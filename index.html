@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Color-by-Number Demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__header">
+        <h1 class="app__title">Color-by-Number Demo</h1>
+        <p class="app__subtitle">
+          Choose a color and tap a matching numbered region to paint the artwork.
+        </p>
+      </header>
+
+      <section class="app__canvas" aria-label="Coloring canvas">
+        <svg
+          id="coloringCanvas"
+          class="canvas"
+          viewBox="0 0 320 240"
+          role="img"
+          aria-labelledby="canvas-title"
+        >
+          <title id="canvas-title">Simple landscape scene with numbered regions</title>
+          <rect x="0" y="0" width="320" height="240" fill="#fefefe" />
+          <g class="cells">
+            <path
+              class="cell"
+              data-number="1"
+              d="M0 150 L80 90 L160 150 Z"
+              aria-label="Region number 1"
+            ></path>
+            <text x="80" y="135" class="cell-label">1</text>
+            <path
+              class="cell"
+              data-number="2"
+              d="M160 150 L240 90 L320 150 Z"
+              aria-label="Region number 2"
+            ></path>
+            <text x="240" y="135" class="cell-label">2</text>
+            <rect
+              class="cell"
+              data-number="3"
+              x="0"
+              y="150"
+              width="320"
+              height="90"
+              aria-label="Region number 3"
+            ></rect>
+            <text x="160" y="205" class="cell-label">3</text>
+            <circle
+              class="cell"
+              data-number="4"
+              cx="90"
+              cy="70"
+              r="25"
+              aria-label="Region number 4"
+            ></circle>
+            <text x="90" y="75" class="cell-label">4</text>
+            <circle
+              class="cell"
+              data-number="4"
+              cx="230"
+              cy="70"
+              r="25"
+              aria-label="Region number 4"
+            ></circle>
+            <text x="230" y="75" class="cell-label">4</text>
+            <path
+              class="cell"
+              data-number="5"
+              d="M0 150 Q160 40 320 150 L320 0 L0 0 Z"
+              aria-label="Region number 5"
+            ></path>
+            <text x="160" y="110" class="cell-label">5</text>
+            <path
+              class="cell"
+              data-number="6"
+              d="M130 170 Q160 130 190 170 Z"
+              aria-label="Region number 6"
+            ></path>
+            <text x="160" y="165" class="cell-label">6</text>
+          </g>
+        </svg>
+      </section>
+
+      <section class="app__controls" aria-label="Color palette and actions">
+        <div class="palette" id="palette" role="list" aria-label="Color palette"></div>
+        <div class="control-row">
+          <button id="hintButton" class="button" type="button">Hint</button>
+          <button id="resetButton" class="button" type="button">Reset</button>
+        </div>
+        <p id="statusText" class="status-text" role="status" aria-live="polite">
+          Select a color to begin.
+        </p>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
