@@ -1,10 +1,10 @@
 const paletteData = [
-  { number: 1, color: "#ff6b6b", label: "Sunset peak" },
-  { number: 2, color: "#ffa36c", label: "Sunset ridge" },
-  { number: 3, color: "#8cd5ff", label: "Water" },
-  { number: 4, color: "#f9d23c", label: "Sun" },
-  { number: 5, color: "#82d173", label: "Sky glow" },
-  { number: 6, color: "#3b82f6", label: "Boat" },
+  { number: 1, color: "#f97316" },
+  { number: 2, color: "#22d3ee" },
+  { number: 3, color: "#a3e635" },
+  { number: 4, color: "#facc15" },
+  { number: 5, color: "#f472b6" },
+  { number: 6, color: "#60a5fa" },
 ];
 
 const cells = Array.from(document.querySelectorAll(".cell"));
@@ -37,19 +37,20 @@ function renderPalette() {
     button.dataset.number = item.number;
     button.setAttribute("role", "listitem");
     button.setAttribute("aria-pressed", "false");
-    button.title = `${item.label} (Color ${item.number})`;
+    button.title = `Color ${item.number}`;
+    button.setAttribute(
+      "aria-label",
+      `Color ${item.number}. ${formatRemainingText(item.number)}`
+    );
     button.innerHTML = `
       <span
         class="palette__swatch"
-        style="background:${item.color}"
+        style="--swatch:${item.color}"
         aria-hidden="true"
-      ></span>
-      <span class="palette__label">
-        <span class="palette__number">Color ${item.number}</span>
-        <span class="palette__count" data-count>${formatRemainingText(
-          item.number
-        )}</span>
-      </span>
+      >${item.number}</span>
+      <span class="palette__count" data-count>${formatRemainingText(
+        item.number
+      )}</span>
     `;
 
     button.addEventListener("click", () => setActiveColor(item.number));
@@ -80,6 +81,10 @@ function updateCounts(number) {
   const countLabel = paletteItem?.querySelector("[data-count]");
   if (countLabel) {
     countLabel.textContent = formatRemainingText(number);
+    paletteItem.setAttribute(
+      "aria-label",
+      `Color ${number}. ${formatRemainingText(number)}`
+    );
   }
 
   if (count === 0 && Number(paletteItem?.dataset.number) === activeColor) {
@@ -184,12 +189,17 @@ function resetPainting() {
     ).length;
   });
 
-  paletteContainer
-    .querySelectorAll("[data-count]")
-    .forEach((label) => {
-      const number = Number(label.closest(".palette__item").dataset.number);
+  paletteContainer.querySelectorAll(".palette__item").forEach((item) => {
+    const number = Number(item.dataset.number);
+    const label = item.querySelector("[data-count]");
+    if (label) {
       label.textContent = formatRemainingText(number);
-    });
+    }
+    item.setAttribute(
+      "aria-label",
+      `Color ${number}. ${formatRemainingText(number)}`
+    );
+  });
 
   hintButton.disabled = false;
   clearHints();
