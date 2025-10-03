@@ -8,6 +8,7 @@ Follow these steps when exporting a new reference illustration so it can plug in
    - a unique `id` such as `region-c01`
    - `data-cell-id` (e.g., `c1`) that matches the JSON payload
    - `data-color-id` pointing to the palette entry
+   - optional `data-color-name`/`data-color-hex`/`data-color-rgba` values that seed the importer’s palette metadata
    - an embedded `<title>` node that spells out the label, e.g. `Region c1 – Color #1 (Sky Mist)` so hovering in the app reveals the tooltip.
 4. **Keep region geometry clean.** Use absolute commands (`M`, `L`, `C`, `Z`, etc.) with closed contours and avoid self-intersections. Curves are welcome for organic silhouettes, but ensure every region is watertight so the centroid sampler can locate a true interior point. Extremely thin slivers can confuse the automatic interior-point search, so widen them slightly or merge them with neighboring shapes when possible.
 5. **Avoid overlaps and gaps.** Paths must not overlap and should fully cover the illustration. Slight padding between shapes is acceptable if the background should peek through, but cells cannot intersect.
