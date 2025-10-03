@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "description": "Color-by-number demo (single-file React + Playwright smoke tests)",
   "scripts": {
-    "start": "npx http-server . -p 8000 -c-1",
-    "dev": "npx http-server . -p 8000 -c-1",
-    "test": "npx playwright test",
-    "test:smoke": "npx playwright test tests/hello.spec.js",
-    "test:ci": "npx playwright test --reporter=github --workers=2",
-    "show-report": "npx playwright show-report",
-    "postinstall": "npx playwright install --with-deps"
+    "start": "http-server . -p 8000 -c-1",
+    "dev": "http-server . -p 8000 -c-1",
+    "test": "playwright test",
+    "test:smoke": "playwright test tests/hello.spec.js",
+    "test:ci": "playwright test --reporter=github --workers=2",
+    "show-report": "playwright show-report",
+    "postinstall": "playwright install --with-deps"
   },
   "devDependencies": {
     "@babel/standalone": "^7.24.8",
