@@ -1,6 +1,7 @@
 # UI Review Notes
 
 ## Positive Observations
+- The art library now opens with a thumbnail picker that previews each scene, making it faster to spot and load the exact artwork you want.
 - The ultra-slim glass command rail now hugs the top edge in a single line, keeping library, options, reset, undo, hint, next, and testing controls visible without crowding the artwork.
 - Wheel zoom now eases smoothly toward the cursor and right-click drags mirror the left-button pan, so navigating the canvas feels responsive and predictable.
 - The integrated progress chip beside the artwork title makes it effortless to see completion percentage at a glance as you fill cells.
