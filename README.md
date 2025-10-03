@@ -7,12 +7,23 @@ served directly from static files.
 
 The demo boots entirely from `index.html`, pulling React, ReactDOM, and Babel
 from the vendored runtime bundles so JSX can execute without a build step. The
-default scene now streams from the annotated SVG at `art/capybara-lagoon.svg`,
-and the repository also ships the segmented twilight companion at
-`art/capybara-twilight.svg`. The library still includes three sample
-scenes—"Capybara Forest Retreat," "Capybara Lagoon Sunrise," and "Twilight
-Marsh Study"—so you can jump in and paint while progress is tracked
-automatically.
+default scene streams directly from the annotated SVG at
+`art/capybara-lagoon.svg`, and the starter loader now fetches the segmented
+twilight companion in `art/capybara-twilight.svg` alongside the new
+"Lush Green Forest Walk" reference stored in `art/lush-green-forest.svg`. The
+library ships all three scenes so you can jump in and paint while progress is
+tracked automatically.
+
+When the app runs from `file://`, the loader hydrates each starter from the
+embedded SVG strings inside `art/starter-fallbacks.js` instead of making
+network requests. Regenerate the inline bundle after editing any starter SVG
+with either command:
+
+```bash
+npm run build:fallbacks
+# or
+node tools/build-starter-fallbacks.js
+```
 
 Interaction handlers support mouse and touch gestures including smooth,
 cursor-anchored wheel zoom, pinch zoom, left- or right-button drag panning,
