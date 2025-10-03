@@ -1,0 +1,37 @@
+<!-- Twilight Marsh Study - Segmented SVG -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-labelledby="title desc">
+  <title id="title">Twilight Marsh Study</title>
+  <desc id="desc">Bands of twilight sky over a reflective marsh with silhouetted capybaras along the shore.</desc>
+  <g id="region-c01" data-cell-id="c1" data-color-id="1" data-color-name="Evening Sky" data-color-hex="#f7c59f">
+    <title>Region c1 – Color #1 (Evening Sky)</title>
+    <path d="M0 0 L960 0 L960 160 C 640 150 320 150 0 160 Z" />
+  </g>
+  <g id="region-c02" data-cell-id="c2" data-color-id="2" data-color-name="Glow Band" data-color-hex="#f27d72">
+    <title>Region c2 – Color #2 (Glow Band)</title>
+    <path d="M0 160 C 160 180 320 180 480 185 C 640 190 800 180 960 170 L960 230 C 640 240 320 240 0 230 Z" />
+  </g>
+  <g id="region-c03" data-cell-id="c3" data-color-id="3" data-color-name="Distant Ridge" data-color-hex="#8c5fa6">
+    <title>Region c3 – Color #3 (Distant Ridge)</title>
+    <path d="M0 230 C 200 260 400 250 600 270 C 800 290 880 270 960 280 L960 340 L0 340 Z" />
+  </g>
+  <g id="region-c04" data-cell-id="c4" data-color-id="4" data-color-name="Low Ridge" data-color-hex="#546d7a">
+    <title>Region c4 – Color #4 (Low Ridge)</title>
+    <path d="M0 340 C 200 360 400 360 600 355 C 800 350 880 350 960 355 L960 420 L0 420 Z" />
+  </g>
+  <g id="region-c05" data-cell-id="c5" data-color-id="5" data-color-name="River Mirror" data-color-hex="#4f9fc6">
+    <title>Region c5 – Color #5 (River Mirror)</title>
+    <path d="M0 420 C 220 440 440 450 660 440 C 800 434 880 430 960 432 L960 490 L0 490 Z" />
+  </g>
+  <g id="region-c06" data-cell-id="c6" data-color-id="6" data-color-name="River Depth" data-color-hex="#1f6b8f">
+    <title>Region c6 – Color #6 (River Depth)</title>
+    <path d="M0 490 C 200 510 400 520 600 515 C 800 510 880 508 960 510 L960 555 L0 555 Z" />
+  </g>
+  <g id="region-c07" data-cell-id="c7" data-color-id="7" data-color-name="Shore Glow" data-color-hex="#5d8f63">
+    <title>Region c7 – Color #7 (Shore Glow)</title>
+    <path d="M0 555 C 180 570 360 580 540 575 L540 600 L0 600 Z" />
+  </g>
+  <g id="region-c08" data-cell-id="c8" data-color-id="8" data-color-name="Shore Shadow" data-color-hex="#2f4c45">
+    <title>Region c8 – Color #8 (Shore Shadow)</title>
+    <path d="M540 575 C 700 570 840 565 960 570 L960 600 L540 600 Z" />
+  </g>
+</svg>

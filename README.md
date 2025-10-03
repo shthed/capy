@@ -6,10 +6,15 @@ served directly from static files.
 ## App overview
 
 The demo boots entirely from `index.html`, pulling React, ReactDOM, and Babel
-from the vendored runtime bundles so JSX can execute without a build step. It
-loads the "Capybara Forest Retreat" artwork—a lush 960×600 SVG scene with 26
-numbered regions and an 11-color palette—and keeps track of every cell you fill
-as you paint by matching colors to numbers.
+from the vendored runtime bundles so JSX can execute without a build step. The
+default scene streams directly from the annotated SVG at
+`art/capybara-lagoon.svg`, and the starter loader pulls in the segmented
+twilight companion in `art/capybara-twilight.svg` alongside the
+"Lush Green Forest Walk" reference stored in `art/lush-green-forest.svg`. The
+library reads the SVG files directly so you can jump in and paint while
+progress is tracked automatically. When opened via `file://`, the browser
+blocks direct `fetch`/XHR access to sibling files, so the generated
+`art/starter-fallbacks.js` bundle seeds the loader with the same SVG markup.
 
 Interaction handlers support mouse and touch gestures including smooth,
 cursor-anchored wheel zoom, pinch zoom, left- or right-button drag panning,
