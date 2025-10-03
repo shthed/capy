@@ -899,6 +899,11 @@ function App() {
                   return React.createElement(
                     "g",
                     { key: c.id },
+                    React.createElement(
+                      "title",
+                      null,
+                      `Region ${c.id} – Color #${c.colorId}${pal?.name ? ` (${pal.name})` : ""}`
+                    ),
                     isFilled &&
                       React.createElement("path", {
                         d: c.d,
@@ -1103,9 +1108,10 @@ function NumberLabel({ d, text }) {
       "text",
       {
         x,
-        y: y + 5,
+        y,
         fontSize: 24,
         textAnchor: "middle",
+        dominantBaseline: "middle",
         fill: "#e2e8f0",
         fontFamily: "ui-sans-serif, system-ui",
       },

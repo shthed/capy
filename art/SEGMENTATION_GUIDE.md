@@ -1,0 +1,18 @@
+# SVG Segmentation Guide
+
+Follow these steps when exporting a new reference illustration so it can plug into the color-by-number runtime without additional cleanup.
+
+1. **Use a shared canvas.** Start from a 960×600 artboard (or document the width/height clearly) and ensure the exported `<svg>` includes an explicit `viewBox` and `width`/`height` so aspect ratio stays consistent.
+2. **Include metadata.** Add `<title>` and `<desc>` elements at the top of the file that summarize the scene for assistive technology and reviewers.
+3. **Group every paintable region.** For each numbered area wrap the path(s) in a `<g>` element that carries:
+   - a unique `id` such as `region-c01`
+   - `data-cell-id` (e.g., `c1`) that matches the JSON payload
+   - `data-color-id` pointing to the palette entry
+   - an embedded `<title>` node that spells out the label, e.g. `Region c1 – Color #1 (Sky Mist)` so hovering in the app reveals the tooltip.
+4. **Use simple path commands.** Restrict paintable paths to `M`, `L`, and `Z` commands (no curves) so the in-app centroid math can keep the numbering centered. Merge multiple polygons with additional `<path>` tags inside the same group if necessary.
+5. **Avoid overlaps and gaps.** Paths must not overlap and should fully cover the illustration. Slight padding between shapes is acceptable if the background should peek through, but cells cannot intersect.
+6. **Keep fills flat.** Assign a single solid fill color per region that roughly matches the palette entry. Decorative gradients or strokes are fine in non-paintable layers, but numbered regions should stay flat for clarity.
+7. **Name the palette.** Document the palette separately (see `index.html`) with IDs, human-friendly names, and hex colors so the runtime can display swatches and instructions.
+8. **Validate before shipping.** Open the SVG in a browser and move the pointer across the regions—each should display the tooltip text and highlight clean edges. Confirm no region bleeds outside the artboard and that IDs increment without gaps.
+
+Exporting assets with these conventions guarantees that new scenes import cleanly, display centered labels, and surface accessible tooltips in the game.
