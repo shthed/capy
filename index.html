@@ -45,7 +45,14 @@
     <script src="./vendor/react-dom.development.js"></script>
     <script src="./vendor/babel.min.js"></script>
     <script type="text/babel">
-const { useCallback, useEffect, useMemo, useRef, useState } = React;
+const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
+
+const pathBoxCache = new Map();
+const pathAreaCache = new Map();
+const interiorPointCache = new Map();
+const SVG_NS = "http://www.w3.org/2000/svg";
+let measureSvgEl = null;
+let measureCanvasCtx = null;
 
 // Capybooper Web Game - MVP single-file React app (patched)
 // Fixes: correct zoom/pan math, pan over filled cells, pinch zoom, drag-fill,
@@ -149,8 +156,14 @@ function getStarterArtworks() {
   return [cloneArtwork(DEMO_ART)];
 }
 
-// Rough polygon area estimator for simple paths.
+// Estimate area for heuristics using DOM sampling with a polygon fallback.
 function estimatePathArea(d) {
+  const bbox = measurePathBox(d);
+  const measured = measurePathArea(d, bbox);
+  if (typeof measured === "number" && measured > 0) {
+    return measured;
+  }
+
   try {
     const tokens = d.split(/[ ,]/).filter(Boolean);
     const pts = [];
@@ -168,7 +181,7 @@ function estimatePathArea(d) {
       const [x2, y2] = xy[(i + 1) % xy.length];
       area += x1 * y2 - x2 * y1;
     }
-    return Math.abs(area / 2);
+    return Math.abs(area / 2) || 1000;
   } catch (err) {
     return 1000;
   }
@@ -586,6 +599,65 @@ function App() {
   const eyedropCandidateRef = useRef(null);
   const pointersRef = useRef(new Map());
   const pinchRef = useRef(null);
+  const zoomAnimRef = useRef(null);
+
+  const cancelZoomAnimation = useCallback(() => {
+    if (zoomAnimRef.current) {
+      cancelAnimationFrame(zoomAnimRef.current);
+      zoomAnimRef.current = null;
+    }
+  }, []);
+
+  const smoothZoomTo = useCallback(
+    (targetScale, clientX, clientY) => {
+      if (!art) return;
+      const svg = svgRef.current;
+      if (!svg) return;
+      const { pxArt, pyArt } = cssToArt(svg, clientX, clientY);
+      const artX = (pxArt - offset.x) / scale;
+      const artY = (pyArt - offset.y) / scale;
+      const clamped = clamp(targetScale, 0.3, 4);
+      const targetOffset = {
+        x: pxArt - artX * clamped,
+        y: pyArt - artY * clamped,
+      };
+      cancelZoomAnimation();
+      const duration = 180;
+      const start = performance.now();
+      const startScale = scale;
+      const startOffset = { x: offset.x, y: offset.y };
+
+      function step(now) {
+        const t = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const nextScale = startScale + (clamped - startScale) * eased;
+        const nextOffset = {
+          x: startOffset.x + (targetOffset.x - startOffset.x) * eased,
+          y: startOffset.y + (targetOffset.y - startOffset.y) * eased,
+        };
+        setScale(nextScale);
+        setOffset(nextOffset);
+        if (t < 1) {
+          zoomAnimRef.current = requestAnimationFrame(step);
+        } else {
+          zoomAnimRef.current = null;
+        }
+      }
+
+      if (Math.abs(clamped - startScale) < 1e-3) {
+        setScale(clamped);
+        setOffset(targetOffset);
+        return;
+      }
+
+      zoomAnimRef.current = requestAnimationFrame(step);
+    },
+    [art, cancelZoomAnimation, offset.x, offset.y, scale]
+  );
+
+  useEffect(() => {
+    return () => cancelZoomAnimation();
+  }, [cancelZoomAnimation]);
 
   function cssToArt(svg, clientX, clientY) {
     if (!art) return { pxArt: 0, pyArt: 0 };
@@ -600,17 +672,9 @@ function App() {
   function onWheel(e) {
     if (!art) return;
     e.preventDefault();
-    const factor = Math.exp(-e.deltaY * 0.0015);
-    const newScale = clamp(scale * factor, 0.3, 4);
-
-    const svg = svgRef.current;
-    if (svg) {
-      const { pxArt, pyArt } = cssToArt(svg, e.clientX, e.clientY);
-      const artX = (pxArt - offset.x) / scale;
-      const artY = (pyArt - offset.y) / scale;
-      setOffset({ x: pxArt - artX * newScale, y: pyArt - artY * newScale });
-    }
-    setScale(newScale);
+    const factor = Math.exp(-e.deltaY * 0.0012);
+    const proposed = scale * factor;
+    smoothZoomTo(proposed, e.clientX, e.clientY);
   }
 
   function onPointerDown(e) {
@@ -623,7 +687,18 @@ function App() {
     const cid = target?.dataset?.cellId;
     movedRef.current = 0;
 
+    if (e.pointerType === "mouse" && (e.button === 2 || e.button === 1 || e.ctrlKey)) {
+      e.preventDefault();
+      cancelZoomAnimation();
+      isPaintingRef.current = false;
+      eyedropCandidateRef.current = null;
+      isPanningRef.current = true;
+      lastPosRef.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
+
     if (pointersRef.current.size === 2 && !pinchRef.current) {
+      cancelZoomAnimation();
       const ids = Array.from(pointersRef.current.keys());
       const p1 = pointersRef.current.get(ids[0]);
       const p2 = pointersRef.current.get(ids[1]);
@@ -637,6 +712,7 @@ function App() {
     }
 
     if (cid) {
+      cancelZoomAnimation();
       const already = !!filled[cid];
       if (already) {
         eyedropCandidateRef.current = enableEyedropper ? cid : null;
@@ -648,6 +724,7 @@ function App() {
       onCellTap(cid);
       return;
     }
+    cancelZoomAnimation();
     isPanningRef.current = true;
     lastPosRef.current = { x: e.clientX, y: e.clientY };
   }
@@ -876,6 +953,7 @@ function App() {
                 onPointerDown: onPointerDown,
                 onPointerMove: onPointerMove,
                 onPointerUp: onPointerUp,
+                onContextMenu: (e) => e.preventDefault(),
               },
               React.createElement(
                 "g",
@@ -895,6 +973,11 @@ function App() {
                   return React.createElement(
                     "g",
                     { key: c.id },
+                    React.createElement(
+                      "title",
+                      null,
+                      `Region ${c.id} – Color #${c.colorId}${pal?.name ? ` (${pal.name})` : ""}`
+                    ),
                     isFilled &&
                       React.createElement("path", {
                         d: c.d,
@@ -916,7 +999,11 @@ function App() {
                       "aria-label": `Cell ${c.id}. Target color ${c.colorId}. ${isFilled ? "Filled" : "Unfilled"}`,
                     }),
                     !isFilled && showNumberBadges && scale >= 0.6 &&
-                      React.createElement(NumberLabel, { d: c.d, text: `${c.colorId}` }),
+                      React.createElement(NumberLabel, {
+                        d: c.d,
+                        text: `${c.colorId}`,
+                        area: c.area,
+                      }),
                     !isFilled && showHeatmapDots && scale < 0.6 &&
                       React.createElement(HeatDot, { d: c.d })
                   );
@@ -949,7 +1036,6 @@ function App() {
                 title: `${progress}% complete`,
                 "aria-label": `${progress}% complete`,
                 "aria-live": "polite",
-                "aria-atomic": "true",
               },
               `${progress}%`
             )
@@ -976,8 +1062,6 @@ function App() {
                 onClick: () => setShowOptions(true),
                 title: "Adjust options",
                 "aria-label": "Adjust options",
-                "aria-haspopup": "dialog",
-                "aria-expanded": showOptions,
               },
               "Options"
             ),
@@ -1065,6 +1149,206 @@ function App() {
 }
 
 // ---------- Helpers: Number label & heat dot ----------
+
+function ensureMeasureSvg() {
+  if (typeof document === "undefined") return null;
+  if (!measureSvgEl) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("width", "0");
+    svg.setAttribute("height", "0");
+    svg.style.position = "absolute";
+    svg.style.width = "0";
+    svg.style.height = "0";
+    svg.style.opacity = "0";
+    svg.style.pointerEvents = "none";
+    document.body.appendChild(svg);
+    measureSvgEl = svg;
+  }
+  return measureSvgEl;
+}
+
+function ensureMeasureContext() {
+  if (typeof document === "undefined") return null;
+  if (!measureCanvasCtx) {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    measureCanvasCtx = canvas.getContext("2d");
+  }
+  return measureCanvasCtx;
+}
+
+function measurePathBox(d) {
+  if (pathBoxCache.has(d)) return pathBoxCache.get(d);
+  const host = ensureMeasureSvg();
+  if (!host) return null;
+  try {
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d);
+    host.appendChild(path);
+    const box = path.getBBox();
+    host.removeChild(path);
+    pathBoxCache.set(d, box);
+    return box;
+  } catch (err) {
+    return null;
+  }
+}
+
+function measurePathArea(d, bbox) {
+  if (pathAreaCache.has(d)) return pathAreaCache.get(d);
+  const ctx = ensureMeasureContext();
+  if (!ctx || !bbox) return null;
+  if (typeof Path2D === "undefined") return null;
+  let path;
+  try {
+    path = new Path2D(d);
+  } catch (err) {
+    return null;
+  }
+
+  const longest = Math.max(bbox.width, bbox.height);
+  const steps = Math.max(12, Math.min(80, Math.ceil(longest / 8)));
+  if (!Number.isFinite(steps) || steps <= 0) return null;
+
+  const stepX = bbox.width / steps;
+  const stepY = bbox.height / steps;
+  if (!Number.isFinite(stepX) || !Number.isFinite(stepY)) return null;
+
+  let inside = 0;
+  const total = steps * steps;
+  const originX = bbox.x + stepX / 2;
+  const originY = bbox.y + stepY / 2;
+
+  for (let ix = 0; ix < steps; ix++) {
+    const x = originX + ix * stepX;
+    for (let iy = 0; iy < steps; iy++) {
+      const y = originY + iy * stepY;
+      if (ctx.isPointInPath(path, x, y)) inside++;
+    }
+  }
+
+  if (inside === 0) return null;
+  const area = (inside / total) * bbox.width * bbox.height;
+  pathAreaCache.set(d, area);
+  return area;
+}
+
+function findInteriorPoint(d, fallback, bbox) {
+  const ctx = ensureMeasureContext();
+  if (!ctx) return fallback;
+  if (typeof Path2D === "undefined") return fallback;
+  let path;
+  try {
+    path = new Path2D(d);
+  } catch (err) {
+    return fallback;
+  }
+
+  const cached = interiorPointCache.get(d);
+  if (cached && ctx.isPointInPath(path, cached.x, cached.y)) {
+    return cached;
+  }
+
+  const center = bbox
+    ? { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 }
+    : fallback;
+  const candidates = [fallback];
+  if (bbox) {
+    candidates.push(
+      center,
+      { x: bbox.x + bbox.width * 0.3, y: bbox.y + bbox.height * 0.5 },
+      { x: bbox.x + bbox.width * 0.7, y: bbox.y + bbox.height * 0.5 },
+      { x: bbox.x + bbox.width * 0.5, y: bbox.y + bbox.height * 0.3 },
+      { x: bbox.x + bbox.width * 0.5, y: bbox.y + bbox.height * 0.7 }
+    );
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (ctx.isPointInPath(path, candidate.x, candidate.y)) return candidate;
+  }
+
+  if (!bbox) return fallback;
+
+  const centerX = bbox.x + bbox.width / 2;
+  const centerY = bbox.y + bbox.height / 2;
+  const longest = Math.max(bbox.width, bbox.height);
+  const steps = Math.max(6, Math.ceil(longest / 60));
+  const stepX = bbox.width / (steps + 1);
+  const stepY = bbox.height / (steps + 1);
+
+  let best = null;
+  let bestScore = -Infinity;
+
+  for (let i = 0; i <= steps; i++) {
+    for (let j = 0; j <= steps; j++) {
+      const x = bbox.x + (i + 0.5) * stepX;
+      const y = bbox.y + (j + 0.5) * stepY;
+      if (!ctx.isPointInPath(path, x, y)) continue;
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const score = -(dx * dx + dy * dy);
+      if (score > bestScore) {
+        best = { x, y };
+        bestScore = score;
+      }
+    }
+  }
+
+  if (best) {
+    interiorPointCache.set(d, best);
+    return best;
+  }
+
+  const maxRadius = Math.hypot(bbox.width, bbox.height) / 2;
+  const rings = Math.max(3, Math.ceil(longest / 45));
+  const samplesPerRing = Math.max(12, Math.ceil(longest / 30));
+
+  for (let r = 1; r <= rings; r++) {
+    const radius = (r / rings) * maxRadius;
+    for (let i = 0; i < samplesPerRing; i++) {
+      const angle = (i / samplesPerRing) * Math.PI * 2;
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius;
+      if (ctx.isPointInPath(path, x, y)) {
+        const point = { x, y };
+        interiorPointCache.set(d, point);
+        return point;
+      }
+    }
+  }
+
+  if (fallback && ctx.isPointInPath(path, fallback.x, fallback.y)) {
+    interiorPointCache.set(d, fallback);
+  }
+  return best ?? fallback;
+}
+
+function computeLabelMetrics(bbox, area) {
+  const defaults = { radius: 16, fontSize: 24, showBubble: true };
+  if (!bbox) return defaults;
+
+  const minSide = Math.max(0, Math.min(bbox.width, bbox.height));
+  if (minSide === 0) return defaults;
+
+  const areaRadius = area && area > 0 ? Math.sqrt(area) / 14 : 0;
+  let radius = Math.max(6, Math.min(18, Math.max(minSide / 2.6, areaRadius)));
+  const maxRadius = Math.max(4, minSide / 2 - 1);
+  radius = Math.min(radius, maxRadius);
+  if (!Number.isFinite(radius) || radius <= 0) {
+    radius = 10;
+  }
+
+  const showBubble = radius >= 6 && minSide >= 14;
+  if (!showBubble) {
+    const fontSize = Math.max(9, Math.min(16, minSide * 0.9));
+    return { radius: 0, fontSize, showBubble };
+  }
+
+  const fontSize = Math.max(10, Math.min(20, radius * 1.35));
+  return { radius, fontSize, showBubble };
+}
 function centroidFromPath(d) {
   const tokens = d.split(/[ ,]/).filter(Boolean);
   const pts = [];
@@ -1092,24 +1376,60 @@ function centroidFromPath(d) {
   return { x: cx / (6 * a), y: cy / (6 * a) };
 }
 
-function NumberLabel({ d, text }) {
-  const { x, y } = centroidFromPath(d);
+const pointAlmostEqual = (a, b) =>
+  a === b || (a && b && Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01);
+
+const metricsAlmostEqual = (a, b) =>
+  a === b ||
+  (a &&
+    b &&
+    Math.abs(a.radius - b.radius) < 0.01 &&
+    Math.abs(a.fontSize - b.fontSize) < 0.01 &&
+    a.showBubble === b.showBubble);
+
+function NumberLabel({ d, text, area }) {
+  const fallback = useMemo(() => centroidFromPath(d), [d]);
+  const [position, setPosition] = useState(fallback);
+  const [metrics, setMetrics] = useState(() => ({ radius: 16, fontSize: 24, showBubble: true }));
+
+  useLayoutEffect(() => {
+    if (typeof document === "undefined") return;
+    const bbox = measurePathBox(d);
+    const nextPoint = findInteriorPoint(d, fallback, bbox);
+    setPosition((prev) => (pointAlmostEqual(prev, nextPoint) ? prev : nextPoint));
+    const measuredArea = measurePathArea(d, bbox);
+    const areaHint = measuredArea ?? area;
+    const nextMetrics = computeLabelMetrics(bbox, areaHint);
+    setMetrics((prev) => (metricsAlmostEqual(prev, nextMetrics) ? prev : nextMetrics));
+  }, [d, area, fallback.x, fallback.y]);
+
+  const { x, y } = position;
+  const { radius, fontSize, showBubble } = metrics;
+
+  const textProps = {
+    x,
+    y,
+    fontSize,
+    textAnchor: "middle",
+    dominantBaseline: "middle",
+    fill: "#e2e8f0",
+    fontFamily: "ui-sans-serif, system-ui",
+  };
+
+  if (!showBubble) {
+    textProps.style = {
+      paintOrder: "stroke",
+      stroke: "rgba(15, 23, 42, 0.9)",
+      strokeWidth: 3,
+    };
+  }
+
   return React.createElement(
     "g",
     { pointerEvents: "none" },
-    React.createElement("circle", { cx: x, cy: y, r: 16, fill: "rgba(15, 23, 42, 0.9)" }),
-    React.createElement(
-      "text",
-      {
-        x,
-        y: y + 5,
-        fontSize: 24,
-        textAnchor: "middle",
-        fill: "#e2e8f0",
-        fontFamily: "ui-sans-serif, system-ui",
-      },
-      text
-    )
+    showBubble &&
+      React.createElement("circle", { cx: x, cy: y, r: radius, fill: "rgba(15, 23, 42, 0.9)" }),
+    React.createElement("text", textProps, text)
   );
 }
 
@@ -1134,7 +1454,7 @@ function Palette({ palette, remaining, activeColor, onSelect }) {
           disabled: left === 0 && !isActive,
           "aria-pressed": isActive,
           "aria-label": `${p.name ?? "Color"} #${p.id}. ${left} cells remaining`,
-          title: `${p.name ?? "Color"} #${p.id} - Remaining ${left}`,
+          title: `${p.name ?? "Color"} #${p.id} • Remaining ${left}`,
           style: {
             ...styles.swatch,
             background: p.rgba,
@@ -1581,7 +1901,7 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
       React.createElement(
         "p",
         { style: styles.optionsAbout },
-        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. It loads a predefined &quot;Capybara Forest Retreat&quot; scene inspired by a detailed 960x600 SVG reference (art/capybara-forest.svg) with 26 labeled, non-overlapping regions and an 11-color palette, then tracks each cell's fill state so players can match colors to numbers."
+        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. It loads a predefined “Capybara Forest Retreat” scene inspired by a detailed 960×600 SVG reference (art/capybara-forest.svg) with 26 labeled, non-overlapping regions and an 11-color palette, then tracks each cell’s fill state so players can match colors to numbers."
       ),
       React.createElement("div", { style: styles.optionsSectionTitle }, "UI surfaces"),
       React.createElement(
@@ -1808,11 +2128,11 @@ const styles = {
     left: "50%",
     bottom: 24,
     transform: "translateX(-50%)",
-    width: "min(920px, calc(100% - 24px))",
+    width: "min(940px, calc(100% - 24px))",
     background: "rgba(15, 23, 42, 0.82)",
     borderRadius: 18,
     border: "1px solid rgba(148, 163, 184, 0.28)",
-    padding: "10px 14px",
+    padding: "8px 12px",
     boxShadow: "0 24px 50px rgba(2, 6, 23, 0.6)",
     zIndex: 11,
     overflow: "hidden",
@@ -1832,34 +2152,35 @@ const styles = {
     display: "flex",
     flexDirection: "row",
     flexWrap: "nowrap",
-    gap: 10,
+    gap: 8,
     width: "100%",
     overflowX: "auto",
     paddingBottom: 4,
     scrollSnapType: "x proximity",
   },
   swatch: {
-    height: 38,
-    borderRadius: 12,
+    height: "clamp(44px, 9vw, 58px)",
+    borderRadius: 999,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     transition: "transform 0.12s ease, box-shadow 0.2s ease",
     cursor: "pointer",
     color: "#f8fafc",
-    flex: "0 0 clamp(88px, 12vw, 132px)",
+    flex: "0 0 clamp(44px, 9vw, 58px)",
+    aspectRatio: "1",
     scrollSnapAlign: "center",
   },
   swatchNumber: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    width: 20,
-    height: 20,
+    width: 18,
+    height: 18,
     borderRadius: "50%",
     background: "rgba(15, 23, 42, 0.52)",
     color: "#f8fafc",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 700,
     letterSpacing: 0.4,
   },

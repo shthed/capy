@@ -17,7 +17,7 @@ test.describe('Capybooper app smoke tests', () => {
 
   test('renders the application shell', async ({ page }) => {
     await expect(page).toHaveTitle('Color-by-Number Demo');
-    await expect(page.locator('svg')).toBeVisible();
+    await expect(page.locator('svg').first()).toBeVisible();
     await expect(page.locator('[data-testid="palette-dock"]')).toBeVisible();
   });
 
