@@ -47,6 +47,13 @@
     <script type="text/babel">
 const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
 
+const pathBoxCache = new Map();
+const pathAreaCache = new Map();
+const interiorPointCache = new Map();
+const SVG_NS = "http://www.w3.org/2000/svg";
+let measureSvgEl = null;
+let measureCanvasCtx = null;
+
 // Capybooper Web Game — MVP single-file React app (patched)
 // Fixes: correct zoom/pan math, pan over filled cells, pinch zoom, drag-fill,
 // eyedropper, auto-advance, hint stroke highlight, smoke-test HUD.
@@ -149,8 +156,14 @@ function getStarterArtworks() {
   return [cloneArtwork(DEMO_ART)];
 }
 
-// Rough polygon area estimator for simple paths.
+// Estimate area for heuristics using DOM sampling with a polygon fallback.
 function estimatePathArea(d) {
+  const bbox = measurePathBox(d);
+  const measured = measurePathArea(d, bbox);
+  if (typeof measured === "number" && measured > 0) {
+    return measured;
+  }
+
   try {
     const tokens = d.split(/[ ,]/).filter(Boolean);
     const pts = [];
@@ -168,7 +181,7 @@ function estimatePathArea(d) {
       const [x2, y2] = xy[(i + 1) % xy.length];
       area += x1 * y2 - x2 * y1;
     }
-    return Math.abs(area / 2);
+    return Math.abs(area / 2) || 1000;
   } catch (err) {
     return 1000;
   }
@@ -1075,9 +1088,6 @@ function App() {
 }
 
 // ---------- Helpers: Number label & heat dot ----------
-const SVG_NS = "http://www.w3.org/2000/svg";
-let measureSvgEl = null;
-let measureCanvasCtx = null;
 
 function ensureMeasureSvg() {
   if (typeof document === "undefined") return null;
@@ -1108,6 +1118,7 @@ function ensureMeasureContext() {
 }
 
 function measurePathBox(d) {
+  if (pathBoxCache.has(d)) return pathBoxCache.get(d);
   const host = ensureMeasureSvg();
   if (!host) return null;
   try {
@@ -1116,6 +1127,7 @@ function measurePathBox(d) {
     host.appendChild(path);
     const box = path.getBBox();
     host.removeChild(path);
+    pathBoxCache.set(d, box);
     return box;
   } catch (err) {
     return null;
@@ -1123,6 +1135,7 @@ function measurePathBox(d) {
 }
 
 function measurePathArea(d, bbox) {
+  if (pathAreaCache.has(d)) return pathAreaCache.get(d);
   const ctx = ensureMeasureContext();
   if (!ctx || !bbox) return null;
   if (typeof Path2D === "undefined") return null;
@@ -1155,7 +1168,9 @@ function measurePathArea(d, bbox) {
   }
 
   if (inside === 0) return null;
-  return (inside / total) * bbox.width * bbox.height;
+  const area = (inside / total) * bbox.width * bbox.height;
+  pathAreaCache.set(d, area);
+  return area;
 }
 
 function findInteriorPoint(d, fallback, bbox) {
@@ -1167,6 +1182,11 @@ function findInteriorPoint(d, fallback, bbox) {
     path = new Path2D(d);
   } catch (err) {
     return fallback;
+  }
+
+  const cached = interiorPointCache.get(d);
+  if (cached && ctx.isPointInPath(path, cached.x, cached.y)) {
+    return cached;
   }
 
   const center = bbox
@@ -1215,7 +1235,10 @@ function findInteriorPoint(d, fallback, bbox) {
     }
   }
 
-  if (best) return best;
+  if (best) {
+    interiorPointCache.set(d, best);
+    return best;
+  }
 
   const maxRadius = Math.hypot(bbox.width, bbox.height) / 2;
   const rings = Math.max(3, Math.ceil(longest / 45));
@@ -1228,11 +1251,16 @@ function findInteriorPoint(d, fallback, bbox) {
       const x = centerX + Math.cos(angle) * radius;
       const y = centerY + Math.sin(angle) * radius;
       if (ctx.isPointInPath(path, x, y)) {
-        return { x, y };
+        const point = { x, y };
+        interiorPointCache.set(d, point);
+        return point;
       }
     }
   }
 
+  if (fallback && ctx.isPointInPath(path, fallback.x, fallback.y)) {
+    interiorPointCache.set(d, fallback);
+  }
   return best ?? fallback;
 }
 
