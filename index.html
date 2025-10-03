@@ -44,6 +44,7 @@
     <script src="./vendor/react.development.js"></script>
     <script src="./vendor/react-dom.development.js"></script>
     <script src="./vendor/babel.min.js"></script>
+    <script src="./art/starter-fallbacks.js"></script>
     <script type="text/babel">
 const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
 
@@ -512,25 +513,154 @@ const STARTER_SOURCES = [
     url: "./art/capybara-lagoon.svg",
     filename: "capybara-lagoon.svg",
     type: "image/svg+xml",
-    fallback: () => cloneArtwork(LAGOON_ART),
   },
   {
     id: "starter-twilight-marsh",
     url: "./art/capybara-twilight.svg",
     filename: "capybara-twilight.svg",
     type: "image/svg+xml",
-    fallback: () => cloneArtwork(TWILIGHT_ART),
   },
   {
-    id: "starter-capybara-forest",
-    fallback: () => cloneArtwork(DEMO_ART),
+    id: "starter-lush-forest",
+    url: "./art/lush-green-forest.svg",
+    filename: "lush-green-forest.svg",
+    type: "image/svg+xml",
   },
 ];
 
 function getLegacyStarterArtworks() {
-  return STARTER_SOURCES.map((source) =>
-    typeof source.fallback === "function" ? source.fallback() : null
-  ).filter(Boolean);
+  return [];
+}
+
+function loadSvgViaObject(url, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+
+    if (!document?.body) {
+      reject(new Error('The document body is unavailable.'));
+      return;
+    }
+
+    const objectEl = document.createElement('object');
+    objectEl.type = 'image/svg+xml';
+    objectEl.setAttribute('aria-hidden', 'true');
+    objectEl.style.position = 'absolute';
+    objectEl.style.width = '0';
+    objectEl.style.height = '0';
+    objectEl.style.pointerEvents = 'none';
+    objectEl.style.opacity = '0';
+
+    const cleanup = () => {
+      objectEl.removeEventListener('load', handleLoad);
+      objectEl.removeEventListener('error', handleError);
+      if (signal) {
+        signal.removeEventListener('abort', handleAbort);
+      }
+      if (objectEl.parentNode) {
+        objectEl.parentNode.removeChild(objectEl);
+      }
+    };
+
+    const handleAbort = () => {
+      cleanup();
+      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    };
+
+    const handleLoad = () => {
+      try {
+        const doc = objectEl.contentDocument;
+        if (!doc) {
+          throw new Error('Unable to access the SVG document.');
+        }
+        const svgEl = doc.documentElement;
+        if (!svgEl) {
+          throw new Error('The SVG content is empty.');
+        }
+        resolve(svgEl.outerHTML);
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error('Unable to read the SVG content.'));
+      } finally {
+        cleanup();
+      }
+    };
+
+    const handleError = () => {
+      cleanup();
+      reject(new Error('Unable to load the SVG via <object>.'));
+    };
+
+    objectEl.addEventListener('load', handleLoad);
+    objectEl.addEventListener('error', handleError);
+    if (signal) {
+      signal.addEventListener('abort', handleAbort, { once: true });
+    }
+    document.body.appendChild(objectEl);
+    try {
+      const resolved = new URL(url, window.location.href);
+      objectEl.data = resolved.href;
+    } catch (err) {
+      cleanup();
+      reject(err instanceof Error ? err : new Error('Invalid SVG URL.'));
+    }
+  });
+}
+
+function loadSvgViaXhr(url, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+
+    let aborted = false;
+    const xhr = new XMLHttpRequest();
+    const cleanup = () => {
+      xhr.onerror = null;
+      xhr.onreadystatechange = null;
+      if (signal) {
+        signal.removeEventListener('abort', handleAbort);
+      }
+    };
+    const handleAbort = () => {
+      aborted = true;
+      xhr.abort();
+      cleanup();
+      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    };
+
+    xhr.onerror = () => {
+      cleanup();
+      reject(new Error('Unable to load the SVG via XMLHttpRequest.'));
+    };
+
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState !== XMLHttpRequest.DONE) return;
+      cleanup();
+      if (aborted) return;
+      const status = xhr.status;
+      if (status === 0 || (status >= 200 && status < 300)) {
+        resolve(xhr.responseText);
+      } else {
+        reject(new Error(`XMLHttpRequest failed with status ${status}.`));
+      }
+    };
+
+    try {
+      const resolved = new URL(url, window.location.href);
+      xhr.open('GET', resolved.href, true);
+      xhr.overrideMimeType('image/svg+xml');
+      if (signal) {
+        signal.addEventListener('abort', handleAbort, { once: true });
+      }
+      xhr.send();
+    } catch (err) {
+      cleanup();
+      reject(err instanceof Error ? err : new Error('Unable to resolve the SVG URL.'));
+    }
+  });
 }
 
 async function loadStarterArtworks(signal) {
@@ -538,32 +668,124 @@ async function loadStarterArtworks(signal) {
   const seenIds = new Set();
   const errors = [];
 
+  const inlineFallbacks =
+    typeof window !== "undefined" ? window.__starterSvgFallbacks ?? null : null;
+  const preferInlineFallback =
+    typeof window !== "undefined" && window.location?.protocol === "file:";
+  const allowNetworkFetch = !preferInlineFallback;
+
   for (const source of STARTER_SOURCES) {
     let candidate = null;
 
-    if (source.url) {
+    const failureReasons = [];
+    const meta = {
+      filename: source.filename ?? source.url?.split("/").pop(),
+      type: source.type ?? "image/svg+xml",
+      source: "starter",
+    };
+    const parseSource = (raw) => {
+      const parsed = parseArtworkPayload(raw, meta);
+      if (parsed.ok && parsed.artwork) {
+        return cloneArtwork(parsed.artwork);
+      }
+      throw new Error(parsed.error ?? "Unable to convert the artwork payload.");
+    };
+
+    const inlinePayload = inlineFallbacks?.[source.id] ?? null;
+    let inlineError = null;
+
+    if (inlinePayload) {
+      try {
+        candidate = parseSource(inlinePayload);
+      } catch (inlineErr) {
+        inlineError = inlineErr instanceof Error ? inlineErr : new Error(String(inlineErr));
+        failureReasons.push(inlineError);
+      }
+    }
+
+    if (!candidate && preferInlineFallback && !inlinePayload) {
+      errors.push(
+        new Error(`No inline fallback was bundled for ${source.id || source.url || 'starter art'}.`)
+      );
+      continue;
+    }
+
+    if (!candidate && preferInlineFallback && inlinePayload) {
+      if (inlineError) {
+        errors.push(inlineError);
+      }
+      continue;
+    }
+
+    if (!candidate && source.url && allowNetworkFetch) {
       try {
         const response = await fetch(source.url, { signal });
         if (!response.ok) {
           throw new Error(`Request failed with status ${response.status}`);
         }
         const text = await response.text();
-        const parsed = parseArtworkPayload(text, {
-          filename: source.filename ?? source.url.split("/").pop(),
-          type: source.type ?? "image/svg+xml",
-          source: "starter",
-        });
-        if (parsed.ok && parsed.artwork) {
-          candidate = cloneArtwork(parsed.artwork);
-        }
+        candidate = parseSource(text);
       } catch (err) {
-        console.warn(`Unable to load starter artwork from ${source.url}:`, err);
-        errors.push(err);
-      }
-    }
+        const error = err instanceof Error ? err : new Error(String(err));
+        failureReasons.push(error);
+        console.warn(`Unable to fetch starter artwork from ${source.url}:`, error);
 
-    if (!candidate && typeof source.fallback === "function") {
-      candidate = source.fallback();
+        if (source.type === "image/svg+xml") {
+          let parsedFromFallback = false;
+          try {
+            const text = await loadSvgViaXhr(source.url, signal);
+            candidate = parseSource(text);
+            if (candidate) {
+              console.info(`Loaded starter artwork from ${source.url} via XMLHttpRequest fallback.`);
+              failureReasons.length = 0;
+              parsedFromFallback = true;
+            }
+          } catch (xhrErr) {
+            const normalized = xhrErr instanceof Error ? xhrErr : new Error(String(xhrErr));
+            console.warn(`Unable to load starter artwork from ${source.url} via XMLHttpRequest:`, normalized);
+            failureReasons.push(normalized);
+          }
+
+          if (!parsedFromFallback || !candidate) {
+            try {
+              const text = await loadSvgViaObject(source.url, signal);
+              candidate = parseSource(text);
+              if (candidate) {
+                console.info(`Loaded starter artwork from ${source.url} via <object> fallback.`);
+                failureReasons.length = 0;
+                parsedFromFallback = true;
+              }
+            } catch (fallbackErr) {
+              const normalized =
+                fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr));
+              console.warn(`Unable to load starter artwork from ${source.url} via <object>:`, normalized);
+              failureReasons.push(normalized);
+            }
+          }
+
+          if ((!parsedFromFallback || !candidate) && inlinePayload) {
+            try {
+              candidate = parseSource(inlinePayload);
+              if (candidate) {
+                console.info(`Loaded starter artwork from ${source.url} via inline fallback.`);
+                failureReasons.length = 0;
+              }
+            } catch (inlineErr) {
+              const normalized =
+                inlineErr instanceof Error ? inlineErr : new Error(String(inlineErr));
+              console.warn(`Unable to parse inline fallback for ${source.url}:`, normalized);
+              failureReasons.push(normalized);
+            }
+          }
+        }
+
+        if (!candidate && failureReasons.length) {
+          failureReasons.forEach((failure) => {
+            console.warn(`Unable to load starter artwork from ${source.url}:`, failure);
+            errors.push(failure);
+          });
+        }
+      }
     }
 
     if (!candidate) continue;
@@ -696,6 +918,19 @@ function normalizeArtwork(raw) {
   } catch (err) {
     return null;
   }
+}
+
+function cloneArtwork(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const palette = Array.isArray(raw.palette)
+    ? raw.palette.map((item) => ({ ...item }))
+    : [];
+  const cells = Array.isArray(raw.cells) ? raw.cells.map((cell) => ({ ...cell })) : [];
+  return {
+    ...raw,
+    palette,
+    cells,
+  };
 }
 
 function parseDimension(value) {
