@@ -4,7 +4,39 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Color-by-Number Demo</title>
-    <link rel="stylesheet" href="styles.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui,
+          sans-serif;
+        background-color: #030712;
+        color: #e2e8f0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at top, rgba(56, 189, 248, 0.08), transparent),
+          #030712;
+        color: inherit;
+      }
+
+      #root {
+        min-height: 100vh;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      svg {
+        touch-action: none;
+      }
+    </style>
   </head>
   <body>
     <div id="root" role="application" aria-label="Color-by-number painting app"></div>
@@ -12,6 +44,826 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="text/babel" src="app.js"></script>
+    <script type="text/babel">
+const { useEffect, useMemo, useRef, useState } = React;
+
+// Capybooper Web Game — MVP single-file React app (patched)
+// Fixes: correct zoom/pan math, pan over filled cells, pinch zoom, drag-fill,
+// eyedropper, auto-advance, hint stroke highlight, smoke-test HUD.
+// No external libs. LocalStorage autosave. Keyboard support.
+
+// ---------- Types ----------
+/** @typedef {number} ColorId */
+
+/**
+ * @typedef PaletteItem
+ * @property {ColorId} id
+ * @property {string=} name
+ * @property {string} rgba
+ */
+
+/**
+ * @typedef Cell
+ * @property {string} id
+ * @property {ColorId} colorId
+ * @property {string} d
+ * @property {number=} area
+ */
+
+/**
+ * @typedef Artwork
+ * @property {string} id
+ * @property {string} title
+ * @property {number} width
+ * @property {number} height
+ * @property {PaletteItem[]} palette
+ * @property {Cell[]} cells
+ */
+
+/**
+ * @typedef SaveState
+ * @property {string} artworkId
+ * @property {Record<string, boolean>} filled
+ * @property {ColorId=} activeColor
+ * @property {{ scale: number; x: number; y: number }=} viewport
+ * @property {number} lastSaved
+ */
+
+// ---------- Sample Artwork ----------
+const DEMO_ART = {
+  id: "demo-fox",
+  title: "Low‑poly Fox",
+  width: 1000,
+  height: 1000,
+  palette: [
+    { id: 1, name: "Light Fur", rgba: "#F7C68E" },
+    { id: 2, name: "Mid Fur", rgba: "#EAA15E" },
+    { id: 3, name: "Dark Fur", rgba: "#B65A37" },
+    { id: 4, name: "White", rgba: "#F2F2F2" },
+    { id: 5, name: "Nose", rgba: "#222" },
+    { id: 6, name: "Shadow", rgba: "#8C3E28" },
+    { id: 7, name: "Ear Inner", rgba: "#F7D9B5" },
+  ],
+  cells: [
+    { id: "c1", colorId: 7, d: "M120 90 L230 260 L120 260 Z" },
+    { id: "c2", colorId: 7, d: "M880 90 L770 260 L880 260 Z" },
+    { id: "c3", colorId: 3, d: "M230 260 L350 300 L200 420 Z" },
+    { id: "c4", colorId: 3, d: "M770 260 L650 300 L800 420 Z" },
+    { id: "c5", colorId: 2, d: "M350 300 L500 360 L650 300 L500 150 Z" },
+    { id: "c6", colorId: 2, d: "M200 420 L350 300 L500 520 L300 520 Z" },
+    { id: "c7", colorId: 2, d: "M800 420 L650 300 L500 520 L700 520 Z" },
+    { id: "c8", colorId: 1, d: "M300 520 L500 520 L460 700 L260 620 Z" },
+    { id: "c9", colorId: 1, d: "M700 520 L500 520 L540 700 L740 620 Z" },
+    { id: "c10", colorId: 4, d: "M260 620 L460 700 L500 760 L440 820 L280 740 Z" },
+    { id: "c11", colorId: 4, d: "M740 620 L540 700 L500 760 L560 820 L720 740 Z" },
+    { id: "c12", colorId: 4, d: "M440 820 L500 760 L560 820 L500 900 Z" },
+    { id: "c13", colorId: 5, d: "M480 820 L520 820 L500 840 Z" },
+    { id: "c14", colorId: 6, d: "M350 300 L420 380 L500 360 Z" },
+    { id: "c15", colorId: 6, d: "M650 300 L580 380 L500 360 Z" },
+    { id: "c16", colorId: 6, d: "M460 700 L500 640 L540 700 L500 760 Z" },
+    { id: "c17", colorId: 6, d: "M440 820 L500 900 L420 880 Z" },
+    { id: "c18", colorId: 6, d: "M560 820 L500 900 L580 880 Z" },
+    { id: "c19", colorId: 1, d: "M300 520 L260 620 L220 560 Z" },
+    { id: "c20", colorId: 1, d: "M700 520 L740 620 L780 560 Z" },
+    { id: "c21", colorId: 2, d: "M420 380 L500 520 L500 360 Z" },
+    { id: "c22", colorId: 2, d: "M580 380 L500 520 L500 360 Z" },
+    { id: "c23", colorId: 7, d: "M170 220 L200 260 L140 260 Z" },
+    { id: "c24", colorId: 7, d: "M830 220 L800 260 L860 260 Z" },
+  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
+};
+
+// Rough polygon area estimator for simple paths.
+function estimatePathArea(d) {
+  try {
+    const tokens = d.split(/[ ,]/).filter(Boolean);
+    const pts = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      if (t === "M" || t === "L" || t === "Z") continue;
+      const n = Number(t);
+      if (!Number.isNaN(n)) pts.push(n);
+    }
+    const xy = [];
+    for (let i = 0; i + 1 < pts.length; i += 2) xy.push([pts[i], pts[i + 1]]);
+    let area = 0;
+    for (let i = 0; i < xy.length; i++) {
+      const [x1, y1] = xy[i];
+      const [x2, y2] = xy[(i + 1) % xy.length];
+      area += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(area / 2);
+  } catch (err) {
+    return 1000;
+  }
+}
+
+// ---------- Utilities ----------
+const SAVE_KEY = (artId) => `capybooper_save_${artId}`;
+
+function loadSave(art) {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY(art.id));
+    if (!raw) return undefined;
+    const s = JSON.parse(raw);
+    if (s.artworkId !== art.id) return undefined;
+    return s;
+  } catch (err) {
+    return undefined;
+  }
+}
+
+function persistSave(art, s) {
+  try {
+    localStorage.setItem(SAVE_KEY(art.id), JSON.stringify(s));
+  } catch (err) {}
+}
+
+function computeRemaining(art, filled) {
+  const map = {};
+  for (const p of art.palette) map[p.id] = 0;
+  for (const c of art.cells) if (!filled[c.id]) map[c.colorId] = (map[c.colorId] ?? 0) + 1;
+  return map;
+}
+
+// ---------- App ----------
+function App() {
+  const art = DEMO_ART;
+  const initial = useMemo(() => {
+    const saved = loadSave(art);
+    return (
+      saved ?? {
+        artworkId: art.id,
+        filled: {},
+        activeColor: art.palette[0].id,
+        viewport: { scale: 0.9, x: 50, y: 50 },
+        lastSaved: Date.now(),
+      }
+    );
+  }, [art]);
+
+  const [filled, setFilled] = useState(initial.filled);
+  const [activeColor, setActiveColor] = useState(initial.activeColor ?? art.palette[0].id);
+  const [scale, setScale] = useState(initial.viewport?.scale ?? 0.9);
+  const [offset, setOffset] = useState({
+    x: initial.viewport?.x ?? 0,
+    y: initial.viewport?.y ?? 0,
+  });
+  const [lastAction, setLastAction] = useState(null);
+  const [hintPulse, setHintPulse] = useState(new Set());
+  const [showTests, setShowTests] = useState(true);
+
+  // Autosave debounced
+  useEffect(() => {
+    const t = setTimeout(() => {
+      persistSave(art, {
+        artworkId: art.id,
+        filled,
+        activeColor,
+        viewport: { scale, x: offset.x, y: offset.y },
+        lastSaved: Date.now(),
+      });
+    }, 800);
+    return () => clearTimeout(t);
+  }, [art, filled, activeColor, scale, offset]);
+
+  const remaining = useMemo(() => computeRemaining(art, filled), [art, filled]);
+  const totalCells = art.cells.length;
+  const filledCount = Object.values(filled).filter(Boolean).length;
+  const progress = Math.round((filledCount / totalCells) * 100);
+
+  // Completion detection
+  useEffect(() => {
+    if (filledCount === totalCells) {
+      const el = document.getElementById("artframe");
+      if (!el) return;
+      el.animate(
+        [
+          { boxShadow: "0 0 0px rgba(0,0,0,0)" },
+          { boxShadow: "0 0 30px rgba(0,0,0,0.6)" },
+          { boxShadow: "0 0 0px rgba(0,0,0,0)" },
+        ],
+        { duration: 800 }
+      );
+    }
+  }, [filledCount, totalCells]);
+
+  // ---------- Interaction state ----------
+  const svgRef = useRef(null);
+  const isPanningRef = useRef(false);
+  const isPaintingRef = useRef(false);
+  const lastPosRef = useRef(null);
+  const movedRef = useRef(0);
+  const eyedropCandidateRef = useRef(null);
+  const pointersRef = useRef(new Map());
+  const pinchRef = useRef(null);
+
+  // ---------- Coordinate helpers ----------
+  function cssToArt(svg, clientX, clientY) {
+    const rect = svg.getBoundingClientRect();
+    const sx = art.width / rect.width;
+    const sy = art.height / rect.height;
+    const pxArt = (clientX - rect.left) * sx;
+    const pyArt = (clientY - rect.top) * sy;
+    return { pxArt, pyArt };
+  }
+
+  // ---------- Wheel zoom ----------
+  function onWheel(e) {
+    e.preventDefault();
+    const factor = Math.exp(-e.deltaY * 0.0015);
+    const newScale = clamp(scale * factor, 0.3, 4);
+
+    const svg = svgRef.current;
+    if (svg) {
+      const { pxArt, pyArt } = cssToArt(svg, e.clientX, e.clientY);
+      const artX = (pxArt - offset.x) / scale;
+      const artY = (pyArt - offset.y) / scale;
+      setOffset({ x: pxArt - artX * newScale, y: pyArt - artY * newScale });
+    }
+    setScale(newScale);
+  }
+
+  // ---------- Pointer handlers ----------
+  function onPointerDown(e) {
+    const svg = svgRef.current;
+    svg?.setPointerCapture?.(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    const target = e.target;
+    const cid = target?.dataset?.cellId;
+    movedRef.current = 0;
+
+    if (pointersRef.current.size === 2 && !pinchRef.current) {
+      const ids = Array.from(pointersRef.current.keys());
+      const p1 = pointersRef.current.get(ids[0]);
+      const p2 = pointersRef.current.get(ids[1]);
+      const d0 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      pinchRef.current = { id1: ids[0], id2: ids[1], d0, s0: scale, mid0: mid };
+      isPanningRef.current = false;
+      isPaintingRef.current = false;
+      eyedropCandidateRef.current = null;
+      return;
+    }
+
+    if (cid) {
+      const already = !!filled[cid];
+      if (already) {
+        eyedropCandidateRef.current = cid;
+        isPanningRef.current = true;
+        lastPosRef.current = { x: e.clientX, y: e.clientY };
+        return;
+      }
+      isPaintingRef.current = true;
+      onCellTap(cid);
+      return;
+    }
+    isPanningRef.current = true;
+    lastPosRef.current = { x: e.clientX, y: e.clientY };
+  }
+
+  function onPointerMove(e) {
+    const svg = svgRef.current;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pinchRef.current) {
+      const { id1, id2, d0, s0, mid0 } = pinchRef.current;
+      const p1 = pointersRef.current.get(id1);
+      const p2 = pointersRef.current.get(id2);
+      if (p1 && p2) {
+        const d = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const factor = d0 > 0 ? d / d0 : 1;
+        const newScale = clamp(s0 * factor, 0.3, 4);
+        const { pxArt, pyArt } = cssToArt(svg, mid0.x, mid0.y);
+        const artX = (pxArt - offset.x) / scale;
+        const artY = (pyArt - offset.y) / scale;
+        setOffset({ x: pxArt - artX * newScale, y: pyArt - artY * newScale });
+        setScale(newScale);
+      }
+      return;
+    }
+
+    if (isPaintingRef.current) {
+      const target = e.target;
+      const id = target?.dataset?.cellId;
+      if (id) onCellTap(id);
+      return;
+    }
+
+    if (isPanningRef.current && lastPosRef.current) {
+      const rect = svg.getBoundingClientRect();
+      const sx = art.width / rect.width;
+      const sy = art.height / rect.height;
+      const dxPx = e.clientX - lastPosRef.current.x;
+      const dyPx = e.clientY - lastPosRef.current.y;
+      movedRef.current += Math.hypot(dxPx, dyPx);
+      lastPosRef.current = { x: e.clientX, y: e.clientY };
+      setOffset((o) => ({ x: o.x + dxPx * sx, y: o.y + dyPx * sy }));
+    }
+  }
+
+  function onPointerUp(e) {
+    const svg = svgRef.current;
+    svg?.releasePointerCapture?.(e.pointerId);
+
+    if (eyedropCandidateRef.current && movedRef.current < 6) {
+      const cell = art.cells.find((c) => c.id === eyedropCandidateRef.current);
+      if (cell && (remaining[cell.colorId] ?? 0) > 0) setActiveColor(cell.colorId);
+    }
+
+    pointersRef.current.delete(e.pointerId);
+    if (pinchRef.current && (e.pointerId === pinchRef.current.id1 || e.pointerId === pinchRef.current.id2)) {
+      pinchRef.current = null;
+    }
+
+    isPanningRef.current = false;
+    isPaintingRef.current = false;
+    lastPosRef.current = null;
+    eyedropCandidateRef.current = null;
+    movedRef.current = 0;
+  }
+
+  function onCellTap(cellId) {
+    const cell = art.cells.find((c) => c.id === cellId);
+    if (!cell) return;
+
+    if (filled[cellId]) return;
+
+    if (cell.colorId !== activeColor) {
+      const el = document.getElementById(cellId);
+      if (el) {
+        el.setAttribute("stroke", "#d22");
+        el.setAttribute("stroke-width", "4");
+        setTimeout(() => {
+          el.setAttribute("stroke", "#444");
+          el.setAttribute("stroke-width", "2");
+        }, 220);
+      }
+      return;
+    }
+
+    const willCompleteColor = (remaining[activeColor] ?? 0) === 1;
+    setFilled((prev) => ({ ...prev, [cellId]: true }));
+    setLastAction(cellId);
+    if (willCompleteColor) nextColor();
+  }
+
+  function undo() {
+    if (!lastAction) return;
+    setFilled((prev) => ({ ...prev, [lastAction]: false }));
+    setLastAction(null);
+  }
+
+  function hint() {
+    const candidates = art.cells
+      .filter((c) => c.colorId === activeColor && !filled[c.id])
+      .sort((a, b) => (a.area ?? 0) - (b.area ?? 0))
+      .slice(0, 3);
+    const ids = new Set(candidates.map((c) => c.id));
+    setHintPulse(ids);
+    setTimeout(() => setHintPulse(new Set()), 1000);
+  }
+
+  function resetView() {
+    setScale(0.9);
+    setOffset({ x: 50, y: 50 });
+  }
+
+  function nextColor() {
+    const order = art.palette.map((p) => p.id);
+    const startIdx = order.indexOf(activeColor);
+    for (let i = 1; i <= order.length; i++) {
+      const id = order[(startIdx + i) % order.length];
+      if ((remaining[id] ?? 0) > 0) {
+        setActiveColor(id);
+        return;
+      }
+    }
+  }
+
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === "0") resetView();
+      if (e.key === "+" || e.key === "=") setScale((s) => clamp(s * 1.1, 0.3, 4));
+      if (e.key === "-" || e.key === "_") setScale((s) => clamp(s / 1.1, 0.3, 4));
+      if (e.key.toLowerCase() === "h") hint();
+      if (e.key.toLowerCase() === "n") nextColor();
+      if (e.key.toLowerCase() === "u") undo();
+      if (e.key.toLowerCase() === "t") setShowTests((v) => !v);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeColor, remaining, lastAction]);
+
+  return (
+    React.createElement(
+      "div",
+      { style: styles.app },
+      React.createElement(
+        "header",
+        { style: styles.header },
+        React.createElement(
+          "button",
+          {
+            "aria-label": "Back",
+            style: styles.back,
+            onClick: () => alert("Back to gallery (stub)"),
+          },
+          "\u2190"
+        ),
+        React.createElement("div", { style: { fontWeight: 600 } }, art.title),
+        React.createElement(
+          "div",
+          { style: styles.headerRight },
+          React.createElement(
+            "span",
+            { "aria-live": "polite", style: { marginRight: 12 } },
+            `Progress: ${progress}%`
+          ),
+          React.createElement(
+            "button",
+            { style: styles.iconBtn, onClick: resetView, title: "Fit to screen" },
+            "\u2922"
+          ),
+          React.createElement(
+            "button",
+            { style: styles.iconBtn, onClick: undo, title: "Undo" },
+            "\u21B6"
+          ),
+          React.createElement(
+            "button",
+            { style: styles.iconBtn, onClick: hint, title: "Hint" },
+            "\uD83D\uDCA1"
+          ),
+          React.createElement(
+            "button",
+            { style: styles.iconBtn, onClick: nextColor, title: "Next color" },
+            "\u27A1"
+          ),
+          React.createElement(
+            "button",
+            { style: styles.iconBtn, onClick: () => setShowTests((v) => !v), title: "Toggle tests" },
+            "\u2714"
+          )
+        )
+      ),
+      React.createElement(
+        "main",
+        { style: styles.main },
+        React.createElement(
+          "div",
+          { id: "artframe", style: styles.artframe },
+          React.createElement(
+            "svg",
+            {
+              ref: svgRef,
+              width: "100%",
+              height: "100%",
+              viewBox: `0 0 ${art.width} ${art.height}`,
+              style: { background: "#0f172a", touchAction: "none" },
+              onWheel: onWheel,
+              onPointerDown: onPointerDown,
+              onPointerMove: onPointerMove,
+              onPointerUp: onPointerUp,
+            },
+            React.createElement(
+              "g",
+              { transform: `translate(${offset.x} ${offset.y}) scale(${scale})` },
+              React.createElement("rect", {
+                x: 0,
+                y: 0,
+                width: art.width,
+                height: art.height,
+                fill: "#0f172a",
+                stroke: "#1e293b",
+              }),
+              art.cells.map((c) => {
+                const isFilled = !!filled[c.id];
+                const pal = art.palette.find((p) => p.id === c.colorId);
+                const showPulse = hintPulse.has(c.id);
+                return React.createElement(
+                  "g",
+                  { key: c.id },
+                  isFilled &&
+                    React.createElement("path", {
+                      d: c.d,
+                      fill: pal?.rgba,
+                      pointerEvents: "none",
+                    }),
+                  React.createElement("path", {
+                    id: c.id,
+                    "data-cell-id": c.id,
+                    "data-color-id": c.colorId,
+                    d: c.d,
+                    fill: isFilled ? "transparent" : "#0f172a",
+                    stroke: showPulse ? "#f2c200" : "#334155",
+                    strokeWidth: showPulse ? 4 : 2,
+                    style: {
+                      cursor: isFilled ? "grab" : "pointer",
+                      opacity: isFilled ? 0.35 : 1,
+                    },
+                    "aria-label": `Cell ${c.id}. Target color ${c.colorId}. ${
+                      isFilled ? "Filled" : "Unfilled"
+                    }`,
+                  }),
+                  !isFilled && scale >= 0.6 &&
+                    React.createElement(NumberLabel, { d: c.d, text: `${c.colorId}` }),
+                  !isFilled && scale < 0.6 && React.createElement(HeatDot, { d: c.d })
+                );
+              })
+            )
+          )
+        ),
+        showTests && React.createElement(SmokeTests, { art: art, filled: filled })
+      ),
+      React.createElement(
+        "footer",
+        { style: styles.footer },
+        React.createElement(Palette, {
+          palette: art.palette,
+          remaining: remaining,
+          activeColor: activeColor,
+          onSelect: setActiveColor,
+        })
+      )
+    )
+  );
+}
+
+// ---------- Helpers: Number label & heat dot ----------
+function centroidFromPath(d) {
+  const tokens = d.split(/[ ,]/).filter(Boolean);
+  const pts = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === "M" || t === "L" || t === "Z") continue;
+    const n = Number(t);
+    if (!Number.isNaN(n)) pts.push(n);
+  }
+  const xy = [];
+  for (let i = 0; i + 1 < pts.length; i += 2) xy.push([pts[i], pts[i + 1]]);
+  let cx = 0,
+    cy = 0,
+    a = 0;
+  for (let i = 0; i < xy.length; i++) {
+    const [x1, y1] = xy[i];
+    const [x2, y2] = xy[(i + 1) % xy.length];
+    const cross = x1 * y2 - x2 * y1;
+    a += cross;
+    cx += (x1 + x2) * cross;
+    cy += (y1 + y2) * cross;
+  }
+  a *= 0.5;
+  if (Math.abs(a) < 1e-5) return { x: xy[0]?.[0] ?? 0, y: xy[0]?.[1] ?? 0 };
+  return { x: cx / (6 * a), y: cy / (6 * a) };
+}
+
+function NumberLabel({ d, text }) {
+  const { x, y } = centroidFromPath(d);
+  return React.createElement(
+    "g",
+    { pointerEvents: "none" },
+    React.createElement("circle", { cx: x, cy: y, r: 16, fill: "rgba(15, 23, 42, 0.9)" }),
+    React.createElement(
+      "text",
+      {
+        x,
+        y: y + 5,
+        fontSize: 24,
+        textAnchor: "middle",
+        fill: "#e2e8f0",
+        fontFamily: "ui-sans-serif, system-ui",
+      },
+      text
+    )
+  );
+}
+
+function HeatDot({ d }) {
+  const { x, y } = centroidFromPath(d);
+  return React.createElement("circle", { pointerEvents: "none", cx: x, cy: y, r: 6, fill: "#94a3b8" });
+}
+
+// ---------- Palette ----------
+function Palette({ palette, remaining, activeColor, onSelect }) {
+  return React.createElement(
+    "div",
+    { style: styles.paletteWrap },
+    palette.map((p) => {
+      const left = remaining[p.id] ?? 0;
+      const isActive = p.id === activeColor;
+      return React.createElement(
+        "button",
+        {
+          key: p.id,
+          onClick: () => onSelect(p.id),
+          disabled: left === 0 && !isActive,
+          "aria-pressed": isActive,
+          title: `${p.name ?? "Color"} #${p.id} • Remaining ${left}`,
+          style: {
+            ...styles.swatch,
+            borderColor: isActive ? "#f8fafc" : "transparent",
+            boxShadow: isActive ? "0 0 0 2px rgba(148, 163, 184, 0.4)" : undefined,
+            opacity: left === 0 ? 0.4 : 1,
+          },
+        },
+        React.createElement(
+          "div",
+          { style: { ...styles.swatchChip, background: p.rgba } },
+          React.createElement("span", { style: styles.swatchNumber }, p.id)
+        ),
+        React.createElement(
+          "div",
+          { style: styles.swatchMeta },
+          React.createElement("span", { style: styles.swatchCountLabel }, "Cells"),
+          React.createElement("span", { style: styles.swatchCount }, left)
+        )
+      );
+    })
+  );
+}
+
+// ---------- Smoke Tests HUD ----------
+function SmokeTests({ art, filled }) {
+  const results = useMemo(() => runSmokeTests(art, filled), [art, filled]);
+  const allPass = results.every((r) => r.pass);
+  return React.createElement(
+    "div",
+    {
+      style: {
+        position: "absolute",
+        left: 16,
+        bottom: 120,
+        background: allPass ? "rgba(34, 197, 94, 0.12)" : "rgba(248, 113, 113, 0.12)",
+        border: `1px solid ${allPass ? "#22c55e" : "#f87171"}`,
+        borderRadius: 12,
+        padding: 12,
+        boxShadow: "0 12px 40px rgba(15, 23, 42, 0.35)",
+        maxWidth: 360,
+        fontSize: 12,
+        backdropFilter: "blur(12px)",
+      },
+    },
+    React.createElement(
+      "div",
+      { style: { fontWeight: 700, marginBottom: 8 } },
+      allPass ? "Smoke tests passed" : "Smoke tests failed"
+    ),
+    React.createElement(
+      "ul",
+      { style: { margin: 0, paddingLeft: 18 } },
+      results.map((r) =>
+        React.createElement(
+          "li",
+          { key: r.name, style: { color: r.pass ? "#4ade80" : "#fca5a5" } },
+          `${r.pass ? "✔" : "✖"} ${r.name}${r.msg ? ` – ${r.msg}` : ""}`
+        )
+      )
+    ),
+    React.createElement(
+      "div",
+      { style: { marginTop: 8, color: "#94a3b8" } },
+      "Press T to hide/show."
+    )
+  );
+}
+
+function runSmokeTests(art, filled) {
+  const tests = [];
+  const rem = computeRemaining(art, filled);
+  const sum = Object.values(rem).reduce((a, b) => a + b, 0);
+  const expected = art.cells.filter((c) => !filled[c.id]).length;
+  tests.push({ name: "Remaining matches unfilled count", pass: sum === expected, msg: `${sum}/${expected}` });
+  const c0 = art.cells[0];
+  const { x, y } = centroidFromPath(c0.d);
+  tests.push({ name: "Centroid in bounds", pass: x >= 0 && y >= 0 && x <= art.width && y <= art.height });
+  const ids = new Set(art.palette.map((p) => p.id));
+  tests.push({ name: "Palette IDs unique", pass: ids.size === art.palette.length });
+  return tests;
+}
+
+// ---------- Styles ----------
+const styles = {
+  app: {
+    height: "100vh",
+    display: "grid",
+    gridTemplateRows: "72px 1fr 120px",
+    fontFamily: "'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui",
+    color: "#f8fafc",
+    background: "radial-gradient(circle at top, rgba(56, 189, 248, 0.05), rgba(15, 23, 42, 0.9))",
+  },
+  header: {
+    display: "grid",
+    gridTemplateColumns: "56px 1fr auto",
+    alignItems: "center",
+    padding: "0 20px",
+    borderBottom: "1px solid rgba(148, 163, 184, 0.2)",
+    background: "rgba(2, 6, 23, 0.7)",
+    backdropFilter: "blur(12px)",
+  },
+  back: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    border: "1px solid rgba(148, 163, 184, 0.3)",
+    background: "rgba(15, 23, 42, 0.8)",
+    color: "#e2e8f0",
+    cursor: "pointer",
+  },
+  headerRight: {
+    display: "flex",
+    alignItems: "center",
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    border: "1px solid rgba(148, 163, 184, 0.3)",
+    background: "rgba(15, 23, 42, 0.8)",
+    color: "#e2e8f0",
+    cursor: "pointer",
+    marginLeft: 10,
+    display: "grid",
+    placeItems: "center",
+  },
+  main: {
+    display: "grid",
+    placeItems: "center",
+    padding: 24,
+    position: "relative",
+  },
+  artframe: {
+    width: "min(96vw, 960px)",
+    height: "min(70vh, 720px)",
+    background: "rgba(15, 23, 42, 0.85)",
+    border: "1px solid rgba(148, 163, 184, 0.15)",
+    borderRadius: 24,
+    overflow: "hidden",
+    boxShadow: "0 18px 50px rgba(2, 6, 23, 0.55)",
+  },
+  footer: {
+    borderTop: "1px solid rgba(148, 163, 184, 0.2)",
+    background: "rgba(2, 6, 23, 0.7)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "18px 24px",
+    backdropFilter: "blur(12px)",
+  },
+  paletteWrap: {
+    display: "flex",
+    gap: 16,
+    padding: "0 12px",
+    overflowX: "auto",
+    width: "100%",
+    maxWidth: 960,
+  },
+  swatch: {
+    minWidth: 120,
+    height: 72,
+    borderRadius: 20,
+    border: "1px solid transparent",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 14,
+    padding: "0 16px",
+    background: "rgba(15, 23, 42, 0.8)",
+    color: "#cbd5f5",
+    cursor: "pointer",
+  },
+  swatchChip: {
+    width: 48,
+    height: 48,
+    borderRadius: "50%",
+    display: "grid",
+    placeItems: "center",
+    boxShadow: "0 0 0 2px rgba(15, 23, 42, 0.6)",
+  },
+  swatchNumber: {
+    fontWeight: 700,
+    color: "#020617",
+  },
+  swatchMeta: {
+    display: "grid",
+    gap: 2,
+    fontSize: 12,
+  },
+  swatchCountLabel: {
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    color: "#64748b",
+    fontSize: 10,
+  },
+  swatchCount: {
+    fontSize: 18,
+    fontWeight: 700,
+    color: "#e2e8f0",
+  },
+};
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
+    </script>
   </body>
 </html>
