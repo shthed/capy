@@ -37,7 +37,8 @@ smoke-test overlay verifying key invariants for debugging.
 - **Options panel:** Floating dialog opened from the header that summarizes the
   app overview, lists the major UI surfaces, and exposes toggles for autosave,
   auto-advance, hint pulses, drag-fill, eyedropper, keyboard shortcuts,
-  numbered overlays, heat-map dots, and the smoke-test HUD.
+  numbered overlays, heat-map dots, and the smoke-test HUD. Choices persist in
+  localStorage and can be restored to the defaults with a single reset.
 
 ## Getting started
 

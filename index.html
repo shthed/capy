@@ -172,6 +172,33 @@ const DEFAULT_CONFIG = {
   enableSmokeHud: true,
 };
 
+const CONFIG_KEY = "capybooper_config";
+
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem(CONFIG_KEY);
+    if (!raw) return DEFAULT_CONFIG;
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_CONFIG, ...parsed };
+  } catch (err) {
+    return DEFAULT_CONFIG;
+  }
+}
+
+function persistConfig(next) {
+  try {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(next));
+  } catch (err) {}
+}
+
+function shallowEqual(a, b) {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) if (a[key] !== b[key]) return false;
+  return true;
+}
+
 function loadSave(art) {
   try {
     const raw = localStorage.getItem(SAVE_KEY(art.id));
@@ -200,6 +227,7 @@ function computeRemaining(art, filled) {
 // ---------- App ----------
 function App() {
   const art = DEMO_ART;
+  const initialConfig = useMemo(() => loadConfig(), []);
   const initial = useMemo(() => {
     const saved = loadSave(art);
     return (
@@ -213,7 +241,8 @@ function App() {
     );
   }, [art]);
 
-  const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [config, setConfig] = useState(initialConfig);
+  const isDefaultConfig = useMemo(() => shallowEqual(config, DEFAULT_CONFIG), [config]);
   const [filled, setFilled] = useState(initial.filled);
   const [activeColor, setActiveColor] = useState(initial.activeColor ?? art.palette[0].id);
   const [scale, setScale] = useState(initial.viewport?.scale ?? 0.9);
@@ -223,7 +252,7 @@ function App() {
   });
   const [lastAction, setLastAction] = useState(null);
   const [hintPulse, setHintPulse] = useState(new Set());
-  const [showTests, setShowTests] = useState(DEFAULT_CONFIG.enableSmokeHud);
+  const [showTests, setShowTests] = useState(initialConfig.enableSmokeHud);
   const [showOptions, setShowOptions] = useState(false);
 
   const {
@@ -258,7 +287,7 @@ function App() {
   const filledCount = Object.values(filled).filter(Boolean).length;
   const progress = Math.round((filledCount / totalCells) * 100);
 
-  const previousSmokePreferenceRef = useRef(DEFAULT_CONFIG.enableSmokeHud);
+  const previousSmokePreferenceRef = useRef(initialConfig.enableSmokeHud);
 
   useEffect(() => {
     if (!enableSmokeHud) {
@@ -491,7 +520,22 @@ function App() {
   }
 
   function handleConfigChange(key, value) {
-    setConfig((prev) => ({ ...prev, [key]: value }));
+    setConfig((prev) => {
+      if (prev[key] === value) return prev;
+      const next = { ...prev, [key]: value };
+      persistConfig(next);
+      return next;
+    });
+  }
+
+  function handleConfigReset() {
+    setConfig((prev) => {
+      if (shallowEqual(prev, DEFAULT_CONFIG)) return prev;
+      persistConfig(DEFAULT_CONFIG);
+      return DEFAULT_CONFIG;
+    });
+    previousSmokePreferenceRef.current = DEFAULT_CONFIG.enableSmokeHud;
+    setShowTests(DEFAULT_CONFIG.enableSmokeHud);
   }
 
   useEffect(() => {
@@ -595,6 +639,8 @@ function App() {
         React.createElement(OptionsPanel, {
           config: config,
           onToggle: handleConfigChange,
+          canReset: !isDefaultConfig,
+          onReset: handleConfigReset,
           onClose: () => setShowOptions(false),
         }),
       React.createElement(
@@ -773,7 +819,7 @@ function Palette({ palette, remaining, activeColor, onSelect }) {
   );
 }
 
-function OptionsPanel({ config, onToggle, onClose }) {
+function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
   const options = [
     {
       key: "enableAutosave",
@@ -913,6 +959,24 @@ function OptionsPanel({ config, onToggle, onClose }) {
         "pre",
         { style: styles.optionsConfigPre },
         JSON.stringify(config, null, 2)
+      ),
+      React.createElement(
+        "div",
+        { style: styles.optionsFooter },
+        React.createElement(
+          "button",
+          {
+            style: {
+              ...styles.optionsReset,
+              opacity: canReset ? 1 : 0.5,
+              cursor: canReset ? "pointer" : "not-allowed",
+            },
+            type: "button",
+            onClick: canReset ? onReset : undefined,
+            disabled: !canReset,
+          },
+          "Reset to defaults"
+        )
       )
     )
   );
@@ -1208,6 +1272,20 @@ const styles = {
     fontSize: 12,
     color: "#f8fafc",
     overflowX: "auto",
+  },
+  optionsFooter: {
+    marginTop: 16,
+    display: "flex",
+    justifyContent: "flex-end",
+  },
+  optionsReset: {
+    borderRadius: 12,
+    border: "1px solid rgba(148, 163, 184, 0.35)",
+    background: "rgba(51, 65, 85, 0.4)",
+    color: "#e2e8f0",
+    padding: "10px 16px",
+    cursor: "pointer",
+    fontWeight: 600,
   },
 };
 
