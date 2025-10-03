@@ -33,7 +33,7 @@ test.describe('Capybooper app smoke tests', () => {
   test('fills a cell and updates progress', async ({ page }) => {
     const progressBadge = page.locator('[data-testid="progress-indicator"]');
     await progressBadge.waitFor();
-    await expect(progressBadge).toContainText('0% complete');
+    await expect(progressBadge).toHaveText('0%');
 
     const paletteButtons = page.locator('[data-testid="palette-dock"] button');
     await paletteButtons.nth(8).click();
@@ -41,6 +41,6 @@ test.describe('Capybooper app smoke tests', () => {
     const targetCell = page.locator('path[data-cell-id="c18"]');
     await targetCell.click({ force: true });
 
-    await expect(progressBadge).not.toContainText('0% complete');
+    await expect(progressBadge).not.toHaveText('0%');
   });
 });
