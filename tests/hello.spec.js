@@ -36,9 +36,9 @@ test.describe('Capybooper app smoke tests', () => {
     await expect(progressBadge).toHaveText('0%');
 
     const paletteButtons = page.locator('[data-testid="palette-dock"] button');
-    await paletteButtons.nth(8).click();
+    await paletteButtons.first().click();
 
-    const targetCell = page.locator('path[data-cell-id="c18"]');
+    const targetCell = page.locator('path[data-cell-id="c1"]');
     await targetCell.click({ force: true });
 
     await expect(progressBadge).not.toHaveText('0%');
