@@ -599,6 +599,65 @@ function App() {
   const eyedropCandidateRef = useRef(null);
   const pointersRef = useRef(new Map());
   const pinchRef = useRef(null);
+  const zoomAnimRef = useRef(null);
+
+  const cancelZoomAnimation = useCallback(() => {
+    if (zoomAnimRef.current) {
+      cancelAnimationFrame(zoomAnimRef.current);
+      zoomAnimRef.current = null;
+    }
+  }, []);
+
+  const smoothZoomTo = useCallback(
+    (targetScale, clientX, clientY) => {
+      if (!art) return;
+      const svg = svgRef.current;
+      if (!svg) return;
+      const { pxArt, pyArt } = cssToArt(svg, clientX, clientY);
+      const artX = (pxArt - offset.x) / scale;
+      const artY = (pyArt - offset.y) / scale;
+      const clamped = clamp(targetScale, 0.3, 4);
+      const targetOffset = {
+        x: pxArt - artX * clamped,
+        y: pyArt - artY * clamped,
+      };
+      cancelZoomAnimation();
+      const duration = 180;
+      const start = performance.now();
+      const startScale = scale;
+      const startOffset = { x: offset.x, y: offset.y };
+
+      function step(now) {
+        const t = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const nextScale = startScale + (clamped - startScale) * eased;
+        const nextOffset = {
+          x: startOffset.x + (targetOffset.x - startOffset.x) * eased,
+          y: startOffset.y + (targetOffset.y - startOffset.y) * eased,
+        };
+        setScale(nextScale);
+        setOffset(nextOffset);
+        if (t < 1) {
+          zoomAnimRef.current = requestAnimationFrame(step);
+        } else {
+          zoomAnimRef.current = null;
+        }
+      }
+
+      if (Math.abs(clamped - startScale) < 1e-3) {
+        setScale(clamped);
+        setOffset(targetOffset);
+        return;
+      }
+
+      zoomAnimRef.current = requestAnimationFrame(step);
+    },
+    [art, cancelZoomAnimation, offset.x, offset.y, scale]
+  );
+
+  useEffect(() => {
+    return () => cancelZoomAnimation();
+  }, [cancelZoomAnimation]);
 
   function cssToArt(svg, clientX, clientY) {
     if (!art) return { pxArt: 0, pyArt: 0 };
@@ -613,17 +672,9 @@ function App() {
   function onWheel(e) {
     if (!art) return;
     e.preventDefault();
-    const factor = Math.exp(-e.deltaY * 0.0015);
-    const newScale = clamp(scale * factor, 0.3, 4);
-
-    const svg = svgRef.current;
-    if (svg) {
-      const { pxArt, pyArt } = cssToArt(svg, e.clientX, e.clientY);
-      const artX = (pxArt - offset.x) / scale;
-      const artY = (pyArt - offset.y) / scale;
-      setOffset({ x: pxArt - artX * newScale, y: pyArt - artY * newScale });
-    }
-    setScale(newScale);
+    const factor = Math.exp(-e.deltaY * 0.0012);
+    const proposed = scale * factor;
+    smoothZoomTo(proposed, e.clientX, e.clientY);
   }
 
   function onPointerDown(e) {
@@ -636,7 +687,18 @@ function App() {
     const cid = target?.dataset?.cellId;
     movedRef.current = 0;
 
+    if (e.pointerType === "mouse" && (e.button === 2 || e.button === 1 || e.ctrlKey)) {
+      e.preventDefault();
+      cancelZoomAnimation();
+      isPaintingRef.current = false;
+      eyedropCandidateRef.current = null;
+      isPanningRef.current = true;
+      lastPosRef.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
+
     if (pointersRef.current.size === 2 && !pinchRef.current) {
+      cancelZoomAnimation();
       const ids = Array.from(pointersRef.current.keys());
       const p1 = pointersRef.current.get(ids[0]);
       const p2 = pointersRef.current.get(ids[1]);
@@ -650,6 +712,7 @@ function App() {
     }
 
     if (cid) {
+      cancelZoomAnimation();
       const already = !!filled[cid];
       if (already) {
         eyedropCandidateRef.current = enableEyedropper ? cid : null;
@@ -661,6 +724,7 @@ function App() {
       onCellTap(cid);
       return;
     }
+    cancelZoomAnimation();
     isPanningRef.current = true;
     lastPosRef.current = { x: e.clientX, y: e.clientY };
   }
@@ -893,6 +957,7 @@ function App() {
                 onPointerDown: onPointerDown,
                 onPointerMove: onPointerMove,
                 onPointerUp: onPointerUp,
+                onContextMenu: (e) => e.preventDefault(),
               },
               React.createElement(
                 "g",
