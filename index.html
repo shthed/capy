@@ -670,9 +670,8 @@ async function loadStarterArtworks(signal) {
 
   const inlineFallbacks =
     typeof window !== "undefined" ? window.__starterSvgFallbacks ?? null : null;
-  const preferInlineFallback =
+  const isFileProtocol =
     typeof window !== "undefined" && window.location?.protocol === "file:";
-  const allowNetworkFetch = !preferInlineFallback;
 
   for (const source of STARTER_SOURCES) {
     let candidate = null;
@@ -691,104 +690,81 @@ async function loadStarterArtworks(signal) {
       throw new Error(parsed.error ?? "Unable to convert the artwork payload.");
     };
 
-    const inlinePayload = inlineFallbacks?.[source.id] ?? null;
-    let inlineError = null;
+    if (!candidate && source.url) {
+      const loaders = [];
+      const addLoader = (label, fn) => loaders.push({ label, fn });
 
-    if (inlinePayload) {
-      try {
-        candidate = parseSource(inlinePayload);
-      } catch (inlineErr) {
-        inlineError = inlineErr instanceof Error ? inlineErr : new Error(String(inlineErr));
-        failureReasons.push(inlineError);
+      if (isFileProtocol) {
+        addLoader("<object>", () => loadSvgViaObject(source.url, signal));
+        addLoader("XMLHttpRequest", () => loadSvgViaXhr(source.url, signal));
+        addLoader("fetch", async () => {
+          const response = await fetch(source.url, { signal });
+          if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+          return response.text();
+        });
+      } else {
+        addLoader("fetch", async () => {
+          const response = await fetch(source.url, { signal });
+          if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+          return response.text();
+        });
+        addLoader("XMLHttpRequest", () => loadSvgViaXhr(source.url, signal));
+        addLoader("<object>", () => loadSvgViaObject(source.url, signal));
       }
-    }
 
-    if (!candidate && preferInlineFallback && !inlinePayload) {
-      errors.push(
-        new Error(`No inline fallback was bundled for ${source.id || source.url || 'starter art'}.`)
-      );
-      continue;
-    }
-
-    if (!candidate && preferInlineFallback && inlinePayload) {
-      if (inlineError) {
-        errors.push(inlineError);
-      }
-      continue;
-    }
-
-    if (!candidate && source.url && allowNetworkFetch) {
-      try {
-        const response = await fetch(source.url, { signal });
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
+      for (const loader of loaders) {
+        if (candidate) break;
+        try {
+          const raw = await loader.fn();
+          candidate = parseSource(raw);
+          if (candidate) {
+            console.info(
+              `Loaded starter artwork from ${source.url} via ${loader.label}.`
+            );
+          }
+        } catch (err) {
+          const normalized = err instanceof Error ? err : new Error(String(err));
+          failureReasons.push(normalized);
+          console.warn(
+            `Unable to load starter artwork from ${source.url} via ${loader.label}:`,
+            normalized
+          );
         }
-        const text = await response.text();
-        candidate = parseSource(text);
+      }
+    }
+
+    if (!candidate && inlineFallbacks?.[source.id]) {
+      try {
+        candidate = parseSource(inlineFallbacks[source.id]);
+        if (candidate) {
+          console.info(
+            `Loaded starter artwork from ${source.url || source.id} via inline fallback.`
+          );
+        }
       } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        failureReasons.push(error);
-        console.warn(`Unable to fetch starter artwork from ${source.url}:`, error);
-
-        if (source.type === "image/svg+xml") {
-          let parsedFromFallback = false;
-          try {
-            const text = await loadSvgViaXhr(source.url, signal);
-            candidate = parseSource(text);
-            if (candidate) {
-              console.info(`Loaded starter artwork from ${source.url} via XMLHttpRequest fallback.`);
-              failureReasons.length = 0;
-              parsedFromFallback = true;
-            }
-          } catch (xhrErr) {
-            const normalized = xhrErr instanceof Error ? xhrErr : new Error(String(xhrErr));
-            console.warn(`Unable to load starter artwork from ${source.url} via XMLHttpRequest:`, normalized);
-            failureReasons.push(normalized);
-          }
-
-          if (!parsedFromFallback || !candidate) {
-            try {
-              const text = await loadSvgViaObject(source.url, signal);
-              candidate = parseSource(text);
-              if (candidate) {
-                console.info(`Loaded starter artwork from ${source.url} via <object> fallback.`);
-                failureReasons.length = 0;
-                parsedFromFallback = true;
-              }
-            } catch (fallbackErr) {
-              const normalized =
-                fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr));
-              console.warn(`Unable to load starter artwork from ${source.url} via <object>:`, normalized);
-              failureReasons.push(normalized);
-            }
-          }
-
-          if ((!parsedFromFallback || !candidate) && inlinePayload) {
-            try {
-              candidate = parseSource(inlinePayload);
-              if (candidate) {
-                console.info(`Loaded starter artwork from ${source.url} via inline fallback.`);
-                failureReasons.length = 0;
-              }
-            } catch (inlineErr) {
-              const normalized =
-                inlineErr instanceof Error ? inlineErr : new Error(String(inlineErr));
-              console.warn(`Unable to parse inline fallback for ${source.url}:`, normalized);
-              failureReasons.push(normalized);
-            }
-          }
-        }
-
-        if (!candidate && failureReasons.length) {
-          failureReasons.forEach((failure) => {
-            console.warn(`Unable to load starter artwork from ${source.url}:`, failure);
-            errors.push(failure);
-          });
-        }
+        const normalized = err instanceof Error ? err : new Error(String(err));
+        failureReasons.push(normalized);
+        console.warn(
+          `Unable to parse inline fallback for ${source.url || source.id}:`,
+          normalized
+        );
       }
     }
 
-    if (!candidate) continue;
+    if (!candidate) {
+      if (failureReasons.length) {
+        errors.push(failureReasons[0]);
+      } else {
+        errors.push(
+          new Error(`Unable to load starter artwork from ${source.url || source.id || 'starter art'}.`)
+        );
+      }
+      continue;
+    }
 
     let id = (candidate.id ?? "").toString().trim();
     if (!id) {
@@ -1990,7 +1966,7 @@ function App() {
         React.createElement(
           "div",
           { style: styles.bootstrapBanner, role: "status" },
-          `Starter art could not be loaded automatically (${starterStatus.error}). Using bundled fallback data.`
+          `Starter art could not be loaded automatically (${starterStatus.error}). Import an SVG from the library to continue.`
         ),
       art
         ? React.createElement(
