@@ -1,9 +1,9 @@
 # UI Review Notes
 
 ## Positive Observations
-- The glassy top command bar now centralizes library, options, and canvas utilities with readable labels and generous touch targets.
+- The glassy top command rail now runs in a single compact line, keeping library, options, reset, undo, hint, next, and testing controls visible without overwhelming the canvas.
 - The integrated progress chip beside the artwork title makes it effortless to see completion percentage at a glance as you fill cells.
-- Keyboard shortcuts and hint messaging are surfaced in the footer, which supports accessibility for power users.
+- Slimmed palette bubbles still feel tactile thanks to the inset numbering and glow, and they give the composition more breathing room around the artwork.
 
 ## Suggestions for Improvement
 - Consider increasing the contrast between inactive palette swatches and the dark background to improve readability.
