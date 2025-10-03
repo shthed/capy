@@ -4,6 +4,7 @@
   <desc id="desc">Layered sunrise bands over a lagoon with a stylized capybara on the shore.</desc>
   <g id="region-c01" data-cell-id="c1" data-color-id="1" data-color-name="Sunrise Sky" data-color-hex="#f6bf60">
 <<<<<<< HEAD
+<<<<<<< HEAD
     <path d="M0 0 L960 0 L960 160 C 760 150 600 150 480 155 C 320 160 160 165 0 160 Z"/>
   </g>
   <g id="region-c02" data-cell-id="c2" data-color-id="2" data-color-name="Amber Drift" data-color-hex="#f4994c">
@@ -36,6 +37,8 @@
   <g id="region-c11" data-cell-id="c11" data-color-id="11" data-color-name="Shore Right" data-color-hex="#3f5b3b">
     <path d="M870 585 C 900 570 930 562 960 565 L960 600 L870 600 Z"/>
 =======
+=======
+>>>>>>> 512eaaf (Refine canvas controls and update docs)
     <title>Region c1 – Color #1 (Sunrise Sky)</title>
     <path d="M0 0 L960 0 L960 80 C 820 70 680 68 540 72 C 380 78 220 86 0 80 Z"/>
   </g>
@@ -138,6 +141,9 @@
   <g id="region-c26" data-cell-id="c26" data-color-id="11" data-color-name="Shore Right" data-color-hex="#3f5b3b">
     <title>Region c26 – Color #11 (Shore Right)</title>
     <path d="M780 460 C 840 456 900 454 960 452 L960 600 C 910 600 870 598 810 600 C 846 608 878 594 892 556 C 884 520 860 488 780 460 Z"/>
+<<<<<<< HEAD
 >>>>>>> cffa377 (Refine lagoon segmentation and unblock progress)
+=======
+>>>>>>> 512eaaf (Refine canvas controls and update docs)
   </g>
 </svg>
