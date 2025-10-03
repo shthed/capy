@@ -15,3 +15,4 @@
 - Regions should use varied silhouettes (curves, diagonals, and organic contours) so the final illustration feels hand-crafted instead of grid based.
 - Validate that every region receives a unique identifier and is referenced by the palette legend so color matching remains obvious to players.
 - Before committing new artwork, zoom the canvas to inspect that no slivers remain unlabeled and that the aggregate composition still conveys the intended scene.
+- Export the finalized segmentation as an SVG asset (see art/capybara-forest.svg) so it can be inspected or iterated on outside the runtime.
