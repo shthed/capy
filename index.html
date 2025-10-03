@@ -45,7 +45,7 @@
     <script src="./vendor/react-dom.development.js"></script>
     <script src="./vendor/babel.min.js"></script>
     <script type="text/babel">
-const { useCallback, useEffect, useMemo, useRef, useState } = React;
+const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
 
 // Capybooper Web Game — MVP single-file React app (patched)
 // Fixes: correct zoom/pan math, pan over filled cells, pinch zoom, drag-fill,
@@ -925,7 +925,11 @@ function App() {
                       "aria-label": `Cell ${c.id}. Target color ${c.colorId}. ${isFilled ? "Filled" : "Unfilled"}`,
                     }),
                     !isFilled && showNumberBadges && scale >= 0.6 &&
-                      React.createElement(NumberLabel, { d: c.d, text: `${c.colorId}` }),
+                      React.createElement(NumberLabel, {
+                        d: c.d,
+                        text: `${c.colorId}`,
+                        area: c.area,
+                      }),
                     !isFilled && showHeatmapDots && scale < 0.6 &&
                       React.createElement(HeatDot, { d: c.d })
                   );
@@ -1071,6 +1075,136 @@ function App() {
 }
 
 // ---------- Helpers: Number label & heat dot ----------
+const SVG_NS = "http://www.w3.org/2000/svg";
+let measureSvgEl = null;
+let measureCanvasCtx = null;
+
+function ensureMeasureSvg() {
+  if (typeof document === "undefined") return null;
+  if (!measureSvgEl) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("width", "0");
+    svg.setAttribute("height", "0");
+    svg.style.position = "absolute";
+    svg.style.width = "0";
+    svg.style.height = "0";
+    svg.style.opacity = "0";
+    svg.style.pointerEvents = "none";
+    document.body.appendChild(svg);
+    measureSvgEl = svg;
+  }
+  return measureSvgEl;
+}
+
+function ensureMeasureContext() {
+  if (typeof document === "undefined") return null;
+  if (!measureCanvasCtx) {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    measureCanvasCtx = canvas.getContext("2d");
+  }
+  return measureCanvasCtx;
+}
+
+function measurePathBox(d) {
+  const host = ensureMeasureSvg();
+  if (!host) return null;
+  try {
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d);
+    host.appendChild(path);
+    const box = path.getBBox();
+    host.removeChild(path);
+    return box;
+  } catch (err) {
+    return null;
+  }
+}
+
+function findInteriorPoint(d, fallback, bbox) {
+  const ctx = ensureMeasureContext();
+  if (!ctx) return fallback;
+  if (typeof Path2D === "undefined") return fallback;
+  let path;
+  try {
+    path = new Path2D(d);
+  } catch (err) {
+    return fallback;
+  }
+
+  const center = bbox
+    ? { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 }
+    : fallback;
+  const candidates = [fallback];
+  if (bbox) {
+    candidates.push(
+      center,
+      { x: bbox.x + bbox.width * 0.3, y: bbox.y + bbox.height * 0.5 },
+      { x: bbox.x + bbox.width * 0.7, y: bbox.y + bbox.height * 0.5 },
+      { x: bbox.x + bbox.width * 0.5, y: bbox.y + bbox.height * 0.3 },
+      { x: bbox.x + bbox.width * 0.5, y: bbox.y + bbox.height * 0.7 }
+    );
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (ctx.isPointInPath(path, candidate.x, candidate.y)) return candidate;
+  }
+
+  if (!bbox) return fallback;
+
+  const centerX = bbox.x + bbox.width / 2;
+  const centerY = bbox.y + bbox.height / 2;
+  const steps = Math.max(6, Math.ceil(Math.max(bbox.width, bbox.height) / 60));
+  const stepX = bbox.width / (steps + 1);
+  const stepY = bbox.height / (steps + 1);
+
+  let best = null;
+  let bestScore = -Infinity;
+
+  for (let i = 0; i <= steps; i++) {
+    for (let j = 0; j <= steps; j++) {
+      const x = bbox.x + (i + 0.5) * stepX;
+      const y = bbox.y + (j + 0.5) * stepY;
+      if (!ctx.isPointInPath(path, x, y)) continue;
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const score = -(dx * dx + dy * dy);
+      if (score > bestScore) {
+        best = { x, y };
+        bestScore = score;
+      }
+    }
+  }
+
+  return best ?? fallback;
+}
+
+function computeLabelMetrics(bbox, area) {
+  const defaults = { radius: 16, fontSize: 24, showBubble: true };
+  if (!bbox) return defaults;
+
+  const minSide = Math.max(0, Math.min(bbox.width, bbox.height));
+  if (minSide === 0) return defaults;
+
+  const areaRadius = area && area > 0 ? Math.sqrt(area) / 14 : 0;
+  let radius = Math.max(6, Math.min(18, Math.max(minSide / 2.6, areaRadius)));
+  const maxRadius = Math.max(4, minSide / 2 - 1);
+  radius = Math.min(radius, maxRadius);
+  if (!Number.isFinite(radius) || radius <= 0) {
+    radius = 10;
+  }
+
+  const showBubble = radius >= 6 && minSide >= 14;
+  if (!showBubble) {
+    const fontSize = Math.max(9, Math.min(16, minSide * 0.9));
+    return { radius: 0, fontSize, showBubble };
+  }
+
+  const fontSize = Math.max(10, Math.min(20, radius * 1.35));
+  return { radius, fontSize, showBubble };
+}
 function centroidFromPath(d) {
   const tokens = d.split(/[ ,]/).filter(Boolean);
   const pts = [];
@@ -1098,25 +1232,58 @@ function centroidFromPath(d) {
   return { x: cx / (6 * a), y: cy / (6 * a) };
 }
 
-function NumberLabel({ d, text }) {
-  const { x, y } = centroidFromPath(d);
+const pointAlmostEqual = (a, b) =>
+  a === b || (a && b && Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01);
+
+const metricsAlmostEqual = (a, b) =>
+  a === b ||
+  (a &&
+    b &&
+    Math.abs(a.radius - b.radius) < 0.01 &&
+    Math.abs(a.fontSize - b.fontSize) < 0.01 &&
+    a.showBubble === b.showBubble);
+
+function NumberLabel({ d, text, area }) {
+  const fallback = useMemo(() => centroidFromPath(d), [d]);
+  const [position, setPosition] = useState(fallback);
+  const [metrics, setMetrics] = useState(() => ({ radius: 16, fontSize: 24, showBubble: true }));
+
+  useLayoutEffect(() => {
+    if (typeof document === "undefined") return;
+    const bbox = measurePathBox(d);
+    const nextPoint = findInteriorPoint(d, fallback, bbox);
+    setPosition((prev) => (pointAlmostEqual(prev, nextPoint) ? prev : nextPoint));
+    const nextMetrics = computeLabelMetrics(bbox, area);
+    setMetrics((prev) => (metricsAlmostEqual(prev, nextMetrics) ? prev : nextMetrics));
+  }, [d, area, fallback.x, fallback.y]);
+
+  const { x, y } = position;
+  const { radius, fontSize, showBubble } = metrics;
+
+  const textProps = {
+    x,
+    y,
+    fontSize,
+    textAnchor: "middle",
+    dominantBaseline: "middle",
+    fill: "#e2e8f0",
+    fontFamily: "ui-sans-serif, system-ui",
+  };
+
+  if (!showBubble) {
+    textProps.style = {
+      paintOrder: "stroke",
+      stroke: "rgba(15, 23, 42, 0.9)",
+      strokeWidth: 3,
+    };
+  }
+
   return React.createElement(
     "g",
     { pointerEvents: "none" },
-    React.createElement("circle", { cx: x, cy: y, r: 16, fill: "rgba(15, 23, 42, 0.9)" }),
-    React.createElement(
-      "text",
-      {
-        x,
-        y,
-        fontSize: 24,
-        textAnchor: "middle",
-        dominantBaseline: "middle",
-        fill: "#e2e8f0",
-        fontFamily: "ui-sans-serif, system-ui",
-      },
-      text
-    )
+    showBubble &&
+      React.createElement("circle", { cx: x, cy: y, r: radius, fill: "rgba(15, 23, 42, 0.9)" }),
+    React.createElement("text", textProps, text)
   );
 }
 
