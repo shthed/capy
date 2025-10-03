@@ -248,6 +248,217 @@ function normalizeArtwork(raw) {
   }
 }
 
+function parseDimension(value) {
+  if (value === null || value === undefined) return null;
+  const num = Number.parseFloat(value);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+function coerceId(value) {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "number") return value;
+  const trimmed = value.toString().trim();
+  if (!trimmed) return undefined;
+  if (/^-?\d+(?:\.\d+)?$/.test(trimmed) && !/^0\d+/.test(trimmed)) {
+    const num = Number(trimmed);
+    if (Number.isFinite(num)) return num;
+  }
+  return trimmed;
+}
+
+function parseSvgArtwork(raw, meta = {}) {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(raw, "image/svg+xml");
+    if (!doc) {
+      return { ok: false, error: "Unable to parse the SVG markup." };
+    }
+    if (doc.querySelector("parsererror")) {
+      return { ok: false, error: "The SVG markup contains syntax errors." };
+    }
+    const svgEl = doc.querySelector("svg");
+    if (!svgEl) {
+      return { ok: false, error: "The SVG is missing a <svg> root element." };
+    }
+
+    let width = parseDimension(svgEl.getAttribute("width"));
+    let height = parseDimension(svgEl.getAttribute("height"));
+    const viewBox = svgEl.getAttribute("viewBox");
+    if ((!width || !height) && viewBox) {
+      const parts = viewBox
+        .trim()
+        .split(/[ ,]+/)
+        .map((v) => Number.parseFloat(v))
+        .filter((v) => Number.isFinite(v));
+      if (parts.length >= 4) {
+        width = width || parts[2];
+        height = height || parts[3];
+      }
+    }
+    if (!width || !height) {
+      return { ok: false, error: "The SVG must include width/height or a valid viewBox." };
+    }
+
+    const rawNodes = Array.from(svgEl.querySelectorAll("[data-cell-id]"));
+    const nodes = rawNodes.filter((node) => {
+      const parent = node.parentElement?.closest?.("[data-cell-id]");
+      return !parent;
+    });
+    if (!nodes.length) {
+      return {
+        ok: false,
+        error:
+          "No paintable regions were found. Each region needs a data-cell-id attribute.",
+      };
+    }
+
+    const paletteMap = new Map();
+    const cells = [];
+
+    nodes.forEach((node, index) => {
+      const cellId = (node.getAttribute("data-cell-id") || "").trim() || `c${index + 1}`;
+      const colorSource = node.getAttribute("data-color-id") ?? node.getAttribute("data-color");
+      const resolvedColorId = coerceId(colorSource ?? index + 1) ?? index + 1;
+      const paletteKey = String(resolvedColorId);
+
+      const pathNodes = [];
+      if (node.tagName && node.tagName.toLowerCase() === "path") {
+        pathNodes.push(node);
+      }
+      node.querySelectorAll?.("path").forEach((el) => {
+        pathNodes.push(el);
+      });
+
+      const segments = pathNodes
+        .map((el) => (el.getAttribute("d") || "").trim())
+        .filter((d) => d.length > 0);
+      if (!segments.length) {
+        throw new Error(`Region ${cellId} is missing path data.`);
+      }
+      const d = segments.join(" ");
+
+      let colorValue =
+        node.getAttribute("data-color-hex") ||
+        node.getAttribute("data-color-rgba") ||
+        node.getAttribute("data-color") ||
+        node.getAttribute("fill");
+      if ((!colorValue || !colorValue.trim()) && pathNodes.length) {
+        for (const path of pathNodes) {
+          const fill = path.getAttribute("fill");
+          if (fill && fill.trim()) {
+            colorValue = fill.trim();
+            break;
+          }
+        }
+      }
+      const paletteName = (node.getAttribute("data-color-name") || "").trim();
+
+      const existing = paletteMap.get(paletteKey);
+      if (existing) {
+        if (!existing.name && paletteName) existing.name = paletteName;
+        if (!existing.rgba && colorValue) existing.rgba = colorValue;
+      } else {
+        paletteMap.set(paletteKey, {
+          id: resolvedColorId,
+          name: paletteName || undefined,
+          rgba: (colorValue && colorValue.trim()) || undefined,
+        });
+      }
+
+      cells.push({
+        id: cellId,
+        colorId: paletteMap.get(paletteKey).id,
+        d,
+      });
+    });
+
+    const palette = Array.from(paletteMap.values()).map((entry) => ({
+      id: entry.id,
+      name: entry.name || `Color ${entry.id}`,
+      rgba: entry.rgba || "#94a3b8",
+    }));
+    palette.sort((a, b) => {
+      const aNum = typeof a.id === "number" ? a.id : Number.NaN;
+      const bNum = typeof b.id === "number" ? b.id : Number.NaN;
+      if (Number.isFinite(aNum) && Number.isFinite(bNum)) return aNum - bNum;
+      return a.id.toString().localeCompare(b.id.toString());
+    });
+
+    const filename = (meta?.filename || "").replace(/\.[^./]+$/, "");
+    const rawTitle =
+      svgEl.getAttribute("data-title") ||
+      svgEl.getAttribute("title") ||
+      doc.querySelector("title")?.textContent ||
+      filename ||
+      "Imported artwork";
+    const title = rawTitle.toString().trim() || "Imported artwork";
+    const rawId =
+      svgEl.getAttribute("data-art-id") ||
+      svgEl.getAttribute("id") ||
+      (filename || "").trim();
+    let id = (rawId || "").toString().trim();
+    if (!id) {
+      id = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    }
+
+    const normalized = normalizeArtwork({
+      id,
+      title,
+      width,
+      height,
+      palette,
+      cells,
+    });
+    if (!normalized) {
+      return { ok: false, error: "The SVG is missing required artwork metadata." };
+    }
+    return { ok: true, artwork: normalized };
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error ? err.message : "Unable to convert the SVG into artwork data.",
+    };
+  }
+}
+
+function parseArtworkPayload(raw, meta = {}) {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) {
+    return { ok: false, error: "Paste artwork JSON or SVG first." };
+  }
+  if (text.startsWith("<")) {
+    return parseSvgArtwork(text, meta);
+  }
+  try {
+    const parsed = JSON.parse(text);
+    let candidate = parsed;
+    if (Array.isArray(candidate)) {
+      candidate = candidate[0];
+    }
+    if (candidate && typeof candidate === "object" && candidate.artwork) {
+      candidate = candidate.artwork;
+    }
+    const normalized = normalizeArtwork(candidate);
+    if (!normalized) {
+      return {
+        ok: false,
+        error:
+          "The JSON is missing required fields (id, title, width, height, palette, cells).",
+      };
+    }
+    return { ok: true, artwork: normalized };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Unable to parse the JSON payload.",
+    };
+  }
+}
+
 function loadArtworks() {
   try {
     const raw = localStorage.getItem(ARTWORKS_KEY);
@@ -486,38 +697,24 @@ function App() {
   }, [artworks, art?.id, progress, libraryRevision]);
 
   const handleImportArtwork = useCallback(
-    (json) => {
-      if (!json || !json.trim()) {
-        return { ok: false, error: "Paste artwork JSON first." };
+    (raw, meta = {}) => {
+      const result = parseArtworkPayload(typeof raw === "string" ? raw : "", meta);
+      if (!result.ok || !result.artwork) {
+        return result;
       }
-      try {
-        const parsed = JSON.parse(json);
-        const normalized = normalizeArtwork(parsed);
-        if (!normalized) {
-          return {
-            ok: false,
-            error:
-              "The JSON is missing required fields (id, title, width, height, palette, cells).",
-          };
-        }
-        const existingIds = new Set(artworks.map((item) => item.id));
-        const baseId = normalized.id || `art-${Math.random().toString(36).slice(2, 8)}`;
-        let uniqueId = baseId;
-        let suffix = 2;
-        while (existingIds.has(uniqueId)) {
-          uniqueId = `${baseId}-${suffix++}`;
-        }
-        const finalArtwork = { ...normalized, id: uniqueId };
-        setArtworks((prev) => [...prev, finalArtwork]);
-        selectArtwork(finalArtwork.id);
-        setLibraryRevision((v) => v + 1);
-        return { ok: true, artwork: finalArtwork };
-      } catch (err) {
-        return {
-          ok: false,
-          error: err instanceof Error ? err.message : "Unable to parse the JSON payload.",
-        };
+      const normalized = result.artwork;
+      const existingIds = new Set(artworks.map((item) => item.id));
+      const baseId = normalized.id || `art-${Math.random().toString(36).slice(2, 8)}`;
+      let uniqueId = baseId;
+      let suffix = 2;
+      while (existingIds.has(uniqueId)) {
+        uniqueId = `${baseId}-${suffix++}`;
       }
+      const finalArtwork = cloneArtwork({ ...normalized, id: uniqueId });
+      setArtworks((prev) => [...prev, finalArtwork]);
+      selectArtwork(finalArtwork.id);
+      setLibraryRevision((v) => v + 1);
+      return { ok: true, artwork: finalArtwork };
     },
     [artworks, selectArtwork]
   );
@@ -1553,19 +1750,44 @@ function ArtLibrary({
     }
   }
 
-  function handleImportSubmit(e) {
-    e?.preventDefault?.();
-    const result = onImport(draft);
-    if (result?.ok) {
+  function applyImportResult(result, sourceLabel) {
+    if (result?.ok && result.artwork) {
       setDraft("");
-      setFeedback({ type: "success", message: `Imported "${result.artwork.title}".` });
+      setFeedback({
+        type: "success",
+        message: `Imported "${result.artwork.title}"${sourceLabel ? ` from ${sourceLabel}` : ""}.`,
+      });
       setEditingId(null);
       setTitleDraft("");
-    } else if (result?.error) {
-      setFeedback({ type: "error", message: result.error });
-    } else {
-      setFeedback({ type: "error", message: "Unable to import artwork." });
+      return;
     }
+    if (result?.error) {
+      setFeedback({ type: "error", message: result.error });
+      return;
+    }
+    setFeedback({ type: "error", message: "Unable to import artwork." });
+  }
+
+  function handleImportSubmit(e) {
+    e?.preventDefault?.();
+    const result = onImport(draft, { source: "textarea" });
+    applyImportResult(result);
+  }
+
+  function handleFileUpload(e) {
+    const file = e?.target?.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      const outcome = onImport(text, { filename: file.name, type: file.type });
+      applyImportResult(outcome, file.name);
+    };
+    reader.onerror = () => {
+      setFeedback({ type: "error", message: `Unable to read ${file.name}.` });
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = "";
   }
 
   function startEditing(art) {
@@ -1759,7 +1981,12 @@ function ArtLibrary({
       React.createElement(
         "form",
         { style: styles.libraryImport, onSubmit: handleImportSubmit },
-        React.createElement("label", { style: styles.libraryLabel }, "Import artwork JSON"),
+        React.createElement("label", { style: styles.libraryLabel }, "Import artwork JSON or SVG"),
+        React.createElement(
+          "p",
+          { style: styles.libraryNote },
+          "Paste JSON exported from the app or upload an SVG segmented with data-cell-id/data-color-id attributes."
+        ),
         React.createElement("textarea", {
           style: styles.libraryTextarea,
           value: draft,
@@ -1767,6 +1994,21 @@ function ArtLibrary({
           placeholder: "{ \"id\": \"my-art\", ... }",
           rows: 6,
         }),
+        React.createElement(
+          "div",
+          { style: styles.libraryFileRow },
+          React.createElement("input", {
+            type: "file",
+            accept: ".json,.svg,application/json,image/svg+xml",
+            onChange: handleFileUpload,
+            style: styles.libraryFileInput,
+          }),
+          React.createElement(
+            "span",
+            { style: styles.libraryFileHint },
+            "Choose a file to import annotated SVGs or saved JSON payloads."
+          )
+        ),
         React.createElement(
           "div",
           { style: styles.libraryImportActions },
@@ -1901,7 +2143,7 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
       React.createElement(
         "p",
         { style: styles.optionsAbout },
-        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. It loads a predefined “Capybara Forest Retreat” scene inspired by a detailed 960×600 SVG reference (art/capybara-forest.svg) with 26 labeled, non-overlapping regions and an 11-color palette, then tracks each cell’s fill state so players can match colors to numbers."
+        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. The art library import accepts JSON exports or annotated SVG files with data-cell-id/data-color-id metadata so new scenes can be added without editing code. It loads a predefined “Capybara Forest Retreat” scene inspired by a detailed 960×600 SVG reference (art/capybara-forest.svg) with 26 labeled, non-overlapping regions and an 11-color palette, then tracks each cell’s fill state so players can match colors to numbers."
       ),
       React.createElement("div", { style: styles.optionsSectionTitle }, "UI surfaces"),
       React.createElement(
@@ -2358,6 +2600,11 @@ const styles = {
     fontWeight: 600,
     color: "#cbd5f5",
   },
+  libraryNote: {
+    margin: 0,
+    fontSize: 12,
+    color: "#94a3b8",
+  },
   libraryTextarea: {
     width: "100%",
     borderRadius: 12,
@@ -2367,6 +2614,20 @@ const styles = {
     padding: 12,
     fontSize: 13,
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+  },
+  libraryFileRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 12,
+  },
+  libraryFileInput: {
+    color: "#cbd5f5",
+    fontSize: 12,
+  },
+  libraryFileHint: {
+    fontSize: 12,
+    color: "#94a3b8",
   },
   libraryImportActions: {
     display: "flex",

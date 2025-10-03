@@ -35,6 +35,12 @@
 - `.github/workflows/ci.yml` - Windows CI pipeline running Playwright.
 - `docs/` - Project documentation (this guide, requirements, etc.).
 
+## Importing Artwork
+- Open the in-app Art Library and use the import section to paste JSON payloads or upload `.json`/`.svg` files.
+- Annotated SVGs must tag each paintable region with `data-cell-id` and `data-color-id`; optional `data-color-name`, `data-color-hex`, or `data-color-rgba` metadata is used to seed palette entries (otherwise fills or defaults supply the swatch color).
+- The importer merges multiple `<path>` elements within a region, generates palette entries for every referenced color ID, and slugifies the SVG title or filename when an explicit artwork ID is absent.
+- Successful imports are saved to localStorage alongside autosave progress and can be removed or renamed from the library UI.
+
 ## Quality Checklist
 - Keep Playwright tests green (`npm test`).
 - Manually verify keyboard shortcuts (W/A/S/D panning, hints, toggles) when touching interaction code.
