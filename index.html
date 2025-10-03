@@ -370,7 +370,7 @@ function App() {
   const [offset, setOffset] = useState({ x: 50, y: 50 });
   const [lastAction, setLastAction] = useState(null);
   const [hintPulse, setHintPulse] = useState(new Set());
-  const [showTests, setShowTests] = useState(initialConfig.enableSmokeHud);
+  const [showTests, setShowTests] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryRevision, setLibraryRevision] = useState(0);
@@ -553,7 +553,7 @@ function App() {
     [art]
   );
 
-  const previousSmokePreferenceRef = useRef(initialConfig.enableSmokeHud);
+  const previousSmokePreferenceRef = useRef(false);
 
   useEffect(() => {
     if (!enableSmokeHud) {
@@ -787,8 +787,8 @@ function App() {
       persistConfig(DEFAULT_CONFIG);
       return DEFAULT_CONFIG;
     });
-    previousSmokePreferenceRef.current = DEFAULT_CONFIG.enableSmokeHud;
-    setShowTests(DEFAULT_CONFIG.enableSmokeHud);
+    previousSmokePreferenceRef.current = false;
+    setShowTests(false);
   }
 
   useEffect(() => {
