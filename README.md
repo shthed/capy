@@ -11,12 +11,13 @@ loads the "Capybara Forest Retreat" artwork—a lush 960×600 SVG scene with 26
 numbered regions and an 11-color palette—and keeps track of every cell you fill
 as you paint by matching colors to numbers.
 
-Interaction handlers support mouse and touch gestures including wheel and pinch
-zoom, panning, tap/drag fill, auto-advance to the next color, hint pulses for
-tiny cells, and an eyedropper that reselects already-filled colors. Keyboard
-shortcuts mirror the core actions. Progress, remaining-cell counts, and
-autosave state update immediately after each change, while a lightweight smoke
-test overlay validates key invariants when a check fails.
+Interaction handlers support mouse and touch gestures including smooth,
+cursor-anchored wheel zoom, pinch zoom, left- or right-button drag panning,
+tap/drag fill, auto-advance to the next color, hint pulses for tiny cells, and
+an eyedropper that reselects already-filled colors. Keyboard shortcuts mirror
+the core actions. Progress, remaining-cell counts, and autosave state update
+immediately after each change, while a lightweight smoke test overlay
+validates key invariants when a check fails.
 
 ### UI elements
 

@@ -2,6 +2,7 @@
 
 ## Positive Observations
 - The ultra-slim glass command rail now hugs the top edge in a single line, keeping library, options, reset, undo, hint, next, and testing controls visible without crowding the artwork.
+- Wheel zoom now eases smoothly toward the cursor and right-click drags mirror the left-button pan, so navigating the canvas feels responsive and predictable.
 - The integrated progress chip beside the artwork title makes it effortless to see completion percentage at a glance as you fill cells.
 - Slimmed palette bubbles still feel tactile thanks to the inset numbering and glow, and they give the composition more breathing room around the artwork.
 - Region numerals now stay centered even inside narrow tree trunks or tapered highlights, which makes the puzzle feel more intentional when zoomed in.
@@ -9,7 +10,7 @@
 ## Suggestions for Improvement
 - Consider increasing the contrast between inactive palette swatches and the dark background to improve readability.
 - On initial load, the onboarding helper text could be more prominent to guide first-time users to select a color before tapping the canvas.
-- Offer a quick legend of gesture controls (pan, zoom, drag-fill) near the top bar so first-time painters notice the advanced interactions.
+- Offer a quick legend of gesture controls (pan, zoom, drag-fill) near the top bar so first-time painters notice the advanced interactions and learn about right-click panning.
 - Some badge circles still graze the edge of extremely thin shapes; nudging the search radius or providing manual overrides for future art would eliminate the occasional overlap.
 
 ## Artwork Production Checklist
