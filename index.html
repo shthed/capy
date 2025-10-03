@@ -1122,6 +1122,42 @@ function measurePathBox(d) {
   }
 }
 
+function measurePathArea(d, bbox) {
+  const ctx = ensureMeasureContext();
+  if (!ctx || !bbox) return null;
+  if (typeof Path2D === "undefined") return null;
+  let path;
+  try {
+    path = new Path2D(d);
+  } catch (err) {
+    return null;
+  }
+
+  const longest = Math.max(bbox.width, bbox.height);
+  const steps = Math.max(12, Math.min(80, Math.ceil(longest / 8)));
+  if (!Number.isFinite(steps) || steps <= 0) return null;
+
+  const stepX = bbox.width / steps;
+  const stepY = bbox.height / steps;
+  if (!Number.isFinite(stepX) || !Number.isFinite(stepY)) return null;
+
+  let inside = 0;
+  const total = steps * steps;
+  const originX = bbox.x + stepX / 2;
+  const originY = bbox.y + stepY / 2;
+
+  for (let ix = 0; ix < steps; ix++) {
+    const x = originX + ix * stepX;
+    for (let iy = 0; iy < steps; iy++) {
+      const y = originY + iy * stepY;
+      if (ctx.isPointInPath(path, x, y)) inside++;
+    }
+  }
+
+  if (inside === 0) return null;
+  return (inside / total) * bbox.width * bbox.height;
+}
+
 function findInteriorPoint(d, fallback, bbox) {
   const ctx = ensureMeasureContext();
   if (!ctx) return fallback;
@@ -1156,7 +1192,8 @@ function findInteriorPoint(d, fallback, bbox) {
 
   const centerX = bbox.x + bbox.width / 2;
   const centerY = bbox.y + bbox.height / 2;
-  const steps = Math.max(6, Math.ceil(Math.max(bbox.width, bbox.height) / 60));
+  const longest = Math.max(bbox.width, bbox.height);
+  const steps = Math.max(6, Math.ceil(longest / 60));
   const stepX = bbox.width / (steps + 1);
   const stepY = bbox.height / (steps + 1);
 
@@ -1174,6 +1211,24 @@ function findInteriorPoint(d, fallback, bbox) {
       if (score > bestScore) {
         best = { x, y };
         bestScore = score;
+      }
+    }
+  }
+
+  if (best) return best;
+
+  const maxRadius = Math.hypot(bbox.width, bbox.height) / 2;
+  const rings = Math.max(3, Math.ceil(longest / 45));
+  const samplesPerRing = Math.max(12, Math.ceil(longest / 30));
+
+  for (let r = 1; r <= rings; r++) {
+    const radius = (r / rings) * maxRadius;
+    for (let i = 0; i < samplesPerRing; i++) {
+      const angle = (i / samplesPerRing) * Math.PI * 2;
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius;
+      if (ctx.isPointInPath(path, x, y)) {
+        return { x, y };
       }
     }
   }
@@ -1253,7 +1308,9 @@ function NumberLabel({ d, text, area }) {
     const bbox = measurePathBox(d);
     const nextPoint = findInteriorPoint(d, fallback, bbox);
     setPosition((prev) => (pointAlmostEqual(prev, nextPoint) ? prev : nextPoint));
-    const nextMetrics = computeLabelMetrics(bbox, area);
+    const measuredArea = measurePathArea(d, bbox);
+    const areaHint = measuredArea ?? area;
+    const nextMetrics = computeLabelMetrics(bbox, areaHint);
     setMetrics((prev) => (metricsAlmostEqual(prev, nextMetrics) ? prev : nextMetrics));
   }, [d, area, fallback.x, fallback.y]);
 
