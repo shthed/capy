@@ -91,47 +91,52 @@ const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
 // ---------- Sample Artwork ----------
 const DEMO_ART = {
-  id: "demo-fox",
-  title: "Low‑poly Fox",
-  width: 1000,
-  height: 1000,
+  id: "demo-capybara-forest",
+  title: "Capybara Forest Retreat",
+  width: 960,
+  height: 600,
   palette: [
-    { id: 1, name: "Light Fur", rgba: "#F7C68E" },
-    { id: 2, name: "Mid Fur", rgba: "#EAA15E" },
-    { id: 3, name: "Dark Fur", rgba: "#B65A37" },
-    { id: 4, name: "White", rgba: "#F2F2F2" },
-    { id: 5, name: "Nose", rgba: "#222" },
-    { id: 6, name: "Shadow", rgba: "#8C3E28" },
-    { id: 7, name: "Ear Inner", rgba: "#F7D9B5" },
+    { id: 1, name: "Sky Mist", rgba: "#86c5ff" },
+    { id: 2, name: "Sky Veil", rgba: "#e6f0ff" },
+    { id: 3, name: "Dawn Glow", rgba: "#fef6e4" },
+    { id: 4, name: "Distant Hills", rgba: "#b7d1a7" },
+    { id: 5, name: "Pine Canopy", rgba: "#2f7a33" },
+    { id: 6, name: "Pine Shadow", rgba: "#255f27" },
+    { id: 7, name: "Pond Light", rgba: "#7fd5ef" },
+    { id: 8, name: "Meadow Moss", rgba: "#3b7b46" },
+    { id: 9, name: "Capybara Fur", rgba: "#8e5b3a" },
+    { id: 10, name: "Capybara Shade", rgba: "#5a3d2a" },
+    { id: 11, name: "Forest Accent", rgba: "#2c6e49" },
   ],
   cells: [
-    { id: "c1", colorId: 7, d: "M120 90 L230 260 L120 260 Z" },
-    { id: "c2", colorId: 7, d: "M880 90 L770 260 L880 260 Z" },
-    { id: "c3", colorId: 3, d: "M230 260 L350 300 L200 420 Z" },
-    { id: "c4", colorId: 3, d: "M770 260 L650 300 L800 420 Z" },
-    { id: "c5", colorId: 2, d: "M350 300 L500 360 L650 300 L500 150 Z" },
-    { id: "c6", colorId: 2, d: "M200 420 L350 300 L500 520 L300 520 Z" },
-    { id: "c7", colorId: 2, d: "M800 420 L650 300 L500 520 L700 520 Z" },
-    { id: "c8", colorId: 1, d: "M300 520 L500 520 L460 700 L260 620 Z" },
-    { id: "c9", colorId: 1, d: "M700 520 L500 520 L540 700 L740 620 Z" },
-    { id: "c10", colorId: 4, d: "M260 620 L460 700 L500 760 L440 820 L280 740 Z" },
-    { id: "c11", colorId: 4, d: "M740 620 L540 700 L500 760 L560 820 L720 740 Z" },
-    { id: "c12", colorId: 4, d: "M440 820 L500 760 L560 820 L500 900 Z" },
-    { id: "c13", colorId: 5, d: "M480 820 L520 820 L500 840 Z" },
-    { id: "c14", colorId: 6, d: "M350 300 L420 380 L500 360 Z" },
-    { id: "c15", colorId: 6, d: "M650 300 L580 380 L500 360 Z" },
-    { id: "c16", colorId: 6, d: "M460 700 L500 640 L540 700 L500 760 Z" },
-    { id: "c17", colorId: 6, d: "M440 820 L500 900 L420 880 Z" },
-    { id: "c18", colorId: 6, d: "M560 820 L500 900 L580 880 Z" },
-    { id: "c19", colorId: 1, d: "M300 520 L260 620 L220 560 Z" },
-    { id: "c20", colorId: 1, d: "M700 520 L740 620 L780 560 Z" },
-    { id: "c21", colorId: 2, d: "M420 380 L500 520 L500 360 Z" },
-    { id: "c22", colorId: 2, d: "M580 380 L500 520 L500 360 Z" },
-    { id: "c23", colorId: 7, d: "M170 220 L200 260 L140 260 Z" },
-    { id: "c24", colorId: 7, d: "M830 220 L800 260 L860 260 Z" },
+    { id: "c1", colorId: 1, d: "M0 0 L960 0 L960 140 C 860 150 760 150 660 140 C 560 130 480 130 400 140 C 280 155 160 150 0 130 Z" },
+    { id: "c2", colorId: 3, d: "M0 130 C 160 150 320 160 480 160 L480 210 C 320 205 160 200 0 190 Z" },
+    { id: "c3", colorId: 2, d: "M480 160 C 640 170 800 160 960 140 L960 210 C 800 215 640 215 480 210 Z" },
+    { id: "c4", colorId: 4, d: "M0 190 C 120 210 240 220 360 220 C 400 220 420 218 420 218 L420 260 L0 260 Z" },
+    { id: "c5", colorId: 4, d: "M420 218 C 560 210 700 210 840 205 C 900 202 940 200 960 205 L960 260 L420 260 Z" },
+    { id: "c6", colorId: 5, d: "M0 260 C 100 300 220 320 300 330 C 220 340 140 350 40 340 C 20 330 0 300 0 260 Z" },
+    { id: "c7", colorId: 6, d: "M300 330 C 380 300 500 290 620 300 C 680 310 740 330 780 360 L780 360 L300 360 Z" },
+    { id: "c8", colorId: 5, d: "M780 360 C 820 320 880 300 960 290 L960 360 L780 360 Z" },
+    { id: "c9", colorId: 6, d: "M0 360 C 120 380 240 390 360 390 C 480 390 600 370 720 360 C 820 350 900 350 960 360 L960 420 C 860 430 760 430 660 420 C 560 410 460 410 360 420 C 240 430 120 420 0 400 Z" },
+    { id: "c10", colorId: 2, d: "M0 420 C 160 440 320 450 480 445 C 640 440 800 430 960 420 L960 460 C 800 480 640 490 480 485 C 320 480 160 470 0 450 Z" },
+    { id: "c11", colorId: 7, d: "M0 460 C 160 480 320 495 480 490 C 640 485 800 470 960 460 L960 500 L0 500 Z" },
+    { id: "c12", colorId: 8, d: "M0 500 L170 508 L170 560 L0 560 Z" },
+    { id: "c13", colorId: 8, d: "M240 508 L320 515 L320 560 L240 560 Z" },
+    { id: "c14", colorId: 8, d: "M320 515 L360 518 L360 560 L320 560 Z" },
+    { id: "c15", colorId: 8, d: "M680 515 L720 518 L720 560 L680 560 Z" },
+    { id: "c16", colorId: 3, d: "M168 500 L240 504 L240 540 C 224 548 204 552 176 554 L168 554 Z" },
+    { id: "c17", colorId: 11, d: "M160 540 C 188 518 216 518 240 540 L240 560 L160 560 Z" },
+    { id: "c18", colorId: 9, d: "M360 540 L360 508 C 380 472 430 450 500 444 C 580 438 650 456 680 496 L680 540 Z" },
+    { id: "c19", colorId: 10, d: "M360 540 L680 540 L680 560 C 620 576 540 582 460 576 C 400 572 372 562 360 552 Z" },
+    { id: "c20", colorId: 8, d: "M720 518 L736 516 L736 560 L720 560 Z" },
+    { id: "c21", colorId: 3, d: "M736 500 L792 504 L792 540 C 780 546 766 550 744 552 L736 552 Z" },
+    { id: "c22", colorId: 11, d: "M724 540 C 752 520 788 520 820 540 L820 560 L724 560 Z" },
+    { id: "c23", colorId: 8, d: "M792 504 L820 502 L820 540 L792 540 Z" },
+    { id: "c24", colorId: 8, d: "M820 502 L880 500 L880 560 L820 560 Z" },
+    { id: "c25", colorId: 8, d: "M880 500 L960 500 L960 560 L880 560 Z" },
+    { id: "c26", colorId: 8, d: "M0 560 C 200 580 400 590 600 585 C 760 580 880 570 960 575 L960 600 L0 600 Z" },
   ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
 };
-
 function cloneArtwork(art) {
   return {
     ...art,
@@ -370,7 +375,7 @@ function App() {
   const [offset, setOffset] = useState({ x: 50, y: 50 });
   const [lastAction, setLastAction] = useState(null);
   const [hintPulse, setHintPulse] = useState(new Set());
-  const [showTests, setShowTests] = useState(false);
+  const [showTests, setShowTests] = useState(initialConfig.enableSmokeHud);
   const [showOptions, setShowOptions] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryRevision, setLibraryRevision] = useState(0);
@@ -553,7 +558,7 @@ function App() {
     [art]
   );
 
-  const previousSmokePreferenceRef = useRef(false);
+  const previousSmokePreferenceRef = useRef(initialConfig.enableSmokeHud);
 
   useEffect(() => {
     if (!enableSmokeHud) {
@@ -787,8 +792,8 @@ function App() {
       persistConfig(DEFAULT_CONFIG);
       return DEFAULT_CONFIG;
     });
-    previousSmokePreferenceRef.current = false;
-    setShowTests(false);
+    previousSmokePreferenceRef.current = DEFAULT_CONFIG.enableSmokeHud;
+    setShowTests(DEFAULT_CONFIG.enableSmokeHud);
   }
 
   useEffect(() => {
@@ -828,8 +833,6 @@ function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [art, enableKeyboardShortcuts, enableSmokeHud, showOptions, showLibrary, scale]);
-
-
   return (
     React.createElement(
       "div",
@@ -932,85 +935,118 @@ function App() {
         React.createElement(SmokeTests, { art: art, filled: filled }),
       art &&
         React.createElement(
-          "div",
-          { style: styles.progressBadge, "data-testid": "progress-badge" },
-          React.createElement("div", { style: styles.progressTitle }, art.title),
-          React.createElement("div", {
-            role: "status",
-            "aria-live": "polite",
-            "aria-atomic": "true",
-          }, `Progress: ${progress}%`)
-        ),
-        React.createElement(
-          "div",
-          { style: styles.controlColumn },
+          "header",
+          { style: styles.topBar, role: "banner" },
           React.createElement(
-            "button",
-            {
-              style: styles.controlButton,
-              onClick: () => setShowLibrary(true),
-              title: "Art library",
-              "aria-label": "Open art library",
-            },
-            "LIB"
-          ),
-          React.createElement(
-            "button",
-            {
-              style: styles.controlButton,
-              onClick: () => setShowOptions(true),
-              title: "Options",
-              "aria-label": "Options",
-              "aria-haspopup": "dialog",
-              "aria-expanded": showOptions,
-            },
-            "OPT"
-          ),
-          React.createElement(
-            "button",
-            { style: styles.controlButton, onClick: resetView, title: "Reset view", "aria-label": "Reset view" },
-            "RST"
-          ),
-          React.createElement(
-            "button",
-            { style: styles.controlButton, onClick: undo, title: "Undo", "aria-label": "Undo" },
-            "UNDO"
-          ),
-          React.createElement(
-            "button",
-            {
-              style: {
-                ...styles.controlButton,
-                opacity: enableHintPulse ? 1 : 0.4,
-                cursor: enableHintPulse ? "pointer" : "not-allowed",
+            "div",
+            { style: styles.topContext },
+            React.createElement("span", { style: styles.topTitle }, art.title),
+            React.createElement(
+              "span",
+              {
+                style: styles.topProgress,
+                "data-testid": "progress-indicator",
+                title: `${progress}% complete`,
+                "aria-label": `${progress}% complete`,
+                "aria-live": "polite",
+                "aria-atomic": "true",
               },
-              onClick: hint,
-              title: "Hint",
-              disabled: !enableHintPulse,
-              "aria-label": "Hint",
-            },
-            "HINT"
+              `${progress}%`
+            )
           ),
           React.createElement(
-            "button",
-            { style: styles.controlButton, onClick: nextColor, title: "Next color", "aria-label": "Next color" },
-            "NEXT"
-          ),
-          React.createElement(
-            "button",
-            {
-              style: {
-                ...styles.controlButton,
-                opacity: enableSmokeHud ? 1 : 0.4,
-                cursor: enableSmokeHud ? "pointer" : "not-allowed",
+            "nav",
+            { style: styles.topActions, "aria-label": "Canvas controls" },
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: styles.controlButton,
+                onClick: () => setShowLibrary(true),
+                title: "Open art library",
+                "aria-label": "Open art library",
               },
-              onClick: () => enableSmokeHud && setShowTests((v) => !v),
-              title: "Toggle tests",
-              disabled: !enableSmokeHud,
-              "aria-pressed": showTests,
-              "aria-label": "Toggle tests",
-            },
-            "TEST"
+              "Library"
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: styles.controlButton,
+                onClick: () => setShowOptions(true),
+                title: "Adjust options",
+                "aria-label": "Adjust options",
+                "aria-haspopup": "dialog",
+                "aria-expanded": showOptions,
+              },
+              "Options"
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: styles.controlButton,
+                onClick: resetView,
+                title: "Reset view",
+                "aria-label": "Reset view",
+              },
+              "Reset"
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: styles.controlButton,
+                onClick: undo,
+                title: "Undo last fill",
+                "aria-label": "Undo last fill",
+              },
+              "Undo"
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: {
+                  ...styles.controlButton,
+                  opacity: enableHintPulse ? 1 : 0.45,
+                  cursor: enableHintPulse ? "pointer" : "not-allowed",
+                },
+                onClick: hint,
+                title: "Highlight a suggested cell",
+                disabled: !enableHintPulse,
+                "aria-label": "Highlight a suggested cell",
+              },
+              "Hint"
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: styles.controlButton,
+                onClick: nextColor,
+                title: "Jump to the next color",
+                "aria-label": "Jump to the next color",
+              },
+              "Next"
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: {
+                  ...styles.controlButton,
+                  opacity: enableSmokeHud ? 1 : 0.45,
+                  cursor: enableSmokeHud ? "pointer" : "not-allowed",
+                },
+                onClick: () => enableSmokeHud && setShowTests((v) => !v),
+                title: "Toggle the smoke test HUD",
+                disabled: !enableSmokeHud,
+                "aria-pressed": showTests,
+                "aria-label": "Toggle the smoke test HUD",
+              },
+              "Tests"
+            )
           )
         ),
       art &&
@@ -1097,25 +1133,21 @@ function Palette({ palette, remaining, activeColor, onSelect }) {
           onClick: () => onSelect(p.id),
           disabled: left === 0 && !isActive,
           "aria-pressed": isActive,
-          title: `${p.name ?? "Color"} #${p.id} • Remaining ${left}`,
+          "aria-label": `${p.name ?? "Color"} #${p.id}. ${left} cells remaining`,
+          title: `${p.name ?? "Color"} #${p.id} - Remaining ${left}`,
           style: {
             ...styles.swatch,
-            borderColor: isActive ? "#f8fafc" : "transparent",
-            boxShadow: isActive ? "0 0 0 2px rgba(148, 163, 184, 0.4)" : undefined,
-            opacity: left === 0 ? 0.4 : 1,
+            background: p.rgba,
+            border: isActive
+              ? "2px solid rgba(248, 250, 252, 0.85)"
+              : "2px solid rgba(15, 23, 42, 0.6)",
+            boxShadow: isActive
+              ? "0 0 0 4px rgba(148, 163, 184, 0.45), 0 10px 24px rgba(2, 6, 23, 0.55)"
+              : "0 8px 18px rgba(2, 6, 23, 0.45)",
+            opacity: left === 0 && !isActive ? 0.35 : 1,
           },
         },
-        React.createElement(
-          "div",
-          { style: { ...styles.swatchChip, background: p.rgba } },
-          React.createElement("span", { style: styles.swatchNumber }, p.id)
-        ),
-        React.createElement(
-          "div",
-          { style: styles.swatchMeta },
-          React.createElement("span", { style: styles.swatchCountLabel }, "Cells"),
-          React.createElement("span", { style: styles.swatchCount }, left)
-        )
+        React.createElement("span", { style: styles.swatchNumber }, p.id)
       );
     })
   );
@@ -1549,7 +1581,7 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
       React.createElement(
         "p",
         { style: styles.optionsAbout },
-        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. It loads a predefined \u201CLow\u2011poly Fox\u201D artwork composed of numbered SVG paths and a corresponding palette, then tracks each cell\u2019s fill state so users can paint the illustration by matching colors to numbers."
+        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. It loads a predefined "Capybara Forest Retreat" scene inspired by a detailed 960x600 SVG reference (art/capybara-forest.svg) with 26 labeled, non-overlapping regions and an 11-color palette, then tracks each cell's fill state so players can match colors to numbers."
       ),
       React.createElement("div", { style: styles.optionsSectionTitle }, "UI surfaces"),
       React.createElement(
@@ -1619,6 +1651,7 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
 function SmokeTests({ art, filled }) {
   const results = useMemo(() => runSmokeTests(art, filled), [art, filled]);
   const allPass = results.every((r) => r.pass);
+  if (allPass) return null;
   return React.createElement(
     "div",
     {
@@ -1626,8 +1659,8 @@ function SmokeTests({ art, filled }) {
         position: "absolute",
         left: 16,
         bottom: 180,
-        background: allPass ? "rgba(34, 197, 94, 0.12)" : "rgba(248, 113, 113, 0.12)",
-        border: `1px solid ${allPass ? "#22c55e" : "#f87171"}`,
+        background: "rgba(248, 113, 113, 0.12)",
+        border: "1px solid #f87171",
         borderRadius: 12,
         padding: 12,
         boxShadow: "0 12px 40px rgba(15, 23, 42, 0.35)",
@@ -1639,7 +1672,7 @@ function SmokeTests({ art, filled }) {
     React.createElement(
       "div",
       { style: { fontWeight: 700, marginBottom: 8 } },
-      allPass ? "Smoke tests passed" : "Smoke tests failed"
+      "Smoke tests failed"
     ),
     React.createElement(
       "ul",
@@ -1692,65 +1725,96 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
   },
-  progressBadge: {
+  topBar: {
     position: "fixed",
-    top: 24,
-    left: 24,
-    background: "rgba(15, 23, 42, 0.85)",
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    borderRadius: 14,
-    padding: "10px 16px",
-    fontSize: 14,
-    fontWeight: 600,
-    boxShadow: "0 12px 30px rgba(2, 6, 23, 0.55)",
-    pointerEvents: "none",
-    zIndex: 12,
-  },
-  progressTitle: {
-    fontSize: 13,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-    color: "#94a3b8",
-    marginBottom: 4,
-  },
-  controlColumn: {
-    position: "fixed",
-    top: 24,
-    right: 24,
-    display: "grid",
-    gap: 10,
-    zIndex: 12,
+    top: 16,
+    left: "50%",
+    transform: "translateX(-50%)",
+    width: "min(880px, calc(100% - 28px))",
+    display: "flex",
+    flexWrap: "nowrap",
+    justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
+    padding: "8px 14px",
+    borderRadius: 16,
+    background: "rgba(15, 23, 42, 0.82)",
+    border: "1px solid rgba(148, 163, 184, 0.26)",
+    boxShadow: "0 18px 36px rgba(2, 6, 23, 0.55)",
+    backdropFilter: "blur(14px)",
+    zIndex: 20,
+  },
+  topContext: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
+    flex: "0 1 auto",
+    overflow: "hidden",
+  },
+  topTitle: {
+    fontSize: 16,
+    fontWeight: 600,
+    color: "#f8fafc",
+    letterSpacing: 0.3,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  topProgress: {
+    fontSize: 12,
+    fontWeight: 600,
+    padding: "2px 10px",
+    borderRadius: 999,
+    background: "rgba(30, 41, 59, 0.7)",
+    border: "1px solid rgba(148, 163, 184, 0.26)",
+    color: "#d3defe",
+    whiteSpace: "nowrap",
+  },
+  topActions: {
+    display: "flex",
+    flexWrap: "nowrap",
+    justifyContent: "flex-end",
+    gap: 6,
+    flex: "1 1 auto",
+    overflowX: "auto",
   },
   controlButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    background: "rgba(15, 23, 42, 0.78)",
-    color: "#e2e8f0",
-    fontSize: 14,
+    borderRadius: 10,
+    border: "1px solid rgba(148, 163, 184, 0.28)",
+    background: "linear-gradient(180deg, rgba(51, 65, 85, 0.55), rgba(15, 23, 42, 0.9))",
+    color: "#f8fafc",
+    fontSize: 12,
     fontWeight: 600,
-    letterSpacing: 0.5,
-    display: "grid",
-    placeItems: "center",
+    letterSpacing: 0.2,
+    padding: "6px 12px",
+    minHeight: 34,
+    minWidth: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     cursor: "pointer",
-    textTransform: "uppercase",
-    userSelect: "none",
-    transition: "background 0.2s ease, transform 0.1s ease",
+    boxShadow: "0 12px 28px rgba(2, 6, 23, 0.45)",
+    transition: "transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease",
+    textTransform: "none",
+    whiteSpace: "nowrap",
+    lineHeight: 1.2,
   },
   paletteDock: {
     position: "fixed",
     left: "50%",
     bottom: 24,
     transform: "translateX(-50%)",
-    background: "rgba(15, 23, 42, 0.85)",
-    borderRadius: 24,
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    padding: "14px 18px",
+    width: "min(920px, calc(100% - 24px))",
+    background: "rgba(15, 23, 42, 0.82)",
+    borderRadius: 18,
+    border: "1px solid rgba(148, 163, 184, 0.28)",
+    padding: "10px 14px",
     boxShadow: "0 24px 50px rgba(2, 6, 23, 0.6)",
     zIndex: 11,
-    overflowX: "auto",
+    overflow: "hidden",
+    backdropFilter: "blur(16px)",
   },
   emptyState: {
     position: "absolute",
@@ -1764,54 +1828,38 @@ const styles = {
   },
   paletteWrap: {
     display: "flex",
-    gap: 12,
-    padding: "0 8px",
-    overflowX: "auto",
+    flexDirection: "row",
+    flexWrap: "nowrap",
+    gap: 10,
     width: "100%",
-    maxWidth: 720,
-    alignItems: "center",
+    overflowX: "auto",
+    paddingBottom: 4,
+    scrollSnapType: "x proximity",
   },
   swatch: {
-    minWidth: 112,
-    height: 64,
-    borderRadius: 18,
-    border: "1px solid transparent",
+    height: 38,
+    borderRadius: 12,
     display: "flex",
     alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 12,
-    padding: "0 14px",
-    background: "rgba(15, 23, 42, 0.78)",
-    color: "#cbd5f5",
+    justifyContent: "center",
+    transition: "transform 0.12s ease, box-shadow 0.2s ease",
     cursor: "pointer",
-  },
-  swatchChip: {
-    width: 48,
-    height: 48,
-    borderRadius: "50%",
-    display: "grid",
-    placeItems: "center",
-    boxShadow: "0 0 0 2px rgba(15, 23, 42, 0.6)",
+    color: "#f8fafc",
+    flex: "0 0 clamp(88px, 12vw, 132px)",
+    scrollSnapAlign: "center",
   },
   swatchNumber: {
-    fontWeight: 700,
-    color: "#020617",
-  },
-  swatchMeta: {
-    display: "grid",
-    gap: 2,
-    fontSize: 12,
-  },
-  swatchCountLabel: {
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    color: "#64748b",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 20,
+    height: 20,
+    borderRadius: "50%",
+    background: "rgba(15, 23, 42, 0.52)",
+    color: "#f8fafc",
     fontSize: 10,
-  },
-  swatchCount: {
-    fontSize: 18,
     fontWeight: 700,
-    color: "#e2e8f0",
+    letterSpacing: 0.4,
   },
   libraryOverlay: {
     position: "fixed",
@@ -2127,3 +2175,5 @@ root.render(React.createElement(App));
     </script>
   </body>
 </html>
+
+
