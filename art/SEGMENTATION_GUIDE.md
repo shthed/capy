@@ -9,7 +9,7 @@ Follow these steps when exporting a new reference illustration so it can plug in
    - `data-cell-id` (e.g., `c1`) that matches the JSON payload
    - `data-color-id` pointing to the palette entry
    - an embedded `<title>` node that spells out the label, e.g. `Region c1 – Color #1 (Sky Mist)` so hovering in the app reveals the tooltip.
-4. **Use simple path commands.** Restrict paintable paths to `M`, `L`, and `Z` commands (no curves) so the in-app centroid math can keep the numbering centered. Merge multiple polygons with additional `<path>` tags inside the same group if necessary.
+4. **Keep region geometry clean.** Use absolute commands (`M`, `L`, `C`, `Z`, etc.) with closed contours and avoid self-intersections. Curves are welcome for organic silhouettes, but ensure every region is watertight so the centroid sampler can locate a true interior point.
 5. **Avoid overlaps and gaps.** Paths must not overlap and should fully cover the illustration. Slight padding between shapes is acceptable if the background should peek through, but cells cannot intersect.
 6. **Keep fills flat.** Assign a single solid fill color per region that roughly matches the palette entry. Decorative gradients or strokes are fine in non-paintable layers, but numbered regions should stay flat for clarity.
 7. **Name the palette.** Document the palette separately (see `index.html`) with IDs, human-friendly names, and hex colors so the runtime can display swatches and instructions.
