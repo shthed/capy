@@ -1,33 +1,146 @@
-<!-- Capybara Forest Retreat segmentation -->
+<!-- Capybara in the Forest - Detailed SVG -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-labelledby="title desc">
-  <title id="title">Capybara Forest Retreat</title>
-  <desc id="desc">Color-by-number segmentation depicting a capybara beside a forest pond with mushrooms and layered foliage.</desc>
-  <g id="regions" fill-rule="evenodd">
-    <path id="region-c1" data-cell-id="c1" data-color-id="1" fill="#86c5ff" d="M0 0 L960 0 L960 140 C 860 150 760 150 660 140 C 560 130 480 130 400 140 C 280 155 160 150 0 130 Z" />
-    <path id="region-c2" data-cell-id="c2" data-color-id="3" fill="#fef6e4" d="M0 130 C 160 150 320 160 480 160 L480 210 C 320 205 160 200 0 190 Z" />
-    <path id="region-c3" data-cell-id="c3" data-color-id="2" fill="#bfd7e5" d="M480 160 C 640 170 800 160 960 140 L960 210 C 800 215 640 215 480 210 Z" />
-    <path id="region-c4" data-cell-id="c4" data-color-id="4" fill="#b7d1a7" d="M0 190 C 120 210 240 220 360 220 C 400 220 420 218 420 218 L420 260 L0 260 Z" />
-    <path id="region-c5" data-cell-id="c5" data-color-id="4" fill="#b7d1a7" d="M420 218 C 560 210 700 210 840 205 C 900 202 940 200 960 205 L960 260 L420 260 Z" />
-    <path id="region-c6" data-cell-id="c6" data-color-id="5" fill="#2e7d32" d="M0 260 C 100 300 220 320 300 330 C 220 340 140 350 40 340 C 20 330 0 300 0 260 Z" />
-    <path id="region-c7" data-cell-id="c7" data-color-id="6" fill="#255f27" d="M300 330 C 380 300 500 290 620 300 C 680 310 740 330 780 360 L780 360 L300 360 Z" />
-    <path id="region-c8" data-cell-id="c8" data-color-id="5" fill="#2e7d32" d="M780 360 C 820 320 880 300 960 290 L960 360 L780 360 Z" />
-    <path id="region-c9" data-cell-id="c9" data-color-id="6" fill="#255f27" d="M0 360 C 120 380 240 390 360 390 C 480 390 600 370 720 360 C 820 350 900 350 960 360 L960 420 C 860 430 760 430 660 420 C 560 410 460 410 360 420 C 240 430 120 420 0 400 Z" />
-    <path id="region-c10" data-cell-id="c10" data-color-id="2" fill="#bfd7e5" d="M0 420 C 160 440 320 450 480 445 C 640 440 800 430 960 420 L960 460 C 800 480 640 490 480 485 C 320 480 160 470 0 450 Z" />
-    <path id="region-c11" data-cell-id="c11" data-color-id="7" fill="#4fb1d7" d="M0 460 C 160 480 320 495 480 490 C 640 485 800 470 960 460 L960 500 L0 500 Z" />
-    <path id="region-c12" data-cell-id="c12" data-color-id="8" fill="#3b7b46" d="M0 500 L170 508 L170 560 L0 560 Z" />
-    <path id="region-c13" data-cell-id="c13" data-color-id="8" fill="#3b7b46" d="M240 508 L320 515 L320 560 L240 560 Z" />
-    <path id="region-c14" data-cell-id="c14" data-color-id="8" fill="#3b7b46" d="M320 515 L360 518 L360 560 L320 560 Z" />
-    <path id="region-c15" data-cell-id="c15" data-color-id="8" fill="#3b7b46" d="M680 515 L720 518 L720 560 L680 560 Z" />
-    <path id="region-c16" data-cell-id="c16" data-color-id="3" fill="#fef6e4" d="M168 500 L240 504 L240 540 C 224 548 204 552 176 554 L168 554 Z" />
-    <path id="region-c17" data-cell-id="c17" data-color-id="11" fill="#d75b63" d="M160 540 C 188 518 216 518 240 540 L240 560 L160 560 Z" />
-    <path id="region-c18" data-cell-id="c18" data-color-id="9" fill="#9c6a45" d="M360 540 L360 508 C 380 472 430 450 500 444 C 580 438 650 456 680 496 L680 540 Z" />
-    <path id="region-c19" data-cell-id="c19" data-color-id="10" fill="#5b3a23" d="M360 540 L680 540 L680 560 C 620 576 540 582 460 576 C 400 572 372 562 360 552 Z" />
-    <path id="region-c20" data-cell-id="c20" data-color-id="8" fill="#3b7b46" d="M720 518 L736 516 L736 560 L720 560 Z" />
-    <path id="region-c21" data-cell-id="c21" data-color-id="3" fill="#fef6e4" d="M736 500 L792 504 L792 540 C 780 546 766 550 744 552 L736 552 Z" />
-    <path id="region-c22" data-cell-id="c22" data-color-id="11" fill="#d75b63" d="M724 540 C 752 520 788 520 820 540 L820 560 L724 560 Z" />
-    <path id="region-c23" data-cell-id="c23" data-color-id="8" fill="#3b7b46" d="M792 504 L820 502 L820 540 L792 540 Z" />
-    <path id="region-c24" data-cell-id="c24" data-color-id="8" fill="#3b7b46" d="M820 502 L880 500 L880 560 L820 560 Z" />
-    <path id="region-c25" data-cell-id="c25" data-color-id="8" fill="#3b7b46" d="M880 500 L960 500 L960 560 L880 560 Z" />
-    <path id="region-c26" data-cell-id="c26" data-color-id="8" fill="#3b7b46" d="M0 560 C 200 580 400 590 600 585 C 760 580 880 570 960 575 L960 600 L0 600 Z" />
+  <title id="title">Capybara in a Forest</title>
+  <desc id="desc">A detailed capybara beside a pond with layered pines, hills, ripples, and shaded fur.</desc>
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="gSky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#86c5ff"/>
+      <stop offset="70%" stop-color="#e6f0ff"/>
+      <stop offset="100%" stop-color="#fef6e4"/>
+    </linearGradient>
+    <linearGradient id="gSun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFD36E"/>
+      <stop offset="100%" stop-color="#FFB347"/>
+    </linearGradient>
+    <linearGradient id="gWater" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7fd5ef"/>
+      <stop offset="100%" stop-color="#2a94b6"/>
+    </linearGradient>
+    <linearGradient id="gGround" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6fb06f"/>
+      <stop offset="100%" stop-color="#3b7b46"/>
+    </linearGradient>
+    <!-- Capybara fur: warm top to mid, cool shadow bottom -->
+    <linearGradient id="gFurBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8e5b3a"/>
+      <stop offset="55%" stop-color="#956141"/>
+      <stop offset="100%" stop-color="#5a3d2a"/>
+    </linearGradient>
+    <linearGradient id="gFurHead" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#8e5b3a"/>
+      <stop offset="100%" stop-color="#6b452e"/>
+    </linearGradient>
+    <!-- Filters -->
+    <filter id="fSoft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+    <filter id="fBlurSmall" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5"/>
+    </filter>
+    <!-- Pine symbol with three tiers -->
+    <symbol id="pine" viewBox="0 0 120 200">
+      <rect x="56" y="150" width="8" height="50" rx="3" fill="#6d4c41"/>
+      <polygon points="60,0 5,80 115,80" fill="#2f7a33"/>
+      <polygon points="60,45 15,120 105,120" fill="#2a6f2d"/>
+      <polygon points="60,90 25,155 95,155" fill="#255f27"/>
+    </symbol>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="600" fill="url(#gSky)"/>
+  <circle cx="790" cy="110" r="56" fill="url(#gSun)" filter="url(#fSoft)"/>
+
+  <!-- Distant hills -->
+  <g opacity="0.95">
+    <path d="M0 360 C120 300, 200 330, 310 320 C420 310, 520 350, 640 330 C760 310, 860 320, 960 300 L960 600 L0 600 Z" fill="#b7d1a7"/>
+    <path d="M0 400 C140 350, 260 380, 380 370 C520 360, 680 400, 820 380 C900 370, 930 370, 960 360 L960 600 L0 600 Z" fill="#9dc692"/>
+  </g>
+
+  <!-- Forest layers -->
+  <g opacity="0.95">
+    <!-- back row -->
+    <use href="#pine" x="40" y="230" width="110" height="190"/>
+    <use href="#pine" x="120" y="240" width="130" height="210"/>
+    <use href="#pine" x="230" y="230" width="115" height="195"/>
+    <use href="#pine" x="670" y="235" width="125" height="205"/>
+    <use href="#pine" x="770" y="235" width="115" height="195"/>
+    <use href="#pine" x="860" y="245" width="120" height="200"/>
+    <!-- mid row with slight darkening -->
+    <g opacity="0.9">
+      <use href="#pine" x="90" y="260" width="120" height="200"/>
+      <use href="#pine" x="180" y="255" width="135" height="215"/>
+      <use href="#pine" x="730" y="255" width="130" height="210"/>
+    </g>
+  </g>
+
+  <!-- Pond and shoreline -->
+  <g>
+    <path d="M0 470 C180 450, 360 520, 540 500 C720 480, 840 520, 960 505 L960 600 L0 600 Z" fill="url(#gWater)"/>
+    <!-- shoreline highlight -->
+    <path d="M20 500 C200 485, 360 515, 540 498 C720 482, 840 515, 940 505" fill="none" stroke="#e9fbff" stroke-width="3" opacity="0.55"/>
+    <!-- broad ripple bands -->
+    <path d="M150 520 q22 -12 44 0 t44 0 t44 0" fill="none" stroke="#cfeef6" stroke-width="4" stroke-linecap="round"/>
+    <path d="M590 528 q20 -12 40 0 t40 0 t40 0" fill="none" stroke="#cfeef6" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- Foreground ground strip -->
+  <path d="M0 520 C120 530, 240 540, 360 535 C480 530, 600 540, 720 535 C840 530, 900 535, 960 540 L960 600 L0 600 Z" fill="url(#gGround)"/>
+
+  <!-- Capybara group -->
+  <g id="capybara" transform="translate(300,350)">
+    <!-- Body silhouette with organic curves -->
+    <path d="M70 160 C 60 140, 58 115, 72 95 C 88 73, 116 58, 150 52 C 210 42, 300 55, 350 92 C 385 118, 400 148, 396 170 C 392 192, 374 206, 346 210 L 150 215 C 116 216, 84 194, 76 175 C 72 167, 71 163, 70 160 Z" fill="url(#gFurBody)" stroke="#4b3325" stroke-opacity="0.25"/>
+
+    <!-- Head with longer wedge snout -->
+    <path d="M78 140 C 66 120, 70 98, 92 86 C 118 72, 150 74, 182 94 C 198 104, 210 118, 210 130 C 210 148, 194 162, 173 168 C 148 175, 112 169, 94 158 C 86 153, 81 148, 78 140 Z" fill="url(#gFurHead)"/>
+
+    <!-- Ear -->
+    <ellipse cx="160" cy="98" rx="12" ry="9" fill="#6e4930"/>
+    <ellipse cx="160" cy="98" rx="7" ry="5" fill="#8c5e3e"/>
+
+    <!-- Eye with highlight -->
+    <circle cx="142" cy="132" r="6" fill="#232222"/>
+    <circle cx="144" cy="130" r="2.2" fill="#ffffff"/>
+
+    <!-- Nose hint -->
+    <ellipse cx="188" cy="144" rx="7" ry="4.5" fill="#3a2a1f" opacity="0.7"/>
+
+    <!-- Midtone and rim highlights -->
+    <path d="M88 110 C150 82, 265 86, 328 120" fill="none" stroke="#b4815c" stroke-width="5" stroke-linecap="round" opacity="0.35"/>
+    <path d="M95 175 C170 198, 280 205, 330 195" fill="none" stroke="#3e2a1f" stroke-width="7" opacity="0.15"/>
+
+    <!-- Legs with overlap and small hoof shapes -->
+    <g fill="#6f4b32">
+      <!-- Front near -->
+      <path d="M140 210 C138 224, 136 240, 140 246 C152 256, 170 256, 178 246 C182 240, 180 224, 178 212 Z"/>
+      <!-- Front far -->
+      <path d="M118 208 C116 222, 114 238, 118 244 C128 254, 146 254, 154 244 C158 238, 156 222, 154 210 Z" opacity="0.85"/>
+      <!-- Rear near -->
+      <path d="M280 206 C278 220, 276 236, 280 242 C292 252, 312 252, 322 242 C326 236, 324 220, 322 208 Z"/>
+      <!-- Rear far -->
+      <path d="M300 204 C298 218, 296 234, 300 240 C312 250, 332 250, 342 240 C346 234, 344 218, 342 206 Z" opacity="0.85"/>
+      <!-- Small hoof hints -->
+      <ellipse cx="170" cy="254" rx="10" ry="3" fill="#3e2a1f" opacity="0.5"/>
+      <ellipse cx="148" cy="252" rx="10" ry="3" fill="#3e2a1f" opacity="0.45"/>
+      <ellipse cx="312" cy="250" rx="10" ry="3" fill="#3e2a1f" opacity="0.5"/>
+      <ellipse cx="332" cy="248" rx="10" ry="3" fill="#3e2a1f" opacity="0.45"/>
+    </g>
+
+    <!-- Contact shadows under torso and feet -->
+    <ellipse cx="220" cy="232" rx="120" ry="18" fill="#000" opacity="0.18" filter="url(#fBlurSmall)"/>
+    <ellipse cx="170" cy="256" rx="16" ry="4" fill="#000" opacity="0.25" filter="url(#fBlurSmall)"/>
+    <ellipse cx="148" cy="254" rx="16" ry="4" fill="#000" opacity="0.22" filter="url(#fBlurSmall)"/>
+    <ellipse cx="312" cy="252" rx="16" ry="4" fill="#000" opacity="0.25" filter="url(#fBlurSmall)"/>
+    <ellipse cx="332" cy="250" rx="16" ry="4" fill="#000" opacity="0.22" filter="url(#fBlurSmall)"/>
+  </g>
+
+  <!-- Foreground shrubs crossing ankles for embedding -->
+  <g>
+    <path d="M110 560 q20 -40 40 0 q-25 -50 -5 -85 q-10 30 10 60 q-10 -30 30 -55 q-30 45 -5 80 Z" fill="#2c6e49" opacity="0.95"/>
+    <path d="M860 560 q18 -36 36 0 q-22 -44 -4 -76 q-10 26 8 52 q-8 -26 28 -48 q-28 40 -6 72 Z" fill="#2c6e49" opacity="0.95"/>
+    <!-- small grasses near capybara feet -->
+    <path d="M450 560 q4 -18 12 0 q-6 -20 -2 -34 q-3 12 4 24 q-4 -12 14 -22 q-12 16 -4 30 Z" fill="#2a6f2d"/>
+    <path d="M500 558 q4 -16 10 0 q-6 -18 -2 -30 q-2 10 4 20 q-4 -10 12 -18 q-10 14 -4 26 Z" fill="#2a6f2d"/>
   </g>
 </svg>
