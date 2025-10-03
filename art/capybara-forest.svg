@@ -1,0 +1,33 @@
+<!-- Capybara Forest Retreat segmentation -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-labelledby="title desc">
+  <title id="title">Capybara Forest Retreat</title>
+  <desc id="desc">Color-by-number segmentation depicting a capybara beside a forest pond with mushrooms and layered foliage.</desc>
+  <g id="regions" fill-rule="evenodd">
+    <path id="region-c1" data-cell-id="c1" data-color-id="1" fill="#86c5ff" d="M0 0 L960 0 L960 140 C 860 150 760 150 660 140 C 560 130 480 130 400 140 C 280 155 160 150 0 130 Z" />
+    <path id="region-c2" data-cell-id="c2" data-color-id="3" fill="#fef6e4" d="M0 130 C 160 150 320 160 480 160 L480 210 C 320 205 160 200 0 190 Z" />
+    <path id="region-c3" data-cell-id="c3" data-color-id="2" fill="#bfd7e5" d="M480 160 C 640 170 800 160 960 140 L960 210 C 800 215 640 215 480 210 Z" />
+    <path id="region-c4" data-cell-id="c4" data-color-id="4" fill="#b7d1a7" d="M0 190 C 120 210 240 220 360 220 C 400 220 420 218 420 218 L420 260 L0 260 Z" />
+    <path id="region-c5" data-cell-id="c5" data-color-id="4" fill="#b7d1a7" d="M420 218 C 560 210 700 210 840 205 C 900 202 940 200 960 205 L960 260 L420 260 Z" />
+    <path id="region-c6" data-cell-id="c6" data-color-id="5" fill="#2e7d32" d="M0 260 C 100 300 220 320 300 330 C 220 340 140 350 40 340 C 20 330 0 300 0 260 Z" />
+    <path id="region-c7" data-cell-id="c7" data-color-id="6" fill="#255f27" d="M300 330 C 380 300 500 290 620 300 C 680 310 740 330 780 360 L780 360 L300 360 Z" />
+    <path id="region-c8" data-cell-id="c8" data-color-id="5" fill="#2e7d32" d="M780 360 C 820 320 880 300 960 290 L960 360 L780 360 Z" />
+    <path id="region-c9" data-cell-id="c9" data-color-id="6" fill="#255f27" d="M0 360 C 120 380 240 390 360 390 C 480 390 600 370 720 360 C 820 350 900 350 960 360 L960 420 C 860 430 760 430 660 420 C 560 410 460 410 360 420 C 240 430 120 420 0 400 Z" />
+    <path id="region-c10" data-cell-id="c10" data-color-id="2" fill="#bfd7e5" d="M0 420 C 160 440 320 450 480 445 C 640 440 800 430 960 420 L960 460 C 800 480 640 490 480 485 C 320 480 160 470 0 450 Z" />
+    <path id="region-c11" data-cell-id="c11" data-color-id="7" fill="#4fb1d7" d="M0 460 C 160 480 320 495 480 490 C 640 485 800 470 960 460 L960 500 L0 500 Z" />
+    <path id="region-c12" data-cell-id="c12" data-color-id="8" fill="#3b7b46" d="M0 500 L170 508 L170 560 L0 560 Z" />
+    <path id="region-c13" data-cell-id="c13" data-color-id="8" fill="#3b7b46" d="M240 508 L320 515 L320 560 L240 560 Z" />
+    <path id="region-c14" data-cell-id="c14" data-color-id="8" fill="#3b7b46" d="M320 515 L360 518 L360 560 L320 560 Z" />
+    <path id="region-c15" data-cell-id="c15" data-color-id="8" fill="#3b7b46" d="M680 515 L720 518 L720 560 L680 560 Z" />
+    <path id="region-c16" data-cell-id="c16" data-color-id="3" fill="#fef6e4" d="M168 500 L240 504 L240 540 C 224 548 204 552 176 554 L168 554 Z" />
+    <path id="region-c17" data-cell-id="c17" data-color-id="11" fill="#d75b63" d="M160 540 C 188 518 216 518 240 540 L240 560 L160 560 Z" />
+    <path id="region-c18" data-cell-id="c18" data-color-id="9" fill="#9c6a45" d="M360 540 L360 508 C 380 472 430 450 500 444 C 580 438 650 456 680 496 L680 540 Z" />
+    <path id="region-c19" data-cell-id="c19" data-color-id="10" fill="#5b3a23" d="M360 540 L680 540 L680 560 C 620 576 540 582 460 576 C 400 572 372 562 360 552 Z" />
+    <path id="region-c20" data-cell-id="c20" data-color-id="8" fill="#3b7b46" d="M720 518 L736 516 L736 560 L720 560 Z" />
+    <path id="region-c21" data-cell-id="c21" data-color-id="3" fill="#fef6e4" d="M736 500 L792 504 L792 540 C 780 546 766 550 744 552 L736 552 Z" />
+    <path id="region-c22" data-cell-id="c22" data-color-id="11" fill="#d75b63" d="M724 540 C 752 520 788 520 820 540 L820 560 L724 560 Z" />
+    <path id="region-c23" data-cell-id="c23" data-color-id="8" fill="#3b7b46" d="M792 504 L820 502 L820 540 L792 540 Z" />
+    <path id="region-c24" data-cell-id="c24" data-color-id="8" fill="#3b7b46" d="M820 502 L880 500 L880 560 L820 560 Z" />
+    <path id="region-c25" data-cell-id="c25" data-color-id="8" fill="#3b7b46" d="M880 500 L960 500 L960 560 L880 560 Z" />
+    <path id="region-c26" data-cell-id="c26" data-color-id="8" fill="#3b7b46" d="M0 560 C 200 580 400 590 600 585 C 760 580 880 570 960 575 L960 600 L0 600 Z" />
+  </g>
+</svg>
