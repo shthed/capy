@@ -829,8 +829,6 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [art, enableKeyboardShortcuts, enableSmokeHud, showOptions, showLibrary, scale]);
 
-  const headerTitle = art ? art.title : "No artwork selected";
-  const progressLabel = art ? `Progress: ${progress}%` : "Add or load an artwork";
 
   return (
     React.createElement(
@@ -937,7 +935,11 @@ function App() {
           "div",
           { style: styles.progressBadge, "data-testid": "progress-badge" },
           React.createElement("div", { style: styles.progressTitle }, art.title),
-          React.createElement("div", null, `Progress: ${progress}%`)
+          React.createElement("div", {
+            role: "status",
+            "aria-live": "polite",
+            "aria-atomic": "true",
+          }, `Progress: ${progress}%`)
         ),
         React.createElement(
           "div",
@@ -954,7 +956,14 @@ function App() {
           ),
           React.createElement(
             "button",
-            { style: styles.controlButton, onClick: () => setShowOptions(true), title: "Options", "aria-label": "Options" },
+            {
+              style: styles.controlButton,
+              onClick: () => setShowOptions(true),
+              title: "Options",
+              "aria-label": "Options",
+              "aria-haspopup": "dialog",
+              "aria-expanded": showOptions,
+            },
             "OPT"
           ),
           React.createElement(
@@ -2118,13 +2127,3 @@ root.render(React.createElement(App));
     </script>
   </body>
 </html>
-
-
-
-
-
-
-
-
-
-
