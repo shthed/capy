@@ -6,7 +6,7 @@ const appUrl = pathToFileURL(nodePath.join(__dirname, '..', 'index.html')).href;
 
 async function waitForAppReady(page) {
   await page.goto(appUrl);
-  await page.waitForSelector('header span[aria-live="polite"]', { state: 'visible' });
+  await page.waitForSelector('svg path[data-cell-id]', { state: 'visible' });
   await page.waitForLoadState('networkidle');
 }
 
@@ -17,36 +17,27 @@ test.describe('Capybooper app smoke tests', () => {
 
   test('renders the application shell', async ({ page }) => {
     await expect(page).toHaveTitle('Color-by-Number Demo');
-    await expect(page.locator('header')).toBeVisible();
-    await expect(page.locator('#artframe svg')).toBeVisible();
+    await expect(page.locator('svg')).toBeVisible();
+    await expect(page.locator('[data-testid="palette-dock"]')).toBeVisible();
   });
 
   test('shows artwork and palette elements', async ({ page }) => {
     const cellPaths = page.locator('svg path[data-cell-id]');
-    await cellPaths.first().waitFor();
-    const cellCount = await cellPaths.count();
-    expect(cellCount).toBeGreaterThan(20);
+    expect(await cellPaths.count()).toBeGreaterThan(20);
 
-    const paletteButtons = page.locator('footer button');
+    const paletteButtons = page.locator('[data-testid="palette-dock"] button');
     await expect(paletteButtons).toHaveCount(7);
     await expect(paletteButtons.first()).toContainText('Cells');
   });
 
   test('fills a cell and updates progress', async ({ page }) => {
-    const progressLabel = page.locator('header span[aria-live="polite"]');
-    await expect(progressLabel).toHaveText(/Progress: 0%/);
+    const progressBadge = page.locator('[data-testid="progress-badge"]');
+    await progressBadge.waitFor();
+    await expect(progressBadge).toContainText('Progress: 0%');
 
     const targetCell = page.locator('path[data-color-id="1"][data-cell-id]').first();
-    await targetCell.waitFor({ state: 'visible' });
     await targetCell.click({ force: true });
 
-    await page.waitForFunction(() => {
-      const span = document.querySelector('header span[aria-live="polite"]');
-      if (!span) return false;
-      const match = span.textContent.match(/Progress: (\d+)%/);
-      return match ? Number(match[1]) > 0 : false;
-    });
-
-    await expect(progressLabel).not.toHaveText(/Progress: 0%/);
+    await expect(progressBadge).not.toContainText('Progress: 0%');
   });
 });
