@@ -97,16 +97,16 @@ const DEMO_ART = {
   height: 600,
   palette: [
     { id: 1, name: "Sky Mist", rgba: "#86c5ff" },
-    { id: 2, name: "Cloud Reflection", rgba: "#bfd7e5" },
-    { id: 3, name: "Sun Glow", rgba: "#fef6e4" },
+    { id: 2, name: "Sky Veil", rgba: "#e6f0ff" },
+    { id: 3, name: "Dawn Glow", rgba: "#fef6e4" },
     { id: 4, name: "Distant Hills", rgba: "#b7d1a7" },
-    { id: 5, name: "Forest Canopy", rgba: "#2e7d32" },
-    { id: 6, name: "Forest Shadow", rgba: "#255f27" },
-    { id: 7, name: "Pond Water", rgba: "#4fb1d7" },
-    { id: 8, name: "Moss Meadow", rgba: "#3b7b46" },
-    { id: 9, name: "Capybara Fur", rgba: "#9c6a45" },
-    { id: 10, name: "Capybara Shadow", rgba: "#5b3a23" },
-    { id: 11, name: "Mushroom Cap", rgba: "#d75b63" },
+    { id: 5, name: "Pine Canopy", rgba: "#2f7a33" },
+    { id: 6, name: "Pine Shadow", rgba: "#255f27" },
+    { id: 7, name: "Pond Light", rgba: "#7fd5ef" },
+    { id: 8, name: "Meadow Moss", rgba: "#3b7b46" },
+    { id: 9, name: "Capybara Fur", rgba: "#8e5b3a" },
+    { id: 10, name: "Capybara Shade", rgba: "#5a3d2a" },
+    { id: 11, name: "Forest Accent", rgba: "#2c6e49" },
   ],
   cells: [
     { id: "c1", colorId: 1, d: "M0 0 L960 0 L960 140 C 860 150 760 150 660 140 C 560 130 480 130 400 140 C 280 155 160 150 0 130 Z" },
@@ -1541,7 +1541,7 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
       React.createElement(
         "p",
         { style: styles.optionsAbout },
-        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. It loads a predefined “Capybara Forest Retreat” scene sourced from a 960×600 SVG (art/capybara-forest.svg) with 26 labeled, non-overlapping regions and an 11-color palette, then tracks each cell’s fill state so players can match colors to numbers."
+        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. It loads a predefined “Capybara Forest Retreat” scene inspired by a detailed 960×600 SVG reference (art/capybara-forest.svg) with 26 labeled, non-overlapping regions and an 11-color palette, then tracks each cell’s fill state so players can match colors to numbers."
       ),
       React.createElement("div", { style: styles.optionsSectionTitle }, "UI surfaces"),
       React.createElement(
