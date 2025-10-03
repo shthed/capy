@@ -160,6 +160,18 @@ function estimatePathArea(d) {
 // ---------- Utilities ----------
 const SAVE_KEY = (artId) => `capybooper_save_${artId}`;
 
+const DEFAULT_CONFIG = {
+  enableAutosave: true,
+  autoAdvanceOnComplete: true,
+  enableHintPulse: true,
+  enableDragFill: true,
+  enableEyedropper: true,
+  enableKeyboardShortcuts: true,
+  showNumberBadges: true,
+  showHeatmapDots: true,
+  enableSmokeHud: true,
+};
+
 function loadSave(art) {
   try {
     const raw = localStorage.getItem(SAVE_KEY(art.id));
@@ -201,6 +213,7 @@ function App() {
     );
   }, [art]);
 
+  const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [filled, setFilled] = useState(initial.filled);
   const [activeColor, setActiveColor] = useState(initial.activeColor ?? art.palette[0].id);
   const [scale, setScale] = useState(initial.viewport?.scale ?? 0.9);
@@ -210,10 +223,24 @@ function App() {
   });
   const [lastAction, setLastAction] = useState(null);
   const [hintPulse, setHintPulse] = useState(new Set());
-  const [showTests, setShowTests] = useState(true);
+  const [showTests, setShowTests] = useState(DEFAULT_CONFIG.enableSmokeHud);
+  const [showOptions, setShowOptions] = useState(false);
+
+  const {
+    enableAutosave,
+    autoAdvanceOnComplete,
+    enableHintPulse,
+    enableDragFill,
+    enableEyedropper,
+    enableKeyboardShortcuts,
+    showNumberBadges,
+    showHeatmapDots,
+    enableSmokeHud,
+  } = config;
 
   // Autosave debounced
   useEffect(() => {
+    if (!enableAutosave) return;
     const t = setTimeout(() => {
       persistSave(art, {
         artworkId: art.id,
@@ -224,12 +251,23 @@ function App() {
       });
     }, 800);
     return () => clearTimeout(t);
-  }, [art, filled, activeColor, scale, offset]);
+  }, [art, filled, activeColor, scale, offset, enableAutosave]);
 
   const remaining = useMemo(() => computeRemaining(art, filled), [art, filled]);
   const totalCells = art.cells.length;
   const filledCount = Object.values(filled).filter(Boolean).length;
   const progress = Math.round((filledCount / totalCells) * 100);
+
+  const previousSmokePreferenceRef = useRef(DEFAULT_CONFIG.enableSmokeHud);
+
+  useEffect(() => {
+    if (!enableSmokeHud) {
+      previousSmokePreferenceRef.current = showTests;
+      setShowTests(false);
+    } else {
+      setShowTests((prev) => prev || previousSmokePreferenceRef.current);
+    }
+  }, [enableSmokeHud]);
 
   // Completion detection
   useEffect(() => {
@@ -246,6 +284,15 @@ function App() {
       );
     }
   }, [filledCount, totalCells]);
+
+  useEffect(() => {
+    if (!showOptions) return;
+    function onKeyDown(e) {
+      if (e.key === "Escape") setShowOptions(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showOptions]);
 
   // ---------- Interaction state ----------
   const svgRef = useRef(null);
@@ -309,7 +356,7 @@ function App() {
     if (cid) {
       const already = !!filled[cid];
       if (already) {
-        eyedropCandidateRef.current = cid;
+        eyedropCandidateRef.current = enableEyedropper ? cid : null;
         isPanningRef.current = true;
         lastPosRef.current = { x: e.clientX, y: e.clientY };
         return;
@@ -344,6 +391,7 @@ function App() {
     }
 
     if (isPaintingRef.current) {
+      if (!enableDragFill) return;
       const target = e.target;
       const id = target?.dataset?.cellId;
       if (id) onCellTap(id);
@@ -366,7 +414,7 @@ function App() {
     const svg = svgRef.current;
     svg?.releasePointerCapture?.(e.pointerId);
 
-    if (eyedropCandidateRef.current && movedRef.current < 6) {
+    if (enableEyedropper && eyedropCandidateRef.current && movedRef.current < 6) {
       const cell = art.cells.find((c) => c.id === eyedropCandidateRef.current);
       if (cell && (remaining[cell.colorId] ?? 0) > 0) setActiveColor(cell.colorId);
     }
@@ -405,7 +453,7 @@ function App() {
     const willCompleteColor = (remaining[activeColor] ?? 0) === 1;
     setFilled((prev) => ({ ...prev, [cellId]: true }));
     setLastAction(cellId);
-    if (willCompleteColor) nextColor();
+    if (willCompleteColor && autoAdvanceOnComplete) nextColor();
   }
 
   function undo() {
@@ -415,6 +463,7 @@ function App() {
   }
 
   function hint() {
+    if (!enableHintPulse) return;
     const candidates = art.cells
       .filter((c) => c.colorId === activeColor && !filled[c.id])
       .sort((a, b) => (a.area ?? 0) - (b.area ?? 0))
@@ -441,7 +490,12 @@ function App() {
     }
   }
 
+  function handleConfigChange(key, value) {
+    setConfig((prev) => ({ ...prev, [key]: value }));
+  }
+
   useEffect(() => {
+    if (!enableKeyboardShortcuts) return;
     function onKey(e) {
       if (e.key === "0") resetView();
       if (e.key === "+" || e.key === "=") setScale((s) => clamp(s * 1.1, 0.3, 4));
@@ -449,11 +503,12 @@ function App() {
       if (e.key.toLowerCase() === "h") hint();
       if (e.key.toLowerCase() === "n") nextColor();
       if (e.key.toLowerCase() === "u") undo();
-      if (e.key.toLowerCase() === "t") setShowTests((v) => !v);
+      if (e.key.toLowerCase() === "t" && enableSmokeHud) setShowTests((v) => !v);
+      if (e.key === "Escape" && showOptions) setShowOptions(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeColor, remaining, lastAction]);
+  }, [activeColor, remaining, lastAction, enableKeyboardShortcuts, enableSmokeHud, showOptions]);
 
   return (
     React.createElement(
@@ -482,6 +537,16 @@ function App() {
           ),
           React.createElement(
             "button",
+            {
+              style: styles.iconBtn,
+              onClick: () => setShowOptions(true),
+              title: "Options and app overview",
+              "aria-haspopup": "dialog",
+            },
+            "\u2699"
+          ),
+          React.createElement(
+            "button",
             { style: styles.iconBtn, onClick: resetView, title: "Fit to screen" },
             "\u2922"
           ),
@@ -492,7 +557,16 @@ function App() {
           ),
           React.createElement(
             "button",
-            { style: styles.iconBtn, onClick: hint, title: "Hint" },
+            {
+              style: {
+                ...styles.iconBtn,
+                opacity: enableHintPulse ? 1 : 0.4,
+                cursor: enableHintPulse ? "pointer" : "not-allowed",
+              },
+              onClick: hint,
+              title: "Hint",
+              disabled: !enableHintPulse,
+            },
             "\uD83D\uDCA1"
           ),
           React.createElement(
@@ -502,11 +576,27 @@ function App() {
           ),
           React.createElement(
             "button",
-            { style: styles.iconBtn, onClick: () => setShowTests((v) => !v), title: "Toggle tests" },
+            {
+              style: {
+                ...styles.iconBtn,
+                opacity: enableSmokeHud ? 1 : 0.4,
+                cursor: enableSmokeHud ? "pointer" : "not-allowed",
+              },
+              onClick: () => enableSmokeHud && setShowTests((v) => !v),
+              title: "Toggle tests",
+              disabled: !enableSmokeHud,
+              "aria-pressed": showTests,
+            },
             "\u2714"
           )
         )
       ),
+      showOptions &&
+        React.createElement(OptionsPanel, {
+          config: config,
+          onToggle: handleConfigChange,
+          onClose: () => setShowOptions(false),
+        }),
       React.createElement(
         "main",
         { style: styles.main },
@@ -566,15 +656,15 @@ function App() {
                       isFilled ? "Filled" : "Unfilled"
                     }`,
                   }),
-                  !isFilled && scale >= 0.6 &&
+                  !isFilled && showNumberBadges && scale >= 0.6 &&
                     React.createElement(NumberLabel, { d: c.d, text: `${c.colorId}` }),
-                  !isFilled && scale < 0.6 && React.createElement(HeatDot, { d: c.d })
+                  !isFilled && showHeatmapDots && scale < 0.6 && React.createElement(HeatDot, { d: c.d })
                 );
               })
             )
           )
         ),
-        showTests && React.createElement(SmokeTests, { art: art, filled: filled })
+        enableSmokeHud && showTests && React.createElement(SmokeTests, { art: art, filled: filled })
       ),
       React.createElement(
         "footer",
@@ -683,6 +773,151 @@ function Palette({ palette, remaining, activeColor, onSelect }) {
   );
 }
 
+function OptionsPanel({ config, onToggle, onClose }) {
+  const options = [
+    {
+      key: "enableAutosave",
+      label: "Autosave progress",
+      description: "Persist the fill state and viewport to localStorage after each change.",
+    },
+    {
+      key: "autoAdvanceOnComplete",
+      label: "Auto-advance color",
+      description: "Jump to the next color when the active color has no unfilled cells remaining.",
+    },
+    {
+      key: "enableHintPulse",
+      label: "Hint pulses",
+      description: "Allow the Hint control to highlight the smallest unfilled cells in the active color.",
+    },
+    {
+      key: "enableDragFill",
+      label: "Drag-to-fill",
+      description: "While painting, drag across adjacent cells to fill them without additional taps.",
+    },
+    {
+      key: "enableEyedropper",
+      label: "Eyedropper",
+      description: "Tap a filled cell without moving to reselect its color.",
+    },
+    {
+      key: "enableKeyboardShortcuts",
+      label: "Keyboard shortcuts",
+      description: "Use H, N, U, T, +/-, and 0 to control hints, color cycling, undo, tests, zoom, and fitting.",
+    },
+    {
+      key: "showNumberBadges",
+      label: "Number badges",
+      description: "Show numbered overlays for unfilled cells when zoomed in.",
+    },
+    {
+      key: "showHeatmapDots",
+      label: "Heat-map dots",
+      description: "Show locator dots for tiny cells when zoomed out.",
+    },
+    {
+      key: "enableSmokeHud",
+      label: "Smoke-test HUD",
+      description: "Allow the debugging overlay that summarizes automated checks.",
+    },
+  ];
+
+  const surfaces = [
+    {
+      title: "Root layout",
+      body: "Dark-mode experience with a full-viewport canvas and floating header/footer controls.",
+    },
+    {
+      title: "Header bar",
+      body: "Back affordance, artwork title, progress text, and utility buttons for fit, undo, hint, next color, tests, and options.",
+    },
+    {
+      title: "Canvas frame",
+      body: "Fullscreen SVG stage with pan/zoom transforms, strokes, badges, and heat-map dots as you zoom.",
+    },
+    {
+      title: "Smoke Tests HUD",
+      body: "Optional floating card that reports automated sanity checks and can be hidden with the toolbar or T shortcut.",
+    },
+    {
+      title: "Palette footer",
+      body: "Scrollable row of numbered swatches with remaining counts, highlighting the active color and disabling completed ones.",
+    },
+  ];
+
+  return React.createElement(
+    "div",
+    { style: styles.optionsOverlay, onClick: onClose },
+    React.createElement(
+      "aside",
+      {
+        style: styles.optionsCard,
+        role: "dialog",
+        "aria-modal": true,
+        "aria-label": "Options and configuration",
+        onClick: (e) => e.stopPropagation(),
+      },
+      React.createElement(
+        "div",
+        { style: styles.optionsHeader },
+        React.createElement("div", { style: styles.optionsTitle }, "Options"),
+        React.createElement(
+          "button",
+          { style: styles.optionsClose, onClick: onClose, "aria-label": "Close options" },
+          "\u2715"
+        )
+      ),
+      React.createElement(
+        "p",
+        { style: styles.optionsAbout },
+        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. It loads a predefined \u201CLow\u2011poly Fox\u201D artwork composed of numbered SVG paths and a corresponding palette, then tracks each cell\u2019s fill state so users can paint the illustration by matching colors to numbers."
+      ),
+      React.createElement("div", { style: styles.optionsSectionTitle }, "UI surfaces"),
+      React.createElement(
+        "ul",
+        { style: styles.optionsUiList },
+        surfaces.map((s) =>
+          React.createElement(
+            "li",
+            { key: s.title },
+            React.createElement("strong", null, s.title, ": "),
+            s.body
+          )
+        )
+      ),
+      React.createElement("div", { style: styles.optionsSectionTitle }, "Configuration"),
+      React.createElement(
+        "div",
+        { style: styles.optionsList },
+        options.map((opt) =>
+          React.createElement(
+            "label",
+            { key: opt.key, style: styles.optionRow },
+            React.createElement("input", {
+              type: "checkbox",
+              checked: !!config[opt.key],
+              onChange: (e) => onToggle(opt.key, e.target.checked),
+              style: styles.optionCheckbox,
+            }),
+            React.createElement(
+              "div",
+              null,
+              React.createElement("div", { style: styles.optionLabel }, opt.label),
+              React.createElement("div", { style: styles.optionDescription }, opt.description)
+            )
+          )
+        )
+      ),
+      React.createElement("div", { style: styles.optionsSectionTitle }, "Current values"),
+      React.createElement(
+        "pre",
+        { style: styles.optionsConfigPre },
+        JSON.stringify(config, null, 2)
+      )
+    )
+  );
+}
+
 // ---------- Smoke Tests HUD ----------
 function SmokeTests({ art, filled }) {
   const results = useMemo(() => runSmokeTests(art, filled), [art, filled]);
@@ -693,7 +928,7 @@ function SmokeTests({ art, filled }) {
       style: {
         position: "absolute",
         left: 16,
-        bottom: 120,
+        bottom: 180,
         background: allPass ? "rgba(34, 197, 94, 0.12)" : "rgba(248, 113, 113, 0.12)",
         border: `1px solid ${allPass ? "#22c55e" : "#f87171"}`,
         borderRadius: 12,
@@ -745,9 +980,8 @@ function runSmokeTests(art, filled) {
 // ---------- Styles ----------
 const styles = {
   app: {
-    height: "100vh",
-    display: "grid",
-    gridTemplateRows: "72px 1fr 120px",
+    minHeight: "100vh",
+    position: "relative",
     fontFamily: "'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui",
     color: "#f8fafc",
     background: "radial-gradient(circle at top, rgba(56, 189, 248, 0.05), rgba(15, 23, 42, 0.9))",
@@ -760,6 +994,12 @@ const styles = {
     borderBottom: "1px solid rgba(148, 163, 184, 0.2)",
     background: "rgba(2, 6, 23, 0.7)",
     backdropFilter: "blur(12px)",
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    boxShadow: "0 12px 32px rgba(2, 6, 23, 0.55)",
   },
   back: {
     width: 44,
@@ -787,14 +1027,16 @@ const styles = {
     placeItems: "center",
   },
   main: {
+    position: "relative",
     display: "grid",
     placeItems: "center",
-    padding: 24,
-    position: "relative",
+    padding: "96px 24px 168px",
+    minHeight: "100vh",
+    width: "100%",
   },
   artframe: {
-    width: "min(96vw, 960px)",
-    height: "min(70vh, 720px)",
+    width: "min(96vw, 1100px)",
+    height: "max(320px, calc(100vh - 264px))",
     background: "rgba(15, 23, 42, 0.85)",
     border: "1px solid rgba(148, 163, 184, 0.15)",
     borderRadius: 24,
@@ -809,6 +1051,12 @@ const styles = {
     justifyContent: "center",
     padding: "18px 24px",
     backdropFilter: "blur(12px)",
+    position: "fixed",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 30,
+    boxShadow: "0 -12px 32px rgba(2, 6, 23, 0.55)",
   },
   paletteWrap: {
     display: "flex",
@@ -859,6 +1107,107 @@ const styles = {
     fontSize: 18,
     fontWeight: 700,
     color: "#e2e8f0",
+  },
+  optionsOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(2, 6, 23, 0.6)",
+    backdropFilter: "blur(8px)",
+    display: "flex",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    padding: "24px 32px",
+    zIndex: 50,
+  },
+  optionsCard: {
+    width: "min(420px, 100%)",
+    maxHeight: "calc(100vh - 48px)",
+    overflowY: "auto",
+    background: "rgba(15, 23, 42, 0.96)",
+    borderRadius: 24,
+    padding: 24,
+    boxShadow: "0 24px 60px rgba(2, 6, 23, 0.65)",
+    border: "1px solid rgba(148, 163, 184, 0.25)",
+    color: "#e2e8f0",
+  },
+  optionsHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  optionsTitle: {
+    fontSize: 20,
+    fontWeight: 700,
+  },
+  optionsClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    border: "1px solid rgba(148, 163, 184, 0.35)",
+    background: "rgba(15, 23, 42, 0.8)",
+    color: "#cbd5f5",
+    cursor: "pointer",
+  },
+  optionsAbout: {
+    fontSize: 13,
+    lineHeight: 1.6,
+    color: "#cbd5f5",
+    marginTop: 0,
+    marginBottom: 16,
+  },
+  optionsSectionTitle: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    color: "#64748b",
+    margin: "20px 0 10px",
+  },
+  optionsUiList: {
+    margin: 0,
+    paddingLeft: 18,
+    display: "grid",
+    gap: 8,
+    fontSize: 13,
+    color: "#d0def5",
+  },
+  optionsList: {
+    display: "grid",
+    gap: 12,
+  },
+  optionRow: {
+    display: "grid",
+    gridTemplateColumns: "auto 1fr",
+    gap: 12,
+    alignItems: "start",
+    background: "rgba(15, 23, 42, 0.7)",
+    padding: 12,
+    borderRadius: 16,
+    border: "1px solid rgba(148, 163, 184, 0.15)",
+  },
+  optionCheckbox: {
+    width: 18,
+    height: 18,
+    marginTop: 4,
+  },
+  optionLabel: {
+    fontWeight: 600,
+    color: "#e2e8f0",
+  },
+  optionDescription: {
+    fontSize: 12,
+    color: "#94a3b8",
+    marginTop: 4,
+  },
+  optionsConfigPre: {
+    margin: 0,
+    padding: 12,
+    background: "rgba(15, 23, 42, 0.7)",
+    borderRadius: 16,
+    border: "1px solid rgba(148, 163, 184, 0.15)",
+    fontSize: 12,
+    color: "#f8fafc",
+    overflowX: "auto",
   },
 };
 
