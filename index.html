@@ -47,7 +47,7 @@
     <script type="text/babel">
 const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
-// Capybooper Web Game — MVP single-file React app (patched)
+// Capybooper Web Game - MVP single-file React app (patched)
 // Fixes: correct zoom/pan math, pan over filled cells, pinch zoom, drag-fill,
 // eyedropper, auto-advance, hint stroke highlight, smoke-test HUD.
 // No external libs. LocalStorage autosave. Keyboard support.
@@ -1677,13 +1677,15 @@ function SmokeTests({ art, filled }) {
     React.createElement(
       "ul",
       { style: { margin: 0, paddingLeft: 18 } },
-      results.map((r) =>
-        React.createElement(
+      results.map((r) => {
+        const status = r.pass ? "[pass]" : "[fail]";
+        const details = r.msg ? ` - ${r.msg}` : "";
+        return React.createElement(
           "li",
           { key: r.name, style: { color: r.pass ? "#4ade80" : "#fca5a5" } },
-          `${r.pass ? "✔" : "✖"} ${r.name}${r.msg ? ` – ${r.msg}` : ""}`
-        )
-      )
+          `${status} ${r.name}${details}`
+        );
+      })
     ),
     React.createElement(
       "div",
