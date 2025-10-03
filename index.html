@@ -1167,8 +1167,16 @@ function App() {
 
   function onWheel(e) {
     if (!art) return;
-    e.preventDefault();
-    const factor = Math.exp(-e.deltaY * 0.0012);
+    if (e.nativeEvent?.cancelable) {
+      e.nativeEvent.preventDefault();
+    } else {
+      e.preventDefault();
+    }
+    const pageSpan =
+      typeof window !== "undefined" && window.innerHeight ? window.innerHeight : 360;
+    const modeFactor = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? pageSpan : 1;
+    const delta = e.deltaY * modeFactor;
+    const factor = Math.exp(-delta * 0.0012);
     const proposed = scale * factor;
     smoothZoomTo(proposed, e.clientX, e.clientY);
   }
@@ -1182,6 +1190,14 @@ function App() {
     const target = e.target;
     const cid = target?.dataset?.cellId;
     movedRef.current = 0;
+
+    if (e.pointerType === "mouse" && e.button === 0) {
+      if (e.nativeEvent?.cancelable) {
+        e.nativeEvent.preventDefault();
+      } else {
+        e.preventDefault();
+      }
+    }
 
     if (e.pointerType === "mouse" && (e.button === 2 || e.button === 1 || e.ctrlKey)) {
       e.preventDefault();
@@ -1229,6 +1245,14 @@ function App() {
     if (!art) return;
     const svg = svgRef.current;
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (isPanningRef.current && e.pointerType === "mouse") {
+      if (e.nativeEvent?.cancelable) {
+        e.nativeEvent.preventDefault();
+      } else {
+        e.preventDefault();
+      }
+    }
 
     if (pinchRef.current) {
       const { id1, id2, d0, s0, mid0 } = pinchRef.current;
@@ -1451,7 +1475,12 @@ function App() {
                 width: "100%",
                 height: "100%",
                 viewBox: `0 0 ${art.width} ${art.height}`,
-                style: { background: "#0f172a", touchAction: "none" },
+                style: {
+                  background: "#0f172a",
+                  touchAction: "none",
+                  userSelect: "none",
+                  WebkitUserSelect: "none",
+                },
                 onWheel: onWheel,
                 onPointerDown: onPointerDown,
                 onPointerMove: onPointerMove,
@@ -1571,28 +1600,6 @@ function App() {
                 "aria-label": "Adjust options",
               },
               "Options"
-            ),
-            React.createElement(
-              "button",
-              {
-                type: "button",
-                style: styles.controlButton,
-                onClick: resetView,
-                title: "Reset view",
-                "aria-label": "Reset view",
-              },
-              "Reset"
-            ),
-            React.createElement(
-              "button",
-              {
-                type: "button",
-                style: styles.controlButton,
-                onClick: undo,
-                title: "Undo last fill",
-                "aria-label": "Undo last fill",
-              },
-              "Undo"
             ),
             React.createElement(
               "button",
@@ -2412,7 +2419,7 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
     },
     {
       title: "Header bar",
-      body: "Back affordance, artwork title, progress text, and utility buttons for fit, undo, hint, next color, tests, and options.",
+      body: "Back affordance, artwork title, progress text, and utility buttons for the library, options, hints, next color, and tests.",
     },
     {
       title: "Canvas frame",
