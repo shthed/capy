@@ -8,22 +8,13 @@ served directly from static files.
 The demo boots entirely from `index.html`, pulling React, ReactDOM, and Babel
 from the vendored runtime bundles so JSX can execute without a build step. The
 default scene streams directly from the annotated SVG at
-`art/capybara-lagoon.svg`, and the starter loader now fetches the segmented
-twilight companion in `art/capybara-twilight.svg` alongside the new
+`art/capybara-lagoon.svg`, and the starter loader pulls in the segmented
+twilight companion in `art/capybara-twilight.svg` alongside the
 "Lush Green Forest Walk" reference stored in `art/lush-green-forest.svg`. The
-library ships all three scenes so you can jump in and paint while progress is
-tracked automatically.
-
-When the app runs from `file://`, the loader hydrates each starter from the
-embedded SVG strings inside `art/starter-fallbacks.js` instead of making
-network requests. Regenerate the inline bundle after editing any starter SVG
-with either command:
-
-```bash
-npm run build:fallbacks
-# or
-node tools/build-starter-fallbacks.js
-```
+library reads the SVG files directly so you can jump in and paint while
+progress is tracked automatically. When opened via `file://`, the browser
+blocks direct `fetch`/XHR access to sibling files, so the generated
+`art/starter-fallbacks.js` bundle seeds the loader with the same SVG markup.
 
 Interaction handlers support mouse and touch gestures including smooth,
 cursor-anchored wheel zoom, pinch zoom, left- or right-button drag panning,
