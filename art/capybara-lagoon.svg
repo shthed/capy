@@ -1,0 +1,38 @@
+<!-- Capybara Lagoon Sunrise - Segmented SVG -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-labelledby="title desc">
+  <title id="title">Capybara Lagoon Sunrise</title>
+  <desc id="desc">Layered sunrise bands over a lagoon with a stylized capybara on the shore.</desc>
+  <g id="region-c01" data-cell-id="c1" data-color-id="1" data-color-name="Sunrise Sky" data-color-hex="#f6bf60">
+    <path d="M0 0 L960 0 L960 160 C 760 150 600 150 480 155 C 320 160 160 165 0 160 Z"/>
+  </g>
+  <g id="region-c02" data-cell-id="c2" data-color-id="2" data-color-name="Amber Drift" data-color-hex="#f4994c">
+    <path d="M0 160 C 160 170 320 190 480 190 C 640 190 800 170 960 160 L960 220 C 800 230 640 240 480 240 C 320 240 160 230 0 220 Z"/>
+  </g>
+  <g id="region-c03" data-cell-id="c3" data-color-id="3" data-color-name="Violet Ridge" data-color-hex="#9a6bb3">
+    <path d="M0 220 L120 200 L240 230 L360 210 L480 235 L600 205 L720 230 L840 215 L960 240 L960 300 L0 300 Z"/>
+  </g>
+  <g id="region-c04" data-cell-id="c4" data-color-id="4" data-color-name="Forest Ridge" data-color-hex="#5d7a76">
+    <path d="M0 300 C 160 280 320 310 480 295 C 640 280 800 310 960 290 L960 360 L0 360 Z"/>
+  </g>
+  <g id="region-c05" data-cell-id="c5" data-color-id="5" data-color-name="Lagoon Light" data-color-hex="#76c7d6">
+    <path d="M0 360 C 180 380 360 390 540 380 C 720 370 840 360 960 365 L960 440 L0 440 Z"/>
+  </g>
+  <g id="region-c06" data-cell-id="c6" data-color-id="6" data-color-name="Lagoon Depth" data-color-hex="#1c6f8c">
+    <path d="M0 440 C 200 460 380 470 560 465 C 740 460 860 450 960 455 L960 520 L0 520 Z"/>
+  </g>
+  <g id="region-c07" data-cell-id="c7" data-color-id="7" data-color-name="Shore Left" data-color-hex="#4f7d5c">
+    <path d="M0 520 C 150 540 260 545 320 548 L320 600 L0 600 Z"/>
+  </g>
+  <g id="region-c08" data-cell-id="c8" data-color-id="8" data-color-name="Shore Middle" data-color-hex="#6b9358">
+    <path d="M320 548 C 380 552 450 552 520 545 L520 600 L320 600 Z"/>
+  </g>
+  <g id="region-c09" data-cell-id="c9" data-color-id="9" data-color-name="Capy Body" data-color-hex="#7d5735">
+    <path d="M520 545 C 540 500 600 470 680 470 C 740 470 780 495 790 530 L790 600 L520 600 Z"/>
+  </g>
+  <g id="region-c10" data-cell-id="c10" data-color-id="10" data-color-name="Capy Head" data-color-hex="#5e3b24">
+    <path d="M790 530 C 810 500 850 500 870 520 C 890 540 890 570 870 585 C 850 600 810 595 795 570 Z"/>
+  </g>
+  <g id="region-c11" data-cell-id="c11" data-color-id="11" data-color-name="Shore Right" data-color-hex="#3f5b3b">
+    <path d="M870 585 C 900 570 930 562 960 565 L960 600 L870 600 Z"/>
+  </g>
+</svg>

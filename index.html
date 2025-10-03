@@ -144,6 +144,142 @@ const DEMO_ART = {
     { id: "c26", colorId: 8, d: "M0 560 C 200 580 400 590 600 585 C 760 580 880 570 960 575 L960 600 L0 600 Z" },
   ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
 };
+
+const LAGOON_ART = {
+  id: "demo-capybara-lagoon",
+  title: "Capybara Lagoon Sunrise",
+  width: 960,
+  height: 600,
+  palette: [
+    { id: 1, name: "Sunrise Sky", rgba: "#f6bf60" },
+    { id: 2, name: "Amber Drift", rgba: "#f4994c" },
+    { id: 3, name: "Violet Ridge", rgba: "#9a6bb3" },
+    { id: 4, name: "Forest Ridge", rgba: "#5d7a76" },
+    { id: 5, name: "Lagoon Light", rgba: "#76c7d6" },
+    { id: 6, name: "Lagoon Depth", rgba: "#1c6f8c" },
+    { id: 7, name: "Shore Left", rgba: "#4f7d5c" },
+    { id: 8, name: "Shore Middle", rgba: "#6b9358" },
+    { id: 9, name: "Capy Body", rgba: "#7d5735" },
+    { id: 10, name: "Capy Head", rgba: "#5e3b24" },
+    { id: 11, name: "Shore Right", rgba: "#3f5b3b" },
+  ],
+  cells: [
+    {
+      id: "c1",
+      colorId: 1,
+      d: "M0 0 L960 0 L960 160 C 760 150 600 150 480 155 C 320 160 160 165 0 160 Z",
+    },
+    {
+      id: "c2",
+      colorId: 2,
+      d: "M0 160 C 160 170 320 190 480 190 C 640 190 800 170 960 160 L960 220 C 800 230 640 240 480 240 C 320 240 160 230 0 220 Z",
+    },
+    {
+      id: "c3",
+      colorId: 3,
+      d: "M0 220 L120 200 L240 230 L360 210 L480 235 L600 205 L720 230 L840 215 L960 240 L960 300 L0 300 Z",
+    },
+    {
+      id: "c4",
+      colorId: 4,
+      d: "M0 300 C 160 280 320 310 480 295 C 640 280 800 310 960 290 L960 360 L0 360 Z",
+    },
+    {
+      id: "c5",
+      colorId: 5,
+      d: "M0 360 C 180 380 360 390 540 380 C 720 370 840 360 960 365 L960 440 L0 440 Z",
+    },
+    {
+      id: "c6",
+      colorId: 6,
+      d: "M0 440 C 200 460 380 470 560 465 C 740 460 860 450 960 455 L960 520 L0 520 Z",
+    },
+    {
+      id: "c7",
+      colorId: 7,
+      d: "M0 520 C 150 540 260 545 320 548 L320 600 L0 600 Z",
+    },
+    {
+      id: "c8",
+      colorId: 8,
+      d: "M320 548 C 380 552 450 552 520 545 L520 600 L320 600 Z",
+    },
+    {
+      id: "c9",
+      colorId: 9,
+      d: "M520 545 C 540 500 600 470 680 470 C 740 470 780 495 790 530 L790 600 L520 600 Z",
+    },
+    {
+      id: "c10",
+      colorId: 10,
+      d: "M790 530 C 810 500 850 500 870 520 C 890 540 890 570 870 585 C 850 600 810 595 795 570 Z",
+    },
+    {
+      id: "c11",
+      colorId: 11,
+      d: "M870 585 C 900 570 930 562 960 565 L960 600 L870 600 Z",
+    },
+  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
+};
+
+const TWILIGHT_ART = {
+  id: "demo-capybara-twilight",
+  title: "Twilight Marsh Study",
+  width: 960,
+  height: 600,
+  palette: [
+    { id: 1, name: "Evening Sky", rgba: "#f7c59f" },
+    { id: 2, name: "Glow Band", rgba: "#f27d72" },
+    { id: 3, name: "Distant Ridge", rgba: "#8c5fa6" },
+    { id: 4, name: "Low Ridge", rgba: "#546d7a" },
+    { id: 5, name: "River Mirror", rgba: "#4f9fc6" },
+    { id: 6, name: "River Depth", rgba: "#1f6b8f" },
+    { id: 7, name: "Shore Glow", rgba: "#5d8f63" },
+    { id: 8, name: "Shore Shadow", rgba: "#2f4c45" },
+  ],
+  cells: [
+    {
+      id: "c1",
+      colorId: 1,
+      d: "M0 0 L960 0 L960 160 C 640 150 320 150 0 160 Z",
+    },
+    {
+      id: "c2",
+      colorId: 2,
+      d: "M0 160 C 160 180 320 180 480 185 C 640 190 800 180 960 170 L960 230 C 640 240 320 240 0 230 Z",
+    },
+    {
+      id: "c3",
+      colorId: 3,
+      d: "M0 230 C 200 260 400 250 600 270 C 800 290 880 270 960 280 L960 340 L0 340 Z",
+    },
+    {
+      id: "c4",
+      colorId: 4,
+      d: "M0 340 C 200 360 400 360 600 355 C 800 350 880 350 960 355 L960 420 L0 420 Z",
+    },
+    {
+      id: "c5",
+      colorId: 5,
+      d: "M0 420 C 220 440 440 450 660 440 C 800 434 880 430 960 432 L960 490 L0 490 Z",
+    },
+    {
+      id: "c6",
+      colorId: 6,
+      d: "M0 490 C 200 510 400 520 600 515 C 800 510 880 508 960 510 L960 555 L0 555 Z",
+    },
+    {
+      id: "c7",
+      colorId: 7,
+      d: "M0 555 C 180 570 360 580 540 575 L540 600 L0 600 Z",
+    },
+    {
+      id: "c8",
+      colorId: 8,
+      d: "M540 575 C 700 570 840 565 960 570 L960 600 L540 600 Z",
+    },
+  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
+};
 function cloneArtwork(art) {
   return {
     ...art,
@@ -153,7 +289,11 @@ function cloneArtwork(art) {
 }
 
 function getStarterArtworks() {
-  return [cloneArtwork(DEMO_ART)];
+  return [
+    cloneArtwork(DEMO_ART),
+    cloneArtwork(LAGOON_ART),
+    cloneArtwork(TWILIGHT_ART),
+  ];
 }
 
 // Estimate area for heuristics using DOM sampling with a polygon fallback.
@@ -2143,7 +2283,7 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
       React.createElement(
         "p",
         { style: styles.optionsAbout },
-        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. The art library import accepts JSON exports or annotated SVG files with data-cell-id/data-color-id metadata so new scenes can be added without editing code. It loads a predefined “Capybara Forest Retreat” scene inspired by a detailed 960×600 SVG reference (art/capybara-forest.svg) with 26 labeled, non-overlapping regions and an 11-color palette, then tracks each cell’s fill state so players can match colors to numbers."
+        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. The art library import accepts JSON exports or annotated SVG files with data-cell-id/data-color-id metadata so new scenes can be added without editing code. It now ships with three sample scenes—“Capybara Forest Retreat,” “Capybara Lagoon Sunrise,” and “Twilight Marsh Study”—plus autosave that tracks each cell’s fill state so players can match colors to numbers."
       ),
       React.createElement("div", { style: styles.optionsSectionTitle }, "UI surfaces"),
       React.createElement(
