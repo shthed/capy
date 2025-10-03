@@ -144,6 +144,217 @@ const DEMO_ART = {
     { id: "c26", colorId: 8, d: "M0 560 C 200 580 400 590 600 585 C 760 580 880 570 960 575 L960 600 L0 600 Z" },
   ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
 };
+
+const LAGOON_ART = {
+  id: "demo-capybara-lagoon",
+  title: "Capybara Lagoon Sunrise",
+  width: 960,
+  height: 600,
+  palette: [
+    { id: 1, name: "Sunrise Sky", rgba: "#f6bf60" },
+    { id: 2, name: "Amber Drift", rgba: "#f4994c" },
+    { id: 3, name: "Violet Ridge", rgba: "#9a6bb3" },
+    { id: 4, name: "Forest Ridge", rgba: "#5d7a76" },
+    { id: 5, name: "Lagoon Light", rgba: "#76c7d6" },
+    { id: 6, name: "Lagoon Depth", rgba: "#1c6f8c" },
+    { id: 7, name: "Shore Left", rgba: "#4f7d5c" },
+    { id: 8, name: "Shore Middle", rgba: "#6b9358" },
+    { id: 9, name: "Capy Body", rgba: "#7d5735" },
+    { id: 10, name: "Capy Head", rgba: "#5e3b24" },
+    { id: 11, name: "Shore Right", rgba: "#3f5b3b" },
+  ],
+  cells: [
+    {
+      id: "c1",
+      colorId: 1,
+      d: "M0 0 L960 0 L960 80 C 820 70 680 68 540 72 C 380 78 220 86 0 80 Z",
+    },
+    {
+      id: "c2",
+      colorId: 1,
+      d: "M0 80 C 200 90 360 86 540 80 C 720 74 860 76 960 80 L960 148 C 820 142 680 148 520 156 C 360 166 200 164 0 148 Z",
+    },
+    {
+      id: "c3",
+      colorId: 2,
+      d: "M0 148 C 160 156 320 160 520 152 C 500 176 480 198 440 212 C 320 220 160 218 0 216 Z",
+    },
+    {
+      id: "c4",
+      colorId: 2,
+      d: "M520 152 C 700 150 840 146 960 148 C 940 176 900 198 860 210 C 740 220 640 220 520 214 C 520 194 520 172 520 152 Z",
+    },
+    {
+      id: "c5",
+      colorId: 3,
+      d: "M0 216 C 120 228 220 232 320 230 C 300 248 260 268 210 278 C 150 286 80 284 0 280 Z",
+    },
+    {
+      id: "c6",
+      colorId: 3,
+      d: "M320 230 C 440 236 520 234 640 226 C 630 250 600 268 560 276 C 480 286 400 284 320 278 C 320 258 320 244 320 230 Z",
+    },
+    {
+      id: "c7",
+      colorId: 3,
+      d: "M640 226 C 760 224 860 220 960 220 C 940 240 900 260 860 272 C 780 286 700 284 640 278 C 640 256 640 240 640 226 Z",
+    },
+    {
+      id: "c8",
+      colorId: 4,
+      d: "M0 280 C 100 292 200 300 320 292 C 300 312 260 328 210 336 C 150 344 80 344 0 340 Z",
+    },
+    {
+      id: "c9",
+      colorId: 4,
+      d: "M320 292 C 440 298 540 300 640 298 C 620 318 580 332 540 340 C 460 348 380 346 320 340 C 320 320 320 306 320 292 Z",
+    },
+    {
+      id: "c10",
+      colorId: 4,
+      d: "M640 298 C 760 300 860 300 960 300 C 940 320 900 332 860 340 C 780 348 700 348 640 340 C 640 320 640 308 640 298 Z",
+    },
+    {
+      id: "c11",
+      colorId: 5,
+      d: "M0 340 C 120 344 220 346 320 344 C 300 350 300 352 320 352 C 200 356 120 354 0 352 C 0 348 0 344 0 340 Z",
+    },
+    {
+      id: "c12",
+      colorId: 5,
+      d: "M320 344 C 440 346 540 344 640 342 C 640 346 640 350 640 352 C 520 356 420 356 320 352 C 320 348 320 346 320 344 Z",
+    },
+    {
+      id: "c13",
+      colorId: 5,
+      d: "M640 342 C 760 340 860 338 960 340 C 960 344 960 348 960 352 C 840 354 740 354 640 352 C 640 348 640 344 640 342 Z",
+    },
+    {
+      id: "c14",
+      colorId: 5,
+      d: "M0 352 C 120 356 220 356 320 352 C 310 364 310 372 320 376 C 200 382 120 380 0 376 C 0 364 0 358 0 352 Z",
+    },
+    {
+      id: "c15",
+      colorId: 5,
+      d: "M320 352 C 440 354 540 352 640 352 C 650 362 650 370 640 376 C 520 382 420 382 320 376 C 320 366 320 360 320 352 Z",
+    },
+    {
+      id: "c16",
+      colorId: 5,
+      d: "M640 352 C 760 352 860 350 960 352 C 960 362 960 372 960 376 C 840 380 740 380 640 376 C 640 366 640 358 640 352 Z",
+    },
+    {
+      id: "c17",
+      colorId: 6,
+      d: "M0 376 C 160 382 320 388 480 384 C 480 394 480 400 480 404 C 320 408 160 404 0 404 C 0 392 0 384 0 376 Z",
+    },
+    {
+      id: "c18",
+      colorId: 6,
+      d: "M480 376 C 640 382 800 380 960 376 L960 404 C 800 410 640 412 480 404 C 480 394 480 386 480 376 Z",
+    },
+    {
+      id: "c19",
+      colorId: 6,
+      d: "M0 404 C 160 410 320 416 480 412 C 480 428 480 440 480 448 C 320 456 160 452 0 448 C 0 430 0 416 0 404 Z",
+    },
+    {
+      id: "c20",
+      colorId: 6,
+      d: "M480 412 C 640 416 800 410 960 404 L960 448 C 820 456 680 460 520 456 C 500 454 490 448 480 448 C 480 432 480 420 480 412 Z",
+    },
+    {
+      id: "c21",
+      colorId: 7,
+      d: "M0 448 C 120 454 220 458 300 462 C 280 500 220 540 140 566 C 80 584 30 592 0 592 C 0 544 0 496 0 448 Z",
+    },
+    {
+      id: "c22",
+      colorId: 7,
+      d: "M300 462 C 360 468 420 472 520 456 C 510 486 490 514 460 540 C 420 568 360 580 300 572 C 280 540 290 500 300 462 Z",
+    },
+    {
+      id: "c23",
+      colorId: 8,
+      d: "M520 456 C 640 462 720 464 780 460 C 788 474 792 498 796 528 C 786 580 768 584 752 588 C 700 600 656 598 604 588 C 566 580 534 564 518 546 C 506 532 506 520 520 510 C 508 496 512 476 520 456 Z",
+    },
+    {
+      id: "c24",
+      colorId: 9,
+      d: "M520 510 C 548 470 612 440 692 434 C 744 430 768 438 780 456 C 790 474 794 498 796 528 C 798 556 786 580 752 588 C 708 600 656 598 604 588 C 566 580 534 564 518 546 C 508 532 506 518 520 510 Z",
+    },
+    {
+      id: "c25",
+      colorId: 10,
+      d: "M780 456 C 804 438 838 438 866 460 C 894 482 904 520 892 556 C 878 594 846 608 810 600 C 800 598 796 590 796 528 C 794 500 788 474 780 456 Z",
+    },
+    {
+      id: "c26",
+      colorId: 11,
+      d: "M780 460 C 840 456 900 454 960 452 L960 600 C 910 600 870 598 810 600 C 846 608 878 594 892 556 C 884 520 860 488 780 460 Z",
+    },
+  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
+};
+
+const TWILIGHT_ART = {
+  id: "demo-capybara-twilight",
+  title: "Twilight Marsh Study",
+  width: 960,
+  height: 600,
+  palette: [
+    { id: 1, name: "Evening Sky", rgba: "#f7c59f" },
+    { id: 2, name: "Glow Band", rgba: "#f27d72" },
+    { id: 3, name: "Distant Ridge", rgba: "#8c5fa6" },
+    { id: 4, name: "Low Ridge", rgba: "#546d7a" },
+    { id: 5, name: "River Mirror", rgba: "#4f9fc6" },
+    { id: 6, name: "River Depth", rgba: "#1f6b8f" },
+    { id: 7, name: "Shore Glow", rgba: "#5d8f63" },
+    { id: 8, name: "Shore Shadow", rgba: "#2f4c45" },
+  ],
+  cells: [
+    {
+      id: "c1",
+      colorId: 1,
+      d: "M0 0 L960 0 L960 160 C 640 150 320 150 0 160 Z",
+    },
+    {
+      id: "c2",
+      colorId: 2,
+      d: "M0 160 C 160 180 320 180 480 185 C 640 190 800 180 960 170 L960 230 C 640 240 320 240 0 230 Z",
+    },
+    {
+      id: "c3",
+      colorId: 3,
+      d: "M0 230 C 200 260 400 250 600 270 C 800 290 880 270 960 280 L960 340 L0 340 Z",
+    },
+    {
+      id: "c4",
+      colorId: 4,
+      d: "M0 340 C 200 360 400 360 600 355 C 800 350 880 350 960 355 L960 420 L0 420 Z",
+    },
+    {
+      id: "c5",
+      colorId: 5,
+      d: "M0 420 C 220 440 440 450 660 440 C 800 434 880 430 960 432 L960 490 L0 490 Z",
+    },
+    {
+      id: "c6",
+      colorId: 6,
+      d: "M0 490 C 200 510 400 520 600 515 C 800 510 880 508 960 510 L960 555 L0 555 Z",
+    },
+    {
+      id: "c7",
+      colorId: 7,
+      d: "M0 555 C 180 570 360 580 540 575 L540 600 L0 600 Z",
+    },
+    {
+      id: "c8",
+      colorId: 8,
+      d: "M540 575 C 700 570 840 565 960 570 L960 600 L540 600 Z",
+    },
+  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
+};
 function cloneArtwork(art) {
   return {
     ...art,
@@ -152,8 +363,98 @@ function cloneArtwork(art) {
   };
 }
 
-function getStarterArtworks() {
-  return [cloneArtwork(DEMO_ART)];
+const STARTER_SOURCES = [
+  {
+    id: "starter-capybara-lagoon",
+    url: "./art/capybara-lagoon.svg",
+    filename: "capybara-lagoon.svg",
+    type: "image/svg+xml",
+    fallback: () => cloneArtwork(LAGOON_ART),
+  },
+  {
+    id: "starter-twilight-marsh",
+    url: "./art/capybara-twilight.svg",
+    filename: "capybara-twilight.svg",
+    type: "image/svg+xml",
+    fallback: () => cloneArtwork(TWILIGHT_ART),
+  },
+  {
+    id: "starter-capybara-forest",
+    fallback: () => cloneArtwork(DEMO_ART),
+  },
+];
+
+function getLegacyStarterArtworks() {
+  return STARTER_SOURCES.map((source) =>
+    typeof source.fallback === "function" ? source.fallback() : null
+  ).filter(Boolean);
+}
+
+async function loadStarterArtworks(signal) {
+  const results = [];
+  const seenIds = new Set();
+  const errors = [];
+
+  for (const source of STARTER_SOURCES) {
+    let candidate = null;
+
+    if (source.url) {
+      try {
+        const response = await fetch(source.url, { signal });
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+        const text = await response.text();
+        const parsed = parseArtworkPayload(text, {
+          filename: source.filename ?? source.url.split("/").pop(),
+          type: source.type ?? "image/svg+xml",
+          source: "starter",
+        });
+        if (parsed.ok && parsed.artwork) {
+          candidate = cloneArtwork(parsed.artwork);
+        }
+      } catch (err) {
+        console.warn(`Unable to load starter artwork from ${source.url}:`, err);
+        errors.push(err);
+      }
+    }
+
+    if (!candidate && typeof source.fallback === "function") {
+      candidate = source.fallback();
+    }
+
+    if (!candidate) continue;
+
+    let id = (candidate.id ?? "").toString().trim();
+    if (!id) {
+      id = source.id || `starter-${Math.random().toString(36).slice(2, 8)}`;
+      candidate = { ...candidate, id };
+    }
+
+    if (seenIds.has(id)) {
+      let suffix = 2;
+      let uniqueId = `${id}-${suffix}`;
+      while (seenIds.has(uniqueId)) {
+        uniqueId = `${id}-${++suffix}`;
+      }
+      candidate = { ...candidate, id: uniqueId };
+      seenIds.add(uniqueId);
+    } else {
+      seenIds.add(id);
+    }
+
+    if (!candidate.title && source.title) {
+      candidate = { ...candidate, title: source.title };
+    }
+
+    results.push(candidate);
+  }
+
+  if (!results.length) {
+    return { artworks: getLegacyStarterArtworks(), errors };
+  }
+
+  return { artworks: results, errors };
 }
 
 // Estimate area for heuristics using DOM sampling with a polygon fallback.
@@ -459,17 +760,17 @@ function parseArtworkPayload(raw, meta = {}) {
   }
 }
 
-function loadArtworks() {
+function loadStoredArtworks() {
   try {
     const raw = localStorage.getItem(ARTWORKS_KEY);
-    if (!raw) return getStarterArtworks();
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     const normalized = (Array.isArray(parsed) ? parsed : [])
       .map((art) => normalizeArtwork(art))
       .filter(Boolean);
-    return normalized.length ? normalized : getStarterArtworks();
+    return normalized;
   } catch (err) {
-    return getStarterArtworks();
+    return [];
   }
 }
 
@@ -578,7 +879,7 @@ function App() {
   const initialArtworksRef = useRef(null);
 
   if (initialArtworksRef.current === null) {
-    initialArtworksRef.current = loadArtworks();
+    initialArtworksRef.current = loadStoredArtworks();
   }
 
   const [artworks, setArtworks] = useState(initialArtworksRef.current);
@@ -603,11 +904,65 @@ function App() {
   const [showOptions, setShowOptions] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryRevision, setLibraryRevision] = useState(0);
+  const [starterStatus, setStarterStatus] = useState(
+    initialArtworksRef.current.length
+      ? { state: "ready", error: null }
+      : { state: "idle", error: null }
+  );
 
   const selectArtwork = useCallback((id) => {
     setActiveArtworkIdState(id);
     persistActiveArtworkId(id ?? null);
   }, []);
+
+  useEffect(() => {
+    if (initialArtworksRef.current.length) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    async function bootstrap() {
+      setStarterStatus({ state: "loading", error: null });
+      try {
+        const { artworks: loaded, errors } = await loadStarterArtworks(controller.signal);
+        if (cancelled) return;
+        initialArtworksRef.current = loaded;
+        setArtworks(loaded);
+        const nextId = loadActiveArtworkId(loaded);
+        if (nextId) {
+          selectArtwork(nextId);
+        }
+        setStarterStatus({
+          state: "ready",
+          error: errors.length
+            ? errors[0] instanceof Error
+              ? errors[0].message
+              : "Unable to load all starter artworks."
+            : null,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        const fallback = getLegacyStarterArtworks();
+        initialArtworksRef.current = fallback;
+        setArtworks(fallback);
+        const nextId = loadActiveArtworkId(fallback);
+        if (nextId) {
+          selectArtwork(nextId);
+        }
+        setStarterStatus({
+          state: "error",
+          error: err instanceof Error ? err.message : "Unable to load starter artworks.",
+        });
+      }
+    }
+
+    bootstrap();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [selectArtwork]);
 
   useEffect(() => {
     persistArtworks(artworks);
@@ -1134,6 +1489,13 @@ function App() {
           onReset: handleConfigReset,
           onClose: () => setShowOptions(false),
         }),
+      starterStatus.error &&
+        art &&
+        React.createElement(
+          "div",
+          { style: styles.bootstrapBanner, role: "status" },
+          `Starter art could not be loaded automatically (${starterStatus.error}). Using bundled fallback data.`
+        ),
       art
         ? React.createElement(
             "div",
@@ -1211,7 +1573,11 @@ function App() {
         : React.createElement(
             "div",
             { style: styles.emptyState },
-            "Import or add an artwork in the library to start painting."
+            starterStatus.state === "loading"
+              ? "Loading starter artwork…"
+              : starterStatus.error
+              ? `Starter art could not be loaded automatically (${starterStatus.error}). Use the library to import a file.`
+              : "Import or add an artwork in the library to start painting."
           ),
       art &&
         enableSmokeHud &&
@@ -2143,7 +2509,7 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
       React.createElement(
         "p",
         { style: styles.optionsAbout },
-        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. The art library import accepts JSON exports or annotated SVG files with data-cell-id/data-color-id metadata so new scenes can be added without editing code. It loads a predefined “Capybara Forest Retreat” scene inspired by a detailed 960×600 SVG reference (art/capybara-forest.svg) with 26 labeled, non-overlapping regions and an 11-color palette, then tracks each cell’s fill state so players can match colors to numbers."
+        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. The art library import accepts JSON exports or annotated SVG files with data-cell-id/data-color-id metadata so new scenes can be added without editing code. It now ships with three sample scenes—“Capybara Forest Retreat,” “Capybara Lagoon Sunrise,” and “Twilight Marsh Study”—plus autosave that tracks each cell’s fill state so players can match colors to numbers."
       ),
       React.createElement("div", { style: styles.optionsSectionTitle }, "UI surfaces"),
       React.createElement(
@@ -2281,6 +2647,24 @@ const styles = {
     fontFamily: "'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui",
     color: "#f8fafc",
     background: "radial-gradient(circle at top, rgba(56, 189, 248, 0.12), #030712)",
+  },
+  bootstrapBanner: {
+    position: "fixed",
+    top: 64,
+    left: "50%",
+    transform: "translateX(-50%)",
+    maxWidth: "min(520px, calc(100% - 32px))",
+    padding: "10px 16px",
+    borderRadius: 14,
+    background: "rgba(248, 113, 113, 0.15)",
+    border: "1px solid rgba(248, 113, 113, 0.4)",
+    color: "#fecaca",
+    fontSize: 12,
+    textAlign: "center",
+    zIndex: 30,
+    boxShadow: "0 12px 32px rgba(2, 6, 23, 0.6)",
+    backdropFilter: "blur(10px)",
+    pointerEvents: "none",
   },
   canvas: {
     position: "absolute",
