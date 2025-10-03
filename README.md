@@ -6,10 +6,13 @@ served directly from static files.
 ## App overview
 
 The demo boots entirely from `index.html`, pulling React, ReactDOM, and Babel
-from the vendored runtime bundles so JSX can execute without a build step. It
-loads the "Capybara Forest Retreat" artwork—a lush 960×600 SVG scene with 26
-numbered regions and an 11-color palette—and keeps track of every cell you fill
-as you paint by matching colors to numbers.
+from the vendored runtime bundles so JSX can execute without a build step. The
+default scene now streams from the annotated SVG at `art/capybara-lagoon.svg`,
+and the repository also ships the segmented twilight companion at
+`art/capybara-twilight.svg`. The library still includes three sample
+scenes—"Capybara Forest Retreat," "Capybara Lagoon Sunrise," and "Twilight
+Marsh Study"—so you can jump in and paint while progress is tracked
+automatically.
 
 Interaction handlers support mouse and touch gestures including smooth,
 cursor-anchored wheel zoom, pinch zoom, left- or right-button drag panning,
