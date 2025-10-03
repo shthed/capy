@@ -1,14 +1,14 @@
 # UI Review Notes
 
 ## Positive Observations
-- The color-by-number layout loads quickly and immediately displays the artwork canvas with a clear palette sidebar.
-- Progress information ("Cells filled" indicator) is easy to find and updates as interactions occur.
+- The glassy top command bar now centralizes library, options, and canvas utilities with readable labels and generous touch targets.
+- The integrated progress chip beside the artwork title makes it effortless to see completion percentage at a glance as you fill cells.
 - Keyboard shortcuts and hint messaging are surfaced in the footer, which supports accessibility for power users.
 
 ## Suggestions for Improvement
 - Consider increasing the contrast between inactive palette swatches and the dark background to improve readability.
 - On initial load, the onboarding helper text could be more prominent to guide first-time users to select a color before tapping the canvas.
-- The interface could benefit from a tooltip or label on the "Hint" control to clarify the action for screen reader users.
+- Offer a quick legend of gesture controls (pan, zoom, drag-fill) near the top bar so first-time painters notice the advanced interactions.
 
 ## Artwork Production Checklist
 - Each SVG path must represent a single numbered region with no overlap; adjacent shapes may share edges but never stack on top of one another.
