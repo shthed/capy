@@ -26,8 +26,8 @@ test.describe('Capybooper app smoke tests', () => {
     expect(await cellPaths.count()).toBeGreaterThan(20);
 
     const paletteButtons = page.locator('[data-testid="palette-dock"] button');
-    await expect(paletteButtons).toHaveCount(7);
-    await expect(paletteButtons.first()).toContainText('Cells');
+    await expect(paletteButtons).toHaveCount(11);
+    await expect(paletteButtons.first()).toHaveText('1');
   });
 
   test('fills a cell and updates progress', async ({ page }) => {
