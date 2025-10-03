@@ -45,7 +45,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script type="text/babel">
-const { useEffect, useMemo, useRef, useState } = React;
+const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
 // Capybooper Web Game — MVP single-file React app (patched)
 // Fixes: correct zoom/pan math, pan over filled cells, pinch zoom, drag-fill,
@@ -132,6 +132,18 @@ const DEMO_ART = {
   ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
 };
 
+function cloneArtwork(art) {
+  return {
+    ...art,
+    palette: (art.palette ?? []).map((p) => ({ ...p })),
+    cells: (art.cells ?? []).map((c) => ({ ...c })),
+  };
+}
+
+function getStarterArtworks() {
+  return [cloneArtwork(DEMO_ART)];
+}
+
 // Rough polygon area estimator for simple paths.
 function estimatePathArea(d) {
   try {
@@ -159,6 +171,104 @@ function estimatePathArea(d) {
 
 // ---------- Utilities ----------
 const SAVE_KEY = (artId) => `capybooper_save_${artId}`;
+const ARTWORKS_KEY = "capybooper_artworks_v1";
+const ACTIVE_ART_KEY = "capybooper_active_art";
+
+function normalizeArtwork(raw) {
+  if (!raw) return null;
+  try {
+    const width = Number(raw.width);
+    const height = Number(raw.height);
+    if (!Number.isFinite(width) || width <= 0) return null;
+    if (!Number.isFinite(height) || height <= 0) return null;
+    const palette = Array.isArray(raw.palette)
+      ? raw.palette
+          .map((item) => ({
+            id: item.id,
+            name: item.name ?? undefined,
+            rgba: item.rgba,
+          }))
+          .filter((item) => item.id !== undefined && typeof item.rgba === "string")
+      : [];
+    const cells = Array.isArray(raw.cells)
+      ? raw.cells
+          .map((cell) => ({
+            id: cell.id,
+            colorId: cell.colorId,
+            d: cell.d,
+            area: cell.area ?? estimatePathArea(cell.d ?? ""),
+          }))
+          .filter(
+            (cell) =>
+              typeof cell.id === "string" &&
+              cell.id.length > 0 &&
+              typeof cell.d === "string" &&
+              cell.d.length > 0 &&
+              cell.colorId !== undefined
+          )
+      : [];
+    const title = (raw.title ?? "").trim();
+    let id = (raw.id ?? "").toString().trim();
+    if (!title || !palette.length || !cells.length) return null;
+    if (!id) {
+      const slug = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      id = slug || `art-${Math.random().toString(36).slice(2, 8)}`;
+    }
+    return {
+      id,
+      title,
+      width,
+      height,
+      palette,
+      cells,
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+function loadArtworks() {
+  try {
+    const raw = localStorage.getItem(ARTWORKS_KEY);
+    if (!raw) return getStarterArtworks();
+    const parsed = JSON.parse(raw);
+    const normalized = (Array.isArray(parsed) ? parsed : [])
+      .map((art) => normalizeArtwork(art))
+      .filter(Boolean);
+    return normalized.length ? normalized : getStarterArtworks();
+  } catch (err) {
+    return getStarterArtworks();
+  }
+}
+
+function persistArtworks(list) {
+  try {
+    localStorage.setItem(ARTWORKS_KEY, JSON.stringify(list));
+  } catch (err) {}
+}
+
+function loadActiveArtworkId(artworks) {
+  try {
+    const stored = localStorage.getItem(ACTIVE_ART_KEY);
+    if (!stored) return artworks?.[0]?.id ?? null;
+    return artworks?.some((art) => art.id === stored) ? stored : artworks?.[0]?.id ?? null;
+  } catch (err) {
+    return artworks?.[0]?.id ?? null;
+  }
+}
+
+function persistActiveArtworkId(id) {
+  try {
+    if (id) {
+      localStorage.setItem(ACTIVE_ART_KEY, id);
+    } else {
+      localStorage.removeItem(ACTIVE_ART_KEY);
+    }
+  } catch (err) {}
+}
 
 const DEFAULT_CONFIG = {
   enableAutosave: true,
@@ -200,6 +310,7 @@ function shallowEqual(a, b) {
 }
 
 function loadSave(art) {
+  if (!art) return undefined;
   try {
     const raw = localStorage.getItem(SAVE_KEY(art.id));
     if (!raw) return undefined;
@@ -212,12 +323,20 @@ function loadSave(art) {
 }
 
 function persistSave(art, s) {
+  if (!art) return;
   try {
     localStorage.setItem(SAVE_KEY(art.id), JSON.stringify(s));
   } catch (err) {}
 }
 
+function clearSave(artId) {
+  try {
+    localStorage.removeItem(SAVE_KEY(artId));
+  } catch (err) {}
+}
+
 function computeRemaining(art, filled) {
+  if (!art) return {};
   const map = {};
   for (const p of art.palette) map[p.id] = 0;
   for (const c of art.cells) if (!filled[c.id]) map[c.colorId] = (map[c.colorId] ?? 0) + 1;
@@ -225,35 +344,77 @@ function computeRemaining(art, filled) {
 }
 
 // ---------- App ----------
-function App() {
-  const art = DEMO_ART;
+﻿function App() {
   const initialConfig = useMemo(() => loadConfig(), []);
-  const initial = useMemo(() => {
-    const saved = loadSave(art);
-    return (
-      saved ?? {
-        artworkId: art.id,
-        filled: {},
-        activeColor: art.palette[0].id,
-        viewport: { scale: 0.9, x: 50, y: 50 },
-        lastSaved: Date.now(),
-      }
-    );
-  }, [art]);
+  const initialArtworksRef = useRef(null);
 
+  if (initialArtworksRef.current === null) {
+    initialArtworksRef.current = loadArtworks();
+  }
+
+  const [artworks, setArtworks] = useState(initialArtworksRef.current);
+  const [activeArtworkId, setActiveArtworkIdState] = useState(() =>
+    loadActiveArtworkId(initialArtworksRef.current)
+  );
   const [config, setConfig] = useState(initialConfig);
   const isDefaultConfig = useMemo(() => shallowEqual(config, DEFAULT_CONFIG), [config]);
-  const [filled, setFilled] = useState(initial.filled);
-  const [activeColor, setActiveColor] = useState(initial.activeColor ?? art.palette[0].id);
-  const [scale, setScale] = useState(initial.viewport?.scale ?? 0.9);
-  const [offset, setOffset] = useState({
-    x: initial.viewport?.x ?? 0,
-    y: initial.viewport?.y ?? 0,
-  });
+
+  const art = useMemo(() => {
+    const match = artworks.find((entry) => entry.id === activeArtworkId);
+    return match ?? artworks[0] ?? null;
+  }, [artworks, activeArtworkId]);
+
+  const [filled, setFilled] = useState({});
+  const [activeColor, setActiveColor] = useState(art?.palette?.[0]?.id ?? null);
+  const [scale, setScale] = useState(0.9);
+  const [offset, setOffset] = useState({ x: 50, y: 50 });
   const [lastAction, setLastAction] = useState(null);
   const [hintPulse, setHintPulse] = useState(new Set());
   const [showTests, setShowTests] = useState(initialConfig.enableSmokeHud);
   const [showOptions, setShowOptions] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [libraryRevision, setLibraryRevision] = useState(0);
+
+  const selectArtwork = useCallback((id) => {
+    setActiveArtworkIdState(id);
+    persistActiveArtworkId(id ?? null);
+  }, []);
+
+  useEffect(() => {
+    persistArtworks(artworks);
+  }, [artworks]);
+
+  useEffect(() => {
+    if (!artworks.length) {
+      selectArtwork(null);
+      return;
+    }
+    if (!artworks.some((entry) => entry.id === activeArtworkId)) {
+      selectArtwork(artworks[0].id);
+    }
+  }, [artworks, activeArtworkId, selectArtwork]);
+
+  useEffect(() => {
+    if (!art) {
+      setFilled({});
+      setActiveColor(null);
+      setScale(0.9);
+      setOffset({ x: 50, y: 50 });
+      setLastAction(null);
+      setHintPulse(new Set());
+      return;
+    }
+    const saved = loadSave(art);
+    setFilled(saved?.filled ?? {});
+    setActiveColor(saved?.activeColor ?? art.palette?.[0]?.id ?? null);
+    setScale(saved?.viewport?.scale ?? 0.9);
+    setOffset({
+      x: saved?.viewport?.x ?? 50,
+      y: saved?.viewport?.y ?? 50,
+    });
+    setLastAction(null);
+    setHintPulse(new Set());
+  }, [art?.id]);
 
   const {
     enableAutosave,
@@ -267,9 +428,8 @@ function App() {
     enableSmokeHud,
   } = config;
 
-  // Autosave debounced
   useEffect(() => {
-    if (!enableAutosave) return;
+    if (!enableAutosave || !art) return;
     const t = setTimeout(() => {
       persistSave(art, {
         artworkId: art.id,
@@ -283,9 +443,115 @@ function App() {
   }, [art, filled, activeColor, scale, offset, enableAutosave]);
 
   const remaining = useMemo(() => computeRemaining(art, filled), [art, filled]);
-  const totalCells = art.cells.length;
+  const totalCells = art?.cells?.length ?? 0;
   const filledCount = Object.values(filled).filter(Boolean).length;
-  const progress = Math.round((filledCount / totalCells) * 100);
+  const progress = totalCells > 0 ? Math.round((filledCount / totalCells) * 100) : 0;
+
+  const libraryProgress = useMemo(() => {
+    const map = {};
+    artworks.forEach((entry) => {
+      if (!entry) return;
+      if (art && entry.id === art.id) {
+        map[entry.id] = progress;
+        return;
+      }
+      const total = entry.cells?.length ?? 0;
+      const saved = loadSave(entry);
+      if (!saved) {
+        map[entry.id] = 0;
+        return;
+      }
+      const count = Object.values(saved.filled ?? {}).filter(Boolean).length;
+      map[entry.id] = total > 0 ? Math.round((count / total) * 100) : 0;
+    });
+    return map;
+  }, [artworks, art?.id, progress, libraryRevision]);
+
+  const handleImportArtwork = useCallback(
+    (json) => {
+      if (!json || !json.trim()) {
+        return { ok: false, error: "Paste artwork JSON first." };
+      }
+      try {
+        const parsed = JSON.parse(json);
+        const normalized = normalizeArtwork(parsed);
+        if (!normalized) {
+          return {
+            ok: false,
+            error:
+              "The JSON is missing required fields (id, title, width, height, palette, cells).",
+          };
+        }
+        const existingIds = new Set(artworks.map((item) => item.id));
+        const baseId = normalized.id || `art-${Math.random().toString(36).slice(2, 8)}`;
+        let uniqueId = baseId;
+        let suffix = 2;
+        while (existingIds.has(uniqueId)) {
+          uniqueId = `${baseId}-${suffix++}`;
+        }
+        const finalArtwork = { ...normalized, id: uniqueId };
+        setArtworks((prev) => [...prev, finalArtwork]);
+        selectArtwork(finalArtwork.id);
+        setLibraryRevision((v) => v + 1);
+        return { ok: true, artwork: finalArtwork };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Unable to parse the JSON payload.",
+        };
+      }
+    },
+    [artworks, selectArtwork]
+  );
+
+  const handleDeleteArtwork = useCallback(
+    (id) => {
+      setArtworks((prev) => {
+        const next = prev.filter((entry) => entry.id !== id);
+        if (!next.length) {
+          selectArtwork(null);
+          return [];
+        }
+        if (!next.some((entry) => entry.id === activeArtworkId)) {
+          selectArtwork(next[0].id);
+        }
+        return next;
+      });
+      clearSave(id);
+      setLibraryRevision((v) => v + 1);
+      if (art && art.id === id) {
+        setFilled({});
+        setActiveColor(null);
+        setScale(0.9);
+        setOffset({ x: 50, y: 50 });
+        setLastAction(null);
+        setHintPulse(new Set());
+        setShowLibrary(true);
+      }
+    },
+    [art, activeArtworkId, selectArtwork, setShowLibrary]
+  );
+
+  const handleRenameArtwork = useCallback((id, nextTitle) => {
+    const title = (nextTitle ?? "").trim() || "Untitled artwork";
+    setArtworks((prev) => prev.map((entry) => (entry.id === id ? { ...entry, title } : entry)));
+  }, []);
+
+  const handleClearProgress = useCallback(
+    (id) => {
+      clearSave(id);
+      setLibraryRevision((v) => v + 1);
+      if (art && art.id === id) {
+        setFilled({});
+        setActiveColor(art.palette?.[0]?.id ?? null);
+        setScale(0.9);
+        setOffset({ x: 50, y: 50 });
+        setLastAction(null);
+        setHintPulse(new Set());
+      }
+    },
+    [art]
+  );
 
   const previousSmokePreferenceRef = useRef(initialConfig.enableSmokeHud);
 
@@ -296,23 +562,7 @@ function App() {
     } else {
       setShowTests((prev) => prev || previousSmokePreferenceRef.current);
     }
-  }, [enableSmokeHud]);
-
-  // Completion detection
-  useEffect(() => {
-    if (filledCount === totalCells) {
-      const el = document.getElementById("artframe");
-      if (!el) return;
-      el.animate(
-        [
-          { boxShadow: "0 0 0px rgba(0,0,0,0)" },
-          { boxShadow: "0 0 30px rgba(0,0,0,0.6)" },
-          { boxShadow: "0 0 0px rgba(0,0,0,0)" },
-        ],
-        { duration: 800 }
-      );
-    }
-  }, [filledCount, totalCells]);
+  }, [enableSmokeHud, showTests]);
 
   useEffect(() => {
     if (!showOptions) return;
@@ -323,7 +573,6 @@ function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [showOptions]);
 
-  // ---------- Interaction state ----------
   const svgRef = useRef(null);
   const isPanningRef = useRef(false);
   const isPaintingRef = useRef(false);
@@ -333,8 +582,8 @@ function App() {
   const pointersRef = useRef(new Map());
   const pinchRef = useRef(null);
 
-  // ---------- Coordinate helpers ----------
   function cssToArt(svg, clientX, clientY) {
+    if (!art) return { pxArt: 0, pyArt: 0 };
     const rect = svg.getBoundingClientRect();
     const sx = art.width / rect.width;
     const sy = art.height / rect.height;
@@ -343,8 +592,8 @@ function App() {
     return { pxArt, pyArt };
   }
 
-  // ---------- Wheel zoom ----------
   function onWheel(e) {
+    if (!art) return;
     e.preventDefault();
     const factor = Math.exp(-e.deltaY * 0.0015);
     const newScale = clamp(scale * factor, 0.3, 4);
@@ -359,8 +608,8 @@ function App() {
     setScale(newScale);
   }
 
-  // ---------- Pointer handlers ----------
   function onPointerDown(e) {
+    if (!art) return;
     const svg = svgRef.current;
     svg?.setPointerCapture?.(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -399,6 +648,7 @@ function App() {
   }
 
   function onPointerMove(e) {
+    if (!art) return;
     const svg = svgRef.current;
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -440,6 +690,7 @@ function App() {
   }
 
   function onPointerUp(e) {
+    if (!art) return;
     const svg = svgRef.current;
     svg?.releasePointerCapture?.(e.pointerId);
 
@@ -461,6 +712,7 @@ function App() {
   }
 
   function onCellTap(cellId) {
+    if (!art || activeColor == null) return;
     const cell = art.cells.find((c) => c.id === cellId);
     if (!cell) return;
 
@@ -492,7 +744,7 @@ function App() {
   }
 
   function hint() {
-    if (!enableHintPulse) return;
+    if (!enableHintPulse || !art || activeColor == null) return;
     const candidates = art.cells
       .filter((c) => c.colorId === activeColor && !filled[c.id])
       .sort((a, b) => (a.area ?? 0) - (b.area ?? 0))
@@ -508,6 +760,7 @@ function App() {
   }
 
   function nextColor() {
+    if (!art || activeColor == null) return;
     const order = art.palette.map((p) => p.id);
     const startIdx = order.indexOf(activeColor);
     for (let i = 1; i <= order.length; i++) {
@@ -548,11 +801,17 @@ function App() {
       if (e.key.toLowerCase() === "n") nextColor();
       if (e.key.toLowerCase() === "u") undo();
       if (e.key.toLowerCase() === "t" && enableSmokeHud) setShowTests((v) => !v);
-      if (e.key === "Escape" && showOptions) setShowOptions(false);
+      if (e.key === "Escape") {
+        if (showOptions) setShowOptions(false);
+        if (showLibrary) setShowLibrary(false);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeColor, remaining, lastAction, enableKeyboardShortcuts, enableSmokeHud, showOptions]);
+  }, [enableKeyboardShortcuts, enableSmokeHud, showOptions, showLibrary]);
+
+  const headerTitle = art ? art.title : "No artwork selected";
+  const progressLabel = art ? `Progress: ${progress}%` : "Add or load an artwork";
 
   return (
     React.createElement(
@@ -564,20 +823,21 @@ function App() {
         React.createElement(
           "button",
           {
-            "aria-label": "Back",
+            "aria-label": "Open art library",
+            title: "Manage artworks",
             style: styles.back,
-            onClick: () => alert("Back to gallery (stub)"),
+            onClick: () => setShowLibrary(true),
           },
-          "\u2190"
+          "LIB"
         ),
-        React.createElement("div", { style: { fontWeight: 600 } }, art.title),
+        React.createElement("div", { style: { fontWeight: 600 } }, headerTitle),
         React.createElement(
           "div",
           { style: styles.headerRight },
           React.createElement(
             "span",
             { "aria-live": "polite", style: { marginRight: 12 } },
-            `Progress: ${progress}%`
+            progressLabel
           ),
           React.createElement(
             "button",
@@ -635,6 +895,21 @@ function App() {
           )
         )
       ),
+      showLibrary &&
+        React.createElement(ArtLibrary, {
+          artworks: artworks,
+          activeArtworkId: activeArtworkId,
+          progressMap: libraryProgress,
+          onSelect: (id) => {
+            selectArtwork(id);
+            setShowLibrary(false);
+          },
+          onClose: () => setShowLibrary(false),
+          onImport: handleImportArtwork,
+          onDelete: handleDeleteArtwork,
+          onRename: handleRenameArtwork,
+          onClearProgress: handleClearProgress,
+        }),
       showOptions &&
         React.createElement(OptionsPanel, {
           config: config,
@@ -646,81 +921,88 @@ function App() {
       React.createElement(
         "main",
         { style: styles.main },
-        React.createElement(
-          "div",
-          { id: "artframe", style: styles.artframe },
-          React.createElement(
-            "svg",
-            {
-              ref: svgRef,
-              width: "100%",
-              height: "100%",
-              viewBox: `0 0 ${art.width} ${art.height}`,
-              style: { background: "#0f172a", touchAction: "none" },
-              onWheel: onWheel,
-              onPointerDown: onPointerDown,
-              onPointerMove: onPointerMove,
-              onPointerUp: onPointerUp,
-            },
-            React.createElement(
-              "g",
-              { transform: `translate(${offset.x} ${offset.y}) scale(${scale})` },
-              React.createElement("rect", {
-                x: 0,
-                y: 0,
-                width: art.width,
-                height: art.height,
-                fill: "#0f172a",
-                stroke: "#1e293b",
-              }),
-              art.cells.map((c) => {
-                const isFilled = !!filled[c.id];
-                const pal = art.palette.find((p) => p.id === c.colorId);
-                const showPulse = hintPulse.has(c.id);
-                return React.createElement(
+        art
+          ? React.createElement(
+              "div",
+              { id: "artframe", style: styles.artframe },
+              React.createElement(
+                "svg",
+                {
+                  ref: svgRef,
+                  width: "100%",
+                  height: "100%",
+                  viewBox: `0 0 ${art.width} ${art.height}`,
+                  style: { background: "#0f172a", touchAction: "none" },
+                  onWheel: onWheel,
+                  onPointerDown: onPointerDown,
+                  onPointerMove: onPointerMove,
+                  onPointerUp: onPointerUp,
+                },
+                React.createElement(
                   "g",
-                  { key: c.id },
-                  isFilled &&
-                    React.createElement("path", {
-                      d: c.d,
-                      fill: pal?.rgba,
-                      pointerEvents: "none",
-                    }),
-                  React.createElement("path", {
-                    id: c.id,
-                    "data-cell-id": c.id,
-                    "data-color-id": c.colorId,
-                    d: c.d,
-                    fill: isFilled ? "transparent" : "#0f172a",
-                    stroke: showPulse ? "#f2c200" : "#334155",
-                    strokeWidth: showPulse ? 4 : 2,
-                    style: {
-                      cursor: isFilled ? "grab" : "pointer",
-                      opacity: isFilled ? 0.35 : 1,
-                    },
-                    "aria-label": `Cell ${c.id}. Target color ${c.colorId}. ${
-                      isFilled ? "Filled" : "Unfilled"
-                    }`,
+                  { transform: `translate(${offset.x} ${offset.y}) scale(${scale})` },
+                  React.createElement("rect", {
+                    x: 0,
+                    y: 0,
+                    width: art.width,
+                    height: art.height,
+                    fill: "#0f172a",
+                    stroke: "#1e293b",
                   }),
-                  !isFilled && showNumberBadges && scale >= 0.6 &&
-                    React.createElement(NumberLabel, { d: c.d, text: `${c.colorId}` }),
-                  !isFilled && showHeatmapDots && scale < 0.6 && React.createElement(HeatDot, { d: c.d })
-                );
-              })
+                  art.cells.map((c) => {
+                    const isFilled = !!filled[c.id];
+                    const pal = art.palette.find((p) => p.id === c.colorId);
+                    const showPulse = hintPulse.has(c.id);
+                    return React.createElement(
+                      "g",
+                      { key: c.id },
+                      isFilled &&
+                        React.createElement("path", {
+                          d: c.d,
+                          fill: pal?.rgba,
+                          pointerEvents: "none",
+                        }),
+                      React.createElement("path", {
+                        id: c.id,
+                        "data-cell-id": c.id,
+                        "data-color-id": c.colorId,
+                        d: c.d,
+                        fill: isFilled ? "transparent" : "#0f172a",
+                        stroke: showPulse ? "#f2c200" : "#334155",
+                        strokeWidth: showPulse ? 4 : 2,
+                        style: {
+                          cursor: isFilled ? "grab" : "pointer",
+                          opacity: isFilled ? 0.35 : 1,
+                        },
+                        "aria-label": `Cell ${c.id}. Target color ${c.colorId}. ${isFilled ? "Filled" : "Unfilled"}`,
+                      }),
+                      !isFilled && showNumberBadges && scale >= 0.6 &&
+                        React.createElement(NumberLabel, { d: c.d, text: `${c.colorId}` }),
+                      !isFilled && showHeatmapDots && scale < 0.6 &&
+                        React.createElement(HeatDot, { d: c.d })
+                    );
+                  })
+                )
+              )
             )
-          )
-        ),
-        enableSmokeHud && showTests && React.createElement(SmokeTests, { art: art, filled: filled })
+          : React.createElement(
+              "div",
+              { style: styles.emptyArtState },
+              "Import or add an artwork in the library to start painting."
+            ),
+        enableSmokeHud && showTests && art && React.createElement(SmokeTests, { art: art, filled: filled })
       ),
       React.createElement(
         "footer",
         { style: styles.footer },
-        React.createElement(Palette, {
-          palette: art.palette,
-          remaining: remaining,
-          activeColor: activeColor,
-          onSelect: setActiveColor,
-        })
+        art
+          ? React.createElement(Palette, {
+              palette: art.palette,
+              remaining: remaining,
+              activeColor: activeColor,
+              onSelect: setActiveColor,
+            })
+          : React.createElement("div", { style: styles.footerEmpty }, "No palette available yet.")
       )
     )
   );
@@ -816,6 +1098,337 @@ function Palette({ palette, remaining, activeColor, onSelect }) {
         )
       );
     })
+  );
+}
+
+﻿function ArtLibrary({
+  artworks,
+  activeArtworkId,
+  progressMap,
+  onSelect,
+  onClose,
+  onImport,
+  onDelete,
+  onRename,
+  onClearProgress,
+}) {
+  const [draft, setDraft] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [promptStatus, setPromptStatus] = useState(null);
+  const promptTimerRef = useRef(null);
+
+  const sorted = useMemo(
+    () => [...artworks].sort((a, b) => a.title.localeCompare(b.title)),
+    [artworks]
+  );
+
+  useEffect(() => {
+    function handleKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    return () => {
+      if (promptTimerRef.current) clearTimeout(promptTimerRef.current);
+    };
+  }, []);
+
+  const promptText = `You are an SVG color-by-number generator. Produce JSON with keys: id (short slug), title, width, height, palette (array of { id, name, rgba }), and cells (array of { id, colorId, d } path commands using only M/L/Z). Ensure 40-80 cells and 6-12 palette entries. Colors should be polished and themed. Return JSON only.`;
+
+  function schedulePromptStatus(status) {
+    setPromptStatus(status);
+    if (promptTimerRef.current) {
+      clearTimeout(promptTimerRef.current);
+    }
+    promptTimerRef.current = setTimeout(() => setPromptStatus(null), 2500);
+  }
+
+  function handleCopyPrompt() {
+    const clipboard = navigator?.clipboard;
+    if (clipboard?.writeText) {
+      clipboard
+        .writeText(promptText)
+        .then(() =>
+          schedulePromptStatus({ type: "success", message: "Prompt copied to clipboard." })
+        )
+        .catch(() =>
+          schedulePromptStatus({
+            type: "error",
+            message: "Clipboard copy failed. Copy manually below.",
+          })
+        );
+      return;
+    }
+
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = promptText;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "absolute";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      schedulePromptStatus({ type: "success", message: "Prompt copied to clipboard." });
+    } catch (err) {
+      schedulePromptStatus({ type: "error", message: "Clipboard copy failed. Copy manually below." });
+    }
+  }
+
+  function handleImportSubmit(e) {
+    e?.preventDefault?.();
+    const result = onImport(draft);
+    if (result?.ok) {
+      setDraft("");
+      setFeedback({ type: "success", message: `Imported "${result.artwork.title}".` });
+      setEditingId(null);
+      setTitleDraft("");
+    } else if (result?.error) {
+      setFeedback({ type: "error", message: result.error });
+    } else {
+      setFeedback({ type: "error", message: "Unable to import artwork." });
+    }
+  }
+
+  function startEditing(art) {
+    setEditingId(art.id);
+    setTitleDraft(art.title);
+  }
+
+  function saveEdit() {
+    onRename(editingId, titleDraft);
+    setEditingId(null);
+    setTitleDraft("");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setTitleDraft("");
+  }
+
+  const list = sorted.length
+    ? sorted.map((art) => {
+        const isActive = art.id === activeArtworkId;
+        const isEditing = editingId === art.id;
+        const progress = progressMap?.[art.id] ?? 0;
+        return React.createElement(
+          "div",
+          {
+            key: art.id,
+            style: {
+              ...styles.libraryItem,
+              ...(isActive ? styles.libraryItemActive : {}),
+            },
+          },
+          React.createElement(
+            "div",
+            { style: styles.libraryItemHeader },
+            isEditing
+              ? React.createElement("input", {
+                  style: styles.libraryTitleInput,
+                  value: titleDraft,
+                  onChange: (e) => setTitleDraft(e.target.value),
+                  autoFocus: true,
+                })
+              : React.createElement("div", { style: styles.libraryItemTitle }, art.title),
+            React.createElement(
+              "span",
+              {
+                style: {
+                  ...styles.libraryBadge,
+                  ...(isActive ? styles.libraryBadgeActive : {}),
+                },
+              },
+              isActive ? "Active" : `${progress}%`
+            )
+          ),
+          React.createElement(
+            "div",
+            { style: styles.libraryMeta },
+            `Progress: ${progress}% - ${art.palette.length} colors - ${art.cells.length} cells`
+          ),
+          React.createElement(
+            "div",
+            { style: styles.libraryButtons },
+            isEditing
+              ? [
+                  React.createElement(
+                    "button",
+                    {
+                      key: "save",
+                      type: "button",
+                      style: styles.libraryPrimaryButton,
+                      onClick: saveEdit,
+                    },
+                    "Save"
+                  ),
+                  React.createElement(
+                    "button",
+                    {
+                      key: "cancel",
+                      type: "button",
+                      style: styles.libraryButton,
+                      onClick: cancelEdit,
+                    },
+                    "Cancel"
+                  ),
+                ]
+              : [
+                  React.createElement(
+                    "button",
+                    {
+                      key: "load",
+                      type: "button",
+                      style: styles.libraryPrimaryButton,
+                      onClick: () => onSelect(art.id),
+                    },
+                    isActive ? "Resume" : "Load"
+                  ),
+                  React.createElement(
+                    "button",
+                    {
+                      key: "rename",
+                      type: "button",
+                      style: styles.libraryButton,
+                      onClick: () => startEditing(art),
+                    },
+                    "Rename"
+                  ),
+                  React.createElement(
+                    "button",
+                    {
+                      key: "clear",
+                      type: "button",
+                      style: styles.libraryButton,
+                      onClick: () => onClearProgress(art.id),
+                    },
+                    "Clear progress"
+                  ),
+                  React.createElement(
+                    "button",
+                    {
+                      key: "delete",
+                      type: "button",
+                      style: styles.libraryDangerButton,
+                      onClick: () => onDelete(art.id),
+                    },
+                    "Delete"
+                  ),
+                ]
+          )
+        );
+      })
+    : React.createElement("div", { style: styles.libraryEmpty }, "No artworks saved yet.");
+
+  return React.createElement(
+    "div",
+    { style: styles.libraryOverlay, onClick: onClose },
+    React.createElement(
+      "aside",
+      {
+        style: styles.libraryPanel,
+        role: "dialog",
+        "aria-modal": true,
+        "aria-label": "Artwork library",
+        onClick: (e) => e.stopPropagation(),
+      },
+      React.createElement(
+        "div",
+        { style: styles.libraryHeader },
+        React.createElement("div", { style: styles.libraryTitle }, "Art Library"),
+        React.createElement(
+          "button",
+          { style: styles.libraryClose, onClick: onClose, "aria-label": "Close art library" },
+          "\u2715"
+        )
+      ),
+      React.createElement("div", { style: styles.libraryList }, list),
+      React.createElement(
+        "section",
+        { style: styles.libraryPromptSection },
+        React.createElement("h3", { style: styles.libraryPromptTitle }, "ChatGPT prompt"),
+        React.createElement(
+          "p",
+          { style: styles.libraryPromptBody },
+          "Use this prompt with ChatGPT to produce a new color-by-number JSON file."
+        ),
+        React.createElement(
+          "div",
+          { style: styles.libraryPromptActions },
+          React.createElement(
+            "button",
+            { type: "button", style: styles.libraryPrimaryButton, onClick: handleCopyPrompt },
+            "Copy prompt"
+          ),
+          promptStatus &&
+            React.createElement(
+              "span",
+              {
+                style: {
+                  ...styles.libraryPromptStatus,
+                  color: promptStatus.type === "error" ? "#f87171" : "#22c55e",
+                },
+              },
+              promptStatus.message
+            )
+        ),
+        React.createElement(
+          "pre",
+          { style: styles.libraryPromptPre },
+          promptText
+        )
+      ),
+      React.createElement(
+        "form",
+        { style: styles.libraryImport, onSubmit: handleImportSubmit },
+        React.createElement("label", { style: styles.libraryLabel }, "Import artwork JSON"),
+        React.createElement("textarea", {
+          style: styles.libraryTextarea,
+          value: draft,
+          onChange: (e) => setDraft(e.target.value),
+          placeholder: "{ \"id\": \"my-art\", ... }",
+          rows: 6,
+        }),
+        React.createElement(
+          "div",
+          { style: styles.libraryImportActions },
+          React.createElement(
+            "button",
+            { type: "submit", style: styles.libraryPrimaryButton },
+            "Add artwork"
+          ),
+          React.createElement(
+            "button",
+            {
+              type: "button",
+              style: styles.libraryButton,
+              onClick: () => {
+                setDraft("");
+                setFeedback(null);
+              },
+            },
+            "Clear"
+          )
+        ),
+        feedback &&
+          React.createElement(
+            "div",
+            {
+              style: {
+                ...styles.libraryFeedback,
+                color: feedback.type === "error" ? "#f87171" : "#22c55e",
+              },
+            },
+            feedback.message
+          )
+      )
+    )
   );
 }
 
@@ -1122,6 +1735,214 @@ const styles = {
     zIndex: 30,
     boxShadow: "0 -12px 32px rgba(2, 6, 23, 0.55)",
   },
+  emptyArtState: {
+    width: "min(96vw, 1100px)",
+    minHeight: "max(320px, calc(100vh - 264px))",
+    borderRadius: 24,
+    border: "1px dashed rgba(148, 163, 184, 0.35)",
+    display: "grid",
+    placeItems: "center",
+    textAlign: "center",
+    color: "#94a3b8",
+    background: "rgba(15, 23, 42, 0.6)",
+    padding: "32px",
+  },
+  footerEmpty: {
+    color: "#94a3b8",
+    fontSize: 14,
+  },
+  libraryOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(2, 6, 23, 0.7)",
+    backdropFilter: "blur(12px)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: "24px",
+    zIndex: 60,
+  },
+  libraryPanel: {
+    width: "min(560px, 100%)",
+    maxHeight: "calc(100vh - 48px)",
+    overflowY: "auto",
+    background: "rgba(15, 23, 42, 0.96)",
+    borderRadius: 24,
+    padding: 24,
+    boxShadow: "0 24px 60px rgba(2, 6, 23, 0.7)",
+    border: "1px solid rgba(148, 163, 184, 0.3)",
+    color: "#e2e8f0",
+    display: "grid",
+    gap: 20,
+  },
+  libraryHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  libraryTitle: {
+    fontSize: 20,
+    fontWeight: 700,
+  },
+  libraryClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    border: "1px solid rgba(148, 163, 184, 0.35)",
+    background: "rgba(15, 23, 42, 0.8)",
+    color: "#cbd5f5",
+    cursor: "pointer",
+  },
+  libraryList: {
+    display: "grid",
+    gap: 12,
+  },
+  libraryItem: {
+    border: "1px solid rgba(148, 163, 184, 0.2)",
+    borderRadius: 16,
+    padding: 16,
+    background: "rgba(15, 23, 42, 0.7)",
+    display: "grid",
+    gap: 12,
+  },
+  libraryItemActive: {
+    borderColor: "rgba(56, 189, 248, 0.6)",
+    boxShadow: "0 0 0 1px rgba(56, 189, 248, 0.4)",
+  },
+  libraryItemHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  libraryItemTitle: {
+    fontWeight: 600,
+    fontSize: 16,
+  },
+  libraryTitleInput: {
+    width: "100%",
+    padding: "6px 10px",
+    borderRadius: 10,
+    border: "1px solid rgba(148, 163, 184, 0.35)",
+    background: "rgba(15, 23, 42, 0.85)",
+    color: "#e2e8f0",
+  },
+  libraryBadge: {
+    padding: "4px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    background: "rgba(148, 163, 184, 0.2)",
+    color: "#cbd5f5",
+  },
+  libraryBadgeActive: {
+    background: "rgba(56, 189, 248, 0.2)",
+    color: "#38bdf8",
+  },
+  libraryMeta: {
+    fontSize: 13,
+    color: "#94a3b8",
+  },
+  libraryButtons: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  libraryButton: {
+    padding: "8px 12px",
+    borderRadius: 10,
+    border: "1px solid rgba(148, 163, 184, 0.35)",
+    background: "rgba(30, 41, 59, 0.6)",
+    color: "#cbd5f5",
+    cursor: "pointer",
+  },
+  libraryPrimaryButton: {
+    padding: "8px 12px",
+    borderRadius: 10,
+    border: "1px solid rgba(56, 189, 248, 0.5)",
+    background: "rgba(56, 189, 248, 0.2)",
+    color: "#38bdf8",
+    cursor: "pointer",
+  },
+  libraryDangerButton: {
+    padding: "8px 12px",
+    borderRadius: 10,
+    border: "1px solid rgba(248, 113, 113, 0.5)",
+    background: "rgba(248, 113, 113, 0.15)",
+    color: "#fca5a5",
+    cursor: "pointer",
+  },
+  libraryEmpty: {
+    padding: 16,
+    textAlign: "center",
+    color: "#94a3b8",
+    border: "1px dashed rgba(148, 163, 184, 0.3)",
+    borderRadius: 16,
+  },
+  libraryPromptSection: {
+    border: "1px solid rgba(148, 163, 184, 0.25)",
+    borderRadius: 16,
+    padding: 16,
+    background: "rgba(15, 23, 42, 0.7)",
+    display: "grid",
+    gap: 12,
+  },
+  libraryPromptTitle: {
+    margin: 0,
+    fontSize: 15,
+    fontWeight: 600,
+  },
+  libraryPromptBody: {
+    margin: 0,
+    fontSize: 13,
+    color: "#94a3b8",
+  },
+  libraryPromptActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+  },
+  libraryPromptStatus: {
+    fontSize: 12,
+  },
+  libraryPromptPre: {
+    margin: 0,
+    padding: 12,
+    background: "rgba(15, 23, 42, 0.85)",
+    borderRadius: 12,
+    border: "1px solid rgba(148, 163, 184, 0.2)",
+    fontSize: 12,
+    color: "#cbd5f5",
+    overflowX: "auto",
+    whiteSpace: "pre-wrap",
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+  },
+  libraryImport: {
+    display: "grid",
+    gap: 12,
+  },
+  libraryLabel: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#cbd5f5",
+  },
+  libraryTextarea: {
+    width: "100%",
+    borderRadius: 12,
+    border: "1px solid rgba(148, 163, 184, 0.35)",
+    background: "rgba(15, 23, 42, 0.8)",
+    color: "#e2e8f0",
+    padding: 12,
+    fontSize: 13,
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+  },
+  libraryImportActions: {
+    display: "flex",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  libraryFeedback: {
+    fontSize: 12,
+  },
   paletteWrap: {
     display: "flex",
     gap: 16,
@@ -1294,3 +2115,4 @@ root.render(React.createElement(App));
     </script>
   </body>
 </html>
+
