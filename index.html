@@ -54,7 +54,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 let measureSvgEl = null;
 let measureCanvasCtx = null;
 
-// Capybooper Web Game — MVP single-file React app (patched)
+// Capybooper Web Game - MVP single-file React app (patched)
 // Fixes: correct zoom/pan math, pan over filled cells, pinch zoom, drag-fill,
 // eyedropper, auto-advance, hint stroke highlight, smoke-test HUD.
 // No external libs. LocalStorage autosave. Keyboard support.
@@ -910,10 +910,6 @@ function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [art, enableKeyboardShortcuts, enableSmokeHud, showOptions, showLibrary, scale]);
-
-  const headerTitle = art ? art.title : "No artwork selected";
-  const progressLabel = art ? `Progress: ${progress}%` : "Add or load an artwork";
-
   return (
     React.createElement(
       "div",
@@ -2001,13 +1997,15 @@ function SmokeTests({ art, filled }) {
     React.createElement(
       "ul",
       { style: { margin: 0, paddingLeft: 18 } },
-      results.map((r) =>
-        React.createElement(
+      results.map((r) => {
+        const status = r.pass ? "[pass]" : "[fail]";
+        const details = r.msg ? ` - ${r.msg}` : "";
+        return React.createElement(
           "li",
           { key: r.name, style: { color: r.pass ? "#4ade80" : "#fca5a5" } },
-          `${r.pass ? "✔" : "✖"} ${r.name}${r.msg ? ` – ${r.msg}` : ""}`
-        )
-      )
+          `${status} ${r.name}${details}`
+        );
+      })
     ),
     React.createElement(
       "div",
@@ -2500,13 +2498,5 @@ root.render(React.createElement(App));
     </script>
   </body>
 </html>
-
-
-
-
-
-
-
-
 
 
