@@ -75,3 +75,17 @@ python -m http.server 8000
 ```
 
 Then visit <http://localhost:8000> to use the app.
+
+## Test suite explainers
+
+Our automated Playwright run (`npm test --silent`) validates the experience end to end:
+
+- **Application shell renders:** Confirms the React runtime boots, starter artwork mounts, and HUD chrome appears.
+- **Artwork and palette presence:** Ensures the starter SVG and swatch dock render with the expected DOM structure.
+- **Art library listing:** Opens the library dialog and verifies every bundled scene is present.
+- **Painting updates progress:** Fills a cell to confirm the completion meter and progress chip react immediately.
+- **Starter merge behavior:** Boots with stored data to ensure bundled scenes merge without duplication.
+- **Title preservation:** Checks that custom titles persist after a starter refresh.
+- **SVG quality checks:** Parses each bundled SVG (`capybara-lagoon`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
+
+See [docs/test-run-2025-10-04.md](docs/test-run-2025-10-04.md) for the latest run log, timings, and raw output.
