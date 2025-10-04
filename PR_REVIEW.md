@@ -1,13 +1,13 @@
 # PR Review Notes
 
 ## Summary
-- Sampled the code paths that calculate region centroids and identified repeated DOM measurements that could be cached.
-- Confirmed that `estimatePathArea` was using a polygon-only approximation even when a browser measurement API was available.
+- Walked through the Playwright `ui-review` harness to confirm it waits for palette buttons and numbered paths before capturing the scene, and that the assertions fail when either count is zero. 
+- Spot-checked the segmented `art/capybara-forest.svg` to ensure the metadata (`data-cell-id`, palette attributes, and `<title>` nodes) still line up with the written specification after the restructuring.
+- Verified the documentation updates in `docs/svg-art-file-spec.md` and `ui-review.md` explain the new screenshot workflow so contributors can reproduce the checks locally.
 
-## Actions Taken
-- Cache bounding boxes, sampled areas, and interior points per SVG path so repeated renders avoid unnecessary DOM work.
-- Teach `estimatePathArea` to reuse the precise sampling-based area computation before falling back to the polygon heuristic.
+## Codex Bot Feedback
+- The Codex bot called out that the harness should explicitly fail when no palette buttons render. The assertions at the end of `tests/ui-review.spec.js` now cover both palette and cell counts, and the test also waits for the selectors so the screenshot only runs after a real render.
+- It also reminded us to keep the screenshot artifacts discoverable. The harness writes both the PNG and JSON summary into `artifacts/ui-review/`, matching the docs so reviewers know where to look.
 
-## Remaining Risks
-- Cached entries are keyed by the raw `d` attribute; if future tooling normalizes whitespace these lookups will remain valid, but deliberate mutations at runtime should call the relevant cache `.clear()` helpers if introduced.
-- The polygon fallback still ignores bezier curvature. If `Path2D` is ever unavailable in a target browser, consider swapping in a dedicated parser.
+## Verdict
+Approved. All blocking feedback has been addressed and the visual regression harness behaves as expected.
