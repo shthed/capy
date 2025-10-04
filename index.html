@@ -55,8 +55,15 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 let measureSvgEl = null;
 let measureCanvasCtx = null;
 
+function clamp(value, min, max) {
+  if (Number.isNaN(value)) return min;
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
 // Capybooper Web Game - MVP single-file React app (patched)
-// Fixes: correct zoom/pan math, pan over filled cells, pinch zoom, drag-fill,
+// Fixes: correct zoom/pan math, pan over filled cells, pinch zoom, tap-to-fill,
 // eyedropper, auto-advance, hint stroke highlight, smoke-test HUD.
 // No external libs. LocalStorage autosave. Keyboard support.
 
@@ -97,6 +104,294 @@ let measureCanvasCtx = null;
  * @property {number} lastSaved
  */
 
+// ---------- Sample Artwork ----------
+const DEMO_ART = {
+  id: "demo-capybara-forest",
+  title: "Capybara Forest Retreat",
+  width: 960,
+  height: 600,
+  palette: [
+    { id: 1, name: "Sky Mist", rgba: "#86c5ff" },
+    { id: 2, name: "Sky Veil", rgba: "#e6f0ff" },
+    { id: 3, name: "Dawn Glow", rgba: "#fef6e4" },
+    { id: 4, name: "Distant Hills", rgba: "#b7d1a7" },
+    { id: 5, name: "Pine Canopy", rgba: "#2f7a33" },
+    { id: 6, name: "Pine Shadow", rgba: "#255f27" },
+    { id: 7, name: "Pond Light", rgba: "#7fd5ef" },
+    { id: 8, name: "Meadow Moss", rgba: "#3b7b46" },
+    { id: 9, name: "Capybara Fur", rgba: "#8e5b3a" },
+    { id: 10, name: "Capybara Shade", rgba: "#5a3d2a" },
+    { id: 11, name: "Forest Accent", rgba: "#2c6e49" },
+  ],
+  cells: [
+    { id: "c1", colorId: 1, d: "M0 0 L960 0 L960 140 C 860 150 760 150 660 140 C 560 130 480 130 400 140 C 280 155 160 150 0 130 Z" },
+    { id: "c2", colorId: 3, d: "M0 130 C 160 150 320 160 480 160 L480 210 C 320 205 160 200 0 190 Z" },
+    { id: "c3", colorId: 2, d: "M480 160 C 640 170 800 160 960 140 L960 210 C 800 215 640 215 480 210 Z" },
+    { id: "c4", colorId: 4, d: "M0 190 C 120 210 240 220 360 220 C 400 220 420 218 420 218 L420 260 L0 260 Z" },
+    { id: "c5", colorId: 4, d: "M420 218 C 560 210 700 210 840 205 C 900 202 940 200 960 205 L960 260 L420 260 Z" },
+    { id: "c6", colorId: 5, d: "M0 260 C 100 300 220 320 300 330 C 220 340 140 350 40 340 C 20 330 0 300 0 260 Z" },
+    { id: "c7", colorId: 6, d: "M300 330 C 380 300 500 290 620 300 C 680 310 740 330 780 360 L780 360 L300 360 Z" },
+    { id: "c8", colorId: 5, d: "M780 360 C 820 320 880 300 960 290 L960 360 L780 360 Z" },
+    { id: "c9", colorId: 6, d: "M0 360 C 120 380 240 390 360 390 C 480 390 600 370 720 360 C 820 350 900 350 960 360 L960 420 C 860 430 760 430 660 420 C 560 410 460 410 360 420 C 240 430 120 420 0 400 Z" },
+    { id: "c10", colorId: 2, d: "M0 420 C 160 440 320 450 480 445 C 640 440 800 430 960 420 L960 460 C 800 480 640 490 480 485 C 320 480 160 470 0 450 Z" },
+    { id: "c11", colorId: 7, d: "M0 460 C 160 480 320 495 480 490 C 640 485 800 470 960 460 L960 500 L0 500 Z" },
+    { id: "c12", colorId: 8, d: "M0 500 L170 508 L170 560 L0 560 Z" },
+    { id: "c13", colorId: 8, d: "M240 508 L320 515 L320 560 L240 560 Z" },
+    { id: "c14", colorId: 8, d: "M320 515 L360 518 L360 560 L320 560 Z" },
+    { id: "c15", colorId: 8, d: "M680 515 L720 518 L720 560 L680 560 Z" },
+    { id: "c16", colorId: 3, d: "M168 500 L240 504 L240 540 C 224 548 204 552 176 554 L168 554 Z" },
+    { id: "c17", colorId: 11, d: "M160 540 C 188 518 216 518 240 540 L240 560 L160 560 Z" },
+    { id: "c18", colorId: 9, d: "M360 540 L360 508 C 380 472 430 450 500 444 C 580 438 650 456 680 496 L680 540 Z" },
+    { id: "c19", colorId: 10, d: "M360 540 L680 540 L680 560 C 620 576 540 582 460 576 C 400 572 372 562 360 552 Z" },
+    { id: "c20", colorId: 8, d: "M720 518 L736 516 L736 560 L720 560 Z" },
+    { id: "c21", colorId: 3, d: "M736 500 L792 504 L792 540 C 780 546 766 550 744 552 L736 552 Z" },
+    { id: "c22", colorId: 11, d: "M724 540 C 752 520 788 520 820 540 L820 560 L724 560 Z" },
+    { id: "c23", colorId: 8, d: "M792 504 L820 502 L820 540 L792 540 Z" },
+    { id: "c24", colorId: 8, d: "M820 502 L880 500 L880 560 L820 560 Z" },
+    { id: "c25", colorId: 8, d: "M880 500 L960 500 L960 560 L880 560 Z" },
+    { id: "c26", colorId: 8, d: "M0 560 C 200 580 400 590 600 585 C 760 580 880 570 960 575 L960 600 L0 600 Z" },
+  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
+};
+
+const LAGOON_ART = {
+  id: "demo-capybara-lagoon",
+  title: "Capybara Lagoon Sunrise",
+  width: 960,
+  height: 600,
+  palette: [
+    { id: 1, name: "Sunrise Sky", rgba: "#f6bf60" },
+    { id: 2, name: "Amber Drift", rgba: "#f4994c" },
+    { id: 3, name: "Violet Ridge", rgba: "#9a6bb3" },
+    { id: 4, name: "Forest Ridge", rgba: "#5d7a76" },
+    { id: 5, name: "Lagoon Light", rgba: "#76c7d6" },
+    { id: 6, name: "Lagoon Depth", rgba: "#1c6f8c" },
+    { id: 7, name: "Shore Left", rgba: "#4f7d5c" },
+    { id: 8, name: "Shore Middle", rgba: "#6b9358" },
+    { id: 9, name: "Capy Body", rgba: "#7d5735" },
+    { id: 10, name: "Capy Head", rgba: "#5e3b24" },
+    { id: 11, name: "Shore Right", rgba: "#3f5b3b" },
+  ],
+  cells: [
+    {
+      id: "c1",
+      colorId: 1,
+      d: "M0 0 L960 0 L960 160 C 760 150 600 150 480 155 C 320 160 160 165 0 160 Z",
+    },
+    {
+      id: "c2",
+      colorId: 2,
+      d: "M0 160 C 160 170 320 190 480 190 C 640 190 800 170 960 160 L960 220 C 800 230 640 240 480 240 C 320 240 160 230 0 220 Z",
+    },
+    {
+      id: "c3",
+      colorId: 3,
+      d: "M0 220 L120 200 L240 230 L360 210 L480 235 L600 205 L720 230 L840 215 L960 240 L960 300 L0 300 Z",
+    },
+    {
+      id: "c4",
+      colorId: 4,
+      d: "M0 300 C 160 280 320 310 480 295 C 640 280 800 310 960 290 L960 360 L0 360 Z",
+    },
+    {
+      id: "c5",
+      colorId: 5,
+      d: "M0 360 C 180 380 360 390 540 380 C 720 370 840 360 960 365 L960 440 L0 440 Z",
+    },
+    {
+      id: "c6",
+      colorId: 6,
+      d: "M0 440 C 200 460 380 470 560 465 C 740 460 860 450 960 455 L960 520 L0 520 Z",
+    },
+    {
+      id: "c7",
+      colorId: 7,
+      d: "M0 520 C 150 540 260 545 320 548 L320 600 L0 600 Z",
+    },
+    {
+      id: "c8",
+      colorId: 8,
+      d: "M320 548 C 380 552 450 552 520 545 L520 600 L320 600 Z",
+    },
+    {
+      id: "c9",
+      colorId: 9,
+      d: "M520 545 C 540 500 600 470 680 470 C 740 470 780 495 790 530 L790 600 L520 600 Z",
+    },
+    {
+      id: "c10",
+      colorId: 10,
+      d: "M790 530 C 810 500 850 500 870 520 C 890 540 890 570 870 585 C 850 600 810 595 795 570 Z",
+    },
+    {
+      id: "c11",
+      colorId: 11,
+      d: "M870 585 C 900 570 930 562 960 565 L960 600 L870 600 Z",
+    },
+  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
+};
+
+const TWILIGHT_ART = {
+  id: "demo-capybara-twilight",
+  title: "Twilight Marsh Study",
+  width: 960,
+  height: 600,
+  palette: [
+    { id: 1, name: "Evening Sky", rgba: "#f7c59f" },
+    { id: 2, name: "Glow Band", rgba: "#f27d72" },
+    { id: 3, name: "Distant Ridge", rgba: "#8c5fa6" },
+    { id: 4, name: "Low Ridge", rgba: "#546d7a" },
+    { id: 5, name: "River Mirror", rgba: "#4f9fc6" },
+    { id: 6, name: "River Depth", rgba: "#1f6b8f" },
+    { id: 7, name: "Shore Glow", rgba: "#5d8f63" },
+    { id: 8, name: "Shore Shadow", rgba: "#2f4c45" },
+  ],
+  cells: [
+    {
+      id: "c1",
+      colorId: 1,
+      d: "M0 0 L960 0 L960 160 C 640 150 320 150 0 160 Z",
+    },
+    {
+      id: "c2",
+      colorId: 2,
+      d: "M0 160 C 160 180 320 180 480 185 C 640 190 800 180 960 170 L960 230 C 640 240 320 240 0 230 Z",
+    },
+    {
+      id: "c3",
+      colorId: 3,
+      d: "M0 230 C 200 260 400 250 600 270 C 800 290 880 270 960 280 L960 340 L0 340 Z",
+    },
+    {
+      id: "c4",
+      colorId: 4,
+      d: "M0 340 C 200 360 400 360 600 355 C 800 350 880 350 960 355 L960 420 L0 420 Z",
+    },
+    {
+      id: "c5",
+      colorId: 5,
+      d: "M0 420 C 220 440 440 450 660 440 C 800 434 880 430 960 432 L960 490 L0 490 Z",
+    },
+    {
+      id: "c6",
+      colorId: 6,
+      d: "M0 490 C 200 510 400 520 600 515 C 800 510 880 508 960 510 L960 555 L0 555 Z",
+    },
+    {
+      id: "c7",
+      colorId: 7,
+      d: "M0 555 C 180 570 360 580 540 575 L540 600 L0 600 Z",
+    },
+    {
+      id: "c8",
+      colorId: 8,
+      d: "M540 575 C 700 570 840 565 960 570 L960 600 L540 600 Z",
+    },
+  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
+};
+function cloneArtwork(art) {
+  return {
+    ...art,
+    palette: (art.palette ?? []).map((p) => ({ ...p })),
+    cells: (art.cells ?? []).map((c) => ({ ...c })),
+  };
+}
+
+function mergeArtworkLists(existingList, starterList) {
+  const existing = Array.isArray(existingList) ? existingList : [];
+  const starters = Array.isArray(starterList) ? starterList : [];
+  if (!existing.length && !starters.length) return existing;
+
+  const starterMap = new Map();
+  starters.forEach((art) => {
+    if (art && art.id) {
+      starterMap.set(art.id, cloneArtwork(art));
+    }
+  });
+
+  let changed = false;
+  const seen = new Set();
+  const merged = [];
+
+  for (const art of existing) {
+    if (!art || !art.id) {
+      changed = true;
+      continue;
+    }
+    if (seen.has(art.id)) {
+      changed = true;
+      continue;
+    }
+    seen.add(art.id);
+
+    const starter = starterMap.get(art.id);
+    if (!starter) {
+      merged.push(art);
+      continue;
+    }
+
+    const updates = {};
+
+    const existingTitle = typeof art.title === "string" ? art.title.trim() : "";
+    const starterTitle = typeof starter.title === "string" ? starter.title.trim() : "";
+    if (!existingTitle && starterTitle) {
+      updates.title = starterTitle;
+    }
+
+    const existingWidth = Number(art.width);
+    const starterWidth = Number(starter.width);
+    if (
+      (!Number.isFinite(existingWidth) || existingWidth <= 0) &&
+      Number.isFinite(starterWidth) &&
+      starterWidth > 0
+    ) {
+      updates.width = starterWidth;
+    }
+
+    const existingHeight = Number(art.height);
+    const starterHeight = Number(starter.height);
+    if (
+      (!Number.isFinite(existingHeight) || existingHeight <= 0) &&
+      Number.isFinite(starterHeight) &&
+      starterHeight > 0
+    ) {
+      updates.height = starterHeight;
+    }
+
+    const needsPalette = !Array.isArray(art.palette) || art.palette.length === 0;
+    if (needsPalette && starter.palette?.length) {
+      updates.palette = starter.palette.map((p) => ({ ...p }));
+    }
+
+    const needsCells = !Array.isArray(art.cells) || art.cells.length === 0;
+    if (needsCells && starter.cells?.length) {
+      updates.cells = starter.cells.map((c) => ({ ...c }));
+    }
+
+    starterMap.delete(art.id);
+
+    if (Object.keys(updates).length) {
+      merged.push({ ...art, ...updates });
+      changed = true;
+    } else {
+      merged.push(art);
+    }
+  }
+
+  starterMap.forEach((art, id) => {
+    if (seen.has(id)) {
+      return;
+    }
+    merged.push(cloneArtwork(art));
+    changed = true;
+  });
+
+  if (!changed && merged.length === existing.length) {
+    return existing;
+  }
+
+  return merged;
+}
+
 const STARTER_SOURCES = [
   {
     id: "starter-capybara-lagoon",
@@ -119,7 +414,11 @@ const STARTER_SOURCES = [
 ];
 
 function getLegacyStarterArtworks() {
-  return [];
+  return [
+    cloneArtwork(DEMO_ART),
+    cloneArtwork(LAGOON_ART),
+    cloneArtwork(TWILIGHT_ART),
+  ];
 }
 
 function loadSvgViaObject(url, signal) {
@@ -480,19 +779,6 @@ function normalizeArtwork(raw) {
   }
 }
 
-function cloneArtwork(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const palette = Array.isArray(raw.palette)
-    ? raw.palette.map((item) => ({ ...item }))
-    : [];
-  const cells = Array.isArray(raw.cells) ? raw.cells.map((cell) => ({ ...cell })) : [];
-  return {
-    ...raw,
-    palette,
-    cells,
-  };
-}
-
 function parseDimension(value) {
   if (value === null || value === undefined) return null;
   const num = Number.parseFloat(value);
@@ -748,12 +1034,15 @@ const DEFAULT_CONFIG = {
   enableAutosave: true,
   autoAdvanceOnComplete: true,
   enableHintPulse: true,
-  enableDragFill: true,
+  enableDragFill: false,
   enableEyedropper: true,
   enableKeyboardShortcuts: true,
   showNumberBadges: true,
   showHeatmapDots: true,
   enableSmokeHud: true,
+  showColorLabels: true,
+  showRemainingCounts: true,
+  peekHoldToReveal: true,
 };
 
 const CONFIG_KEY = "capybooper_config";
@@ -830,8 +1119,13 @@ function App() {
   const [activeArtworkId, setActiveArtworkIdState] = useState(() =>
     loadActiveArtworkId(initialArtworksRef.current)
   );
+  const activeArtworkIdRef = useRef(activeArtworkId);
   const [config, setConfig] = useState(initialConfig);
   const isDefaultConfig = useMemo(() => shallowEqual(config, DEFAULT_CONFIG), [config]);
+
+  useEffect(() => {
+    activeArtworkIdRef.current = activeArtworkId;
+  }, [activeArtworkId]);
 
   const art = useMemo(() => {
     const match = artworks.find((entry) => entry.id === activeArtworkId);
@@ -846,6 +1140,8 @@ function App() {
   const [hintPulse, setHintPulse] = useState(new Set());
   const [showTests, setShowTests] = useState(initialConfig.enableSmokeHud);
   const [showOptions, setShowOptions] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [isPeekActive, setIsPeekActive] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryRevision, setLibraryRevision] = useState(0);
   const [starterStatus, setStarterStatus] = useState(
@@ -860,43 +1156,80 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (initialArtworksRef.current.length) return;
-
+    const hadStored = initialArtworksRef.current.length > 0;
     let cancelled = false;
     const controller = new AbortController();
 
-    async function bootstrap() {
+    if (!hadStored) {
       setStarterStatus({ state: "loading", error: null });
+    }
+
+    async function bootstrap() {
       try {
         const { artworks: loaded, errors } = await loadStarterArtworks(controller.signal);
         if (cancelled) return;
-        initialArtworksRef.current = loaded;
-        setArtworks(loaded);
-        const nextId = loadActiveArtworkId(loaded);
-        if (nextId) {
-          selectArtwork(nextId);
+
+        const primaryError = errors.length
+          ? errors[0] instanceof Error
+            ? errors[0].message
+            : "Unable to load all starter artworks."
+          : null;
+
+        if (!loaded.length) {
+          if (!hadStored) {
+            const fallback = getLegacyStarterArtworks();
+            initialArtworksRef.current = fallback;
+            setArtworks(fallback);
+            const nextId = loadActiveArtworkId(fallback);
+            if (nextId) selectArtwork(nextId);
+            setStarterStatus({
+              state: fallback.length ? "ready" : "error",
+              error: primaryError || "Unable to load starter artworks.",
+            });
+          } else {
+            setStarterStatus({ state: "ready", error: primaryError });
+          }
+          return;
         }
-        setStarterStatus({
-          state: "ready",
-          error: errors.length
-            ? errors[0] instanceof Error
-              ? errors[0].message
-              : "Unable to load all starter artworks."
-            : null,
+
+        setStarterStatus({ state: "ready", error: primaryError });
+
+        setArtworks((prev) => {
+          const merged = mergeArtworkLists(prev, loaded);
+          if (merged === prev) {
+            return prev;
+          }
+          initialArtworksRef.current = merged;
+          const activeId = activeArtworkIdRef.current;
+          const hasActive = activeId ? merged.some((entry) => entry.id === activeId) : false;
+          if (!hasActive) {
+            selectArtwork(loadActiveArtworkId(merged));
+          } else if (!hadStored) {
+            const ensuredId = loadActiveArtworkId(merged);
+            if (ensuredId && ensuredId !== activeId) {
+              selectArtwork(ensuredId);
+            }
+          }
+          return merged;
         });
       } catch (err) {
         if (cancelled) return;
-        const fallback = getLegacyStarterArtworks();
-        initialArtworksRef.current = fallback;
-        setArtworks(fallback);
-        const nextId = loadActiveArtworkId(fallback);
-        if (nextId) {
-          selectArtwork(nextId);
+        const message =
+          err instanceof Error ? err.message : "Unable to load starter artworks.";
+
+        if (!hadStored) {
+          const fallback = getLegacyStarterArtworks();
+          initialArtworksRef.current = fallback;
+          setArtworks(fallback);
+          const nextId = loadActiveArtworkId(fallback);
+          if (nextId) selectArtwork(nextId);
+          setStarterStatus({
+            state: fallback.length ? "ready" : "error",
+            error: message,
+          });
+        } else {
+          setStarterStatus({ state: "ready", error: message });
         }
-        setStarterStatus({
-          state: "error",
-          error: err instanceof Error ? err.message : "Unable to load starter artworks.",
-        });
       }
     }
 
@@ -930,6 +1263,7 @@ function App() {
       setOffset({ x: 50, y: 50 });
       setLastAction(null);
       setHintPulse(new Set());
+      setIsPeekActive(false);
       return;
     }
     const saved = loadSave(art);
@@ -942,19 +1276,33 @@ function App() {
     });
     setLastAction(null);
     setHintPulse(new Set());
+    setIsPeekActive(false);
   }, [art?.id]);
 
   const {
     enableAutosave,
     autoAdvanceOnComplete,
     enableHintPulse,
-    enableDragFill,
     enableEyedropper,
     enableKeyboardShortcuts,
     showNumberBadges,
     showHeatmapDots,
     enableSmokeHud,
+    showColorLabels,
+    showRemainingCounts,
+    peekHoldToReveal,
   } = config;
+
+  useEffect(() => {
+    if (peekHoldToReveal) setIsPeekActive(false);
+  }, [peekHoldToReveal]);
+
+  useEffect(() => {
+    if (isPeekActive) {
+      pendingPaintRef.current = null;
+      dragIntentRef.current = "idle";
+    }
+  }, [isPeekActive]);
 
   useEffect(() => {
     if (!enableAutosave || !art) return;
@@ -969,6 +1317,17 @@ function App() {
     }, 800);
     return () => clearTimeout(t);
   }, [art, filled, activeColor, scale, offset, enableAutosave]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    window.__capyTestHooks = window.__capyTestHooks || {};
+    window.__capyTestHooks.fillCell = (cellId) => onCellTapRef.current(cellId);
+    return () => {
+      if (window.__capyTestHooks) {
+        delete window.__capyTestHooks.fillCell;
+      }
+    };
+  }, []);
 
   const remaining = useMemo(() => computeRemaining(art, filled), [art, filled]);
   const totalCells = art?.cells?.length ?? 0;
@@ -994,6 +1353,64 @@ function App() {
     });
     return map;
   }, [artworks, art?.id, progress, libraryRevision]);
+
+
+  const peekHoldMode = peekHoldToReveal;
+  const startPeek = useCallback(() => setIsPeekActive(true), []);
+  const stopPeek = useCallback(() => setIsPeekActive(false), []);
+  const togglePeek = useCallback(() => setIsPeekActive((prev) => !prev), []);
+
+  const peekButtonTitle = peekHoldMode
+    ? "Hold to peek at the completed painting"
+    : isPeekActive
+    ? "Hide the completed painting preview"
+    : "Show the completed painting preview";
+
+  const peekButtonHandlers = peekHoldMode
+    ? {
+        onPointerDown: (e) => {
+          if (e.pointerType === "mouse" && e.button !== 0) return;
+          e.preventDefault();
+          e.currentTarget.setPointerCapture?.(e.pointerId);
+          startPeek();
+        },
+        onPointerUp: (e) => {
+          e.currentTarget.releasePointerCapture?.(e.pointerId);
+          stopPeek();
+        },
+        onPointerLeave: () => stopPeek(),
+        onPointerCancel: () => stopPeek(),
+        onBlur: () => stopPeek(),
+        onKeyDown: (e) => {
+          if (e.key === " " || e.key === "Enter") {
+            e.preventDefault();
+            startPeek();
+          }
+        },
+        onKeyUp: (e) => {
+          if (e.key === " " || e.key === "Enter") {
+            e.preventDefault();
+            stopPeek();
+          }
+        },
+      }
+    : {
+        onClick: () => togglePeek(),
+      };
+
+  const peekButtonProps = Object.assign(
+    {
+      type: "button",
+      style: {
+        ...styles.controlButton,
+        ...(isPeekActive ? styles.controlButtonActive : {}),
+      },
+      title: peekButtonTitle,
+      "aria-label": peekButtonTitle,
+    },
+    peekHoldMode ? {} : { "aria-pressed": isPeekActive },
+    peekButtonHandlers
+  );
 
   const handleImportArtwork = useCallback(
     (raw, meta = {}) => {
@@ -1089,13 +1506,25 @@ function App() {
 
   const svgRef = useRef(null);
   const isPanningRef = useRef(false);
-  const isPaintingRef = useRef(false);
   const lastPosRef = useRef(null);
   const movedRef = useRef(0);
   const eyedropCandidateRef = useRef(null);
   const pointersRef = useRef(new Map());
   const pinchRef = useRef(null);
   const zoomAnimRef = useRef(null);
+  const dragIntentRef = useRef("idle");
+  const pendingPaintRef = useRef(null);
+  const onCellTapRef = useRef(() => {});
+  const pointerOriginRef = useRef(null);
+  const PAN_DRAG_THRESHOLD = 8;
+
+  function beginPan(clientX, clientY) {
+    pendingPaintRef.current = null;
+    dragIntentRef.current = "pan";
+    isPanningRef.current = true;
+    lastPosRef.current = { x: clientX, y: clientY };
+    pointerOriginRef.current = null;
+  }
 
   const cancelZoomAnimation = useCallback(() => {
     if (zoomAnimRef.current) {
@@ -1167,45 +1596,39 @@ function App() {
 
   function onWheel(e) {
     if (!art) return;
-    if (e.nativeEvent?.cancelable) {
-      e.nativeEvent.preventDefault();
-    } else {
-      e.preventDefault();
-    }
-    const pageSpan =
-      typeof window !== "undefined" && window.innerHeight ? window.innerHeight : 360;
-    const modeFactor = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? pageSpan : 1;
-    const delta = e.deltaY * modeFactor;
+    const svg = svgRef.current;
+    if (!svg) return;
+    let delta = e.deltaY;
+    if (e.deltaMode === 1) delta *= 16;
+    if (e.deltaMode === 2) delta *= 240;
     const factor = Math.exp(-delta * 0.0012);
-    const proposed = scale * factor;
-    smoothZoomTo(proposed, e.clientX, e.clientY);
+    const targetScale = clamp(scale * factor, 0.2, 6);
+    smoothZoomTo(targetScale, e.clientX, e.clientY);
   }
 
   function onPointerDown(e) {
     if (!art) return;
+    if (isPeekActive) {
+      e.preventDefault?.();
+      return;
+    }
     const svg = svgRef.current;
     svg?.setPointerCapture?.(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
+    dragIntentRef.current = "idle";
+    pendingPaintRef.current = null;
+    pointerOriginRef.current = { x: e.clientX, y: e.clientY };
+    movedRef.current = 0;
+    eyedropCandidateRef.current = null;
+
     const target = e.target;
     const cid = target?.dataset?.cellId;
-    movedRef.current = 0;
-
-    if (e.pointerType === "mouse" && e.button === 0) {
-      if (e.nativeEvent?.cancelable) {
-        e.nativeEvent.preventDefault();
-      } else {
-        e.preventDefault();
-      }
-    }
 
     if (e.pointerType === "mouse" && (e.button === 2 || e.button === 1 || e.ctrlKey)) {
       e.preventDefault();
       cancelZoomAnimation();
-      isPaintingRef.current = false;
-      eyedropCandidateRef.current = null;
-      isPanningRef.current = true;
-      lastPosRef.current = { x: e.clientX, y: e.clientY };
+      beginPan(e.clientX, e.clientY);
       return;
     }
 
@@ -1217,9 +1640,9 @@ function App() {
       const d0 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
       const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
       pinchRef.current = { id1: ids[0], id2: ids[1], d0, s0: scale, mid0: mid };
+      dragIntentRef.current = "pinch";
       isPanningRef.current = false;
-      isPaintingRef.current = false;
-      eyedropCandidateRef.current = null;
+      pointerOriginRef.current = null;
       return;
     }
 
@@ -1228,30 +1651,41 @@ function App() {
       const already = !!filled[cid];
       if (already) {
         eyedropCandidateRef.current = enableEyedropper ? cid : null;
-        isPanningRef.current = true;
-        lastPosRef.current = { x: e.clientX, y: e.clientY };
+        beginPan(e.clientX, e.clientY);
         return;
       }
-      isPaintingRef.current = true;
-      onCellTap(cid);
+      dragIntentRef.current = enableDragFill ? "painting" : "pending-paint";
+      pendingPaintRef.current = cid;
+      if (enableDragFill) {
+        onCellTap(cid);
+      }
+      isPanningRef.current = false;
       return;
     }
     cancelZoomAnimation();
-    isPanningRef.current = true;
-    lastPosRef.current = { x: e.clientX, y: e.clientY };
+    beginPan(e.clientX, e.clientY);
   }
 
   function onPointerMove(e) {
     if (!art) return;
+    if (isPeekActive) return;
     const svg = svgRef.current;
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    if (isPanningRef.current && e.pointerType === "mouse") {
-      if (e.nativeEvent?.cancelable) {
-        e.nativeEvent.preventDefault();
-      } else {
-        e.preventDefault();
+    if (dragIntentRef.current === "pending-paint" && pointerOriginRef.current) {
+      const dx = e.clientX - pointerOriginRef.current.x;
+      const dy = e.clientY - pointerOriginRef.current.y;
+      if (Math.hypot(dx, dy) > PAN_DRAG_THRESHOLD) beginPan(e.clientX, e.clientY);
+    }
+
+    if (enableDragFill && dragIntentRef.current === "painting") {
+      const target = e.target;
+      const id = target?.dataset?.cellId;
+      if (id && id !== pendingPaintRef.current) {
+        pendingPaintRef.current = id;
+        onCellTap(id);
       }
+      return;
     }
 
     if (pinchRef.current) {
@@ -1271,14 +1705,6 @@ function App() {
       return;
     }
 
-    if (isPaintingRef.current) {
-      if (!enableDragFill) return;
-      const target = e.target;
-      const id = target?.dataset?.cellId;
-      if (id) onCellTap(id);
-      return;
-    }
-
     if (isPanningRef.current && lastPosRef.current) {
       const rect = svg.getBoundingClientRect();
       const sx = art.width / rect.width;
@@ -1293,8 +1719,13 @@ function App() {
 
   function onPointerUp(e) {
     if (!art) return;
+    if (isPeekActive) return;
     const svg = svgRef.current;
     svg?.releasePointerCapture?.(e.pointerId);
+
+    if (pendingPaintRef.current && dragIntentRef.current === "pending-paint") {
+      onCellTap(pendingPaintRef.current);
+    }
 
     if (enableEyedropper && eyedropCandidateRef.current && movedRef.current < 6) {
       const cell = art.cells.find((c) => c.id === eyedropCandidateRef.current);
@@ -1306,8 +1737,10 @@ function App() {
       pinchRef.current = null;
     }
 
+    dragIntentRef.current = "idle";
+    pendingPaintRef.current = null;
+    pointerOriginRef.current = null;
     isPanningRef.current = false;
-    isPaintingRef.current = false;
     lastPosRef.current = null;
     eyedropCandidateRef.current = null;
     movedRef.current = 0;
@@ -1338,6 +1771,8 @@ function App() {
     setLastAction(cellId);
     if (willCompleteColor && autoAdvanceOnComplete) nextColor();
   }
+
+  onCellTapRef.current = onCellTap;
 
   function undo() {
     if (!lastAction) return;
@@ -1406,6 +1841,7 @@ function App() {
       if (lower === "t" && enableSmokeHud) setShowTests((v) => !v);
       if (e.key === "Escape") {
         if (showOptions) setShowOptions(false);
+        if (showHelp) setShowHelp(false);
         if (showLibrary) setShowLibrary(false);
       }
       if (!art) return;
@@ -1429,7 +1865,7 @@ function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [art, enableKeyboardShortcuts, enableSmokeHud, showOptions, showLibrary, scale]);
+  }, [art, enableKeyboardShortcuts, enableSmokeHud, showOptions, showHelp, showLibrary, scale]);
   return (
     React.createElement(
       "div",
@@ -1448,6 +1884,14 @@ function App() {
           onDelete: handleDeleteArtwork,
           onRename: handleRenameArtwork,
           onClearProgress: handleClearProgress,
+        }),
+      showHelp &&
+        React.createElement(HelpPanel, {
+          art: art,
+          progress: progress,
+          activeColor: activeColor,
+          filled: filled,
+          onClose: () => setShowHelp(false),
         }),
       showOptions &&
         React.createElement(OptionsPanel, {
@@ -1502,41 +1946,62 @@ function App() {
                   const isFilled = !!filled[c.id];
                   const pal = art.palette.find((p) => p.id === c.colorId);
                   const showPulse = hintPulse.has(c.id);
+                  const shouldShowFill = isFilled || isPeekActive;
+                  const fillOpacity = isFilled ? 1 : 0.75;
+                  const strokeColor = showPulse
+                    ? "#f2c200"
+                    : isPeekActive
+                    ? "rgba(148, 163, 184, 0.6)"
+                    : "#334155";
+                  const strokeWidth = showPulse ? 4 : isPeekActive ? 1.6 : 2;
+                  const baseFill = isFilled
+                    ? "transparent"
+                    : isPeekActive
+                    ? "rgba(15, 23, 42, 0.2)"
+                    : "#0f172a";
                   return React.createElement(
                     "g",
                     { key: c.id },
                     React.createElement(
                       "title",
                       null,
-                      `Region ${c.id} – Color #${c.colorId}${pal?.name ? ` (${pal.name})` : ""}`
+                      `Region ${c.id} - Color #${c.colorId}${pal?.name ? ` (${pal.name})` : ""}`
                     ),
-                    isFilled &&
+                    shouldShowFill &&
                       React.createElement("path", {
                         d: c.d,
                         fill: pal?.rgba,
                         pointerEvents: "none",
+                        opacity: fillOpacity,
                       }),
                     React.createElement("path", {
                       id: c.id,
                       "data-cell-id": c.id,
                       "data-color-id": c.colorId,
                       d: c.d,
-                      fill: isFilled ? "transparent" : "#0f172a",
-                      stroke: showPulse ? "#f2c200" : "#334155",
-                      strokeWidth: showPulse ? 4 : 2,
+                      fill: baseFill,
+                      stroke: strokeColor,
+                      strokeWidth: strokeWidth,
                       style: {
                         cursor: isFilled ? "grab" : "pointer",
                         opacity: isFilled ? 0.35 : 1,
                       },
+                      onClick: () => onCellTap(c.id),
                       "aria-label": `Cell ${c.id}. Target color ${c.colorId}. ${isFilled ? "Filled" : "Unfilled"}`,
                     }),
-                    !isFilled && showNumberBadges && scale >= 0.6 &&
+                    !isPeekActive &&
+                      !isFilled &&
+                      showNumberBadges &&
+                      scale >= 0.6 &&
                       React.createElement(NumberLabel, {
                         d: c.d,
                         text: `${c.colorId}`,
                         area: c.area,
                       }),
-                    !isFilled && showHeatmapDots && scale < 0.6 &&
+                    !isPeekActive &&
+                      !isFilled &&
+                      showHeatmapDots &&
+                      scale < 0.6 &&
                       React.createElement(HeatDot, { d: c.d })
                   );
                 })
@@ -1547,7 +2012,7 @@ function App() {
             "div",
             { style: styles.emptyState },
             starterStatus.state === "loading"
-              ? "Loading starter artwork…"
+              ? "Loading starter artworks..."
               : starterStatus.error
               ? `Starter art could not be loaded automatically (${starterStatus.error}). Use the library to import a file.`
               : "Import or add an artwork in the library to start painting."
@@ -1584,9 +2049,14 @@ function App() {
               {
                 type: "button",
                 style: styles.controlButton,
-                onClick: () => setShowLibrary(true),
+                onClick: () => {
+                  setShowHelp(false);
+                  setShowOptions(false);
+                  setShowLibrary(true);
+                },
                 title: "Open art library",
                 "aria-label": "Open art library",
+                "data-testid": "open-art-library",
               },
               "Library"
             ),
@@ -1595,11 +2065,51 @@ function App() {
               {
                 type: "button",
                 style: styles.controlButton,
-                onClick: () => setShowOptions(true),
+                onClick: () => {
+                  setShowHelp(false);
+                  setShowOptions(true);
+                },
                 title: "Adjust options",
                 "aria-label": "Adjust options",
               },
               "Options"
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: styles.controlButton,
+                onClick: () => {
+                  setShowOptions(false);
+                  setShowHelp(true);
+                },
+                title: "Open help",
+                "aria-label": "Open help",
+              },
+              "Help"
+            ),
+            React.createElement("button", peekButtonProps, "Peek"),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: styles.controlButton,
+                onClick: resetView,
+                title: "Reset view",
+                "aria-label": "Reset view",
+              },
+              "Reset"
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: styles.controlButton,
+                onClick: undo,
+                title: "Undo last fill",
+                "aria-label": "Undo last fill",
+              },
+              "Undo"
             ),
             React.createElement(
               "button",
@@ -1656,6 +2166,8 @@ function App() {
             remaining: remaining,
             activeColor: activeColor,
             onSelect: setActiveColor,
+            showLabels: showColorLabels,
+            showRemaining: showRemainingCounts,
           })
         )
     )
@@ -1953,37 +2465,127 @@ function HeatDot({ d }) {
 }
 
 // ---------- Palette ----------
-function Palette({ palette, remaining, activeColor, onSelect }) {
+function Palette({
+  palette,
+  remaining,
+  activeColor,
+  onSelect,
+  showLabels,
+  showRemaining,
+}) {
   return React.createElement(
     "div",
     { style: styles.paletteWrap },
     palette.map((p) => {
       const left = remaining[p.id] ?? 0;
       const isActive = p.id === activeColor;
+      const label = p.name ?? `Color ${p.id}`;
+      const statusText = left === 0 ? "Complete" : `${left} left`;
+      const buttonStyle = {
+        ...styles.swatch,
+        background: p.rgba,
+        border: isActive
+          ? "2px solid rgba(248, 250, 252, 0.85)"
+          : "2px solid rgba(15, 23, 42, 0.6)",
+        boxShadow: isActive
+          ? "0 0 0 4px rgba(148, 163, 184, 0.45), 0 10px 24px rgba(2, 6, 23, 0.55)"
+          : "0 8px 18px rgba(2, 6, 23, 0.45)",
+        opacity: left === 0 && !isActive ? 0.35 : 1,
+      };
       return React.createElement(
-        "button",
-        {
-          key: p.id,
-          onClick: () => onSelect(p.id),
-          disabled: left === 0 && !isActive,
-          "aria-pressed": isActive,
-          "aria-label": `${p.name ?? "Color"} #${p.id}. ${left} cells remaining`,
-          title: `${p.name ?? "Color"} #${p.id} • Remaining ${left}`,
-          style: {
-            ...styles.swatch,
-            background: p.rgba,
-            border: isActive
-              ? "2px solid rgba(248, 250, 252, 0.85)"
-              : "2px solid rgba(15, 23, 42, 0.6)",
-            boxShadow: isActive
-              ? "0 0 0 4px rgba(148, 163, 184, 0.45), 0 10px 24px rgba(2, 6, 23, 0.55)"
-              : "0 8px 18px rgba(2, 6, 23, 0.45)",
-            opacity: left === 0 && !isActive ? 0.35 : 1,
+        "div",
+        { key: p.id, style: styles.swatchItem },
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            onClick: () => onSelect(p.id),
+            disabled: left === 0 && !isActive,
+            "aria-pressed": isActive,
+            "aria-label": `${label}. ${statusText}`,
+            title: `${label} - ${statusText}`,
+            style: buttonStyle,
           },
-        },
-        React.createElement("span", { style: styles.swatchNumber }, p.id)
+          React.createElement("span", { style: styles.swatchNumber }, p.id)
+        ),
+        showLabels &&
+          React.createElement("span", { style: styles.swatchName }, label),
+        showRemaining &&
+          React.createElement(
+            "span",
+            { style: styles.swatchRemaining },
+            statusText
+          )
       );
     })
+  );
+}
+
+function ArtworkPreviewCard({ art, progress, isActive, onSelect }) {
+  const paletteLookup = useMemo(() => {
+    const map = new Map();
+    (art.palette ?? []).forEach((entry) => {
+      map.set(entry.id, entry.rgba || "#64748b");
+    });
+    return map;
+  }, [art]);
+  const handleSelect = useCallback(() => onSelect(art.id), [art.id, onSelect]);
+  return React.createElement(
+    "button",
+    {
+      type: "button",
+      style: {
+        ...styles.libraryCard,
+        ...(isActive ? styles.libraryCardActive : {}),
+      },
+      onClick: handleSelect,
+      title: isActive ? `${art.title} (active)` : `Load ${art.title}`,
+      "aria-label": isActive ? `${art.title} (active)` : `Load ${art.title}`,
+      "aria-pressed": isActive,
+      "data-testid": "art-library-card",
+      "data-artwork-id": art.id,
+    },
+    React.createElement(
+      "div",
+      { style: styles.libraryCardPreview },
+      React.createElement(
+        "svg",
+        {
+          viewBox: `0 0 ${art.width} ${art.height}`,
+          style: styles.libraryCardSvg,
+          role: "presentation",
+          focusable: "false",
+        },
+        React.createElement("rect", {
+          x: 0,
+          y: 0,
+          width: art.width,
+          height: art.height,
+          fill: "#0f172a",
+          stroke: "rgba(148, 163, 184, 0.35)",
+          strokeWidth: 2,
+        }),
+        art.cells.map((cell) =>
+          React.createElement("path", {
+            key: cell.id,
+            d: cell.d,
+            fill: paletteLookup.get(cell.colorId) || "#1e293b",
+            stroke: "rgba(15, 23, 42, 0.55)",
+            strokeWidth: 1.4,
+          })
+        )
+      )
+    ),
+    React.createElement(
+      "div",
+      { style: styles.libraryCardBody },
+      React.createElement("div", { style: styles.libraryCardTitle }, art.title),
+      React.createElement(
+        "div",
+        { style: styles.libraryCardMeta },
+        `\n${progress}% complete • ${art.palette.length} colors`
+      )
+    )
   );
 }
 
@@ -2009,6 +2611,7 @@ function ArtLibrary({
     () => [...artworks].sort((a, b) => a.title.localeCompare(b.title)),
     [artworks]
   );
+  const hasArtworks = sorted.length > 0;
 
   useEffect(() => {
     function handleKey(e) {
@@ -2123,7 +2726,27 @@ function ArtLibrary({
     setTitleDraft("");
   }
 
-  const list = sorted.length
+  const pickerContent = hasArtworks
+    ? React.createElement(
+      "div",
+      { style: styles.libraryPickerGrid },
+      sorted.map((art) =>
+        React.createElement(ArtworkPreviewCard, {
+          key: art.id,
+          art: art,
+          progress: progressMap?.[art.id] ?? 0,
+          isActive: art.id === activeArtworkId,
+          onSelect: onSelect,
+        })
+      )
+    )
+    : React.createElement(
+      "div",
+      { style: styles.libraryPickerEmpty },
+      "Add an artwork to see selectable previews."
+    );
+
+  const list = hasArtworks
     ? sorted.map((art) => {
         const isActive = art.id === activeArtworkId;
         const isEditing = editingId === art.id;
@@ -2235,29 +2858,54 @@ function ArtLibrary({
           )
         );
       })
-    : React.createElement("div", { style: styles.libraryEmpty }, "No artworks saved yet.");
+    : React.createElement(
+        "div",
+        { style: styles.libraryEmpty },
+        "Import or add an artwork to manage it here."
+      );
 
   return React.createElement(
     "div",
     { style: styles.libraryOverlay, onClick: onClose },
-    React.createElement(
-      "aside",
-      {
-        style: styles.libraryPanel,
-        role: "dialog",
-        "aria-modal": true,
-        "aria-label": "Artwork library",
-        onClick: (e) => e.stopPropagation(),
-      },
+      React.createElement(
+        "aside",
+        {
+          style: styles.libraryPanel,
+          role: "dialog",
+          "aria-modal": true,
+          "aria-label": "Artwork library",
+          onClick: (e) => e.stopPropagation(),
+          "data-testid": "art-library-dialog",
+        },
       React.createElement(
         "div",
         { style: styles.libraryHeader },
         React.createElement("div", { style: styles.libraryTitle }, "Art Library"),
         React.createElement(
           "button",
-          { style: styles.libraryClose, onClick: onClose, "aria-label": "Close art library" },
+          {
+            style: styles.libraryClose,
+            onClick: onClose,
+            "aria-label": "Close art library",
+            "data-testid": "close-art-library",
+          },
           "\u2715"
         )
+      ),
+      React.createElement(
+        "section",
+        { style: styles.libraryPickerSection },
+        React.createElement(
+          "div",
+          { style: styles.libraryPickerHeader },
+          React.createElement("h3", { style: styles.libraryPickerTitle }, "Art Picker"),
+          React.createElement(
+            "p",
+            { style: styles.libraryPickerHelp },
+            "Select a card to load a scene."
+          )
+        ),
+        pickerContent
       ),
       React.createElement("div", { style: styles.libraryList }, list),
       React.createElement(
@@ -2363,76 +3011,261 @@ function ArtLibrary({
   );
 }
 
+const OPTION_COPY = {
+  enableAutosave: {
+    label: "Autosave progress",
+    description: "Persist the fill state and viewport to localStorage after each change.",
+    group: "gameplay",
+  },
+  autoAdvanceOnComplete: {
+    label: "Auto-advance color",
+    description: "Jump to the next color when the active color has no unfilled cells remaining.",
+    group: "gameplay",
+  },
+  enableHintPulse: {
+    label: "Hint pulses",
+    description: "Allow the Hint control to highlight the smallest unfilled cells in the active color.",
+    group: "gameplay",
+  },
+  enableDragFill: {
+    label: "Drag-to-fill",
+    description: "While painting, drag across adjacent cells to fill them without additional taps.",
+    group: "gameplay",
+  },
+  enableEyedropper: {
+    label: "Eyedropper",
+    description: "Tap a filled cell without moving to reselect its color.",
+    group: "gameplay",
+  },
+  enableKeyboardShortcuts: {
+    label: "Keyboard shortcuts",
+    description: "Use H, N, U, T, +/-, and 0 to control hints, color cycling, undo, tests, zoom, and fitting.",
+    group: "gameplay",
+  },
+  showNumberBadges: {
+    label: "Number badges",
+    description: "Show numbered overlays for unfilled cells when zoomed in.",
+    group: "gameplay",
+  },
+  showHeatmapDots: {
+    label: "Heat-map dots",
+    description: "Show locator dots for tiny cells when zoomed out.",
+    group: "gameplay",
+  },
+  enableSmokeHud: {
+    label: "Smoke-test HUD",
+    description: "Allow the debugging overlay that summarizes automated checks.",
+    group: "gameplay",
+  },
+  showColorLabels: {
+    label: "Show color names",
+    description: "Display the palette color names beneath each swatch.",
+    group: "interface",
+  },
+  showRemainingCounts: {
+    label: "Show remaining counts",
+    description: "Keep a caption with how many cells are left for each color.",
+    group: "interface",
+  },
+  peekHoldToReveal: {
+    label: "Peek requires hold",
+    description: "Hold the Peek button down instead of toggling it on and off.",
+    group: "interface",
+  },
+};
+
+const HELP_SURFACES = [
+  {
+    title: "Root layout",
+    body: "Dark-mode experience with a full-viewport canvas and floating header/footer controls.",
+  },
+  {
+    title: "Header bar",
+    body: "Back affordance, artwork title, progress text, and utility buttons for fit, undo, hint, next color, tests, and options.",
+  },
+  {
+    title: "Canvas frame",
+    body: "Fullscreen SVG stage with pan/zoom transforms, strokes, badges, and heat-map dots as you zoom.",
+  },
+  {
+    title: "Smoke Tests HUD",
+    body: "Optional floating card that reports automated sanity checks and can be hidden with the toolbar or T shortcut.",
+  },
+  {
+    title: "Palette footer",
+    body: "Scrollable row of numbered swatches with remaining counts, highlighting the active color and disabling completed ones.",
+  },
+];
+
+const HELP_SHORTCUTS = [
+  { combo: "H", action: "Highlight a hint cell" },
+  { combo: "N", action: "Select the next color" },
+  { combo: "U", action: "Undo the last paint" },
+  { combo: "T", action: "Toggle the smoke-test HUD" },
+  { combo: "+ / =", action: "Zoom in" },
+  { combo: "- / _", action: "Zoom out" },
+  { combo: "0", action: "Reset the view" },
+  { combo: "W / A / S / D", action: "Pan across the canvas" },
+];
+
+function HelpPanel({ art, progress, activeColor, filled, onClose }) {
+  const filledCount = useMemo(() => Object.values(filled ?? {}).filter(Boolean).length, [filled]);
+  const todoItems = useMemo(
+    () => [
+      {
+        id: "choose-art",
+        label: "Open the library and choose an artwork to paint.",
+        done: !!art,
+      },
+      {
+        id: "pick-color",
+        label: "Tap a palette color to make it active.",
+        done: activeColor != null,
+      },
+      {
+        id: "fill-cell",
+        label: "Fill a matching cell to add paint to the scene.",
+        done: filledCount > 0,
+      },
+      {
+        id: "finish-scene",
+        label: "Color every region to reach 100% completion.",
+        done: progress === 100,
+      },
+    ],
+    [art, activeColor, filledCount, progress]
+  );
+
+  return React.createElement(
+    "div",
+    { style: styles.helpOverlay, onClick: onClose },
+    React.createElement(
+      "aside",
+      {
+        style: styles.helpCard,
+        role: "dialog",
+        "aria-modal": true,
+        "aria-label": "Help and instructions",
+        onClick: (e) => e.stopPropagation(),
+      },
+      React.createElement(
+        "div",
+        { style: styles.helpHeader },
+        React.createElement("div", { style: styles.helpTitle }, "Help"),
+        React.createElement(
+          "button",
+          { style: styles.helpClose, onClick: onClose, "aria-label": "Close help" },
+          "\u2715"
+        )
+      ),
+      React.createElement(
+        "section",
+        { style: styles.helpSection },
+        React.createElement("h3", { style: styles.helpSectionTitle }, "Quick how-to"),
+        React.createElement(
+          "p",
+          { style: styles.helpIntro },
+          "Pick a color from the palette, tap the matching cells, and fill every region to finish the scene."
+        ),
+        React.createElement(
+          "ul",
+          { style: styles.helpTodoList },
+          todoItems.map((item) =>
+            React.createElement(
+              "li",
+              { key: item.id, style: styles.helpTodoItem },
+              React.createElement(
+                "span",
+                { style: styles.helpTodoCheck, "aria-hidden": "true" },
+                item.done ? "[x]" : "[ ]"
+              ),
+              React.createElement("span", { style: styles.helpTodoLabel }, item.label)
+            )
+          )
+        )
+      ),
+      React.createElement(
+        "section",
+        { style: styles.helpSection },
+        React.createElement("h3", { style: styles.helpSectionTitle }, "What's on screen"),
+        React.createElement(
+          "ul",
+          { style: styles.helpUiList },
+          HELP_SURFACES.map((surface) =>
+            React.createElement(
+              "li",
+              { key: surface.title },
+              React.createElement("strong", null, surface.title, ": "),
+              surface.body
+            )
+          )
+        )
+      ),
+      React.createElement(
+        "section",
+        { style: styles.helpSection },
+        React.createElement("h3", { style: styles.helpSectionTitle }, "Keyboard shortcuts"),
+        React.createElement(
+          "ul",
+          { style: styles.helpShortcutList },
+          HELP_SHORTCUTS.map((shortcut) =>
+            React.createElement(
+              "li",
+              { key: shortcut.combo, style: styles.helpShortcutRow },
+              React.createElement("span", { style: styles.helpShortcutKey }, shortcut.combo),
+              React.createElement("span", { style: styles.helpShortcutLabel }, shortcut.action)
+            )
+          )
+        )
+      ),
+      React.createElement("div", { style: styles.helpFooter }, "Need to tweak the experience? Open Options to toggle helpers and accessibility tools.")
+    )
+  );
+}
+
 function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
-  const options = [
-    {
-      key: "enableAutosave",
-      label: "Autosave progress",
-      description: "Persist the fill state and viewport to localStorage after each change.",
-    },
-    {
-      key: "autoAdvanceOnComplete",
-      label: "Auto-advance color",
-      description: "Jump to the next color when the active color has no unfilled cells remaining.",
-    },
-    {
-      key: "enableHintPulse",
-      label: "Hint pulses",
-      description: "Allow the Hint control to highlight the smallest unfilled cells in the active color.",
-    },
-    {
-      key: "enableDragFill",
-      label: "Drag-to-fill",
-      description: "While painting, drag across adjacent cells to fill them without additional taps.",
-    },
-    {
-      key: "enableEyedropper",
-      label: "Eyedropper",
-      description: "Tap a filled cell without moving to reselect its color.",
-    },
-    {
-      key: "enableKeyboardShortcuts",
-      label: "Keyboard shortcuts",
-      description: "Use H, N, U, T, +/-, and 0 to control hints, color cycling, undo, tests, zoom, and fitting.",
-    },
-    {
-      key: "showNumberBadges",
-      label: "Number badges",
-      description: "Show numbered overlays for unfilled cells when zoomed in.",
-    },
-    {
-      key: "showHeatmapDots",
-      label: "Heat-map dots",
-      description: "Show locator dots for tiny cells when zoomed out.",
-    },
-    {
-      key: "enableSmokeHud",
-      label: "Smoke-test HUD",
-      description: "Allow the debugging overlay that summarizes automated checks.",
-    },
+  const humanize = (value) =>
+    value
+      .replace(/([A-Z])/g, " $1")
+      .replace(/[-_]+/g, " ")
+      .replace(/^./, (ch) => ch.toUpperCase())
+      .trim();
+
+  const optionEntries = Object.keys(DEFAULT_CONFIG).map((key) => {
+    const copy = OPTION_COPY[key] || {};
+    const label = copy.label || humanize(key);
+    const description = copy.description || "";
+    const group = copy.group || "gameplay";
+    return { key, label, description, group };
+  });
+
+  const baseGroups = [
+    { key: "gameplay", title: "Game flow & helpers" },
+    { key: "interface", title: "Interface & layout" },
   ];
 
-  const surfaces = [
-    {
-      title: "Root layout",
-      body: "Dark-mode experience with a full-viewport canvas and floating header/footer controls.",
-    },
-    {
-      title: "Header bar",
-      body: "Back affordance, artwork title, progress text, and utility buttons for the library, options, hints, next color, and tests.",
-    },
-    {
-      title: "Canvas frame",
-      body: "Fullscreen SVG stage with pan/zoom transforms, strokes, badges, and heat-map dots as you zoom.",
-    },
-    {
-      title: "Smoke Tests HUD",
-      body: "Optional floating card that reports automated sanity checks and can be hidden with the toolbar or T shortcut.",
-    },
-    {
-      title: "Palette footer",
-      body: "Scrollable row of numbered swatches with remaining counts, highlighting the active color and disabling completed ones.",
-    },
+  const grouped = optionEntries.reduce((acc, entry) => {
+    const bucket = entry.group || "gameplay";
+    if (!acc[bucket]) acc[bucket] = [];
+    acc[bucket].push(entry);
+    return acc;
+  }, {});
+
+  const sections = [
+    ...baseGroups
+      .map((info) => ({
+        key: info.key,
+        title: info.title,
+        options: grouped[info.key] || [],
+      }))
+      .filter((section) => section.options.length > 0),
+    ...Object.keys(grouped)
+      .filter((key) => !baseGroups.some((info) => info.key === key))
+      .map((key) => ({
+        key,
+        title: humanize(key),
+        options: grouped[key],
+      })),
   ];
 
   return React.createElement(
@@ -2444,7 +3277,7 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
         style: styles.optionsCard,
         role: "dialog",
         "aria-modal": true,
-        "aria-label": "Options and configuration",
+        "aria-label": "Game options",
         onClick: (e) => e.stopPropagation(),
       },
       React.createElement(
@@ -2460,40 +3293,35 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
       React.createElement(
         "p",
         { style: styles.optionsAbout },
-        "The project is a single-page React 18 color-by-number demo that boots entirely from index.html, pulling React, ReactDOM, and Babel from CDNs so the JSX logic can run in the browser without a build step. The art library import accepts JSON exports or annotated SVG files with data-cell-id/data-color-id metadata so new scenes can be added without editing code. It now ships with three sample scenes—“Capybara Lagoon Sunrise,” “Twilight Marsh Study,” and “Lush Green Forest Walk”—plus autosave that tracks each cell’s fill state so players can match colors to numbers."
+        "Fine-tune gameplay helpers or personalize the interface. The project boots entirely from index.html, pulling React, ReactDOM, and Babel from the bundled runtime so new scenes load instantly, and it ships with three sample artworks plus autosave so changes persist."
       ),
-      React.createElement("div", { style: styles.optionsSectionTitle }, "UI surfaces"),
-      React.createElement(
-        "ul",
-        { style: styles.optionsUiList },
-        surfaces.map((s) =>
+      sections.map((section) =>
+        React.createElement(
+          React.Fragment,
+          { key: section.key },
+          React.createElement("div", { style: styles.optionsSectionTitle }, section.title),
           React.createElement(
-            "li",
-            { key: s.title },
-            React.createElement("strong", null, s.title, ": "),
-            s.body
-          )
-        )
-      ),
-      React.createElement("div", { style: styles.optionsSectionTitle }, "Configuration"),
-      React.createElement(
-        "div",
-        { style: styles.optionsList },
-        options.map((opt) =>
-          React.createElement(
-            "label",
-            { key: opt.key, style: styles.optionRow },
-            React.createElement("input", {
-              type: "checkbox",
-              checked: !!config[opt.key],
-              onChange: (e) => onToggle(opt.key, e.target.checked),
-              style: styles.optionCheckbox,
-            }),
-            React.createElement(
-              "div",
-              null,
-              React.createElement("div", { style: styles.optionLabel }, opt.label),
-              React.createElement("div", { style: styles.optionDescription }, opt.description)
+            "div",
+            { style: styles.optionsList },
+            section.options.map((opt) =>
+              React.createElement(
+                "label",
+                { key: opt.key, style: styles.optionRow },
+                React.createElement("input", {
+                  type: "checkbox",
+                  checked: !!config[opt.key],
+                  onChange: (e) => onToggle(opt.key, e.target.checked),
+                  style: styles.optionCheckbox,
+                }),
+                React.createElement(
+                  "div",
+                  null,
+                  React.createElement("div", { style: styles.optionLabel }, opt.label),
+                  opt.description
+                    ? React.createElement("div", { style: styles.optionDescription }, opt.description)
+                    : null
+                )
+              )
             )
           )
         )
@@ -2599,30 +3427,14 @@ const styles = {
     color: "#f8fafc",
     background: "radial-gradient(circle at top, rgba(56, 189, 248, 0.12), #030712)",
   },
-  bootstrapBanner: {
-    position: "fixed",
-    top: 64,
-    left: "50%",
-    transform: "translateX(-50%)",
-    maxWidth: "min(520px, calc(100% - 32px))",
-    padding: "10px 16px",
-    borderRadius: 14,
-    background: "rgba(248, 113, 113, 0.15)",
-    border: "1px solid rgba(248, 113, 113, 0.4)",
-    color: "#fecaca",
-    fontSize: 12,
-    textAlign: "center",
-    zIndex: 30,
-    boxShadow: "0 12px 32px rgba(2, 6, 23, 0.6)",
-    backdropFilter: "blur(10px)",
-    pointerEvents: "none",
-  },
   canvas: {
     position: "absolute",
     inset: 0,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    userSelect: "none",
+    WebkitUserSelect: "none",
   },
   topBar: {
     position: "fixed",
@@ -2700,20 +3512,24 @@ const styles = {
     whiteSpace: "nowrap",
     lineHeight: 1.2,
   },
+  controlButtonActive: {
+    border: "1px solid rgba(56, 189, 248, 0.55)",
+    boxShadow: "0 0 0 2px rgba(56, 189, 248, 0.35), 0 12px 32px rgba(2, 6, 23, 0.55)",
+    color: "#38bdf8",
+  },
   paletteDock: {
     position: "fixed",
-    left: "50%",
-    bottom: 24,
-    transform: "translateX(-50%)",
-    width: "min(940px, calc(100% - 24px))",
-    background: "rgba(15, 23, 42, 0.82)",
-    borderRadius: 18,
-    border: "1px solid rgba(148, 163, 184, 0.28)",
-    padding: "8px 12px",
-    boxShadow: "0 24px 50px rgba(2, 6, 23, 0.6)",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: "10px 18px",
+    background: "rgba(15, 23, 42, 0.9)",
+    borderRadius: 0,
+    border: "none",
+    boxShadow: "0 -8px 24px rgba(2, 6, 23, 0.45)",
     zIndex: 11,
     overflow: "hidden",
-    backdropFilter: "blur(16px)",
+    backdropFilter: "blur(18px)",
   },
   emptyState: {
     position: "absolute",
@@ -2725,41 +3541,68 @@ const styles = {
     fontSize: 18,
     textAlign: "center",
   },
+  bootstrapBanner: {
+    position: "fixed",
+    top: 72,
+    left: "50%",
+    transform: "translateX(-50%)",
+    padding: "10px 18px",
+    borderRadius: 12,
+    background: "rgba(248, 113, 113, 0.16)",
+    border: "1px solid rgba(248, 113, 113, 0.45)",
+    color: "#fecaca",
+    boxShadow: "0 12px 32px rgba(2, 6, 23, 0.5)",
+    backdropFilter: "blur(12px)",
+    zIndex: 25,
+    textAlign: "center",
+    maxWidth: "min(480px, 90vw)",
+    fontSize: 12,
+  },
   paletteWrap: {
     display: "flex",
     flexDirection: "row",
     flexWrap: "nowrap",
-    gap: 8,
+    gap: 14,
     width: "100%",
     overflowX: "auto",
-    paddingBottom: 4,
+    padding: "4px 4px 2px",
     scrollSnapType: "x proximity",
+    alignItems: "flex-start",
   },
   swatch: {
-    height: "clamp(44px, 9vw, 58px)",
-    borderRadius: 999,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    width: "clamp(52px, 9vw, 72px)",
+    height: "clamp(52px, 9vw, 72px)",
+    borderRadius: 18,
+    display: "grid",
+    placeItems: "center",
+    position: "relative",
     transition: "transform 0.12s ease, box-shadow 0.2s ease",
     cursor: "pointer",
     color: "#f8fafc",
-    flex: "0 0 clamp(44px, 9vw, 58px)",
-    aspectRatio: "1",
-    scrollSnapAlign: "center",
   },
   swatchNumber: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: 18,
-    height: 18,
-    borderRadius: "50%",
-    background: "rgba(15, 23, 42, 0.52)",
-    color: "#f8fafc",
-    fontSize: 9,
+    fontSize: 18,
     fontWeight: 700,
-    letterSpacing: 0.4,
+    textShadow: "0 1px 4px rgba(15, 23, 42, 0.65)",
+  },
+  swatchItem: {
+    display: "grid",
+    gap: 6,
+    justifyItems: "center",
+    minWidth: 72,
+    scrollSnapAlign: "center",
+  },
+  swatchName: {
+    fontSize: 11,
+    color: "#dbeafe",
+    textAlign: "center",
+    maxWidth: 96,
+    lineHeight: 1.3,
+  },
+  swatchRemaining: {
+    fontSize: 10,
+    color: "#94a3b8",
+    textAlign: "center",
   },
   libraryOverlay: {
     position: "fixed",
@@ -2806,6 +3649,86 @@ const styles = {
   libraryList: {
     display: "grid",
     gap: 12,
+  },
+  libraryPickerSection: {
+    border: "1px solid rgba(148, 163, 184, 0.25)",
+    borderRadius: 16,
+    padding: 16,
+    background: "rgba(15, 23, 42, 0.7)",
+    display: "grid",
+    gap: 12,
+  },
+  libraryPickerHeader: {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  libraryPickerTitle: {
+    fontSize: 16,
+    fontWeight: 600,
+    margin: 0,
+  },
+  libraryPickerHelp: {
+    margin: 0,
+    fontSize: 12,
+    color: "#94a3b8",
+  },
+  libraryPickerGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: 12,
+  },
+  libraryPickerEmpty: {
+    padding: 16,
+    textAlign: "center",
+    color: "#94a3b8",
+    border: "1px dashed rgba(148, 163, 184, 0.3)",
+    borderRadius: 16,
+  },
+  libraryCard: {
+    display: "grid",
+    gap: 8,
+    padding: 12,
+    borderRadius: 16,
+    border: "1px solid rgba(148, 163, 184, 0.22)",
+    background: "rgba(15, 23, 42, 0.72)",
+    color: "#e2e8f0",
+    cursor: "pointer",
+    textAlign: "left",
+    width: "100%",
+    transition: "transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease",
+  },
+  libraryCardActive: {
+    borderColor: "rgba(56, 189, 248, 0.6)",
+    boxShadow: "0 0 0 1px rgba(56, 189, 248, 0.4), 0 12px 30px rgba(2, 6, 23, 0.65)",
+    transform: "translateY(-2px)",
+  },
+  libraryCardPreview: {
+    width: "100%",
+    aspectRatio: "4 / 3",
+    background: "rgba(15, 23, 42, 0.9)",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  libraryCardSvg: {
+    width: "100%",
+    height: "100%",
+    display: "block",
+  },
+  libraryCardBody: {
+    display: "grid",
+    gap: 4,
+  },
+  libraryCardTitle: {
+    fontSize: 14,
+    fontWeight: 600,
+    lineHeight: 1.3,
+  },
+  libraryCardMeta: {
+    fontSize: 12,
+    color: "#94a3b8",
   },
   libraryItem: {
     border: "1px solid rgba(148, 163, 184, 0.2)",
@@ -2972,6 +3895,130 @@ const styles = {
   libraryFeedback: {
     fontSize: 12,
   },
+  helpOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(2, 6, 23, 0.6)",
+    backdropFilter: "blur(8px)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: "24px",
+    zIndex: 55,
+  },
+  helpCard: {
+    width: "min(520px, 100%)",
+    maxHeight: "calc(100vh - 60px)",
+    overflowY: "auto",
+    background: "rgba(15, 23, 42, 0.96)",
+    borderRadius: 24,
+    padding: 24,
+    boxShadow: "0 24px 60px rgba(2, 6, 23, 0.65)",
+    border: "1px solid rgba(148, 163, 184, 0.3)",
+    color: "#e2e8f0",
+    display: "grid",
+    gap: 16,
+  },
+  helpHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  helpTitle: {
+    fontSize: 20,
+    fontWeight: 700,
+  },
+  helpClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    border: "1px solid rgba(148, 163, 184, 0.35)",
+    background: "rgba(15, 23, 42, 0.8)",
+    color: "#cbd5f5",
+    cursor: "pointer",
+  },
+  helpSection: {
+    display: "grid",
+    gap: 12,
+  },
+  helpSectionTitle: {
+    fontSize: 14,
+    fontWeight: 600,
+    margin: 0,
+  },
+  helpIntro: {
+    margin: 0,
+    fontSize: 13,
+    color: "#94a3b8",
+  },
+  helpTodoList: {
+    listStyle: "none",
+    margin: 0,
+    padding: 0,
+    display: "grid",
+    gap: 8,
+  },
+  helpTodoItem: {
+    display: "grid",
+    gridTemplateColumns: "auto 1fr",
+    gap: 12,
+    alignItems: "center",
+    padding: "8px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(148, 163, 184, 0.18)",
+    background: "rgba(15, 23, 42, 0.7)",
+  },
+  helpTodoCheck: {
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    fontSize: 12,
+    color: "#cbd5f5",
+  },
+  helpTodoLabel: {
+    fontSize: 13,
+    color: "#e2e8f0",
+  },
+  helpUiList: {
+    margin: 0,
+    paddingLeft: 18,
+    display: "grid",
+    gap: 8,
+    fontSize: 13,
+    color: "#d0def5",
+  },
+  helpShortcutList: {
+    margin: 0,
+    padding: 0,
+    listStyle: "none",
+    display: "grid",
+    gap: 8,
+  },
+  helpShortcutRow: {
+    display: "grid",
+    gridTemplateColumns: "auto 1fr",
+    gap: 12,
+    alignItems: "center",
+  },
+  helpShortcutKey: {
+    padding: "4px 10px",
+    borderRadius: 10,
+    border: "1px solid rgba(148, 163, 184, 0.35)",
+    background: "rgba(15, 23, 42, 0.8)",
+    color: "#f8fafc",
+    fontSize: 12,
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+  },
+  helpShortcutLabel: {
+    fontSize: 12,
+    color: "#94a3b8",
+  },
+  helpFooter: {
+    fontSize: 12,
+    color: "#94a3b8",
+    background: "rgba(15, 23, 42, 0.7)",
+    borderRadius: 12,
+    padding: 12,
+    border: "1px solid rgba(148, 163, 184, 0.18)",
+  },
   optionsOverlay: {
     position: "fixed",
     inset: 0,
@@ -3094,5 +4141,4 @@ root.render(React.createElement(App));
     </script>
   </body>
 </html>
-
 
