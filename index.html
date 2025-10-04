@@ -1530,6 +1530,7 @@ function App() {
                 },
                 title: "Open art library",
                 "aria-label": "Open art library",
+                "data-testid": "open-art-library",
               },
               "Library"
             ),
@@ -2015,6 +2016,8 @@ function ArtworkPreviewCard({ art, progress, isActive, onSelect }) {
       title: isActive ? `${art.title} (active)` : `Load ${art.title}`,
       "aria-label": isActive ? `${art.title} (active)` : `Load ${art.title}`,
       "aria-pressed": isActive,
+      "data-testid": "art-library-card",
+      "data-artwork-id": art.id,
     },
     React.createElement(
       "div",
@@ -2338,22 +2341,28 @@ function ArtLibrary({
   return React.createElement(
     "div",
     { style: styles.libraryOverlay, onClick: onClose },
-    React.createElement(
-      "aside",
-      {
-        style: styles.libraryPanel,
-        role: "dialog",
-        "aria-modal": true,
-        "aria-label": "Artwork library",
-        onClick: (e) => e.stopPropagation(),
-      },
+      React.createElement(
+        "aside",
+        {
+          style: styles.libraryPanel,
+          role: "dialog",
+          "aria-modal": true,
+          "aria-label": "Artwork library",
+          onClick: (e) => e.stopPropagation(),
+          "data-testid": "art-library-dialog",
+        },
       React.createElement(
         "div",
         { style: styles.libraryHeader },
         React.createElement("div", { style: styles.libraryTitle }, "Art Library"),
         React.createElement(
           "button",
-          { style: styles.libraryClose, onClick: onClose, "aria-label": "Close art library" },
+          {
+            style: styles.libraryClose,
+            onClick: onClose,
+            "aria-label": "Close art library",
+            "data-testid": "close-art-library",
+          },
           "\u2715"
         )
       ),
