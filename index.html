@@ -44,6 +44,7 @@
     <script src="./vendor/react.development.js"></script>
     <script src="./vendor/react-dom.development.js"></script>
     <script src="./vendor/babel.min.js"></script>
+    <script src="./art/starter-fallbacks.js"></script>
     <script type="text/babel">
 const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
 
@@ -295,12 +296,301 @@ function cloneArtwork(art) {
   };
 }
 
-function getStarterArtworks() {
+function getLegacyStarterArtworks() {
   return [
     cloneArtwork(DEMO_ART),
     cloneArtwork(LAGOON_ART),
     cloneArtwork(TWILIGHT_ART),
   ];
+}
+
+const STARTER_SOURCES = [
+  {
+    id: "starter-capybara-lagoon",
+    url: "./art/capybara-lagoon.svg",
+    filename: "capybara-lagoon.svg",
+    type: "image/svg+xml",
+  },
+  {
+    id: "starter-twilight-marsh",
+    url: "./art/capybara-twilight.svg",
+    filename: "capybara-twilight.svg",
+    type: "image/svg+xml",
+  },
+  {
+    id: "starter-lush-forest",
+    url: "./art/lush-green-forest.svg",
+    filename: "lush-green-forest.svg",
+    type: "image/svg+xml",
+  },
+];
+
+function loadSvgViaObject(url, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+      return;
+    }
+
+    if (!document?.body) {
+      reject(new Error("The document body is unavailable."));
+      return;
+    }
+
+    const objectEl = document.createElement("object");
+    objectEl.type = "image/svg+xml";
+    objectEl.setAttribute("aria-hidden", "true");
+    objectEl.style.position = "absolute";
+    objectEl.style.width = "0";
+    objectEl.style.height = "0";
+    objectEl.style.pointerEvents = "none";
+    objectEl.style.opacity = "0";
+
+    const cleanup = () => {
+      objectEl.removeEventListener("load", handleLoad);
+      objectEl.removeEventListener("error", handleError);
+      if (signal) {
+        signal.removeEventListener("abort", handleAbort);
+      }
+      if (objectEl.parentNode) {
+        objectEl.parentNode.removeChild(objectEl);
+      }
+    };
+
+    const handleAbort = () => {
+      cleanup();
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+
+    const handleLoad = () => {
+      try {
+        const doc = objectEl.contentDocument;
+        if (!doc) {
+          throw new Error("Unable to access the SVG document.");
+        }
+        const svgEl = doc.documentElement;
+        if (!svgEl) {
+          throw new Error("The SVG content is empty.");
+        }
+        resolve(svgEl.outerHTML);
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error("Unable to read the SVG content."));
+      } finally {
+        cleanup();
+      }
+    };
+
+    const handleError = () => {
+      cleanup();
+      reject(new Error("Unable to load the SVG via <object>."));
+    };
+
+    objectEl.addEventListener("load", handleLoad);
+    objectEl.addEventListener("error", handleError);
+    if (signal) {
+      signal.addEventListener("abort", handleAbort, { once: true });
+    }
+    document.body.appendChild(objectEl);
+    try {
+      const resolved = new URL(url, window.location.href);
+      objectEl.data = resolved.href;
+    } catch (err) {
+      cleanup();
+      reject(err instanceof Error ? err : new Error("Invalid SVG URL."));
+    }
+  });
+}
+
+function loadSvgViaXhr(url, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+      return;
+    }
+
+    let aborted = false;
+    const xhr = new XMLHttpRequest();
+    const cleanup = () => {
+      xhr.onerror = null;
+      xhr.onreadystatechange = null;
+      if (signal) {
+        signal.removeEventListener("abort", handleAbort);
+      }
+    };
+    const handleAbort = () => {
+      aborted = true;
+      xhr.abort();
+      cleanup();
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+
+    xhr.onerror = () => {
+      cleanup();
+      reject(new Error("Unable to load the SVG via XMLHttpRequest."));
+    };
+
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState !== XMLHttpRequest.DONE) return;
+      cleanup();
+      if (aborted) return;
+      const status = xhr.status;
+      if (status === 0 || (status >= 200 && status < 300)) {
+        resolve(xhr.responseText);
+      } else {
+        reject(new Error(`XMLHttpRequest failed with status ${status}.`));
+      }
+    };
+
+    try {
+      const resolved = new URL(url, window.location.href);
+      xhr.open("GET", resolved.href, true);
+      xhr.overrideMimeType("image/svg+xml");
+      if (signal) {
+        signal.addEventListener("abort", handleAbort, { once: true });
+      }
+      xhr.send();
+    } catch (err) {
+      cleanup();
+      reject(err instanceof Error ? err : new Error("Unable to resolve the SVG URL."));
+    }
+  });
+}
+
+async function loadStarterArtworks(signal) {
+  const results = [];
+  const seenIds = new Set();
+  const errors = [];
+
+  const inlineFallbacks =
+    typeof window !== "undefined" ? window.__starterSvgFallbacks ?? null : null;
+  const isFileProtocol =
+    typeof window !== "undefined" && window.location?.protocol === "file:";
+
+  for (const source of STARTER_SOURCES) {
+    let candidate = null;
+
+    const failureReasons = [];
+    const meta = {
+      filename: source.filename ?? source.url?.split("/").pop(),
+      type: source.type ?? "image/svg+xml",
+      source: "starter",
+    };
+    const parseSource = (raw) => {
+      const parsed = parseArtworkPayload(raw, meta);
+      if (parsed.ok && parsed.artwork) {
+        return cloneArtwork(parsed.artwork);
+      }
+      throw new Error(parsed.error ?? "Unable to convert the artwork payload.");
+    };
+
+    if (!candidate && source.url) {
+      const loaders = [];
+      const addLoader = (label, fn) => loaders.push({ label, fn });
+
+      if (isFileProtocol) {
+        addLoader("<object>", () => loadSvgViaObject(source.url, signal));
+        addLoader("XMLHttpRequest", () => loadSvgViaXhr(source.url, signal));
+        addLoader("fetch", async () => {
+          const response = await fetch(source.url, { signal });
+          if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+          return response.text();
+        });
+      } else {
+        addLoader("fetch", async () => {
+          const response = await fetch(source.url, { signal });
+          if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+          return response.text();
+        });
+        addLoader("XMLHttpRequest", () => loadSvgViaXhr(source.url, signal));
+        addLoader("<object>", () => loadSvgViaObject(source.url, signal));
+      }
+
+      for (const loader of loaders) {
+        if (candidate) break;
+        try {
+          const raw = await loader.fn();
+          candidate = parseSource(raw);
+          if (candidate) {
+            console.info(
+              `Loaded starter artwork from ${source.url} via ${loader.label}.`
+            );
+          }
+        } catch (err) {
+          const normalized = err instanceof Error ? err : new Error(String(err));
+          failureReasons.push(normalized);
+          console.warn(
+            `Unable to load starter artwork from ${source.url} via ${loader.label}:`,
+            normalized
+          );
+        }
+      }
+    }
+
+    if (!candidate && inlineFallbacks?.[source.id]) {
+      try {
+        candidate = parseSource(inlineFallbacks[source.id]);
+        if (candidate) {
+          console.info(
+            `Loaded starter artwork from ${source.url || source.id} via inline fallback.`
+          );
+        }
+      } catch (err) {
+        const normalized = err instanceof Error ? err : new Error(String(err));
+        failureReasons.push(normalized);
+        console.warn(
+          `Unable to parse inline fallback for ${source.url || source.id}:`,
+          normalized
+        );
+      }
+    }
+
+    if (!candidate) {
+      if (failureReasons.length) {
+        errors.push(failureReasons[0]);
+      } else {
+        errors.push(
+          new Error(
+            `Unable to load starter artwork from ${source.url || source.id || "starter art"}.`
+          )
+        );
+      }
+      continue;
+    }
+
+    let id = (candidate.id ?? "").toString().trim();
+    if (!id) {
+      id = source.id || `starter-${Math.random().toString(36).slice(2, 8)}`;
+      candidate = { ...candidate, id };
+    }
+
+    if (seenIds.has(id)) {
+      let suffix = 2;
+      let uniqueId = `${id}-${suffix}`;
+      while (seenIds.has(uniqueId)) {
+        uniqueId = `${id}-${++suffix}`;
+      }
+      candidate = { ...candidate, id: uniqueId };
+      seenIds.add(uniqueId);
+    } else {
+      seenIds.add(id);
+    }
+
+    if (!candidate.title && source.title) {
+      candidate = { ...candidate, title: source.title };
+    }
+
+    results.push(candidate);
+  }
+
+  if (!results.length) {
+    return { artworks: getLegacyStarterArtworks(), errors };
+  }
+
+  return { artworks: results, errors };
 }
 
 // Estimate area for heuristics using DOM sampling with a polygon fallback.
@@ -606,17 +896,17 @@ function parseArtworkPayload(raw, meta = {}) {
   }
 }
 
-function loadArtworks() {
+function loadStoredArtworks() {
   try {
     const raw = localStorage.getItem(ARTWORKS_KEY);
-    if (!raw) return getStarterArtworks();
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     const normalized = (Array.isArray(parsed) ? parsed : [])
       .map((art) => normalizeArtwork(art))
       .filter(Boolean);
-    return normalized.length ? normalized : getStarterArtworks();
+    return normalized;
   } catch (err) {
-    return getStarterArtworks();
+    return [];
   }
 }
 
@@ -727,7 +1017,7 @@ function App() {
   const initialArtworksRef = useRef(null);
 
   if (initialArtworksRef.current === null) {
-    initialArtworksRef.current = loadArtworks();
+    initialArtworksRef.current = loadStoredArtworks();
   }
 
   const [artworks, setArtworks] = useState(initialArtworksRef.current);
@@ -754,11 +1044,65 @@ function App() {
   const [isPeekActive, setIsPeekActive] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryRevision, setLibraryRevision] = useState(0);
+  const [starterStatus, setStarterStatus] = useState(
+    initialArtworksRef.current.length
+      ? { state: "ready", error: null }
+      : { state: "idle", error: null }
+  );
 
   const selectArtwork = useCallback((id) => {
     setActiveArtworkIdState(id);
     persistActiveArtworkId(id ?? null);
   }, []);
+
+  useEffect(() => {
+    if (initialArtworksRef.current.length) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    async function bootstrap() {
+      setStarterStatus({ state: "loading", error: null });
+      try {
+        const { artworks: loaded, errors } = await loadStarterArtworks(controller.signal);
+        if (cancelled) return;
+        initialArtworksRef.current = loaded;
+        setArtworks(loaded);
+        const nextId = loadActiveArtworkId(loaded);
+        if (nextId) {
+          selectArtwork(nextId);
+        }
+        setStarterStatus({
+          state: "ready",
+          error: errors.length
+            ? errors[0] instanceof Error
+              ? errors[0].message
+              : "Unable to load all starter artworks."
+            : null,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        const fallback = getLegacyStarterArtworks();
+        initialArtworksRef.current = fallback;
+        setArtworks(fallback);
+        const nextId = loadActiveArtworkId(fallback);
+        if (nextId) {
+          selectArtwork(nextId);
+        }
+        setStarterStatus({
+          state: "error",
+          error: err instanceof Error ? err.message : "Unable to load starter artworks.",
+        });
+      }
+    }
+
+    bootstrap();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [selectArtwork]);
 
   useEffect(() => {
     persistArtworks(artworks);
@@ -1393,6 +1737,13 @@ function App() {
           onReset: handleConfigReset,
           onClose: () => setShowOptions(false),
         }),
+      starterStatus.error &&
+        art &&
+        React.createElement(
+          "div",
+          { style: styles.bootstrapBanner, role: "status" },
+          `Starter art could not be loaded automatically (${starterStatus.error}). Import an SVG from the library to continue.`
+        ),
       art
         ? React.createElement(
             "div",
@@ -1495,7 +1846,11 @@ function App() {
         : React.createElement(
             "div",
             { style: styles.emptyState },
-            "Import or add an artwork in the library to start painting."
+            starterStatus.state === "loading"
+              ? "Loading starter artwork…"
+              : starterStatus.error
+              ? `Starter art could not be loaded automatically (${starterStatus.error}). Use the library to import a file.`
+              : "Import or add an artwork in the library to start painting."
           ),
       art &&
         enableSmokeHud &&

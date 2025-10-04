@@ -8,7 +8,7 @@
 - The new Help panel delivers a simple how-to, to-do checklist, and keyboard tips so new players understand the flow right away.
 - The art library now opens with a thumbnail picker that previews each scene, making it faster to spot and load the exact artwork you want.
 - The ultra-slim glass command rail now hugs the top edge in a single line, keeping library, options, reset, undo, hint, next, and testing controls visible without crowding the artwork.
-- Mousewheel zoom now stays anchored under the cursor and both mouse buttons pan the scene, so navigation feels immediate and predictable.
+- Mousewheel zoom now eases smoothly toward the cursor while right-click drags mirror the left-button pan, so navigation feels immediate and predictable.
 - The integrated progress chip beside the artwork title makes it effortless to see completion percentage at a glance as you fill cells.
 - Slimmed palette bubbles still feel tactile thanks to the inset numbering and glow, and they give the composition more breathing room around the artwork.
 - Region numerals now stay centered even inside narrow tree trunks or tapered highlights, which makes the puzzle feel more intentional when zoomed in.

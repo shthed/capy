@@ -38,11 +38,14 @@ test.describe('Capybooper app smoke tests', () => {
 
     const cards = dialog.locator('[data-testid="art-library-card"]');
     await expect(cards).toHaveCount(3);
-    await expect(cards).toContainText([
-      'Capybara Forest Retreat',
+    const expectedTitles = [
       'Capybara Lagoon Sunrise',
+      'Lush Green Forest Walk',
       'Twilight Marsh Study',
-    ]);
+    ];
+    for (let i = 0; i < expectedTitles.length; i += 1) {
+      await expect(cards.nth(i)).toContainText(expectedTitles[i]);
+    }
 
     await dialog.locator('[data-testid="close-art-library"]').click();
     await expect(page.locator('[data-testid="art-library-dialog"]')).toHaveCount(0);

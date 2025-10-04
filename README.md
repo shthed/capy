@@ -6,10 +6,12 @@ served directly from static files.
 ## App overview
 
 The demo boots entirely from `index.html`, pulling React, ReactDOM, and Babel
-from the vendored runtime bundles so JSX can execute without a build step. It
-now includes three sample scenes—"Capybara Forest Retreat," "Capybara Lagoon
-Sunrise," and "Twilight Marsh Study"—and keeps track of every cell you fill as
-you paint by matching colors to numbers.
+from the vendored runtime bundles so JSX can execute without a build step. The
+starter library streams three bundled scenes—"Lush Green Forest Walk," "Capybara
+Lagoon Sunrise," and "Twilight Marsh Study"—directly from their annotated SVG
+sources and falls back to the generated `art/starter-fallbacks.js` bundle when
+`file://` access blocks fetches, so you can start painting immediately while
+progress is tracked cell by cell.
 
 ### Feature highlights
 
