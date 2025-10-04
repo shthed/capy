@@ -7,7 +7,7 @@
     "dev": "http-server . -p 8000 -c-1",
     "test": "playwright test",
     "build:fallbacks": "node tools/build-starter-fallbacks.js",
-    "test:smoke": "playwright test tests/hello.spec.js",
+    "test:smoke": "playwright test tests/ui-review.spec.js",
     "test:ci": "playwright test --reporter=github --workers=2",
     "show-report": "playwright show-report",
     "postinstall": "playwright install --with-deps"
