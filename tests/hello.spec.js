@@ -30,6 +30,24 @@ test.describe('Capybooper app smoke tests', () => {
     await expect(paletteButtons.first()).toHaveText('1');
   });
 
+  test('opens the art library and lists bundled scenes', async ({ page }) => {
+    await page.locator('[data-testid="open-art-library"]').click();
+
+    const dialog = page.locator('[data-testid="art-library-dialog"]');
+    await expect(dialog).toBeVisible();
+
+    const cards = dialog.locator('[data-testid="art-library-card"]');
+    await expect(cards).toHaveCount(3);
+    await expect(cards).toContainText([
+      'Capybara Forest Retreat',
+      'Capybara Lagoon Sunrise',
+      'Twilight Marsh Study',
+    ]);
+
+    await dialog.locator('[data-testid="close-art-library"]').click();
+    await expect(page.locator('[data-testid="art-library-dialog"]')).toHaveCount(0);
+  });
+
   test('fills a cell and updates progress', async ({ page }) => {
     const progressBadge = page.locator('[data-testid="progress-indicator"]');
     await progressBadge.waitFor();
