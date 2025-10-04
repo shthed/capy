@@ -393,6 +393,12 @@ function mergeArtworkLists(existingList, starterList) {
 
 const STARTER_SOURCES = [
   {
+    id: "starter-capybara-forest",
+    url: "./art/capybara-forest.svg",
+    filename: "capybara-forest.svg",
+    type: "image/svg+xml",
+  },
+  {
     id: "starter-capybara-lagoon",
     url: "./art/capybara-lagoon.svg",
     filename: "capybara-lagoon.svg",
@@ -3250,7 +3256,7 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
       React.createElement(
         "p",
         { style: styles.optionsAbout },
-        "Fine-tune gameplay helpers or personalize the interface. The project boots entirely from index.html, pulling React, ReactDOM, and Babel from the bundled runtime so new scenes load instantly, and it ships with three sample artworks plus autosave so changes persist."
+        "Fine-tune gameplay helpers or personalize the interface. The project boots entirely from index.html, pulling React, ReactDOM, and Babel from the bundled runtime so new scenes load instantly, and it ships with four sample artworks plus autosave so changes persist."
       ),
       sections.map((section) =>
         React.createElement(

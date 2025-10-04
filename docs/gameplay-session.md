@@ -9,7 +9,7 @@
 - Accessed the app at <http://localhost:8000/index.html> via an automated Chromium session (Playwright).
 
 ## Actions Performed
-1. Loaded the default "Capybara Forest Retreat" scene from the artwork library.
+1. Loaded the default "Capybara in a Forest" scene from the artwork library.
 2. Selected the first palette swatch to activate its associated color.
 3. Painted an available cell on the SVG canvas to confirm interaction wiring.
 

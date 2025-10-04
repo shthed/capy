@@ -7,8 +7,8 @@ served directly from static files.
 
 The demo boots entirely from `index.html`, pulling React, ReactDOM, and Babel
 from the vendored runtime bundles so JSX can execute without a build step. It
-now includes three sample scenes—"Capybara Forest Retreat," "Capybara Lagoon
-Sunrise," and "Twilight Marsh Study"—and keeps track of every cell you fill as
+now includes four sample scenes—"Capybara in a Forest," "Capybara Lagoon
+Sunrise," "Twilight Marsh Study," and "Lush Green Forest Walk"—and keeps track of every cell you fill as
 you paint by matching colors to numbers. The library reads the segmented SVG
 files directly so you can jump in and paint while progress is tracked
 automatically. When opened via `file://`, the browser blocks direct `fetch`/XHR
@@ -82,11 +82,11 @@ Our automated Playwright run (`npm test --silent`) validates the experience end 
 
 - **Application shell renders:** Confirms the React runtime boots, starter artwork mounts, and HUD chrome appears.
 - **Artwork and palette presence:** Ensures the starter SVG and swatch dock render with the expected DOM structure.
-- **Art library listing:** Opens the library dialog and verifies every bundled scene is present.
+- **Art library listing:** Opens the library dialog and verifies every bundled scene is present (Capybara in a Forest, Capybara Lagoon Sunrise, Twilight Marsh Study, Lush Green Forest Walk).
 - **Painting updates progress:** Fills a cell to confirm the completion meter and progress chip react immediately.
 - **HUD coverage snapshot:** Captures a full-page screenshot plus a JSON summary with palette counts, cell totals, progress text/ARIA label, and the presence of the art-library control.
 - **Starter merge behavior:** Boots with stored data to ensure bundled scenes merge without duplication.
 - **Title preservation:** Checks that custom titles persist after a starter refresh.
-- **SVG quality checks:** Parses each bundled SVG (`capybara-lagoon`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
+- **SVG quality checks:** Parses each bundled SVG (`capybara-forest`, `capybara-lagoon`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
 
 See [docs/test-run-2025-10-04.md](docs/test-run-2025-10-04.md) for the latest run log, timings, and raw output.
