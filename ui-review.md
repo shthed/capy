@@ -1,5 +1,9 @@
 # UI Review Notes
 
+## Automated Visual Capture
+- Run `npm test --silent` to boot the static demo, grab a full-page screenshot, and log palette/cell counts to `artifacts/ui-review`. The harness fails automatically if the screenshot capture is empty, the console throws, or the page renders without palette buttons/numbered regions.
+- Review the generated JSON for console errors and metadata counts, then open the screenshot to confirm composition changes look right before merging.
+
 ## Positive Observations
 - The Peek control lets you preview the finished painting without leaving the canvas, either by holding or toggling the button.
 - Palette swatches now list both color names and remaining counts, so picking the next hue is faster.
