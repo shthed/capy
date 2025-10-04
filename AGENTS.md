@@ -14,6 +14,11 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 ## Documentation & Notes
 - Update `SEGMENTATION_GUIDE.md`, `ui-review.md`, or other relevant docs whenever the workflow or UI meaningfully changes.
 
+## Git Preferences
+- Configure git with `git config user.name "Codex"` and `git config user.email "codex@openai.com"` before committing.
+- Keep `core.pager` set to `cat` so command output remains deterministic in logs.
+- Run `git fetch --all --prune` at the start of a task to ensure local refs match the remote state before making changes.
+
 ## PR / Final Response
 - Summaries should call out both UI and workflow changes when present.
 - Reference the tests that were run (or why they were skipped) in the final response.
