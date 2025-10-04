@@ -1,5 +1,175 @@
 (function () {
   const fallbackSvgs = {
+    "starter-capybara-forest": String.raw`<?xml version="1.0" ?>
+<!-- Capybara in the Forest - Segmented SVG -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-labelledby="title desc">
+  <title id="title">Capybara in a Forest</title>
+  <desc id="desc">A detailed capybara beside a pond with layered pines, hills, ripples, and shaded fur.</desc>
+
+  <defs>
+    <linearGradient id="gSky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#86c5ff"/>
+      <stop offset="70%" stop-color="#e6f0ff"/>
+      <stop offset="100%" stop-color="#fef6e4"/>
+    </linearGradient>
+    <linearGradient id="gSun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFD36E"/>
+      <stop offset="100%" stop-color="#FFB347"/>
+    </linearGradient>
+    <linearGradient id="gWater" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7fd5ef"/>
+      <stop offset="100%" stop-color="#2a94b6"/>
+    </linearGradient>
+    <linearGradient id="gGround" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6fb06f"/>
+      <stop offset="100%" stop-color="#3b7b46"/>
+    </linearGradient>
+    <linearGradient id="gFurBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8e5b3a"/>
+      <stop offset="55%" stop-color="#956141"/>
+      <stop offset="100%" stop-color="#5a3d2a"/>
+    </linearGradient>
+    <linearGradient id="gFurHead" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#8e5b3a"/>
+      <stop offset="100%" stop-color="#6b452e"/>
+    </linearGradient>
+    <filter id="fSoft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+    <filter id="fBlurSmall" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5"/>
+    </filter>
+    <radialGradient id="gVig" cx="50%" cy="45%" r="70%">
+      <stop offset="60%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.25"/>
+    </radialGradient>
+  </defs>
+
+  <g id="region-c01" data-cell-id="c1" data-color-id="1" data-color-name="Sky Haze" data-color-hex="#86c5ff">
+    <title>Region c1 – Color #1 (Sky Haze)</title>
+    <path d="M0 0 H960 V300 H0 Z" fill="url(#gSky)"/>
+  </g>
+
+  <g id="region-c02" data-cell-id="c2" data-color-id="2" data-color-name="Sun Glow" data-color-hex="#ffb347">
+    <title>Region c2 – Color #2 (Sun Glow)</title>
+    <path d="M734 110 A56 56 0 1 1 846 110 A56 56 0 1 1 734 110 Z" fill="url(#gSun)" filter="url(#fSoft)"/>
+  </g>
+
+  <g id="region-c03" data-cell-id="c3" data-color-id="3" data-color-name="Distant Ridge" data-color-hex="#b7d1a7">
+    <title>Region c3 – Color #3 (Distant Ridge)</title>
+    <path d="M0 360 C120 300 200 330 310 320 C420 310 520 350 640 330 C760 310 860 320 960 300 L960 470 L0 470 Z" fill="#b7d1a7"/>
+  </g>
+
+  <g id="region-c04" data-cell-id="c4" data-color-id="4" data-color-name="Mid Ridge" data-color-hex="#9dc692">
+    <title>Region c4 – Color #4 (Mid Ridge)</title>
+    <path d="M0 400 C140 350 260 380 380 370 C520 360 680 400 820 380 C900 370 930 370 960 360 L960 500 L0 500 Z" fill="#9dc692"/>
+  </g>
+
+  <g id="region-c05" data-cell-id="c5" data-color-id="5" data-color-name="Left Pine Ridge" data-color-hex="#2f7a33">
+    <title>Region c5 – Color #5 (Left Pine Ridge)</title>
+    <path d="M0 500 L20 320 L60 360 L100 270 L140 350 L180 280 L220 360 L260 290 L300 380 L330 300 L360 500 Z" fill="#2f7a33"/>
+  </g>
+
+  <g id="region-c06" data-cell-id="c6" data-color-id="6" data-color-name="Center Pine Ridge" data-color-hex="#2a6f2d">
+    <title>Region c6 – Color #6 (Center Pine Ridge)</title>
+    <path d="M360 500 L380 300 L420 360 L460 280 L500 360 L540 290 L580 370 L620 300 L660 390 L700 310 L730 500 Z" fill="#2a6f2d"/>
+  </g>
+
+  <g id="region-c07" data-cell-id="c7" data-color-id="7" data-color-name="Right Pine Ridge" data-color-hex="#255f27">
+    <title>Region c7 – Color #7 (Right Pine Ridge)</title>
+    <path d="M730 500 L750 310 L790 360 L830 280 L870 350 L910 290 L950 360 L960 310 L960 500 Z" fill="#255f27"/>
+  </g>
+
+  <g id="region-c08" data-cell-id="c8" data-color-id="8" data-color-name="Lake Surface" data-color-hex="#7fd5ef">
+    <title>Region c8 – Color #8 (Lake Surface)</title>
+    <path d="M0 470 C180 450 360 520 540 500 C720 480 840 520 960 505 L960 600 L0 600 Z" fill="url(#gWater)"/>
+  </g>
+
+  <g id="region-c09" data-cell-id="c9" data-color-id="9" data-color-name="Lake Highlight" data-color-hex="#cfeef6">
+    <title>Region c9 – Color #9 (Lake Highlight)</title>
+    <path d="M20 500 C200 485 360 515 540 498 C720 482 840 515 940 505 L940 520 C840 530 720 512 540 524 C360 536 200 514 20 526 Z" fill="#cfeef6" opacity="0.6"/>
+  </g>
+
+  <g id="region-c10" data-cell-id="c10" data-color-id="10" data-color-name="Shoreline Meadow" data-color-hex="#3b7b46">
+    <title>Region c10 – Color #10 (Shoreline Meadow)</title>
+    <path d="M0 520 C120 530 240 540 360 535 C480 530 600 540 720 535 C840 530 900 535 960 540 L960 600 L0 600 Z" fill="url(#gGround)"/>
+  </g>
+
+  <g id="region-c11" data-cell-id="c11" data-color-id="11" data-color-name="Capy Body" data-color-hex="#8e5b3a" transform="translate(300,350)">
+    <title>Region c11 – Color #11 (Capy Body)</title>
+    <path d="M70 160 C 60 140, 58 115, 72 95 C 88 73, 116 58, 150 52 C 210 42, 300 55, 350 92 C 385 118, 400 148, 396 170 C 392 192, 374 206, 346 210 L 150 215 C 116 216, 84 194, 76 175 C 72 167, 71 163, 70 160 Z" fill="url(#gFurBody)" stroke="#4b3325" stroke-opacity="0.25"/>
+  </g>
+
+  <g id="region-c12" data-cell-id="c12" data-color-id="12" data-color-name="Capy Head" data-color-hex="#6b452e" transform="translate(300,350)">
+    <title>Region c12 – Color #12 (Capy Head)</title>
+    <path d="M78 140 C 66 120, 70 98, 92 86 C 118 72, 150 74, 182 94 C 198 104, 210 118, 210 130 C 210 148, 194 162, 173 168 C 148 175, 112 169, 94 158 C 86 153, 81 148, 78 140 Z" fill="url(#gFurHead)"/>
+  </g>
+
+  <g id="region-c13" data-cell-id="c13" data-color-id="13" data-color-name="Outer Ear" data-color-hex="#6e4930" transform="translate(300,350)">
+    <title>Region c13 – Color #13 (Outer Ear)</title>
+    <path d="M148 98 A12 9 0 1 0 172 98 A12 9 0 1 0 148 98 Z" fill="#6e4930"/>
+  </g>
+
+  <g id="region-c14" data-cell-id="c14" data-color-id="14" data-color-name="Inner Ear" data-color-hex="#8c5e3e" transform="translate(300,350)">
+    <title>Region c14 – Color #14 (Inner Ear)</title>
+    <path d="M153 98 A7 5 0 1 0 167 98 A7 5 0 1 0 153 98 Z" fill="#8c5e3e"/>
+  </g>
+
+  <g id="region-c15" data-cell-id="c15" data-color-id="15" data-color-name="Capy Eye" data-color-hex="#232222" transform="translate(300,350)">
+    <title>Region c15 – Color #15 (Capy Eye)</title>
+    <path d="M136 132 A6 6 0 1 0 148 132 A6 6 0 1 0 136 132 Z" fill="#232222"/>
+  </g>
+
+  <g id="region-c16" data-cell-id="c16" data-color-id="16" data-color-name="Eye Highlight" data-color-hex="#ffffff" transform="translate(300,350)">
+    <title>Region c16 – Color #16 (Eye Highlight)</title>
+    <path d="M141.8 130 A2.2 2.2 0 1 0 146.2 130 A2.2 2.2 0 1 0 141.8 130 Z" fill="#ffffff"/>
+  </g>
+
+  <g id="region-c17" data-cell-id="c17" data-color-id="17" data-color-name="Snout Shadow" data-color-hex="#3a2a1f" transform="translate(300,350)">
+    <title>Region c17 – Color #17 (Snout Shadow)</title>
+    <path d="M181 144 A7 4.5 0 1 0 195 144 A7 4.5 0 1 0 181 144 Z" fill="#3a2a1f" opacity="0.7"/>
+  </g>
+
+  <g id="region-c18" data-cell-id="c18" data-color-id="18" data-color-name="Capy Legs" data-color-hex="#6f4b32" transform="translate(300,350)">
+    <title>Region c18 – Color #18 (Capy Legs)</title>
+    <path d="M140 210 C138 224, 136 240, 140 246 C152 256, 170 256, 178 246 C182 240, 180 224, 178 212 Z" fill="#6f4b32"/>
+    <path d="M118 208 C116 222, 114 238, 118 244 C128 254, 146 254, 154 244 C158 238, 156 222, 154 210 Z" fill="#6f4b32" opacity="0.85"/>
+    <path d="M280 206 C278 220, 276 236, 280 242 C292 252, 312 252, 322 242 C326 236, 324 220, 322 208 Z" fill="#6f4b32"/>
+    <path d="M300 204 C298 218, 296 234, 300 240 C312 250, 332 250, 342 240 C346 234, 344 218, 342 206 Z" fill="#6f4b32" opacity="0.85"/>
+  </g>
+
+  <g id="region-c19" data-cell-id="c19" data-color-id="19" data-color-name="Cast Shadow" data-color-hex="#000000" transform="translate(300,350)">
+    <title>Region c19 – Color #19 (Cast Shadow)</title>
+    <path d="M100 232 A120 18 0 1 0 340 232 A120 18 0 1 0 100 232 Z" fill="#000000" opacity="0.18" filter="url(#fBlurSmall)"/>
+  </g>
+
+  <g id="region-c20" data-cell-id="c20" data-color-id="20" data-color-name="Forefoot Shadow" data-color-hex="#000000" transform="translate(300,350)">
+    <title>Region c20 – Color #20 (Forefoot Shadow)</title>
+    <path d="M154 256 A16 4 0 1 0 186 256 A16 4 0 1 0 154 256 Z" fill="#000000" opacity="0.25" filter="url(#fBlurSmall)"/>
+    <path d="M132 254 A16 4 0 1 0 164 254 A16 4 0 1 0 132 254 Z" fill="#000000" opacity="0.22" filter="url(#fBlurSmall)"/>
+  </g>
+
+  <g id="region-c21" data-cell-id="c21" data-color-id="21" data-color-name="Hindfoot Shadow" data-color-hex="#000000" transform="translate(300,350)">
+    <title>Region c21 – Color #21 (Hindfoot Shadow)</title>
+    <path d="M296 252 A16 4 0 1 0 328 252 A16 4 0 1 0 296 252 Z" fill="#000000" opacity="0.25" filter="url(#fBlurSmall)"/>
+    <path d="M316 250 A16 4 0 1 0 348 250 A16 4 0 1 0 316 250 Z" fill="#000000" opacity="0.22" filter="url(#fBlurSmall)"/>
+  </g>
+
+  <g id="region-c22" data-cell-id="c22" data-color-id="22" data-color-name="Lakeside Greens" data-color-hex="#2c6e49">
+    <title>Region c22 – Color #22 (Lakeside Greens)</title>
+    <path d="M110 560 q20 -40 40 0 q-25 -50 -5 -85 q-10 30 10 60 q-10 -30 30 -55 q-30 45 -5 80 Z" fill="#2c6e49" opacity="0.95"/>
+    <path d="M860 560 q18 -36 36 0 q-22 -44 -4 -76 q-10 26 8 52 q-8 -26 28 -48 q-28 40 -6 72 Z" fill="#2c6e49" opacity="0.95"/>
+  </g>
+
+  <g id="region-c23" data-cell-id="c23" data-color-id="23" data-color-name="Pond Reeds" data-color-hex="#2a6f2d">
+    <title>Region c23 – Color #23 (Pond Reeds)</title>
+    <path d="M450 560 q4 -18 12 0 q-6 -20 -2 -34 q-3 12 4 24 q-4 -12 14 -22 q-12 16 -4 30 Z" fill="#2a6f2d"/>
+    <path d="M500 558 q4 -16 10 0 q-6 -18 -2 -30 q-2 10 4 20 q-4 -10 12 -18 q-10 14 -4 26 Z" fill="#2a6f2d"/>
+  </g>
+
+  <path d="M0 0 H960 V600 H0 Z" fill="url(#gVig)" style="mix-blend-mode:multiply"/>
+</svg>
+`,
     "starter-capybara-lagoon": String.raw`<!-- Capybara Lagoon Sunrise - Segmented SVG -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-labelledby="title desc">
   <title id="title">Capybara Lagoon Sunrise</title>

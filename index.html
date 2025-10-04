@@ -393,6 +393,12 @@ function mergeArtworkLists(existingList, starterList) {
 
 const STARTER_SOURCES = [
   {
+    id: "starter-capybara-forest",
+    url: "./art/capybara-forest.svg",
+    filename: "capybara-forest.svg",
+    type: "image/svg+xml",
+  },
+  {
     id: "starter-capybara-lagoon",
     url: "./art/capybara-lagoon.svg",
     filename: "capybara-lagoon.svg",
@@ -1994,7 +2000,6 @@ function App() {
                         cursor: isFilled ? "grab" : "pointer",
                         opacity: isFilled ? 0.35 : 1,
                       },
-                      onClick: () => onCellTap(c.id),
                       "aria-label": `Cell ${c.id}. Target color ${c.colorId}. ${isFilled ? "Filled" : "Unfilled"}`,
                     }),
                     !isPeekActive &&
@@ -2101,28 +2106,6 @@ function App() {
               "button",
               {
                 type: "button",
-                style: styles.controlButton,
-                onClick: resetView,
-                title: "Reset view",
-                "aria-label": "Reset view",
-              },
-              "Reset"
-            ),
-            React.createElement(
-              "button",
-              {
-                type: "button",
-                style: styles.controlButton,
-                onClick: undo,
-                title: "Undo last fill",
-                "aria-label": "Undo last fill",
-              },
-              "Undo"
-            ),
-            React.createElement(
-              "button",
-              {
-                type: "button",
                 style: {
                   ...styles.controlButton,
                   opacity: enableHintPulse ? 1 : 0.45,
@@ -2134,34 +2117,6 @@ function App() {
                 "aria-label": "Highlight a suggested cell",
               },
               "Hint"
-            ),
-            React.createElement(
-              "button",
-              {
-                type: "button",
-                style: styles.controlButton,
-                onClick: nextColor,
-                title: "Jump to the next color",
-                "aria-label": "Jump to the next color",
-              },
-              "Next"
-            ),
-            React.createElement(
-              "button",
-              {
-                type: "button",
-                style: {
-                  ...styles.controlButton,
-                  opacity: enableSmokeHud ? 1 : 0.45,
-                  cursor: enableSmokeHud ? "pointer" : "not-allowed",
-                },
-                onClick: () => enableSmokeHud && setShowTests((v) => !v),
-                title: "Toggle the smoke test HUD",
-                disabled: !enableSmokeHud,
-                "aria-pressed": showTests,
-                "aria-label": "Toggle the smoke test HUD",
-              },
-              "Tests"
             )
           )
         ),
@@ -3089,7 +3044,7 @@ const HELP_SURFACES = [
   },
   {
     title: "Header bar",
-    body: "Back affordance, artwork title, progress text, and utility buttons for fit, undo, hint, next color, tests, and options.",
+    body: "Back affordance, artwork title, live progress chip (with accessible label), library toggle, and compact buttons for help, options, peek, and hints while keyboard shortcuts cover advanced actions.",
   },
   {
     title: "Canvas frame",
@@ -3173,7 +3128,7 @@ function HelpPanel({ art, progress, activeColor, filled, onClose }) {
         React.createElement(
           "p",
           { style: styles.helpIntro },
-          "Pick a color from the palette, tap the matching cells, and fill every region to finish the scene."
+          "Pick a color from the palette, tap the matching cells, watch the progress chip climb, and fill every region to finish the scene. Use the Library button in the header to swap artwork any time."
         ),
         React.createElement(
           "ul",
@@ -3301,7 +3256,7 @@ function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
       React.createElement(
         "p",
         { style: styles.optionsAbout },
-        "Fine-tune gameplay helpers or personalize the interface. The project boots entirely from index.html, pulling React, ReactDOM, and Babel from the bundled runtime so new scenes load instantly, and it ships with three sample artworks plus autosave so changes persist."
+        "Fine-tune gameplay helpers or personalize the interface. The project boots entirely from index.html, pulling React, ReactDOM, and Babel from the bundled runtime so new scenes load instantly, and it ships with four sample artworks plus autosave so changes persist."
       ),
       sections.map((section) =>
         React.createElement(
