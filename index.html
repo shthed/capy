@@ -54,6 +54,13 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 let measureSvgEl = null;
 let measureCanvasCtx = null;
 
+function clamp(value, min, max) {
+  if (Number.isNaN(value)) return min;
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
 // Capybooper Web Game - MVP single-file React app (patched)
 // Fixes: correct zoom/pan math, pan over filled cells, pinch zoom, tap-to-fill,
 // eyedropper, auto-advance, hint stroke highlight, smoke-test HUD.
@@ -1096,7 +1103,6 @@ function App() {
 
   function onWheel(e) {
     if (!art) return;
-    e.preventDefault();
     const svg = svgRef.current;
     if (!svg) return;
     let delta = e.deltaY;
