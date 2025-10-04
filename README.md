@@ -11,6 +11,23 @@ now includes three sample scenes—"Capybara Forest Retreat," "Capybara Lagoon
 Sunrise," and "Twilight Marsh Study"—and keeps track of every cell you fill as
 you paint by matching colors to numbers.
 
+### Feature highlights
+
+- **Artwork library and importer:** Browse bundled scenes with hover previews,
+  rename entries in place, or import new JSON/SVG payloads directly in the
+  dialog. Library metadata (including autosave state) persists in
+  `localStorage` so custom scenes stay available between sessions.
+- **Palette customization:** Edit color names, override swatch hex values, or
+  toggle Peek behavior from the Options panel. The palette dock now shows the
+  remaining cell counts beneath each swatch and dims colors as you finish a
+  hue.
+- **Peek preview modes:** Hold the Peek button for a transient look at the
+  completed illustration or toggle it to stay active. Keyboard shortcuts mirror
+  the on-screen controls for quick access.
+- **Improved navigation:** Cursor-anchored scroll zoom, dual-button panning,
+  and high-precision number badges make it easier to explore dense artwork
+  without losing context.
+
 Interaction handlers support mouse and touch gestures including smooth,
 cursor-anchored wheel zoom, pinch zoom, left- or right-button drag panning,
 tap-to-fill, auto-advance to the next color, hint pulses for tiny cells, a configurable Peek preview, and
