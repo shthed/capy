@@ -13,6 +13,7 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 
 ## Documentation & Notes
 - Update `SEGMENTATION_GUIDE.md`, `ui-review.md`, or other relevant docs whenever the workflow or UI meaningfully changes.
+- When adjusting the UI review harness, also refresh README/test docs to mention new metadata captured (e.g., progress chip text or library controls).
 
 ## Git Preferences
 - Configure git with `git config user.name "Codex"` and `git config user.email "codex@openai.com"` before committing.

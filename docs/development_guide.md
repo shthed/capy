@@ -25,6 +25,7 @@
 - **Start the app:** `npm run dev` (or `npm run start`).
 - **Run smoke tests:** `npm test` executes the Playwright UI review harness in `tests/ui-review.spec.js`.
 - **Inspect reports:** After a test run, open `playwright-report/index.html` or run `npm run show-report`.
+- **Review UI artifacts:** Check `artifacts/ui-review/*.json` for palette counts, cell totals, HUD progress text/ARIA, and art-library presence alongside the captured screenshot.
 - **Static assets:** React, ReactDOM, and Babel live under `vendor/`. Update them with `npx playwright` or direct downloads and keep versions in sync with `package.json`.
 - **Editor tasks:** VS Code tasks (`.vscode/tasks.json`) expose a "Start http-server" background task that mirrors `npm run dev`.
 

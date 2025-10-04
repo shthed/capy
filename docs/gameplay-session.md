@@ -15,6 +15,7 @@
 
 ## Observations
 - Artwork, palette, and progress UI rendered without errors once the page finished hydrating.
+- The art-library button remained visible on the header rail, matching the UI review coverage expectations.
 - Palette selection immediately highlighted the active swatch and revealed the remaining cell count badge.
 - Painting a cell updated the fill color inline without requiring additional refreshes or focus changes.
 - Overall responsiveness stayed smooth during the brief automation-driven play session.
