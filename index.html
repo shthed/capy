@@ -442,7 +442,13 @@ function loadSvgViaObject(url, signal) {
     objectEl.style.pointerEvents = 'none';
     objectEl.style.opacity = '0';
 
+    let timeoutId = null;
+
     const cleanup = () => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       objectEl.removeEventListener('load', handleLoad);
       objectEl.removeEventListener('error', handleError);
       if (signal) {
@@ -486,6 +492,10 @@ function loadSvgViaObject(url, signal) {
     if (signal) {
       signal.addEventListener('abort', handleAbort, { once: true });
     }
+    timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error('Loading the SVG via <object> timed out.'));
+    }, 4000);
     document.body.appendChild(objectEl);
     try {
       const resolved = new URL(url, window.location.href);
@@ -584,7 +594,6 @@ async function loadStarterArtworks(signal) {
       const addLoader = (label, fn) => loaders.push({ label, fn });
 
       if (isFileProtocol) {
-        addLoader("<object>", () => loadSvgViaObject(source.url, signal));
         addLoader("XMLHttpRequest", () => loadSvgViaXhr(source.url, signal));
         addLoader("fetch", async () => {
           const response = await fetch(source.url, { signal });
