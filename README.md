@@ -47,8 +47,8 @@ when a check fails.
 
 - **Top command rail:** Ultra-slim glass bar pinned to the top edge. It shows
   the active artwork title, a live progress chip, and compact buttons for the
-  library, options, reset, undo, hint, next color, and smoke-test toggle in a
-  single line.
+  library, help, options, peek preview, and hint pulse without crowding the
+  artwork.
 - **Canvas frame:** Fullscreen SVG stage wrapped with pan/zoom transforms,
   per-cell strokes, number badges that stay centered inside each region, and
   optional heatmap dots when zoomed out.
@@ -84,6 +84,7 @@ Our automated Playwright run (`npm test --silent`) validates the experience end 
 - **Artwork and palette presence:** Ensures the starter SVG and swatch dock render with the expected DOM structure.
 - **Art library listing:** Opens the library dialog and verifies every bundled scene is present.
 - **Painting updates progress:** Fills a cell to confirm the completion meter and progress chip react immediately.
+- **HUD coverage snapshot:** Captures a full-page screenshot plus a JSON summary with palette counts, cell totals, progress text/ARIA label, and the presence of the art-library control.
 - **Starter merge behavior:** Boots with stored data to ensure bundled scenes merge without duplication.
 - **Title preservation:** Checks that custom titles persist after a starter refresh.
 - **SVG quality checks:** Parses each bundled SVG (`capybara-lagoon`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.

@@ -37,11 +37,18 @@ test.describe('Capybooper visual review', () => {
     const details = await page.evaluate(() => {
       const paletteButtons = document.querySelectorAll('[data-testid="palette-dock"] button');
       const cellPaths = document.querySelectorAll('path[data-cell-id]');
+      const progressEl = document.querySelector('[data-testid="progress-indicator"]');
+      const libraryButton = document.querySelector('[data-testid="open-art-library"]');
+
+      const progressText = progressEl ? progressEl.textContent.trim() : null;
 
       return {
         title: document.title,
         paletteCount: paletteButtons.length,
         cellCount: cellPaths.length,
+        progressText,
+        progressLabel: progressEl ? progressEl.getAttribute('aria-label')?.trim() ?? null : null,
+        hasLibraryButton: Boolean(libraryButton),
       };
     });
 
@@ -74,5 +81,8 @@ test.describe('Capybooper visual review', () => {
     expect(details.title).toContain('Color-by-Number');
     expect(details.paletteCount).toBeGreaterThan(0);
     expect(details.cellCount).toBeGreaterThan(0);
+    expect(details.hasLibraryButton).toBe(true);
+    expect(details.progressText).toMatch(/\d+%/);
+    expect(details.progressLabel).toMatch(/% complete$/);
   });
 });
