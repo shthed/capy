@@ -6,23 +6,42 @@ served directly from static files.
 ## App overview
 
 The demo boots entirely from `index.html`, pulling React, ReactDOM, and Babel
-from the vendored runtime bundles so JSX can execute without a build step. The
-default scene streams directly from the annotated SVG at
-`art/capybara-lagoon.svg`, and the starter loader pulls in the segmented
-twilight companion in `art/capybara-twilight.svg` alongside the
-"Lush Green Forest Walk" reference stored in `art/lush-green-forest.svg`. The
-library reads the SVG files directly so you can jump in and paint while
-progress is tracked automatically. When opened via `file://`, the browser
-blocks direct `fetch`/XHR access to sibling files, so the generated
-`art/starter-fallbacks.js` bundle seeds the loader with the same SVG markup.
+from the vendored runtime bundles so JSX can execute without a build step. It
+now includes three sample scenes—"Capybara Forest Retreat," "Capybara Lagoon
+Sunrise," and "Twilight Marsh Study"—and keeps track of every cell you fill as
+you paint by matching colors to numbers. The library reads the segmented SVG
+files directly so you can jump in and paint while progress is tracked
+automatically. When opened via `file://`, the browser blocks direct `fetch`/XHR
+access to sibling files, so the generated `art/starter-fallbacks.js` bundle
+seeds the loader with the same SVG markup. On startup the loader now merges
+those bundled scenes with anything in localStorage so refreshed starter updates
+coexist with imported artwork.
+
+### Feature highlights
+
+- **Artwork library and importer:** Browse bundled scenes with hover previews,
+  rename entries in place, or import new JSON/SVG payloads directly in the
+  dialog. Library metadata (including autosave state) persists in
+  `localStorage` so custom scenes stay available between sessions.
+- **Palette customization:** Edit color names, override swatch hex values, or
+  toggle Peek behavior from the Options panel. The palette dock now shows the
+  remaining cell counts beneath each swatch and dims colors as you finish a
+  hue.
+- **Peek preview modes:** Hold the Peek button for a transient look at the
+  completed illustration or toggle it to stay active. Keyboard shortcuts mirror
+  the on-screen controls for quick access.
+- **Improved navigation:** Cursor-anchored scroll zoom, dual-button panning,
+  and high-precision number badges make it easier to explore dense artwork
+  without losing context.
 
 Interaction handlers support mouse and touch gestures including smooth,
 cursor-anchored wheel zoom, pinch zoom, left- or right-button drag panning,
-tap/drag fill, auto-advance to the next color, hint pulses for tiny cells, and
-an eyedropper that reselects already-filled colors. Keyboard shortcuts mirror
-the core actions. Progress, remaining-cell counts, and autosave state update
-immediately after each change, while a lightweight smoke test overlay
-validates key invariants when a check fails.
+tap-to-fill (with optional drag-fill), auto-advance to the next color, hint
+pulses for tiny cells, a configurable Peek preview, and an eyedropper that
+reselects already-filled colors. Keyboard shortcuts mirror the core actions.
+Progress, remaining-cell counts, and autosave state update immediately after
+each change, while a lightweight smoke test overlay validates key invariants
+when a check fails.
 
 ### UI elements
 
@@ -34,16 +53,16 @@ validates key invariants when a check fails.
   per-cell strokes, number badges that stay centered inside each region, and
   optional heatmap dots when zoomed out.
 - **Palette dock:** Floating glass strip centred beneath the canvas with a
-  single-row, horizontally scrollable set of circular swatches. Swatches
-  resize to stay round, highlight the active selection, and dim once their
-  cells are complete.
+  single-row, horizontally scrollable set of swatches. Each swatch now shows
+  the color name and remaining count, highlights the active selection, and dims
+  once its cells are complete.
 - **Smoke Tests HUD:** Hidden by default when all checks pass. If a test fails,
   a floating card appears with diagnostics and a reminder that the “T”
   shortcut toggles visibility.
 - **Options panel:** Floating dialog that explains the app, lists controls,
-  and exposes toggles for autosave, auto-advance, hint pulses, drag-fill,
-  eyedropper, keyboard shortcuts, numbered overlays, heatmap dots, and the
-  smoke-test HUD. Choices persist in `localStorage` and can be restored to
+  and exposes toggles for autosave, auto-advance, hint pulses, eyedropper,
+  keyboard shortcuts, numbered overlays, heatmap dots, the smoke-test HUD,
+  palette labels, and peek behavior. Choices persist in `localStorage` and can be restored to
   the defaults with a single reset.
 
 ## Getting started
