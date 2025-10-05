@@ -91,7 +91,7 @@ The Playwright suite exercises the core flows:
 - **renders command rail and generator settings on load** – Confirms the hint
   overlay, status copy, command rail buttons, and generator controls render on
   first boot.
-- **lets players fill a puzzle to completion** – Loads a tiny fixture via
+- **fills the basic test pattern to completion** – Loads a tiny fixture via
   `window.capyGenerator.loadPuzzleFixture`, walks through selecting palette
   swatches, fills each region, observes the completion copy, and resets the
   board.

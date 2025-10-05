@@ -2,7 +2,8 @@ const { test, expect } = require('@playwright/test');
 
 const APP_URL = 'http://127.0.0.1:8000/index.html';
 
-const FIXTURE_PUZZLE = {
+const BASIC_TEST_PATTERN = {
+  name: 'Basic test pattern',
   width: 4,
   height: 4,
   palette: [
@@ -23,10 +24,10 @@ const FIXTURE_PUZZLE = {
   ],
 };
 
-async function loadFixturePuzzle(page) {
+async function loadBasicTestPattern(page) {
   await page.evaluate((puzzle) => {
     window.capyGenerator.loadPuzzleFixture(puzzle);
-  }, FIXTURE_PUZZLE);
+  }, BASIC_TEST_PATTERN);
   await page.waitForSelector('[data-testid="palette-swatch"]');
   await expect(page.locator('[data-testid="start-hint"]')).toHaveClass(/hidden/);
 }
@@ -89,24 +90,24 @@ test.describe('Capy image generator', () => {
     await page.click('[data-sheet-close="settings"]');
   });
 
-  test('lets players fill a puzzle to completion', async ({ page }) => {
+  test('fills the basic test pattern to completion', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-    await loadFixturePuzzle(page);
+    await loadBasicTestPattern(page);
 
     const palette = page.locator('[data-testid="palette-swatch"]');
-    await expect(palette).toHaveCount(2);
+    await expect(palette).toHaveCount(BASIC_TEST_PATTERN.palette.length);
     await page.click('#settingsButton');
     await expect(page.locator('#downloadJson')).toBeEnabled();
     await page.click('[data-sheet-close="settings"]');
     await expect(page.locator('#resetButton')).toBeEnabled();
 
     const progress = page.locator('[data-testid="progress-message"]');
-    await expect(progress).toHaveText(`Filled 0 of ${FIXTURE_PUZZLE.regions.length} regions.`);
+    await expect(progress).toHaveText(`Filled 0 of ${BASIC_TEST_PATTERN.regions.length} regions.`);
 
-    for (let index = 0; index < FIXTURE_PUZZLE.regions.length; index += 1) {
-      const region = FIXTURE_PUZZLE.regions[index];
+    for (let index = 0; index < BASIC_TEST_PATTERN.regions.length; index += 1) {
+      const region = BASIC_TEST_PATTERN.regions[index];
       await page.click(`[data-color-id="${region.colorId}"]`);
-      await clickRegionCenter(page, region, FIXTURE_PUZZLE);
+      await clickRegionCenter(page, region, BASIC_TEST_PATTERN);
 
       await expect
         .poll(async () =>
@@ -114,9 +115,9 @@ test.describe('Capy image generator', () => {
         )
         .toBe(index + 1);
 
-      if (index + 1 < FIXTURE_PUZZLE.regions.length) {
+      if (index + 1 < BASIC_TEST_PATTERN.regions.length) {
         await expect(progress).toHaveText(
-          `Filled ${index + 1} of ${FIXTURE_PUZZLE.regions.length} regions.`
+          `Filled ${index + 1} of ${BASIC_TEST_PATTERN.regions.length} regions.`
         );
       } else {
         await expect(progress).toHaveText(
@@ -126,6 +127,6 @@ test.describe('Capy image generator', () => {
     }
 
     await page.click('#resetButton');
-    await expect(progress).toHaveText(`Filled 0 of ${FIXTURE_PUZZLE.regions.length} regions.`);
+    await expect(progress).toHaveText(`Filled 0 of ${BASIC_TEST_PATTERN.regions.length} regions.`);
   });
 });

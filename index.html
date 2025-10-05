@@ -230,10 +230,10 @@
         flex: 1;
         display: grid;
         grid-auto-flow: column;
-        grid-auto-columns: minmax(72px, max-content);
-        gap: 10px;
+        grid-auto-columns: minmax(64px, max-content);
+        gap: 8px;
         overflow-x: auto;
-        padding: 4px 0 6px;
+        padding: 2px 0 6px;
         scrollbar-width: thin;
       }
 
@@ -327,19 +327,33 @@
       }
 
       .swatch {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 6px;
-        padding: 8px 10px;
-        min-width: 72px;
+        gap: 4px;
+        padding: 6px 10px;
+        min-width: 64px;
         border-radius: 12px;
         border: 1px solid rgba(148, 163, 184, 0.25);
-        background: rgba(15, 23, 42, 0.85);
+        background:
+          linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.82));
         color: inherit;
         text-align: center;
         cursor: pointer;
         transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+      }
+
+      .swatch::before {
+        content: "";
+        position: absolute;
+        inset: 4px;
+        border-radius: 10px;
+        background:
+          linear-gradient(140deg, rgba(15, 23, 42, 0.06), rgba(15, 23, 42, 0.28)),
+          var(--swatch-color, transparent);
+        opacity: 0.9;
+        pointer-events: none;
       }
 
       .swatch:hover {
@@ -347,34 +361,29 @@
       }
 
       .swatch.active {
-        border-color: rgba(96, 165, 250, 0.8);
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+        border-color: rgba(96, 165, 250, 0.85);
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
       }
 
       .swatch.done {
         opacity: 0.55;
       }
 
-      .swatch .sample {
-        width: 32px;
-        height: 32px;
-        border-radius: 999px;
-        border: 1px solid rgba(15, 23, 42, 0.35);
-        flex-shrink: 0;
-      }
-
       .swatch .label {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 2px;
-        font-size: 0.72rem;
+        gap: 1px;
+        font-size: 0.68rem;
         line-height: 1.2;
         max-width: 100%;
+        z-index: 1;
       }
 
       .swatch .label > strong {
-        font-size: 1rem;
+        font-size: 0.95rem;
+        letter-spacing: 0.02em;
       }
 
       .swatch .label > span {
@@ -1386,8 +1395,8 @@
           swatch.title = `${labelText} · ${remaining} of ${total} remaining`;
           if (state.activeColor === color.id) swatch.classList.add("active");
           if (remaining === 0) swatch.classList.add("done");
+          swatch.style.setProperty("--swatch-color", color.hex || "transparent");
           swatch.innerHTML = `
-            <span class="sample" style="background:${color.hex}"></span>
             <span class="label">
               <strong>${color.id}</strong>
               <span>${labelText}</span>
