@@ -52,19 +52,40 @@
         opacity: 1;
       }
 
-      #puzzleCanvas {
+      #stage {
         position: absolute;
         inset: 0;
-        margin: auto;
-        max-width: calc(100vw - 120px);
-        max-height: calc(100vh - 160px);
-        width: auto;
-        height: auto;
-        border-radius: 24px;
+        display: flex;
+        align-items: stretch;
+        justify-content: stretch;
+        overflow: hidden;
+      }
+
+      #canvasViewport {
+        position: relative;
+        flex: 1;
+        overflow: hidden;
+        touch-action: none;
+        cursor: default;
+      }
+
+      #canvasViewport.ready {
+        cursor: grab;
+      }
+
+      #canvasViewport.panning {
+        cursor: grabbing;
+      }
+
+      #puzzleCanvas {
+        display: block;
         background: #0f172a;
+        border-radius: 24px;
         border: 1px solid rgba(148, 163, 184, 0.35);
         box-shadow: 0 40px 80px rgba(8, 47, 73, 0.45);
         image-rendering: pixelated;
+        transform-origin: top left;
+        will-change: transform;
       }
 
       #startHint {
@@ -423,11 +444,6 @@
       }
 
       @media (max-width: 900px) {
-        #puzzleCanvas {
-          max-width: calc(100vw - 40px);
-          max-height: calc(100vh - 220px);
-        }
-
         #hud {
           left: 20px;
           right: 20px;
@@ -444,9 +460,12 @@
 
       @media (max-width: 600px) {
         #hud {
-          top: 18px;
-          left: 18px;
-          gap: 12px;
+          top: 16px;
+          left: 16px;
+          right: 16px;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 10px;
         }
 
         #menuToggle {
@@ -456,17 +475,18 @@
 
         #statusBar {
           padding: 12px 14px;
-          min-width: 200px;
+          min-width: 0;
+          width: 100%;
         }
 
         #paletteScroller {
           gap: 10px;
-          padding: 8px 8px 12px;
+          padding: 8px 10px 12px;
         }
 
         .swatch {
           grid-template-columns: 48px 1fr;
-          min-width: 160px;
+          min-width: 148px;
           padding: 10px 12px;
         }
 
@@ -475,12 +495,25 @@
           height: 48px;
           border-radius: 12px;
         }
+
+        #startHint .hint-body {
+          max-width: 280px;
+          padding: 24px;
+        }
+
+        #startHint p {
+          font-size: 0.95rem;
+        }
       }
     </style>
   </head>
   <body>
     <div id="app">
-      <canvas id="puzzleCanvas" width="640" height="480"></canvas>
+      <div id="stage">
+        <div id="canvasViewport">
+          <canvas id="puzzleCanvas" width="640" height="480"></canvas>
+        </div>
+      </div>
       <div id="startHint" class="hint" tabindex="0">
         <div class="hint-body">
           <h1>Drop an image to start</h1>
@@ -561,6 +594,7 @@
       const applyBtn = document.getElementById("applyOptions");
       const resetBtn = document.getElementById("resetPuzzle");
       const downloadBtn = document.getElementById("downloadJson");
+      const canvasViewport = document.getElementById("canvasViewport");
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.getElementById("previewCanvas");
       const paletteScroller = document.getElementById("paletteScroller");
@@ -578,6 +612,17 @@
         sourceUrl: null,
         lastOptions: null,
       };
+
+      const view = {
+        scale: 1,
+        minScale: 0.5,
+        maxScale: 4,
+        offsetX: 0,
+        offsetY: 0,
+      };
+
+      const pointerState = new Map();
+      let pinchBase = null;
 
       selectButton.addEventListener("click", () => fileInput.click());
 
@@ -722,30 +767,32 @@
         updateProgress();
       });
 
-      puzzleCanvas.addEventListener("click", (event) => {
-        if (!state.puzzle || state.activeColor == null) return;
-        const rect = puzzleCanvas.getBoundingClientRect();
-        const scaleX = puzzleCanvas.width / rect.width;
-        const scaleY = puzzleCanvas.height / rect.height;
-        const x = Math.floor((event.clientX - rect.left) * scaleX);
-        const y = Math.floor((event.clientY - rect.top) * scaleY);
-        const idx = y * puzzleCanvas.width + x;
-        const regionId = state.puzzle.regionMap[idx];
-        const region = state.puzzle.regions[regionId];
-        if (!region) return;
-        if (state.filled.has(regionId)) return;
-        if (region.colorId !== state.activeColor) {
-          flashRegion(regionId, "#facc15");
-          return;
-        }
-        state.filled.add(regionId);
-        if (countRemaining(region.colorId) === 0) {
-          const next = findNextIncompleteColor(region.colorId);
-          state.activeColor = next;
-        }
-        renderPuzzle();
-        renderPalette();
-        updateProgress();
+      canvasViewport.addEventListener("pointerdown", onPointerDown);
+      canvasViewport.addEventListener("pointermove", onPointerMove);
+      canvasViewport.addEventListener("pointerup", onPointerEnd);
+      canvasViewport.addEventListener("pointercancel", onPointerEnd);
+      canvasViewport.addEventListener("pointerleave", onPointerEnd);
+      canvasViewport.addEventListener(
+        "wheel",
+        (event) => {
+          if (!state.puzzle || !event.ctrlKey) return;
+          event.preventDefault();
+          const scaleFactor = Math.exp(-event.deltaY / 500);
+          const nextScale = clamp(view.scale * scaleFactor, view.minScale, view.maxScale);
+          zoomAt(nextScale, { x: event.clientX, y: event.clientY });
+        },
+        { passive: false }
+      );
+
+      canvasViewport.addEventListener("dblclick", (event) => {
+        if (!state.puzzle) return;
+        event.preventDefault();
+        resetView();
+      });
+
+      window.addEventListener("resize", () => {
+        if (!state.puzzle) return;
+        refreshViewBounds(true);
       });
 
       downloadBtn.addEventListener("click", () => {
@@ -783,6 +830,219 @@
           URL.revokeObjectURL(url);
         });
       });
+
+      function onPointerDown(event) {
+        if (!state.puzzle) return;
+        canvasViewport.setPointerCapture(event.pointerId);
+        pointerState.set(event.pointerId, {
+          x: event.clientX,
+          y: event.clientY,
+          lastX: event.clientX,
+          lastY: event.clientY,
+          startX: event.clientX,
+          startY: event.clientY,
+          moved: false,
+        });
+        if (pointerState.size === 2) {
+          const snapshot = capturePinch();
+          if (snapshot) {
+            pinchBase = { distance: Math.max(snapshot.distance, 1), scale: view.scale };
+          }
+        }
+      }
+
+      function onPointerMove(event) {
+        const pointer = pointerState.get(event.pointerId);
+        if (!pointer) return;
+        if (!state.puzzle) return;
+        const dx = event.clientX - pointer.lastX;
+        const dy = event.clientY - pointer.lastY;
+        pointer.lastX = event.clientX;
+        pointer.lastY = event.clientY;
+        pointer.x = event.clientX;
+        pointer.y = event.clientY;
+        if (!pointer.moved) {
+          const totalDx = event.clientX - pointer.startX;
+          const totalDy = event.clientY - pointer.startY;
+          pointer.moved = Math.hypot(totalDx, totalDy) > 6;
+        }
+        if (pointerState.size >= 2) {
+          canvasViewport.classList.remove("panning");
+          const snapshot = capturePinch();
+          if (!snapshot) return;
+          if (!pinchBase || pinchBase.distance <= 0) {
+            pinchBase = { distance: Math.max(snapshot.distance, 1), scale: view.scale };
+          }
+          const scaleFactor = snapshot.distance / pinchBase.distance;
+          const nextScale = clamp(pinchBase.scale * scaleFactor, view.minScale, view.maxScale);
+          zoomAt(nextScale, { x: snapshot.centerX, y: snapshot.centerY });
+          pinchBase = { distance: Math.max(snapshot.distance, 1), scale: view.scale };
+        } else if (pointerState.size === 1 && pointer.moved) {
+          view.offsetX += dx;
+          view.offsetY += dy;
+          clampView();
+          applyViewTransform();
+          canvasViewport.classList.add("panning");
+        }
+      }
+
+      function onPointerEnd(event) {
+        const pointer = pointerState.get(event.pointerId);
+        const wasPinch = pointerState.size >= 2;
+        if (!pointer) return;
+        pointerState.delete(event.pointerId);
+        if (canvasViewport.hasPointerCapture(event.pointerId)) {
+          canvasViewport.releasePointerCapture(event.pointerId);
+        }
+        if (pointerState.size < 2) {
+          pinchBase = null;
+        }
+        if (pointerState.size === 0) {
+          canvasViewport.classList.remove("panning");
+        }
+        if (!wasPinch && !pointer.moved) {
+          handleTap(event.clientX, event.clientY);
+        }
+      }
+
+      function handleTap(clientX, clientY) {
+        if (!state.puzzle || state.activeColor == null) return;
+        const point = clientToPuzzle(clientX, clientY);
+        if (!point) return;
+        const x = Math.floor(point.x);
+        const y = Math.floor(point.y);
+        const idx = y * puzzleCanvas.width + x;
+        if (idx < 0 || idx >= state.puzzle.regionMap.length) return;
+        const regionId = state.puzzle.regionMap[idx];
+        if (regionId == null || regionId < 0) return;
+        const region = state.puzzle.regions[regionId];
+        if (!region) return;
+        if (state.filled.has(regionId)) return;
+        if (region.colorId !== state.activeColor) {
+          flashRegion(regionId, "#facc15");
+          return;
+        }
+        state.filled.add(regionId);
+        if (countRemaining(region.colorId) === 0) {
+          const next = findNextIncompleteColor(region.colorId);
+          state.activeColor = next;
+        }
+        renderPuzzle();
+        renderPalette();
+        updateProgress();
+      }
+
+      function clientToPuzzle(clientX, clientY) {
+        if (!state.puzzle) return null;
+        const rect = canvasViewport.getBoundingClientRect();
+        const localX = clientX - rect.left;
+        const localY = clientY - rect.top;
+        const x = (localX - view.offsetX) / view.scale;
+        const y = (localY - view.offsetY) / view.scale;
+        if (Number.isNaN(x) || Number.isNaN(y)) return null;
+        if (x < 0 || y < 0 || x >= puzzleCanvas.width || y >= puzzleCanvas.height) {
+          return null;
+        }
+        return { x, y };
+      }
+
+      function capturePinch() {
+        if (pointerState.size < 2) return null;
+        const pointers = Array.from(pointerState.values());
+        if (pointers.length < 2) return null;
+        const [a, b] = pointers;
+        return {
+          distance: Math.hypot(b.x - a.x, b.y - a.y),
+          centerX: (a.x + b.x) / 2,
+          centerY: (a.y + b.y) / 2,
+        };
+      }
+
+      function zoomAt(newScale, center) {
+        if (!state.puzzle) return;
+        const rect = canvasViewport.getBoundingClientRect();
+        const localX = center.x - rect.left;
+        const localY = center.y - rect.top;
+        const worldX = (localX - view.offsetX) / view.scale;
+        const worldY = (localY - view.offsetY) / view.scale;
+        view.scale = newScale;
+        view.offsetX = localX - worldX * view.scale;
+        view.offsetY = localY - worldY * view.scale;
+        clampView();
+        applyViewTransform();
+      }
+
+      function resetView() {
+        refreshViewBounds(false);
+      }
+
+      function refreshViewBounds(preservePosition) {
+        if (!state.puzzle) return;
+        const viewportWidth = canvasViewport.clientWidth;
+        const viewportHeight = canvasViewport.clientHeight;
+        if (!viewportWidth || !viewportHeight) return;
+        const margins = getViewportMargins();
+        const fitScale = Math.min(
+          (viewportWidth - margins.horizontal * 2) / state.puzzle.width,
+          (viewportHeight - margins.vertical * 2) / state.puzzle.height,
+          1
+        );
+        view.minScale = Math.max(0.25, fitScale * 0.5);
+        view.maxScale = Math.max(4, fitScale * 3);
+        if (preservePosition) {
+          view.scale = clamp(view.scale, view.minScale, view.maxScale);
+        } else {
+          view.scale = fitScale;
+          view.offsetX = (viewportWidth - state.puzzle.width * view.scale) / 2;
+          view.offsetY = (viewportHeight - state.puzzle.height * view.scale) / 2;
+        }
+        clampView();
+        applyViewTransform();
+      }
+
+      function getViewportMargins() {
+        const viewportWidth = canvasViewport.clientWidth || window.innerWidth;
+        const viewportHeight = canvasViewport.clientHeight || window.innerHeight;
+        return {
+          horizontal: Math.max(24, Math.min(120, viewportWidth * 0.08)),
+          vertical: Math.max(56, Math.min(160, viewportHeight * 0.14)),
+        };
+      }
+
+      function clampView() {
+        if (!state.puzzle) return;
+        const viewportWidth = canvasViewport.clientWidth;
+        const viewportHeight = canvasViewport.clientHeight;
+        if (!viewportWidth || !viewportHeight) return;
+        const margins = getViewportMargins();
+        const displayWidth = state.puzzle.width * view.scale;
+        const displayHeight = state.puzzle.height * view.scale;
+        if (displayWidth + margins.horizontal * 2 <= viewportWidth) {
+          view.offsetX = (viewportWidth - displayWidth) / 2;
+        } else {
+          const minX = viewportWidth - displayWidth - margins.horizontal;
+          const maxX = margins.horizontal;
+          view.offsetX = clamp(view.offsetX, minX, maxX);
+        }
+        if (displayHeight + margins.vertical * 2 <= viewportHeight) {
+          view.offsetY = (viewportHeight - displayHeight) / 2;
+        } else {
+          const minY = viewportHeight - displayHeight - margins.vertical;
+          const maxY = margins.vertical;
+          view.offsetY = clamp(view.offsetY, minY, maxY);
+        }
+      }
+
+      function applyViewTransform() {
+        puzzleCanvas.style.transform = `translate(${view.offsetX}px, ${view.offsetY}px) scale(${view.scale})`;
+      }
+
+      function updateViewportStatus() {
+        canvasViewport.classList.toggle("ready", Boolean(state.puzzle));
+        if (!state.puzzle) {
+          canvasViewport.classList.remove("panning");
+        }
+      }
 
       function getCurrentOptions() {
         return {
@@ -849,6 +1109,19 @@
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
+        for (const id of pointerState.keys()) {
+          if (canvasViewport.hasPointerCapture(id)) {
+            canvasViewport.releasePointerCapture(id);
+          }
+        }
+        pointerState.clear();
+        pinchBase = null;
+        canvasViewport.classList.remove("panning");
+        view.scale = 1;
+        view.offsetX = 0;
+        view.offsetY = 0;
+        applyViewTransform();
+        updateViewportStatus();
         paletteScroller.innerHTML = "";
         progressSummary.textContent = "Processing...";
         progressDetail.textContent = "Processing...";
@@ -875,6 +1148,8 @@
         puzzleCanvas.height = data.height;
         previewCanvas.width = data.width;
         previewCanvas.height = data.height;
+        refreshViewBounds(false);
+        updateViewportStatus();
         ensureActiveColor();
         renderPreview();
         renderPuzzle();
