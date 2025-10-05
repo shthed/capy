@@ -24,6 +24,9 @@ tools, a save manager, and a configurable generator all live inside a single
   region (falling back to a celebratory flash when a colour is finished) so
   it's obvious where to paint next, and correctly filled regions immediately
   display the underlying illustration.
+- **Customisable background.** Pick a backdrop colour for unfinished regions in
+  the Settings sheet; outlines and numbers automatically switch contrast so dark
+  or light themes stay legible while you paint.
 - **Precision view controls.** Pan the puzzle by click-dragging with the
   primary mouse button (spacebar, middle, and right buttons still work), scroll
   to zoom in or out, or tap `+`/`-` on the keyboard for incremental adjustments.
@@ -91,9 +94,10 @@ tools, a save manager, and a configurable generator all live inside a single
 1. **Load an image.** Drag a bitmap into the viewport, activate the “Choose an
    image” button, or tap **Try the capybara sample** to spin up the bundled
    scene. The hint overlay disappears once a source is selected.
-2. **Tune generation.** Open **Settings** to tweak palette size, minimum region
-   area, resize detail, sample rate (for faster clustering), iteration count,
-   and smoothing passes. Apply changes instantly when working from an image
+2. **Tune generation & appearance.** Open **Settings** to tweak palette size,
+   minimum region area, resize detail, sample rate (for faster clustering),
+   iteration count, smoothing passes, auto-advance, hint animations, and the
+   canvas background colour. Apply changes instantly when working from an image
    source.
 3. **Explore the puzzle.** The game canvas shows outlines and number badges,
    while the **Preview** button floods the entire viewport with a fullscreen
@@ -125,8 +129,9 @@ tools, a save manager, and a configurable generator all live inside a single
   completed versus total regions and announces updates politely via `aria-live`.
 - **Settings sheet** – A modal sheet that hides the generation sliders by
   default. Controls include colours, minimum region size, resize detail, sample
-  rate, k-means iterations, and smoothing passes, plus toggles for auto-advance
-  and hint animations. The sheet also houses the JSON export action.
+  rate, k-means iterations, smoothing passes, a background colour picker, plus
+  toggles for auto-advance and hint animations. The sheet also houses the JSON
+  export action.
 - **Save manager** – A companion sheet listing every stored snapshot. Each entry
   shows completion progress with quick actions to load, rename, export, or
   delete the save.
@@ -170,6 +175,9 @@ The Playwright suite exercises the core flows:
 - **loads the capybara sample scene** – Clicks the new start overlay shortcut to
   generate a bundled illustration, ensuring the onboarding affordance works
   offline.
+- **allows adjusting the canvas background colour** – Uses the fixture loader to
+  set a new background via the exposed harness helper, verifies pixel data,
+  and confirms the debug log records the change.
 - **fills the basic test pattern to completion** – Loads a tiny fixture via
   `window.capyGenerator.loadPuzzleFixture`, walks through selecting palette
   swatches, fills each region, observes the completion copy, and resets the

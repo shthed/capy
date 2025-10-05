@@ -368,6 +368,22 @@
         cursor: pointer;
       }
 
+      input[type="color"] {
+        width: 100%;
+        height: 38px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.85);
+        padding: 0;
+        cursor: pointer;
+      }
+
+      input[type="color"]::-webkit-color-swatch,
+      input[type="color"]::-moz-color-swatch {
+        border: none;
+        border-radius: 10px;
+      }
+
       .control-note {
         margin-top: -8px;
         font-size: 0.8rem;
@@ -878,7 +894,7 @@
             <dt>ℹ Help</dt>
             <dd>Open this guide and inspect the live debug log.</dd>
             <dt>⚙ Settings</dt>
-            <dd>Adjust generation sliders, toggle auto-advance, or export JSON.</dd>
+            <dd>Adjust generation sliders, toggle auto-advance, customise the background, or export JSON.</dd>
           </dl>
         </section>
         <section class="sheet-section" aria-labelledby="controlsHeading">
@@ -931,6 +947,16 @@
             <input id="hintFlashToggle" type="checkbox" checked />
             <span>Animate hint highlights</span>
           </label>
+        </section>
+        <section class="sheet-section" aria-labelledby="appearanceHeading">
+          <h3 id="appearanceHeading">Appearance</h3>
+          <label class="control">
+            <span>Background colour</span>
+            <input id="backgroundColor" type="color" value="#f8fafc" />
+          </label>
+          <p class="control-note">
+            Applies to unfinished regions and adjusts outline contrast automatically.
+          </p>
         </section>
         <section class="sheet-section" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Generator</h3>
@@ -1011,6 +1037,7 @@
       const canvasTransform = document.getElementById("canvasTransform");
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
+      const backgroundColorInput = document.getElementById("backgroundColor");
       const colorCountEl = document.getElementById("colorCount");
       const minRegionEl = document.getElementById("minRegion");
       const detailEl = document.getElementById("detailLevel");
@@ -1038,7 +1065,9 @@
         smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
-      const BACKGROUND_PIXEL = [248, 250, 252, 255];
+      const DEFAULT_BACKGROUND_HEX = "#f8fafc";
+      let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
+      let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
 
       // Embedded sample used for onboarding and smoke tests.
       const SAMPLE_ARTWORK = {
@@ -1081,6 +1110,7 @@
         settings: {
           autoAdvance: true,
           animateHints: true,
+          backgroundColor: DEFAULT_BACKGROUND_HEX,
         },
         previewVisible: false,
         saves: loadSavedEntries(),
@@ -1116,6 +1146,9 @@
           },
           loadPuzzleFixture(puzzle) {
             return loadPuzzleFixtureData(puzzle);
+          },
+          setBackgroundColor(hex) {
+            applyBackgroundColor(hex);
           },
           togglePreview(show) {
             if (typeof show === "boolean") {
@@ -1205,6 +1238,15 @@
         state.settings.animateHints = hintFlashToggle.checked;
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
       });
+
+      if (backgroundColorInput) {
+        backgroundColorInput.addEventListener("input", (event) => {
+          applyBackgroundColor(event.target.value, { skipLog: true });
+        });
+        backgroundColorInput.addEventListener("change", (event) => {
+          applyBackgroundColor(event.target.value);
+        });
+      }
 
       hintButton.addEventListener("click", () => {
         useHint();
@@ -1528,6 +1570,37 @@
         renderDebugLog();
       }
 
+      function applyBackgroundColor(hex, options = {}) {
+        const { skipRender = false, skipLog = false, force = false } = options;
+        const current = state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX;
+        const normalized = sanitizeHexColor(hex, current);
+        const changed = force || normalized !== current;
+        state.settings.backgroundColor = normalized;
+        backgroundPixel = [...hexToRgb(normalized), 255];
+        backgroundInk = computeInkStyles(normalized);
+        if (backgroundColorInput && backgroundColorInput.value !== normalized) {
+          backgroundColorInput.value = normalized;
+        }
+        if (!changed) {
+          return normalized;
+        }
+        if (!skipRender) {
+          if (state.puzzle) {
+            initializePuzzleImage();
+            renderPuzzle();
+          } else {
+            puzzleCtx.save();
+            puzzleCtx.fillStyle = normalized;
+            puzzleCtx.fillRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
+            puzzleCtx.restore();
+          }
+        }
+        if (changed && !skipLog) {
+          logDebug(`Background colour set to ${normalized.toUpperCase()}`);
+        }
+        return normalized;
+      }
+
       function updateOptionOutputs() {
         if (optionOutputs.colorCount) optionOutputs.colorCount.textContent = String(colorCountEl.value);
         if (optionOutputs.minRegion) optionOutputs.minRegion.textContent = `${minRegionEl.value} px²`;
@@ -1588,6 +1661,7 @@
                   options: payload.options || getCurrentOptions(),
                   filled: payload.filled,
                   activeColor: payload.activeColor,
+                  backgroundColor: payload.backgroundColor,
                   title: resolvedTitle,
                 })
               ) {
@@ -1630,7 +1704,11 @@
             const options = getCurrentOptions();
             const data = await createPuzzleData(img, options);
             const title = state.sourceTitle || "Generated puzzle";
-            applyPuzzleResult(data, { options, title });
+            applyPuzzleResult(data, {
+              options,
+              title,
+              backgroundColor: state.settings.backgroundColor,
+            });
           } catch (error) {
             console.error("Failed to create puzzle", error);
           }
@@ -1779,6 +1857,10 @@
         }
         const paletteIds = new Set(palette.map((entry) => entry.id));
         const requestedColor = metadata.activeColor ?? palette[0]?.id ?? null;
+        const backgroundHex = sanitizeHexColor(
+          metadata.backgroundColor ?? data.backgroundColor ?? state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX,
+          state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX
+        );
         state.puzzle = {
           width: data.width,
           height: data.height,
@@ -1786,12 +1868,14 @@
           regions,
           regionMap,
         };
+        state.puzzle.backgroundColor = backgroundHex;
         state.activeColor =
           requestedColor != null && paletteIds.has(requestedColor)
             ? requestedColor
             : palette[0]?.id ?? null;
         state.filled = new Set(metadata.filled ?? []);
         state.lastOptions = metadata.options ?? getCurrentOptions();
+        applyBackgroundColor(backgroundHex, { skipRender: true, skipLog: true });
         puzzleCanvas.width = data.width;
         puzzleCanvas.height = data.height;
         previewCanvas.width = data.width;
@@ -1833,6 +1917,7 @@
           options: getCurrentOptions(),
           filled: puzzle.filled,
           activeColor: puzzle.activeColor,
+          backgroundColor: puzzle.backgroundColor,
           title: resolvedTitle,
         });
         if (applied) {
@@ -1868,10 +1953,10 @@
         const imageData = new ImageData(width, height);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
-          data[i] = BACKGROUND_PIXEL[0];
-          data[i + 1] = BACKGROUND_PIXEL[1];
-          data[i + 2] = BACKGROUND_PIXEL[2];
-          data[i + 3] = BACKGROUND_PIXEL[3];
+          data[i] = backgroundPixel[0];
+          data[i + 1] = backgroundPixel[1];
+          data[i + 2] = backgroundPixel[2];
+          data[i + 3] = backgroundPixel[3];
         }
         state.puzzleImageData = imageData;
         if (state.filled.size > 0) {
@@ -1914,7 +1999,7 @@
         if (state.puzzleImageData) {
           puzzleCtx.putImageData(state.puzzleImageData, 0, 0);
         } else {
-          puzzleCtx.fillStyle = "#f8fafc";
+          puzzleCtx.fillStyle = state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX;
           puzzleCtx.fillRect(0, 0, width, height);
         }
         drawOutlines();
@@ -1926,7 +2011,7 @@
         const { regions, width } = state.puzzle;
         const fontSize = Math.max(10, Math.round(width / 45));
         puzzleCtx.font = `${fontSize}px "Inter", "Segoe UI", sans-serif`;
-        puzzleCtx.fillStyle = "rgba(15, 23, 42, 0.95)";
+        puzzleCtx.fillStyle = backgroundInk.number;
         puzzleCtx.textAlign = "center";
         puzzleCtx.textBaseline = "middle";
         for (const region of regions) {
@@ -1938,7 +2023,7 @@
       function drawOutlines() {
         if (!state.puzzle) return;
         const { width, height, regionMap } = state.puzzle;
-        puzzleCtx.fillStyle = "rgba(15, 23, 42, 0.65)";
+        puzzleCtx.fillStyle = backgroundInk.outline;
         for (let y = 0; y < height; y++) {
           for (let x = 0; x < width; x++) {
             const idx = y * width + x;
@@ -2355,6 +2440,7 @@
           options: state.lastOptions,
           sourceUrl: state.sourceUrl,
           activeColor: state.activeColor,
+          backgroundColor: state.settings.backgroundColor,
         };
       }
 
@@ -2424,7 +2510,14 @@
       function loadSaveEntry(id) {
         const entry = state.saves.find((item) => item.id === id);
         if (!entry) return;
-        if (applyPuzzleResult(entry.data, { options: entry.data.options, filled: entry.data.filled, activeColor: entry.data.activeColor })) {
+        if (
+          applyPuzzleResult(entry.data, {
+            options: entry.data.options,
+            filled: entry.data.filled,
+            activeColor: entry.data.activeColor,
+            backgroundColor: entry.data.backgroundColor,
+          })
+        ) {
           state.sourceUrl = entry.data.sourceUrl ?? null;
           state.sourceTitle = entry.title || state.sourceTitle;
           startHint.classList.add("hidden");
@@ -2684,6 +2777,44 @@
         if (y > 0) neighbors.push((y - 1) * width + x);
         if (y < height - 1) neighbors.push((y + 1) * width + x);
         return neighbors;
+      }
+
+      function sanitizeHexColor(value, fallback = DEFAULT_BACKGROUND_HEX) {
+        if (typeof value !== "string") return fallback;
+        const trimmed = value.trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
+          return `#${trimmed.slice(1).toLowerCase()}`;
+        }
+        if (/^[0-9a-fA-F]{6}$/.test(trimmed)) {
+          return `#${trimmed.toLowerCase()}`;
+        }
+        return fallback;
+      }
+
+      function computeInkStyles(hex) {
+        const [r, g, b] = hexToRgb(hex);
+        const luminance = relativeLuminance([r, g, b]);
+        if (luminance < 0.45) {
+          return {
+            outline: "rgba(248, 250, 252, 0.75)",
+            number: "rgba(248, 250, 252, 0.95)",
+          };
+        }
+        return {
+          outline: "rgba(15, 23, 42, 0.65)",
+          number: "rgba(15, 23, 42, 0.95)",
+        };
+      }
+
+      function relativeLuminance([r, g, b]) {
+        const toLinear = (channel) => {
+          const value = channel / 255;
+          return value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+        };
+        const linearR = toLinear(r);
+        const linearG = toLinear(g);
+        const linearB = toLinear(b);
+        return 0.2126 * linearR + 0.7152 * linearG + 0.0722 * linearB;
       }
 
       function hexToRgb(hex) {

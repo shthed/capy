@@ -19,6 +19,7 @@
 - The mobile smoke run confirms the compact swatches stay legible and the top rail remains reachable at handheld sizes.
 - Mousewheel zoom now stays anchored under the cursor, eases smoothly toward the target scale, keyboard nudges on `+`/`-` mirror the motion, and both mouse buttons pan the scene, so navigation feels immediate and predictable.
 - Palette pulses now accompany colour selection so playtesters immediately see every matching region (or a brief celebration when a colour is finished).
+- The Settings sheet now exposes a background colour picker that immediately repaints unfinished regions and recalibrates outline contrast, making dark themes workable without extra CSS overrides.
 - Long-pressing the hint icon now peeks at the finished artwork while a tap still flashes hint pulses, so advanced guidance stays one gesture away.
 - Slimmed palette bubbles still feel tactile thanks to the inset numbering and glow, and they give the composition more breathing room around the artwork.
 - Region numerals now stay centered even inside narrow tree trunks or tapered highlights, which makes the puzzle feel more intentional when zoomed in.

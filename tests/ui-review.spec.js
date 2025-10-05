@@ -117,6 +117,7 @@ test.describe('Capy image generator', () => {
     );
     expect(generatorLabels.some((label) => label.includes('Colours'))).toBe(true);
     expect(generatorLabels.some((label) => label.includes('Sample rate'))).toBe(true);
+    expect(generatorLabels.some((label) => label.includes('Background colour'))).toBe(true);
     await page.click('[data-sheet-close="settings"]');
   });
 
@@ -195,6 +196,42 @@ test.describe('Capy image generator', () => {
     expect(logMessages.length).toBeGreaterThan(0);
     expect(logMessages[0]).toMatch(/Zoom set to/);
     expect(logMessages.some((message) => message.includes('colour #1'))).toBe(true);
+    await page.click('[data-sheet-close="help"]');
+  });
+
+  test('allows adjusting the canvas background colour', async ({ page }) => {
+    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await loadBasicTestPattern(page);
+
+    await page.evaluate(() => {
+      window.capyGenerator.setBackgroundColor('#1e293b');
+    });
+
+    const state = await page.evaluate(() => window.capyGenerator.getState());
+    expect(state.settings.backgroundColor).toBe('#1e293b');
+
+    const pixel = await page.evaluate(() => {
+      const canvas = document.querySelector('[data-testid="puzzle-canvas"]');
+      if (!canvas) return null;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      return Array.from(ctx.getImageData(0, 0, 1, 1).data);
+    });
+    expect(pixel).not.toBeNull();
+    expect(pixel.slice(0, 3)).not.toEqual([248, 250, 252]);
+
+    const dataPixel = await page.evaluate(() => {
+      const state = window.capyGenerator.getState();
+      if (!state.puzzleImageData) return null;
+      return Array.from(state.puzzleImageData.data.slice(0, 3));
+    });
+    expect(dataPixel).toEqual([30, 41, 59]);
+
+    await page.click('#helpButton');
+    const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+      nodes.map((el) => (el.textContent || '').trim())
+    );
+    expect(logMessages[0]).toMatch(/Background colour set to #1E293B/);
     await page.click('[data-sheet-close="help"]');
   });
 
