@@ -34,6 +34,10 @@
         cursor: copy;
       }
 
+      body.panning {
+        cursor: grabbing;
+      }
+
       #app {
         position: relative;
         width: 100vw;
@@ -127,7 +131,8 @@
         transition: opacity 0.18s ease;
       }
 
-      body.dragging #viewport::before {
+      body.dragging #viewport::before,
+      body.panning #viewport::before {
         opacity: 1;
       }
 
@@ -813,6 +818,8 @@
 
       let panPointerId = null;
       const panOrigin = { x: 0, y: 0, panX: 0, panY: 0 };
+      let panCandidate = null;
+      let isPanning = false;
       let spacePressed = false;
 
       const state = {
@@ -1043,7 +1050,17 @@
       window.addEventListener("resize", () => resetView({ preserveZoom: true }));
       window.addEventListener("blur", () => {
         spacePressed = false;
+        if (panPointerId != null) {
+          try {
+            canvasStage.releasePointerCapture(panPointerId);
+          } catch (error) {}
+        }
         panPointerId = null;
+        panCandidate = null;
+        if (isPanning) {
+          document.body.classList.remove("panning");
+          isPanning = false;
+        }
       });
 
       puzzleCanvas.addEventListener("click", (event) => {
@@ -1583,40 +1600,88 @@
         }
       }
 
+      function beginPanSession(pointerId, originX, originY, startPanX, startPanY) {
+        panPointerId = pointerId;
+        panOrigin.x = originX;
+        panOrigin.y = originY;
+        panOrigin.panX = startPanX;
+        panOrigin.panY = startPanY;
+        panCandidate = null;
+        isPanning = true;
+        document.body.classList.add("panning");
+        try {
+          canvasStage.setPointerCapture(pointerId);
+        } catch (error) {}
+      }
+
       function handlePanStart(event) {
         if (!state.puzzle) return;
         if (event.pointerType === "touch") return;
-        const allowPan =
-          event.button === 1 ||
-          event.button === 2 ||
-          (event.button === 0 && spacePressed);
-        if (!allowPan) return;
-        event.preventDefault();
-        panPointerId = event.pointerId;
-        panOrigin.x = event.clientX;
-        panOrigin.y = event.clientY;
-        panOrigin.panX = viewState.panX;
-        panOrigin.panY = viewState.panY;
-        try {
-          canvasStage.setPointerCapture(event.pointerId);
-        } catch (error) {}
+        panCandidate = null;
+        const usesModifier = spacePressed || event.altKey || event.ctrlKey || event.metaKey;
+        const auxButton = event.button === 1 || event.button === 2;
+        if (auxButton || usesModifier) {
+          event.preventDefault();
+          beginPanSession(
+            event.pointerId,
+            event.clientX,
+            event.clientY,
+            viewState.panX,
+            viewState.panY
+          );
+          return;
+        }
+        if (event.button === 0) {
+          panCandidate = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            panX: viewState.panX,
+            panY: viewState.panY,
+          };
+        }
       }
 
       function handlePanMove(event) {
-        if (event.pointerId !== panPointerId) return;
-        const dx = event.clientX - panOrigin.x;
-        const dy = event.clientY - panOrigin.y;
-        viewState.panX = panOrigin.panX + dx;
-        viewState.panY = panOrigin.panY + dy;
-        applyViewTransform();
+        if (panPointerId === event.pointerId && isPanning) {
+          event.preventDefault();
+          const dx = event.clientX - panOrigin.x;
+          const dy = event.clientY - panOrigin.y;
+          viewState.panX = panOrigin.panX + dx;
+          viewState.panY = panOrigin.panY + dy;
+          applyViewTransform();
+          return;
+        }
+        if (!panCandidate || panCandidate.pointerId !== event.pointerId) return;
+        const dx = event.clientX - panCandidate.startX;
+        const dy = event.clientY - panCandidate.startY;
+        const distance = Math.hypot(dx, dy);
+        if (distance < 6) return;
+        event.preventDefault();
+        beginPanSession(
+          event.pointerId,
+          panCandidate.startX,
+          panCandidate.startY,
+          panCandidate.panX,
+          panCandidate.panY
+        );
+        panCandidate = null;
+        handlePanMove(event);
       }
 
       function handlePanEnd(event) {
+        if (panCandidate && panCandidate.pointerId === event.pointerId) {
+          panCandidate = null;
+        }
         if (event.pointerId !== panPointerId) return;
+        panPointerId = null;
+        if (isPanning) {
+          isPanning = false;
+          document.body.classList.remove("panning");
+        }
         try {
           canvasStage.releasePointerCapture(event.pointerId);
         } catch (error) {}
-        panPointerId = null;
       }
 
       function handleWheel(event) {

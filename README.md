@@ -18,9 +18,10 @@ tools, a save manager, and a configurable generator all live inside a single
   while optional auto-advance hops to the next unfinished colour. Filled areas
   now reveal the clustered artwork beneath the outlines so the illustration
   gradually emerges as you work.
-- **Precision view controls.** Pan the puzzle with the middle mouse button
-  (or while holding Space) and scroll to zoom in or out. The canvas stays
-  centered and scales smoothly for detailed touch-ups.
+- **Precision view controls.** Pan the puzzle by click-dragging with the
+  primary mouse button (spacebar, middle, and right buttons still work) and
+  scroll to zoom in or out. The canvas stays centered and scales smoothly for
+  detailed touch-ups.
 - **Contextual hinting.** Trigger highlight pulses for the current colour or let
   the app surface the smallest unfinished region when you need a nudge.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
@@ -59,8 +60,9 @@ tools, a save manager, and a configurable generator all live inside a single
   generator/gameplay options.
 - **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`).
   The canvas renders outlines, remaining numbers, and filled regions, respects
-  auto-advance / hint animation toggles, and now supports smooth pan + zoom so
-  you can inspect fine details.
+  auto-advance / hint animation toggles, and supports smooth pan + zoom so you
+  can inspect fine details. Drag with the mouse or trackpad to reposition the
+  scene and use the scroll wheel (or trackpad gesture) to zoom.
 - **Fullscreen preview overlay** – Triggered by the Preview button. The preview
   canvas stretches to fit the viewport so contributors can inspect the clustered
   output in detail before painting.
@@ -90,6 +92,8 @@ tools, a save manager, and a configurable generator all live inside a single
 - Palette buttons toggle the active colour and expose `data-color-id` so tests
   and tooling can reason about selections. Auto-advance can be disabled from the
   Settings sheet for full manual control.
+- Hold Space to temporarily switch the primary mouse button into a dedicated
+  pan gesture; direct click-dragging also works for quick viewport adjustments.
 - Both the settings and save sheets trap focus while open and close via their
   dedicated Close buttons or the shared backdrop.
 

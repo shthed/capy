@@ -17,7 +17,7 @@
 - Artwork, palette, and the top-right hint/menu controls rendered without errors once the page finished hydrating.
 - The top-right command rail now shows icon-only controls tucked to the right edge so opening settings or the save manager never obscures the artwork.
 - Palette selection immediately highlighted the active swatch, responded on the first tap in the touch emulation, and kept the compact number-only label crisp while remaining counts surfaced via tooltip copy.
-- Painting a cell updated the fill color inline with the clustered artwork (no refresh needed) and the pan/zoom gestures made it easy to inspect tiny regions.
+- Painting a cell updated the fill color inline with the clustered artwork (no refresh needed) and click-drag panning plus the scroll-wheel zoom made it easy to inspect tiny regions.
 - Overall responsiveness stayed smooth during the brief automation-driven play session.
 
 ## Follow-up Ideas
