@@ -366,17 +366,24 @@
   <body>
     <div id="app">
       <div id="viewport">
-        <canvas id="puzzleCanvas" width="640" height="480"></canvas>
-        <div id="startHint" class="hint" tabindex="0">
+        <canvas
+          id="puzzleCanvas"
+          data-testid="puzzle-canvas"
+          width="640"
+          height="480"
+        ></canvas>
+        <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
             <h1>Drop an image to start</h1>
             <p>Drag a picture anywhere on the screen or choose a file from your device.</p>
             <button id="selectImage" type="button">Choose an image</button>
           </div>
         </div>
-        <div id="statusBar" role="status">Drop an image anywhere to begin.</div>
+        <div id="statusBar" role="status" data-testid="status-bar">
+          Drop an image anywhere to begin.
+        </div>
       </div>
-      <aside id="optionsPanel" aria-label="Puzzle options">
+      <aside id="optionsPanel" aria-label="Puzzle options" data-testid="options-panel">
         <div class="panel-section">
           <h2>Generator</h2>
           <label class="control">
@@ -401,14 +408,21 @@
         </div>
         <div class="panel-section">
           <h2>Preview</h2>
-          <canvas id="previewCanvas" width="320" height="240"></canvas>
+          <canvas
+            id="previewCanvas"
+            data-testid="preview-canvas"
+            width="320"
+            height="240"
+          ></canvas>
         </div>
         <div class="panel-section">
           <h2>Palette</h2>
-          <div id="palette" aria-live="polite"></div>
+          <div id="palette" aria-live="polite" data-testid="palette-dock"></div>
         </div>
         <div class="panel-section">
-          <div id="progress" aria-live="polite">Drop an image to begin.</div>
+          <div id="progress" aria-live="polite" data-testid="progress-message">
+            Drop an image to begin.
+          </div>
         </div>
       </aside>
     </div>
@@ -438,6 +452,22 @@
         sourceUrl: null,
         lastOptions: null,
       };
+
+      if (typeof window !== "undefined") {
+        window.capyGenerator = {
+          getState: () => state,
+          loadFromDataUrl(dataUrl) {
+            if (typeof dataUrl !== "string" || dataUrl.length === 0) {
+              return;
+            }
+            resetPuzzleUI();
+            statusEl.textContent = "Loading image...";
+            state.sourceUrl = dataUrl;
+            startHint.classList.add("hidden");
+            loadImage(dataUrl);
+          },
+        };
+      }
 
       selectButton.addEventListener("click", () => fileInput.click());
 
@@ -780,6 +810,7 @@
           const swatch = document.createElement("button");
           swatch.type = "button";
           swatch.className = "swatch";
+          swatch.dataset.testid = "palette-swatch";
           if (state.activeColor === color.id) swatch.classList.add("active");
           const remaining = state.puzzle.regions.filter(
             (region) => region.colorId === color.id && !state.filled.has(region.id)
