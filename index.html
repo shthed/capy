@@ -1165,10 +1165,12 @@ function App() {
   );
   const commandMenuRef = useRef(null);
   const commandToggleRef = useRef(null);
+  const hintPressTimerRef = useRef(null);
+  const hintLongPressActiveRef = useRef(false);
+  const hintSuppressClickRef = useRef(false);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
 
   const { width: viewportWidth } = useViewportSize();
-  const isCompactHeader = viewportWidth <= 960;
   const isStackedHeader = viewportWidth <= 640;
   const collapseCommands = viewportWidth <= 880;
 
@@ -1203,93 +1205,31 @@ function App() {
     if (isStackedHeader) {
       return {
         ...base,
-        flexDirection: "column",
-        alignItems: "stretch",
-        padding: "10px 16px",
-        gap: 10,
-        maxWidth: "min(340px, calc(100% - 24px))",
+        padding: "8px 12px",
+        gap: 8,
+        borderRadius: 16,
         right: 12,
       };
     }
     if (collapseCommands) {
       return {
         ...base,
-        maxWidth: "min(420px, calc(100% - 32px))",
-        padding: "10px 18px",
-      };
-    }
-    if (isCompactHeader) {
-      return {
-        ...base,
-        maxWidth: "min(760px, calc(100% - 32px))",
-        padding: "10px 18px",
+        padding: "8px 14px",
+        gap: 10,
       };
     }
     return base;
-  }, [collapseCommands, isCompactHeader, isStackedHeader]);
+  }, [collapseCommands, isStackedHeader]);
 
-  const topContextStyle = useMemo(() => {
-    if (isStackedHeader) {
-      return {
-        ...styles.topContext,
-        width: "100%",
-        justifyContent: "space-between",
-      };
-    }
-    return styles.topContext;
-  }, [isStackedHeader]);
+  const topActionsStyle = useMemo(
+    () => ({
+      ...styles.topActions,
+      gap: collapseCommands ? 6 : 10,
+    }),
+    [collapseCommands]
+  );
 
-  const topTitleStyle = useMemo(() => {
-    if (isCompactHeader) {
-      return {
-        ...styles.topTitle,
-        fontSize: isStackedHeader ? 15 : 16,
-      };
-    }
-    return styles.topTitle;
-  }, [isCompactHeader, isStackedHeader]);
-
-  const topActionsStyle = useMemo(() => {
-    if (collapseCommands) {
-      return {
-        ...styles.topActions,
-        gap: 0,
-        overflow: "visible",
-        position: "relative",
-        flexWrap: "nowrap",
-      };
-    }
-    if (isStackedHeader) {
-      return {
-        ...styles.topActions,
-        width: "100%",
-        flexWrap: "wrap",
-        justifyContent: "flex-start",
-        gap: 8,
-        paddingBottom: 4,
-      };
-    }
-    if (isCompactHeader) {
-      return {
-        ...styles.topActions,
-        gap: 8,
-      };
-    }
-    return styles.topActions;
-  }, [collapseCommands, isCompactHeader, isStackedHeader]);
-
-  const controlButtonStyle = useMemo(() => {
-    if (collapseCommands) {
-      return styles.controlButton;
-    }
-    if (isStackedHeader) {
-      return { ...styles.controlButton, ...styles.controlButtonStacked };
-    }
-    if (isCompactHeader) {
-      return { ...styles.controlButton, ...styles.controlButtonCompact };
-    }
-    return styles.controlButton;
-  }, [collapseCommands, isCompactHeader, isStackedHeader]);
+  const menuAnchorStyle = useMemo(() => styles.menuAnchor, []);
 
   const selectArtwork = useCallback((id) => {
     setActiveArtworkIdState(id);
@@ -1539,18 +1479,9 @@ function App() {
         onClick: () => togglePeek(),
       };
 
-  const peekButtonStyle = useMemo(
-    () => ({
-      ...controlButtonStyle,
-      ...(isPeekActive ? styles.controlButtonActive : {}),
-    }),
-    [controlButtonStyle, isPeekActive]
-  );
-
   const wrapMenuHandler = useCallback(
     (handler, options = {}) => {
       if (typeof handler !== "function") return handler;
-      if (!collapseCommands) return handler;
       return (event, ...args) => {
         handler(event, ...args);
         if (options.skipClose && options.skipClose(event)) {
@@ -1559,21 +1490,8 @@ function App() {
         setShowCommandMenu(false);
       };
     },
-    [collapseCommands, setShowCommandMenu]
+    []
   );
-
-  const peekInlineProps = useMemo(() => {
-    const base = {
-      type: "button",
-      style: peekButtonStyle,
-      title: peekButtonTitle,
-      "aria-label": peekButtonTitle,
-    };
-    if (!peekHoldMode) {
-      base["aria-pressed"] = isPeekActive;
-    }
-    return { ...base, ...peekButtonHandlers };
-  }, [isPeekActive, peekButtonHandlers, peekButtonStyle, peekButtonTitle, peekHoldMode]);
 
   const peekMenuStyle = useMemo(
     () => ({
@@ -1584,7 +1502,6 @@ function App() {
   );
 
   const peekMenuProps = useMemo(() => {
-    if (!collapseCommands) return null;
     const base = {
       type: "button",
       role: "menuitem",
@@ -1615,15 +1532,16 @@ function App() {
       ...base,
       onClick: wrapMenuHandler(peekButtonHandlers.onClick),
     };
-  }, [collapseCommands, isPeekActive, peekButtonHandlers, peekButtonTitle, peekHoldMode, peekMenuStyle, wrapMenuHandler]);
+  }, [isPeekActive, peekButtonHandlers, peekButtonTitle, peekHoldMode, peekMenuStyle, wrapMenuHandler]);
 
   const hintButtonStyle = useMemo(
     () => ({
-      ...controlButtonStyle,
+      ...styles.iconButton,
+      ...(isPeekActive ? styles.iconButtonActive : {}),
       opacity: enableHintPulse ? 1 : 0.45,
       cursor: enableHintPulse ? "pointer" : "not-allowed",
     }),
-    [controlButtonStyle, enableHintPulse]
+    [enableHintPulse, isPeekActive]
   );
 
   const hintMenuStyle = useMemo(
@@ -1635,13 +1553,129 @@ function App() {
     [enableHintPulse]
   );
 
+  const clearHintPressTimer = useCallback(() => {
+    if (hintPressTimerRef.current != null) {
+      clearTimeout(hintPressTimerRef.current);
+      hintPressTimerRef.current = null;
+    }
+  }, []);
+
+  const endHintPeek = useCallback(() => {
+    if (!hintLongPressActiveRef.current) return;
+    hintLongPressActiveRef.current = false;
+    stopPeek();
+  }, [stopPeek]);
+
+  const handleHintPointerDown = useCallback(
+    (event) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      hintSuppressClickRef.current = false;
+      hintLongPressActiveRef.current = false;
+      clearHintPressTimer();
+      if (event.pointerType === "touch") {
+        event.preventDefault();
+      }
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      hintPressTimerRef.current = window.setTimeout(() => {
+        hintLongPressActiveRef.current = true;
+        hintSuppressClickRef.current = true;
+        setShowCommandMenu(false);
+        startPeek();
+      }, 420);
+    },
+    [clearHintPressTimer, setShowCommandMenu, startPeek]
+  );
+
+  const handleHintPointerUp = useCallback(
+    (event) => {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      const wasLongPress = hintLongPressActiveRef.current;
+      clearHintPressTimer();
+      if (wasLongPress) {
+        endHintPeek();
+      }
+    },
+    [clearHintPressTimer, endHintPeek]
+  );
+
+  const handleHintPointerLeave = useCallback(() => {
+    clearHintPressTimer();
+    if (hintLongPressActiveRef.current) {
+      hintSuppressClickRef.current = true;
+    }
+    endHintPeek();
+  }, [clearHintPressTimer, endHintPeek]);
+
+  const handleHintPointerCancel = useCallback(() => {
+    clearHintPressTimer();
+    if (hintLongPressActiveRef.current) {
+      hintSuppressClickRef.current = true;
+    }
+    endHintPeek();
+  }, [clearHintPressTimer, endHintPeek]);
+
+  const handleHintBlur = useCallback(() => {
+    clearHintPressTimer();
+    endHintPeek();
+    hintSuppressClickRef.current = false;
+  }, [clearHintPressTimer, endHintPeek]);
+
+  const handleHintKeyDown = useCallback(
+    (event) => {
+      if (event.key !== " " && event.key !== "Enter") return;
+      event.preventDefault();
+      hintSuppressClickRef.current = false;
+      hintLongPressActiveRef.current = false;
+      clearHintPressTimer();
+      hintPressTimerRef.current = window.setTimeout(() => {
+        hintLongPressActiveRef.current = true;
+        hintSuppressClickRef.current = true;
+        setShowCommandMenu(false);
+        startPeek();
+      }, 420);
+    },
+    [clearHintPressTimer, setShowCommandMenu, startPeek]
+  );
+
+  const handleHintKeyUp = useCallback(
+    (event) => {
+      if (event.key !== " " && event.key !== "Enter") return;
+      event.preventDefault();
+      const wasLongPress = hintLongPressActiveRef.current;
+      clearHintPressTimer();
+      if (wasLongPress) {
+        hintSuppressClickRef.current = true;
+        endHintPeek();
+        return;
+      }
+      hintSuppressClickRef.current = true;
+      if (enableHintPulse) {
+        setShowCommandMenu(false);
+        hint();
+      }
+    },
+    [clearHintPressTimer, enableHintPulse, endHintPeek, hint]
+  );
+
+  const handleHintClick = useCallback(
+    (event) => {
+      if (hintSuppressClickRef.current) {
+        hintSuppressClickRef.current = false;
+        return;
+      }
+      if (!enableHintPulse) return;
+      setShowCommandMenu(false);
+      hint();
+    },
+    [enableHintPulse, hint]
+  );
+
   const menuToggleStyle = useMemo(
     () => ({
-      ...controlButtonStyle,
-      ...styles.commandMenuToggle,
-      ...(showCommandMenu ? styles.controlButtonActive : {}),
+      ...styles.iconButton,
+      ...(showCommandMenu ? styles.iconButtonActive : {}),
     }),
-    [controlButtonStyle, showCommandMenu]
+    [showCommandMenu]
   );
 
   const renderControlContent = (icon, label, labelStyle = styles.controlLabel) =>
@@ -1656,149 +1690,87 @@ function App() {
     setShowHelp(false);
     setShowOptions(false);
     setShowLibrary(true);
-    if (collapseCommands) setShowCommandMenu(false);
-  }, [collapseCommands]);
+    setShowCommandMenu(false);
+  }, []);
 
   const handleOpenOptions = useCallback(() => {
     setShowHelp(false);
     setShowOptions(true);
-    if (collapseCommands) setShowCommandMenu(false);
-  }, [collapseCommands]);
+    setShowCommandMenu(false);
+  }, []);
 
   const handleOpenHelp = useCallback(() => {
     setShowOptions(false);
     setShowHelp(true);
-    if (collapseCommands) setShowCommandMenu(false);
-  }, [collapseCommands]);
+    setShowCommandMenu(false);
+  }, []);
 
   const handleHintRequest = useCallback(() => {
     hint();
-    if (collapseCommands) setShowCommandMenu(false);
-  }, [collapseCommands, hint]);
+    setShowCommandMenu(false);
+  }, [hint]);
 
-  const inlineCommandButtons = [
+  const menuCommandButtons = [
     React.createElement(
       "button",
       {
         key: "library",
         type: "button",
-        style: controlButtonStyle,
+        role: "menuitem",
+        style: styles.commandMenuButton,
         onClick: handleOpenLibrary,
         title: "Open art library",
         "aria-label": "Open art library",
         "data-testid": "open-art-library",
       },
-      renderControlContent("\ud83d\udcda", "Library")
+      renderControlContent("\ud83d\udcda", "Library", styles.commandMenuLabel)
     ),
     React.createElement(
       "button",
       {
         key: "options",
         type: "button",
-        style: controlButtonStyle,
+        role: "menuitem",
+        style: styles.commandMenuButton,
         onClick: handleOpenOptions,
         title: "Adjust options",
         "aria-label": "Adjust options",
       },
-      renderControlContent("\u2699\ufe0f", "Options")
+      renderControlContent("\u2699\ufe0f", "Options", styles.commandMenuLabel)
     ),
     React.createElement(
       "button",
       {
         key: "help",
         type: "button",
-        style: controlButtonStyle,
+        role: "menuitem",
+        style: styles.commandMenuButton,
         onClick: handleOpenHelp,
         title: "Open help",
         "aria-label": "Open help",
       },
-      renderControlContent("\u2753", "Help")
+      renderControlContent("\u2753", "Help", styles.commandMenuLabel)
     ),
     React.createElement(
       "button",
-      { key: "peek", ...peekInlineProps },
-      renderControlContent("\ud83d\udc41\ufe0f", "Peek")
+      { key: "peek", ...peekMenuProps },
+      renderControlContent("\ud83d\udc41\ufe0f", "Peek", styles.commandMenuLabel)
     ),
     React.createElement(
       "button",
       {
         key: "hint",
         type: "button",
-        style: hintButtonStyle,
+        role: "menuitem",
+        style: hintMenuStyle,
         onClick: handleHintRequest,
         title: "Highlight a suggested cell",
         disabled: !enableHintPulse,
         "aria-label": "Highlight a suggested cell",
       },
-      renderControlContent("\u2728", "Hint")
+      renderControlContent("\u2728", "Hint", styles.commandMenuLabel)
     ),
-  ];
-
-  const menuCommandButtons = collapseCommands
-    ? [
-        React.createElement(
-          "button",
-          {
-            key: "library",
-            type: "button",
-            role: "menuitem",
-            style: styles.commandMenuButton,
-            onClick: handleOpenLibrary,
-            title: "Open art library",
-            "aria-label": "Open art library",
-            "data-testid": "open-art-library",
-          },
-          renderControlContent("\ud83d\udcda", "Library", styles.commandMenuLabel)
-        ),
-        React.createElement(
-          "button",
-          {
-            key: "options",
-            type: "button",
-            role: "menuitem",
-            style: styles.commandMenuButton,
-            onClick: handleOpenOptions,
-            title: "Adjust options",
-            "aria-label": "Adjust options",
-          },
-          renderControlContent("\u2699\ufe0f", "Options", styles.commandMenuLabel)
-        ),
-        React.createElement(
-          "button",
-          {
-            key: "help",
-            type: "button",
-            role: "menuitem",
-            style: styles.commandMenuButton,
-            onClick: handleOpenHelp,
-            title: "Open help",
-            "aria-label": "Open help",
-          },
-          renderControlContent("\u2753", "Help", styles.commandMenuLabel)
-        ),
-        peekMenuProps
-          ? React.createElement(
-              "button",
-              { key: "peek", ...peekMenuProps },
-              renderControlContent("\ud83d\udc41\ufe0f", "Peek", styles.commandMenuLabel)
-            )
-          : null,
-        React.createElement(
-          "button",
-          {
-            key: "hint",
-            type: "button",
-            role: "menuitem",
-            style: hintMenuStyle,
-            onClick: handleHintRequest,
-            title: "Highlight a suggested cell",
-            disabled: !enableHintPulse,
-            "aria-label": "Highlight a suggested cell",
-          },
-          renderControlContent("\u2728", "Hint", styles.commandMenuLabel)
-        ),
-      ].filter(Boolean)
-    : null;
+  ].filter(Boolean);
 
   const toggleTitle = showCommandMenu ? "Hide controls" : "Show controls";
 
@@ -2030,7 +2002,14 @@ function App() {
       const p2 = pointersRef.current.get(ids[1]);
       const d0 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
       const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-      pinchRef.current = { id1: ids[0], id2: ids[1], d0, s0: scale, mid0: mid };
+      let artX = 0;
+      let artY = 0;
+      if (svg) {
+        const { pxArt, pyArt } = cssToArt(svg, mid.x, mid.y);
+        artX = (pxArt - offset.x) / scale;
+        artY = (pyArt - offset.y) / scale;
+      }
+      pinchRef.current = { id1: ids[0], id2: ids[1], d0, s0: scale, artX, artY };
       dragIntentRef.current = "pinch";
       isPanningRef.current = false;
       pointerOriginRef.current = null;
@@ -2081,16 +2060,15 @@ function App() {
     }
 
     if (pinchRef.current) {
-      const { id1, id2, d0, s0, mid0 } = pinchRef.current;
+      const { id1, id2, d0, s0, artX, artY } = pinchRef.current;
       const p1 = pointersRef.current.get(id1);
       const p2 = pointersRef.current.get(id2);
       if (p1 && p2) {
         const d = Math.hypot(p2.x - p1.x, p2.y - p1.y);
         const factor = d0 > 0 ? d / d0 : 1;
         const newScale = clamp(s0 * factor, 0.3, 4);
-        const { pxArt, pyArt } = cssToArt(svg, mid0.x, mid0.y);
-        const artX = (pxArt - offset.x) / scale;
-        const artY = (pyArt - offset.y) / scale;
+        const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+        const { pxArt, pyArt } = cssToArt(svg, mid.x, mid.y);
         setOffset({ x: pxArt - artX * newScale, y: pyArt - artY * newScale });
         setScale(newScale);
       }
@@ -2109,17 +2087,17 @@ function App() {
     }
   }
 
-  function onPointerUp(e) {
+  function finalizePointerInteraction(e, shouldPaint) {
     if (!art) return;
     if (isPeekActive) return;
     const svg = svgRef.current;
     svg?.releasePointerCapture?.(e.pointerId);
 
-    if (pendingPaintRef.current && dragIntentRef.current === "pending-paint") {
+    if (shouldPaint && pendingPaintRef.current && dragIntentRef.current === "pending-paint") {
       onCellTap(pendingPaintRef.current);
     }
 
-    if (enableEyedropper && eyedropCandidateRef.current && movedRef.current < 6) {
+    if (shouldPaint && enableEyedropper && eyedropCandidateRef.current && movedRef.current < 6) {
       const cell = art.cells.find((c) => c.id === eyedropCandidateRef.current);
       if (cell && (remaining[cell.colorId] ?? 0) > 0) setActiveColor(cell.colorId);
     }
@@ -2136,6 +2114,14 @@ function App() {
     lastPosRef.current = null;
     eyedropCandidateRef.current = null;
     movedRef.current = 0;
+  }
+
+  function onPointerUp(e) {
+    finalizePointerInteraction(e, true);
+  }
+
+  function onPointerCancel(e) {
+    finalizePointerInteraction(e, false);
   }
 
   function onCellTap(cellId) {
@@ -2321,6 +2307,7 @@ function App() {
                 onPointerDown: onPointerDown,
                 onPointerMove: onPointerMove,
                 onPointerUp: onPointerUp,
+                onPointerCancel: onPointerCancel,
                 onContextMenu: (e) => e.preventDefault(),
               },
               React.createElement(
@@ -2418,56 +2405,59 @@ function App() {
           "header",
           { style: topBarStyle, role: "banner" },
           React.createElement(
-            "div",
-            { style: topContextStyle },
-            React.createElement("span", { style: topTitleStyle }, art.title),
-            React.createElement(
-              "span",
-              {
-                style: styles.topProgress,
-                "data-testid": "progress-indicator",
-                title: `${progress}% complete`,
-                "aria-label": `${progress}% complete`,
-                "aria-live": "polite",
-              },
-              `${progress}%`
-            )
-          ),
-          React.createElement(
             "nav",
             { style: topActionsStyle, "aria-label": "Canvas controls" },
-            collapseCommands
-              ? React.createElement(
-                  React.Fragment,
-                  null,
-                  React.createElement(
-                    "button",
-                    {
-                      type: "button",
-                      ref: commandToggleRef,
-                      style: menuToggleStyle,
-                      onClick: () => setShowCommandMenu((open) => !open),
-                      "aria-expanded": showCommandMenu ? "true" : "false",
-                      "aria-haspopup": "menu",
-                      title: toggleTitle,
-                      "aria-label": toggleTitle,
-                      "data-testid": "command-menu-toggle",
-                    },
-                    renderControlContent("\u2630", "Menu")
-                  ),
-                  showCommandMenu &&
-                    React.createElement(
-                      "div",
-                      {
-                        ref: commandMenuRef,
-                        style: styles.commandMenu,
-                        role: "menu",
-                        "aria-label": "Canvas command menu",
-                      },
-                      menuCommandButtons
-                    )
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                style: hintButtonStyle,
+                title: "Highlight a suggested cell",
+                "aria-label": "Highlight a suggested cell",
+                "aria-disabled": enableHintPulse ? undefined : "true",
+                onPointerDown: handleHintPointerDown,
+                onPointerUp: handleHintPointerUp,
+                onPointerLeave: handleHintPointerLeave,
+                onPointerCancel: handleHintPointerCancel,
+                onBlur: handleHintBlur,
+                onKeyDown: handleHintKeyDown,
+                onKeyUp: handleHintKeyUp,
+                onClick: handleHintClick,
+              },
+              React.createElement("span", { style: styles.iconGlyph, "aria-hidden": "true" }, "\u2728"),
+              React.createElement("span", { style: styles.srOnly }, "Highlight a suggested cell")
+            ),
+            React.createElement(
+              "div",
+              { style: menuAnchorStyle },
+              React.createElement(
+                "button",
+                {
+                  type: "button",
+                  ref: commandToggleRef,
+                  style: menuToggleStyle,
+                  onClick: () => setShowCommandMenu((open) => !open),
+                  "aria-expanded": showCommandMenu ? "true" : "false",
+                  "aria-haspopup": "menu",
+                  title: toggleTitle,
+                  "aria-label": toggleTitle,
+                  "data-testid": "command-menu-toggle",
+                },
+                React.createElement("span", { style: styles.iconGlyph, "aria-hidden": "true" }, "\u2630"),
+                React.createElement("span", { style: styles.srOnly }, toggleTitle)
+              ),
+              showCommandMenu &&
+                React.createElement(
+                  "div",
+                  {
+                    ref: commandMenuRef,
+                    style: styles.commandMenu,
+                    role: "menu",
+                    "aria-label": "Canvas command menu",
+                  },
+                  menuCommandButtons
                 )
-              : inlineCommandButtons
+            )
           )
         ),
       art &&
@@ -3464,7 +3454,7 @@ const HELP_SURFACES = [
   },
   {
     title: "Header bar",
-    body: "Back affordance, artwork title, live progress chip (with accessible label), library toggle, and compact buttons for help, options, peek, and hints while keyboard shortcuts cover advanced actions.",
+    body: "Minimal icon row pinned to the top-right: tap the ✨ button to flash a hint (long-press to peek at the finished art) and use the ☰ menu to reach the library, help, options, and peek controls without covering the canvas.",
   },
   {
     title: "Canvas frame",
@@ -3548,7 +3538,7 @@ function HelpPanel({ art, progress, activeColor, filled, onClose }) {
         React.createElement(
           "p",
           { style: styles.helpIntro },
-          "Pick a color from the palette, tap the matching cells, watch the progress chip climb, and fill every region to finish the scene. Use the Library button in the header to swap artwork any time."
+          "Pick a palette color, tap the matching cells, and use the ✨ button for quick hints. Long-press that same control to peek at the finished illustration, and open the menu toggle to access the library, options, and help."
         ),
         React.createElement(
           "ul",
@@ -3850,92 +3840,64 @@ const styles = {
     right: 16,
     left: "auto",
     display: "flex",
-    flexDirection: "row",
-    flexWrap: "nowrap",
-    justifyContent: "space-between",
     alignItems: "center",
-    gap: 12,
-    padding: "10px 20px",
+    justifyContent: "flex-end",
+    gap: 10,
+    padding: "8px 12px",
     borderRadius: 18,
     background: "rgba(15, 23, 42, 0.85)",
     border: "1px solid rgba(148, 163, 184, 0.28)",
     boxShadow: "0 18px 36px rgba(2, 6, 23, 0.55)",
     backdropFilter: "blur(14px)",
     zIndex: 20,
-    maxWidth: "min(820px, calc(100% - 32px))",
-  },
-  topContext: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 10,
-    minWidth: 0,
-    flex: "0 1 auto",
-    overflow: "hidden",
-  },
-  topTitle: {
-    fontSize: 16,
-    fontWeight: 600,
-    color: "#f8fafc",
-    letterSpacing: 0.3,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  topProgress: {
-    fontSize: 12,
-    fontWeight: 600,
-    padding: "2px 10px",
-    borderRadius: 999,
-    background: "rgba(30, 41, 59, 0.7)",
-    border: "1px solid rgba(148, 163, 184, 0.26)",
-    color: "#d3defe",
-    whiteSpace: "nowrap",
+    maxWidth: "min(360px, calc(100% - 24px))",
   },
   topActions: {
     display: "flex",
-    flexWrap: "nowrap",
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "flex-end",
-    gap: 8,
-    flex: "1 1 auto",
-    overflowX: "auto",
+    gap: 10,
   },
-  controlButton: {
-    borderRadius: 10,
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     border: "1px solid rgba(148, 163, 184, 0.32)",
-    background: "linear-gradient(180deg, rgba(51, 65, 85, 0.55), rgba(15, 23, 42, 0.92))",
+    background: "linear-gradient(180deg, rgba(51, 65, 85, 0.6), rgba(15, 23, 42, 0.94))",
     color: "#f8fafc",
-    fontSize: 12,
-    fontWeight: 600,
-    letterSpacing: 0.2,
-    padding: "6px 12px",
-    minHeight: 34,
-    minWidth: 0,
-    display: "flex",
+    display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    fontSize: 18,
     cursor: "pointer",
     boxShadow: "0 12px 28px rgba(2, 6, 23, 0.45)",
-    transition: "transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease",
-    textTransform: "none",
-    whiteSpace: "nowrap",
-    lineHeight: 1.2,
-    flex: "0 0 auto",
+    transition: "transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, border 0.2s ease",
   },
-  controlButtonCompact: {
-    padding: "6px 10px",
-    flex: "1 1 calc(50% - 10px)",
-  },
-  controlButtonStacked: {
-    padding: "6px 10px",
-    flex: "1 1 100%",
-    width: "100%",
-  },
-  controlButtonActive: {
+  iconButtonActive: {
     border: "1px solid rgba(56, 189, 248, 0.55)",
     boxShadow: "0 0 0 2px rgba(56, 189, 248, 0.35), 0 12px 32px rgba(2, 6, 23, 0.55)",
     color: "#38bdf8",
+  },
+  iconGlyph: {
+    fontSize: 20,
+    lineHeight: 1,
+  },
+  srOnly: {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: "hidden",
+    clip: "rect(0, 0, 0, 0)",
+    whiteSpace: "nowrap",
+    border: 0,
+  },
+  menuAnchor: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
   },
   controlIcon: {
     fontSize: 16,
@@ -3946,10 +3908,6 @@ const styles = {
     fontWeight: 600,
     letterSpacing: 0.2,
     whiteSpace: "nowrap",
-  },
-  commandMenuToggle: {
-    padding: "6px 10px",
-    minWidth: 0,
   },
   commandMenu: {
     position: "absolute",

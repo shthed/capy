@@ -21,7 +21,7 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 
 ## Documentation & Notes
 - Update `SEGMENTATION_GUIDE.md`, `ui-review.md`, or other relevant docs whenever the workflow or UI meaningfully changes.
-- When adjusting the UI review harness, also refresh README/test docs to mention new metadata captured (e.g., progress chip text or library controls).
+- When adjusting the UI review harness, also refresh README/test docs to mention new metadata captured (e.g., header button ARIA labels or library controls).
 - Note responsive header or palette adjustments in `README.md` and `docs/gameplay-session.md` so contributors understand current UX expectations.
 
 ## Git Preferences

@@ -25,7 +25,7 @@
 - **Start the app:** `npm run dev` (or `npm run start`).
 - **Run smoke tests:** `npm test` executes the Playwright UI review harness in `tests/ui-review.spec.js`.
 - **Inspect reports:** After a test run, open `playwright-report/index.html` or run `npm run show-report`.
-- **Review UI artifacts:** Check `artifacts/ui-review/*.json` for palette counts, cell totals, HUD progress text/ARIA, and art-library presence alongside the captured screenshot.
+- **Review UI artifacts:** Check `artifacts/ui-review/*.json` for palette counts, cell totals, header button ARIA labels, and art-library presence alongside the captured screenshot.
 - **Mobile HUD check:** The UI review suite now boots a handheld viewport to ensure the header hugs the top-right edge, the menu toggle exposes every command, and the palette swatches stay compact with their inline labels/badges.
 - **Static assets:** React, ReactDOM, and Babel live under `vendor/`. Update them with `npx playwright` or direct downloads and keep versions in sync with `package.json`.
 - **Editor tasks:** VS Code tasks (`.vscode/tasks.json`) expose a "Start http-server" background task that mirrors `npm run dev`.
@@ -47,7 +47,7 @@
 - Keep Playwright tests green (`npm test`).
 - Manually verify keyboard shortcuts (W/A/S/D panning, hints, toggles) when touching interaction code.
 - Confirm bundled assets remain up to date if upgrading React/Babel.
-- Review accessibility: confirm the progress badge announces updates and the Options button exposes dialog affordances.
+- Review accessibility: confirm the hint icon and menu toggle announce their actions and the Options button exposes dialog affordances.
 
 Update this guide when workflows change.
 

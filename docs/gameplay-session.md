@@ -14,12 +14,12 @@
 3. Painted an available cell on the SVG canvas to confirm interaction wiring.
 
 ## Observations
-- Artwork, palette, and progress UI rendered without errors once the page finished hydrating.
+- Artwork, palette, and the top-right hint/menu controls rendered without errors once the page finished hydrating.
 - The top-right command rail now shows icon-labeled controls and collapses into a "Menu" toggle on the handheld viewport, so opening the library or help never obscures the artwork.
 - Palette selection immediately highlighted the active swatch, responded on the first tap in the touch emulation, and kept the tiny in-button label readable while the optional remaining-count badge stayed tucked inside the button.
 - Painting a cell updated the fill color inline without requiring additional refreshes or focus changes.
 - Overall responsiveness stayed smooth during the brief automation-driven play session.
 
 ## Follow-up Ideas
-- Capture longer playthroughs that cycle through multiple colors to validate progress tracking.
+- Capture longer playthroughs that cycle through multiple colors to validate completion tracking and autosave.
 - Evaluate touch interactions (pinch zoom, drag fill) on a mobile emulator for broader coverage.

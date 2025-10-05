@@ -22,7 +22,10 @@ test.describe('Capybooper visual review', () => {
       const paletteButtons = Array.from(
         document.querySelectorAll('[data-testid="palette-dock"] button')
       );
-      if (!header || paletteButtons.length === 0) {
+      const navButtons = header
+        ? Array.from(header.querySelectorAll('nav button'))
+        : [];
+      if (!header || paletteButtons.length === 0 || navButtons.length === 0) {
         return null;
       }
       const headerRect = header.getBoundingClientRect();
@@ -39,6 +42,10 @@ test.describe('Capybooper visual review', () => {
         headerTop: headerRect.top,
         headerRightInset: window.innerWidth - headerRect.right,
         buttonMetrics,
+        navLabels: navButtons.map((btn) => ({
+          text: (btn.textContent || '').trim(),
+          ariaLabel: btn.getAttribute('aria-label') || '',
+        })),
       };
     });
 
@@ -48,6 +55,11 @@ test.describe('Capybooper visual review', () => {
     expect(layout.headerTop).toBeGreaterThanOrEqual(4);
     expect(layout.headerRightInset).toBeLessThanOrEqual(24);
     expect(layout.headerLeft).toBeGreaterThanOrEqual(0);
+
+    expect(layout.navLabels).toHaveLength(2);
+    const navAria = layout.navLabels.map((entry) => entry.ariaLabel.toLowerCase());
+    expect(navAria).toContain('highlight a suggested cell');
+    expect(navAria.some((label) => label.includes('show controls'))).toBe(true);
 
     const normalizedTexts = layout.buttonMetrics.map((entry) =>
       entry.text.replace(/\s+/g, ' ').trim().toLowerCase()
@@ -102,20 +114,29 @@ test.describe('Capybooper visual review', () => {
     const details = await page.evaluate(() => {
       const paletteButtons = document.querySelectorAll('[data-testid="palette-dock"] button');
       const cellPaths = document.querySelectorAll('path[data-cell-id]');
-      const progressEl = document.querySelector('[data-testid="progress-indicator"]');
-      const libraryButton = document.querySelector('[data-testid="open-art-library"]');
-
-      const progressText = progressEl ? progressEl.textContent.trim() : null;
+      const navButtons = document.querySelectorAll('header[role="banner"] nav button');
 
       return {
         title: document.title,
         paletteCount: paletteButtons.length,
         cellCount: cellPaths.length,
-        progressText,
-        progressLabel: progressEl ? progressEl.getAttribute('aria-label')?.trim() ?? null : null,
-        hasLibraryButton: Boolean(libraryButton),
+        navAriaLabels: Array.from(navButtons).map(
+          (btn) => btn.getAttribute('aria-label')?.trim() ?? ''
+        ),
       };
     });
+
+    const menuToggle = page.locator('[data-testid="command-menu-toggle"]');
+    await menuToggle.click();
+    await page.waitForSelector('[aria-label="Canvas command menu"]', {
+      timeout: 10_000,
+      state: 'visible',
+    });
+    const menuLibraryButtons = await page
+      .locator('[aria-label="Canvas command menu"] [data-testid="open-art-library"]')
+      .count();
+    expect(menuLibraryButtons).toBeGreaterThan(0);
+    await menuToggle.click();
 
     const safeName =
       testInfo.title
@@ -146,8 +167,7 @@ test.describe('Capybooper visual review', () => {
     expect(details.title).toContain('Color-by-Number');
     expect(details.paletteCount).toBeGreaterThan(0);
     expect(details.cellCount).toBeGreaterThan(0);
-    expect(details.hasLibraryButton).toBe(true);
-    expect(details.progressText).toMatch(/\d+%/);
-    expect(details.progressLabel).toMatch(/% complete$/);
+    expect(details.navAriaLabels).toContain('Highlight a suggested cell');
+    expect(details.navAriaLabels.some((label) => /show controls/i.test(label))).toBe(true);
   });
 });
