@@ -62,6 +62,14 @@ test.describe('Capybooper visual review', () => {
       expect(metric.height).toBeLessThanOrEqual(90);
     });
 
+    const menuToggle = page.locator('[data-testid="command-menu-toggle"]');
+    if ((await menuToggle.count()) > 0) {
+      await menuToggle.click();
+      await page.waitForSelector('[aria-label="Canvas command menu"]', {
+        timeout: 10_000,
+        state: 'visible',
+      });
+    }
     await page.click('[data-testid="open-art-library"]');
     const cardCount = await page.locator("[data-testid=\"art-library-card\"]").count();
     expect(cardCount).toBeGreaterThan(0);
