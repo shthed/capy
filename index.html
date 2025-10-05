@@ -466,6 +466,9 @@
             startHint.classList.add("hidden");
             loadImage(dataUrl);
           },
+          loadPuzzleFixture(puzzle) {
+            return loadPuzzleFixtureData(puzzle);
+          },
         };
       }
 
@@ -704,10 +707,73 @@
           maxSize,
           kmeansIters: 12,
         });
-        state.puzzle = data;
-        state.activeColor = data.palette[0]?.id ?? null;
+        const applied = applyPuzzleResult(data, {
+          options: { targetColors, minRegion, maxSize },
+        });
+        if (applied) {
+          statusEl.textContent = `Generated ${state.puzzle.regions.length} regions across ${state.puzzle.palette.length} colours.`;
+        }
+      }
+
+      function applyPuzzleResult(data, metadata = {}) {
+        if (!data || typeof data.width !== "number" || typeof data.height !== "number") {
+          statusEl.textContent = "Puzzle data missing required dimensions.";
+          return false;
+        }
+        if (!Array.isArray(data.palette) || !Array.isArray(data.regions)) {
+          statusEl.textContent = "Puzzle data missing palette information.";
+          return false;
+        }
+        const mapSource = Array.from(data.regionMap ?? []);
+        if (mapSource.length !== data.width * data.height) {
+          statusEl.textContent = "Puzzle data is inconsistent.";
+          return false;
+        }
+        const palette = data.palette.map((entry, index) => {
+          const hex = entry.hex ?? "#ffffff";
+          const rgba = Array.isArray(entry.rgba) ? entry.rgba.slice(0, 3) : hexToRgb(hex);
+          return {
+            id: entry.id ?? index + 1,
+            hex,
+            rgba,
+          };
+        });
+        const regions = data.regions.map((region, index) => {
+          const pixels = Array.from(region.pixels ?? []);
+          const pixelCount = region.pixelCount ?? pixels.length;
+          let cx = typeof region.cx === "number" ? region.cx : null;
+          let cy = typeof region.cy === "number" ? region.cy : null;
+          if (pixels.length && (cx == null || cy == null)) {
+            let sumX = 0;
+            let sumY = 0;
+            for (const idx of pixels) {
+              sumX += idx % data.width;
+              sumY += (idx / data.width) | 0;
+            }
+            cx = sumX / pixels.length;
+            cy = sumY / pixels.length;
+          }
+          return {
+            id: region.id ?? index,
+            colorId: region.colorId ?? 1,
+            pixels,
+            pixelCount,
+            cx: cx ?? 0,
+            cy: cy ?? 0,
+          };
+        });
+        const regionMap = new Int32Array(mapSource);
+        state.puzzle = {
+          width: data.width,
+          height: data.height,
+          palette,
+          regions,
+          regionMap,
+        };
+        state.activeColor = metadata.activeColor ?? palette[0]?.id ?? null;
         state.filled = new Set();
-        state.lastOptions = { targetColors, minRegion, maxSize };
+        const options = metadata.options ?? getCurrentOptions();
+        state.lastOptions = options;
         puzzleCanvas.width = data.width;
         puzzleCanvas.height = data.height;
         previewCanvas.width = data.width;
@@ -718,8 +784,19 @@
         updateProgress();
         resetBtn.disabled = false;
         downloadBtn.disabled = false;
-        applyBtn.disabled = true;
-        statusEl.textContent = `Generated ${data.regions.length} regions across ${data.palette.length} colours.`;
+        markOptionsDirty();
+        return true;
+      }
+
+      function loadPuzzleFixtureData(puzzle) {
+        if (!puzzle) return false;
+        resetPuzzleUI();
+        const applied = applyPuzzleResult(puzzle, { options: getCurrentOptions() });
+        if (applied) {
+          startHint.classList.add("hidden");
+          statusEl.textContent = `Loaded ${state.puzzle.regions.length} regions across ${state.puzzle.palette.length} colours.`;
+        }
+        return applied;
       }
 
       function renderPreview() {
@@ -862,6 +939,18 @@
         setTimeout(() => {
           renderPuzzle();
         }, 180);
+      }
+
+      function hexToRgb(hex) {
+        if (typeof hex !== "string") return [255, 255, 255];
+        const normalized = hex.replace("#", "").trim();
+        if (normalized.length !== 6) {
+          return [255, 255, 255];
+        }
+        const r = parseInt(normalized.slice(0, 2), 16);
+        const g = parseInt(normalized.slice(2, 4), 16);
+        const b = parseInt(normalized.slice(4, 6), 16);
+        return [r, g, b];
       }
 
       function clamp(value, min, max) {
