@@ -8,7 +8,8 @@
       listeners when adjusting layout interactions.
     - Viewport + stage: #viewport, #canvasStage, and #canvasTransform cooperate with the
       viewState structure. applyViewTransform, applyZoom, resetView, and the pointer handlers are
-      the touch/mouse entry points for navigation.
+      the touch/mouse entry points for navigation. Pointerdown/up/move feed handlePan* while
+      wheel/key events route through applyZoom.
     - Puzzle state + rendering: the state object captures palette, regions, fill progress, and
       metadata. Rendering flows through renderPuzzle → drawOutlines/drawNumbers with helpers like
       applyRegionToImage.
@@ -1340,7 +1341,14 @@
         }
       });
 
-      // Viewport gesture wiring: pointer drags + wheel feed into the shared pan/zoom helpers.
+      // Viewport gesture wiring (mouse + pen):
+      // - pointerdown delegates to handlePanStart so modifier / middle / right clicks immediately
+      //   kick off panning while primary-button drags become "candidates" until they travel a few
+      //   pixels. That keeps simple taps available for the canvas click handler below.
+      // - pointermove promotes a stored candidate into a full pan session (capturing the pointer)
+      //   once it travels ~4px, then continuously applies deltas via handlePanMove.
+      // - pointerup/pointercancel tear down the session and restore the grab cursor. We also listen
+      //   for lostpointercapture so releasing the mouse outside the stage still resets state.
       canvasStage.addEventListener("pointerdown", handlePanStart);
       canvasStage.addEventListener("pointermove", handlePanMove);
       canvasStage.addEventListener("pointerup", handlePanEnd);
@@ -1368,7 +1376,14 @@
 
       // Puzzle fill interaction: click to paint if the region matches the active colour.
       puzzleCanvas.addEventListener("click", (event) => {
-        if (!state.puzzle || state.activeColor == null) return;
+        if (!state.puzzle) {
+          logDebug("Ignoring canvas click: no puzzle loaded yet");
+          return;
+        }
+        if (state.activeColor == null) {
+          logDebug("Ignoring canvas click: no active colour selected");
+          return;
+        }
         const rect = puzzleCanvas.getBoundingClientRect();
         const scaleX = puzzleCanvas.width / rect.width;
         const scaleY = puzzleCanvas.height / rect.height;
@@ -1377,12 +1392,21 @@
         const idx = y * puzzleCanvas.width + x;
         const regionId = state.puzzle.regionMap[idx];
         const region = state.puzzle.regions[regionId];
-        if (!region) return;
-        if (state.filled.has(regionId)) return;
+        if (!region) {
+          logDebug("Ignoring canvas click: no region mapped under pointer");
+          return;
+        }
+        if (state.filled.has(regionId)) {
+          logDebug(`Region ${region.id} already filled; ignoring click`);
+          return;
+        }
         if (region.colorId !== state.activeColor) {
           if (state.settings.animateHints) {
             flashRegion(regionId, "rgba(250, 204, 21, 0.55)");
           }
+          logDebug(
+            `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
+          );
           return;
         }
         state.filled.add(regionId);

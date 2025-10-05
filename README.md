@@ -63,6 +63,29 @@ tools, a save manager, and a configurable generator all live inside a single
   `serializeCurrentPuzzle` manage the save sheet while JSON exports lean on the
   same serialization path for predictable data output.
 
+## Mouse interaction flow
+
+- **Pointer staging.** The stage element (`#canvasStage`) captures all pointer
+  events for the playfield. `handlePanStart` records the pointer that pressed
+  down, immediately beginning a pan for right/middle clicks or when modifier
+  keys (Space/Alt/Ctrl/Meta) are held. Primary-button drags become "candidates"
+  so short taps still fall through to the canvas click handler.
+- **Pan promotion.** `handlePanMove` measures how far the candidate pointer has
+  travelled. Once it exceeds roughly four pixels the function calls
+  `beginPanSession`, captures the pointer, and continuously updates `viewState`
+  so the canvas glides under the cursor.
+- **Teardown safeguards.** `handlePanEnd` runs for `pointerup`,
+  `pointercancel`, and `lostpointercapture` so releasing the mouse outside the
+  viewport still resets the grab cursor and clears pan state.
+- **Zoom input.** Scroll wheel events, `+`/`-` keyboard shortcuts, and helper
+  calls from tests all feed into `applyZoom`, which calculates a new scale,
+  recenters the viewport, and updates the debug log with the latest percentage.
+- **Region clicks.** The canvas click handler first validates that a puzzle and
+  active colour exist, then resolves the clicked pixel to a region. Mismatches
+  trigger a yellow flash and a debug log entry explaining which colour is
+  required, while successful fills call `applyRegionToImage` and advance
+  progress tracking.
+
 ## How it works
 
 1. **Load an image.** Drag a bitmap into the viewport, activate the “Choose an
