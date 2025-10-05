@@ -7,8 +7,8 @@ served directly from static files.
 
 The demo boots entirely from `index.html`, pulling React, ReactDOM, and Babel
 from the vendored runtime bundles so JSX can execute without a build step. It
-now includes three sample scenes—"Capybara Forest Retreat," "Capybara Lagoon
-Sunrise," and "Twilight Marsh Study"—and keeps track of every cell you fill as
+now includes four sample scenes—"Capybara in a Forest," "Capybara Lagoon
+Sunrise," "Twilight Marsh Study," and "Lush Green Forest Walk"—and keeps track of every cell you fill as
 you paint by matching colors to numbers. The library reads the segmented SVG
 files directly so you can jump in and paint while progress is tracked
 automatically. When opened via `file://`, the browser blocks direct `fetch`/XHR
@@ -24,12 +24,12 @@ coexist with imported artwork.
   dialog. Library metadata (including autosave state) persists in
   `localStorage` so custom scenes stay available between sessions.
 - **Palette customization:** Edit color names, override swatch hex values, or
-  toggle Peek behavior from the Options panel. The palette dock now shows the
-  remaining cell counts beneath each swatch and dims colors as you finish a
-  hue.
-- **Peek preview modes:** Hold the Peek button for a transient look at the
-  completed illustration or toggle it to stay active. Keyboard shortcuts mirror
-  the on-screen controls for quick access.
+  toggle Peek behavior from the Options panel. The palette dock now prints each
+  color name directly inside its swatch, dims colors as you finish a hue, and
+  can optionally show a minimal remaining-count badge inside the swatch.
+- **Peek preview modes:** Hold the Peek button or long-press the ✨ hint icon
+  for a transient look at the completed illustration, or toggle Peek to stay
+  active. Keyboard shortcuts mirror the on-screen controls for quick access.
 - **Improved navigation:** Cursor-anchored scroll zoom, dual-button panning,
   and high-precision number badges make it easier to explore dense artwork
   without losing context.
@@ -45,24 +45,25 @@ when a check fails.
 
 ### UI elements
 
-- **Top command rail:** Ultra-slim glass bar pinned to the top edge. It shows
-  the active artwork title, a live progress chip, and compact buttons for the
-  library, options, reset, undo, hint, next color, and smoke-test toggle in a
-  single line.
+- **Top command rail:** Ultra-slim glass bar pinned near the top-right corner.
+  A ✨ hint icon (tap to pulse, long-press to peek at the finished art) sits
+  beside a ☰ menu toggle that reveals the library, help, options, and peek
+  controls on demand so the artwork stays unobstructed on every screen size.
 - **Canvas frame:** Fullscreen SVG stage wrapped with pan/zoom transforms,
   per-cell strokes, number badges that stay centered inside each region, and
   optional heatmap dots when zoomed out.
 - **Palette dock:** Floating glass strip centred beneath the canvas with a
-  single-row, horizontally scrollable set of swatches. Each swatch now shows
-  the color name and remaining count, highlights the active selection, and dims
-  once its cells are complete.
+  single-row, horizontally scrollable set of smaller swatches. Each swatch now
+  shows both the number and color name inside the button, can surface a tiny
+  remaining-count badge, highlights the active selection, dims once its cells
+  are complete, and responds instantly to touch taps as well as clicks.
 - **Smoke Tests HUD:** Hidden by default when all checks pass. If a test fails,
   a floating card appears with diagnostics and a reminder that the “T”
   shortcut toggles visibility.
 - **Options panel:** Floating dialog that explains the app, lists controls,
   and exposes toggles for autosave, auto-advance, hint pulses, eyedropper,
   keyboard shortcuts, numbered overlays, heatmap dots, the smoke-test HUD,
-  palette labels, and peek behavior. Choices persist in `localStorage` and can be restored to
+  palette labels/badges, and peek behavior. Choices persist in `localStorage` and can be restored to
   the defaults with a single reset.
 
 ## Getting started
@@ -82,10 +83,13 @@ Our automated Playwright run (`npm test --silent`) validates the experience end 
 
 - **Application shell renders:** Confirms the React runtime boots, starter artwork mounts, and HUD chrome appears.
 - **Artwork and palette presence:** Ensures the starter SVG and swatch dock render with the expected DOM structure.
-- **Art library listing:** Opens the library dialog and verifies every bundled scene is present.
-- **Painting updates progress:** Fills a cell to confirm the completion meter and progress chip react immediately.
+- **Art library listing:** Opens the library dialog and verifies every bundled scene is present (Capybara in a Forest, Capybara Lagoon Sunrise, Twilight Marsh Study, Lush Green Forest Walk).
+- **Painting updates completion:** Fills a cell to confirm autosave and completion tracking update immediately.
+- **HUD coverage snapshot:** Captures a full-page screenshot plus a JSON summary with palette counts, cell totals, and the header button ARIA labels alongside the presence of the art-library control.
+- **Tap-to-fill regression:** Clicks the first region and inspects the DOM to ensure the fill renders, opacity drops, and no console errors fire during the interaction.
+- **Mobile command rail layout:** Boots the app at a handheld viewport to ensure the header hugs the top-right edge, the two-icon cluster remains reachable, the menu toggle reveals every command, and the palette swatches stay compact while still showing their color names.
 - **Starter merge behavior:** Boots with stored data to ensure bundled scenes merge without duplication.
 - **Title preservation:** Checks that custom titles persist after a starter refresh.
-- **SVG quality checks:** Parses each bundled SVG (`capybara-lagoon`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
+- **SVG quality checks:** Parses each bundled SVG (`capybara-forest`, `capybara-lagoon`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
 
 See [docs/test-run-2025-10-04.md](docs/test-run-2025-10-04.md) for the latest run log, timings, and raw output.
