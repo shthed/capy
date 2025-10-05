@@ -536,6 +536,8 @@
           aria-haspopup="true"
           aria-expanded="false"
           aria-controls="optionsDrawer"
+          aria-label="Toggle puzzle options"
+          data-testid="menu-toggle"
         >
           <span class="icon">☰</span>
         </button>
@@ -1604,6 +1606,51 @@
       function toHex(value) {
         return value.toString(16).padStart(2, "0");
       }
+
+      function exposeTestApi() {
+        const api = {
+          getSummary() {
+            return {
+              hasPuzzle: Boolean(state.puzzle),
+              paletteCount: state.puzzle?.palette.length ?? 0,
+              regionCount: state.puzzle?.regions.length ?? 0,
+              filledCount: state.filled.size,
+              activeColor: state.activeColor,
+              status: statusMessage.textContent,
+            };
+          },
+          getFirstPlayableRegion() {
+            if (!state.puzzle) return null;
+            ensureActiveColor();
+            const active = state.activeColor;
+            if (active == null) return null;
+            return (
+              state.puzzle.regions.find(
+                (region) => region.colorId === active && !state.filled.has(region.id)
+              ) || null
+            );
+          },
+          selectColor(colorId) {
+            if (!state.puzzle) return false;
+            state.activeColor = colorId;
+            renderPalette();
+            return true;
+          },
+          tapRegion(regionId) {
+            if (!state.puzzle) return false;
+            const region = state.puzzle.regions.find((entry) => entry.id === regionId);
+            if (!region) return false;
+            const rect = canvasViewport.getBoundingClientRect();
+            const clientX = rect.left + view.offsetX + region.cx * view.scale;
+            const clientY = rect.top + view.offsetY + region.cy * view.scale;
+            handleTap(clientX, clientY);
+            return true;
+          },
+        };
+        window.__capy = api;
+      }
+
+      exposeTestApi();
     </script>
   </body>
 </html>
