@@ -2,6 +2,7 @@
 
 ## Automated Visual Capture
 - Run `npm test --silent` to boot the static demo, grab a full-page screenshot, and log palette/cell counts to `artifacts/ui-review`. The harness fails automatically if the screenshot capture is empty, the console throws, or the page renders without palette buttons/numbered regions.
+- The multi-scene sweep now opens the art library, loads every bundled SVG, and stores per-artwork screenshots plus JSON summaries under `artifacts/ui-review/artworks/`. A manifest is emitted alongside the images so you can confirm counts and console status for each scene at a glance.
 - The JSON summary now records the header button ARIA labels and whether the art-library affordance is present so regressions are obvious during review.
 - A dedicated interaction check clicks the first paintable region, ensuring the DOM reflects the filled state and no console errors appear while tapping-to-fill.
 - Review the generated JSON for console errors and metadata counts, then open the screenshot to confirm composition changes look right before merging.
