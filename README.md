@@ -90,6 +90,6 @@ Our automated Playwright run (`npm test --silent`) validates the experience end 
 - **Mobile command rail layout:** Boots the app at a handheld viewport to ensure the header hugs the top-right edge, the two-icon cluster remains reachable, the menu toggle reveals every command, and the palette swatches stay compact while still showing their color names.
 - **Starter merge behavior:** Boots with stored data to ensure bundled scenes merge without duplication.
 - **Title preservation:** Checks that custom titles persist after a starter refresh.
-- **SVG quality checks:** Parses each bundled SVG (`capybara-forest`, `capybara-lagoon`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
+- **SVG quality checks:** Parses each bundled SVG (`capybara-forest`, `capybara-lagoon`, `capybara-terraced-market`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
 
 See [docs/test-run-2025-10-04.md](docs/test-run-2025-10-04.md) for the latest run log, timings, and raw output.
