@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Color-by-Number Demo</title>
+    <title>Image to Color-by-Number</title>
     <style>
       :root {
-        color-scheme: dark;
+        color-scheme: light dark;
         font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui,
           sans-serif;
-        background-color: #030712;
+        background: #020617;
         color: #e2e8f0;
       }
 
@@ -20,4780 +20,1030 @@
       body {
         margin: 0;
         min-height: 100vh;
-        background: radial-gradient(circle at top, rgba(56, 189, 248, 0.08), transparent),
-          #030712;
+        background: radial-gradient(circle at top, rgba(59, 130, 246, 0.22), transparent),
+          #020617;
         color: inherit;
+        overflow: hidden;
       }
 
-      #root {
-        min-height: 100vh;
+      body.dragging {
+        cursor: copy;
+      }
+
+      #app {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      #viewport {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        padding: 32px;
+      }
+
+      #viewport::before {
+        content: "";
+        position: absolute;
+        inset: 24px;
+        border-radius: 24px;
+        border: 2px dashed rgba(148, 163, 184, 0.35);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.18s ease;
+      }
+
+      body.dragging #viewport::before {
+        opacity: 1;
+      }
+
+      #puzzleCanvas {
+        max-width: calc(100vw - 160px);
+        max-height: calc(100vh - 160px);
+        width: auto;
+        height: auto;
+        border-radius: 20px;
+        background: #0f172a;
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        box-shadow: 0 30px 60px rgba(15, 23, 42, 0.45);
+        image-rendering: pixelated;
+      }
+
+      #startHint {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: rgba(15, 23, 42, 0.82);
+        backdrop-filter: blur(18px);
+        transition: opacity 0.24s ease;
+        z-index: 2;
+      }
+
+      #startHint.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #startHint .hint-body {
+        pointer-events: auto;
+        text-align: center;
+        max-width: 360px;
+        padding: 32px;
+        border-radius: 20px;
+        background: rgba(2, 6, 23, 0.78);
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.6);
+      }
+
+      #startHint h1 {
+        margin: 0 0 12px;
+        font-size: clamp(1.8rem, 3vw + 0.5rem, 2.6rem);
+      }
+
+      #startHint p {
+        margin: 0 0 20px;
+        color: rgba(226, 232, 240, 0.8);
+        font-size: 1rem;
       }
 
       button {
         font: inherit;
+        border-radius: 999px;
+        border: none;
+        padding: 10px 22px;
+        background: rgba(96, 165, 250, 0.92);
+        color: #021027;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
       }
 
-      svg {
-        touch-action: none;
+      button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
+        background: rgba(147, 197, 253, 0.96);
+      }
+
+      button:disabled {
+        background: rgba(148, 163, 184, 0.35);
+        color: rgba(226, 232, 240, 0.7);
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+
+      #statusBar {
+        position: absolute;
+        left: 32px;
+        bottom: 32px;
+        padding: 10px 16px;
+        background: rgba(2, 6, 23, 0.8);
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        font-size: 0.95rem;
+        color: rgba(226, 232, 240, 0.86);
+        backdrop-filter: blur(14px);
+        z-index: 1;
+      }
+
+      #optionsPanel {
+        position: fixed;
+        top: 28px;
+        right: 28px;
+        width: 280px;
+        max-height: calc(100vh - 56px);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        border-radius: 20px;
+        background: rgba(2, 6, 23, 0.88);
+        border: 1px solid rgba(59, 130, 246, 0.4);
+        box-shadow: 0 24px 50px rgba(8, 47, 73, 0.45);
+        overflow-y: auto;
+        backdrop-filter: blur(20px);
+        z-index: 3;
+      }
+
+      #optionsPanel h2 {
+        margin: 0 0 12px;
+        font-size: 1.05rem;
+        letter-spacing: 0.02em;
+      }
+
+      .panel-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .control {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 0.95rem;
+      }
+
+      .control > span {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 600;
+      }
+
+      .control output {
+        font-size: 0.85rem;
+        color: rgba(148, 163, 184, 0.9);
+      }
+
+      input[type="range"] {
+        -webkit-appearance: none;
+        appearance: none;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(51, 65, 85, 0.9);
+      }
+
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: rgba(96, 165, 250, 0.95);
+        border: none;
+        box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+        cursor: pointer;
+      }
+
+      input[type="range"]::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: rgba(96, 165, 250, 0.95);
+        border: none;
+        box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+        cursor: pointer;
+      }
+
+      .control-note {
+        margin-top: -8px;
+        font-size: 0.8rem;
+        color: rgba(148, 163, 184, 0.8);
+      }
+
+      .panel-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .panel-actions button {
+        border-radius: 12px;
+      }
+
+      #downloadJson {
+        width: 100%;
+        border-radius: 12px;
+        padding: 10px 0;
+      }
+
+      #previewCanvas {
+        width: 100%;
+        height: auto;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: rgba(15, 23, 42, 0.8);
+        image-rendering: pixelated;
+      }
+
+      #palette {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .swatch {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(15, 23, 42, 0.85);
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+        transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+      }
+
+      .swatch:hover {
+        transform: translateY(-1px);
+      }
+
+      .swatch.active {
+        border-color: rgba(96, 165, 250, 0.8);
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+      }
+
+      .swatch.done {
+        opacity: 0.55;
+      }
+
+      .swatch .sample {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        border: 1px solid rgba(15, 23, 42, 0.35);
+        flex-shrink: 0;
+      }
+
+      .swatch .info {
+        display: flex;
+        flex-direction: column;
+        font-size: 0.82rem;
+        gap: 2px;
+      }
+
+      .swatch strong {
+        font-size: 0.95rem;
+      }
+
+      #progress {
+        font-size: 0.9rem;
+        color: rgba(226, 232, 240, 0.82);
+      }
+
+      @media (max-width: 900px) {
+        #optionsPanel {
+          width: min(100vw - 32px, 320px);
+        }
+
+        #statusBar {
+          left: 20px;
+          right: 20px;
+          bottom: 20px;
+        }
+
+        #puzzleCanvas {
+          max-width: calc(100vw - 40px);
+          max-height: calc(100vh - 200px);
+        }
+      }
+
+      @media (max-width: 720px) {
+        #optionsPanel {
+          position: fixed;
+          left: 16px;
+          right: 16px;
+          bottom: 16px;
+          top: auto;
+          width: auto;
+          max-height: 60vh;
+        }
+
+        #statusBar {
+          left: 16px;
+          right: 16px;
+          bottom: auto;
+          top: 16px;
+        }
+
+        #viewport {
+          padding: 20px;
+        }
+
+        #puzzleCanvas {
+          max-height: calc(100vh - 220px);
+        }
       }
     </style>
   </head>
   <body>
-    <div id="root" role="application" aria-label="Color-by-number painting app"></div>
-
-    <script src="./vendor/react.development.js"></script>
-    <script src="./vendor/react-dom.development.js"></script>
-    <script src="./art/starter-fallbacks.js"></script>
-    <script type="text/javascript">
-const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
-
-const pathBoxCache = new Map();
-const pathAreaCache = new Map();
-const interiorPointCache = new Map();
-const SVG_NS = "http://www.w3.org/2000/svg";
-let measureSvgEl = null;
-let measureCanvasCtx = null;
-
-function clamp(value, min, max) {
-  if (Number.isNaN(value)) return min;
-  if (value < min) return min;
-  if (value > max) return max;
-  return value;
-}
-
-// Capybooper Web Game - MVP single-file React app (patched)
-// Fixes: correct zoom/pan math, pan over filled cells, pinch zoom, tap-to-fill,
-// eyedropper, auto-advance, hint stroke highlight, smoke-test HUD.
-// No external libs. LocalStorage autosave. Keyboard support.
-
-// ---------- Types ----------
-/** @typedef {number} ColorId */
-
-/**
- * @typedef PaletteItem
- * @property {ColorId} id
- * @property {string=} name
- * @property {string} rgba
- */
-
-/**
- * @typedef Cell
- * @property {string} id
- * @property {ColorId} colorId
- * @property {string} d
- * @property {number=} area
- */
-
-/**
- * @typedef Artwork
- * @property {string} id
- * @property {string} title
- * @property {number} width
- * @property {number} height
- * @property {PaletteItem[]} palette
- * @property {Cell[]} cells
- */
-
-/**
- * @typedef SaveState
- * @property {string} artworkId
- * @property {Record<string, boolean>} filled
- * @property {ColorId=} activeColor
- * @property {{ scale: number; x: number; y: number }=} viewport
- * @property {number} lastSaved
- */
-
-// ---------- Sample Artwork ----------
-const DEMO_ART = {
-  id: "demo-capybara-forest",
-  title: "Capybara Forest Retreat",
-  width: 960,
-  height: 600,
-  palette: [
-    { id: 1, name: "Sky Mist", rgba: "#86c5ff" },
-    { id: 2, name: "Sky Veil", rgba: "#e6f0ff" },
-    { id: 3, name: "Dawn Glow", rgba: "#fef6e4" },
-    { id: 4, name: "Distant Hills", rgba: "#b7d1a7" },
-    { id: 5, name: "Pine Canopy", rgba: "#2f7a33" },
-    { id: 6, name: "Pine Shadow", rgba: "#255f27" },
-    { id: 7, name: "Pond Light", rgba: "#7fd5ef" },
-    { id: 8, name: "Meadow Moss", rgba: "#3b7b46" },
-    { id: 9, name: "Capybara Fur", rgba: "#8e5b3a" },
-    { id: 10, name: "Capybara Shade", rgba: "#5a3d2a" },
-    { id: 11, name: "Forest Accent", rgba: "#2c6e49" },
-  ],
-  cells: [
-    { id: "c1", colorId: 1, d: "M0 0 L960 0 L960 140 C 860 150 760 150 660 140 C 560 130 480 130 400 140 C 280 155 160 150 0 130 Z" },
-    { id: "c2", colorId: 3, d: "M0 130 C 160 150 320 160 480 160 L480 210 C 320 205 160 200 0 190 Z" },
-    { id: "c3", colorId: 2, d: "M480 160 C 640 170 800 160 960 140 L960 210 C 800 215 640 215 480 210 Z" },
-    { id: "c4", colorId: 4, d: "M0 190 C 120 210 240 220 360 220 C 400 220 420 218 420 218 L420 260 L0 260 Z" },
-    { id: "c5", colorId: 4, d: "M420 218 C 560 210 700 210 840 205 C 900 202 940 200 960 205 L960 260 L420 260 Z" },
-    { id: "c6", colorId: 5, d: "M0 260 C 100 300 220 320 300 330 C 220 340 140 350 40 340 C 20 330 0 300 0 260 Z" },
-    { id: "c7", colorId: 6, d: "M300 330 C 380 300 500 290 620 300 C 680 310 740 330 780 360 L780 360 L300 360 Z" },
-    { id: "c8", colorId: 5, d: "M780 360 C 820 320 880 300 960 290 L960 360 L780 360 Z" },
-    { id: "c9", colorId: 6, d: "M0 360 C 120 380 240 390 360 390 C 480 390 600 370 720 360 C 820 350 900 350 960 360 L960 420 C 860 430 760 430 660 420 C 560 410 460 410 360 420 C 240 430 120 420 0 400 Z" },
-    { id: "c10", colorId: 2, d: "M0 420 C 160 440 320 450 480 445 C 640 440 800 430 960 420 L960 460 C 800 480 640 490 480 485 C 320 480 160 470 0 450 Z" },
-    { id: "c11", colorId: 7, d: "M0 460 C 160 480 320 495 480 490 C 640 485 800 470 960 460 L960 500 L0 500 Z" },
-    { id: "c12", colorId: 8, d: "M0 500 L170 508 L170 560 L0 560 Z" },
-    { id: "c13", colorId: 8, d: "M240 508 L320 515 L320 560 L240 560 Z" },
-    { id: "c14", colorId: 8, d: "M320 515 L360 518 L360 560 L320 560 Z" },
-    { id: "c15", colorId: 8, d: "M680 515 L720 518 L720 560 L680 560 Z" },
-    { id: "c16", colorId: 3, d: "M168 500 L240 504 L240 540 C 224 548 204 552 176 554 L168 554 Z" },
-    { id: "c17", colorId: 11, d: "M160 540 C 188 518 216 518 240 540 L240 560 L160 560 Z" },
-    { id: "c18", colorId: 9, d: "M360 540 L360 508 C 380 472 430 450 500 444 C 580 438 650 456 680 496 L680 540 Z" },
-    { id: "c19", colorId: 10, d: "M360 540 L680 540 L680 560 C 620 576 540 582 460 576 C 400 572 372 562 360 552 Z" },
-    { id: "c20", colorId: 8, d: "M720 518 L736 516 L736 560 L720 560 Z" },
-    { id: "c21", colorId: 3, d: "M736 500 L792 504 L792 540 C 780 546 766 550 744 552 L736 552 Z" },
-    { id: "c22", colorId: 11, d: "M724 540 C 752 520 788 520 820 540 L820 560 L724 560 Z" },
-    { id: "c23", colorId: 8, d: "M792 504 L820 502 L820 540 L792 540 Z" },
-    { id: "c24", colorId: 8, d: "M820 502 L880 500 L880 560 L820 560 Z" },
-    { id: "c25", colorId: 8, d: "M880 500 L960 500 L960 560 L880 560 Z" },
-    { id: "c26", colorId: 8, d: "M0 560 C 200 580 400 590 600 585 C 760 580 880 570 960 575 L960 600 L0 600 Z" },
-  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
-};
-
-const LAGOON_ART = {
-  id: "demo-capybara-lagoon",
-  title: "Capybara Lagoon Sunrise",
-  width: 960,
-  height: 600,
-  palette: [
-    { id: 1, name: "Sunrise Sky", rgba: "#f6bf60" },
-    { id: 2, name: "Amber Drift", rgba: "#f4994c" },
-    { id: 3, name: "Violet Ridge", rgba: "#9a6bb3" },
-    { id: 4, name: "Forest Ridge", rgba: "#5d7a76" },
-    { id: 5, name: "Lagoon Light", rgba: "#76c7d6" },
-    { id: 6, name: "Lagoon Depth", rgba: "#1c6f8c" },
-    { id: 7, name: "Shore Left", rgba: "#4f7d5c" },
-    { id: 8, name: "Shore Middle", rgba: "#6b9358" },
-    { id: 9, name: "Capy Body", rgba: "#7d5735" },
-    { id: 10, name: "Capy Head", rgba: "#5e3b24" },
-    { id: 11, name: "Shore Right", rgba: "#3f5b3b" },
-  ],
-  cells: [
-    {
-      id: "c1",
-      colorId: 1,
-      d: "M0 0 L960 0 L960 160 C 760 150 600 150 480 155 C 320 160 160 165 0 160 Z",
-    },
-    {
-      id: "c2",
-      colorId: 2,
-      d: "M0 160 C 160 170 320 190 480 190 C 640 190 800 170 960 160 L960 220 C 800 230 640 240 480 240 C 320 240 160 230 0 220 Z",
-    },
-    {
-      id: "c3",
-      colorId: 3,
-      d: "M0 220 L120 200 L240 230 L360 210 L480 235 L600 205 L720 230 L840 215 L960 240 L960 300 L0 300 Z",
-    },
-    {
-      id: "c4",
-      colorId: 4,
-      d: "M0 300 C 160 280 320 310 480 295 C 640 280 800 310 960 290 L960 360 L0 360 Z",
-    },
-    {
-      id: "c5",
-      colorId: 5,
-      d: "M0 360 C 180 380 360 390 540 380 C 720 370 840 360 960 365 L960 440 L0 440 Z",
-    },
-    {
-      id: "c6",
-      colorId: 6,
-      d: "M0 440 C 200 460 380 470 560 465 C 740 460 860 450 960 455 L960 520 L0 520 Z",
-    },
-    {
-      id: "c7",
-      colorId: 7,
-      d: "M0 520 C 150 540 260 545 320 548 L320 600 L0 600 Z",
-    },
-    {
-      id: "c8",
-      colorId: 8,
-      d: "M320 548 C 380 552 450 552 520 545 L520 600 L320 600 Z",
-    },
-    {
-      id: "c9",
-      colorId: 9,
-      d: "M520 545 C 540 500 600 470 680 470 C 740 470 780 495 790 530 L790 600 L520 600 Z",
-    },
-    {
-      id: "c10",
-      colorId: 10,
-      d: "M790 530 C 810 500 850 500 870 520 C 890 540 890 570 870 585 C 850 600 810 595 795 570 Z",
-    },
-    {
-      id: "c11",
-      colorId: 11,
-      d: "M870 585 C 900 570 930 562 960 565 L960 600 L870 600 Z",
-    },
-  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
-};
-
-const TWILIGHT_ART = {
-  id: "demo-capybara-twilight",
-  title: "Twilight Marsh Study",
-  width: 960,
-  height: 600,
-  palette: [
-    { id: 1, name: "Evening Sky", rgba: "#f7c59f" },
-    { id: 2, name: "Glow Band", rgba: "#f27d72" },
-    { id: 3, name: "Distant Ridge", rgba: "#8c5fa6" },
-    { id: 4, name: "Low Ridge", rgba: "#546d7a" },
-    { id: 5, name: "River Mirror", rgba: "#4f9fc6" },
-    { id: 6, name: "River Depth", rgba: "#1f6b8f" },
-    { id: 7, name: "Shore Glow", rgba: "#5d8f63" },
-    { id: 8, name: "Shore Shadow", rgba: "#2f4c45" },
-  ],
-  cells: [
-    {
-      id: "c1",
-      colorId: 1,
-      d: "M0 0 L960 0 L960 160 C 640 150 320 150 0 160 Z",
-    },
-    {
-      id: "c2",
-      colorId: 2,
-      d: "M0 160 C 160 180 320 180 480 185 C 640 190 800 180 960 170 L960 230 C 640 240 320 240 0 230 Z",
-    },
-    {
-      id: "c3",
-      colorId: 3,
-      d: "M0 230 C 200 260 400 250 600 270 C 800 290 880 270 960 280 L960 340 L0 340 Z",
-    },
-    {
-      id: "c4",
-      colorId: 4,
-      d: "M0 340 C 200 360 400 360 600 355 C 800 350 880 350 960 355 L960 420 L0 420 Z",
-    },
-    {
-      id: "c5",
-      colorId: 5,
-      d: "M0 420 C 220 440 440 450 660 440 C 800 434 880 430 960 432 L960 490 L0 490 Z",
-    },
-    {
-      id: "c6",
-      colorId: 6,
-      d: "M0 490 C 200 510 400 520 600 515 C 800 510 880 508 960 510 L960 555 L0 555 Z",
-    },
-    {
-      id: "c7",
-      colorId: 7,
-      d: "M0 555 C 180 570 360 580 540 575 L540 600 L0 600 Z",
-    },
-    {
-      id: "c8",
-      colorId: 8,
-      d: "M540 575 C 700 570 840 565 960 570 L960 600 L540 600 Z",
-    },
-  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
-};
-
-const TERRACED_MARKET_ART = {
-  id: "demo-capybara-terraced-market",
-  title: "Capybara Terraced Market",
-  width: 960,
-  height: 600,
-  palette: [
-    { id: 1, name: "Misty Sky", rgba: "#9fb596" },
-    { id: 2, name: "Dawn Haze", rgba: "#e8ca8b" },
-    { id: 3, name: "Soft Stucco", rgba: "#c5bd8c" },
-    { id: 4, name: "Sunlit Terrace", rgba: "#e9ac68" },
-    { id: 5, name: "Olive Walkway", rgba: "#979053" },
-    { id: 6, name: "Cypress Terraces", rgba: "#4c725c" },
-    { id: 7, name: "Sage Shadows", rgba: "#62886e" },
-    { id: 8, name: "Harbor Teal", rgba: "#376760" },
-    { id: 9, name: "Terracotta Fur", rgba: "#a06834" },
-    { id: 10, name: "Soil Shadow", rgba: "#625532" },
-    { id: 11, name: "Timber Accent", rgba: "#997448" },
-    { id: 12, name: "Ember Eye", rgba: "#c17d3c" },
-    { id: 13, name: "Cool Glint", rgba: "#629281" },
-    { id: 14, name: "Brass Planter", rgba: "#a0853e" },
-  ],
-  cells: [
-    {
-      id: "c1",
-      colorId: 1,
-      d: "M0 0 H960 V70 C 780 55 620 52 480 60 C 320 70 160 78 0 64 Z",
-    },
-    {
-      id: "c2",
-      colorId: 2,
-      d: "M0 64 C 160 82 320 88 480 86 C 640 84 800 76 960 70 V150 C 780 162 620 174 480 176 C 320 178 160 170 0 154 Z",
-    },
-    {
-      id: "c3",
-      colorId: 3,
-      d: "M0 154 C 120 176 240 188 360 186 C 480 184 600 170 720 176 C 840 182 900 172 960 164 V228 C 780 238 620 246 480 246 C 320 246 160 238 0 224 Z",
-    },
-    {
-      id: "c4",
-      colorId: 4,
-      d: "M0 224 C 100 260 180 284 260 296 C 340 308 440 306 520 292 C 620 274 760 262 960 270 V320 C 800 332 640 346 480 346 C 320 346 160 334 0 312 Z",
-    },
-    {
-      id: "c5",
-      colorId: 5,
-      d: "M0 312 C 80 332 160 344 240 350 C 320 356 400 356 480 352 C 600 346 720 332 840 322 C 900 318 940 316 960 320 V360 C 840 372 720 384 600 388 C 460 392 320 388 160 370 C 100 364 40 352 0 340 Z",
-    },
-    {
-      id: "c6",
-      colorId: 6,
-      d: "M0 340 C 60 360 120 380 180 396 C 240 412 320 422 420 420 C 520 418 600 400 700 388 C 800 376 880 368 960 370 V420 C 860 432 760 446 640 454 C 520 462 400 460 280 450 C 180 442 80 428 0 406 Z",
-    },
-    {
-      id: "c7",
-      colorId: 7,
-      d: "M0 406 C 90 432 160 456 240 472 C 320 488 420 498 520 496 C 620 494 720 474 840 460 C 880 456 920 450 960 444 V500 C 820 512 680 526 520 530 C 380 534 220 530 0 508 Z M430 436 C 390 456 384 492 412 522 C 452 562 540 562 600 528 C 640 504 644 472 620 448 C 592 422 520 416 460 422 Z M220 430 C 206 446 204 466 218 484 C 236 504 272 508 300 498 C 324 490 332 470 318 450 C 302 428 254 420 220 430 Z M708 444 C 692 460 688 482 700 500 C 718 522 758 526 786 512 C 810 500 818 478 806 460 C 790 436 738 432 708 444 Z",
-      fillRule: "evenodd",
-    },
-    {
-      id: "c8",
-      colorId: 8,
-      d: "M0 508 C 160 528 320 540 480 544 C 640 548 800 542 960 522 V560 C 780 574 600 582 420 584 C 260 586 120 582 0 566 Z",
-    },
-    {
-      id: "c9",
-      colorId: 6,
-      d: "M0 566 C 200 586 400 596 600 596 C 760 596 880 588 960 580 V600 H0 Z",
-    },
-    {
-      id: "c10",
-      colorId: 9,
-      d: "M438 440 C 404 460 396 492 416 522 C 444 562 512 570 568 544 C 606 526 626 500 620 474 C 614 444 588 424 548 418 C 504 412 464 420 438 440 Z",
-    },
-    {
-      id: "c11",
-      colorId: 10,
-      d: "M488 470 C 464 484 460 508 476 526 C 500 550 544 548 570 528 C 588 514 594 496 584 480 C 572 458 524 454 488 470 Z",
-    },
-    {
-      id: "c12",
-      colorId: 4,
-      d: "M540 450 C 518 440 496 440 476 448 C 456 456 450 470 456 486 C 466 506 494 516 520 512 C 546 508 566 492 564 472 C 562 460 554 452 540 450 Z",
-    },
-    {
-      id: "c13",
-      colorId: 11,
-      d: "M560 438 C 552 432 540 430 530 432 C 520 434 514 442 518 450 C 524 460 536 464 546 462 C 556 460 564 452 564 444 C 564 442 562 440 560 438 Z",
-    },
-    {
-      id: "c14",
-      colorId: 12,
-      d: "M522 476 C 514 478 510 486 514 492 C 520 500 532 500 538 494 C 544 488 544 480 538 476 C 534 472 528 472 522 476 Z",
-    },
-    {
-      id: "c15",
-      colorId: 13,
-      d: "M528 482 C 526 484 526 486 528 488 C 530 490 534 490 536 488 C 538 486 538 484 536 482 C 534 480 530 480 528 482 Z",
-    },
-    {
-      id: "c16",
-      colorId: 14,
-      d: "M220 430 C 206 446 204 466 218 484 C 236 504 272 508 300 498 C 324 490 332 470 318 450 C 302 428 254 420 220 430 Z",
-    },
-    {
-      id: "c17",
-      colorId: 11,
-      d: "M708 444 C 692 460 688 482 700 500 C 718 522 758 526 786 512 C 810 500 818 478 806 460 C 790 436 738 432 708 444 Z",
-    },
-    {
-      id: "c18",
-      colorId: 6,
-      d: "M240 444 C 226 454 224 466 232 478 C 244 494 270 496 288 488 C 302 480 308 468 300 454 C 290 440 260 436 240 444 Z",
-    },
-    {
-      id: "c19",
-      colorId: 7,
-      d: "M728 456 C 716 466 714 480 722 494 C 734 510 760 512 780 502 C 796 494 802 480 794 466 C 784 452 752 448 728 456 Z",
-    },
-  ].map((c) => ({ ...c, area: estimatePathArea(c.d) })),
-};
-function cloneArtwork(art) {
-  return {
-    ...art,
-    palette: (art.palette ?? []).map((p) => ({ ...p })),
-    cells: (art.cells ?? []).map((c) => ({ ...c })),
-  };
-}
-
-function mergeArtworkLists(existingList, starterList) {
-  const existing = Array.isArray(existingList) ? existingList : [];
-  const starters = Array.isArray(starterList) ? starterList : [];
-  if (!existing.length && !starters.length) return existing;
-
-  const starterMap = new Map();
-  starters.forEach((art) => {
-    if (art && art.id) {
-      starterMap.set(art.id, cloneArtwork(art));
-    }
-  });
-
-  let changed = false;
-  const seen = new Set();
-  const merged = [];
-
-  for (const art of existing) {
-    if (!art || !art.id) {
-      changed = true;
-      continue;
-    }
-    if (seen.has(art.id)) {
-      changed = true;
-      continue;
-    }
-    seen.add(art.id);
-
-    const starter = starterMap.get(art.id);
-    if (!starter) {
-      merged.push(art);
-      continue;
-    }
-
-    const updates = {};
-
-    const existingTitle = typeof art.title === "string" ? art.title.trim() : "";
-    const starterTitle = typeof starter.title === "string" ? starter.title.trim() : "";
-    if (!existingTitle && starterTitle) {
-      updates.title = starterTitle;
-    }
-
-    const existingWidth = Number(art.width);
-    const starterWidth = Number(starter.width);
-    if (
-      (!Number.isFinite(existingWidth) || existingWidth <= 0) &&
-      Number.isFinite(starterWidth) &&
-      starterWidth > 0
-    ) {
-      updates.width = starterWidth;
-    }
-
-    const existingHeight = Number(art.height);
-    const starterHeight = Number(starter.height);
-    if (
-      (!Number.isFinite(existingHeight) || existingHeight <= 0) &&
-      Number.isFinite(starterHeight) &&
-      starterHeight > 0
-    ) {
-      updates.height = starterHeight;
-    }
-
-    const needsPalette = !Array.isArray(art.palette) || art.palette.length === 0;
-    if (needsPalette && starter.palette?.length) {
-      updates.palette = starter.palette.map((p) => ({ ...p }));
-    }
-
-    const needsCells = !Array.isArray(art.cells) || art.cells.length === 0;
-    if (needsCells && starter.cells?.length) {
-      updates.cells = starter.cells.map((c) => ({ ...c }));
-    }
-
-    starterMap.delete(art.id);
-
-    if (Object.keys(updates).length) {
-      merged.push({ ...art, ...updates });
-      changed = true;
-    } else {
-      merged.push(art);
-    }
-  }
-
-  starterMap.forEach((art, id) => {
-    if (seen.has(id)) {
-      return;
-    }
-    merged.push(cloneArtwork(art));
-    changed = true;
-  });
-
-  if (!changed && merged.length === existing.length) {
-    return existing;
-  }
-
-  return merged;
-}
-
-const STARTER_SOURCES = [
-  {
-    id: "starter-capybara-forest",
-    url: "./art/capybara-forest.svg",
-    filename: "capybara-forest.svg",
-    type: "image/svg+xml",
-  },
-  {
-    id: "starter-capybara-lagoon",
-    url: "./art/capybara-lagoon.svg",
-    filename: "capybara-lagoon.svg",
-    type: "image/svg+xml",
-  },
-  {
-    id: "starter-capybara-terraced-market",
-    url: "./art/capybara-terraced-market.svg",
-    filename: "capybara-terraced-market.svg",
-    type: "image/svg+xml",
-  },
-  {
-    id: "starter-twilight-marsh",
-    url: "./art/capybara-twilight.svg",
-    filename: "capybara-twilight.svg",
-    type: "image/svg+xml",
-  },
-  {
-    id: "starter-lush-forest",
-    url: "./art/lush-green-forest.svg",
-    filename: "lush-green-forest.svg",
-    type: "image/svg+xml",
-  },
-];
-
-function getLegacyStarterArtworks() {
-  return [
-    cloneArtwork(DEMO_ART),
-    cloneArtwork(LAGOON_ART),
-    cloneArtwork(TWILIGHT_ART),
-    cloneArtwork(TERRACED_MARKET_ART),
-  ];
-}
-
-function loadSvgViaObject(url, signal) {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-      return;
-    }
-
-    if (!document?.body) {
-      reject(new Error('The document body is unavailable.'));
-      return;
-    }
-
-    const objectEl = document.createElement('object');
-    objectEl.type = 'image/svg+xml';
-    objectEl.setAttribute('aria-hidden', 'true');
-    objectEl.style.position = 'absolute';
-    objectEl.style.width = '0';
-    objectEl.style.height = '0';
-    objectEl.style.pointerEvents = 'none';
-    objectEl.style.opacity = '0';
-
-    let timeoutId = null;
-
-    const cleanup = () => {
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      objectEl.removeEventListener('load', handleLoad);
-      objectEl.removeEventListener('error', handleError);
-      if (signal) {
-        signal.removeEventListener('abort', handleAbort);
-      }
-      if (objectEl.parentNode) {
-        objectEl.parentNode.removeChild(objectEl);
-      }
-    };
-
-    const handleAbort = () => {
-      cleanup();
-      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-    };
-
-    const handleLoad = () => {
-      try {
-        const doc = objectEl.contentDocument;
-        if (!doc) {
-          throw new Error('Unable to access the SVG document.');
-        }
-        const svgEl = doc.documentElement;
-        if (!svgEl) {
-          throw new Error('The SVG content is empty.');
-        }
-        resolve(svgEl.outerHTML);
-      } catch (err) {
-        reject(err instanceof Error ? err : new Error('Unable to read the SVG content.'));
-      } finally {
-        cleanup();
-      }
-    };
-
-    const handleError = () => {
-      cleanup();
-      reject(new Error('Unable to load the SVG via <object>.'));
-    };
-
-    objectEl.addEventListener('load', handleLoad);
-    objectEl.addEventListener('error', handleError);
-    if (signal) {
-      signal.addEventListener('abort', handleAbort, { once: true });
-    }
-    timeoutId = setTimeout(() => {
-      cleanup();
-      reject(new Error('Loading the SVG via <object> timed out.'));
-    }, 4000);
-    document.body.appendChild(objectEl);
-    try {
-      const resolved = new URL(url, window.location.href);
-      objectEl.data = resolved.href;
-    } catch (err) {
-      cleanup();
-      reject(err instanceof Error ? err : new Error('Invalid SVG URL.'));
-    }
-  });
-}
-
-function loadSvgViaXhr(url, signal) {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-      return;
-    }
-
-    let aborted = false;
-    const xhr = new XMLHttpRequest();
-    const cleanup = () => {
-      xhr.onerror = null;
-      xhr.onreadystatechange = null;
-      if (signal) {
-        signal.removeEventListener('abort', handleAbort);
-      }
-    };
-    const handleAbort = () => {
-      aborted = true;
-      xhr.abort();
-      cleanup();
-      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-    };
-
-    xhr.onerror = () => {
-      cleanup();
-      reject(new Error('Unable to load the SVG via XMLHttpRequest.'));
-    };
-
-    xhr.onreadystatechange = () => {
-      if (xhr.readyState !== XMLHttpRequest.DONE) return;
-      cleanup();
-      if (aborted) return;
-      const status = xhr.status;
-      if (status === 0 || (status >= 200 && status < 300)) {
-        resolve(xhr.responseText);
-      } else {
-        reject(new Error(`XMLHttpRequest failed with status ${status}.`));
-      }
-    };
-
-    try {
-      const resolved = new URL(url, window.location.href);
-      xhr.open('GET', resolved.href, true);
-      xhr.overrideMimeType('image/svg+xml');
-      if (signal) {
-        signal.addEventListener('abort', handleAbort, { once: true });
-      }
-      xhr.send();
-    } catch (err) {
-      cleanup();
-      reject(err instanceof Error ? err : new Error('Unable to resolve the SVG URL.'));
-    }
-  });
-}
-
-async function loadStarterArtworks(signal) {
-  const results = [];
-  const seenIds = new Set();
-  const errors = [];
-
-  const inlineFallbacks =
-    typeof window !== "undefined" ? window.__starterSvgFallbacks ?? null : null;
-  const isFileProtocol =
-    typeof window !== "undefined" && window.location?.protocol === "file:";
-
-  for (const source of STARTER_SOURCES) {
-    let candidate = null;
-
-    const failureReasons = [];
-    const meta = {
-      filename: source.filename ?? source.url?.split("/").pop(),
-      type: source.type ?? "image/svg+xml",
-      source: "starter",
-    };
-    const parseSource = (raw) => {
-      const parsed = parseArtworkPayload(raw, meta);
-      if (parsed.ok && parsed.artwork) {
-        return cloneArtwork(parsed.artwork);
-      }
-      throw new Error(parsed.error ?? "Unable to convert the artwork payload.");
-    };
-
-    if (!candidate && source.url) {
-      const loaders = [];
-      const addLoader = (label, fn) => loaders.push({ label, fn });
-
-      if (isFileProtocol) {
-        addLoader("XMLHttpRequest", () => loadSvgViaXhr(source.url, signal));
-        addLoader("fetch", async () => {
-          const response = await fetch(source.url, { signal });
-          if (!response.ok) {
-            throw new Error(`Request failed with status ${response.status}`);
-          }
-          return response.text();
-        });
-      } else {
-        addLoader("fetch", async () => {
-          const response = await fetch(source.url, { signal });
-          if (!response.ok) {
-            throw new Error(`Request failed with status ${response.status}`);
-          }
-          return response.text();
-        });
-        addLoader("XMLHttpRequest", () => loadSvgViaXhr(source.url, signal));
-        addLoader("<object>", () => loadSvgViaObject(source.url, signal));
-      }
-
-      for (const loader of loaders) {
-        if (candidate) break;
-        try {
-          const raw = await loader.fn();
-          candidate = parseSource(raw);
-          if (candidate) {
-            console.info(
-              `Loaded starter artwork from ${source.url} via ${loader.label}.`
-            );
-          }
-        } catch (err) {
-          const normalized = err instanceof Error ? err : new Error(String(err));
-          failureReasons.push(normalized);
-          console.warn(
-            `Unable to load starter artwork from ${source.url} via ${loader.label}:`,
-            normalized
-          );
-        }
-      }
-    }
-
-    if (!candidate && inlineFallbacks?.[source.id]) {
-      try {
-        candidate = parseSource(inlineFallbacks[source.id]);
-        if (candidate) {
-          console.info(
-            `Loaded starter artwork from ${source.url || source.id} via inline fallback.`
-          );
-        }
-      } catch (err) {
-        const normalized = err instanceof Error ? err : new Error(String(err));
-        failureReasons.push(normalized);
-        console.warn(
-          `Unable to parse inline fallback for ${source.url || source.id}:`,
-          normalized
-        );
-      }
-    }
-
-    if (!candidate) {
-      if (failureReasons.length) {
-        errors.push(failureReasons[0]);
-      } else {
-        errors.push(
-          new Error(`Unable to load starter artwork from ${source.url || source.id || 'starter art'}.`)
-        );
-      }
-      continue;
-    }
-
-    let id = (candidate.id ?? "").toString().trim();
-    if (!id) {
-      id = source.id || `starter-${Math.random().toString(36).slice(2, 8)}`;
-      candidate = { ...candidate, id };
-    }
-
-    if (seenIds.has(id)) {
-      let suffix = 2;
-      let uniqueId = `${id}-${suffix}`;
-      while (seenIds.has(uniqueId)) {
-        uniqueId = `${id}-${++suffix}`;
-      }
-      candidate = { ...candidate, id: uniqueId };
-      seenIds.add(uniqueId);
-    } else {
-      seenIds.add(id);
-    }
-
-    if (!candidate.title && source.title) {
-      candidate = { ...candidate, title: source.title };
-    }
-
-    results.push(candidate);
-  }
-
-  if (!results.length) {
-    return { artworks: getLegacyStarterArtworks(), errors };
-  }
-
-  return { artworks: results, errors };
-}
-
-// Estimate area for heuristics using DOM sampling with a polygon fallback.
-function estimatePathArea(d) {
-  const bbox = measurePathBox(d);
-  const measured = measurePathArea(d, bbox);
-  if (typeof measured === "number" && measured > 0) {
-    return measured;
-  }
-
-  try {
-    const tokens = d.split(/[ ,]/).filter(Boolean);
-    const pts = [];
-    for (let i = 0; i < tokens.length; i++) {
-      const t = tokens[i];
-      if (t === "M" || t === "L" || t === "Z") continue;
-      const n = Number(t);
-      if (!Number.isNaN(n)) pts.push(n);
-    }
-    const xy = [];
-    for (let i = 0; i + 1 < pts.length; i += 2) xy.push([pts[i], pts[i + 1]]);
-    let area = 0;
-    for (let i = 0; i < xy.length; i++) {
-      const [x1, y1] = xy[i];
-      const [x2, y2] = xy[(i + 1) % xy.length];
-      area += x1 * y2 - x2 * y1;
-    }
-    return Math.abs(area / 2) || 1000;
-  } catch (err) {
-    return 1000;
-  }
-}
-
-// ---------- Utilities ----------
-const SAVE_KEY = (artId) => `capybooper_save_${artId}`;
-const ARTWORKS_KEY = "capybooper_artworks_v1";
-const ACTIVE_ART_KEY = "capybooper_active_art";
-
-function normalizeArtwork(raw) {
-  if (!raw) return null;
-  try {
-    const width = Number(raw.width);
-    const height = Number(raw.height);
-    if (!Number.isFinite(width) || width <= 0) return null;
-    if (!Number.isFinite(height) || height <= 0) return null;
-    const palette = Array.isArray(raw.palette)
-      ? raw.palette
-          .map((item) => ({
-            id: item.id,
-            name: item.name ?? undefined,
-            rgba: item.rgba,
-          }))
-          .filter((item) => item.id !== undefined && typeof item.rgba === "string")
-      : [];
-    const cells = Array.isArray(raw.cells)
-      ? raw.cells
-          .map((cell) => {
-            const rule =
-              typeof cell.fillRule === "string"
-                ? cell.fillRule.trim().toLowerCase()
-                : undefined;
-            const fillRule = rule === "evenodd" || rule === "nonzero" ? rule : undefined;
-            const normalized = {
-              id: cell.id,
-              colorId: cell.colorId,
-              d: cell.d,
-              area: cell.area ?? estimatePathArea(cell.d ?? ""),
-            };
-            if (fillRule) {
-              normalized.fillRule = fillRule;
-            }
-            return normalized;
-          })
-          .filter(
-            (cell) =>
-              typeof cell.id === "string" &&
-              cell.id.length > 0 &&
-              typeof cell.d === "string" &&
-              cell.d.length > 0 &&
-              cell.colorId !== undefined
-          )
-      : [];
-    const title = (raw.title ?? "").trim();
-    let id = (raw.id ?? "").toString().trim();
-    if (!title || !palette.length || !cells.length) return null;
-    if (!id) {
-      const slug = title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
-      id = slug || `art-${Math.random().toString(36).slice(2, 8)}`;
-    }
-    return {
-      id,
-      title,
-      width,
-      height,
-      palette,
-      cells,
-    };
-  } catch (err) {
-    return null;
-  }
-}
-
-function parseDimension(value) {
-  if (value === null || value === undefined) return null;
-  const num = Number.parseFloat(value);
-  return Number.isFinite(num) && num > 0 ? num : null;
-}
-
-function coerceId(value) {
-  if (value === null || value === undefined) return undefined;
-  if (typeof value === "number") return value;
-  const trimmed = value.toString().trim();
-  if (!trimmed) return undefined;
-  if (/^-?\d+(?:\.\d+)?$/.test(trimmed) && !/^0\d+/.test(trimmed)) {
-    const num = Number(trimmed);
-    if (Number.isFinite(num)) return num;
-  }
-  return trimmed;
-}
-
-function parseSvgArtwork(raw, meta = {}) {
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(raw, "image/svg+xml");
-    if (!doc) {
-      return { ok: false, error: "Unable to parse the SVG markup." };
-    }
-    if (doc.querySelector("parsererror")) {
-      return { ok: false, error: "The SVG markup contains syntax errors." };
-    }
-    const svgEl = doc.querySelector("svg");
-    if (!svgEl) {
-      return { ok: false, error: "The SVG is missing a <svg> root element." };
-    }
-
-    let width = parseDimension(svgEl.getAttribute("width"));
-    let height = parseDimension(svgEl.getAttribute("height"));
-    const viewBox = svgEl.getAttribute("viewBox");
-    if ((!width || !height) && viewBox) {
-      const parts = viewBox
-        .trim()
-        .split(/[ ,]+/)
-        .map((v) => Number.parseFloat(v))
-        .filter((v) => Number.isFinite(v));
-      if (parts.length >= 4) {
-        width = width || parts[2];
-        height = height || parts[3];
-      }
-    }
-    if (!width || !height) {
-      return { ok: false, error: "The SVG must include width/height or a valid viewBox." };
-    }
-
-    const rawNodes = Array.from(svgEl.querySelectorAll("[data-cell-id]"));
-    const nodes = rawNodes.filter((node) => {
-      const parent = node.parentElement?.closest?.("[data-cell-id]");
-      return !parent;
-    });
-    if (!nodes.length) {
-      return {
-        ok: false,
-        error:
-          "No paintable regions were found. Each region needs a data-cell-id attribute.",
+    <div id="app">
+      <div id="viewport">
+        <canvas id="puzzleCanvas" width="640" height="480"></canvas>
+        <div id="startHint" class="hint" tabindex="0">
+          <div class="hint-body">
+            <h1>Drop an image to start</h1>
+            <p>Drag a picture anywhere on the screen or choose a file from your device.</p>
+            <button id="selectImage" type="button">Choose an image</button>
+          </div>
+        </div>
+        <div id="statusBar" role="status">Drop an image anywhere to begin.</div>
+      </div>
+      <aside id="optionsPanel" aria-label="Puzzle options">
+        <div class="panel-section">
+          <h2>Generator</h2>
+          <label class="control">
+            <span>Colours <output data-for="colorCount">16</output></span>
+            <input id="colorCount" type="range" min="4" max="48" value="16" />
+          </label>
+          <label class="control">
+            <span>Regions <output data-for="minRegion">80 px²</output></span>
+            <input id="minRegion" type="range" min="1" max="400" value="80" />
+          </label>
+          <p class="control-note">Higher values merge smaller areas for fewer regions.</p>
+          <label class="control">
+            <span>Detail <output data-for="detailLevel">768 px</output></span>
+            <input id="detailLevel" type="range" min="320" max="1280" step="64" value="768" />
+          </label>
+          <p class="control-note">Controls the longest edge used when resizing the source image.</p>
+          <div class="panel-actions">
+            <button id="applyOptions" type="button" disabled>Apply changes</button>
+            <button id="resetPuzzle" type="button" disabled>Reset progress</button>
+          </div>
+          <button id="downloadJson" type="button" disabled>Download JSON</button>
+        </div>
+        <div class="panel-section">
+          <h2>Preview</h2>
+          <canvas id="previewCanvas" width="320" height="240"></canvas>
+        </div>
+        <div class="panel-section">
+          <h2>Palette</h2>
+          <div id="palette" aria-live="polite"></div>
+        </div>
+        <div class="panel-section">
+          <div id="progress" aria-live="polite">Drop an image to begin.</div>
+        </div>
+      </aside>
+    </div>
+    <input id="fileInput" type="file" accept="image/*" hidden />
+    <script>
+      const fileInput = document.getElementById("fileInput");
+      const selectButton = document.getElementById("selectImage");
+      const startHint = document.getElementById("startHint");
+      const statusEl = document.getElementById("statusBar");
+      const colorCountEl = document.getElementById("colorCount");
+      const minRegionEl = document.getElementById("minRegion");
+      const detailEl = document.getElementById("detailLevel");
+      const applyBtn = document.getElementById("applyOptions");
+      const resetBtn = document.getElementById("resetPuzzle");
+      const downloadBtn = document.getElementById("downloadJson");
+      const puzzleCanvas = document.getElementById("puzzleCanvas");
+      const previewCanvas = document.getElementById("previewCanvas");
+      const paletteEl = document.getElementById("palette");
+      const progressEl = document.getElementById("progress");
+      const puzzleCtx = puzzleCanvas.getContext("2d");
+      const previewCtx = previewCanvas.getContext("2d");
+
+      const state = {
+        puzzle: null,
+        activeColor: null,
+        filled: new Set(),
+        sourceUrl: null,
+        lastOptions: null,
       };
-    }
 
-    const paletteMap = new Map();
-    const cells = [];
+      selectButton.addEventListener("click", () => fileInput.click());
 
-    nodes.forEach((node, index) => {
-      const cellId = (node.getAttribute("data-cell-id") || "").trim() || `c${index + 1}`;
-      const colorSource = node.getAttribute("data-color-id") ?? node.getAttribute("data-color");
-      const resolvedColorId = coerceId(colorSource ?? index + 1) ?? index + 1;
-      const paletteKey = String(resolvedColorId);
-
-      const pathNodes = [];
-      if (node.tagName && node.tagName.toLowerCase() === "path") {
-        pathNodes.push(node);
-      }
-      node.querySelectorAll?.("path").forEach((el) => {
-        pathNodes.push(el);
+      startHint.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          fileInput.click();
+        }
       });
 
-      const segments = pathNodes
-        .map((el) => (el.getAttribute("d") || "").trim())
-        .filter((d) => d.length > 0);
-      if (!segments.length) {
-        throw new Error(`Region ${cellId} is missing path data.`);
-      }
-      const d = segments.join(" ");
-
-      let fillRule =
-        node.getAttribute("fill-rule") || node.getAttribute("fillRule") || "";
-      if (!fillRule && pathNodes.length) {
-        for (const path of pathNodes) {
-          const candidate = path.getAttribute("fill-rule") || path.getAttribute("fillRule");
-          if (candidate && candidate.trim()) {
-            fillRule = candidate;
-            break;
-          }
+      fileInput.addEventListener("change", (event) => {
+        const file = event.target.files?.[0];
+        if (file) {
+          handleFile(file);
         }
-      }
-      fillRule = typeof fillRule === "string" ? fillRule.trim().toLowerCase() : undefined;
-      if (fillRule !== "evenodd" && fillRule !== "nonzero") {
-        fillRule = undefined;
-      }
-
-      let colorValue =
-        node.getAttribute("data-color-hex") ||
-        node.getAttribute("data-color-rgba") ||
-        node.getAttribute("data-color") ||
-        node.getAttribute("fill");
-      if ((!colorValue || !colorValue.trim()) && pathNodes.length) {
-        for (const path of pathNodes) {
-          const fill = path.getAttribute("fill");
-          if (fill && fill.trim()) {
-            colorValue = fill.trim();
-            break;
-          }
-        }
-      }
-      const paletteName = (node.getAttribute("data-color-name") || "").trim();
-
-      const existing = paletteMap.get(paletteKey);
-      if (existing) {
-        if (!existing.name && paletteName) existing.name = paletteName;
-        if (!existing.rgba && colorValue) existing.rgba = colorValue;
-      } else {
-        paletteMap.set(paletteKey, {
-          id: resolvedColorId,
-          name: paletteName || undefined,
-          rgba: (colorValue && colorValue.trim()) || undefined,
-        });
-      }
-
-      const entry = {
-        id: cellId,
-        colorId: paletteMap.get(paletteKey).id,
-        d,
-      };
-      if (fillRule) {
-        entry.fillRule = fillRule;
-      }
-
-      cells.push(entry);
-    });
-
-    const palette = Array.from(paletteMap.values()).map((entry) => ({
-      id: entry.id,
-      name: entry.name || `Color ${entry.id}`,
-      rgba: entry.rgba || "#94a3b8",
-    }));
-    palette.sort((a, b) => {
-      const aNum = typeof a.id === "number" ? a.id : Number.NaN;
-      const bNum = typeof b.id === "number" ? b.id : Number.NaN;
-      if (Number.isFinite(aNum) && Number.isFinite(bNum)) return aNum - bNum;
-      return a.id.toString().localeCompare(b.id.toString());
-    });
-
-    const filename = (meta?.filename || "").replace(/\.[^./]+$/, "");
-    const rawTitle =
-      svgEl.getAttribute("data-title") ||
-      svgEl.getAttribute("title") ||
-      doc.querySelector("title")?.textContent ||
-      filename ||
-      "Imported artwork";
-    const title = rawTitle.toString().trim() || "Imported artwork";
-    const rawId =
-      svgEl.getAttribute("data-art-id") ||
-      svgEl.getAttribute("id") ||
-      (filename || "").trim();
-    let id = (rawId || "").toString().trim();
-    if (!id) {
-      id = title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
-    }
-
-    const normalized = normalizeArtwork({
-      id,
-      title,
-      width,
-      height,
-      palette,
-      cells,
-    });
-    if (!normalized) {
-      return { ok: false, error: "The SVG is missing required artwork metadata." };
-    }
-    return { ok: true, artwork: normalized };
-  } catch (err) {
-    return {
-      ok: false,
-      error:
-        err instanceof Error ? err.message : "Unable to convert the SVG into artwork data.",
-    };
-  }
-}
-
-function parseArtworkPayload(raw, meta = {}) {
-  const text = typeof raw === "string" ? raw.trim() : "";
-  if (!text) {
-    return { ok: false, error: "Paste artwork JSON or SVG first." };
-  }
-  if (text.startsWith("<")) {
-    return parseSvgArtwork(text, meta);
-  }
-  try {
-    const parsed = JSON.parse(text);
-    let candidate = parsed;
-    if (Array.isArray(candidate)) {
-      candidate = candidate[0];
-    }
-    if (candidate && typeof candidate === "object" && candidate.artwork) {
-      candidate = candidate.artwork;
-    }
-    const normalized = normalizeArtwork(candidate);
-    if (!normalized) {
-      return {
-        ok: false,
-        error:
-          "The JSON is missing required fields (id, title, width, height, palette, cells).",
-      };
-    }
-    return { ok: true, artwork: normalized };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "Unable to parse the JSON payload.",
-    };
-  }
-}
-
-function loadStoredArtworks() {
-  try {
-    const raw = localStorage.getItem(ARTWORKS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    const normalized = (Array.isArray(parsed) ? parsed : [])
-      .map((art) => normalizeArtwork(art))
-      .filter(Boolean);
-    return normalized;
-  } catch (err) {
-    return [];
-  }
-}
-
-function persistArtworks(list) {
-  try {
-    localStorage.setItem(ARTWORKS_KEY, JSON.stringify(list));
-  } catch (err) {}
-}
-
-function loadActiveArtworkId(artworks) {
-  try {
-    const stored = localStorage.getItem(ACTIVE_ART_KEY);
-    if (!stored) return artworks?.[0]?.id ?? null;
-    return artworks?.some((art) => art.id === stored) ? stored : artworks?.[0]?.id ?? null;
-  } catch (err) {
-    return artworks?.[0]?.id ?? null;
-  }
-}
-
-function persistActiveArtworkId(id) {
-  try {
-    if (id) {
-      localStorage.setItem(ACTIVE_ART_KEY, id);
-    } else {
-      localStorage.removeItem(ACTIVE_ART_KEY);
-    }
-  } catch (err) {}
-}
-
-const DEFAULT_CONFIG = {
-  enableAutosave: true,
-  autoAdvanceOnComplete: true,
-  enableHintPulse: true,
-  enableDragFill: false,
-  enableEyedropper: true,
-  enableKeyboardShortcuts: true,
-  showNumberBadges: true,
-  showHeatmapDots: true,
-  enableSmokeHud: true,
-  showColorLabels: true,
-  showRemainingCounts: true,
-  peekHoldToReveal: true,
-};
-
-const CONFIG_KEY = "capybooper_config";
-
-function loadConfig() {
-  try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    if (!raw) return DEFAULT_CONFIG;
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_CONFIG, ...parsed };
-  } catch (err) {
-    return DEFAULT_CONFIG;
-  }
-}
-
-function persistConfig(next) {
-  try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(next));
-  } catch (err) {}
-}
-
-function shallowEqual(a, b) {
-  const keysA = Object.keys(a);
-  const keysB = Object.keys(b);
-  if (keysA.length !== keysB.length) return false;
-  for (const key of keysA) if (a[key] !== b[key]) return false;
-  return true;
-}
-
-function loadSave(art) {
-  if (!art) return undefined;
-  try {
-    const raw = localStorage.getItem(SAVE_KEY(art.id));
-    if (!raw) return undefined;
-    const s = JSON.parse(raw);
-    if (s.artworkId !== art.id) return undefined;
-    return s;
-  } catch (err) {
-    return undefined;
-  }
-}
-
-function persistSave(art, s) {
-  if (!art) return;
-  try {
-    localStorage.setItem(SAVE_KEY(art.id), JSON.stringify(s));
-  } catch (err) {}
-}
-
-function clearSave(artId) {
-  try {
-    localStorage.removeItem(SAVE_KEY(artId));
-  } catch (err) {}
-}
-
-function computeRemaining(art, filled) {
-  if (!art) return {};
-  const map = {};
-  for (const p of art.palette) map[p.id] = 0;
-  for (const c of art.cells) if (!filled[c.id]) map[c.colorId] = (map[c.colorId] ?? 0) + 1;
-  return map;
-}
-
-// ---------- App ----------
-function App() {
-  const initialConfig = useMemo(() => loadConfig(), []);
-  const initialArtworksRef = useRef(null);
-
-  if (initialArtworksRef.current === null) {
-    initialArtworksRef.current = loadStoredArtworks();
-  }
-
-  const [artworks, setArtworks] = useState(initialArtworksRef.current);
-  const [activeArtworkId, setActiveArtworkIdState] = useState(() =>
-    loadActiveArtworkId(initialArtworksRef.current)
-  );
-  const activeArtworkIdRef = useRef(activeArtworkId);
-  const [config, setConfig] = useState(initialConfig);
-  const isDefaultConfig = useMemo(() => shallowEqual(config, DEFAULT_CONFIG), [config]);
-
-  useEffect(() => {
-    activeArtworkIdRef.current = activeArtworkId;
-  }, [activeArtworkId]);
-
-  const art = useMemo(() => {
-    const match = artworks.find((entry) => entry.id === activeArtworkId);
-    return match ?? artworks[0] ?? null;
-  }, [artworks, activeArtworkId]);
-
-  const [filled, setFilled] = useState({});
-  const [activeColor, setActiveColor] = useState(art?.palette?.[0]?.id ?? null);
-  const [scale, setScale] = useState(0.9);
-  const [offset, setOffset] = useState({ x: 50, y: 50 });
-  const [lastAction, setLastAction] = useState(null);
-  const [hintPulse, setHintPulse] = useState(new Set());
-  const [showTests, setShowTests] = useState(initialConfig.enableSmokeHud);
-  const [showOptions, setShowOptions] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
-  const [isPeekActive, setIsPeekActive] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [libraryRevision, setLibraryRevision] = useState(0);
-  const [paletteHint, setPaletteHint] = useState({ id: null, signal: 0 });
-  const [starterStatus, setStarterStatus] = useState(
-    initialArtworksRef.current.length
-      ? { state: "ready", error: null }
-      : { state: "idle", error: null }
-  );
-  const commandMenuRef = useRef(null);
-  const commandToggleRef = useRef(null);
-  const hintPressTimerRef = useRef(null);
-  const hintLongPressActiveRef = useRef(false);
-  const hintSuppressClickRef = useRef(false);
-  const [showCommandMenu, setShowCommandMenu] = useState(false);
-
-  const { width: viewportWidth } = useViewportSize();
-  const isStackedHeader = viewportWidth <= 640;
-  const collapseCommands = viewportWidth <= 880;
-
-  useEffect(() => {
-    if (!collapseCommands) setShowCommandMenu(false);
-  }, [collapseCommands]);
-
-  useEffect(() => {
-    if (!showCommandMenu) return undefined;
-    if (typeof document === "undefined") return undefined;
-    function handlePointerDown(event) {
-      const menuEl = commandMenuRef.current;
-      const toggleEl = commandToggleRef.current;
-      const target = event.target;
-      if (menuEl && menuEl.contains(target)) return;
-      if (toggleEl && toggleEl.contains(target)) return;
-      setShowCommandMenu(false);
-    }
-    function handleKeyDown(event) {
-      if (event.key === "Escape") setShowCommandMenu(false);
-    }
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [showCommandMenu]);
-
-  const topBarStyle = useMemo(() => {
-    const base = { ...styles.topBar };
-    if (isStackedHeader) {
-      return {
-        ...base,
-        padding: "8px 12px",
-        gap: 8,
-        borderRadius: 16,
-        right: 12,
-      };
-    }
-    if (collapseCommands) {
-      return {
-        ...base,
-        padding: "8px 14px",
-        gap: 10,
-      };
-    }
-    return base;
-  }, [collapseCommands, isStackedHeader]);
-
-  const topActionsStyle = useMemo(
-    () => ({
-      ...styles.topActions,
-      gap: collapseCommands ? 6 : 10,
-    }),
-    [collapseCommands]
-  );
-
-  const menuAnchorStyle = useMemo(() => styles.menuAnchor, []);
-
-  const selectArtwork = useCallback((id) => {
-    setActiveArtworkIdState(id);
-    persistActiveArtworkId(id ?? null);
-  }, []);
-
-  useEffect(() => {
-    const hadStored = initialArtworksRef.current.length > 0;
-    let cancelled = false;
-    const controller = new AbortController();
-
-    if (!hadStored) {
-      setStarterStatus({ state: "loading", error: null });
-    }
-
-    async function bootstrap() {
-      try {
-        const { artworks: loaded, errors } = await loadStarterArtworks(controller.signal);
-        if (cancelled) return;
-
-        const primaryError = errors.length
-          ? errors[0] instanceof Error
-            ? errors[0].message
-            : "Unable to load all starter artworks."
-          : null;
-
-        if (!loaded.length) {
-          if (!hadStored) {
-            const fallback = getLegacyStarterArtworks();
-            initialArtworksRef.current = fallback;
-            setArtworks(fallback);
-            const nextId = loadActiveArtworkId(fallback);
-            if (nextId) selectArtwork(nextId);
-            setStarterStatus({
-              state: fallback.length ? "ready" : "error",
-              error: primaryError || "Unable to load starter artworks.",
-            });
-          } else {
-            setStarterStatus({ state: "ready", error: primaryError });
-          }
-          return;
-        }
-
-        setStarterStatus({ state: "ready", error: primaryError });
-
-        setArtworks((prev) => {
-          const merged = mergeArtworkLists(prev, loaded);
-          if (merged === prev) {
-            return prev;
-          }
-          initialArtworksRef.current = merged;
-          const activeId = activeArtworkIdRef.current;
-          const hasActive = activeId ? merged.some((entry) => entry.id === activeId) : false;
-          if (!hasActive) {
-            selectArtwork(loadActiveArtworkId(merged));
-          } else if (!hadStored) {
-            const ensuredId = loadActiveArtworkId(merged);
-            if (ensuredId && ensuredId !== activeId) {
-              selectArtwork(ensuredId);
-            }
-          }
-          return merged;
-        });
-      } catch (err) {
-        if (cancelled) return;
-        const message =
-          err instanceof Error ? err.message : "Unable to load starter artworks.";
-
-        if (!hadStored) {
-          const fallback = getLegacyStarterArtworks();
-          initialArtworksRef.current = fallback;
-          setArtworks(fallback);
-          const nextId = loadActiveArtworkId(fallback);
-          if (nextId) selectArtwork(nextId);
-          setStarterStatus({
-            state: fallback.length ? "ready" : "error",
-            error: message,
-          });
-        } else {
-          setStarterStatus({ state: "ready", error: message });
-        }
-      }
-    }
-
-    bootstrap();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [selectArtwork]);
-
-  useEffect(() => {
-    persistArtworks(artworks);
-  }, [artworks]);
-
-  useEffect(() => {
-    if (!artworks.length) {
-      selectArtwork(null);
-      return;
-    }
-    if (!artworks.some((entry) => entry.id === activeArtworkId)) {
-      selectArtwork(artworks[0].id);
-    }
-  }, [artworks, activeArtworkId, selectArtwork]);
-
-  useEffect(() => {
-    if (!art) {
-      setFilled({});
-      setActiveColor(null);
-      setScale(0.9);
-      setOffset({ x: 50, y: 50 });
-      setLastAction(null);
-      setHintPulse(new Set());
-      setIsPeekActive(false);
-      return;
-    }
-    const saved = loadSave(art);
-    setFilled(saved?.filled ?? {});
-    setActiveColor(saved?.activeColor ?? art.palette?.[0]?.id ?? null);
-    setScale(saved?.viewport?.scale ?? 0.9);
-    setOffset({
-      x: saved?.viewport?.x ?? 50,
-      y: saved?.viewport?.y ?? 50,
-    });
-    setLastAction(null);
-    setHintPulse(new Set());
-    setIsPeekActive(false);
-  }, [art?.id]);
-
-  const {
-    enableAutosave,
-    autoAdvanceOnComplete,
-    enableHintPulse,
-    enableDragFill,
-    enableEyedropper,
-    enableKeyboardShortcuts,
-    showNumberBadges,
-    showHeatmapDots,
-    enableSmokeHud,
-    showColorLabels,
-    showRemainingCounts,
-    peekHoldToReveal,
-  } = config;
-
-  useEffect(() => {
-    if (peekHoldToReveal) setIsPeekActive(false);
-  }, [peekHoldToReveal]);
-
-  useEffect(() => {
-    if (isPeekActive) {
-      pendingPaintRef.current = null;
-      dragIntentRef.current = "idle";
-    }
-  }, [isPeekActive]);
-
-  useEffect(() => {
-    if (!enableAutosave || !art) return;
-    const t = setTimeout(() => {
-      persistSave(art, {
-        artworkId: art.id,
-        filled,
-        activeColor,
-        viewport: { scale, x: offset.x, y: offset.y },
-        lastSaved: Date.now(),
       });
-    }, 800);
-    return () => clearTimeout(t);
-  }, [art, filled, activeColor, scale, offset, enableAutosave]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    window.__capyTestHooks = window.__capyTestHooks || {};
-    window.__capyTestHooks.fillCell = (cellId) => onCellTapRef.current(cellId);
-    return () => {
-      if (window.__capyTestHooks) {
-        delete window.__capyTestHooks.fillCell;
-      }
-    };
-  }, []);
-
-  const remaining = useMemo(() => computeRemaining(art, filled), [art, filled]);
-  const totalCells = art?.cells?.length ?? 0;
-  const filledCount = Object.values(filled).filter(Boolean).length;
-  const progress = totalCells > 0 ? Math.round((filledCount / totalCells) * 100) : 0;
-
-  const libraryProgress = useMemo(() => {
-    const map = {};
-    artworks.forEach((entry) => {
-      if (!entry) return;
-      if (art && entry.id === art.id) {
-        map[entry.id] = progress;
-        return;
-      }
-      const total = entry.cells?.length ?? 0;
-      const saved = loadSave(entry);
-      if (!saved) {
-        map[entry.id] = 0;
-        return;
-      }
-      const count = Object.values(saved.filled ?? {}).filter(Boolean).length;
-      map[entry.id] = total > 0 ? Math.round((count / total) * 100) : 0;
-    });
-    return map;
-  }, [artworks, art?.id, progress, libraryRevision]);
-
-
-  const peekHoldMode = peekHoldToReveal;
-  const startPeek = useCallback(() => setIsPeekActive(true), []);
-  const stopPeek = useCallback(() => setIsPeekActive(false), []);
-  const togglePeek = useCallback(() => setIsPeekActive((prev) => !prev), []);
-
-  const peekButtonTitle = peekHoldMode
-    ? "Hold to peek at the completed painting"
-    : isPeekActive
-    ? "Hide the completed painting preview"
-    : "Show the completed painting preview";
-
-  const peekButtonHandlers = peekHoldMode
-    ? {
-        onPointerDown: (e) => {
-          if (e.pointerType === "mouse" && e.button !== 0) return;
-          e.preventDefault();
-          e.currentTarget.setPointerCapture?.(e.pointerId);
-          startPeek();
-        },
-        onPointerUp: (e) => {
-          e.currentTarget.releasePointerCapture?.(e.pointerId);
-          stopPeek();
-        },
-        onPointerLeave: () => stopPeek(),
-        onPointerCancel: () => stopPeek(),
-        onBlur: () => stopPeek(),
-        onKeyDown: (e) => {
-          if (e.key === " " || e.key === "Enter") {
-            e.preventDefault();
-            startPeek();
-          }
-        },
-        onKeyUp: (e) => {
-          if (e.key === " " || e.key === "Enter") {
-            e.preventDefault();
-            stopPeek();
-          }
-        },
-      }
-    : {
-        onClick: () => togglePeek(),
-      };
-
-  const wrapMenuHandler = useCallback(
-    (handler, options = {}) => {
-      if (typeof handler !== "function") return handler;
-      return (event, ...args) => {
-        handler(event, ...args);
-        if (options.skipClose && options.skipClose(event)) {
-          return;
+      function hasFiles(event) {
+        const types = event.dataTransfer?.types;
+        if (!types) return false;
+        if (typeof types.includes === "function") {
+          return types.includes("Files");
         }
-        setShowCommandMenu(false);
-      };
-    },
-    []
-  );
+        if (typeof types.contains === "function") {
+          return types.contains("Files");
+        }
+        return Array.from(types).includes("Files");
+      }
 
-  const peekMenuStyle = useMemo(
-    () => ({
-      ...styles.commandMenuButton,
-      ...(isPeekActive ? styles.commandMenuButtonActive : {}),
-    }),
-    [isPeekActive]
-  );
-
-  const peekMenuProps = useMemo(() => {
-    const base = {
-      type: "button",
-      role: "menuitem",
-      style: peekMenuStyle,
-      title: peekButtonTitle,
-      "aria-label": peekButtonTitle,
-    };
-    if (!peekHoldMode) {
-      base["aria-pressed"] = isPeekActive;
-    }
-    if (peekHoldMode) {
-      return {
-        ...base,
-        onPointerDown: wrapMenuHandler(peekButtonHandlers.onPointerDown, {
-          skipClose: (event) => event?.type === "pointerdown",
-        }),
-        onPointerUp: wrapMenuHandler(peekButtonHandlers.onPointerUp),
-        onPointerLeave: wrapMenuHandler(peekButtonHandlers.onPointerLeave),
-        onPointerCancel: wrapMenuHandler(peekButtonHandlers.onPointerCancel),
-        onBlur: wrapMenuHandler(peekButtonHandlers.onBlur),
-        onKeyDown: wrapMenuHandler(peekButtonHandlers.onKeyDown, {
-          skipClose: (event) => event?.type === "keydown",
-        }),
-        onKeyUp: wrapMenuHandler(peekButtonHandlers.onKeyUp),
-      };
-    }
-    return {
-      ...base,
-      onClick: wrapMenuHandler(peekButtonHandlers.onClick),
-    };
-  }, [isPeekActive, peekButtonHandlers, peekButtonTitle, peekHoldMode, peekMenuStyle, wrapMenuHandler]);
-
-  const hintButtonStyle = useMemo(
-    () => ({
-      ...styles.iconButton,
-      ...(isPeekActive ? styles.iconButtonActive : {}),
-      opacity: enableHintPulse ? 1 : 0.45,
-      cursor: enableHintPulse ? "pointer" : "not-allowed",
-    }),
-    [enableHintPulse, isPeekActive]
-  );
-
-  const hintMenuStyle = useMemo(
-    () => ({
-      ...styles.commandMenuButton,
-      opacity: enableHintPulse ? 1 : 0.45,
-      cursor: enableHintPulse ? "pointer" : "not-allowed",
-    }),
-    [enableHintPulse]
-  );
-
-  const clearHintPressTimer = useCallback(() => {
-    if (hintPressTimerRef.current != null) {
-      clearTimeout(hintPressTimerRef.current);
-      hintPressTimerRef.current = null;
-    }
-  }, []);
-
-  const endHintPeek = useCallback(() => {
-    if (!hintLongPressActiveRef.current) return;
-    hintLongPressActiveRef.current = false;
-    stopPeek();
-  }, [stopPeek]);
-
-  const handleHintPointerDown = useCallback(
-    (event) => {
-      if (event.pointerType === "mouse" && event.button !== 0) return;
-      hintSuppressClickRef.current = false;
-      hintLongPressActiveRef.current = false;
-      clearHintPressTimer();
-      if (event.pointerType === "touch") {
+      let dragDepth = 0;
+      window.addEventListener("dragenter", (event) => {
+        if (!hasFiles(event)) return;
+        dragDepth += 1;
+        document.body.classList.add("dragging");
         event.preventDefault();
-      }
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-      hintPressTimerRef.current = window.setTimeout(() => {
-        hintLongPressActiveRef.current = true;
-        hintSuppressClickRef.current = true;
-        setShowCommandMenu(false);
-        startPeek();
-      }, 420);
-    },
-    [clearHintPressTimer, setShowCommandMenu, startPeek]
-  );
-
-  const handleHintPointerUp = useCallback(
-    (event) => {
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-      const wasLongPress = hintLongPressActiveRef.current;
-      clearHintPressTimer();
-      if (wasLongPress) {
-        endHintPeek();
-      }
-    },
-    [clearHintPressTimer, endHintPeek]
-  );
-
-  const handleHintPointerLeave = useCallback(() => {
-    clearHintPressTimer();
-    if (hintLongPressActiveRef.current) {
-      hintSuppressClickRef.current = true;
-    }
-    endHintPeek();
-  }, [clearHintPressTimer, endHintPeek]);
-
-  const handleHintPointerCancel = useCallback(() => {
-    clearHintPressTimer();
-    if (hintLongPressActiveRef.current) {
-      hintSuppressClickRef.current = true;
-    }
-    endHintPeek();
-  }, [clearHintPressTimer, endHintPeek]);
-
-  const handleHintBlur = useCallback(() => {
-    clearHintPressTimer();
-    endHintPeek();
-    hintSuppressClickRef.current = false;
-  }, [clearHintPressTimer, endHintPeek]);
-
-  const handleHintKeyDown = useCallback(
-    (event) => {
-      if (event.key !== " " && event.key !== "Enter") return;
-      event.preventDefault();
-      hintSuppressClickRef.current = false;
-      hintLongPressActiveRef.current = false;
-      clearHintPressTimer();
-      hintPressTimerRef.current = window.setTimeout(() => {
-        hintLongPressActiveRef.current = true;
-        hintSuppressClickRef.current = true;
-        setShowCommandMenu(false);
-        startPeek();
-      }, 420);
-    },
-    [clearHintPressTimer, setShowCommandMenu, startPeek]
-  );
-
-  const handleHintKeyUp = useCallback(
-    (event) => {
-      if (event.key !== " " && event.key !== "Enter") return;
-      event.preventDefault();
-      const wasLongPress = hintLongPressActiveRef.current;
-      clearHintPressTimer();
-      if (wasLongPress) {
-        hintSuppressClickRef.current = true;
-        endHintPeek();
-        return;
-      }
-      hintSuppressClickRef.current = true;
-      if (enableHintPulse) {
-        setShowCommandMenu(false);
-        hint();
-      }
-    },
-    [clearHintPressTimer, enableHintPulse, endHintPeek, hint]
-  );
-
-  const handleHintClick = useCallback(
-    (event) => {
-      if (hintSuppressClickRef.current) {
-        hintSuppressClickRef.current = false;
-        return;
-      }
-      if (!enableHintPulse) return;
-      setShowCommandMenu(false);
-      hint();
-    },
-    [enableHintPulse, hint]
-  );
-
-  const menuToggleStyle = useMemo(
-    () => ({
-      ...styles.iconButton,
-      ...(showCommandMenu ? styles.iconButtonActive : {}),
-    }),
-    [showCommandMenu]
-  );
-
-  const renderControlContent = (icon, label, labelStyle = styles.controlLabel) =>
-    React.createElement(
-      React.Fragment,
-      null,
-      React.createElement("span", { style: styles.controlIcon, "aria-hidden": "true" }, icon),
-      React.createElement("span", { style: labelStyle }, label)
-    );
-
-  const handleOpenLibrary = useCallback(() => {
-    setShowHelp(false);
-    setShowOptions(false);
-    setShowLibrary(true);
-    setShowCommandMenu(false);
-  }, []);
-
-  const handleOpenOptions = useCallback(() => {
-    setShowHelp(false);
-    setShowOptions(true);
-    setShowCommandMenu(false);
-  }, []);
-
-  const handleOpenHelp = useCallback(() => {
-    setShowOptions(false);
-    setShowHelp(true);
-    setShowCommandMenu(false);
-  }, []);
-
-  const handleHintRequest = useCallback(() => {
-    hint();
-    setShowCommandMenu(false);
-  }, [hint]);
-
-  const menuCommandButtons = [
-    React.createElement(
-      "button",
-      {
-        key: "library",
-        type: "button",
-        role: "menuitem",
-        style: styles.commandMenuButton,
-        onClick: handleOpenLibrary,
-        title: "Open art library",
-        "aria-label": "Open art library",
-        "data-testid": "open-art-library",
-      },
-      renderControlContent("\ud83d\udcda", "Library", styles.commandMenuLabel)
-    ),
-    React.createElement(
-      "button",
-      {
-        key: "options",
-        type: "button",
-        role: "menuitem",
-        style: styles.commandMenuButton,
-        onClick: handleOpenOptions,
-        title: "Adjust options",
-        "aria-label": "Adjust options",
-      },
-      renderControlContent("\u2699\ufe0f", "Options", styles.commandMenuLabel)
-    ),
-    React.createElement(
-      "button",
-      {
-        key: "help",
-        type: "button",
-        role: "menuitem",
-        style: styles.commandMenuButton,
-        onClick: handleOpenHelp,
-        title: "Open help",
-        "aria-label": "Open help",
-      },
-      renderControlContent("\u2753", "Help", styles.commandMenuLabel)
-    ),
-    React.createElement(
-      "button",
-      { key: "peek", ...peekMenuProps },
-      renderControlContent("\ud83d\udc41\ufe0f", "Peek", styles.commandMenuLabel)
-    ),
-    React.createElement(
-      "button",
-      {
-        key: "hint",
-        type: "button",
-        role: "menuitem",
-        style: hintMenuStyle,
-        onClick: handleHintRequest,
-        title: "Highlight a suggested cell",
-        disabled: !enableHintPulse,
-        "aria-label": "Highlight a suggested cell",
-      },
-      renderControlContent("\u2728", "Hint", styles.commandMenuLabel)
-    ),
-  ].filter(Boolean);
-
-  const toggleTitle = showCommandMenu ? "Hide controls" : "Show controls";
-
-  const handleImportArtwork = useCallback(
-    (raw, meta = {}) => {
-      const result = parseArtworkPayload(typeof raw === "string" ? raw : "", meta);
-      if (!result.ok || !result.artwork) {
-        return result;
-      }
-      const normalized = result.artwork;
-      const existingIds = new Set(artworks.map((item) => item.id));
-      const baseId = normalized.id || `art-${Math.random().toString(36).slice(2, 8)}`;
-      let uniqueId = baseId;
-      let suffix = 2;
-      while (existingIds.has(uniqueId)) {
-        uniqueId = `${baseId}-${suffix++}`;
-      }
-      const finalArtwork = cloneArtwork({ ...normalized, id: uniqueId });
-      setArtworks((prev) => [...prev, finalArtwork]);
-      selectArtwork(finalArtwork.id);
-      setLibraryRevision((v) => v + 1);
-      return { ok: true, artwork: finalArtwork };
-    },
-    [artworks, selectArtwork]
-  );
-
-  const handleDeleteArtwork = useCallback(
-    (id) => {
-      setArtworks((prev) => {
-        const next = prev.filter((entry) => entry.id !== id);
-        if (!next.length) {
-          selectArtwork(null);
-          return [];
-        }
-        if (!next.some((entry) => entry.id === activeArtworkId)) {
-          selectArtwork(next[0].id);
-        }
-        return next;
       });
-      clearSave(id);
-      setLibraryRevision((v) => v + 1);
-      if (art && art.id === id) {
-        setFilled({});
-        setActiveColor(null);
-        setScale(0.9);
-        setOffset({ x: 50, y: 50 });
-        setLastAction(null);
-        setHintPulse(new Set());
-        setShowLibrary(true);
+
+      window.addEventListener("dragleave", (event) => {
+        if (!hasFiles(event)) return;
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) {
+          document.body.classList.remove("dragging");
+        }
+      });
+
+      window.addEventListener("dragover", (event) => {
+        if (!hasFiles(event)) return;
+        event.preventDefault();
+      });
+
+      window.addEventListener("drop", (event) => {
+        if (!hasFiles(event)) return;
+        event.preventDefault();
+        const file = event.dataTransfer?.files?.[0];
+        dragDepth = 0;
+        document.body.classList.remove("dragging");
+        if (file) {
+          handleFile(file);
+        }
+      });
+
+      function syncRangeOutput(input) {
+        const output = document.querySelector(`output[data-for="${input.id}"]`);
+        if (!output) return;
+        if (input.id === "detailLevel") {
+          output.textContent = `${input.value} px`;
+        } else if (input.id === "minRegion") {
+          output.textContent = `${input.value} px²`;
+        } else {
+          output.textContent = input.value;
+        }
       }
-    },
-    [art, activeArtworkId, selectArtwork, setShowLibrary]
-  );
 
-  const handleRenameArtwork = useCallback((id, nextTitle) => {
-    const title = (nextTitle ?? "").trim() || "Untitled artwork";
-    setArtworks((prev) => prev.map((entry) => (entry.id === id ? { ...entry, title } : entry)));
-  }, []);
+      [colorCountEl, minRegionEl, detailEl].forEach((input) => {
+        syncRangeOutput(input);
+        input.addEventListener("input", () => {
+          syncRangeOutput(input);
+          markOptionsDirty();
+        });
+      });
 
-  const handleClearProgress = useCallback(
-    (id) => {
-      clearSave(id);
-      setLibraryRevision((v) => v + 1);
-      if (art && art.id === id) {
-        setFilled({});
-        setActiveColor(art.palette?.[0]?.id ?? null);
-        setScale(0.9);
-        setOffset({ x: 50, y: 50 });
-        setLastAction(null);
-        setHintPulse(new Set());
-      }
-    },
-    [art]
-  );
+      applyBtn.addEventListener("click", () => {
+        if (!state.sourceUrl) return;
+        applyBtn.disabled = true;
+        regenerateFromSource();
+      });
 
-  const previousSmokePreferenceRef = useRef(initialConfig.enableSmokeHud);
+      resetBtn.addEventListener("click", () => {
+        if (!state.puzzle) return;
+        state.filled = new Set();
+        renderPuzzle();
+        renderPalette();
+        updateProgress();
+      });
 
-  useEffect(() => {
-    if (!enableSmokeHud) {
-      previousSmokePreferenceRef.current = showTests;
-      setShowTests(false);
-    } else {
-      setShowTests((prev) => prev || previousSmokePreferenceRef.current);
-    }
-  }, [enableSmokeHud, showTests]);
+      puzzleCanvas.addEventListener("click", (event) => {
+        if (!state.puzzle || state.activeColor == null) return;
+        const rect = puzzleCanvas.getBoundingClientRect();
+        const scaleX = puzzleCanvas.width / rect.width;
+        const scaleY = puzzleCanvas.height / rect.height;
+        const x = Math.floor((event.clientX - rect.left) * scaleX);
+        const y = Math.floor((event.clientY - rect.top) * scaleY);
+        const idx = y * puzzleCanvas.width + x;
+        const regionId = state.puzzle.regionMap[idx];
+        const region = state.puzzle.regions[regionId];
+        if (!region) return;
+        if (state.filled.has(regionId)) return;
+        if (region.colorId !== state.activeColor) {
+          flashRegion(regionId, "#facc15");
+          return;
+        }
+        state.filled.add(regionId);
+        renderPuzzle();
+        renderPalette();
+        updateProgress();
+      });
 
-  useEffect(() => {
-    if (!showOptions) return;
-    function onKeyDown(e) {
-      if (e.key === "Escape") setShowOptions(false);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showOptions]);
+      downloadBtn.addEventListener("click", () => {
+        if (!state.puzzle) return;
+        const blob = new Blob([
+          JSON.stringify(
+            {
+              width: state.puzzle.width,
+              height: state.puzzle.height,
+              palette: state.puzzle.palette.map((p) => ({
+                id: p.id,
+                hex: p.hex,
+              })),
+              cells: state.puzzle.regions.map((region) => ({
+                id: region.id,
+                colorId: region.colorId,
+                center: [Number(region.cx.toFixed(2)), Number(region.cy.toFixed(2))],
+                pixelCount: region.pixelCount,
+              })),
+            },
+            null,
+            2
+          ),
+        ], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "color-by-number.json";
+        document.body.appendChild(link);
+        link.click();
+        requestAnimationFrame(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        });
+      });
 
-  const svgRef = useRef(null);
-  const isPanningRef = useRef(false);
-  const lastPosRef = useRef(null);
-  const movedRef = useRef(0);
-  const eyedropCandidateRef = useRef(null);
-  const pointersRef = useRef(new Map());
-  const pinchRef = useRef(null);
-  const zoomAnimRef = useRef(null);
-  const dragIntentRef = useRef("idle");
-  const pendingPaintRef = useRef(null);
-  const onCellTapRef = useRef(() => {});
-  const pointerOriginRef = useRef(null);
-  const PAN_DRAG_THRESHOLD = 8;
-
-  function beginPan(clientX, clientY) {
-    pendingPaintRef.current = null;
-    dragIntentRef.current = "pan";
-    isPanningRef.current = true;
-    lastPosRef.current = { x: clientX, y: clientY };
-    pointerOriginRef.current = null;
-  }
-
-  const cancelZoomAnimation = useCallback(() => {
-    if (zoomAnimRef.current) {
-      cancelAnimationFrame(zoomAnimRef.current);
-      zoomAnimRef.current = null;
-    }
-  }, []);
-
-  const smoothZoomTo = useCallback(
-    (targetScale, clientX, clientY) => {
-      if (!art) return;
-      const svg = svgRef.current;
-      if (!svg) return;
-      const { pxArt, pyArt } = cssToArt(svg, clientX, clientY);
-      const artX = (pxArt - offset.x) / scale;
-      const artY = (pyArt - offset.y) / scale;
-      const clamped = clamp(targetScale, 0.3, 4);
-      const targetOffset = {
-        x: pxArt - artX * clamped,
-        y: pyArt - artY * clamped,
-      };
-      cancelZoomAnimation();
-      const duration = 180;
-      const start = performance.now();
-      const startScale = scale;
-      const startOffset = { x: offset.x, y: offset.y };
-
-      function step(now) {
-        const t = Math.min((now - start) / duration, 1);
-        const eased = 1 - Math.pow(1 - t, 3);
-        const nextScale = startScale + (clamped - startScale) * eased;
-        const nextOffset = {
-          x: startOffset.x + (targetOffset.x - startOffset.x) * eased,
-          y: startOffset.y + (targetOffset.y - startOffset.y) * eased,
+      function getCurrentOptions() {
+        return {
+          targetColors: clamp(Number(colorCountEl.value) || 16, 4, 64),
+          minRegion: clamp(Number(minRegionEl.value) || 30, 1, 2000),
+          maxSize: clamp(Number(detailEl.value) || 768, 256, 1600),
         };
-        setScale(nextScale);
-        setOffset(nextOffset);
-        if (t < 1) {
-          zoomAnimRef.current = requestAnimationFrame(step);
-        } else {
-          zoomAnimRef.current = null;
+      }
+
+      function markOptionsDirty() {
+        if (!state.puzzle) return;
+        const current = getCurrentOptions();
+        const last = state.lastOptions;
+        const dirty =
+          !last ||
+          current.targetColors !== last.targetColors ||
+          current.minRegion !== last.minRegion ||
+          current.maxSize !== last.maxSize;
+        applyBtn.disabled = !dirty;
+      }
+
+      function regenerateFromSource() {
+        if (!state.sourceUrl) return;
+        statusEl.textContent = "Updating puzzle with new settings...";
+        loadImage(state.sourceUrl);
+      }
+
+      function handleFile(file) {
+        resetPuzzleUI();
+        statusEl.textContent = "Loading image...";
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          if (typeof result === "string") {
+            state.sourceUrl = result;
+            document.body.classList.remove("dragging");
+            startHint.classList.add("hidden");
+            loadImage(result);
+          }
+        };
+        reader.onerror = () => {
+          statusEl.textContent = "Unable to read that file.";
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function loadImage(url) {
+        const img = new Image();
+        img.onload = async () => {
+          try {
+            await generatePuzzleFromImage(img);
+          } catch (error) {
+            console.error(error);
+            statusEl.textContent = "Something went wrong while generating the puzzle.";
+          }
+        };
+        img.onerror = () => {
+          statusEl.textContent = "Unable to read that image.";
+        };
+        img.src = url;
+      }
+
+      function resetPuzzleUI() {
+        state.puzzle = null;
+        state.activeColor = null;
+        state.filled = new Set();
+        paletteEl.innerHTML = "";
+        progressEl.textContent = "Processing...";
+        resetBtn.disabled = true;
+        downloadBtn.disabled = true;
+        applyBtn.disabled = true;
+        puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
+        previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+      }
+
+      async function generatePuzzleFromImage(img) {
+        const { targetColors, minRegion, maxSize } = getCurrentOptions();
+        statusEl.textContent = "Quantizing colours...";
+        const data = await createPuzzleData(img, {
+          targetColors,
+          minRegion,
+          maxSize,
+          kmeansIters: 12,
+        });
+        state.puzzle = data;
+        state.activeColor = data.palette[0]?.id ?? null;
+        state.filled = new Set();
+        state.lastOptions = { targetColors, minRegion, maxSize };
+        puzzleCanvas.width = data.width;
+        puzzleCanvas.height = data.height;
+        previewCanvas.width = data.width;
+        previewCanvas.height = data.height;
+        renderPreview();
+        renderPuzzle();
+        renderPalette();
+        updateProgress();
+        resetBtn.disabled = false;
+        downloadBtn.disabled = false;
+        applyBtn.disabled = true;
+        statusEl.textContent = `Generated ${data.regions.length} regions across ${data.palette.length} colours.`;
+      }
+
+      function renderPreview() {
+        if (!state.puzzle) return;
+        const { width, height, regions, palette } = state.puzzle;
+        const imageData = previewCtx.createImageData(width, height);
+        const data = imageData.data;
+        for (const region of regions) {
+          const color = palette[region.colorId - 1];
+          if (!color) continue;
+          const rgba = color.rgba;
+          for (const idx of region.pixels) {
+            const base = idx * 4;
+            data[base] = rgba[0];
+            data[base + 1] = rgba[1];
+            data[base + 2] = rgba[2];
+            data[base + 3] = 255;
+          }
+        }
+        previewCtx.putImageData(imageData, 0, 0);
+      }
+
+      function renderPuzzle() {
+        if (!state.puzzle) return;
+        const { width, height, regions, palette } = state.puzzle;
+        puzzleCtx.save();
+        puzzleCtx.clearRect(0, 0, width, height);
+        puzzleCtx.fillStyle = "#f8fafc";
+        puzzleCtx.fillRect(0, 0, width, height);
+        for (const region of regions) {
+          if (!state.filled.has(region.id)) continue;
+          const color = palette[region.colorId - 1];
+          if (!color) continue;
+          puzzleCtx.fillStyle = color.hex;
+          for (const idx of region.pixels) {
+            const x = idx % width;
+            const y = (idx / width) | 0;
+            puzzleCtx.fillRect(x, y, 1, 1);
+          }
+        }
+        drawOutlines();
+        drawNumbers();
+        puzzleCtx.restore();
+      }
+
+      function drawNumbers() {
+        if (!state.puzzle) return;
+        const { regions } = state.puzzle;
+        const fontSize = Math.max(10, Math.round(state.puzzle.width / 45));
+        puzzleCtx.font = `${fontSize}px "Inter", "Segoe UI", sans-serif`;
+        puzzleCtx.fillStyle = "rgba(15, 23, 42, 0.95)";
+        puzzleCtx.textAlign = "center";
+        puzzleCtx.textBaseline = "middle";
+        for (const region of regions) {
+          if (state.filled.has(region.id)) continue;
+          puzzleCtx.fillText(String(region.colorId), region.cx, region.cy);
         }
       }
 
-      if (Math.abs(clamped - startScale) < 1e-3) {
-        setScale(clamped);
-        setOffset(targetOffset);
-        return;
+      function drawOutlines() {
+        if (!state.puzzle) return;
+        const { width, height, regionMap } = state.puzzle;
+        puzzleCtx.fillStyle = "rgba(15, 23, 42, 0.65)";
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const idx = y * width + x;
+            const id = regionMap[idx];
+            const left = x > 0 ? regionMap[idx - 1] : id;
+            const right = x < width - 1 ? regionMap[idx + 1] : id;
+            const up = y > 0 ? regionMap[idx - width] : id;
+            const down = y < height - 1 ? regionMap[idx + width] : id;
+            if (left !== id || right !== id || up !== id || down !== id) {
+              puzzleCtx.fillRect(x, y, 1, 1);
+            }
+          }
+        }
       }
 
-      zoomAnimRef.current = requestAnimationFrame(step);
-    },
-    [art, cancelZoomAnimation, offset.x, offset.y, scale]
-  );
-
-  useEffect(() => {
-    return () => cancelZoomAnimation();
-  }, [cancelZoomAnimation]);
-
-  function cssToArt(svg, clientX, clientY) {
-    if (!art) return { pxArt: 0, pyArt: 0 };
-    const rect = svg.getBoundingClientRect();
-    const sx = art.width / rect.width;
-    const sy = art.height / rect.height;
-    const pxArt = (clientX - rect.left) * sx;
-    const pyArt = (clientY - rect.top) * sy;
-    return { pxArt, pyArt };
-  }
-
-  function onWheel(e) {
-    if (!art) return;
-    const svg = svgRef.current;
-    if (!svg) return;
-    let delta = e.deltaY;
-    if (e.deltaMode === 1) delta *= 16;
-    if (e.deltaMode === 2) delta *= 240;
-    const factor = Math.exp(-delta * 0.0012);
-    const targetScale = clamp(scale * factor, 0.2, 6);
-    smoothZoomTo(targetScale, e.clientX, e.clientY);
-  }
-
-  function onPointerDown(e) {
-    if (!art) return;
-    if (isPeekActive) {
-      e.preventDefault?.();
-      return;
-    }
-    const svg = svgRef.current;
-    svg?.setPointerCapture?.(e.pointerId);
-    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-    dragIntentRef.current = "idle";
-    pendingPaintRef.current = null;
-    pointerOriginRef.current = { x: e.clientX, y: e.clientY };
-    movedRef.current = 0;
-    eyedropCandidateRef.current = null;
-
-    const target = e.target;
-    const cellNode = target?.closest?.("[data-cell-id]");
-    const cid = cellNode?.dataset?.cellId;
-
-    if (e.pointerType === "mouse" && (e.button === 2 || e.button === 1 || e.ctrlKey)) {
-      e.preventDefault();
-      cancelZoomAnimation();
-      beginPan(e.clientX, e.clientY);
-      return;
-    }
-
-    if (pointersRef.current.size === 2 && !pinchRef.current) {
-      cancelZoomAnimation();
-      const ids = Array.from(pointersRef.current.keys());
-      const p1 = pointersRef.current.get(ids[0]);
-      const p2 = pointersRef.current.get(ids[1]);
-      const d0 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-      const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-      let artX = 0;
-      let artY = 0;
-      if (svg) {
-        const { pxArt, pyArt } = cssToArt(svg, mid.x, mid.y);
-        artX = (pxArt - offset.x) / scale;
-        artY = (pyArt - offset.y) / scale;
+      function renderPalette() {
+        paletteEl.innerHTML = "";
+        if (!state.puzzle) return;
+        const colorCounts = new Map();
+        for (const region of state.puzzle.regions) {
+          const count = colorCounts.get(region.colorId) || 0;
+          colorCounts.set(region.colorId, count + 1);
+        }
+        for (const color of state.puzzle.palette) {
+          const swatch = document.createElement("button");
+          swatch.type = "button";
+          swatch.className = "swatch";
+          if (state.activeColor === color.id) swatch.classList.add("active");
+          const remaining = state.puzzle.regions.filter(
+            (region) => region.colorId === color.id && !state.filled.has(region.id)
+          ).length;
+          if (remaining === 0) swatch.classList.add("done");
+          swatch.dataset.colorId = String(color.id);
+          swatch.innerHTML = `
+            <span class="sample" style="background:${color.hex}"></span>
+            <span class="info">
+              <strong>Colour ${color.id}</strong>
+              <span>${color.hex.toUpperCase()} · ${colorCounts.get(color.id) || 0} cells</span>
+              <span>${remaining} remaining</span>
+            </span>
+          `;
+          swatch.addEventListener("click", () => {
+            state.activeColor = color.id;
+            renderPalette();
+          });
+          paletteEl.appendChild(swatch);
+        }
       }
-      pinchRef.current = { id1: ids[0], id2: ids[1], d0, s0: scale, artX, artY };
-      dragIntentRef.current = "pinch";
-      isPanningRef.current = false;
-      pointerOriginRef.current = null;
-      return;
-    }
 
-    if (cid) {
-      cancelZoomAnimation();
-      const already = !!filled[cid];
-      if (already) {
-        eyedropCandidateRef.current = enableEyedropper ? cid : null;
-        beginPan(e.clientX, e.clientY);
-        return;
+      function updateProgress() {
+        if (!state.puzzle) {
+          progressEl.textContent = "Load an image to begin.";
+          return;
+        }
+        const total = state.puzzle.regions.length;
+        const done = state.filled.size;
+        if (done === total) {
+          progressEl.textContent = "Puzzle complete! Download the data or try another image.";
+        } else {
+          progressEl.textContent = `Filled ${done} of ${total} regions.`;
+        }
       }
-      dragIntentRef.current = enableDragFill ? "painting" : "pending-paint";
-      pendingPaintRef.current = cid;
-      if (enableDragFill) {
-        onCellTap(cid);
-      }
-      isPanningRef.current = false;
-      return;
-    }
-    cancelZoomAnimation();
-    beginPan(e.clientX, e.clientY);
-  }
 
-  function onPointerMove(e) {
-    if (!art) return;
-    if (isPeekActive) return;
-    const svg = svgRef.current;
-    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-    if (dragIntentRef.current === "pending-paint" && pointerOriginRef.current) {
-      const dx = e.clientX - pointerOriginRef.current.x;
-      const dy = e.clientY - pointerOriginRef.current.y;
-      if (Math.hypot(dx, dy) > PAN_DRAG_THRESHOLD) beginPan(e.clientX, e.clientY);
-    }
-
-    if (enableDragFill && dragIntentRef.current === "painting") {
-      const target = e.target;
-      const cellNode = target?.closest?.("[data-cell-id]");
-      const id = cellNode?.dataset?.cellId;
-      if (id && id !== pendingPaintRef.current) {
-        pendingPaintRef.current = id;
-        onCellTap(id);
-      }
-      return;
-    }
-
-    if (pinchRef.current) {
-      const { id1, id2, d0, s0, artX, artY } = pinchRef.current;
-      const p1 = pointersRef.current.get(id1);
-      const p2 = pointersRef.current.get(id2);
-      if (p1 && p2) {
-        const d = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-        const factor = d0 > 0 ? d / d0 : 1;
-        const newScale = clamp(s0 * factor, 0.3, 4);
-        const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-        const { pxArt, pyArt } = cssToArt(svg, mid.x, mid.y);
-        setOffset({ x: pxArt - artX * newScale, y: pyArt - artY * newScale });
-        setScale(newScale);
-      }
-      return;
-    }
-
-    if (isPanningRef.current && lastPosRef.current) {
-      const rect = svg.getBoundingClientRect();
-      const sx = art.width / rect.width;
-      const sy = art.height / rect.height;
-      const dxPx = e.clientX - lastPosRef.current.x;
-      const dyPx = e.clientY - lastPosRef.current.y;
-      movedRef.current += Math.hypot(dxPx, dyPx);
-      lastPosRef.current = { x: e.clientX, y: e.clientY };
-      setOffset((o) => ({ x: o.x + dxPx * sx, y: o.y + dyPx * sy }));
-    }
-  }
-
-  function finalizePointerInteraction(e, shouldPaint) {
-    if (!art) return;
-    if (isPeekActive) return;
-    const svg = svgRef.current;
-    svg?.releasePointerCapture?.(e.pointerId);
-
-    if (shouldPaint && pendingPaintRef.current && dragIntentRef.current === "pending-paint") {
-      onCellTap(pendingPaintRef.current);
-    }
-
-    if (shouldPaint && enableEyedropper && eyedropCandidateRef.current && movedRef.current < 6) {
-      const cell = art.cells.find((c) => c.id === eyedropCandidateRef.current);
-      if (cell && (remaining[cell.colorId] ?? 0) > 0) setActiveColor(cell.colorId);
-    }
-
-    pointersRef.current.delete(e.pointerId);
-    if (pinchRef.current && (e.pointerId === pinchRef.current.id1 || e.pointerId === pinchRef.current.id2)) {
-      pinchRef.current = null;
-    }
-
-    dragIntentRef.current = "idle";
-    pendingPaintRef.current = null;
-    pointerOriginRef.current = null;
-    isPanningRef.current = false;
-    lastPosRef.current = null;
-    eyedropCandidateRef.current = null;
-    movedRef.current = 0;
-  }
-
-  function onPointerUp(e) {
-    finalizePointerInteraction(e, true);
-  }
-
-  function onPointerCancel(e) {
-    finalizePointerInteraction(e, false);
-  }
-
-  const triggerPaletteHint = useCallback((colorId) => {
-    if (colorId == null) return;
-    const signal =
-      typeof performance !== "undefined" && typeof performance.now === "function"
-        ? performance.now()
-        : Date.now();
-    setPaletteHint({ id: colorId, signal });
-  }, []);
-
-  function onCellTap(cellId) {
-    if (!art || activeColor == null) return;
-    const cell = art.cells.find((c) => c.id === cellId);
-    if (!cell) return;
-
-    if (filled[cellId]) return;
-
-    if (cell.colorId !== activeColor) {
-      const el = document.getElementById(cellId);
-      if (el) {
-        el.setAttribute("stroke", "#d22");
-        el.setAttribute("stroke-width", "4");
+      function flashRegion(regionId, color) {
+        if (!state.puzzle) return;
+        const region = state.puzzle.regions[regionId];
+        if (!region) return;
+        puzzleCtx.save();
+        puzzleCtx.fillStyle = color;
+        for (const idx of region.pixels) {
+          const x = idx % state.puzzle.width;
+          const y = (idx / state.puzzle.width) | 0;
+          puzzleCtx.fillRect(x, y, 1, 1);
+        }
+        puzzleCtx.restore();
         setTimeout(() => {
-          el.setAttribute("stroke", "#444");
-          el.setAttribute("stroke-width", "2");
-        }, 220);
+          renderPuzzle();
+        }, 180);
       }
-      triggerPaletteHint(cell.colorId);
-      return;
-    }
 
-    const willCompleteColor = (remaining[activeColor] ?? 0) === 1;
-    setFilled((prev) => ({ ...prev, [cellId]: true }));
-    setLastAction(cellId);
-    if (willCompleteColor && autoAdvanceOnComplete) nextColor();
-  }
-
-  onCellTapRef.current = onCellTap;
-
-  function undo() {
-    if (!lastAction) return;
-    setFilled((prev) => ({ ...prev, [lastAction]: false }));
-    setLastAction(null);
-  }
-
-  function hint() {
-    if (!enableHintPulse || !art || activeColor == null) return;
-    const candidates = art.cells
-      .filter((c) => c.colorId === activeColor && !filled[c.id])
-      .sort((a, b) => (a.area ?? 0) - (b.area ?? 0))
-      .slice(0, 3);
-    const ids = new Set(candidates.map((c) => c.id));
-    setHintPulse(ids);
-    setTimeout(() => setHintPulse(new Set()), 1000);
-  }
-
-  function resetView() {
-    setScale(0.9);
-    setOffset({ x: 50, y: 50 });
-  }
-
-  function nextColor() {
-    if (!art || activeColor == null) return;
-    const order = art.palette.map((p) => p.id);
-    const startIdx = order.indexOf(activeColor);
-    for (let i = 1; i <= order.length; i++) {
-      const id = order[(startIdx + i) % order.length];
-      if ((remaining[id] ?? 0) > 0) {
-        setActiveColor(id);
-        return;
+      function clamp(value, min, max) {
+        if (Number.isNaN(value)) return min;
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
       }
-    }
-  }
 
-  function handleConfigChange(key, value) {
-    setConfig((prev) => {
-      if (prev[key] === value) return prev;
-      const next = { ...prev, [key]: value };
-      persistConfig(next);
-      return next;
-    });
-  }
-
-  function handleConfigReset() {
-    setConfig((prev) => {
-      if (shallowEqual(prev, DEFAULT_CONFIG)) return prev;
-      persistConfig(DEFAULT_CONFIG);
-      return DEFAULT_CONFIG;
-    });
-    previousSmokePreferenceRef.current = DEFAULT_CONFIG.enableSmokeHud;
-    setShowTests(DEFAULT_CONFIG.enableSmokeHud);
-  }
-
-  useEffect(() => {
-    if (!enableKeyboardShortcuts) return;
-    function onKey(e) {
-      const lower = e.key.toLowerCase();
-      if (e.key === "0") resetView();
-      if (e.key === "+" || e.key === "=") setScale((s) => clamp(s * 1.1, 0.3, 4));
-      if (e.key === "-" || e.key === "_") setScale((s) => clamp(s / 1.1, 0.3, 4));
-      if (lower === "h") hint();
-      if (lower === "n") nextColor();
-      if (lower === "u") undo();
-      if (lower === "t" && enableSmokeHud) setShowTests((v) => !v);
-      if (e.key === "Escape") {
-        if (showOptions) setShowOptions(false);
-        if (showHelp) setShowHelp(false);
-        if (showLibrary) setShowLibrary(false);
+      async function createPuzzleData(image, options) {
+        const { targetColors, minRegion, maxSize, kmeansIters } = options;
+        const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
+        const width = Math.max(8, Math.round(image.width * scale));
+        const height = Math.max(8, Math.round(image.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(image, 0, 0, width, height);
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const pixels = imageData.data;
+        statusEl.textContent = "Running k-means clustering...";
+        const { centroids, assignments } = kmeansQuantize(pixels, targetColors, kmeansIters);
+        statusEl.textContent = "Cleaning tiny regions...";
+        const { regionMap, regions } = segmentRegions(width, height, assignments, minRegion);
+        for (const region of regions) {
+          let sumX = 0;
+          let sumY = 0;
+          for (const idx of region.pixels) {
+            sumX += idx % width;
+            sumY += (idx / width) | 0;
+          }
+          region.cx = sumX / region.pixelCount;
+          region.cy = sumY / region.pixelCount;
+        }
+        const palette = centroids.map((c, idx) => ({
+          id: idx + 1,
+          hex: `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`,
+          rgba: c,
+        }));
+        for (const region of regions) {
+          region.colorId = region.colorId + 1;
+        }
+        const normalizedRegionMap = new Int32Array(regionMap.length);
+        for (let i = 0; i < regionMap.length; i++) {
+          normalizedRegionMap[i] = regionMap[i];
+        }
+        return {
+          width,
+          height,
+          palette,
+          regions,
+          regionMap: normalizedRegionMap,
+        };
       }
-      if (!art) return;
-      const panStep = 80 / (scale || 1);
-      if (lower === "w" || e.key === "ArrowUp") {
-        e.preventDefault();
-        setOffset((prev) => ({ ...prev, y: prev.y + panStep }));
+
+      function kmeansQuantize(pixels, targetColors, iterations) {
+        const samples = [];
+        for (let i = 0; i < pixels.length; i += 4) {
+          samples.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
+        }
+        const centroids = [];
+        const used = new Set();
+        while (centroids.length < targetColors && centroids.length < samples.length) {
+          let index = Math.floor(Math.random() * samples.length);
+          let guard = 0;
+          while (used.has(index) && guard < samples.length) {
+            index = (index + 1) % samples.length;
+            guard += 1;
+          }
+          used.add(index);
+          centroids.push(samples[index].slice());
+        }
+        while (centroids.length < targetColors) {
+          centroids.push(centroids[centroids.length - 1].slice());
+        }
+        const assignments = new Uint16Array(samples.length);
+        for (let iter = 0; iter < iterations; iter++) {
+          for (let i = 0; i < samples.length; i++) {
+            let best = 0;
+            let bestDist = Infinity;
+            const pixel = samples[i];
+            for (let c = 0; c < centroids.length; c++) {
+              const centroid = centroids[c];
+              const dist =
+                (pixel[0] - centroid[0]) * (pixel[0] - centroid[0]) +
+                (pixel[1] - centroid[1]) * (pixel[1] - centroid[1]) +
+                (pixel[2] - centroid[2]) * (pixel[2] - centroid[2]);
+              if (dist < bestDist) {
+                bestDist = dist;
+                best = c;
+              }
+            }
+            assignments[i] = best;
+          }
+          const sums = Array.from({ length: centroids.length }, () => [0, 0, 0, 0]);
+          for (let i = 0; i < samples.length; i++) {
+            const target = assignments[i];
+            const sample = samples[i];
+            const bucket = sums[target];
+            bucket[0] += sample[0];
+            bucket[1] += sample[1];
+            bucket[2] += sample[2];
+            bucket[3] += 1;
+          }
+          for (let c = 0; c < centroids.length; c++) {
+            const bucket = sums[c];
+            if (bucket[3] === 0) continue;
+            centroids[c][0] = bucket[0] / bucket[3];
+            centroids[c][1] = bucket[1] / bucket[3];
+            centroids[c][2] = bucket[2] / bucket[3];
+          }
+        }
+        return { centroids: centroids.map((c) => c.map((value) => Math.round(value))), assignments };
       }
-      if (lower === "s" || e.key === "ArrowDown") {
-        e.preventDefault();
-        setOffset((prev) => ({ ...prev, y: prev.y - panStep }));
+
+      function segmentRegions(width, height, assignments, minRegion) {
+        const indexMap = new Uint16Array(assignments);
+        let attempt = 0;
+        let threshold = Math.max(1, minRegion);
+        while (true) {
+          const { regionMap, regions } = floodFill(width, height, indexMap);
+          const tiny = regions.filter((region) => region.pixelCount < threshold);
+          if (tiny.length === 0 || threshold <= 1) {
+            return { regionMap, regions };
+          }
+          let changed = false;
+          for (const region of tiny) {
+            const colorVotes = new Map();
+            for (const idx of region.pixels) {
+              const x = idx % width;
+              const y = (idx / width) | 0;
+              const neighbors = neighborIndexes(x, y, width, height);
+              for (const n of neighbors) {
+                const color = indexMap[n];
+                if (color === region.colorId) continue;
+                colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
+              }
+            }
+            if (colorVotes.size === 0) continue;
+            let bestColor = region.colorId;
+            let bestVotes = -1;
+            for (const [color, votes] of colorVotes.entries()) {
+              if (votes > bestVotes) {
+                bestVotes = votes;
+                bestColor = color;
+              }
+            }
+            if (bestColor !== region.colorId) {
+              changed = true;
+              for (const idx of region.pixels) {
+                indexMap[idx] = bestColor;
+              }
+            }
+          }
+          attempt += 1;
+          if (!changed || attempt > 6) {
+            threshold = Math.max(1, Math.floor(threshold / 2));
+          }
+        }
       }
-      if (lower === "a" || e.key === "ArrowLeft") {
-        e.preventDefault();
-        setOffset((prev) => ({ ...prev, x: prev.x + panStep }));
+
+      function floodFill(width, height, indexMap) {
+        const regionMap = new Int32Array(width * height);
+        regionMap.fill(-1);
+        const regions = [];
+        let regionId = 0;
+        const stack = [];
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const startIdx = y * width + x;
+            if (regionMap[startIdx] !== -1) continue;
+            const colorId = indexMap[startIdx];
+            stack.push(startIdx);
+            regionMap[startIdx] = regionId;
+            const pixels = [];
+            while (stack.length) {
+              const idx = stack.pop();
+              pixels.push(idx);
+              const px = idx % width;
+              const py = (idx / width) | 0;
+              const neighbors = neighborIndexes(px, py, width, height);
+              for (const n of neighbors) {
+                if (regionMap[n] !== -1) continue;
+                if (indexMap[n] !== colorId) continue;
+                regionMap[n] = regionId;
+                stack.push(n);
+              }
+            }
+            regions.push({
+              id: regionId,
+              colorId,
+              pixels,
+              pixelCount: pixels.length,
+            });
+            regionId += 1;
+          }
+        }
+        return { regionMap, regions };
       }
-      if (lower === "d" || e.key === "ArrowRight") {
-        e.preventDefault();
-        setOffset((prev) => ({ ...prev, x: prev.x - panStep }));
+
+      function neighborIndexes(x, y, width, height) {
+        const neighbors = [];
+        if (x > 0) neighbors.push(y * width + (x - 1));
+        if (x < width - 1) neighbors.push(y * width + (x + 1));
+        if (y > 0) neighbors.push((y - 1) * width + x);
+        if (y < height - 1) neighbors.push((y + 1) * width + x);
+        return neighbors;
       }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [art, enableKeyboardShortcuts, enableSmokeHud, showOptions, showHelp, showLibrary, scale]);
-  return (
-    React.createElement(
-      "div",
-      { style: styles.app },
-      showLibrary &&
-        React.createElement(ArtLibrary, {
-          artworks: artworks,
-          activeArtworkId: activeArtworkId,
-          progressMap: libraryProgress,
-          onSelect: (id) => {
-            selectArtwork(id);
-            setShowLibrary(false);
-          },
-          onClose: () => setShowLibrary(false),
-          onImport: handleImportArtwork,
-          onDelete: handleDeleteArtwork,
-          onRename: handleRenameArtwork,
-          onClearProgress: handleClearProgress,
-        }),
-      showHelp &&
-        React.createElement(HelpPanel, {
-          art: art,
-          progress: progress,
-          activeColor: activeColor,
-          filled: filled,
-          onClose: () => setShowHelp(false),
-        }),
-      showOptions &&
-        React.createElement(OptionsPanel, {
-          config: config,
-          onToggle: handleConfigChange,
-          canReset: !isDefaultConfig,
-          onReset: handleConfigReset,
-          onClose: () => setShowOptions(false),
-        }),
-      starterStatus.error &&
-        art &&
-        React.createElement(
-          "div",
-          { style: styles.bootstrapBanner, role: "status" },
-          `Starter art could not be loaded automatically (${starterStatus.error}). Import an SVG from the library to continue.`
-        ),
-      art
-        ? React.createElement(
-            "div",
-            { style: styles.canvas },
-            React.createElement(
-              "svg",
-              {
-                ref: svgRef,
-                width: "100%",
-                height: "100%",
-                viewBox: `0 0 ${art.width} ${art.height}`,
-                style: {
-                  background: "#0f172a",
-                  touchAction: "none",
-                  userSelect: "none",
-                  WebkitUserSelect: "none",
-                },
-                onWheel: onWheel,
-                onPointerDown: onPointerDown,
-                onPointerMove: onPointerMove,
-                onPointerUp: onPointerUp,
-                onPointerCancel: onPointerCancel,
-                onContextMenu: (e) => e.preventDefault(),
-              },
-              React.createElement(
-                "g",
-                { transform: `translate(${offset.x} ${offset.y}) scale(${scale})` },
-                React.createElement("rect", {
-                  x: 0,
-                  y: 0,
-                  width: art.width,
-                  height: art.height,
-                  fill: "#0f172a",
-                  stroke: "#1e293b",
-                }),
-                art.cells.map((c) => {
-                  const isFilled = !!filled[c.id];
-                  const pal = art.palette.find((p) => p.id === c.colorId);
-                  const showPulse = hintPulse.has(c.id);
-                  const shouldShowFill = isFilled || isPeekActive;
-                  const fillOpacity = isFilled ? 1 : 0.75;
-                  const strokeColor = showPulse
-                    ? "#f2c200"
-                    : isPeekActive
-                    ? "rgba(148, 163, 184, 0.6)"
-                    : "#334155";
-                  const strokeWidth = showPulse ? 4 : isPeekActive ? 1.6 : 2;
-                  const baseFill = isFilled
-                    ? "transparent"
-                    : isPeekActive
-                    ? "rgba(15, 23, 42, 0.2)"
-                    : "#0f172a";
-                  return React.createElement(
-                    "g",
-                    { key: c.id },
-                    React.createElement(
-                      "title",
-                      null,
-                      `Region ${c.id} - Color #${c.colorId}${pal?.name ? ` (${pal.name})` : ""}`
-                    ),
-                shouldShowFill &&
-                  React.createElement("path", {
-                    d: c.d,
-                    fill: pal?.rgba,
-                    pointerEvents: "none",
-                    opacity: fillOpacity,
-                    fillRule: c.fillRule ?? undefined,
-                  }),
-                React.createElement("path", {
-                  id: c.id,
-                  "data-cell-id": c.id,
-                  "data-color-id": c.colorId,
-                  d: c.d,
-                  fill: baseFill,
-                  fillRule: c.fillRule ?? undefined,
-                  stroke: strokeColor,
-                  strokeWidth: strokeWidth,
-                  style: {
-                    cursor: isFilled ? "grab" : "pointer",
-                    opacity: isFilled ? 0.35 : 1,
-                        pointerEvents: "all",
-                      },
-                      "aria-label": `Cell ${c.id}. Target color ${c.colorId}. ${isFilled ? "Filled" : "Unfilled"}`,
-                    }),
-                    !isPeekActive &&
-                      !isFilled &&
-                      showNumberBadges &&
-                      scale >= 0.6 &&
-                      React.createElement(NumberLabel, {
-                        d: c.d,
-                        text: `${c.colorId}`,
-                        area: c.area,
-                      }),
-                    !isPeekActive &&
-                      !isFilled &&
-                      showHeatmapDots &&
-                      scale < 0.6 &&
-                      React.createElement(HeatDot, { d: c.d })
-                  );
-                })
-              )
-            )
-          )
-        : React.createElement(
-            "div",
-            { style: styles.emptyState },
-            starterStatus.state === "loading"
-              ? "Loading starter artworks..."
-              : starterStatus.error
-              ? `Starter art could not be loaded automatically (${starterStatus.error}). Use the library to import a file.`
-              : "Import or add an artwork in the library to start painting."
-          ),
-      art &&
-        enableSmokeHud &&
-        showTests &&
-        React.createElement(SmokeTests, { art: art, filled: filled }),
-      art &&
-        React.createElement(
-          "header",
-          { style: topBarStyle, role: "banner" },
-          React.createElement(
-            "nav",
-            { style: topActionsStyle, "aria-label": "Canvas controls" },
-            React.createElement(
-              "button",
-              {
-                type: "button",
-                style: hintButtonStyle,
-                title: "Highlight a suggested cell",
-                "aria-label": "Highlight a suggested cell",
-                "aria-disabled": enableHintPulse ? undefined : "true",
-                onPointerDown: handleHintPointerDown,
-                onPointerUp: handleHintPointerUp,
-                onPointerLeave: handleHintPointerLeave,
-                onPointerCancel: handleHintPointerCancel,
-                onBlur: handleHintBlur,
-                onKeyDown: handleHintKeyDown,
-                onKeyUp: handleHintKeyUp,
-                onClick: handleHintClick,
-              },
-              React.createElement("span", { style: styles.iconGlyph, "aria-hidden": "true" }, "\u2728"),
-              React.createElement("span", { style: styles.srOnly }, "Highlight a suggested cell")
-            ),
-            React.createElement(
-              "div",
-              { style: menuAnchorStyle },
-              React.createElement(
-                "button",
-                {
-                  type: "button",
-                  ref: commandToggleRef,
-                  style: menuToggleStyle,
-                  onClick: () => setShowCommandMenu((open) => !open),
-                  "aria-expanded": showCommandMenu ? "true" : "false",
-                  "aria-haspopup": "menu",
-                  title: toggleTitle,
-                  "aria-label": toggleTitle,
-                  "data-testid": "command-menu-toggle",
-                },
-                React.createElement("span", { style: styles.iconGlyph, "aria-hidden": "true" }, "\u2630"),
-                React.createElement("span", { style: styles.srOnly }, toggleTitle)
-              ),
-              showCommandMenu &&
-                React.createElement(
-                  "div",
-                  {
-                    ref: commandMenuRef,
-                    style: styles.commandMenu,
-                    role: "menu",
-                    "aria-label": "Canvas command menu",
-                  },
-                  menuCommandButtons
-                )
-            )
-          )
-        ),
-      art &&
-        React.createElement(
-          "div",
-          { style: styles.paletteDock, "data-testid": "palette-dock" },
-        React.createElement(Palette, {
-          palette: art.palette,
-          remaining: remaining,
-          activeColor: activeColor,
-          onSelect: setActiveColor,
-          showLabels: showColorLabels,
-          showRemaining: showRemainingCounts,
-          hintColorId: paletteHint.id,
-          hintSignal: paletteHint.signal,
-        })
-        )
-    )
-  );
-}
 
-// ---------- Helpers: Number label & heat dot ----------
-
-function ensureMeasureSvg() {
-  if (typeof document === "undefined") return null;
-  if (!measureSvgEl) {
-    const svg = document.createElementNS(SVG_NS, "svg");
-    svg.setAttribute("aria-hidden", "true");
-    svg.setAttribute("width", "0");
-    svg.setAttribute("height", "0");
-    svg.style.position = "absolute";
-    svg.style.width = "0";
-    svg.style.height = "0";
-    svg.style.opacity = "0";
-    svg.style.pointerEvents = "none";
-    document.body.appendChild(svg);
-    measureSvgEl = svg;
-  }
-  return measureSvgEl;
-}
-
-function ensureMeasureContext() {
-  if (typeof document === "undefined") return null;
-  if (!measureCanvasCtx) {
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 1;
-    measureCanvasCtx = canvas.getContext("2d");
-  }
-  return measureCanvasCtx;
-}
-
-function measurePathBox(d) {
-  if (pathBoxCache.has(d)) return pathBoxCache.get(d);
-  const host = ensureMeasureSvg();
-  if (!host) return null;
-  try {
-    const path = document.createElementNS(SVG_NS, "path");
-    path.setAttribute("d", d);
-    host.appendChild(path);
-    const box = path.getBBox();
-    host.removeChild(path);
-    pathBoxCache.set(d, box);
-    return box;
-  } catch (err) {
-    return null;
-  }
-}
-
-function measurePathArea(d, bbox) {
-  if (pathAreaCache.has(d)) return pathAreaCache.get(d);
-  const ctx = ensureMeasureContext();
-  if (!ctx || !bbox) return null;
-  if (typeof Path2D === "undefined") return null;
-  let path;
-  try {
-    path = new Path2D(d);
-  } catch (err) {
-    return null;
-  }
-
-  const longest = Math.max(bbox.width, bbox.height);
-  const steps = Math.max(12, Math.min(80, Math.ceil(longest / 8)));
-  if (!Number.isFinite(steps) || steps <= 0) return null;
-
-  const stepX = bbox.width / steps;
-  const stepY = bbox.height / steps;
-  if (!Number.isFinite(stepX) || !Number.isFinite(stepY)) return null;
-
-  let inside = 0;
-  const total = steps * steps;
-  const originX = bbox.x + stepX / 2;
-  const originY = bbox.y + stepY / 2;
-
-  for (let ix = 0; ix < steps; ix++) {
-    const x = originX + ix * stepX;
-    for (let iy = 0; iy < steps; iy++) {
-      const y = originY + iy * stepY;
-      if (ctx.isPointInPath(path, x, y)) inside++;
-    }
-  }
-
-  if (inside === 0) return null;
-  const area = (inside / total) * bbox.width * bbox.height;
-  pathAreaCache.set(d, area);
-  return area;
-}
-
-function findInteriorPoint(d, fallback, bbox) {
-  const ctx = ensureMeasureContext();
-  if (!ctx) return fallback;
-  if (typeof Path2D === "undefined") return fallback;
-  let path;
-  try {
-    path = new Path2D(d);
-  } catch (err) {
-    return fallback;
-  }
-
-  const cached = interiorPointCache.get(d);
-  if (cached && ctx.isPointInPath(path, cached.x, cached.y)) {
-    return cached;
-  }
-
-  const center = bbox
-    ? { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 }
-    : fallback;
-  const candidates = [fallback];
-  if (bbox) {
-    candidates.push(
-      center,
-      { x: bbox.x + bbox.width * 0.3, y: bbox.y + bbox.height * 0.5 },
-      { x: bbox.x + bbox.width * 0.7, y: bbox.y + bbox.height * 0.5 },
-      { x: bbox.x + bbox.width * 0.5, y: bbox.y + bbox.height * 0.3 },
-      { x: bbox.x + bbox.width * 0.5, y: bbox.y + bbox.height * 0.7 }
-    );
-  }
-
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    if (ctx.isPointInPath(path, candidate.x, candidate.y)) return candidate;
-  }
-
-  if (!bbox) return fallback;
-
-  const centerX = bbox.x + bbox.width / 2;
-  const centerY = bbox.y + bbox.height / 2;
-  const longest = Math.max(bbox.width, bbox.height);
-  const steps = Math.max(6, Math.ceil(longest / 60));
-  const stepX = bbox.width / (steps + 1);
-  const stepY = bbox.height / (steps + 1);
-
-  let best = null;
-  let bestScore = -Infinity;
-
-  for (let i = 0; i <= steps; i++) {
-    for (let j = 0; j <= steps; j++) {
-      const x = bbox.x + (i + 0.5) * stepX;
-      const y = bbox.y + (j + 0.5) * stepY;
-      if (!ctx.isPointInPath(path, x, y)) continue;
-      const dx = x - centerX;
-      const dy = y - centerY;
-      const score = -(dx * dx + dy * dy);
-      if (score > bestScore) {
-        best = { x, y };
-        bestScore = score;
+      function toHex(value) {
+        return value.toString(16).padStart(2, "0");
       }
-    }
-  }
-
-  if (best) {
-    interiorPointCache.set(d, best);
-    return best;
-  }
-
-  const maxRadius = Math.hypot(bbox.width, bbox.height) / 2;
-  const rings = Math.max(3, Math.ceil(longest / 45));
-  const samplesPerRing = Math.max(12, Math.ceil(longest / 30));
-
-  for (let r = 1; r <= rings; r++) {
-    const radius = (r / rings) * maxRadius;
-    for (let i = 0; i < samplesPerRing; i++) {
-      const angle = (i / samplesPerRing) * Math.PI * 2;
-      const x = centerX + Math.cos(angle) * radius;
-      const y = centerY + Math.sin(angle) * radius;
-      if (ctx.isPointInPath(path, x, y)) {
-        const point = { x, y };
-        interiorPointCache.set(d, point);
-        return point;
-      }
-    }
-  }
-
-  if (fallback && ctx.isPointInPath(path, fallback.x, fallback.y)) {
-    interiorPointCache.set(d, fallback);
-  }
-  return best ?? fallback;
-}
-
-function computeLabelMetrics(bbox, area) {
-  const defaults = { radius: 16, fontSize: 24, showBubble: true };
-  if (!bbox) return defaults;
-
-  const minSide = Math.max(0, Math.min(bbox.width, bbox.height));
-  if (minSide === 0) return defaults;
-
-  const areaRadius = area && area > 0 ? Math.sqrt(area) / 14 : 0;
-  let radius = Math.max(6, Math.min(18, Math.max(minSide / 2.6, areaRadius)));
-  const maxRadius = Math.max(4, minSide / 2 - 1);
-  radius = Math.min(radius, maxRadius);
-  if (!Number.isFinite(radius) || radius <= 0) {
-    radius = 10;
-  }
-
-  const showBubble = radius >= 6 && minSide >= 14;
-  if (!showBubble) {
-    const fontSize = Math.max(9, Math.min(16, minSide * 0.9));
-    return { radius: 0, fontSize, showBubble };
-  }
-
-  const fontSize = Math.max(10, Math.min(20, radius * 1.35));
-  return { radius, fontSize, showBubble };
-}
-function centroidFromPath(d) {
-  const tokens = d.split(/[ ,]/).filter(Boolean);
-  const pts = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    if (t === "M" || t === "L" || t === "Z") continue;
-    const n = Number(t);
-    if (!Number.isNaN(n)) pts.push(n);
-  }
-  const xy = [];
-  for (let i = 0; i + 1 < pts.length; i += 2) xy.push([pts[i], pts[i + 1]]);
-  let cx = 0,
-    cy = 0,
-    a = 0;
-  for (let i = 0; i < xy.length; i++) {
-    const [x1, y1] = xy[i];
-    const [x2, y2] = xy[(i + 1) % xy.length];
-    const cross = x1 * y2 - x2 * y1;
-    a += cross;
-    cx += (x1 + x2) * cross;
-    cy += (y1 + y2) * cross;
-  }
-  a *= 0.5;
-  if (Math.abs(a) < 1e-5) return { x: xy[0]?.[0] ?? 0, y: xy[0]?.[1] ?? 0 };
-  return { x: cx / (6 * a), y: cy / (6 * a) };
-}
-
-const pointAlmostEqual = (a, b) =>
-  a === b || (a && b && Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01);
-
-const metricsAlmostEqual = (a, b) =>
-  a === b ||
-  (a &&
-    b &&
-    Math.abs(a.radius - b.radius) < 0.01 &&
-    Math.abs(a.fontSize - b.fontSize) < 0.01 &&
-    a.showBubble === b.showBubble);
-
-function NumberLabel({ d, text, area }) {
-  const fallback = useMemo(() => centroidFromPath(d), [d]);
-  const [position, setPosition] = useState(fallback);
-  const [metrics, setMetrics] = useState(() => ({ radius: 16, fontSize: 24, showBubble: true }));
-
-  useLayoutEffect(() => {
-    if (typeof document === "undefined") return;
-    const bbox = measurePathBox(d);
-    const nextPoint = findInteriorPoint(d, fallback, bbox);
-    setPosition((prev) => (pointAlmostEqual(prev, nextPoint) ? prev : nextPoint));
-    const measuredArea = measurePathArea(d, bbox);
-    const areaHint = measuredArea ?? area;
-    const nextMetrics = computeLabelMetrics(bbox, areaHint);
-    setMetrics((prev) => (metricsAlmostEqual(prev, nextMetrics) ? prev : nextMetrics));
-  }, [d, area, fallback.x, fallback.y]);
-
-  const { x, y } = position;
-  const { radius, fontSize, showBubble } = metrics;
-
-  const textProps = {
-    x,
-    y,
-    fontSize,
-    textAnchor: "middle",
-    dominantBaseline: "middle",
-    fill: "#e2e8f0",
-    fontFamily: "ui-sans-serif, system-ui",
-  };
-
-  if (!showBubble) {
-    textProps.style = {
-      paintOrder: "stroke",
-      stroke: "rgba(15, 23, 42, 0.9)",
-      strokeWidth: 3,
-    };
-  }
-
-  return React.createElement(
-    "g",
-    { pointerEvents: "none" },
-    showBubble &&
-      React.createElement("circle", { cx: x, cy: y, r: radius, fill: "rgba(15, 23, 42, 0.9)" }),
-    React.createElement("text", textProps, text)
-  );
-}
-
-function HeatDot({ d }) {
-  const { x, y } = centroidFromPath(d);
-  return React.createElement("circle", { pointerEvents: "none", cx: x, cy: y, r: 6, fill: "#94a3b8" });
-}
-
-// ---------- Palette ----------
-function Palette({
-  palette,
-  remaining,
-  activeColor,
-  onSelect,
-  showLabels,
-  showRemaining,
-  hintColorId,
-  hintSignal,
-}) {
-  return React.createElement(
-    "div",
-    { style: styles.paletteWrap },
-    palette.map((entry) =>
-      React.createElement(PaletteSwatch, {
-        key: entry.id,
-        entry,
-        remainingCount: remaining[entry.id] ?? 0,
-        isActive: entry.id === activeColor,
-        onSelect,
-        showLabels,
-        showRemaining,
-        flashSignal: entry.id === hintColorId ? hintSignal : 0,
-      })
-    )
-  );
-}
-
-function PaletteSwatch({
-  entry,
-  remainingCount,
-  isActive,
-  onSelect,
-  showLabels,
-  showRemaining,
-  flashSignal,
-}) {
-  const pointerSelectRef = useRef(false);
-  const { id, name, rgba } = entry;
-  const label = name ?? `Color ${id}`;
-  const statusLabel = remainingCount === 0 ? "Complete" : `${remainingCount} cells remaining`;
-  const disabled = remainingCount === 0 && !isActive;
-  const [isFlashing, setIsFlashing] = useState(false);
-
-  useEffect(() => {
-    if (!flashSignal) return;
-    if (typeof window === "undefined") return;
-    setIsFlashing(true);
-    const timer = window.setTimeout(() => setIsFlashing(false), 600);
-    return () => window.clearTimeout(timer);
-  }, [flashSignal]);
-
-  const buttonStyle = useMemo(
-    () => ({
-      ...styles.swatch,
-      background: rgba,
-      border: isFlashing
-        ? "2px solid rgba(250, 204, 21, 0.85)"
-        : isActive
-        ? "2px solid rgba(248, 250, 252, 0.85)"
-        : "2px solid rgba(15, 23, 42, 0.6)",
-      boxShadow: isFlashing
-        ? "0 0 0 6px rgba(250, 204, 21, 0.35), 0 14px 32px rgba(202, 138, 4, 0.5)"
-        : isActive
-        ? "0 0 0 4px rgba(148, 163, 184, 0.45), 0 10px 24px rgba(2, 6, 23, 0.55)"
-        : "0 8px 18px rgba(2, 6, 23, 0.45)",
-      transform: isFlashing ? "scale(1.05)" : isActive ? "scale(1.01)" : "none",
-      opacity: disabled && !isFlashing ? 0.35 : 1,
-    }),
-    [disabled, isActive, isFlashing, rgba]
-  );
-
-  const handlePointerDown = useCallback(
-    (event) => {
-      if (disabled) return;
-      if (event.pointerType === "mouse") return;
-      pointerSelectRef.current = true;
-      event.preventDefault();
-      onSelect(id);
-    },
-    [disabled, id, onSelect]
-  );
-
-  const handleClick = useCallback(
-    (event) => {
-      if (disabled) {
-        event.preventDefault();
-        return;
-      }
-      if (pointerSelectRef.current) {
-        pointerSelectRef.current = false;
-        return;
-      }
-      onSelect(id);
-    },
-    [disabled, id, onSelect]
-  );
-
-  const resetPointerIntent = useCallback(() => {
-    pointerSelectRef.current = false;
-  }, []);
-
-  return React.createElement(
-    "div",
-    { style: styles.swatchItem },
-    React.createElement(
-      "button",
-      {
-        type: "button",
-        onClick: handleClick,
-        onPointerDown: handlePointerDown,
-        onPointerUp: resetPointerIntent,
-        onPointerLeave: resetPointerIntent,
-        onPointerCancel: resetPointerIntent,
-        onBlur: resetPointerIntent,
-        disabled,
-        "aria-pressed": isActive,
-        "aria-label": `${label}. ${statusLabel}`,
-        title: disabled ? `${label} - Complete` : `${label} - ${remainingCount} cells remaining`,
-        style: buttonStyle,
-      },
-      React.createElement(
-        "span",
-        { style: styles.swatchTopRow },
-        React.createElement("span", { style: styles.swatchNumber }, id),
-        showRemaining &&
-          React.createElement(
-            "span",
-            {
-              style: {
-                ...styles.swatchBadge,
-                ...(remainingCount === 0 ? styles.swatchBadgeComplete : {}),
-              },
-              "aria-hidden": "true",
-              title: remainingCount === 0 ? "Color complete" : `${remainingCount} cells remaining`,
-            },
-            remainingCount === 0 ? "✓" : `${remainingCount}`
-          )
-      ),
-      showLabels && React.createElement("span", { style: styles.swatchLabel }, label)
-    )
-  );
-}
-
-function ArtworkPreviewCard({ art, progress, isActive, onSelect }) {
-  const paletteLookup = useMemo(() => {
-    const map = new Map();
-    (art.palette ?? []).forEach((entry) => {
-      map.set(entry.id, entry.rgba || "#64748b");
-    });
-    return map;
-  }, [art]);
-  const handleSelect = useCallback(() => onSelect(art.id), [art.id, onSelect]);
-  return React.createElement(
-    "button",
-    {
-      type: "button",
-      style: {
-        ...styles.libraryCard,
-        ...(isActive ? styles.libraryCardActive : {}),
-      },
-      onClick: handleSelect,
-      title: isActive ? `${art.title} (active)` : `Load ${art.title}`,
-      "aria-label": isActive ? `${art.title} (active)` : `Load ${art.title}`,
-      "aria-pressed": isActive,
-      "data-testid": "art-library-card",
-      "data-artwork-id": art.id,
-    },
-    React.createElement(
-      "div",
-      { style: styles.libraryCardPreview },
-      React.createElement(
-        "svg",
-        {
-          viewBox: `0 0 ${art.width} ${art.height}`,
-          style: styles.libraryCardSvg,
-          role: "presentation",
-          focusable: "false",
-        },
-        React.createElement("rect", {
-          x: 0,
-          y: 0,
-          width: art.width,
-          height: art.height,
-          fill: "#0f172a",
-          stroke: "rgba(148, 163, 184, 0.35)",
-          strokeWidth: 2,
-        }),
-        art.cells.map((cell) =>
-          React.createElement("path", {
-            key: cell.id,
-            d: cell.d,
-            fill: paletteLookup.get(cell.colorId) || "#1e293b",
-            stroke: "rgba(15, 23, 42, 0.55)",
-            strokeWidth: 1.4,
-          })
-        )
-      )
-    ),
-    React.createElement(
-      "div",
-      { style: styles.libraryCardBody },
-      React.createElement("div", { style: styles.libraryCardTitle }, art.title),
-      React.createElement(
-        "div",
-        { style: styles.libraryCardMeta },
-        `\n${progress}% complete • ${art.palette.length} colors`
-      )
-    )
-  );
-}
-
-function ArtLibrary({
-  artworks,
-  activeArtworkId,
-  progressMap,
-  onSelect,
-  onClose,
-  onImport,
-  onDelete,
-  onRename,
-  onClearProgress,
-}) {
-  const [draft, setDraft] = useState("");
-  const [feedback, setFeedback] = useState(null);
-  const [editingId, setEditingId] = useState(null);
-  const [titleDraft, setTitleDraft] = useState("");
-  const [promptStatus, setPromptStatus] = useState(null);
-  const promptTimerRef = useRef(null);
-
-  const sorted = useMemo(
-    () => [...artworks].sort((a, b) => a.title.localeCompare(b.title)),
-    [artworks]
-  );
-  const hasArtworks = sorted.length > 0;
-
-  useEffect(() => {
-    function handleKey(e) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
-  useEffect(() => {
-    return () => {
-      if (promptTimerRef.current) clearTimeout(promptTimerRef.current);
-    };
-  }, []);
-
-  const promptText = `You are an SVG color-by-number generator. Produce JSON with keys: id (short slug), title, width, height, palette (array of { id, name, rgba }), and cells (array of { id, colorId, d } path commands using only M/L/Z). Ensure 40-80 cells and 6-12 palette entries. Colors should be polished and themed. Return JSON only.`;
-
-  function schedulePromptStatus(status) {
-    setPromptStatus(status);
-    if (promptTimerRef.current) {
-      clearTimeout(promptTimerRef.current);
-    }
-    promptTimerRef.current = setTimeout(() => setPromptStatus(null), 2500);
-  }
-
-  function handleCopyPrompt() {
-    const clipboard = navigator?.clipboard;
-    if (clipboard?.writeText) {
-      clipboard
-        .writeText(promptText)
-        .then(() =>
-          schedulePromptStatus({ type: "success", message: "Prompt copied to clipboard." })
-        )
-        .catch(() =>
-          schedulePromptStatus({
-            type: "error",
-            message: "Clipboard copy failed. Copy manually below.",
-          })
-        );
-      return;
-    }
-
-    try {
-      const textarea = document.createElement("textarea");
-      textarea.value = promptText;
-      textarea.setAttribute("readonly", "true");
-      textarea.style.position = "absolute";
-      textarea.style.left = "-9999px";
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-      schedulePromptStatus({ type: "success", message: "Prompt copied to clipboard." });
-    } catch (err) {
-      schedulePromptStatus({ type: "error", message: "Clipboard copy failed. Copy manually below." });
-    }
-  }
-
-  function applyImportResult(result, sourceLabel) {
-    if (result?.ok && result.artwork) {
-      setDraft("");
-      setFeedback({
-        type: "success",
-        message: `Imported "${result.artwork.title}"${sourceLabel ? ` from ${sourceLabel}` : ""}.`,
-      });
-      setEditingId(null);
-      setTitleDraft("");
-      return;
-    }
-    if (result?.error) {
-      setFeedback({ type: "error", message: result.error });
-      return;
-    }
-    setFeedback({ type: "error", message: "Unable to import artwork." });
-  }
-
-  function handleImportSubmit(e) {
-    e?.preventDefault?.();
-    const result = onImport(draft, { source: "textarea" });
-    applyImportResult(result);
-  }
-
-  function handleFileUpload(e) {
-    const file = e?.target?.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = typeof reader.result === "string" ? reader.result : "";
-      const outcome = onImport(text, { filename: file.name, type: file.type });
-      applyImportResult(outcome, file.name);
-    };
-    reader.onerror = () => {
-      setFeedback({ type: "error", message: `Unable to read ${file.name}.` });
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = "";
-  }
-
-  function startEditing(art) {
-    setEditingId(art.id);
-    setTitleDraft(art.title);
-  }
-
-  function saveEdit() {
-    onRename(editingId, titleDraft);
-    setEditingId(null);
-    setTitleDraft("");
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setTitleDraft("");
-  }
-
-  const pickerContent = hasArtworks
-    ? React.createElement(
-      "div",
-      { style: styles.libraryPickerGrid },
-      sorted.map((art) =>
-        React.createElement(ArtworkPreviewCard, {
-          key: art.id,
-          art: art,
-          progress: progressMap?.[art.id] ?? 0,
-          isActive: art.id === activeArtworkId,
-          onSelect: onSelect,
-        })
-      )
-    )
-    : React.createElement(
-      "div",
-      { style: styles.libraryPickerEmpty },
-      "Add an artwork to see selectable previews."
-    );
-
-  const list = hasArtworks
-    ? sorted.map((art) => {
-        const isActive = art.id === activeArtworkId;
-        const isEditing = editingId === art.id;
-        const progress = progressMap?.[art.id] ?? 0;
-        return React.createElement(
-          "div",
-          {
-            key: art.id,
-            style: {
-              ...styles.libraryItem,
-              ...(isActive ? styles.libraryItemActive : {}),
-            },
-          },
-          React.createElement(
-            "div",
-            { style: styles.libraryItemHeader },
-            isEditing
-              ? React.createElement("input", {
-                  style: styles.libraryTitleInput,
-                  value: titleDraft,
-                  onChange: (e) => setTitleDraft(e.target.value),
-                  autoFocus: true,
-                })
-              : React.createElement("div", { style: styles.libraryItemTitle }, art.title),
-            React.createElement(
-              "span",
-              {
-                style: {
-                  ...styles.libraryBadge,
-                  ...(isActive ? styles.libraryBadgeActive : {}),
-                },
-              },
-              isActive ? "Active" : `${progress}%`
-            )
-          ),
-          React.createElement(
-            "div",
-            { style: styles.libraryMeta },
-            `Progress: ${progress}% - ${art.palette.length} colors - ${art.cells.length} cells`
-          ),
-          React.createElement(
-            "div",
-            { style: styles.libraryButtons },
-            isEditing
-              ? [
-                  React.createElement(
-                    "button",
-                    {
-                      key: "save",
-                      type: "button",
-                      style: styles.libraryPrimaryButton,
-                      onClick: saveEdit,
-                    },
-                    "Save"
-                  ),
-                  React.createElement(
-                    "button",
-                    {
-                      key: "cancel",
-                      type: "button",
-                      style: styles.libraryButton,
-                      onClick: cancelEdit,
-                    },
-                    "Cancel"
-                  ),
-                ]
-              : [
-                  React.createElement(
-                    "button",
-                    {
-                      key: "load",
-                      type: "button",
-                      style: styles.libraryPrimaryButton,
-                      onClick: () => onSelect(art.id),
-                    },
-                    isActive ? "Resume" : "Load"
-                  ),
-                  React.createElement(
-                    "button",
-                    {
-                      key: "rename",
-                      type: "button",
-                      style: styles.libraryButton,
-                      onClick: () => startEditing(art),
-                    },
-                    "Rename"
-                  ),
-                  React.createElement(
-                    "button",
-                    {
-                      key: "clear",
-                      type: "button",
-                      style: styles.libraryButton,
-                      onClick: () => onClearProgress(art.id),
-                    },
-                    "Clear progress"
-                  ),
-                  React.createElement(
-                    "button",
-                    {
-                      key: "delete",
-                      type: "button",
-                      style: styles.libraryDangerButton,
-                      onClick: () => onDelete(art.id),
-                    },
-                    "Delete"
-                  ),
-                ]
-          )
-        );
-      })
-    : React.createElement(
-        "div",
-        { style: styles.libraryEmpty },
-        "Import or add an artwork to manage it here."
-      );
-
-  return React.createElement(
-    "div",
-    { style: styles.libraryOverlay, onClick: onClose },
-      React.createElement(
-        "aside",
-        {
-          style: styles.libraryPanel,
-          role: "dialog",
-          "aria-modal": true,
-          "aria-label": "Artwork library",
-          onClick: (e) => e.stopPropagation(),
-          "data-testid": "art-library-dialog",
-        },
-      React.createElement(
-        "div",
-        { style: styles.libraryHeader },
-        React.createElement("div", { style: styles.libraryTitle }, "Art Library"),
-        React.createElement(
-          "button",
-          {
-            style: styles.libraryClose,
-            onClick: onClose,
-            "aria-label": "Close art library",
-            "data-testid": "close-art-library",
-          },
-          "\u2715"
-        )
-      ),
-      React.createElement(
-        "section",
-        { style: styles.libraryPickerSection },
-        React.createElement(
-          "div",
-          { style: styles.libraryPickerHeader },
-          React.createElement("h3", { style: styles.libraryPickerTitle }, "Art Picker"),
-          React.createElement(
-            "p",
-            { style: styles.libraryPickerHelp },
-            "Select a card to load a scene."
-          )
-        ),
-        pickerContent
-      ),
-      React.createElement("div", { style: styles.libraryList }, list),
-      React.createElement(
-        "section",
-        { style: styles.libraryPromptSection },
-        React.createElement("h3", { style: styles.libraryPromptTitle }, "ChatGPT prompt"),
-        React.createElement(
-          "p",
-          { style: styles.libraryPromptBody },
-          "Use this prompt with ChatGPT to produce a new color-by-number JSON file."
-        ),
-        React.createElement(
-          "div",
-          { style: styles.libraryPromptActions },
-          React.createElement(
-            "button",
-            { type: "button", style: styles.libraryPrimaryButton, onClick: handleCopyPrompt },
-            "Copy prompt"
-          ),
-          promptStatus &&
-            React.createElement(
-              "span",
-              {
-                style: {
-                  ...styles.libraryPromptStatus,
-                  color: promptStatus.type === "error" ? "#f87171" : "#22c55e",
-                },
-              },
-              promptStatus.message
-            )
-        ),
-        React.createElement(
-          "pre",
-          { style: styles.libraryPromptPre },
-          promptText
-        )
-      ),
-      React.createElement(
-        "form",
-        { style: styles.libraryImport, onSubmit: handleImportSubmit },
-        React.createElement("label", { style: styles.libraryLabel }, "Import artwork JSON or SVG"),
-        React.createElement(
-          "p",
-          { style: styles.libraryNote },
-          "Paste JSON exported from the app or upload an SVG segmented with data-cell-id/data-color-id attributes."
-        ),
-        React.createElement("textarea", {
-          style: styles.libraryTextarea,
-          value: draft,
-          onChange: (e) => setDraft(e.target.value),
-          placeholder: "{ \"id\": \"my-art\", ... }",
-          rows: 6,
-        }),
-        React.createElement(
-          "div",
-          { style: styles.libraryFileRow },
-          React.createElement("input", {
-            type: "file",
-            accept: ".json,.svg,application/json,image/svg+xml",
-            onChange: handleFileUpload,
-            style: styles.libraryFileInput,
-          }),
-          React.createElement(
-            "span",
-            { style: styles.libraryFileHint },
-            "Choose a file to import annotated SVGs or saved JSON payloads."
-          )
-        ),
-        React.createElement(
-          "div",
-          { style: styles.libraryImportActions },
-          React.createElement(
-            "button",
-            { type: "submit", style: styles.libraryPrimaryButton },
-            "Add artwork"
-          ),
-          React.createElement(
-            "button",
-            {
-              type: "button",
-              style: styles.libraryButton,
-              onClick: () => {
-                setDraft("");
-                setFeedback(null);
-              },
-            },
-            "Clear"
-          )
-        ),
-        feedback &&
-          React.createElement(
-            "div",
-            {
-              style: {
-                ...styles.libraryFeedback,
-                color: feedback.type === "error" ? "#f87171" : "#22c55e",
-              },
-            },
-            feedback.message
-          )
-      )
-    )
-  );
-}
-
-const OPTION_COPY = {
-  enableAutosave: {
-    label: "Autosave progress",
-    description: "Persist the fill state and viewport to localStorage after each change.",
-    group: "gameplay",
-  },
-  autoAdvanceOnComplete: {
-    label: "Auto-advance color",
-    description: "Jump to the next color when the active color has no unfilled cells remaining.",
-    group: "gameplay",
-  },
-  enableHintPulse: {
-    label: "Hint pulses",
-    description: "Allow the Hint control to highlight the smallest unfilled cells in the active color.",
-    group: "gameplay",
-  },
-  enableDragFill: {
-    label: "Drag-to-fill",
-    description: "While painting, drag across adjacent cells to fill them without additional taps.",
-    group: "gameplay",
-  },
-  enableEyedropper: {
-    label: "Eyedropper",
-    description: "Tap a filled cell without moving to reselect its color.",
-    group: "gameplay",
-  },
-  enableKeyboardShortcuts: {
-    label: "Keyboard shortcuts",
-    description: "Use H, N, U, T, +/-, and 0 to control hints, color cycling, undo, tests, zoom, and fitting.",
-    group: "gameplay",
-  },
-  showNumberBadges: {
-    label: "Number badges",
-    description: "Show numbered overlays for unfilled cells when zoomed in.",
-    group: "gameplay",
-  },
-  showHeatmapDots: {
-    label: "Heat-map dots",
-    description: "Show locator dots for tiny cells when zoomed out.",
-    group: "gameplay",
-  },
-  enableSmokeHud: {
-    label: "Smoke-test HUD",
-    description: "Allow the debugging overlay that summarizes automated checks.",
-    group: "gameplay",
-  },
-  showColorLabels: {
-    label: "Show color names",
-    description: "Display the palette color names inside each swatch.",
-    group: "interface",
-  },
-  showRemainingCounts: {
-    label: "Show remaining counts",
-    description: "Show a tiny badge with how many cells are left for each color.",
-    group: "interface",
-  },
-  peekHoldToReveal: {
-    label: "Peek requires hold",
-    description: "Hold the Peek button down instead of toggling it on and off.",
-    group: "interface",
-  },
-};
-
-const HELP_SURFACES = [
-  {
-    title: "Root layout",
-    body: "Dark-mode experience with a full-viewport canvas and floating header/footer controls.",
-  },
-  {
-    title: "Header bar",
-    body: "Minimal icon row pinned to the top-right: tap the ✨ button to flash a hint (long-press to peek at the finished art) and use the ☰ menu to reach the library, help, options, and peek controls without covering the canvas.",
-  },
-  {
-    title: "Canvas frame",
-    body: "Fullscreen SVG stage with pan/zoom transforms, strokes, badges, and heat-map dots as you zoom.",
-  },
-  {
-    title: "Smoke Tests HUD",
-    body: "Optional floating card that reports automated sanity checks and can be hidden with the toolbar or T shortcut.",
-  },
-  {
-    title: "Palette footer",
-    body: "Scrollable row of numbered swatches with remaining counts, highlighting the active color and disabling completed ones.",
-  },
-];
-
-const HELP_SHORTCUTS = [
-  { combo: "H", action: "Highlight a hint cell" },
-  { combo: "N", action: "Select the next color" },
-  { combo: "U", action: "Undo the last paint" },
-  { combo: "T", action: "Toggle the smoke-test HUD" },
-  { combo: "+ / =", action: "Zoom in" },
-  { combo: "- / _", action: "Zoom out" },
-  { combo: "0", action: "Reset the view" },
-  { combo: "W / A / S / D", action: "Pan across the canvas" },
-];
-
-function HelpPanel({ art, progress, activeColor, filled, onClose }) {
-  const filledCount = useMemo(() => Object.values(filled ?? {}).filter(Boolean).length, [filled]);
-  const todoItems = useMemo(
-    () => [
-      {
-        id: "choose-art",
-        label: "Open the library and choose an artwork to paint.",
-        done: !!art,
-      },
-      {
-        id: "pick-color",
-        label: "Tap a palette color to make it active.",
-        done: activeColor != null,
-      },
-      {
-        id: "fill-cell",
-        label: "Fill a matching cell to add paint to the scene.",
-        done: filledCount > 0,
-      },
-      {
-        id: "finish-scene",
-        label: "Color every region to reach 100% completion.",
-        done: progress === 100,
-      },
-    ],
-    [art, activeColor, filledCount, progress]
-  );
-
-  return React.createElement(
-    "div",
-    { style: styles.helpOverlay, onClick: onClose },
-    React.createElement(
-      "aside",
-      {
-        style: styles.helpCard,
-        role: "dialog",
-        "aria-modal": true,
-        "aria-label": "Help and instructions",
-        onClick: (e) => e.stopPropagation(),
-      },
-      React.createElement(
-        "div",
-        { style: styles.helpHeader },
-        React.createElement("div", { style: styles.helpTitle }, "Help"),
-        React.createElement(
-          "button",
-          { style: styles.helpClose, onClick: onClose, "aria-label": "Close help" },
-          "\u2715"
-        )
-      ),
-      React.createElement(
-        "section",
-        { style: styles.helpSection },
-        React.createElement("h3", { style: styles.helpSectionTitle }, "Quick how-to"),
-        React.createElement(
-          "p",
-          { style: styles.helpIntro },
-          "Pick a palette color, tap the matching cells, and use the ✨ button for quick hints. Long-press that same control to peek at the finished illustration, and open the menu toggle to access the library, options, and help."
-        ),
-        React.createElement(
-          "ul",
-          { style: styles.helpTodoList },
-          todoItems.map((item) =>
-            React.createElement(
-              "li",
-              { key: item.id, style: styles.helpTodoItem },
-              React.createElement(
-                "span",
-                { style: styles.helpTodoCheck, "aria-hidden": "true" },
-                item.done ? "[x]" : "[ ]"
-              ),
-              React.createElement("span", { style: styles.helpTodoLabel }, item.label)
-            )
-          )
-        )
-      ),
-      React.createElement(
-        "section",
-        { style: styles.helpSection },
-        React.createElement("h3", { style: styles.helpSectionTitle }, "What's on screen"),
-        React.createElement(
-          "ul",
-          { style: styles.helpUiList },
-          HELP_SURFACES.map((surface) =>
-            React.createElement(
-              "li",
-              { key: surface.title },
-              React.createElement("strong", null, surface.title, ": "),
-              surface.body
-            )
-          )
-        )
-      ),
-      React.createElement(
-        "section",
-        { style: styles.helpSection },
-        React.createElement("h3", { style: styles.helpSectionTitle }, "Keyboard shortcuts"),
-        React.createElement(
-          "ul",
-          { style: styles.helpShortcutList },
-          HELP_SHORTCUTS.map((shortcut) =>
-            React.createElement(
-              "li",
-              { key: shortcut.combo, style: styles.helpShortcutRow },
-              React.createElement("span", { style: styles.helpShortcutKey }, shortcut.combo),
-              React.createElement("span", { style: styles.helpShortcutLabel }, shortcut.action)
-            )
-          )
-        )
-      ),
-      React.createElement("div", { style: styles.helpFooter }, "Need to tweak the experience? Open Options to toggle helpers and accessibility tools.")
-    )
-  );
-}
-
-function OptionsPanel({ config, onToggle, canReset, onReset, onClose }) {
-  const humanize = (value) =>
-    value
-      .replace(/([A-Z])/g, " $1")
-      .replace(/[-_]+/g, " ")
-      .replace(/^./, (ch) => ch.toUpperCase())
-      .trim();
-
-  const optionEntries = Object.keys(DEFAULT_CONFIG).map((key) => {
-    const copy = OPTION_COPY[key] || {};
-    const label = copy.label || humanize(key);
-    const description = copy.description || "";
-    const group = copy.group || "gameplay";
-    return { key, label, description, group };
-  });
-
-  const baseGroups = [
-    { key: "gameplay", title: "Game flow & helpers" },
-    { key: "interface", title: "Interface & layout" },
-  ];
-
-  const grouped = optionEntries.reduce((acc, entry) => {
-    const bucket = entry.group || "gameplay";
-    if (!acc[bucket]) acc[bucket] = [];
-    acc[bucket].push(entry);
-    return acc;
-  }, {});
-
-  const sections = [
-    ...baseGroups
-      .map((info) => ({
-        key: info.key,
-        title: info.title,
-        options: grouped[info.key] || [],
-      }))
-      .filter((section) => section.options.length > 0),
-    ...Object.keys(grouped)
-      .filter((key) => !baseGroups.some((info) => info.key === key))
-      .map((key) => ({
-        key,
-        title: humanize(key),
-        options: grouped[key],
-      })),
-  ];
-
-  return React.createElement(
-    "div",
-    { style: styles.optionsOverlay, onClick: onClose },
-    React.createElement(
-      "aside",
-      {
-        style: styles.optionsCard,
-        role: "dialog",
-        "aria-modal": true,
-        "aria-label": "Game options",
-        onClick: (e) => e.stopPropagation(),
-      },
-      React.createElement(
-        "div",
-        { style: styles.optionsHeader },
-        React.createElement("div", { style: styles.optionsTitle }, "Options"),
-        React.createElement(
-          "button",
-          { style: styles.optionsClose, onClick: onClose, "aria-label": "Close options" },
-          "\u2715"
-        )
-      ),
-      React.createElement(
-        "p",
-        { style: styles.optionsAbout },
-        "Fine-tune gameplay helpers or personalize the interface. The project boots entirely from index.html, pulling React, ReactDOM, and Babel from the bundled runtime so new scenes load instantly, and it ships with four sample artworks plus autosave so changes persist."
-      ),
-      sections.map((section) =>
-        React.createElement(
-          React.Fragment,
-          { key: section.key },
-          React.createElement("div", { style: styles.optionsSectionTitle }, section.title),
-          React.createElement(
-            "div",
-            { style: styles.optionsList },
-            section.options.map((opt) =>
-              React.createElement(
-                "label",
-                { key: opt.key, style: styles.optionRow },
-                React.createElement("input", {
-                  type: "checkbox",
-                  checked: !!config[opt.key],
-                  onChange: (e) => onToggle(opt.key, e.target.checked),
-                  style: styles.optionCheckbox,
-                }),
-                React.createElement(
-                  "div",
-                  null,
-                  React.createElement("div", { style: styles.optionLabel }, opt.label),
-                  opt.description
-                    ? React.createElement("div", { style: styles.optionDescription }, opt.description)
-                    : null
-                )
-              )
-            )
-          )
-        )
-      ),
-      React.createElement("div", { style: styles.optionsSectionTitle }, "Current values"),
-      React.createElement(
-        "pre",
-        { style: styles.optionsConfigPre },
-        JSON.stringify(config, null, 2)
-      ),
-      React.createElement(
-        "div",
-        { style: styles.optionsFooter },
-        React.createElement(
-          "button",
-          {
-            style: {
-              ...styles.optionsReset,
-              opacity: canReset ? 1 : 0.5,
-              cursor: canReset ? "pointer" : "not-allowed",
-            },
-            type: "button",
-            onClick: canReset ? onReset : undefined,
-            disabled: !canReset,
-          },
-          "Reset to defaults"
-        )
-      )
-    )
-  );
-}
-
-// ---------- Smoke Tests HUD ----------
-function SmokeTests({ art, filled }) {
-  const results = useMemo(() => runSmokeTests(art, filled), [art, filled]);
-  const allPass = results.every((r) => r.pass);
-  if (allPass) return null;
-  return React.createElement(
-    "div",
-    {
-      style: {
-        position: "absolute",
-        left: 16,
-        bottom: 180,
-        background: "rgba(248, 113, 113, 0.12)",
-        border: "1px solid #f87171",
-        borderRadius: 12,
-        padding: 12,
-        boxShadow: "0 12px 40px rgba(15, 23, 42, 0.35)",
-        maxWidth: 360,
-        fontSize: 12,
-        backdropFilter: "blur(12px)",
-      },
-    },
-    React.createElement(
-      "div",
-      { style: { fontWeight: 700, marginBottom: 8 } },
-      "Smoke tests failed"
-    ),
-    React.createElement(
-      "ul",
-      { style: { margin: 0, paddingLeft: 18 } },
-      results.map((r) => {
-        const status = r.pass ? "[pass]" : "[fail]";
-        const details = r.msg ? ` - ${r.msg}` : "";
-        return React.createElement(
-          "li",
-          { key: r.name, style: { color: r.pass ? "#4ade80" : "#fca5a5" } },
-          `${status} ${r.name}${details}`
-        );
-      })
-    ),
-    React.createElement(
-      "div",
-      { style: { marginTop: 8, color: "#94a3b8" } },
-      "Press T to hide/show."
-    )
-  );
-}
-
-function runSmokeTests(art, filled) {
-  const tests = [];
-  const rem = computeRemaining(art, filled);
-  const sum = Object.values(rem).reduce((a, b) => a + b, 0);
-  const expected = art.cells.filter((c) => !filled[c.id]).length;
-  tests.push({ name: "Remaining matches unfilled count", pass: sum === expected, msg: `${sum}/${expected}` });
-  const c0 = art.cells[0];
-  const { x, y } = centroidFromPath(c0.d);
-  tests.push({ name: "Centroid in bounds", pass: x >= 0 && y >= 0 && x <= art.width && y <= art.height });
-  const ids = new Set(art.palette.map((p) => p.id));
-  tests.push({ name: "Palette IDs unique", pass: ids.size === art.palette.length });
-  return tests;
-}
-
-// ---------- Hooks ----------
-function useViewportSize() {
-  const [size, setSize] = useState(() => {
-    if (typeof window === "undefined") {
-      return { width: 1024, height: 768 };
-    }
-    return { width: window.innerWidth, height: window.innerHeight };
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    function handleResize() {
-      setSize({ width: window.innerWidth, height: window.innerHeight });
-    }
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("orientationchange", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("orientationchange", handleResize);
-    };
-  }, []);
-
-  return size;
-}
-
-// ---------- Styles ----------
-const styles = {
-  app: {
-    width: "100vw",
-    height: "100vh",
-    position: "relative",
-    overflow: "hidden",
-    fontFamily: "'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui",
-    color: "#f8fafc",
-    background: "radial-gradient(circle at top, rgba(56, 189, 248, 0.12), #030712)",
-  },
-  canvas: {
-    position: "absolute",
-    inset: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    userSelect: "none",
-    WebkitUserSelect: "none",
-  },
-  topBar: {
-    position: "fixed",
-    top: 12,
-    right: 16,
-    left: "auto",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 10,
-    padding: "8px 12px",
-    borderRadius: 18,
-    background: "rgba(15, 23, 42, 0.85)",
-    border: "1px solid rgba(148, 163, 184, 0.28)",
-    boxShadow: "0 18px 36px rgba(2, 6, 23, 0.55)",
-    backdropFilter: "blur(14px)",
-    zIndex: 20,
-    maxWidth: "min(360px, calc(100% - 24px))",
-  },
-  topActions: {
-    display: "flex",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 10,
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    border: "1px solid rgba(148, 163, 184, 0.32)",
-    background: "linear-gradient(180deg, rgba(51, 65, 85, 0.6), rgba(15, 23, 42, 0.94))",
-    color: "#f8fafc",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 18,
-    cursor: "pointer",
-    boxShadow: "0 12px 28px rgba(2, 6, 23, 0.45)",
-    transition: "transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, border 0.2s ease",
-  },
-  iconButtonActive: {
-    border: "1px solid rgba(56, 189, 248, 0.55)",
-    boxShadow: "0 0 0 2px rgba(56, 189, 248, 0.35), 0 12px 32px rgba(2, 6, 23, 0.55)",
-    color: "#38bdf8",
-  },
-  iconGlyph: {
-    fontSize: 20,
-    lineHeight: 1,
-  },
-  srOnly: {
-    position: "absolute",
-    width: 1,
-    height: 1,
-    padding: 0,
-    margin: -1,
-    overflow: "hidden",
-    clip: "rect(0, 0, 0, 0)",
-    whiteSpace: "nowrap",
-    border: 0,
-  },
-  menuAnchor: {
-    position: "relative",
-    display: "flex",
-    alignItems: "center",
-  },
-  controlIcon: {
-    fontSize: 16,
-    lineHeight: 1,
-  },
-  controlLabel: {
-    fontSize: 12,
-    fontWeight: 600,
-    letterSpacing: 0.2,
-    whiteSpace: "nowrap",
-  },
-  commandMenu: {
-    position: "absolute",
-    top: "calc(100% + 8px)",
-    right: 0,
-    display: "grid",
-    gap: 8,
-    padding: 12,
-    minWidth: 200,
-    maxWidth: 260,
-    borderRadius: 14,
-    background: "rgba(15, 23, 42, 0.92)",
-    border: "1px solid rgba(148, 163, 184, 0.28)",
-    boxShadow: "0 18px 32px rgba(2, 6, 23, 0.55)",
-    backdropFilter: "blur(18px)",
-    zIndex: 5,
-  },
-  commandMenuButton: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    justifyContent: "flex-start",
-    width: "100%",
-    padding: "8px 12px",
-    borderRadius: 10,
-    border: "1px solid rgba(148, 163, 184, 0.28)",
-    background: "linear-gradient(180deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.95))",
-    color: "#f8fafc",
-    fontSize: 12,
-    fontWeight: 600,
-    letterSpacing: 0.2,
-    cursor: "pointer",
-    transition: "transform 0.15s ease, background 0.2s ease, border 0.2s ease",
-  },
-  commandMenuButtonActive: {
-    border: "1px solid rgba(56, 189, 248, 0.45)",
-    boxShadow: "0 0 0 2px rgba(56, 189, 248, 0.35)",
-    color: "#38bdf8",
-  },
-  commandMenuLabel: {
-    fontSize: 12,
-    fontWeight: 600,
-    letterSpacing: 0.2,
-    textAlign: "left",
-    flex: "1 1 auto",
-  },
-  paletteDock: {
-    position: "fixed",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: "10px 18px",
-    background: "rgba(15, 23, 42, 0.9)",
-    borderRadius: 0,
-    border: "none",
-    boxShadow: "0 -8px 24px rgba(2, 6, 23, 0.45)",
-    zIndex: 11,
-    overflow: "hidden",
-    backdropFilter: "blur(18px)",
-  },
-  emptyState: {
-    position: "absolute",
-    inset: 0,
-    display: "grid",
-    placeItems: "center",
-    padding: 24,
-    color: "#94a3b8",
-    fontSize: 18,
-    textAlign: "center",
-  },
-  bootstrapBanner: {
-    position: "fixed",
-    top: 72,
-    left: "50%",
-    transform: "translateX(-50%)",
-    padding: "10px 18px",
-    borderRadius: 12,
-    background: "rgba(248, 113, 113, 0.16)",
-    border: "1px solid rgba(248, 113, 113, 0.45)",
-    color: "#fecaca",
-    boxShadow: "0 12px 32px rgba(2, 6, 23, 0.5)",
-    backdropFilter: "blur(12px)",
-    zIndex: 25,
-    textAlign: "center",
-    maxWidth: "min(480px, 90vw)",
-    fontSize: 12,
-  },
-  paletteWrap: {
-    display: "flex",
-    flexDirection: "row",
-    flexWrap: "nowrap",
-    gap: 12,
-    width: "100%",
-    overflowX: "auto",
-    padding: "6px 6px 4px",
-    scrollSnapType: "x proximity",
-    alignItems: "center",
-  },
-  swatch: {
-    width: "clamp(48px, 8vw, 64px)",
-    height: "clamp(48px, 8vw, 64px)",
-    borderRadius: 16,
-    display: "grid",
-    gridAutoRows: "min-content",
-    alignItems: "center",
-    justifyItems: "center",
-    position: "relative",
-    padding: "6px 8px 7px",
-    transition: "transform 0.12s ease, box-shadow 0.2s ease",
-    cursor: "pointer",
-    color: "#f8fafc",
-    textAlign: "center",
-    rowGap: 4,
-    lineHeight: 1.1,
-  },
-  swatchNumber: {
-    fontSize: 16,
-    fontWeight: 700,
-    textShadow: "0 1px 4px rgba(15, 23, 42, 0.7)",
-  },
-  swatchLabel: {
-    fontSize: 9,
-    fontWeight: 600,
-    letterSpacing: 0.3,
-    textShadow: "0 1px 3px rgba(15, 23, 42, 0.7)",
-    whiteSpace: "normal",
-    lineHeight: 1.1,
-  },
-  swatchItem: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    scrollSnapAlign: "center",
-  },
-  swatchTopRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    width: "100%",
-  },
-  swatchBadge: {
-    minWidth: 18,
-    padding: "0 6px",
-    height: 18,
-    borderRadius: 999,
-    background: "rgba(15, 23, 42, 0.7)",
-    color: "#f8fafc",
-    fontSize: 10,
-    fontWeight: 700,
-    lineHeight: "18px",
-    boxShadow: "0 2px 6px rgba(2, 6, 23, 0.45)",
-  },
-  swatchBadgeComplete: {
-    background: "rgba(34, 197, 94, 0.85)",
-    color: "#ecfdf5",
-  },
-  libraryOverlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(2, 6, 23, 0.7)",
-    backdropFilter: "blur(12px)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: "24px",
-    zIndex: 60,
-  },
-  libraryPanel: {
-    width: "min(560px, 100%)",
-    maxHeight: "calc(100vh - 48px)",
-    overflowY: "auto",
-    background: "rgba(15, 23, 42, 0.96)",
-    borderRadius: 24,
-    padding: 24,
-    boxShadow: "0 24px 60px rgba(2, 6, 23, 0.7)",
-    border: "1px solid rgba(148, 163, 184, 0.3)",
-    color: "#e2e8f0",
-    display: "grid",
-    gap: 20,
-  },
-  libraryHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  libraryTitle: {
-    fontSize: 20,
-    fontWeight: 700,
-  },
-  libraryClose: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    background: "rgba(15, 23, 42, 0.8)",
-    color: "#cbd5f5",
-    cursor: "pointer",
-  },
-  libraryList: {
-    display: "grid",
-    gap: 12,
-  },
-  libraryPickerSection: {
-    border: "1px solid rgba(148, 163, 184, 0.25)",
-    borderRadius: 16,
-    padding: 16,
-    background: "rgba(15, 23, 42, 0.7)",
-    display: "grid",
-    gap: 12,
-  },
-  libraryPickerHeader: {
-    display: "flex",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: 12,
-    flexWrap: "wrap",
-  },
-  libraryPickerTitle: {
-    fontSize: 16,
-    fontWeight: 600,
-    margin: 0,
-  },
-  libraryPickerHelp: {
-    margin: 0,
-    fontSize: 12,
-    color: "#94a3b8",
-  },
-  libraryPickerGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-    gap: 12,
-  },
-  libraryPickerEmpty: {
-    padding: 16,
-    textAlign: "center",
-    color: "#94a3b8",
-    border: "1px dashed rgba(148, 163, 184, 0.3)",
-    borderRadius: 16,
-  },
-  libraryCard: {
-    display: "grid",
-    gap: 8,
-    padding: 12,
-    borderRadius: 16,
-    border: "1px solid rgba(148, 163, 184, 0.22)",
-    background: "rgba(15, 23, 42, 0.72)",
-    color: "#e2e8f0",
-    cursor: "pointer",
-    textAlign: "left",
-    width: "100%",
-    transition: "transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease",
-  },
-  libraryCardActive: {
-    borderColor: "rgba(56, 189, 248, 0.6)",
-    boxShadow: "0 0 0 1px rgba(56, 189, 248, 0.4), 0 12px 30px rgba(2, 6, 23, 0.65)",
-    transform: "translateY(-2px)",
-  },
-  libraryCardPreview: {
-    width: "100%",
-    aspectRatio: "4 / 3",
-    background: "rgba(15, 23, 42, 0.9)",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  libraryCardSvg: {
-    width: "100%",
-    height: "100%",
-    display: "block",
-  },
-  libraryCardBody: {
-    display: "grid",
-    gap: 4,
-  },
-  libraryCardTitle: {
-    fontSize: 14,
-    fontWeight: 600,
-    lineHeight: 1.3,
-  },
-  libraryCardMeta: {
-    fontSize: 12,
-    color: "#94a3b8",
-  },
-  libraryItem: {
-    border: "1px solid rgba(148, 163, 184, 0.2)",
-    borderRadius: 16,
-    padding: 16,
-    background: "rgba(15, 23, 42, 0.7)",
-    display: "grid",
-    gap: 12,
-  },
-  libraryItemActive: {
-    borderColor: "rgba(56, 189, 248, 0.6)",
-    boxShadow: "0 0 0 1px rgba(56, 189, 248, 0.4)",
-  },
-  libraryItemHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  libraryItemTitle: {
-    fontWeight: 600,
-    fontSize: 16,
-  },
-  libraryTitleInput: {
-    width: "100%",
-    padding: "6px 10px",
-    borderRadius: 10,
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    background: "rgba(15, 23, 42, 0.85)",
-    color: "#e2e8f0",
-  },
-  libraryBadge: {
-    padding: "4px 10px",
-    borderRadius: 999,
-    fontSize: 12,
-    background: "rgba(148, 163, 184, 0.2)",
-    color: "#cbd5f5",
-  },
-  libraryBadgeActive: {
-    background: "rgba(56, 189, 248, 0.2)",
-    color: "#38bdf8",
-  },
-  libraryMeta: {
-    fontSize: 13,
-    color: "#94a3b8",
-  },
-  libraryButtons: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  libraryButton: {
-    padding: "8px 12px",
-    borderRadius: 10,
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    background: "rgba(30, 41, 59, 0.6)",
-    color: "#cbd5f5",
-    cursor: "pointer",
-  },
-  libraryPrimaryButton: {
-    padding: "8px 12px",
-    borderRadius: 10,
-    border: "1px solid rgba(56, 189, 248, 0.5)",
-    background: "rgba(56, 189, 248, 0.2)",
-    color: "#38bdf8",
-    cursor: "pointer",
-  },
-  libraryDangerButton: {
-    padding: "8px 12px",
-    borderRadius: 10,
-    border: "1px solid rgba(248, 113, 113, 0.5)",
-    background: "rgba(248, 113, 113, 0.15)",
-    color: "#fca5a5",
-    cursor: "pointer",
-  },
-  libraryEmpty: {
-    padding: 16,
-    textAlign: "center",
-    color: "#94a3b8",
-    border: "1px dashed rgba(148, 163, 184, 0.3)",
-    borderRadius: 16,
-  },
-  libraryPromptSection: {
-    border: "1px solid rgba(148, 163, 184, 0.25)",
-    borderRadius: 16,
-    padding: 16,
-    background: "rgba(15, 23, 42, 0.7)",
-    display: "grid",
-    gap: 12,
-  },
-  libraryPromptTitle: {
-    margin: 0,
-    fontSize: 15,
-    fontWeight: 600,
-  },
-  libraryPromptBody: {
-    margin: 0,
-    fontSize: 13,
-    color: "#94a3b8",
-  },
-  libraryPromptActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-  },
-  libraryPromptStatus: {
-    fontSize: 12,
-  },
-  libraryPromptPre: {
-    margin: 0,
-    padding: 12,
-    background: "rgba(15, 23, 42, 0.85)",
-    borderRadius: 12,
-    border: "1px solid rgba(148, 163, 184, 0.2)",
-    fontSize: 12,
-    color: "#cbd5f5",
-    overflowX: "auto",
-    whiteSpace: "pre-wrap",
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-  libraryImport: {
-    display: "grid",
-    gap: 12,
-  },
-  libraryLabel: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#cbd5f5",
-  },
-  libraryNote: {
-    margin: 0,
-    fontSize: 12,
-    color: "#94a3b8",
-  },
-  libraryTextarea: {
-    width: "100%",
-    borderRadius: 12,
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    background: "rgba(15, 23, 42, 0.8)",
-    color: "#e2e8f0",
-    padding: 12,
-    fontSize: 13,
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-  libraryFileRow: {
-    display: "flex",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 12,
-  },
-  libraryFileInput: {
-    color: "#cbd5f5",
-    fontSize: 12,
-  },
-  libraryFileHint: {
-    fontSize: 12,
-    color: "#94a3b8",
-  },
-  libraryImportActions: {
-    display: "flex",
-    gap: 12,
-    flexWrap: "wrap",
-  },
-  libraryFeedback: {
-    fontSize: 12,
-  },
-  helpOverlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(2, 6, 23, 0.6)",
-    backdropFilter: "blur(8px)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: "24px",
-    zIndex: 55,
-  },
-  helpCard: {
-    width: "min(520px, 100%)",
-    maxHeight: "calc(100vh - 60px)",
-    overflowY: "auto",
-    background: "rgba(15, 23, 42, 0.96)",
-    borderRadius: 24,
-    padding: 24,
-    boxShadow: "0 24px 60px rgba(2, 6, 23, 0.65)",
-    border: "1px solid rgba(148, 163, 184, 0.3)",
-    color: "#e2e8f0",
-    display: "grid",
-    gap: 16,
-  },
-  helpHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  helpTitle: {
-    fontSize: 20,
-    fontWeight: 700,
-  },
-  helpClose: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    background: "rgba(15, 23, 42, 0.8)",
-    color: "#cbd5f5",
-    cursor: "pointer",
-  },
-  helpSection: {
-    display: "grid",
-    gap: 12,
-  },
-  helpSectionTitle: {
-    fontSize: 14,
-    fontWeight: 600,
-    margin: 0,
-  },
-  helpIntro: {
-    margin: 0,
-    fontSize: 13,
-    color: "#94a3b8",
-  },
-  helpTodoList: {
-    listStyle: "none",
-    margin: 0,
-    padding: 0,
-    display: "grid",
-    gap: 8,
-  },
-  helpTodoItem: {
-    display: "grid",
-    gridTemplateColumns: "auto 1fr",
-    gap: 12,
-    alignItems: "center",
-    padding: "8px 12px",
-    borderRadius: 12,
-    border: "1px solid rgba(148, 163, 184, 0.18)",
-    background: "rgba(15, 23, 42, 0.7)",
-  },
-  helpTodoCheck: {
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-    fontSize: 12,
-    color: "#cbd5f5",
-  },
-  helpTodoLabel: {
-    fontSize: 13,
-    color: "#e2e8f0",
-  },
-  helpUiList: {
-    margin: 0,
-    paddingLeft: 18,
-    display: "grid",
-    gap: 8,
-    fontSize: 13,
-    color: "#d0def5",
-  },
-  helpShortcutList: {
-    margin: 0,
-    padding: 0,
-    listStyle: "none",
-    display: "grid",
-    gap: 8,
-  },
-  helpShortcutRow: {
-    display: "grid",
-    gridTemplateColumns: "auto 1fr",
-    gap: 12,
-    alignItems: "center",
-  },
-  helpShortcutKey: {
-    padding: "4px 10px",
-    borderRadius: 10,
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    background: "rgba(15, 23, 42, 0.8)",
-    color: "#f8fafc",
-    fontSize: 12,
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-  helpShortcutLabel: {
-    fontSize: 12,
-    color: "#94a3b8",
-  },
-  helpFooter: {
-    fontSize: 12,
-    color: "#94a3b8",
-    background: "rgba(15, 23, 42, 0.7)",
-    borderRadius: 12,
-    padding: 12,
-    border: "1px solid rgba(148, 163, 184, 0.18)",
-  },
-  optionsOverlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(2, 6, 23, 0.6)",
-    backdropFilter: "blur(8px)",
-    display: "flex",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    padding: "24px 32px",
-    zIndex: 50,
-  },
-  optionsCard: {
-    width: "min(420px, 100%)",
-    maxHeight: "calc(100vh - 48px)",
-    overflowY: "auto",
-    background: "rgba(15, 23, 42, 0.96)",
-    borderRadius: 24,
-    padding: 24,
-    boxShadow: "0 24px 60px rgba(2, 6, 23, 0.65)",
-    border: "1px solid rgba(148, 163, 184, 0.25)",
-    color: "#e2e8f0",
-  },
-  optionsHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  optionsTitle: {
-    fontSize: 20,
-    fontWeight: 700,
-  },
-  optionsClose: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    background: "rgba(15, 23, 42, 0.8)",
-    color: "#cbd5f5",
-    cursor: "pointer",
-  },
-  optionsAbout: {
-    fontSize: 13,
-    lineHeight: 1.6,
-    color: "#cbd5f5",
-    marginTop: 0,
-    marginBottom: 16,
-  },
-  optionsSectionTitle: {
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    color: "#64748b",
-    margin: "20px 0 10px",
-  },
-  optionsUiList: {
-    margin: 0,
-    paddingLeft: 18,
-    display: "grid",
-    gap: 8,
-    fontSize: 13,
-    color: "#d0def5",
-  },
-  optionsList: {
-    display: "grid",
-    gap: 12,
-  },
-  optionRow: {
-    display: "grid",
-    gridTemplateColumns: "auto 1fr",
-    gap: 12,
-    alignItems: "start",
-    background: "rgba(15, 23, 42, 0.7)",
-    padding: 12,
-    borderRadius: 16,
-    border: "1px solid rgba(148, 163, 184, 0.15)",
-  },
-  optionCheckbox: {
-    width: 18,
-    height: 18,
-    marginTop: 4,
-  },
-  optionLabel: {
-    fontWeight: 600,
-    color: "#e2e8f0",
-  },
-  optionDescription: {
-    fontSize: 12,
-    color: "#94a3b8",
-    marginTop: 4,
-  },
-  optionsConfigPre: {
-    margin: 0,
-    padding: 12,
-    background: "rgba(15, 23, 42, 0.7)",
-    borderRadius: 16,
-    border: "1px solid rgba(148, 163, 184, 0.15)",
-    fontSize: 12,
-    color: "#f8fafc",
-    overflowX: "auto",
-  },
-  optionsFooter: {
-    marginTop: 16,
-    display: "flex",
-    justifyContent: "flex-end",
-  },
-  optionsReset: {
-    borderRadius: 12,
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    background: "rgba(51, 65, 85, 0.4)",
-    color: "#e2e8f0",
-    padding: "10px 16px",
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-};
-
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(React.createElement(App));
     </script>
   </body>
 </html>
-
