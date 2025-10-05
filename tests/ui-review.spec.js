@@ -66,15 +66,18 @@ test.describe('Capy image generator', () => {
         (el) => el.getAttribute('aria-label') || el.getAttribute('title') || (el.textContent || '').trim()
       );
       const hasSettings = Boolean(document.querySelector('#settingsSheet'));
+      const hasSampleButton = Boolean(document.querySelector('[data-testid="sample-art-button"]'));
       return {
         progress: (progress?.textContent || '').trim(),
         commandButtons,
         hasSettings,
+        hasSampleButton,
       };
     });
 
     expect(layout.hasSettings).toBe(true);
     expect(layout.progress).toBe('—');
+    expect(layout.hasSampleButton).toBe(true);
     expect(layout.commandButtons).toEqual(
       expect.arrayContaining(['Hint', 'Reset puzzle', 'Show preview', 'Import', 'Save manager', 'Settings'])
     );
@@ -87,6 +90,32 @@ test.describe('Capy image generator', () => {
     expect(generatorLabels.some((label) => label.includes('Colours'))).toBe(true);
     expect(generatorLabels.some((label) => label.includes('Sample rate'))).toBe(true);
     await page.click('[data-sheet-close="settings"]');
+  });
+
+  test('loads the capybara sample scene', async ({ page }) => {
+    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-testid="sample-art-button"]');
+    await page.click('[data-testid="sample-art-button"]');
+    await expect(page.locator('[data-testid="start-hint"]')).toHaveClass(/hidden/);
+    await page.waitForSelector('[data-testid="palette-swatch"]');
+
+    const progress = page.locator('[data-testid="progress-message"]');
+    await expect(progress).toHaveText(/0\/\d+/);
+
+    const state = await page.evaluate(() => {
+      const { puzzle, sourceUrl } = window.capyGenerator.getState();
+      return {
+        hasPuzzle: Boolean(puzzle),
+        regionCount: puzzle?.regions?.length || 0,
+        paletteCount: puzzle?.palette?.length || 0,
+        sourceUrl,
+      };
+    });
+
+    expect(state.hasPuzzle).toBe(true);
+    expect(state.paletteCount).toBeGreaterThan(3);
+    expect(state.regionCount).toBeGreaterThan(4);
+    expect(state.sourceUrl).toContain('data:image/svg+xml;base64,');
   });
 
   test('fills the basic test pattern to completion', async ({ page }) => {

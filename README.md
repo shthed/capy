@@ -11,6 +11,8 @@ tools, a save manager, and a configurable generator all live inside a single
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
   previously exported JSON puzzles straight into the generator pipeline.
+- **Built-in capybara sample.** Load the "Capybara Meadow" illustration from
+  the start overlay to play immediately without hunting for an image file.
 - **Configurable puzzle generator.** Tune palette size, minimum region area,
   resize detail, sampling, iteration count, and smoothing passes before
   rebuilding the scene.
@@ -34,8 +36,9 @@ tools, a save manager, and a configurable generator all live inside a single
 
 ## How it works
 
-1. **Load an image.** Drag a bitmap into the viewport or activate the “Choose an
-   image” button. The hint overlay disappears once a source is selected.
+1. **Load an image.** Drag a bitmap into the viewport, activate the “Choose an
+   image” button, or tap **Try the capybara sample** to spin up the bundled
+   scene. The hint overlay disappears once a source is selected.
 2. **Tune generation.** Open **Settings** to tweak palette size, minimum region
    area, resize detail, sample rate (for faster clustering), iteration count,
    and smoothing passes. Apply changes instantly when working from an image
@@ -104,6 +107,9 @@ The Playwright suite exercises the core flows:
 - **renders command rail and generator settings on load** – Confirms the hint
   overlay, iconized command rail, compact progress tally, and generator controls
   render on first boot.
+- **loads the capybara sample scene** – Clicks the new start overlay shortcut to
+  generate a bundled illustration, ensuring the onboarding affordance works
+  offline.
 - **fills the basic test pattern to completion** – Loads a tiny fixture via
   `window.capyGenerator.loadPuzzleFixture`, walks through selecting palette
   swatches, fills each region, observes the completion copy, and resets the

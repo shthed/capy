@@ -202,6 +202,9 @@
         background: rgba(2, 6, 23, 0.78);
         border: 1px solid rgba(59, 130, 246, 0.35);
         box-shadow: 0 20px 60px rgba(15, 23, 42, 0.6);
+        display: grid;
+        gap: 20px;
+        justify-items: center;
       }
 
       #startHint h1 {
@@ -213,6 +216,20 @@
         margin: 0 0 20px;
         color: rgba(226, 232, 240, 0.8);
         font-size: 1rem;
+      }
+
+      #startHint .sample-art {
+        width: min(240px, 70vw);
+        max-width: 100%;
+        border-radius: 16px;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+      }
+
+      #startHint .hint-actions {
+        display: grid;
+        gap: 12px;
+        width: 100%;
       }
 
       button {
@@ -682,9 +699,27 @@
         </div>
         <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
+            <img
+              id="sampleArtPreview"
+              class="sample-art"
+              alt="Capybara sample illustration"
+            />
             <h1>Drop an image to start</h1>
-            <p>Drag a picture anywhere on the screen or choose a file from your device.</p>
-            <button id="selectImage" type="button">Choose an image</button>
+            <p>
+              Drag a picture anywhere on the screen, choose a file from your device,
+              or jump straight into our capybara sample scene.
+            </p>
+            <div class="hint-actions">
+              <button id="selectImage" type="button">Choose an image</button>
+              <button
+                id="samplePuzzle"
+                type="button"
+                data-testid="sample-art-button"
+                aria-label="Load capybara sample puzzle"
+              >
+                Try the capybara sample
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -773,6 +808,8 @@
         <script>
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
+      const sampleButton = document.getElementById("samplePuzzle");
+      const samplePreview = document.getElementById("sampleArtPreview");
       const startHint = document.getElementById("startHint");
       const hintButton = document.getElementById("hintButton");
       const resetButton = document.getElementById("resetButton");
@@ -808,6 +845,19 @@
       const previewCtx = previewCanvas.getContext("2d");
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const BACKGROUND_PIXEL = [248, 250, 252, 255];
+
+      const SAMPLE_ARTWORK = {
+        title: "Capybara Meadow",
+        description: "A capybara lounging beside a pond under a bright sun.",
+        dataUrl:
+          "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMTUwIj4KICA8cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgZmlsbD0iIzhjYzBmZiIgLz4KICA8Y2lyY2xlIGN4PSIxNzAiIGN5PSIzMCIgcj0iMTgiIGZpbGw9IiNmZmUzN2QiIC8+CiAgPGVsbGlwc2UgY3g9IjYwIiBjeT0iMTI1IiByeD0iOTAiIHJ5PSIzNSIgZmlsbD0iIzZkYzNmZiIgb3BhY2l0eT0iMC43IiAvPgogIDxyZWN0IHk9IjkwIiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjYwIiBmaWxsPSIjNzRjMDkwIiAvPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDUwLDYwKSI+CiAgICA8ZWxsaXBzZSBjeD0iNTAiIGN5PSI0MCIgcng9IjQ4IiByeT0iMzQiIGZpbGw9IiNhMzZiNDAiIC8+CiAgICA8ZWxsaXBzZSBjeD0iOTUiIGN5PSIzMCIgcng9IjI4IiByeT0iMjIiIGZpbGw9IiNhMzZiNDAiIC8+CiAgICA8ZWxsaXBzZSBjeD0iNjAiIGN5PSI0NSIgcng9IjI4IiByeT0iMTgiIGZpbGw9IiNjMzhhNTgiIG9wYWNpdHk9IjAuODUiIC8+CiAgICA8ZWxsaXBzZSBjeD0iMTA4IiBjeT0iMjgiIHJ4PSI2IiByeT0iNCIgZmlsbD0iIzVkM2MyMyIgLz4KICAgIDxjaXJjbGUgY3g9IjkyIiBjeT0iMzIiIHI9IjQiIGZpbGw9IiMyZjFmMTYiIC8+CiAgICA8Y2lyY2xlIGN4PSI5My41IiBjeT0iMzEiIHI9IjEuMiIgZmlsbD0iI2ZmZiIgLz4KICAgIDxlbGxpcHNlIGN4PSIzNCIgY3k9IjcwIiByeD0iOCIgcnk9IjEyIiBmaWxsPSIjN2E0ZDJjIiAvPgogICAgPGVsbGlwc2UgY3g9IjU2IiBjeT0iNzIiIHJ4PSI4IiByeT0iMTMiIGZpbGw9IiM3YTRkMmMiIC8+CiAgICA8ZWxsaXBzZSBjeD0iODYiIGN5PSI2NiIgcng9IjciIHJ5PSIxMSIgZmlsbD0iIzdhNGQyYyIgLz4KICAgIDxlbGxpcHNlIGN4PSIxMDMiIGN5PSI2NCIgcng9IjciIHJ5PSIxMCIgZmlsbD0iIzdhNGQyYyIgLz4KICAgIDxlbGxpcHNlIGN4PSIxMTAiIGN5PSIyNiIgcng9IjgiIHJ5PSIxMCIgZmlsbD0iIzc0NDkyYSIgLz4KICA8L2c+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSI+CiAgICA8cGF0aCBkPSJNMTUgMTEwIFEzMCA4MCA0NSAxMTAgVDc1IDExMCIgZmlsbD0iIzRmOTE1MCIgb3BhY2l0eT0iMC44IiAvPgogICAgPHBhdGggZD0iTTE0MCAxMTIgUTE1MCA5MCAxNjAgMTEwIFQxODAgMTEwIiBmaWxsPSIjNGY5MTUwIiBvcGFjaXR5PSIwLjgiIC8+CiAgPC9nPgo8L3N2Zz4=",
+      };
+
+      if (samplePreview) {
+        samplePreview.src = SAMPLE_ARTWORK.dataUrl;
+        samplePreview.alt = SAMPLE_ARTWORK.description;
+        samplePreview.title = SAMPLE_ARTWORK.title;
+      }
 
       const viewState = {
         panX: 0,
@@ -869,6 +919,18 @@
       refreshSaveList();
       updateCommandStates();
       resetView();
+
+      if (sampleButton) {
+        sampleButton.title = `Play ${SAMPLE_ARTWORK.title}`;
+        sampleButton.addEventListener("click", () => {
+          const { dataUrl } = SAMPLE_ARTWORK;
+          if (!dataUrl) return;
+          resetPuzzleUI();
+          state.sourceUrl = dataUrl;
+          startHint.classList.add("hidden");
+          loadImage(dataUrl);
+        });
+      }
 
       selectButton.addEventListener("click", () => fileInput.click());
       importButton.addEventListener("click", () => fileInput.click());

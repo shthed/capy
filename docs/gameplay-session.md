@@ -9,12 +9,14 @@
 - Accessed the app at <http://localhost:8000/index.html> via an automated Chromium session (Playwright).
 
 ## Actions Performed
-1. Loaded the default "Capybara in a Forest" scene from the artwork library.
+1. Triggered the **Try the capybara sample** button to generate the bundled
+   "Capybara Meadow" scene without importing external art.
 2. Selected the first palette swatch to activate its associated color.
 3. Painted an available cell on the SVG canvas to confirm interaction wiring.
 
 ## Observations
-- Artwork, palette, and the top-right hint/menu controls rendered without errors once the page finished hydrating.
+- Artwork, palette, and the top-right hint/menu controls rendered without errors once the page finished hydrating, and the
+  sample preview inside the start overlay matched the generated scene.
 - The top-right command rail now shows icon-only controls tucked to the right edge so opening settings or the save manager never obscures the artwork.
 - Palette selection immediately highlighted the active swatch, responded on the first tap in the touch emulation, and kept the compact number-only label crisp while remaining counts surfaced via tooltip copy.
 - Painting a cell updated the fill color inline with the clustered artwork (no refresh needed) and click-drag panning plus the scroll-wheel zoom made it easy to inspect tiny regions.
