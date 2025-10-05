@@ -61,14 +61,12 @@ test.describe('Capy image generator', () => {
     await page.waitForSelector('[data-testid="start-hint"]');
 
     const layout = await page.evaluate(() => {
-      const status = document.querySelector('[data-testid="status-bar"]');
       const progress = document.querySelector('[data-testid="progress-message"]');
-      const commandButtons = Array.from(
-        document.querySelectorAll('#commandRail button')
-      ).map((el) => (el.textContent || '').trim());
+      const commandButtons = Array.from(document.querySelectorAll('#commandRail button')).map(
+        (el) => el.getAttribute('aria-label') || el.getAttribute('title') || (el.textContent || '').trim()
+      );
       const hasSettings = Boolean(document.querySelector('#settingsSheet'));
       return {
-        status: (status?.textContent || '').trim(),
         progress: (progress?.textContent || '').trim(),
         commandButtons,
         hasSettings,
@@ -76,9 +74,10 @@ test.describe('Capy image generator', () => {
     });
 
     expect(layout.hasSettings).toBe(true);
-    expect(layout.status).toContain('Drop an image');
-    expect(layout.progress).toContain('Drop an image');
-    expect(layout.commandButtons.length).toBeGreaterThanOrEqual(5);
+    expect(layout.progress).toBe('—');
+    expect(layout.commandButtons).toEqual(
+      expect.arrayContaining(['Hint', 'Reset puzzle', 'Show preview', 'Import', 'Save manager', 'Settings'])
+    );
 
     await page.click('#settingsButton');
     const generatorLabels = await page.$$eval(
@@ -102,7 +101,7 @@ test.describe('Capy image generator', () => {
     await expect(page.locator('#resetButton')).toBeEnabled();
 
     const progress = page.locator('[data-testid="progress-message"]');
-    await expect(progress).toHaveText(`Filled 0 of ${BASIC_TEST_PATTERN.regions.length} regions.`);
+    await expect(progress).toHaveText(`0/${BASIC_TEST_PATTERN.regions.length}`);
 
     for (let index = 0; index < BASIC_TEST_PATTERN.regions.length; index += 1) {
       const region = BASIC_TEST_PATTERN.regions[index];
@@ -115,18 +114,10 @@ test.describe('Capy image generator', () => {
         )
         .toBe(index + 1);
 
-      if (index + 1 < BASIC_TEST_PATTERN.regions.length) {
-        await expect(progress).toHaveText(
-          `Filled ${index + 1} of ${BASIC_TEST_PATTERN.regions.length} regions.`
-        );
-      } else {
-        await expect(progress).toHaveText(
-          'Puzzle complete! Download the data or try another image.'
-        );
-      }
+      await expect(progress).toHaveText(`${index + 1}/${BASIC_TEST_PATTERN.regions.length}`);
     }
 
     await page.click('#resetButton');
-    await expect(progress).toHaveText(`Filled 0 of ${BASIC_TEST_PATTERN.regions.length} regions.`);
+    await expect(progress).toHaveText(`0/${BASIC_TEST_PATTERN.regions.length}`);
   });
 });

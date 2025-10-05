@@ -15,13 +15,19 @@ tools, a save manager, and a configurable generator all live inside a single
   resize detail, sampling, iteration count, and smoothing passes before
   rebuilding the scene.
 - **Responsive painting canvas.** Click or tap numbered regions to fill them in
-  while optional auto-advance hops to the next unfinished colour.
+  while optional auto-advance hops to the next unfinished colour. Filled areas
+  now reveal the clustered artwork beneath the outlines so the illustration
+  gradually emerges as you work.
+- **Precision view controls.** Pan the puzzle with the middle mouse button
+  (or while holding Space) and scroll to zoom in or out. The canvas stays
+  centered and scales smoothly for detailed touch-ups.
 - **Contextual hinting.** Trigger highlight pulses for the current colour or let
   the app surface the smallest unfinished region when you need a nudge.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
   artwork at its final resolution without leaving the play surface.
-- **Palette manager.** Swipe through compact swatches that keep colour numbers
-  bold with human-readable names and tooltips for remaining cell counts.
+- **Palette manager.** Swipe through compact, tinted swatches that promote the
+  colour number while tooltips, titles, and ARIA copy preserve human-readable
+  names and remaining region counts.
 - **Progress persistence.** Snapshot runs into localStorage, reopen saves,
   rename them, or export/import the underlying puzzle data as JSON.
 
@@ -45,19 +51,21 @@ tools, a save manager, and a configurable generator all live inside a single
 
 ## UI guide
 
-- **Command rail** – A slim header exposing Hint, Reset, Preview, Import, Save
-  manager, and Settings buttons. Hint flashes tiny regions, Reset clears
-  progress, Preview reveals the fullscreen clustered artwork, Import accepts
-  images or JSON puzzles, Save manager opens the local snapshot vault, and
-  Settings reveals generator/gameplay options.
+- **Command rail** – A slim, right-aligned header exposing Hint, Reset, Preview,
+  Import, Save manager, and Settings buttons through icon-only controls.
+  Hint flashes tiny regions, Reset clears progress, Preview reveals the
+  fullscreen clustered artwork, Import accepts images or JSON puzzles, Save
+  manager opens the local snapshot vault, and Settings reveals
+  generator/gameplay options.
 - **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`).
-  The canvas renders outlines, remaining numbers, and filled regions, and
-  respects the auto-advance / hint animation toggles stored in settings.
+  The canvas renders outlines, remaining numbers, and filled regions, respects
+  auto-advance / hint animation toggles, and now supports smooth pan + zoom so
+  you can inspect fine details.
 - **Fullscreen preview overlay** – Triggered by the Preview button. The preview
   canvas stretches to fit the viewport so contributors can inspect the clustered
   output in detail before painting.
-- **Status bar** – A floating card in the lower-left corner that narrates each
-  step (“Quantizing colours…”, “Smoothing regions…”, “Puzzle complete!”).
+- **Progress indicator** – A numeric tally in the palette dock that tracks
+  completed versus total regions and announces updates politely via `aria-live`.
 - **Settings sheet** – A modal sheet that hides the generation sliders by
   default. Controls include colours, minimum region size, resize detail, sample
   rate, k-means iterations, and smoothing passes, plus toggles for auto-advance
@@ -66,18 +74,19 @@ tools, a save manager, and a configurable generator all live inside a single
   shows completion progress with quick actions to load, rename, export, or
   delete the save.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
-  Each compact swatch keeps the colour number bold with the colour name tucked
-  underneath while tooltips and `data-color-id` attributes expose counts for
-  automation hooks.
+  Each compact swatch keeps the colour number front-and-center while tooltips
+  and `data-color-id` attributes expose the colour name plus remaining counts
+  for automation hooks.
 
 ## Keyboard and accessibility notes
 
 - The hint overlay is focusable and reacts to Enter/Space to trigger the file
   picker, keeping the first interaction accessible.
-- Status and progress messages use `aria-live="polite"` announcements so assistive
-  tech hears every generator update.
-- Command rail buttons advertise clear labels (“Hint”, “Preview”, etc.) and stay
-  reachable via keyboard focus.
+- The progress tally uses `aria-live="polite"` announcements so assistive tech
+  hears every completion update.
+- Command rail buttons expose descriptive `aria-label` and `title` attributes
+  even though the visual controls are icon-only, and they stay reachable via
+  keyboard focus.
 - Palette buttons toggle the active colour and expose `data-color-id` so tests
   and tooling can reason about selections. Auto-advance can be disabled from the
   Settings sheet for full manual control.
@@ -89,8 +98,8 @@ tools, a save manager, and a configurable generator all live inside a single
 The Playwright suite exercises the core flows:
 
 - **renders command rail and generator settings on load** – Confirms the hint
-  overlay, status copy, command rail buttons, and generator controls render on
-  first boot.
+  overlay, iconized command rail, compact progress tally, and generator controls
+  render on first boot.
 - **fills the basic test pattern to completion** – Loads a tiny fixture via
   `window.capyGenerator.loadPuzzleFixture`, walks through selecting palette
   swatches, fills each region, observes the completion copy, and resets the

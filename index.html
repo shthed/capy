@@ -46,18 +46,34 @@
       #commandRail {
         position: relative;
         display: flex;
-        justify-content: center;
-        gap: 12px;
-        padding: 16px 24px;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 24px;
         z-index: 3;
       }
 
       #commandRail button {
-        border-radius: 14px;
-        padding: 10px 18px;
-        background: rgba(15, 23, 42, 0.8);
+        border-radius: 12px;
+        padding: 0;
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        background: rgba(15, 23, 42, 0.82);
         color: rgba(226, 232, 240, 0.92);
-        border: 1px solid rgba(148, 163, 184, 0.3);
+        border: 1px solid rgba(148, 163, 184, 0.28);
+      }
+
+      #commandRail button.active {
+        background: rgba(37, 99, 235, 0.28);
+        border-color: rgba(96, 165, 250, 0.55);
+        color: rgba(226, 232, 240, 1);
+      }
+
+      #commandRail button .icon {
+        font-size: 1.1rem;
+        line-height: 1;
       }
 
       #commandRail button:disabled {
@@ -73,6 +89,31 @@
         display: grid;
         place-items: center;
         padding: 32px;
+        overflow: hidden;
+      }
+
+      #canvasStage {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        --pan-x: 0px;
+        --pan-y: 0px;
+        transform: translate(calc(-50% + var(--pan-x)), calc(-50% + var(--pan-y)));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        touch-action: none;
+        will-change: transform;
+        z-index: 1;
+      }
+
+      #canvasTransform {
+        transform-origin: center;
+        --zoom: 1;
+        transform: scale(var(--zoom));
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       #viewport::before {
@@ -194,20 +235,6 @@
         box-shadow: none;
       }
 
-      #statusBar {
-        position: absolute;
-        left: 32px;
-        bottom: 32px;
-        padding: 10px 16px;
-        background: rgba(2, 6, 23, 0.8);
-        border-radius: 16px;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        font-size: 0.95rem;
-        color: rgba(226, 232, 240, 0.86);
-        backdrop-filter: blur(14px);
-        z-index: 2;
-      }
-
       #paletteDock {
         position: relative;
         display: flex;
@@ -221,8 +248,10 @@
       }
 
       #progress {
-        min-width: 220px;
-        font-size: 0.9rem;
+        min-width: 120px;
+        font-size: 1.05rem;
+        font-variant-numeric: tabular-nums;
+        text-align: left;
         color: rgba(226, 232, 240, 0.82);
       }
 
@@ -230,8 +259,8 @@
         flex: 1;
         display: grid;
         grid-auto-flow: column;
-        grid-auto-columns: minmax(64px, max-content);
-        gap: 8px;
+        grid-auto-columns: minmax(44px, 1fr);
+        gap: 6px;
         overflow-x: auto;
         padding: 2px 0 6px;
         scrollbar-width: thin;
@@ -331,9 +360,11 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 4px;
-        padding: 6px 10px;
-        min-width: 64px;
+        justify-content: center;
+        gap: 2px;
+        padding: 6px;
+        min-width: 44px;
+        min-height: 52px;
         border-radius: 12px;
         border: 1px solid rgba(148, 163, 184, 0.25);
         background:
@@ -374,23 +405,15 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 1px;
-        font-size: 0.68rem;
+        font-size: 0.8rem;
         line-height: 1.2;
         max-width: 100%;
         z-index: 1;
       }
 
       .swatch .label > strong {
-        font-size: 0.95rem;
+        font-size: 1.05rem;
         letter-spacing: 0.02em;
-      }
-
-      .swatch .label > span {
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
 
       .sheet {
@@ -541,19 +564,13 @@
 
         #commandRail {
           flex-wrap: wrap;
+          justify-content: flex-end;
         }
       }
 
       @media (max-width: 720px) {
         #viewport {
           padding: 20px;
-        }
-
-        #statusBar {
-          left: 16px;
-          right: 16px;
-          bottom: auto;
-          top: 16px;
         }
 
         #puzzleCanvas {
@@ -575,20 +592,76 @@
   <body>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
-        <button id="hintButton" type="button" data-testid="hint-button" disabled>Hint</button>
-        <button id="resetButton" type="button" data-testid="reset-button" disabled>Reset</button>
-        <button id="previewToggle" type="button" data-testid="preview-toggle" disabled>Preview</button>
-        <button id="importButton" type="button" data-testid="import-button">Import</button>
-        <button id="saveManagerButton" type="button" data-testid="save-manager-button" disabled>Save manager</button>
-        <button id="settingsButton" type="button" data-testid="settings-button">Settings</button>
+        <button
+          id="hintButton"
+          type="button"
+          data-testid="hint-button"
+          aria-label="Hint"
+          title="Hint"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">?</span>
+        </button>
+        <button
+          id="resetButton"
+          type="button"
+          data-testid="reset-button"
+          aria-label="Reset puzzle"
+          title="Reset puzzle"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">↺</span>
+        </button>
+        <button
+          id="previewToggle"
+          type="button"
+          data-testid="preview-toggle"
+          aria-label="Show preview"
+          title="Show preview"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">🖼</span>
+        </button>
+        <button
+          id="importButton"
+          type="button"
+          data-testid="import-button"
+          aria-label="Import"
+          title="Import"
+        >
+          <span class="icon" aria-hidden="true">⬆</span>
+        </button>
+        <button
+          id="saveManagerButton"
+          type="button"
+          data-testid="save-manager-button"
+          aria-label="Save manager"
+          title="Save manager"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">💾</span>
+        </button>
+        <button
+          id="settingsButton"
+          type="button"
+          data-testid="settings-button"
+          aria-label="Settings"
+          title="Settings"
+        >
+          <span class="icon" aria-hidden="true">⚙</span>
+        </button>
       </header>
       <div id="viewport">
-        <canvas
-          id="puzzleCanvas"
-          data-testid="puzzle-canvas"
-          width="640"
-          height="480"
-        ></canvas>
+        <div id="canvasStage">
+          <div id="canvasTransform">
+            <canvas
+              id="puzzleCanvas"
+              data-testid="puzzle-canvas"
+              width="640"
+              height="480"
+            ></canvas>
+          </div>
+        </div>
         <div id="previewOverlay" class="hidden" aria-hidden="true">
           <div>
             <canvas
@@ -609,14 +682,9 @@
             <button id="selectImage" type="button">Choose an image</button>
           </div>
         </div>
-        <div id="statusBar" role="status" data-testid="status-bar">
-          Drop an image anywhere to begin.
-        </div>
       </div>
       <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div id="progress" aria-live="polite" data-testid="progress-message">
-          Drop an image to begin.
-        </div>
+        <div id="progress" aria-live="polite" data-testid="progress-message">—</div>
         <div id="palette" role="list"></div>
       </footer>
     </div>
@@ -701,7 +769,6 @@
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
       const startHint = document.getElementById("startHint");
-      const statusEl = document.getElementById("statusBar");
       const hintButton = document.getElementById("hintButton");
       const resetButton = document.getElementById("resetButton");
       const previewToggle = document.getElementById("previewToggle");
@@ -713,6 +780,9 @@
       const sheetBackdrop = document.getElementById("sheetBackdrop");
       const settingsSheet = document.getElementById("settingsSheet");
       const saveSheet = document.getElementById("saveSheet");
+      const viewportEl = document.getElementById("viewport");
+      const canvasStage = document.getElementById("canvasStage");
+      const canvasTransform = document.getElementById("canvasTransform");
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
       const colorCountEl = document.getElementById("colorCount");
@@ -732,6 +802,18 @@
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
       const SAVE_STORAGE_KEY = "capy.saves.v2";
+      const BACKGROUND_PIXEL = [248, 250, 252, 255];
+
+      const viewState = {
+        panX: 0,
+        panY: 0,
+        zoom: 1,
+        baseScale: 1,
+      };
+
+      let panPointerId = null;
+      const panOrigin = { x: 0, y: 0, panX: 0, panY: 0 };
+      let spacePressed = false;
 
       const state = {
         puzzle: null,
@@ -745,6 +827,8 @@
         },
         previewVisible: false,
         saves: loadSavedEntries(),
+        previewImageData: null,
+        puzzleImageData: null,
       };
 
       if (typeof window !== "undefined") {
@@ -755,7 +839,6 @@
               return;
             }
             resetPuzzleUI();
-            statusEl.textContent = "Loading image...";
             state.sourceUrl = dataUrl;
             startHint.classList.add("hidden");
             loadImage(dataUrl);
@@ -778,6 +861,7 @@
       updateOptionOutputs();
       refreshSaveList();
       updateCommandStates();
+      resetView();
 
       selectButton.addEventListener("click", () => fileInput.click());
       importButton.addEventListener("click", () => fileInput.click());
@@ -827,10 +911,10 @@
       resetButton.addEventListener("click", () => {
         if (!state.puzzle) return;
         state.filled = new Set();
+        initializePuzzleImage();
         renderPuzzle();
         renderPalette();
         updateProgress();
-        statusEl.textContent = "Progress reset.";
       });
 
       previewToggle.addEventListener("click", () => {
@@ -947,6 +1031,21 @@
         }
       });
 
+      canvasStage.addEventListener("pointerdown", handlePanStart);
+      canvasStage.addEventListener("pointermove", handlePanMove);
+      canvasStage.addEventListener("pointerup", handlePanEnd);
+      canvasStage.addEventListener("pointercancel", handlePanEnd);
+      canvasStage.addEventListener("lostpointercapture", handlePanEnd);
+      canvasStage.addEventListener("wheel", handleWheel, { passive: false });
+      canvasStage.addEventListener("contextmenu", (event) => event.preventDefault());
+      window.addEventListener("keydown", handleKeyDown, true);
+      window.addEventListener("keyup", handleKeyUp, true);
+      window.addEventListener("resize", () => resetView({ preserveZoom: true }));
+      window.addEventListener("blur", () => {
+        spacePressed = false;
+        panPointerId = null;
+      });
+
       puzzleCanvas.addEventListener("click", (event) => {
         if (!state.puzzle || state.activeColor == null) return;
         const rect = puzzleCanvas.getBoundingClientRect();
@@ -963,10 +1062,10 @@
           if (state.settings.animateHints) {
             flashRegion(regionId, "rgba(250, 204, 21, 0.55)");
           }
-          statusEl.textContent = `Try colour ${region.colorId} for that region.`;
           return;
         }
         state.filled.add(regionId);
+        applyRegionToImage(regionId);
         renderPuzzle();
         renderPalette();
         updateProgress();
@@ -1000,11 +1099,17 @@
         if (state.previewVisible && state.puzzle) {
           previewOverlay.classList.remove("hidden");
           previewOverlay.setAttribute("aria-hidden", "false");
-          previewToggle.textContent = "Hide preview";
+          previewToggle.setAttribute("aria-pressed", "true");
+          previewToggle.setAttribute("aria-label", "Hide preview");
+          previewToggle.title = "Hide preview";
+          previewToggle.classList.add("active");
         } else {
           previewOverlay.classList.add("hidden");
           previewOverlay.setAttribute("aria-hidden", "true");
-          previewToggle.textContent = "Preview";
+          previewToggle.setAttribute("aria-pressed", "false");
+          previewToggle.setAttribute("aria-label", "Show preview");
+          previewToggle.title = "Show preview";
+          previewToggle.classList.remove("active");
         }
       }
 
@@ -1064,7 +1169,6 @@
 
       function regenerateFromSource() {
         if (!state.sourceUrl) return;
-        statusEl.textContent = "Updating puzzle with new settings...";
         loadImage(state.sourceUrl);
       }
 
@@ -1076,20 +1180,17 @@
             try {
               const payload = JSON.parse(reader.result);
               if (applyPuzzleResult(payload, { options: payload.options || getCurrentOptions(), filled: payload.filled })) {
-                statusEl.textContent = "Imported puzzle JSON.";
                 startHint.classList.add("hidden");
                 state.sourceUrl = payload.sourceUrl || null;
               }
             } catch (error) {
               console.error(error);
-              statusEl.textContent = "Could not parse that JSON puzzle.";
             }
           };
           reader.readAsText(file);
           return;
         }
         resetPuzzleUI();
-        statusEl.textContent = "Loading image...";
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result;
@@ -1098,11 +1199,11 @@
             startHint.classList.add("hidden");
             loadImage(result);
           } else {
-            statusEl.textContent = "Unsupported file format.";
+            console.error("Unsupported file format");
           }
         };
         reader.onerror = () => {
-          statusEl.textContent = "Unable to read that file.";
+          console.error("Unable to read that file.");
         };
         reader.readAsDataURL(file);
       }
@@ -1112,20 +1213,15 @@
         img.crossOrigin = "anonymous";
         img.onload = async () => {
           try {
-            statusEl.textContent = "Preparing puzzle...";
             const options = getCurrentOptions();
             const data = await createPuzzleData(img, options);
-            const applied = applyPuzzleResult(data, { options });
-            if (applied) {
-              statusEl.textContent = `Generated ${state.puzzle.regions.length} regions across ${state.puzzle.palette.length} colours.`;
-            }
+            applyPuzzleResult(data, { options });
           } catch (error) {
-            console.error(error);
-            statusEl.textContent = "Something went wrong while generating the puzzle.";
+            console.error("Failed to create puzzle", error);
           }
         };
         img.onerror = () => {
-          statusEl.textContent = "Unable to read that image.";
+          console.error("Unable to read that image.");
         };
         img.src = url;
       }
@@ -1135,12 +1231,15 @@
         state.activeColor = null;
         state.filled = new Set();
         paletteEl.innerHTML = "";
-        progressEl.textContent = "Processing...";
+        progressEl.textContent = "…";
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        state.previewImageData = null;
+        state.puzzleImageData = null;
         state.previewVisible = false;
         updatePreviewState();
         updateCommandStates();
+        resetView();
       }
 
       async function createPuzzleData(image, options) {
@@ -1155,14 +1254,11 @@
         ctx.drawImage(image, 0, 0, width, height);
         const imageData = ctx.getImageData(0, 0, width, height);
         const pixels = imageData.data;
-        statusEl.textContent = "Running k-means clustering...";
         const { centroids, assignments } = kmeansQuantize(pixels, width, height, targetColors, kmeansIters, sampleRate);
         let workingAssignments = assignments;
         if (smoothingPasses > 0) {
-          statusEl.textContent = "Smoothing regions...";
           workingAssignments = smoothAssignments(assignments, width, height, smoothingPasses);
         }
-        statusEl.textContent = "Cleaning tiny regions...";
         const { regionMap, regions } = segmentRegions(width, height, workingAssignments, minRegion);
         for (const region of regions) {
           let sumX = 0;
@@ -1195,16 +1291,16 @@
 
       function applyPuzzleResult(data, metadata = {}) {
         if (!data || typeof data.width !== "number" || typeof data.height !== "number") {
-          statusEl.textContent = "Puzzle data missing required dimensions.";
+          console.error("Puzzle data missing required dimensions.");
           return false;
         }
         if (!Array.isArray(data.palette) || !Array.isArray(data.regions)) {
-          statusEl.textContent = "Puzzle data missing palette information.";
+          console.error("Puzzle data missing palette information.");
           return false;
         }
         const mapSource = Array.from(data.regionMap ?? []);
         if (mapSource.length !== data.width * data.height) {
-          statusEl.textContent = "Puzzle data is inconsistent.";
+          console.error("Puzzle data is inconsistent.");
           return false;
         }
         const palette = data.palette.map((entry, index) => {
@@ -1267,12 +1363,14 @@
         previewCanvas.width = data.width;
         previewCanvas.height = data.height;
         renderPreview();
+        initializePuzzleImage();
         renderPuzzle();
         renderPalette();
         updateProgress();
         updateCommandStates();
         updatePreviewState();
         markOptionsDirty();
+        resetView();
         return true;
       }
 
@@ -1282,7 +1380,6 @@
         const applied = applyPuzzleResult(puzzle, { options: getCurrentOptions(), filled: puzzle.filled });
         if (applied) {
           startHint.classList.add("hidden");
-          statusEl.textContent = `Loaded ${state.puzzle.regions.length} regions across ${state.puzzle.palette.length} colours.`;
         }
         return applied;
       }
@@ -1305,29 +1402,66 @@
           }
         }
         previewCtx.putImageData(imageData, 0, 0);
+        state.previewImageData = imageData;
+      }
+
+      function initializePuzzleImage() {
+        if (!state.puzzle) return;
+        const { width, height } = state.puzzle;
+        const imageData = new ImageData(width, height);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = BACKGROUND_PIXEL[0];
+          data[i + 1] = BACKGROUND_PIXEL[1];
+          data[i + 2] = BACKGROUND_PIXEL[2];
+          data[i + 3] = BACKGROUND_PIXEL[3];
+        }
+        state.puzzleImageData = imageData;
+        if (state.filled.size > 0) {
+          applyFilledRegionsToImage();
+        }
+      }
+
+      function applyFilledRegionsToImage() {
+        if (!state.puzzle || !state.puzzleImageData) return;
+        for (const regionId of state.filled) {
+          applyRegionToImage(regionId);
+        }
+      }
+
+      function applyRegionToImage(regionId) {
+        if (!state.puzzle || !state.previewImageData || !state.puzzleImageData) return;
+        const region = state.puzzle.regions[regionId];
+        if (!region) return;
+        const previewData = state.previewImageData.data;
+        const targetData = state.puzzleImageData.data;
+        for (const idx of region.pixels) {
+          const base = idx * 4;
+          targetData[base] = previewData[base];
+          targetData[base + 1] = previewData[base + 1];
+          targetData[base + 2] = previewData[base + 2];
+          targetData[base + 3] = 255;
+        }
       }
 
       function renderPuzzle() {
         if (!state.puzzle) return;
-        const { width, height, regions, palette } = state.puzzle;
-        puzzleCtx.save();
-        puzzleCtx.clearRect(0, 0, width, height);
-        puzzleCtx.fillStyle = "#f8fafc";
-        puzzleCtx.fillRect(0, 0, width, height);
-        for (const region of regions) {
-          if (!state.filled.has(region.id)) continue;
-          const color = palette[region.colorId - 1];
-          if (!color) continue;
-          puzzleCtx.fillStyle = color.hex;
-          for (const idx of region.pixels) {
-            const x = idx % width;
-            const y = (idx / width) | 0;
-            puzzleCtx.fillRect(x, y, 1, 1);
-          }
+        const { width, height } = state.puzzle;
+        if (
+          !state.puzzleImageData ||
+          state.puzzleImageData.width !== width ||
+          state.puzzleImageData.height !== height
+        ) {
+          initializePuzzleImage();
+        }
+        if (state.puzzleImageData) {
+          puzzleCtx.putImageData(state.puzzleImageData, 0, 0);
+        } else {
+          puzzleCtx.fillStyle = "#f8fafc";
+          puzzleCtx.fillRect(0, 0, width, height);
         }
         drawOutlines();
         drawNumbers();
-        puzzleCtx.restore();
       }
 
       function drawNumbers() {
@@ -1399,7 +1533,6 @@
           swatch.innerHTML = `
             <span class="label">
               <strong>${color.id}</strong>
-              <span>${labelText}</span>
             </span>
           `;
           swatch.addEventListener("click", () => {
@@ -1412,23 +1545,148 @@
 
       function updateProgress() {
         if (!state.puzzle) {
-          progressEl.textContent = "Load an image to begin.";
+          progressEl.textContent = "—";
           return;
         }
         const total = state.puzzle.regions.length;
         const done = state.filled.size;
-        if (done === total) {
-          progressEl.textContent = "Puzzle complete! Download the data or try another image.";
-        } else {
-          progressEl.textContent = `Filled ${done} of ${total} regions.`;
+        progressEl.textContent = `${done}/${total}`;
+      }
+
+      function handleKeyDown(event) {
+        if (event.code !== "Space") return;
+        const target = event.target;
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          (target instanceof HTMLElement && target.isContentEditable)
+        ) {
+          return;
         }
+        if (!event.repeat) {
+          spacePressed = true;
+        }
+        if (
+          target === document.body ||
+          target === viewportEl ||
+          target === canvasStage ||
+          target === canvasTransform ||
+          target === puzzleCanvas
+        ) {
+          event.preventDefault();
+        }
+      }
+
+      function handleKeyUp(event) {
+        if (event.code === "Space") {
+          spacePressed = false;
+        }
+      }
+
+      function handlePanStart(event) {
+        if (!state.puzzle) return;
+        if (event.pointerType === "touch") return;
+        const allowPan =
+          event.button === 1 ||
+          event.button === 2 ||
+          (event.button === 0 && spacePressed);
+        if (!allowPan) return;
+        event.preventDefault();
+        panPointerId = event.pointerId;
+        panOrigin.x = event.clientX;
+        panOrigin.y = event.clientY;
+        panOrigin.panX = viewState.panX;
+        panOrigin.panY = viewState.panY;
+        try {
+          canvasStage.setPointerCapture(event.pointerId);
+        } catch (error) {}
+      }
+
+      function handlePanMove(event) {
+        if (event.pointerId !== panPointerId) return;
+        const dx = event.clientX - panOrigin.x;
+        const dy = event.clientY - panOrigin.y;
+        viewState.panX = panOrigin.panX + dx;
+        viewState.panY = panOrigin.panY + dy;
+        applyViewTransform();
+      }
+
+      function handlePanEnd(event) {
+        if (event.pointerId !== panPointerId) return;
+        try {
+          canvasStage.releasePointerCapture(event.pointerId);
+        } catch (error) {}
+        panPointerId = null;
+      }
+
+      function handleWheel(event) {
+        if (!state.puzzle) return;
+        event.preventDefault();
+        const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+        const nextZoom = clamp(viewState.zoom * zoomFactor, 0.2, 6);
+        const change = nextZoom / viewState.zoom;
+        if (!Number.isFinite(change) || change === 1) return;
+        const viewportRect = viewportEl.getBoundingClientRect();
+        const centerX = viewportRect.left + viewportRect.width / 2;
+        const centerY = viewportRect.top + viewportRect.height / 2;
+        const offsetX = event.clientX - centerX - viewState.panX;
+        const offsetY = event.clientY - centerY - viewState.panY;
+        viewState.panX += offsetX - offsetX * change;
+        viewState.panY += offsetY - offsetY * change;
+        viewState.zoom = nextZoom;
+        applyViewTransform();
+      }
+
+      function applyViewTransform() {
+        const zoomValue = Math.max(0.05, viewState.baseScale * viewState.zoom);
+        canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
+        canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
+        canvasTransform.style.setProperty("--zoom", zoomValue.toFixed(4));
+      }
+
+      function computeFitScale() {
+        if (!state.puzzle) return 1;
+        const rect = viewportEl.getBoundingClientRect();
+        const padding = 80;
+        const widthScale = (rect.width - padding) / state.puzzle.width;
+        const heightScale = (rect.height - padding) / state.puzzle.height;
+        const fit = Math.min(widthScale, heightScale);
+        if (!Number.isFinite(fit) || fit <= 0) {
+          return 1;
+        }
+        return Math.min(1, fit);
+      }
+
+      function resetView(options = {}) {
+        const { preserveZoom = false } = options;
+        if (!state.puzzle) {
+          viewState.panX = 0;
+          viewState.panY = 0;
+          viewState.zoom = 1;
+          viewState.baseScale = 1;
+          applyViewTransform();
+          return;
+        }
+        const nextBase = computeFitScale();
+        if (preserveZoom && viewState.baseScale > 0) {
+          const ratio = nextBase / viewState.baseScale;
+          if (Number.isFinite(ratio)) {
+            viewState.panX *= ratio;
+            viewState.panY *= ratio;
+          }
+        } else {
+          viewState.panX = 0;
+          viewState.panY = 0;
+          viewState.zoom = 1;
+        }
+        viewState.baseScale = nextBase;
+        applyViewTransform();
       }
 
       function useHint() {
         if (!state.puzzle) return;
         const candidates = state.puzzle.regions.filter((region) => !state.filled.has(region.id));
         if (candidates.length === 0) {
-          statusEl.textContent = "All cells are complete.";
           return;
         }
         let target = candidates
@@ -1442,7 +1700,6 @@
         if (state.settings.animateHints) {
           flashRegion(target.id, "rgba(59, 130, 246, 0.45)");
         }
-        statusEl.textContent = `Hint: Colour ${target.colorId} has ${target.pixelCount} pixels remaining.`;
       }
 
       function flashRegion(regionId, color) {
@@ -1519,7 +1776,6 @@
         state.saves.unshift(entry);
         persistSaves();
         refreshSaveList();
-        statusEl.textContent = "Snapshot saved.";
       }
 
       function refreshSaveList() {
@@ -1576,7 +1832,6 @@
         if (applyPuzzleResult(entry.data, { options: entry.data.options, filled: entry.data.filled, activeColor: entry.data.activeColor })) {
           state.sourceUrl = entry.data.sourceUrl ?? null;
           startHint.classList.add("hidden");
-          statusEl.textContent = "Save restored.";
         }
       }
 
