@@ -525,6 +525,95 @@
         letter-spacing: 0.02em;
       }
 
+      .command-list {
+        display: grid;
+        grid-template-columns: minmax(0, auto) 1fr;
+        gap: 6px 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .command-list dt {
+        font-weight: 600;
+        color: rgba(148, 163, 184, 0.9);
+        font-size: 0.95rem;
+      }
+
+      .command-list dd {
+        margin: 0;
+        font-size: 0.95rem;
+      }
+
+      .control-list {
+        margin: 0;
+        padding-left: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 0.95rem;
+        list-style: none;
+      }
+
+      .control-list kbd {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.4em;
+        padding: 2px 6px;
+        margin-right: 6px;
+        border-radius: 6px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.65);
+        font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco,
+          Consolas, 'Liberation Mono', 'Courier New', monospace;
+        font-size: 0.85rem;
+        color: rgba(226, 232, 240, 0.9);
+      }
+
+      .debug-log {
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        background: rgba(15, 23, 42, 0.85);
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 240px;
+        overflow-y: auto;
+      }
+
+      .debug-log .log-entry {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 10px;
+        align-items: baseline;
+        font-size: 0.9rem;
+      }
+
+      .debug-log time {
+        font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco,
+          Consolas, 'Liberation Mono', 'Courier New', monospace;
+        font-size: 0.8rem;
+        color: rgba(148, 163, 184, 0.9);
+      }
+
+      .debug-log span {
+        color: rgba(226, 232, 240, 0.95);
+      }
+
+      .log-empty {
+        margin: 0;
+        font-style: italic;
+        color: rgba(148, 163, 184, 0.8);
+      }
+
+      .log-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+      }
+
       .sheet-actions {
         display: flex;
         justify-content: flex-end;
@@ -685,6 +774,15 @@
           <span class="icon" aria-hidden="true">💾</span>
         </button>
         <button
+          id="helpButton"
+          type="button"
+          data-testid="help-button"
+          aria-label="Help &amp; shortcuts"
+          title="Help &amp; shortcuts"
+        >
+          <span class="icon" aria-hidden="true">ℹ</span>
+        </button>
+        <button
           id="settingsButton"
           type="button"
           data-testid="settings-button"
@@ -751,6 +849,65 @@
     </div>
     <input id="fileInput" type="file" accept=".json,image/*" hidden />
     <div id="sheetBackdrop" class="backdrop hidden" tabindex="-1"></div>
+    <div
+      id="helpSheet"
+      class="sheet hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="helpTitle"
+    >
+      <div class="sheet-header">
+        <h2 id="helpTitle">Help &amp; shortcuts</h2>
+        <button type="button" class="close-button" data-sheet-close="help">Close</button>
+      </div>
+      <div class="sheet-body">
+        <section class="sheet-section" aria-labelledby="commandsHeading">
+          <h3 id="commandsHeading">Command buttons</h3>
+          <dl class="command-list">
+            <dt>? Hint</dt>
+            <dd>Flash the smallest unfinished region and switch colours if needed.</dd>
+            <dt>↺ Reset</dt>
+            <dd>Clear every painted region and restart the current puzzle.</dd>
+            <dt>🖼 Preview</dt>
+            <dd>Toggle the finished artwork overlay to compare your progress.</dd>
+            <dt>⬆ Import</dt>
+            <dd>Load a new image or JSON puzzle from disk.</dd>
+            <dt>💾 Saves</dt>
+            <dd>Manage snapshots — load, rename, export, or delete stored games.</dd>
+            <dt>ℹ Help</dt>
+            <dd>Open this guide and inspect the live debug log.</dd>
+            <dt>⚙ Settings</dt>
+            <dd>Adjust generation sliders, toggle auto-advance, or export JSON.</dd>
+          </dl>
+        </section>
+        <section class="sheet-section" aria-labelledby="controlsHeading">
+          <h3 id="controlsHeading">Canvas controls</h3>
+          <ul class="control-list">
+            <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
+            <li>Select a palette swatch to set the active colour and flash every matching region.</li>
+            <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
+            <li><kbd>Space</kbd> + drag (or middle/right drag) Pan the canvas.</li>
+            <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
+          </ul>
+        </section>
+        <section class="sheet-section" aria-labelledby="debugHeading">
+          <h3 id="debugHeading">Debug log</h3>
+          <p class="control-note">
+            Recent actions, selections, and generation events appear here while you play.
+          </p>
+          <div
+            id="debugLog"
+            class="debug-log"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions text"
+          ></div>
+          <div class="log-actions">
+            <button id="clearDebugLog" type="button">Clear log</button>
+          </div>
+        </section>
+      </div>
+    </div>
     <div
       id="settingsSheet"
       class="sheet hidden"
@@ -839,11 +996,15 @@
       const importButton = document.getElementById("importButton");
       const saveManagerButton = document.getElementById("saveManagerButton");
       const settingsButton = document.getElementById("settingsButton");
+      const helpButton = document.getElementById("helpButton");
       const closePreviewButton = document.getElementById("closePreview");
       const previewOverlay = document.getElementById("previewOverlay");
       const sheetBackdrop = document.getElementById("sheetBackdrop");
       const settingsSheet = document.getElementById("settingsSheet");
       const saveSheet = document.getElementById("saveSheet");
+      const helpSheet = document.getElementById("helpSheet");
+      const debugLogEl = document.getElementById("debugLog");
+      const clearDebugLogButton = document.getElementById("clearDebugLog");
       const viewportEl = document.getElementById("viewport");
       const canvasStage = document.getElementById("canvasStage");
       const canvasTransform = document.getElementById("canvasTransform");
@@ -914,6 +1075,7 @@
         activeColor: null,
         filled: new Set(),
         sourceUrl: null,
+        sourceTitle: null,
         lastOptions: null,
         settings: {
           autoAdvance: true,
@@ -925,17 +1087,30 @@
         puzzleImageData: null,
       };
 
+      const debugLogEntries = [];
+      const DEBUG_LOG_LIMIT = 80;
+
       if (typeof window !== "undefined") {
         // Public hooks for tests and manual loading. Keep backwards compatible.
         window.capyGenerator = {
           getState: () => state,
-          loadFromDataUrl(dataUrl) {
+          loadFromDataUrl(dataUrl, metadata) {
             if (typeof dataUrl !== "string" || dataUrl.length === 0) {
               return;
             }
             resetPuzzleUI();
             state.sourceUrl = dataUrl;
+            const metadataTitle =
+              metadata && typeof metadata === "object"
+                ? typeof metadata.title === "string" && metadata.title.trim()
+                  ? metadata.title.trim()
+                  : null
+                : typeof metadata === "string" && metadata.trim()
+                ? metadata.trim()
+                : null;
+            state.sourceTitle = metadataTitle || "External data";
             startHint.classList.add("hidden");
+            logDebug(`Loading external puzzle data: ${state.sourceTitle}`);
             loadImage(dataUrl);
           },
           loadPuzzleFixture(puzzle) {
@@ -956,6 +1131,8 @@
       updateOptionOutputs();
       refreshSaveList();
       updateCommandStates();
+      renderDebugLog();
+      logDebug("Session started");
       resetView();
 
       if (sampleButton) {
@@ -965,7 +1142,9 @@
           if (!dataUrl) return;
           resetPuzzleUI();
           state.sourceUrl = dataUrl;
+          state.sourceTitle = SAMPLE_ARTWORK.title || "Sample puzzle";
           startHint.classList.add("hidden");
+          logDebug(`Loading sample puzzle: ${state.sourceTitle}`);
           loadImage(dataUrl);
         });
       }
@@ -974,6 +1153,17 @@
       importButton.addEventListener("click", () => fileInput.click());
       settingsButton.addEventListener("click", () => openSheet(settingsSheet));
       saveManagerButton.addEventListener("click", () => openSheet(saveSheet));
+      if (helpButton) {
+        helpButton.addEventListener("click", () => openSheet(helpSheet));
+      }
+
+      if (clearDebugLogButton) {
+        clearDebugLogButton.addEventListener("click", () => {
+          debugLogEntries.splice(0, debugLogEntries.length);
+          renderDebugLog();
+          logDebug("Debug log cleared");
+        });
+      }
 
       for (const button of document.querySelectorAll('[data-sheet-close]')) {
         button.addEventListener("click", (event) => {
@@ -982,6 +1172,8 @@
             closeSheet(settingsSheet);
           } else if (target === "save") {
             closeSheet(saveSheet);
+          } else if (target === "help") {
+            closeSheet(helpSheet);
           }
         });
       }
@@ -1005,10 +1197,12 @@
 
       autoAdvanceToggle.addEventListener("change", () => {
         state.settings.autoAdvance = autoAdvanceToggle.checked;
+        logDebug(`Auto-advance ${autoAdvanceToggle.checked ? "enabled" : "disabled"}`);
       });
 
       hintFlashToggle.addEventListener("change", () => {
         state.settings.animateHints = hintFlashToggle.checked;
+        logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
       });
 
       hintButton.addEventListener("click", () => {
@@ -1025,20 +1219,24 @@
           flashColorRegions(state.activeColor);
         }
         updateProgress();
+        logDebug("Reset puzzle progress");
       });
 
       previewToggle.addEventListener("click", () => {
         state.previewVisible = !state.previewVisible;
         updatePreviewState();
+        logDebug(state.previewVisible ? "Opened preview overlay" : "Closed preview overlay");
       });
 
       closePreviewButton.addEventListener("click", () => {
         state.previewVisible = false;
         updatePreviewState();
+        logDebug("Closed preview overlay");
       });
 
       applyBtn.addEventListener("click", () => {
         if (applyBtn.disabled) return;
+        logDebug("Regenerating puzzle with current generator settings");
         regenerateFromSource();
       });
 
@@ -1058,6 +1256,7 @@
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
         });
+        logDebug("Exported puzzle JSON");
       });
 
       saveSnapshotBtn.addEventListener("click", () => {
@@ -1194,6 +1393,9 @@
           flashColorRegions(state.activeColor);
         }
         updateProgress();
+        logDebug(
+          `Filled region ${region.id} with colour #${region.colorId} (${state.filled.size}/${state.puzzle.regions.length})`
+        );
         if (state.settings.autoAdvance) {
           autoAdvanceColor(region.colorId);
         }
@@ -1207,15 +1409,21 @@
 
       function closeSheet(sheet) {
         sheet.classList.add("hidden");
-        if (settingsSheet.classList.contains("hidden") && saveSheet.classList.contains("hidden")) {
+        const sheets = [settingsSheet, saveSheet, helpSheet];
+        const anyOpen = sheets.some((panel) => panel && !panel.classList.contains("hidden"));
+        if (!anyOpen) {
           sheetBackdrop.classList.add("hidden");
           document.body.classList.remove("sheet-open");
         }
       }
 
       function closeAllSheets() {
-        settingsSheet.classList.add("hidden");
-        saveSheet.classList.add("hidden");
+        const sheets = [settingsSheet, saveSheet, helpSheet];
+        for (const panel of sheets) {
+          if (panel) {
+            panel.classList.add("hidden");
+          }
+        }
         sheetBackdrop.classList.add("hidden");
         document.body.classList.remove("sheet-open");
       }
@@ -1246,6 +1454,54 @@
         downloadBtn.disabled = !hasPuzzle;
         saveSnapshotBtn.disabled = !hasPuzzle;
         saveManagerButton.disabled = !hasPuzzle && state.saves.length === 0;
+      }
+
+      function renderDebugLog() {
+        if (!debugLogEl) return;
+        debugLogEl.innerHTML = "";
+        if (debugLogEntries.length === 0) {
+          const empty = document.createElement("p");
+          empty.className = "log-empty";
+          empty.textContent = "No events yet.";
+          debugLogEl.appendChild(empty);
+          return;
+        }
+        const fragment = document.createDocumentFragment();
+        for (let index = debugLogEntries.length - 1; index >= 0; index -= 1) {
+          const entry = debugLogEntries[index];
+          const item = document.createElement("div");
+          item.className = "log-entry";
+          const time = document.createElement("time");
+          time.dateTime = entry.iso;
+          time.textContent = entry.display;
+          const message = document.createElement("span");
+          message.textContent = entry.message;
+          item.appendChild(time);
+          item.appendChild(message);
+          fragment.appendChild(item);
+        }
+        debugLogEl.appendChild(fragment);
+        debugLogEl.scrollTop = 0;
+      }
+
+      function logDebug(message) {
+        if (message == null) return;
+        const now = new Date();
+        const entry = {
+          iso: now.toISOString(),
+          display: now.toLocaleTimeString([], {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+          message: String(message),
+        };
+        debugLogEntries.push(entry);
+        if (debugLogEntries.length > DEBUG_LOG_LIMIT) {
+          debugLogEntries.splice(0, debugLogEntries.length - DEBUG_LOG_LIMIT);
+        }
+        renderDebugLog();
       }
 
       function updateOptionOutputs() {
@@ -1298,9 +1554,22 @@
           reader.onload = () => {
             try {
               const payload = JSON.parse(reader.result);
-              if (applyPuzzleResult(payload, { options: payload.options || getCurrentOptions(), filled: payload.filled })) {
+              const providedTitle =
+                typeof payload.title === "string" && payload.title.trim() ? payload.title.trim() : null;
+              const fallbackTitle = file.name || "Imported puzzle";
+              const resolvedTitle = providedTitle || fallbackTitle;
+              state.sourceTitle = resolvedTitle;
+              if (
+                applyPuzzleResult(payload, {
+                  options: payload.options || getCurrentOptions(),
+                  filled: payload.filled,
+                  activeColor: payload.activeColor,
+                  title: resolvedTitle,
+                })
+              ) {
                 startHint.classList.add("hidden");
                 state.sourceUrl = payload.sourceUrl || null;
+                logDebug(`Imported puzzle from JSON: ${resolvedTitle}`);
               }
             } catch (error) {
               console.error(error);
@@ -1315,7 +1584,9 @@
           const result = reader.result;
           if (typeof result === "string") {
             state.sourceUrl = result;
+            state.sourceTitle = file.name || "Imported image";
             startHint.classList.add("hidden");
+            logDebug(`Generating puzzle from image: ${state.sourceTitle}`);
             loadImage(result);
           } else {
             console.error("Unsupported file format");
@@ -1334,7 +1605,8 @@
           try {
             const options = getCurrentOptions();
             const data = await createPuzzleData(img, options);
-            applyPuzzleResult(data, { options });
+            const title = state.sourceTitle || "Generated puzzle";
+            applyPuzzleResult(data, { options, title });
           } catch (error) {
             console.error("Failed to create puzzle", error);
           }
@@ -1354,6 +1626,8 @@
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
+        state.sourceUrl = null;
+        state.sourceTitle = null;
         paletteEl.innerHTML = "";
         progressEl.textContent = "…";
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
@@ -1472,6 +1746,13 @@
           };
         });
         const regionMap = new Int32Array(mapSource);
+        const metadataTitle =
+          typeof metadata.title === "string" && metadata.title.trim() ? metadata.title.trim() : null;
+        if (metadataTitle) {
+          state.sourceTitle = metadataTitle;
+        } else if (typeof data.title === "string" && data.title.trim()) {
+          state.sourceTitle = data.title.trim();
+        }
         const paletteIds = new Set(palette.map((entry) => entry.id));
         const requestedColor = metadata.activeColor ?? palette[0]?.id ?? null;
         state.puzzle = {
@@ -1503,13 +1784,33 @@
         updatePreviewState();
         markOptionsDirty();
         resetView();
+        const paletteCount = palette.length;
+        const regionCount = regions.length;
+        const descriptor =
+          metadataTitle ||
+          (typeof data.title === "string" && data.title.trim()) ||
+          (state.sourceTitle && state.sourceTitle.trim()) ||
+          "Puzzle";
+        logDebug(
+          `Loaded ${descriptor} (${data.width}×${data.height}, ${paletteCount} colours, ${regionCount} regions)`
+        );
         return true;
       }
 
       function loadPuzzleFixtureData(puzzle) {
         if (!puzzle) return false;
         resetPuzzleUI();
-        const applied = applyPuzzleResult(puzzle, { options: getCurrentOptions(), filled: puzzle.filled });
+        const resolvedTitle =
+          (typeof puzzle.name === "string" && puzzle.name.trim()) ||
+          (typeof puzzle.title === "string" && puzzle.title.trim()) ||
+          "Fixture puzzle";
+        state.sourceTitle = resolvedTitle;
+        const applied = applyPuzzleResult(puzzle, {
+          options: getCurrentOptions(),
+          filled: puzzle.filled,
+          activeColor: puzzle.activeColor,
+          title: resolvedTitle,
+        });
         if (applied) {
           startHint.classList.add("hidden");
         }
@@ -1643,6 +1944,9 @@
         if (flash) {
           flashColorRegions(colorId);
         }
+        const remaining = getRegionsByColor(colorId, { includeFilled: false }).length;
+        const suffix = remaining > 0 ? `${remaining} regions remaining` : "complete";
+        logDebug(`${changed ? "Selected" : "Re-selected"} colour #${colorId} (${suffix})`);
         return changed;
       }
 
@@ -1757,6 +2061,7 @@
         panCandidate = null;
         isPanning = true;
         document.body.classList.add("panning");
+        logDebug("Began panning view");
         try {
           canvasStage.setPointerCapture(pointerId);
         } catch (error) {}
@@ -1826,6 +2131,7 @@
         if (isPanning) {
           isPanning = false;
           document.body.classList.remove("panning");
+          logDebug("Stopped panning view");
         }
         try {
           canvasStage.releasePointerCapture(event.pointerId);
@@ -1838,6 +2144,7 @@
         const nextZoom = clamp(previousZoom * multiplier, 0.2, 6);
         const change = nextZoom / previousZoom;
         if (!Number.isFinite(change) || change === 1) return;
+        const significant = Math.abs(nextZoom - previousZoom) >= 0.01;
         const viewportRect = viewportEl.getBoundingClientRect();
         const centerX = viewportRect.left + viewportRect.width / 2;
         const centerY = viewportRect.top + viewportRect.height / 2;
@@ -1849,6 +2156,9 @@
         viewState.panY += offsetY - offsetY * change;
         viewState.zoom = nextZoom;
         applyViewTransform();
+        if (significant) {
+          logDebug(`Zoom set to ${(viewState.zoom * 100).toFixed(0)}%`);
+        }
       }
 
       function handleWheel(event) {
@@ -1908,6 +2218,7 @@
         if (!state.puzzle) return;
         const candidates = state.puzzle.regions.filter((region) => !state.filled.has(region.id));
         if (candidates.length === 0) {
+          logDebug("Hint requested, but puzzle is complete");
           return;
         }
         let target = candidates
@@ -1920,6 +2231,7 @@
         if (state.settings.animateHints) {
           flashRegion(target.id, "rgba(59, 130, 246, 0.45)");
         }
+        logDebug(`Hint spotlighted region ${target.id} (colour #${target.colorId})`);
       }
 
       function flashColorRegions(colorId, options = {}) {
@@ -2034,6 +2346,7 @@
         state.saves.unshift(entry);
         persistSaves();
         refreshSaveList();
+        logDebug(`Saved snapshot: ${entry.title}`);
       }
 
       function refreshSaveList() {
@@ -2089,14 +2402,18 @@
         if (!entry) return;
         if (applyPuzzleResult(entry.data, { options: entry.data.options, filled: entry.data.filled, activeColor: entry.data.activeColor })) {
           state.sourceUrl = entry.data.sourceUrl ?? null;
+          state.sourceTitle = entry.title || state.sourceTitle;
           startHint.classList.add("hidden");
+          logDebug(`Loaded save: ${entry.title || "Untitled puzzle"}`);
         }
       }
 
       function deleteSaveEntry(id) {
+        const entry = state.saves.find((item) => item.id === id);
         state.saves = state.saves.filter((item) => item.id !== id);
         persistSaves();
         refreshSaveList();
+        logDebug(`Deleted save: ${(entry && entry.title) || id}`);
       }
 
       function renameSaveEntry(id) {
@@ -2108,6 +2425,7 @@
           entry.timestamp = Date.now();
           persistSaves();
           refreshSaveList();
+          logDebug(`Renamed save to: ${entry.title}`);
         }
       }
 
@@ -2127,6 +2445,7 @@
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
         });
+        logDebug(`Exported save: ${entry.title || "capy-save"}`);
       }
 
       function serializeAssignments(pixels, centroids) {

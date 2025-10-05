@@ -85,11 +85,11 @@ tools, a save manager, and a configurable generator all live inside a single
 ## UI guide
 
 - **Command rail** – A slim, right-aligned header exposing Hint, Reset, Preview,
-  Import, Save manager, and Settings buttons through icon-only controls.
+  Import, Save manager, Help, and Settings buttons through icon-only controls.
   Hint flashes tiny regions, Reset clears progress, Preview reveals the
   fullscreen clustered artwork, Import accepts images or JSON puzzles, Save
-  manager opens the local snapshot vault, and Settings reveals
-  generator/gameplay options.
+  manager opens the local snapshot vault, Help opens an in-app manual plus live
+  debug log, and Settings reveals generator/gameplay options.
 - **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`).
   The canvas renders outlines, remaining numbers, and filled regions, respects
   auto-advance / hint animation toggles, and supports smooth pan + zoom so you
@@ -107,6 +107,9 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Save manager** – A companion sheet listing every stored snapshot. Each entry
   shows completion progress with quick actions to load, rename, export, or
   delete the save.
+- **Help sheet** – Lists every command button, summarizes canvas gestures, and
+  surfaces a live debug log so contributors can confirm state changes while
+  testing.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
   Each compact swatch keeps the colour number front-and-center while tooltips
   and `data-color-id` attributes expose the colour name plus remaining counts
@@ -117,7 +120,8 @@ tools, a save manager, and a configurable generator all live inside a single
 - The hint overlay is focusable and reacts to Enter/Space to trigger the file
   picker, keeping the first interaction accessible.
 - The progress tally uses `aria-live="polite"` announcements so assistive tech
-  hears every completion update.
+  hears every completion update, and the help sheet’s debug log mirrors the same
+  polite live region for gameplay telemetry.
 - Command rail buttons expose descriptive `aria-label` and `title` attributes
   even though the visual controls are icon-only, and they stay reachable via
   keyboard focus.

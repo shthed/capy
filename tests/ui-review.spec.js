@@ -86,8 +86,29 @@ test.describe('Capy image generator', () => {
     expect(layout.progress).toBe('—');
     expect(layout.hasSampleButton).toBe(true);
     expect(layout.commandButtons).toEqual(
-      expect.arrayContaining(['Hint', 'Reset puzzle', 'Show preview', 'Import', 'Save manager', 'Settings'])
+      expect.arrayContaining([
+        'Hint',
+        'Reset puzzle',
+        'Show preview',
+        'Import',
+        'Save manager',
+        'Help & shortcuts',
+        'Settings',
+      ])
     );
+
+    await page.click('#helpButton');
+    await expect(page.locator('#helpSheet')).toBeVisible();
+
+    const helpLegend = await page.$$eval('#helpSheet .command-list dt', (nodes) =>
+      nodes.map((node) => (node.textContent || '').trim())
+    );
+    expect(helpLegend).toEqual(expect.arrayContaining(['? Hint', 'ℹ Help', '⚙ Settings']));
+
+    const initialLog = page.locator('#debugLog .log-entry span').first();
+    await expect(initialLog).toHaveText(/Session started/);
+
+    await page.click('[data-sheet-close="help"]');
 
     await page.click('#settingsButton');
     const generatorLabels = await page.$$eval(
@@ -166,6 +187,15 @@ test.describe('Capy image generator', () => {
 
     await page.keyboard.press('Shift+=');
     await expect.poll(zoomValue).toBeGreaterThan(afterMinus);
+
+    await page.click('#helpButton');
+    const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+      nodes.map((el) => (el.textContent || '').trim())
+    );
+    expect(logMessages.length).toBeGreaterThan(0);
+    expect(logMessages[0]).toMatch(/Zoom set to/);
+    expect(logMessages.some((message) => message.includes('colour #1'))).toBe(true);
+    await page.click('[data-sheet-close="help"]');
   });
 
   test('fills the basic test pattern to completion', async ({ page }) => {
@@ -198,5 +228,9 @@ test.describe('Capy image generator', () => {
 
     await page.click('#resetButton');
     await expect(progress).toHaveText(`0/${BASIC_TEST_PATTERN.regions.length}`);
+
+    await page.click('#helpButton');
+    await expect(page.locator('#debugLog .log-entry span').first()).toHaveText(/Reset puzzle progress/);
+    await page.click('[data-sheet-close="help"]');
   });
 });

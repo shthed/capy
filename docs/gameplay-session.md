@@ -20,6 +20,7 @@
 - The top-right command rail now shows icon-only controls tucked to the right edge so opening settings or the save manager never obscures the artwork.
 - Palette selection immediately highlighted the active swatch, flashed every matching region (with a celebratory flash once a colour is complete), and kept the compact number-only label crisp while remaining counts surfaced via tooltip copy.
 - Painting a cell updated the fill color inline with the clustered artwork (no refresh needed) and click-drag panning, scroll-wheel zoom, plus `+`/`-` keyboard shortcuts made it easy to inspect tiny regions.
+- The refreshed Help sheet documents every icon command, reiterates the gesture controls, and streams a live debug log so it was easy to verify hints, fills, and zoom gestures during the session.
 - Overall responsiveness stayed smooth during the brief automation-driven play session.
 
 ## Follow-up Ideas
