@@ -15,8 +15,8 @@
 
 ## Observations
 - Artwork, palette, and progress UI rendered without errors once the page finished hydrating.
-- The art-library button stayed pinned to the top-right header rail, matching the UI review coverage expectations even on a narrow viewport.
-- Palette selection immediately highlighted the active swatch and kept the tiny in-button label readable while the optional remaining-count badge stayed tucked inside the button.
+- The top-right command rail now shows icon-labeled controls and collapses into a "Menu" toggle on the handheld viewport, so opening the library or help never obscures the artwork.
+- Palette selection immediately highlighted the active swatch, responded on the first tap in the touch emulation, and kept the tiny in-button label readable while the optional remaining-count badge stayed tucked inside the button.
 - Painting a cell updated the fill color inline without requiring additional refreshes or focus changes.
 - Overall responsiveness stayed smooth during the brief automation-driven play session.
 

@@ -46,17 +46,18 @@ when a check fails.
 ### UI elements
 
 - **Top command rail:** Ultra-slim glass bar pinned near the top-right corner.
-  It shows the active artwork title, a live progress chip, and compact buttons
-  for the library, help, options, peek preview, and hint pulse while adapting
-  into a stacked layout on narrow screens.
+  It shows the active artwork title, a live progress chip, and compact icon
+  buttons for the library, help, options, peek preview, and hint pulse. On
+  phones the actions collapse behind a "Menu" toggle so the header stays tidy
+  without hiding functionality.
 - **Canvas frame:** Fullscreen SVG stage wrapped with pan/zoom transforms,
   per-cell strokes, number badges that stay centered inside each region, and
   optional heatmap dots when zoomed out.
 - **Palette dock:** Floating glass strip centred beneath the canvas with a
   single-row, horizontally scrollable set of smaller swatches. Each swatch now
   shows both the number and color name inside the button, can surface a tiny
-  remaining-count badge, highlights the active selection, and dims once its
-  cells are complete.
+  remaining-count badge, highlights the active selection, dims once its cells
+  are complete, and responds instantly to touch taps as well as clicks.
 - **Smoke Tests HUD:** Hidden by default when all checks pass. If a test fails,
   a floating card appears with diagnostics and a reminder that the “T”
   shortcut toggles visibility.
@@ -86,7 +87,7 @@ Our automated Playwright run (`npm test --silent`) validates the experience end 
 - **Art library listing:** Opens the library dialog and verifies every bundled scene is present (Capybara in a Forest, Capybara Lagoon Sunrise, Twilight Marsh Study, Lush Green Forest Walk).
 - **Painting updates progress:** Fills a cell to confirm the completion meter and progress chip react immediately.
 - **HUD coverage snapshot:** Captures a full-page screenshot plus a JSON summary with palette counts, cell totals, progress text/ARIA label, and the presence of the art-library control.
-- **Mobile command rail layout:** Boots the app at a handheld viewport to ensure the header hugs the top-right edge and the palette swatches stay compact while still showing their color names.
+- **Mobile command rail layout:** Boots the app at a handheld viewport to ensure the header hugs the top-right edge, the menu toggle reveals every command, and the palette swatches stay compact while still showing their color names.
 - **Starter merge behavior:** Boots with stored data to ensure bundled scenes merge without duplication.
 - **Title preservation:** Checks that custom titles persist after a starter refresh.
 - **SVG quality checks:** Parses each bundled SVG (`capybara-forest`, `capybara-lagoon`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
