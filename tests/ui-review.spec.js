@@ -55,6 +55,13 @@ async function clickRegionCenter(page, region, puzzle) {
   }, { pixel: sample, width: puzzle.width, height: puzzle.height });
 }
 
+async function getStageFlashValue(page) {
+  return page.evaluate(() => {
+    const stage = document.querySelector('#canvasStage');
+    return stage?.dataset.flashingColor || null;
+  });
+}
+
 test.describe('Capy image generator', () => {
   test('renders command rail and hidden generator settings on load', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
@@ -116,6 +123,49 @@ test.describe('Capy image generator', () => {
     expect(state.paletteCount).toBeGreaterThan(3);
     expect(state.regionCount).toBeGreaterThan(4);
     expect(state.sourceUrl).toContain('data:image/svg+xml;base64,');
+  });
+
+  test('flashes matching regions and supports zoom controls', async ({ page }) => {
+    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await loadBasicTestPattern(page);
+
+    await expect.poll(() => getStageFlashValue(page)).toBeNull();
+
+    await page.click('[data-color-id="1"]');
+    await expect.poll(() => getStageFlashValue(page)).toBe('1');
+    await expect.poll(() => getStageFlashValue(page)).toBeNull();
+
+    const zoomValue = () =>
+      page.evaluate(() =>
+        parseFloat(
+          getComputedStyle(document.querySelector('#canvasTransform')).getPropertyValue('--zoom')
+        )
+      );
+
+    const initialZoom = await zoomValue();
+    await page.evaluate(() => {
+      const canvas = document.querySelector('[data-testid="puzzle-canvas"]');
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const event = new WheelEvent('wheel', {
+        deltaX: 0,
+        deltaY: -240,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        bubbles: true,
+        cancelable: true,
+      });
+      canvas.dispatchEvent(event);
+    });
+    await expect.poll(zoomValue).toBeGreaterThan(initialZoom);
+    const afterWheel = await zoomValue();
+
+    await page.keyboard.press('Minus');
+    await expect.poll(zoomValue).toBeLessThan(afterWheel);
+    const afterMinus = await zoomValue();
+
+    await page.keyboard.press('Shift+=');
+    await expect.poll(zoomValue).toBeGreaterThan(afterMinus);
   });
 
   test('fills the basic test pattern to completion', async ({ page }) => {

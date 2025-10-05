@@ -109,6 +109,7 @@
         touch-action: none;
         will-change: transform;
         z-index: 1;
+        cursor: grab;
       }
 
       #canvasTransform {
@@ -871,6 +872,7 @@
       let panCandidate = null;
       let isPanning = false;
       let spacePressed = false;
+      let colorFlashTimer = null;
 
       const state = {
         puzzle: null,
@@ -983,6 +985,9 @@
         initializePuzzleImage();
         renderPuzzle();
         renderPalette();
+        if (state.activeColor != null) {
+          flashColorRegions(state.activeColor);
+        }
         updateProgress();
       });
 
@@ -1147,6 +1152,9 @@
         applyRegionToImage(regionId);
         renderPuzzle();
         renderPalette();
+        if (state.activeColor != null) {
+          flashColorRegions(state.activeColor);
+        }
         updateProgress();
         if (state.settings.autoAdvance) {
           autoAdvanceColor(region.colorId);
@@ -1306,6 +1314,11 @@
       }
 
       function resetPuzzleUI() {
+        if (colorFlashTimer) {
+          clearTimeout(colorFlashTimer);
+          colorFlashTimer = null;
+        }
+        delete canvasStage.dataset.flashingColor;
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
@@ -1427,6 +1440,8 @@
           };
         });
         const regionMap = new Int32Array(mapSource);
+        const paletteIds = new Set(palette.map((entry) => entry.id));
+        const requestedColor = metadata.activeColor ?? palette[0]?.id ?? null;
         state.puzzle = {
           width: data.width,
           height: data.height,
@@ -1434,7 +1449,10 @@
           regions,
           regionMap,
         };
-        state.activeColor = metadata.activeColor ?? palette[0]?.id ?? null;
+        state.activeColor =
+          requestedColor != null && paletteIds.has(requestedColor)
+            ? requestedColor
+            : palette[0]?.id ?? null;
         state.filled = new Set(metadata.filled ?? []);
         state.lastOptions = metadata.options ?? getCurrentOptions();
         puzzleCanvas.width = data.width;
@@ -1445,6 +1463,9 @@
         initializePuzzleImage();
         renderPuzzle();
         renderPalette();
+        if (state.activeColor != null) {
+          flashColorRegions(state.activeColor, { duration: 360 });
+        }
         updateProgress();
         updateCommandStates();
         updatePreviewState();
@@ -1576,6 +1597,23 @@
         }
       }
 
+      function activateColor(colorId, options = {}) {
+        if (!state.puzzle) return false;
+        if (colorId == null) return false;
+        const { flash = true, redraw = true } = options;
+        const hasColour = state.puzzle.palette.some((entry) => entry.id === colorId);
+        if (!hasColour) return false;
+        const changed = state.activeColor !== colorId;
+        state.activeColor = colorId;
+        if (redraw) {
+          renderPalette();
+        }
+        if (flash) {
+          flashColorRegions(colorId);
+        }
+        return changed;
+      }
+
       function renderPalette() {
         paletteEl.innerHTML = "";
         if (!state.puzzle) return;
@@ -1615,8 +1653,7 @@
             </span>
           `;
           swatch.addEventListener("click", () => {
-            state.activeColor = color.id;
-            renderPalette();
+            activateColor(color.id);
           });
           paletteEl.appendChild(swatch);
         }
@@ -1633,7 +1670,6 @@
       }
 
       function handleKeyDown(event) {
-        if (event.code !== "Space") return;
         const target = event.target;
         if (
           target instanceof HTMLInputElement ||
@@ -1642,17 +1678,35 @@
         ) {
           return;
         }
-        if (!event.repeat) {
-          spacePressed = true;
+
+        if (event.code === "Space") {
+          if (!event.repeat) {
+            spacePressed = true;
+          }
+          if (
+            target === document.body ||
+            target === viewportEl ||
+            target === canvasStage ||
+            target === canvasTransform ||
+            target === puzzleCanvas
+          ) {
+            event.preventDefault();
+          }
+          return;
         }
-        if (
-          target === document.body ||
-          target === viewportEl ||
-          target === canvasStage ||
-          target === canvasTransform ||
-          target === puzzleCanvas
-        ) {
+
+        if (!state.puzzle) return;
+
+        const key = event.key;
+        if (key === "+" || key === "=" || event.code === "Equal" || event.code === "NumpadAdd") {
           event.preventDefault();
+          applyZoom(1.1);
+          return;
+        }
+
+        if (key === "-" || event.code === "Minus" || event.code === "NumpadSubtract") {
+          event.preventDefault();
+          applyZoom(0.9);
         }
       }
 
@@ -1718,7 +1772,7 @@
         const dx = event.clientX - panCandidate.startX;
         const dy = event.clientY - panCandidate.startY;
         const distance = Math.hypot(dx, dy);
-        if (distance < 6) return;
+        if (distance < 4) return;
         event.preventDefault();
         beginPanSession(
           event.pointerId,
@@ -1746,22 +1800,30 @@
         } catch (error) {}
       }
 
-      function handleWheel(event) {
+      function applyZoom(multiplier, clientX, clientY) {
         if (!state.puzzle) return;
-        event.preventDefault();
-        const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
-        const nextZoom = clamp(viewState.zoom * zoomFactor, 0.2, 6);
-        const change = nextZoom / viewState.zoom;
+        const previousZoom = viewState.zoom;
+        const nextZoom = clamp(previousZoom * multiplier, 0.2, 6);
+        const change = nextZoom / previousZoom;
         if (!Number.isFinite(change) || change === 1) return;
         const viewportRect = viewportEl.getBoundingClientRect();
         const centerX = viewportRect.left + viewportRect.width / 2;
         const centerY = viewportRect.top + viewportRect.height / 2;
-        const offsetX = event.clientX - centerX - viewState.panX;
-        const offsetY = event.clientY - centerY - viewState.panY;
+        const anchorX = typeof clientX === "number" ? clientX : centerX;
+        const anchorY = typeof clientY === "number" ? clientY : centerY;
+        const offsetX = anchorX - centerX - viewState.panX;
+        const offsetY = anchorY - centerY - viewState.panY;
         viewState.panX += offsetX - offsetX * change;
         viewState.panY += offsetY - offsetY * change;
         viewState.zoom = nextZoom;
         applyViewTransform();
+      }
+
+      function handleWheel(event) {
+        if (!state.puzzle) return;
+        event.preventDefault();
+        const multiplier = event.deltaY > 0 ? 0.9 : 1.1;
+        applyZoom(multiplier, event.clientX, event.clientY);
       }
 
       function applyViewTransform() {
@@ -1821,12 +1883,46 @@
           .sort((a, b) => a.pixelCount - b.pixelCount)[0];
         if (!target) {
           target = candidates.sort((a, b) => a.pixelCount - b.pixelCount)[0];
-          state.activeColor = target.colorId;
-          renderPalette();
+          activateColor(target.colorId, { flash: false });
         }
         if (state.settings.animateHints) {
           flashRegion(target.id, "rgba(59, 130, 246, 0.45)");
         }
+      }
+
+      function flashColorRegions(colorId, options = {}) {
+        if (!state.puzzle) return;
+        if (colorId == null) return;
+        const { tint = "rgba(96, 165, 250, 0.32)", duration = 280 } = options;
+        const unfinished = state.puzzle.regions.filter(
+          (region) => region.colorId === colorId && !state.filled.has(region.id)
+        );
+        const targets = unfinished.length > 0 ? unfinished : state.puzzle.regions.filter((region) => region.colorId === colorId);
+        if (targets.length === 0) {
+          delete canvasStage.dataset.flashingColor;
+          return;
+        }
+        if (colorFlashTimer) {
+          clearTimeout(colorFlashTimer);
+          colorFlashTimer = null;
+        }
+        renderPuzzle();
+        canvasStage.dataset.flashingColor = String(colorId);
+        puzzleCtx.save();
+        puzzleCtx.fillStyle = tint;
+        for (const region of targets) {
+          for (const idx of region.pixels) {
+            const x = idx % state.puzzle.width;
+            const y = (idx / state.puzzle.width) | 0;
+            puzzleCtx.fillRect(x, y, 1, 1);
+          }
+        }
+        puzzleCtx.restore();
+        colorFlashTimer = window.setTimeout(() => {
+          colorFlashTimer = null;
+          delete canvasStage.dataset.flashingColor;
+          renderPuzzle();
+        }, duration);
       }
 
       function flashRegion(regionId, color) {
@@ -1858,8 +1954,7 @@
           )
         );
         if (nextColour) {
-          state.activeColor = nextColour.id;
-          renderPalette();
+          activateColor(nextColour.id);
         }
       }
 

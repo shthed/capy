@@ -20,10 +20,14 @@ tools, a save manager, and a configurable generator all live inside a single
   while optional auto-advance hops to the next unfinished colour. Filled areas
   now reveal the clustered artwork beneath the outlines so the illustration
   gradually emerges as you work.
+- **Colour cues and feedback.** Choosing a swatch briefly pulses every matching
+  region (falling back to a celebratory flash when a colour is finished) so
+  it's obvious where to paint next, and correctly filled regions immediately
+  display the underlying illustration.
 - **Precision view controls.** Pan the puzzle by click-dragging with the
-  primary mouse button (spacebar, middle, and right buttons still work) and
-  scroll to zoom in or out. The canvas stays centered and scales smoothly for
-  detailed touch-ups.
+  primary mouse button (spacebar, middle, and right buttons still work), scroll
+  to zoom in or out, or tap `+`/`-` on the keyboard for incremental adjustments.
+  The canvas stays centered and scales smoothly for detailed touch-ups.
 - **Contextual hinting.** Trigger highlight pulses for the current colour or let
   the app surface the smallest unfinished region when you need a nudge.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
@@ -95,8 +99,12 @@ tools, a save manager, and a configurable generator all live inside a single
 - Palette buttons toggle the active colour and expose `data-color-id` so tests
   and tooling can reason about selections. Auto-advance can be disabled from the
   Settings sheet for full manual control.
+- Palette selection briefly flashes every matching region (and completed
+  colours) so it's immediately clear where the next strokes belong.
 - Hold Space to temporarily switch the primary mouse button into a dedicated
   pan gesture; direct click-dragging also works for quick viewport adjustments.
+- Use `+`/`-` (or `Shift+=`/`-`) to zoom without leaving the keyboard; mouse and
+  trackpad scrolling continue to work for analog control.
 - Both the settings and save sheets trap focus while open and close via their
   dedicated Close buttons or the shared backdrop.
 
