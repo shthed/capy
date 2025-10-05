@@ -65,7 +65,8 @@ async function getStageFlashValue(page) {
 test.describe('Capy image generator', () => {
   test('renders command rail and hidden generator settings on load', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('[data-testid="start-hint"]');
+    await page.waitForSelector('[data-testid="palette-swatch"]');
+    await expect(page.locator('[data-testid="start-hint"]')).toHaveClass(/hidden/);
 
     const layout = await page.evaluate(() => {
       const progress = document.querySelector('[data-testid="progress-message"]');
@@ -79,17 +80,20 @@ test.describe('Capy image generator', () => {
         commandButtons,
         hasSettings,
         hasSampleButton,
+        orientation: document.body?.dataset.orientation || null,
       };
     });
 
     expect(layout.hasSettings).toBe(true);
-    expect(layout.progress).toBe('—');
+    expect(layout.progress).toMatch(/^0\/\d+/);
     expect(layout.hasSampleButton).toBe(true);
+    expect(layout.orientation).toMatch(/landscape|portrait/);
     expect(layout.commandButtons).toEqual(
       expect.arrayContaining([
         'Hint',
         'Reset puzzle',
         'Show preview',
+        'Enter fullscreen',
         'Import',
         'Save manager',
         'Help & shortcuts',
@@ -103,10 +107,15 @@ test.describe('Capy image generator', () => {
     const helpLegend = await page.$$eval('#helpSheet .command-list dt', (nodes) =>
       nodes.map((node) => (node.textContent || '').trim())
     );
-    expect(helpLegend).toEqual(expect.arrayContaining(['? Hint', 'ℹ Help', '⚙ Settings']));
+    expect(helpLegend).toEqual(
+      expect.arrayContaining(['? Hint', '🖼 Preview', '⛶ Fullscreen', 'ℹ Help', '⚙ Settings'])
+    );
 
-    const initialLog = page.locator('#debugLog .log-entry span').first();
-    await expect(initialLog).toHaveText(/Session started/);
+    const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+      nodes.map((el) => (el.textContent || '').trim())
+    );
+    expect(logMessages.some((message) => message.includes('Session started'))).toBe(true);
+    expect(logMessages.some((message) => message.includes('Orientation changed'))).toBe(true);
 
     await page.click('[data-sheet-close="help"]');
 
@@ -121,12 +130,10 @@ test.describe('Capy image generator', () => {
     await page.click('[data-sheet-close="settings"]');
   });
 
-  test('loads the capybara sample scene', async ({ page }) => {
+  test('auto loads and reloads the capybara sample scene', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('[data-testid="sample-art-button"]');
-    await page.click('[data-testid="sample-art-button"]');
-    await expect(page.locator('[data-testid="start-hint"]')).toHaveClass(/hidden/);
     await page.waitForSelector('[data-testid="palette-swatch"]');
+    await expect(page.locator('[data-testid="start-hint"]')).toHaveClass(/hidden/);
 
     const progress = page.locator('[data-testid="progress-message"]');
     await expect(progress).toHaveText(/0\/\d+/);
@@ -145,6 +152,10 @@ test.describe('Capy image generator', () => {
     expect(state.paletteCount).toBeGreaterThan(3);
     expect(state.regionCount).toBeGreaterThan(4);
     expect(state.sourceUrl).toContain('data:image/svg+xml;base64,');
+
+    await page.click('[data-testid="sample-art-button"]');
+    const logHead = page.locator('#debugLog .log-entry span').first();
+    await expect(logHead).toHaveText(/Loading sample puzzle/);
   });
 
   test('flashes matching regions and supports zoom controls', async ({ page }) => {

@@ -11,8 +11,9 @@ tools, a save manager, and a configurable generator all live inside a single
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
   previously exported JSON puzzles straight into the generator pipeline.
-- **Built-in capybara sample.** Load the "Capybara Meadow" illustration from
-  the start overlay to play immediately without hunting for an image file.
+- **Built-in capybara sample.** The "Capybara Meadow" illustration now loads
+  automatically on boot so you can start painting without importing anything,
+  while the start overlay button still reloads it on demand.
 - **Configurable puzzle generator.** Tune palette size, minimum region area,
   resize detail, sampling, iteration count, and smoothing passes before
   rebuilding the scene.
@@ -28,9 +29,14 @@ tools, a save manager, and a configurable generator all live inside a single
   the Settings sheet; outlines and numbers automatically switch contrast so dark
   or light themes stay legible while you paint.
 - **Precision view controls.** Pan the puzzle by click-dragging with the
-  primary mouse button (spacebar, middle, and right buttons still work), scroll
-  to zoom in or out, or tap `+`/`-` on the keyboard for incremental adjustments.
-  The canvas stays centered and scales smoothly for detailed touch-ups.
+  primary mouse button (spacebar, middle, and right buttons still work), use
+  pinch gestures or the mouse wheel to zoom in and out, or tap `+`/`-` on the
+  keyboard for incremental adjustments. The canvas now stretches to fill the
+  viewport, centres itself automatically, and honours device orientation
+  changes without losing your place.
+- **Edge-to-edge stage.** A fullscreen toggle, rotation-aware sizing, and
+  dynamic viewport padding ensure the command rail and palette scale cleanly on
+  phones, tablets, or desktops while the artwork stays centred.
 - **Contextual hinting.** Trigger highlight pulses for the current colour or let
   the app surface the smallest unfinished region when you need a nudge.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
@@ -66,13 +72,14 @@ tools, a save manager, and a configurable generator all live inside a single
   `serializeCurrentPuzzle` manage the save sheet while JSON exports lean on the
   same serialization path for predictable data output.
 
-## Mouse interaction flow
+## Pointer interaction flow
 
 - **Pointer staging.** The stage element (`#canvasStage`) captures all pointer
   events for the playfield. `handlePanStart` records the pointer that pressed
   down, immediately beginning a pan for right/middle clicks or when modifier
-  keys (Space/Alt/Ctrl/Meta) are held. Primary-button drags become "candidates"
-  so short taps still fall through to the canvas click handler.
+  keys (Space/Alt/Ctrl/Meta) are held. Touch pointers are tracked individually
+  so single-finger drags can promote into pans while multi-touch sessions
+  trigger pinch zooming.
 - **Pan promotion.** `handlePanMove` measures how far the candidate pointer has
   travelled. Once it exceeds roughly four pixels the function calls
   `beginPanSession`, captures the pointer, and continuously updates `viewState`
@@ -80,9 +87,11 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Teardown safeguards.** `handlePanEnd` runs for `pointerup`,
   `pointercancel`, and `lostpointercapture` so releasing the mouse outside the
   viewport still resets the grab cursor and clears pan state.
-- **Zoom input.** Scroll wheel events, `+`/`-` keyboard shortcuts, and helper
-  calls from tests all feed into `applyZoom`, which calculates a new scale,
-  recenters the viewport, and updates the debug log with the latest percentage.
+- **Zoom input.** Scroll wheel events, `+`/`-` keyboard shortcuts, pinch
+  gestures, and helper calls from tests all feed into `applyZoom`, which
+  calculates a new scale, recenters the viewport, and updates the debug log with
+  the latest percentage (pinch sessions summarise their final zoom when they
+  end).
 - **Region clicks.** The canvas click handler first validates that a puzzle and
   active colour exist, then resolves the clicked pixel to a region. Mismatches
   trigger a yellow flash and a debug log entry explaining which colour is
@@ -91,9 +100,11 @@ tools, a save manager, and a configurable generator all live inside a single
 
 ## How it works
 
-1. **Load an image.** Drag a bitmap into the viewport, activate the “Choose an
-   image” button, or tap **Try the capybara sample** to spin up the bundled
-   scene. The hint overlay disappears once a source is selected.
+1. **Load an image.** The bundled “Capybara Meadow” puzzle loads automatically
+   on boot so you can start painting immediately. Drag a bitmap into the
+   viewport, activate the “Choose an image” button, or tap **Try the capybara
+   sample** to reload the bundled scene. The hint overlay disappears once a new
+   source is selected.
 2. **Tune generation & appearance.** Open **Settings** to tweak palette size,
    minimum region area, resize detail, sample rate (for faster clustering),
    iteration count, smoothing passes, auto-advance, hint animations, and the
@@ -112,9 +123,10 @@ tools, a save manager, and a configurable generator all live inside a single
 ## UI guide
 
 - **Command rail** – A slim, right-aligned header exposing Hint, Reset, Preview,
-  Import, Save manager, Help, and Settings buttons through icon-only controls.
-  Hint flashes tiny regions, Reset clears progress, Preview reveals the
-  fullscreen clustered artwork, Import accepts images or JSON puzzles, Save
+  Fullscreen, Import, Save manager, Help, and Settings buttons through
+  icon-only controls. Hint flashes tiny regions, Reset clears progress, Preview
+  reveals the clustered artwork, Fullscreen pushes the stage edge-to-edge (and
+  exits back to windowed mode), Import accepts images or JSON puzzles, Save
   manager opens the local snapshot vault, Help opens an in-app manual plus live
   debug log, and Settings reveals generator/gameplay options.
 - **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`).
@@ -172,9 +184,9 @@ The Playwright suite exercises the core flows:
 - **renders command rail and generator settings on load** – Confirms the hint
   overlay, iconized command rail, compact progress tally, and generator controls
   render on first boot.
-- **loads the capybara sample scene** – Clicks the new start overlay shortcut to
-  generate a bundled illustration, ensuring the onboarding affordance works
-  offline.
+- **auto loads the capybara sample scene** – Verifies the bundled illustration is
+  ready as soon as the app boots and that the sample button still reloads it on
+  demand.
 - **allows adjusting the canvas background colour** – Uses the fixture loader to
   set a new background via the exposed harness helper, verifies pixel data,
   and confirms the debug log records the change.

@@ -6,17 +6,20 @@
 - The JSON summary now records the header button ARIA labels and whether the art-library affordance is present so regressions are obvious during review.
 - A dedicated interaction check clicks the first paintable region, ensuring the DOM reflects the filled state and no console errors appear while tapping-to-fill.
 - Interaction coverage also asserts that selecting a palette swatch pulses every matching region and that mouse-wheel as well as keyboard `+`/`-` zoom controls adjust the viewport scale.
+- The smoke run now expects the bundled sample puzzle to be ready on load and confirms the fullscreen control is available for edge-to-edge play.
 - Review the generated JSON for console errors and metadata counts, then open the screenshot to confirm composition changes look right before merging.
 
 ## Positive Observations
 - The Peek control lets you preview the finished painting without leaving the canvas, either by holding or toggling the button.
+- The bundled capybara sample now appears automatically on load, so testers can start painting without importing external art.
 - Palette swatches now tuck their color names directly inside the button while keeping the numbers bold, so picking the next hue is faster without extra labels.
 - Tap-to-fill now fires on deliberate taps, and palette swatches respect the same pointer handling so choosing a color on touch devices never requires a second press while drag gestures stay focused on panning.
 - Left-drag panning now keeps the canvas full-screen while the palette hugs the bottom edge without a frame.
 - The Help & shortcuts sheet now lists every command icon, reiterates the gesture cheatsheet, and pipes a live debug log so QA can confirm fills, hints, and zooms as they happen.
 - The art library now opens with a thumbnail picker that previews each scene, making it faster to spot and load the exact artwork you want.
-- The ultra-slim glass command rail now hugs the top-right corner with a hint icon plus menu toggle, keeping library, options, help, peek, and hint controls reachable without crowding the artwork.
+- The ultra-slim glass command rail now hugs the top-right corner with a hint icon plus menu toggle and fullscreen toggle, keeping library, options, help, peek, and hint controls reachable without crowding the artwork.
 - The mobile smoke run confirms the compact swatches stay legible and the top rail remains reachable at handheld sizes.
+- Rotation events and fullscreen transitions now recenter the canvas automatically, so orientation changes never strand the puzzler.
 - Mousewheel zoom now stays anchored under the cursor, eases smoothly toward the target scale, keyboard nudges on `+`/`-` mirror the motion, and both mouse buttons pan the scene, so navigation feels immediate and predictable.
 - Palette pulses now accompany colour selection so playtesters immediately see every matching region (or a brief celebration when a colour is finished).
 - The Settings sheet now exposes a background colour picker that immediately repaints unfinished regions and recalibrates outline contrast, making dark themes workable without extra CSS overrides.

@@ -32,6 +32,9 @@
           sans-serif;
         background: #020617;
         color: #e2e8f0;
+        --app-width: 100vw;
+        --app-height: 100vh;
+        --viewport-padding: 32px;
       }
 
       * {
@@ -61,8 +64,8 @@
 
       #app {
         position: relative;
-        width: 100vw;
-        height: 100vh;
+        width: var(--app-width, 100vw);
+        height: var(--app-height, 100vh);
         overflow: hidden;
         display: grid;
         grid-template-rows: auto 1fr auto;
@@ -107,13 +110,30 @@
         border-color: rgba(71, 85, 105, 0.35);
       }
 
+      body[data-orientation="portrait"] #commandRail {
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 12px 16px;
+      }
+
+      body[data-orientation="portrait"] #commandRail button {
+        width: 36px;
+        height: 36px;
+      }
+
+      body[data-orientation="portrait"] #paletteDock {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+      }
+
       #viewport {
         position: relative;
         width: 100%;
         height: 100%;
         display: grid;
         place-items: center;
-        padding: 32px;
+        padding: var(--viewport-padding, 32px);
         overflow: hidden;
       }
 
@@ -772,6 +792,15 @@
           <span class="icon" aria-hidden="true">🖼</span>
         </button>
         <button
+          id="fullscreenButton"
+          type="button"
+          data-testid="fullscreen-button"
+          aria-label="Enter fullscreen"
+          title="Enter fullscreen"
+        >
+          <span class="icon" aria-hidden="true">⛶</span>
+        </button>
+        <button
           id="importButton"
           type="button"
           data-testid="import-button"
@@ -887,6 +916,8 @@
             <dd>Clear every painted region and restart the current puzzle.</dd>
             <dt>🖼 Preview</dt>
             <dd>Toggle the finished artwork overlay to compare your progress.</dd>
+            <dt>⛶ Fullscreen</dt>
+            <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
             <dt>⬆ Import</dt>
             <dd>Load a new image or JSON puzzle from disk.</dd>
             <dt>💾 Saves</dt>
@@ -1012,6 +1043,7 @@
     </div>
         <script>
       // Cached DOM references so we can wire handlers without repeated lookups.
+      const appEl = document.getElementById("app");
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
       const sampleButton = document.getElementById("samplePuzzle");
@@ -1020,6 +1052,7 @@
       const hintButton = document.getElementById("hintButton");
       const resetButton = document.getElementById("resetButton");
       const previewToggle = document.getElementById("previewToggle");
+      const fullscreenButton = document.getElementById("fullscreenButton");
       const importButton = document.getElementById("importButton");
       const saveManagerButton = document.getElementById("saveManagerButton");
       const settingsButton = document.getElementById("settingsButton");
@@ -1098,6 +1131,9 @@
       let isPanning = false;
       let spacePressed = false;
       let colorFlashTimer = null;
+      const activeTouches = new Map();
+      let pinchSession = null;
+      let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
 
       // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
@@ -1167,20 +1203,18 @@
       updateCommandStates();
       renderDebugLog();
       logDebug("Session started");
-      resetView();
+      handleViewportChange({ log: true, recenter: true });
+      resetView({ recenter: true });
 
       if (sampleButton) {
         sampleButton.title = `Play ${SAMPLE_ARTWORK.title}`;
         sampleButton.addEventListener("click", () => {
-          const { dataUrl } = SAMPLE_ARTWORK;
-          if (!dataUrl) return;
-          resetPuzzleUI();
-          state.sourceUrl = dataUrl;
-          state.sourceTitle = SAMPLE_ARTWORK.title || "Sample puzzle";
-          startHint.classList.add("hidden");
-          logDebug(`Loading sample puzzle: ${state.sourceTitle}`);
-          loadImage(dataUrl);
+          loadSamplePuzzle();
         });
+      }
+
+      if (SAMPLE_ARTWORK?.dataUrl) {
+        loadSamplePuzzle();
       }
 
       selectButton.addEventListener("click", () => fileInput.click());
@@ -1190,6 +1224,18 @@
       if (helpButton) {
         helpButton.addEventListener("click", () => openSheet(helpSheet));
       }
+
+      if (fullscreenButton) {
+        fullscreenButton.addEventListener("click", () => toggleFullscreen());
+        updateFullscreenState();
+      }
+
+      document.addEventListener("fullscreenchange", () => {
+        updateFullscreenState();
+        const active = Boolean(document.fullscreenElement);
+        logDebug(active ? "Entered fullscreen mode" : "Exited fullscreen mode");
+        handleViewportChange({ log: true, recenter: true });
+      });
 
       if (clearDebugLogButton) {
         clearDebugLogButton.addEventListener("click", () => {
@@ -1400,7 +1446,7 @@
       canvasStage.addEventListener("contextmenu", (event) => event.preventDefault());
       window.addEventListener("keydown", handleKeyDown, true);
       window.addEventListener("keyup", handleKeyUp, true);
-      window.addEventListener("resize", () => resetView({ preserveZoom: true }));
+      window.addEventListener("resize", () => handleViewportChange({ log: true }));
       window.addEventListener("blur", () => {
         spacePressed = false;
         if (panPointerId != null) {
@@ -1415,6 +1461,20 @@
           isPanning = false;
         }
       });
+
+      if (window.screen?.orientation && typeof window.screen.orientation.addEventListener === "function") {
+        window.screen.orientation.addEventListener("change", () =>
+          handleViewportChange({ log: true, recenter: true })
+        );
+      } else if (window.matchMedia) {
+        const orientationQuery = window.matchMedia("(orientation: portrait)");
+        const orientationListener = () => handleViewportChange({ log: true, recenter: true });
+        if (typeof orientationQuery.addEventListener === "function") {
+          orientationQuery.addEventListener("change", orientationListener);
+        } else if (typeof orientationQuery.addListener === "function") {
+          orientationQuery.addListener(orientationListener);
+        }
+      }
 
       // Puzzle fill interaction: click to paint if the region matches the active colour.
       puzzleCanvas.addEventListener("click", (event) => {
@@ -1510,6 +1570,88 @@
           previewToggle.title = "Show preview";
           previewToggle.classList.remove("active");
         }
+      }
+
+      function updateFullscreenState() {
+        if (!fullscreenButton) return;
+        const active = Boolean(document.fullscreenElement);
+        fullscreenButton.classList.toggle("active", active);
+        fullscreenButton.setAttribute("aria-pressed", active ? "true" : "false");
+        fullscreenButton.setAttribute("aria-label", active ? "Exit fullscreen" : "Enter fullscreen");
+        fullscreenButton.title = active ? "Exit fullscreen" : "Enter fullscreen";
+        const icon = fullscreenButton.querySelector(".icon");
+        if (icon) {
+          icon.textContent = active ? "🗗" : "⛶";
+        }
+        fullscreenButton.disabled = !document.fullscreenEnabled && !active;
+      }
+
+      function toggleFullscreen() {
+        if (!fullscreenButton) return;
+        if (document.fullscreenElement) {
+          if (document.exitFullscreen) {
+            document.exitFullscreen().catch((error) => {
+              console.error("Failed to exit fullscreen", error);
+              logDebug("Unable to exit fullscreen");
+            });
+          }
+          return;
+        }
+        const target = appEl || document.documentElement;
+        if (!document.fullscreenEnabled || !target?.requestFullscreen) {
+          logDebug("Fullscreen not supported in this browser");
+          return;
+        }
+        target.requestFullscreen().catch((error) => {
+          console.error("Failed to enter fullscreen", error);
+          logDebug("Fullscreen request was blocked");
+        });
+      }
+
+      function updateViewportMetrics() {
+        const width = Math.round(window.innerWidth || document.documentElement.clientWidth || 0);
+        const height = Math.round(window.innerHeight || document.documentElement.clientHeight || 0);
+        const orientation = width >= height ? "landscape" : "portrait";
+        document.documentElement.style.setProperty("--app-width", `${width}px`);
+        document.documentElement.style.setProperty("--app-height", `${height}px`);
+        const minSide = Math.max(1, Math.min(width, height));
+        const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
+        document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
+        if (document.body) {
+          document.body.dataset.orientation = orientation;
+        }
+        const changed = orientation !== lastViewportMetrics.orientation;
+        const sizeChanged = width !== lastViewportMetrics.width || height !== lastViewportMetrics.height;
+        lastViewportMetrics = { orientation, width, height };
+        return { orientation, changed, sizeChanged, width, height };
+      }
+
+      function handleViewportChange(options = {}) {
+        const { log = false, recenter = false } = options;
+        const metrics = updateViewportMetrics();
+        const orientationChanged = metrics.changed;
+        if (orientationChanged) {
+          logDebug(`Orientation changed to ${metrics.orientation}`);
+        } else if (log && metrics.sizeChanged) {
+          logDebug(`Viewport resized to ${metrics.width}×${metrics.height} (${metrics.orientation})`);
+        }
+        if (state.puzzle) {
+          resetView({ preserveZoom: true, recenter: recenter || orientationChanged });
+        }
+      }
+
+      function loadSamplePuzzle(options = {}) {
+        const { announce = true } = options;
+        const { dataUrl } = SAMPLE_ARTWORK;
+        if (!dataUrl) return;
+        resetPuzzleUI();
+        state.sourceUrl = dataUrl;
+        state.sourceTitle = SAMPLE_ARTWORK.title || "Sample puzzle";
+        startHint.classList.add("hidden");
+        if (announce) {
+          logDebug(`Loading sample puzzle: ${state.sourceTitle}`);
+        }
+        loadImage(dataUrl);
       }
 
       function updateCommandStates() {
@@ -1739,7 +1881,13 @@
         state.previewVisible = false;
         updatePreviewState();
         updateCommandStates();
-        resetView();
+        activeTouches.clear();
+        pinchSession = null;
+        panPointerId = null;
+        panCandidate = null;
+        isPanning = false;
+        document.body.classList.remove("panning");
+        resetView({ recenter: true });
       }
 
       async function createPuzzleData(image, options) {
@@ -1891,7 +2039,7 @@
         updateCommandStates();
         updatePreviewState();
         markOptionsDirty();
-        resetView();
+        resetView({ recenter: true });
         const paletteCount = palette.length;
         const regionCount = regions.length;
         const descriptor =
@@ -2178,8 +2326,45 @@
 
       function handlePanStart(event) {
         if (!state.puzzle) return;
-        if (event.pointerType === "touch") return;
         panCandidate = null;
+        const isTouch = event.pointerType === "touch";
+        if (isTouch) {
+          event.preventDefault();
+          activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          if (!pinchSession && activeTouches.size >= 2) {
+            const entries = Array.from(activeTouches.entries()).slice(0, 2);
+            const first = entries[0];
+            const second = entries[1];
+            if (first && second) {
+              const a = first[1];
+              const b = second[1];
+              const distance = Math.max(10, Math.hypot(b.x - a.x, b.y - a.y));
+              pinchSession = {
+                ids: [first[0], second[0]],
+                initialDistance: distance,
+                initialZoom: viewState.zoom,
+                initialPanX: viewState.panX,
+                initialPanY: viewState.panY,
+                centerX: (a.x + b.x) / 2,
+                centerY: (a.y + b.y) / 2,
+                hasChanged: false,
+              };
+              document.body.classList.add("panning");
+              isPanning = true;
+              logDebug("Pinch zoom started");
+            }
+          } else if (!pinchSession) {
+            panCandidate = {
+              pointerId: event.pointerId,
+              startX: event.clientX,
+              startY: event.clientY,
+              panX: viewState.panX,
+              panY: viewState.panY,
+              pointerType: "touch",
+            };
+          }
+          return;
+        }
         const usesModifier = spacePressed || event.altKey || event.ctrlKey || event.metaKey;
         const auxButton = event.button === 1 || event.button === 2;
         if (auxButton || usesModifier) {
@@ -2200,11 +2385,46 @@
             startY: event.clientY,
             panX: viewState.panX,
             panY: viewState.panY,
+            pointerType: "mouse",
           };
         }
       }
 
       function handlePanMove(event) {
+        const isTouch = event.pointerType === "touch";
+        if (isTouch) {
+          if (activeTouches.has(event.pointerId)) {
+            activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          }
+          if (
+            pinchSession &&
+            pinchSession.ids.every((id) => activeTouches.has(id))
+          ) {
+            event.preventDefault();
+            const [firstId, secondId] = pinchSession.ids;
+            const first = activeTouches.get(firstId);
+            const second = activeTouches.get(secondId);
+            if (first && second) {
+              const distance = Math.max(10, Math.hypot(second.x - first.x, second.y - first.y));
+              const ratio = distance / pinchSession.initialDistance;
+              const currentZoom = viewState.zoom;
+              const targetZoom = clamp(pinchSession.initialZoom * ratio, 0.2, 6);
+              if (Math.abs(targetZoom - currentZoom) > 0.0001) {
+                pinchSession.hasChanged = true;
+                const multiplier = targetZoom / currentZoom;
+                const centerX = (first.x + second.x) / 2;
+                const centerY = (first.y + second.y) / 2;
+                applyZoom(multiplier, centerX, centerY, { skipLog: true });
+              }
+              const centerX = (first.x + second.x) / 2;
+              const centerY = (first.y + second.y) / 2;
+              viewState.panX = pinchSession.initialPanX + (centerX - pinchSession.centerX);
+              viewState.panY = pinchSession.initialPanY + (centerY - pinchSession.centerY);
+              applyViewTransform();
+            }
+            return;
+          }
+        }
         if (panPointerId === event.pointerId && isPanning) {
           event.preventDefault();
           const dx = event.clientX - panOrigin.x;
@@ -2218,7 +2438,8 @@
         const dx = event.clientX - panCandidate.startX;
         const dy = event.clientY - panCandidate.startY;
         const distance = Math.hypot(dx, dy);
-        if (distance < 4) return;
+        const threshold = panCandidate.pointerType === "touch" ? 6 : 4;
+        if (distance < threshold) return;
         event.preventDefault();
         beginPanSession(
           event.pointerId,
@@ -2232,6 +2453,35 @@
       }
 
       function handlePanEnd(event) {
+        if (event.pointerType === "touch") {
+          activeTouches.delete(event.pointerId);
+          if (pinchSession && !pinchSession.ids.every((id) => activeTouches.has(id))) {
+            const changed = pinchSession.hasChanged;
+            pinchSession = null;
+            if (isPanning && panPointerId == null) {
+              document.body.classList.remove("panning");
+              isPanning = false;
+            }
+            if (changed) {
+              logDebug(`Pinch zoom ended at ${(viewState.zoom * 100).toFixed(0)}%`);
+            } else {
+              logDebug("Pinch zoom ended");
+            }
+            if (activeTouches.size === 1) {
+              const [nextId, point] = activeTouches.entries().next().value || [];
+              if (nextId != null && point) {
+                panCandidate = {
+                  pointerId: nextId,
+                  startX: point.x,
+                  startY: point.y,
+                  panX: viewState.panX,
+                  panY: viewState.panY,
+                  pointerType: "touch",
+                };
+              }
+            }
+          }
+        }
         if (panCandidate && panCandidate.pointerId === event.pointerId) {
           panCandidate = null;
         }
@@ -2247,7 +2497,7 @@
         } catch (error) {}
       }
 
-      function applyZoom(multiplier, clientX, clientY) {
+      function applyZoom(multiplier, clientX, clientY, options = {}) {
         if (!state.puzzle) return;
         const previousZoom = viewState.zoom;
         const nextZoom = clamp(previousZoom * multiplier, 0.2, 6);
@@ -2265,7 +2515,7 @@
         viewState.panY += offsetY - offsetY * change;
         viewState.zoom = nextZoom;
         applyViewTransform();
-        if (significant) {
+        if (significant && !options.skipLog) {
           logDebug(`Zoom set to ${(viewState.zoom * 100).toFixed(0)}%`);
         }
       }
@@ -2286,19 +2536,24 @@
 
       function computeFitScale() {
         if (!state.puzzle) return 1;
-        const rect = viewportEl.getBoundingClientRect();
-        const padding = 80;
-        const widthScale = (rect.width - padding) / state.puzzle.width;
-        const heightScale = (rect.height - padding) / state.puzzle.height;
+        const styles = window.getComputedStyle(viewportEl);
+        const paddingX =
+          parseFloat(styles.paddingLeft || "0") + parseFloat(styles.paddingRight || "0");
+        const paddingY =
+          parseFloat(styles.paddingTop || "0") + parseFloat(styles.paddingBottom || "0");
+        const availableWidth = Math.max(1, viewportEl.clientWidth - paddingX);
+        const availableHeight = Math.max(1, viewportEl.clientHeight - paddingY);
+        const widthScale = availableWidth / state.puzzle.width;
+        const heightScale = availableHeight / state.puzzle.height;
         const fit = Math.min(widthScale, heightScale);
         if (!Number.isFinite(fit) || fit <= 0) {
           return 1;
         }
-        return Math.min(1, fit);
+        return fit;
       }
 
       function resetView(options = {}) {
-        const { preserveZoom = false } = options;
+        const { preserveZoom = false, recenter = false } = options;
         if (!state.puzzle) {
           viewState.panX = 0;
           viewState.panY = 0;
@@ -2314,10 +2569,18 @@
             viewState.panX *= ratio;
             viewState.panY *= ratio;
           }
+          if (recenter) {
+            viewState.panX = 0;
+            viewState.panY = 0;
+          }
         } else {
           viewState.panX = 0;
           viewState.panY = 0;
           viewState.zoom = 1;
+        }
+        if (recenter && !preserveZoom) {
+          viewState.panX = 0;
+          viewState.panY = 0;
         }
         viewState.baseScale = nextBase;
         applyViewTransform();
