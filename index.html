@@ -1,5 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
+  <!--
+    Developer Map
+    ==========
+    - UI chrome (header/footer modals): command rail + sheets define primary controls and expose
+      buttons that wire into the handler helpers inside the script. Look for "Command button"
+      listeners when adjusting layout interactions.
+    - Viewport + stage: #viewport, #canvasStage, and #canvasTransform cooperate with the
+      viewState structure. applyViewTransform, applyZoom, resetView, and the pointer handlers are
+      the touch/mouse entry points for navigation.
+    - Puzzle state + rendering: the state object captures palette, regions, fill progress, and
+      metadata. Rendering flows through renderPuzzle → drawOutlines/drawNumbers with helpers like
+      applyRegionToImage.
+    - Generation pipeline: loadImage → createPuzzleData orchestrates quantization (kmeansQuantize),
+      segmentation (segmentRegions), and palette prep. Regeneration, fixture loading, and saves all
+      call applyPuzzleResult to hydrate UI.
+    - Persistence + exports: local storage helpers (persistSaves/loadSavedEntries) back the save
+      sheet. serializeCurrentPuzzle produces an export-safe object.
+    - External API: window.capyGenerator exposes entry points that Playwright and manual testing
+      rely on. Keep it stable whenever you shuffle internal wiring.
+  -->
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -807,6 +827,7 @@
       </div>
     </div>
         <script>
+      // Cached DOM references so we can wire handlers without repeated lookups.
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
       const sampleButton = document.getElementById("samplePuzzle");
@@ -844,9 +865,20 @@
       const previewCanvas = document.getElementById("previewCanvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
+
+      // Settings sheet output mirrors we update while users drag sliders.
+      const optionOutputs = {
+        colorCount: settingsSheet.querySelector('output[data-for="colorCount"]'),
+        minRegion: settingsSheet.querySelector('output[data-for="minRegion"]'),
+        detail: settingsSheet.querySelector('output[data-for="detailLevel"]'),
+        sample: settingsSheet.querySelector('output[data-for="sampleRate"]'),
+        iterations: settingsSheet.querySelector('output[data-for="kmeansIters"]'),
+        smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
+      };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const BACKGROUND_PIXEL = [248, 250, 252, 255];
 
+      // Embedded sample used for onboarding and smoke tests.
       const SAMPLE_ARTWORK = {
         title: "Capybara Meadow",
         description: "A capybara lounging beside a pond under a bright sun.",
@@ -860,6 +892,8 @@
         samplePreview.title = SAMPLE_ARTWORK.title;
       }
 
+      // View state drives pan/zoom transforms. baseScale keeps the puzzle fit-to-screen while
+      // zoom holds user-controlled scaling.
       const viewState = {
         panX: 0,
         panY: 0,
@@ -874,6 +908,7 @@
       let spacePressed = false;
       let colorFlashTimer = null;
 
+      // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
         puzzle: null,
         activeColor: null,
@@ -891,6 +926,7 @@
       };
 
       if (typeof window !== "undefined") {
+        // Public hooks for tests and manual loading. Keep backwards compatible.
         window.capyGenerator = {
           getState: () => state,
           loadFromDataUrl(dataUrl) {
@@ -1105,6 +1141,7 @@
         }
       });
 
+      // Viewport gesture wiring: pointer drags + wheel feed into the shared pan/zoom helpers.
       canvasStage.addEventListener("pointerdown", handlePanStart);
       canvasStage.addEventListener("pointermove", handlePanMove);
       canvasStage.addEventListener("pointerup", handlePanEnd);
@@ -1130,6 +1167,7 @@
         }
       });
 
+      // Puzzle fill interaction: click to paint if the region matches the active colour.
       puzzleCanvas.addEventListener("click", (event) => {
         if (!state.puzzle || state.activeColor == null) return;
         const rect = puzzleCanvas.getBoundingClientRect();
@@ -1211,18 +1249,12 @@
       }
 
       function updateOptionOutputs() {
-        const colorOutput = settingsSheet.querySelector('output[data-for="colorCount"]');
-        const minRegionOutput = settingsSheet.querySelector('output[data-for="minRegion"]');
-        const detailOutput = settingsSheet.querySelector('output[data-for="detailLevel"]');
-        const sampleOutput = settingsSheet.querySelector('output[data-for="sampleRate"]');
-        const iterOutput = settingsSheet.querySelector('output[data-for="kmeansIters"]');
-        const smoothOutput = settingsSheet.querySelector('output[data-for="smoothingPasses"]');
-        if (colorOutput) colorOutput.textContent = String(colorCountEl.value);
-        if (minRegionOutput) minRegionOutput.textContent = `${minRegionEl.value} px²`;
-        if (detailOutput) detailOutput.textContent = `${detailEl.value} px`;
-        if (sampleOutput) sampleOutput.textContent = `${sampleRateEl.value}%`;
-        if (iterOutput) iterOutput.textContent = String(kmeansItersEl.value);
-        if (smoothOutput) smoothOutput.textContent = String(smoothingEl.value);
+        if (optionOutputs.colorCount) optionOutputs.colorCount.textContent = String(colorCountEl.value);
+        if (optionOutputs.minRegion) optionOutputs.minRegion.textContent = `${minRegionEl.value} px²`;
+        if (optionOutputs.detail) optionOutputs.detail.textContent = `${detailEl.value} px`;
+        if (optionOutputs.sample) optionOutputs.sample.textContent = `${sampleRateEl.value}%`;
+        if (optionOutputs.iterations) optionOutputs.iterations.textContent = String(kmeansItersEl.value);
+        if (optionOutputs.smoothing) optionOutputs.smoothing.textContent = String(smoothingEl.value);
       }
 
       function markOptionsDirty() {
@@ -1894,10 +1926,8 @@
         if (!state.puzzle) return;
         if (colorId == null) return;
         const { tint = "rgba(96, 165, 250, 0.32)", duration = 280 } = options;
-        const unfinished = state.puzzle.regions.filter(
-          (region) => region.colorId === colorId && !state.filled.has(region.id)
-        );
-        const targets = unfinished.length > 0 ? unfinished : state.puzzle.regions.filter((region) => region.colorId === colorId);
+        const unfinished = getRegionsByColor(colorId, { includeFilled: false });
+        const targets = unfinished.length > 0 ? unfinished : getRegionsByColor(colorId, { includeFilled: true });
         if (targets.length === 0) {
           delete canvasStage.dataset.flashingColor;
           return;
@@ -1908,16 +1938,7 @@
         }
         renderPuzzle();
         canvasStage.dataset.flashingColor = String(colorId);
-        puzzleCtx.save();
-        puzzleCtx.fillStyle = tint;
-        for (const region of targets) {
-          for (const idx of region.pixels) {
-            const x = idx % state.puzzle.width;
-            const y = (idx / state.puzzle.width) | 0;
-            puzzleCtx.fillRect(x, y, 1, 1);
-          }
-        }
-        puzzleCtx.restore();
+        paintRegions(targets, tint);
         colorFlashTimer = window.setTimeout(() => {
           colorFlashTimer = null;
           delete canvasStage.dataset.flashingColor;
@@ -1929,33 +1950,48 @@
         if (!state.puzzle) return;
         const region = state.puzzle.regions[regionId];
         if (!region) return;
-        puzzleCtx.save();
-        puzzleCtx.fillStyle = color;
-        for (const idx of region.pixels) {
-          const x = idx % state.puzzle.width;
-          const y = (idx / state.puzzle.width) | 0;
-          puzzleCtx.fillRect(x, y, 1, 1);
-        }
-        puzzleCtx.restore();
-        setTimeout(() => {
+        paintRegions([region], color);
+        window.setTimeout(() => {
           renderPuzzle();
         }, 220);
       }
 
       function autoAdvanceColor(currentColorId) {
         if (!state.puzzle) return;
-        const remainingForColor = state.puzzle.regions.some(
-          (region) => region.colorId === currentColorId && !state.filled.has(region.id)
-        );
-        if (remainingForColor) return;
+        const remainingForColor = getRegionsByColor(currentColorId, { includeFilled: false });
+        if (remainingForColor.length > 0) return;
         const nextColour = state.puzzle.palette.find((color) =>
-          state.puzzle.regions.some(
-            (region) => region.colorId === color.id && !state.filled.has(region.id)
-          )
+          getRegionsByColor(color.id, { includeFilled: false }).length > 0
         );
         if (nextColour) {
           activateColor(nextColour.id);
         }
+      }
+
+      // Helper to collect regions for a colour with optional filtering of filled cells.
+      function getRegionsByColor(colorId, options = {}) {
+        const { includeFilled = true } = options;
+        if (!state.puzzle) return [];
+        return state.puzzle.regions.filter((region) => {
+          if (region.colorId !== colorId) return false;
+          if (!includeFilled && state.filled.has(region.id)) return false;
+          return true;
+        });
+      }
+
+      // Shared renderer for flashing overlays (hints + colour selection pulses).
+      function paintRegions(regions, fillStyle) {
+        if (!state.puzzle || regions.length === 0) return;
+        puzzleCtx.save();
+        puzzleCtx.fillStyle = fillStyle;
+        for (const region of regions) {
+          for (const idx of region.pixels) {
+            const x = idx % state.puzzle.width;
+            const y = (idx / state.puzzle.width) | 0;
+            puzzleCtx.fillRect(x, y, 1, 1);
+          }
+        }
+        puzzleCtx.restore();
       }
 
       function serializeCurrentPuzzle() {

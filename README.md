@@ -38,6 +38,31 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Progress persistence.** Snapshot runs into localStorage, reopen saves,
   rename them, or export/import the underlying puzzle data as JSON.
 
+## Code architecture tour
+
+- **Single-file app shell.** `index.html` owns the markup, styles, and logic. The
+  inline script is segmented into DOM caches, global state, event wiring, puzzle
+  rendering, generation helpers, and persistence utilities—each called out in a
+  developer map comment at the top of the file.
+- **Public testing surface.** `window.capyGenerator` exposes harness-friendly
+  helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so the
+  Playwright suite and manual experiments can orchestrate the app without
+  relying on internal selectors.
+- **Pan/zoom subsystem.** `viewState` tracks the transform for `#canvasStage`
+  and `#canvasTransform`; helpers like `applyZoom`, `resetView`, and
+  `applyViewTransform` keep navigation smooth across wheel, keyboard, and drag
+  gestures.
+- **Puzzle rendering pipeline.** `renderPuzzle` orchestrates drawing the current
+  canvas, using `applyRegionToImage`, `drawOutlines`, and `drawNumbers`. Visual
+  feedback uses `flashColorRegions` and `paintRegions` to overlay tint pulses.
+- **Generation + segmentation.** Image imports flow through `createPuzzleData`,
+  which performs quantization (`kmeansQuantize`), smoothing, and `segmentRegions`
+  before feeding `applyPuzzleResult`. Regeneration and fixtures reuse the same
+  entry point so gameplay and export code paths stay in sync.
+- **Persistence helpers.** `persistSaves`, `loadSavedEntries`, and
+  `serializeCurrentPuzzle` manage the save sheet while JSON exports lean on the
+  same serialization path for predictable data output.
+
 ## How it works
 
 1. **Load an image.** Drag a bitmap into the viewport, activate the “Choose an
