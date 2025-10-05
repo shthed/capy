@@ -1318,6 +1318,7 @@ function App() {
   const [isPeekActive, setIsPeekActive] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryRevision, setLibraryRevision] = useState(0);
+  const [paletteHint, setPaletteHint] = useState({ id: null, signal: 0 });
   const [starterStatus, setStarterStatus] = useState(
     initialArtworksRef.current.length
       ? { state: "ready", error: null }
@@ -2285,6 +2286,15 @@ function App() {
     finalizePointerInteraction(e, false);
   }
 
+  const triggerPaletteHint = useCallback((colorId) => {
+    if (colorId == null) return;
+    const signal =
+      typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
+    setPaletteHint({ id: colorId, signal });
+  }, []);
+
   function onCellTap(cellId) {
     if (!art || activeColor == null) return;
     const cell = art.cells.find((c) => c.id === cellId);
@@ -2302,6 +2312,7 @@ function App() {
           el.setAttribute("stroke-width", "2");
         }, 220);
       }
+      triggerPaletteHint(cell.colorId);
       return;
     }
 
@@ -2627,14 +2638,16 @@ function App() {
         React.createElement(
           "div",
           { style: styles.paletteDock, "data-testid": "palette-dock" },
-          React.createElement(Palette, {
-            palette: art.palette,
-            remaining: remaining,
-            activeColor: activeColor,
-            onSelect: setActiveColor,
-            showLabels: showColorLabels,
-            showRemaining: showRemainingCounts,
-          })
+        React.createElement(Palette, {
+          palette: art.palette,
+          remaining: remaining,
+          activeColor: activeColor,
+          onSelect: setActiveColor,
+          showLabels: showColorLabels,
+          showRemaining: showRemainingCounts,
+          hintColorId: paletteHint.id,
+          hintSignal: paletteHint.signal,
+        })
         )
     )
   );
@@ -2938,6 +2951,8 @@ function Palette({
   onSelect,
   showLabels,
   showRemaining,
+  hintColorId,
+  hintSignal,
 }) {
   return React.createElement(
     "div",
@@ -2951,6 +2966,7 @@ function Palette({
         onSelect,
         showLabels,
         showRemaining,
+        flashSignal: entry.id === hintColorId ? hintSignal : 0,
       })
     )
   );
@@ -2963,26 +2979,41 @@ function PaletteSwatch({
   onSelect,
   showLabels,
   showRemaining,
+  flashSignal,
 }) {
   const pointerSelectRef = useRef(false);
   const { id, name, rgba } = entry;
   const label = name ?? `Color ${id}`;
   const statusLabel = remainingCount === 0 ? "Complete" : `${remainingCount} cells remaining`;
   const disabled = remainingCount === 0 && !isActive;
+  const [isFlashing, setIsFlashing] = useState(false);
+
+  useEffect(() => {
+    if (!flashSignal) return;
+    if (typeof window === "undefined") return;
+    setIsFlashing(true);
+    const timer = window.setTimeout(() => setIsFlashing(false), 600);
+    return () => window.clearTimeout(timer);
+  }, [flashSignal]);
 
   const buttonStyle = useMemo(
     () => ({
       ...styles.swatch,
       background: rgba,
-      border: isActive
+      border: isFlashing
+        ? "2px solid rgba(250, 204, 21, 0.85)"
+        : isActive
         ? "2px solid rgba(248, 250, 252, 0.85)"
         : "2px solid rgba(15, 23, 42, 0.6)",
-      boxShadow: isActive
+      boxShadow: isFlashing
+        ? "0 0 0 6px rgba(250, 204, 21, 0.35), 0 14px 32px rgba(202, 138, 4, 0.5)"
+        : isActive
         ? "0 0 0 4px rgba(148, 163, 184, 0.45), 0 10px 24px rgba(2, 6, 23, 0.55)"
         : "0 8px 18px rgba(2, 6, 23, 0.45)",
-      opacity: disabled ? 0.35 : 1,
+      transform: isFlashing ? "scale(1.05)" : isActive ? "scale(1.01)" : "none",
+      opacity: disabled && !isFlashing ? 0.35 : 1,
     }),
-    [disabled, isActive, rgba]
+    [disabled, isActive, isFlashing, rgba]
   );
 
   const handlePointerDown = useCallback(

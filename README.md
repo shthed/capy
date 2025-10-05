@@ -38,7 +38,10 @@ Interaction handlers support mouse and touch gestures including smooth,
 cursor-anchored wheel zoom, pinch zoom, left- or right-button drag panning,
 tap-to-fill (with optional drag-fill), auto-advance to the next color, hint
 pulses for tiny cells, a configurable Peek preview, and an eyedropper that
-reselects already-filled colors. Keyboard shortcuts mirror the core actions.
+reselects already-filled colors. If you tap a region with the wrong color
+selected, the palette briefly flashes the matching swatch so you can hop to
+the correct hue without opening a menu. Keyboard shortcuts mirror the core
+actions.
 Progress, remaining-cell counts, and autosave state update immediately after
 each change, while a lightweight smoke test overlay validates key invariants
 when a check fails.
