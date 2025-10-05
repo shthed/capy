@@ -126,7 +126,79 @@ const STARTER_SOURCES = [
 ];
 
 function getLegacyStarterArtworks() {
-  return [];
+  const fallbackStore =
+    typeof window !== "undefined" ? window.__starterSvgFallbacks ?? null : null;
+  if (!fallbackStore) {
+    return [];
+  }
+
+  const results = [];
+  const seenIds = new Set();
+
+  const parseFallback = (id, raw, meta) => {
+    const parsed = parseArtworkPayload(raw, meta);
+    if (!parsed.ok || !parsed.artwork) {
+      const reason = parsed.error || "Unable to convert inline fallback into artwork.";
+      console.warn(`Inline starter fallback ${id || meta?.filename || "(unknown)"} could not be parsed:`, reason);
+      return null;
+    }
+
+    let artwork = parsed.artwork;
+    let resolvedId = (artwork.id ?? "").toString().trim();
+    if (!resolvedId && id) {
+      resolvedId = id;
+      artwork = { ...artwork, id: resolvedId };
+    }
+    if (!resolvedId) {
+      resolvedId = `starter-${results.length + 1}`;
+      artwork = { ...artwork, id: resolvedId };
+    }
+
+    if (seenIds.has(resolvedId)) {
+      let suffix = 2;
+      let uniqueId = `${resolvedId}-${suffix}`;
+      while (seenIds.has(uniqueId)) {
+        suffix += 1;
+        uniqueId = `${resolvedId}-${suffix}`;
+      }
+      artwork = { ...artwork, id: uniqueId };
+      resolvedId = uniqueId;
+    }
+
+    seenIds.add(resolvedId);
+    if (!artwork.title && meta?.title) {
+      artwork = { ...artwork, title: meta.title };
+    }
+
+    return cloneArtwork(artwork);
+  };
+
+  for (const source of STARTER_SOURCES) {
+    const raw = fallbackStore[source.id];
+    if (!raw) continue;
+    const meta = {
+      filename: source.filename,
+      type: source.type,
+      title: source.title,
+      source: "inline-fallback",
+    };
+    const parsed = parseFallback(source.id, raw, meta);
+    if (parsed) {
+      results.push(parsed);
+    }
+  }
+
+  for (const [id, raw] of Object.entries(fallbackStore)) {
+    if (STARTER_SOURCES.some((source) => source.id === id)) {
+      continue;
+    }
+    const parsed = parseFallback(id, raw, { source: "inline-fallback" });
+    if (parsed) {
+      results.push(parsed);
+    }
+  }
+
+  return results;
 }
 
 function loadSvgViaObject(url, signal) {
