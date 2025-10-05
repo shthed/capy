@@ -87,6 +87,47 @@ test.describe('Capybooper visual review', () => {
     expect(cardCount).toBeGreaterThan(0);
   });
 
+  test('fills a region when clicked without throwing console errors', async ({ page }) => {
+    test.setTimeout(120000);
+    const consoleErrors = [];
+
+    page.on('pageerror', (error) => {
+      consoleErrors.push(`pageerror: ${error.message}`);
+    });
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        consoleErrors.push(`console error: ${msg.text()}`);
+      }
+    });
+
+    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('path[data-cell-id="c1"]', { timeout: 60_000 });
+    await page.waitForSelector('[data-testid="palette-dock"] button', { timeout: 60_000 });
+
+    await page.click('path[data-cell-id="c1"]');
+    await page.waitForTimeout(100);
+
+    const fillState = await page.evaluate(() => {
+      const interactive = document.querySelector('path[data-cell-id="c1"]');
+      const preview = interactive?.previousElementSibling;
+      return {
+        interactiveFill: interactive?.getAttribute('fill') ?? null,
+        interactiveOpacity: interactive
+          ? window.getComputedStyle(interactive).opacity
+          : null,
+        previewFill: preview?.getAttribute('fill') ?? null,
+        previewOpacity: preview?.getAttribute('opacity') ?? null,
+      };
+    });
+
+    expect(fillState.previewFill?.toLowerCase()).toBe('#86c5ff');
+    expect(fillState.previewOpacity).toBe('1');
+    expect(fillState.interactiveFill).toBe('transparent');
+    expect(parseFloat(fillState.interactiveOpacity ?? '1')).toBeLessThan(1);
+    expect(consoleErrors).toHaveLength(0);
+  });
+
   test('renders the home page, captures a screenshot, and logs key details', async ({ page }, testInfo) => {
     test.setTimeout(120000);
     const consoleErrors = [];
