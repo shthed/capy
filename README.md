@@ -27,9 +27,9 @@ coexist with imported artwork.
   toggle Peek behavior from the Options panel. The palette dock now prints each
   color name directly inside its swatch, dims colors as you finish a hue, and
   can optionally show a minimal remaining-count badge inside the swatch.
-- **Peek preview modes:** Hold the Peek button for a transient look at the
-  completed illustration or toggle it to stay active. Keyboard shortcuts mirror
-  the on-screen controls for quick access.
+- **Peek preview modes:** Hold the Peek button or long-press the ✨ hint icon
+  for a transient look at the completed illustration, or toggle Peek to stay
+  active. Keyboard shortcuts mirror the on-screen controls for quick access.
 - **Improved navigation:** Cursor-anchored scroll zoom, dual-button panning,
   and high-precision number badges make it easier to explore dense artwork
   without losing context.
@@ -46,10 +46,9 @@ when a check fails.
 ### UI elements
 
 - **Top command rail:** Ultra-slim glass bar pinned near the top-right corner.
-  It shows the active artwork title, a live progress chip, and compact icon
-  buttons for the library, help, options, peek preview, and hint pulse. On
-  phones the actions collapse behind a "Menu" toggle so the header stays tidy
-  without hiding functionality.
+  A ✨ hint icon (tap to pulse, long-press to peek at the finished art) sits
+  beside a ☰ menu toggle that reveals the library, help, options, and peek
+  controls on demand so the artwork stays unobstructed on every screen size.
 - **Canvas frame:** Fullscreen SVG stage wrapped with pan/zoom transforms,
   per-cell strokes, number badges that stay centered inside each region, and
   optional heatmap dots when zoomed out.
@@ -85,9 +84,9 @@ Our automated Playwright run (`npm test --silent`) validates the experience end 
 - **Application shell renders:** Confirms the React runtime boots, starter artwork mounts, and HUD chrome appears.
 - **Artwork and palette presence:** Ensures the starter SVG and swatch dock render with the expected DOM structure.
 - **Art library listing:** Opens the library dialog and verifies every bundled scene is present (Capybara in a Forest, Capybara Lagoon Sunrise, Twilight Marsh Study, Lush Green Forest Walk).
-- **Painting updates progress:** Fills a cell to confirm the completion meter and progress chip react immediately.
-- **HUD coverage snapshot:** Captures a full-page screenshot plus a JSON summary with palette counts, cell totals, progress text/ARIA label, and the presence of the art-library control.
-- **Mobile command rail layout:** Boots the app at a handheld viewport to ensure the header hugs the top-right edge, the menu toggle reveals every command, and the palette swatches stay compact while still showing their color names.
+- **Painting updates completion:** Fills a cell to confirm autosave and completion tracking update immediately.
+- **HUD coverage snapshot:** Captures a full-page screenshot plus a JSON summary with palette counts, cell totals, and the header button ARIA labels alongside the presence of the art-library control.
+- **Mobile command rail layout:** Boots the app at a handheld viewport to ensure the header hugs the top-right edge, the two-icon cluster remains reachable, the menu toggle reveals every command, and the palette swatches stay compact while still showing their color names.
 - **Starter merge behavior:** Boots with stored data to ensure bundled scenes merge without duplication.
 - **Title preservation:** Checks that custom titles persist after a starter refresh.
 - **SVG quality checks:** Parses each bundled SVG (`capybara-forest`, `capybara-lagoon`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
