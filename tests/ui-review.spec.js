@@ -1,354 +1,200 @@
 const { test, expect } = require('@playwright/test');
-const fs = require('fs');
-const path = require('path');
 
 const APP_URL = 'http://127.0.0.1:8000/index.html';
-const REVIEW_DIR = path.join(__dirname, '..', 'artifacts', 'ui-review');
-const ARTWORK_REVIEW_DIR = path.join(REVIEW_DIR, 'artworks');
-const ACTIVE_ART_KEY = 'capybooper_active_art';
 
-test.describe('Capybooper visual review', () => {
-  test.beforeAll(async () => {
-    await fs.promises.mkdir(REVIEW_DIR, { recursive: true });
-    try {
-      await fs.promises.rm(ARTWORK_REVIEW_DIR, { recursive: true, force: true });
-    } catch (err) {}
-    await fs.promises.mkdir(ARTWORK_REVIEW_DIR, { recursive: true });
+async function createTestImageDataUrl(page) {
+  return page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#1d4ed8';
+    ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = '#22c55e';
+    ctx.fillRect(0, 16, 16, 16);
+    ctx.fillStyle = '#f97316';
+    ctx.fillRect(16, 0, 16, 16);
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(8, 8, 16, 16);
+    return canvas.toDataURL('image/png');
   });
+}
 
-  test('keeps the header anchored and palette compact on mobile viewports', async ({ page }) => {
-    test.setTimeout(120000);
-    await page.setViewportSize({ width: 414, height: 896 });
+async function loadGeneratorWithSample(page) {
+  const dataUrl = await createTestImageDataUrl(page);
+  await page.evaluate((url) => {
+    window.capyGenerator.loadFromDataUrl(url);
+  }, dataUrl);
+  await page.waitForSelector('[data-testid="palette-swatch"]', { timeout: 60_000 });
+  await expect
+    .poll(async () => {
+      const text = await page.locator('[data-testid="status-bar"]').textContent();
+      return (text || '').trim();
+    }, { timeout: 60_000 })
+    .toContain('Generated');
+}
+
+test.describe('Capy image generator', () => {
+  test('renders drag hint and options on load', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('header[role="banner"]', { timeout: 60_000 });
-    await page.waitForSelector('[data-testid="palette-dock"] button', { timeout: 60_000 });
+    await page.waitForSelector('[data-testid="start-hint"]');
 
     const layout = await page.evaluate(() => {
-      const header = document.querySelector('header[role="banner"]');
-      const paletteButtons = Array.from(
-        document.querySelectorAll('[data-testid="palette-dock"] button')
-      );
-      const navButtons = header
-        ? Array.from(header.querySelectorAll('nav button'))
-        : [];
-      if (!header || paletteButtons.length === 0 || navButtons.length === 0) {
-        return null;
-      }
-      const headerRect = header.getBoundingClientRect();
-      const buttonMetrics = paletteButtons.map((btn) => {
-        const rect = btn.getBoundingClientRect();
-        return {
-          text: btn.textContent || '',
-          width: rect.width,
-          height: rect.height,
-        };
-      });
+      const optionsPanel = document.querySelector('[data-testid="options-panel"]');
+      const status = document.querySelector('[data-testid="status-bar"]');
+      const progress = document.querySelector('[data-testid="progress-message"]');
+      const controls = Array.from(
+        optionsPanel?.querySelectorAll('label span:first-child') ?? []
+      ).map((el) => (el.textContent || '').trim());
       return {
-        headerLeft: headerRect.left,
-        headerTop: headerRect.top,
-        headerRightInset: window.innerWidth - headerRect.right,
-        buttonMetrics,
-        navLabels: navButtons.map((btn) => ({
-          text: (btn.textContent || '').trim(),
-          ariaLabel: btn.getAttribute('aria-label') || '',
-        })),
+        hasOptions: Boolean(optionsPanel),
+        status: (status?.textContent || '').trim(),
+        progress: (progress?.textContent || '').trim(),
+        controlLabels: controls,
       };
     });
 
-    expect(layout).not.toBeNull();
-    if (!layout) return;
+    expect(layout.hasOptions).toBe(true);
+    expect(layout.status).toContain('Drop an image');
+    expect(layout.progress).toContain('Drop an image');
+    expect(layout.controlLabels.length).toBeGreaterThanOrEqual(3);
+  });
 
-    expect(layout.headerTop).toBeGreaterThanOrEqual(4);
-    expect(layout.headerRightInset).toBeLessThanOrEqual(24);
-    expect(layout.headerLeft).toBeGreaterThanOrEqual(0);
+  test('generates a puzzle and enables palette + downloads', async ({ page }) => {
+    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await loadGeneratorWithSample(page);
 
-    expect(layout.navLabels).toHaveLength(2);
-    const navAria = layout.navLabels.map((entry) => entry.ariaLabel.toLowerCase());
-    expect(navAria).toContain('highlight a suggested cell');
-    expect(navAria.some((label) => label.includes('show controls'))).toBe(true);
+    const summary = await page.evaluate(() => {
+      const state = window.capyGenerator.getState();
+      return {
+        paletteCount: state.puzzle?.palette.length ?? 0,
+        regionCount: state.puzzle?.regions.length ?? 0,
+        status: document.querySelector('[data-testid="status-bar"]').textContent.trim(),
+        progress: document.querySelector('[data-testid="progress-message"]').textContent.trim(),
+        downloadEnabled: !document.getElementById('downloadJson').disabled,
+        resetEnabled: !document.getElementById('resetPuzzle').disabled,
+        applyDisabled: document.getElementById('applyOptions').disabled,
+      };
+    });
 
-    const normalizedTexts = layout.buttonMetrics.map((entry) =>
-      entry.text.replace(/\s+/g, ' ').trim().toLowerCase()
+    expect(summary.paletteCount).toBeGreaterThan(0);
+    expect(summary.regionCount).toBeGreaterThan(0);
+    expect(summary.status).toMatch(/Generated/);
+    expect(summary.progress).toMatch(/Filled 0/);
+    expect(summary.downloadEnabled).toBe(true);
+    expect(summary.resetEnabled).toBe(true);
+    expect(summary.applyDisabled).toBe(true);
+
+    await page.locator('#colorCount').evaluate((input) => {
+      input.value = '6';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect(page.locator('#applyOptions')).toBeEnabled();
+
+    await page.click('#applyOptions');
+    await expect(page.locator('#applyOptions')).toBeDisabled();
+    await expect
+      .poll(async () => {
+        const text = await page.locator('[data-testid="status-bar"]').textContent();
+        return (text || '').trim();
+      }, { timeout: 60_000 })
+      .toContain('Generated');
+
+    const optionsState = await page.evaluate(() => {
+      const state = window.capyGenerator.getState();
+      return {
+        targetColors: state.lastOptions?.targetColors ?? null,
+        paletteCount: state.puzzle?.palette.length ?? 0,
+      };
+    });
+
+    expect(optionsState.targetColors).toBe(6);
+    expect(optionsState.paletteCount).toBeGreaterThan(0);
+  });
+
+  test('fills a region and can reset progress', async ({ page }) => {
+    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await loadGeneratorWithSample(page);
+
+    const target = await page.evaluate(() => {
+      const state = window.capyGenerator.getState();
+      const puzzle = state.puzzle;
+      if (!puzzle) return null;
+      const region = puzzle.regions.find((entry) => entry.pixelCount > 0);
+      if (!region) return null;
+      return {
+        colorId: region.colorId,
+        cx: region.cx,
+        cy: region.cy,
+        width: puzzle.width,
+        height: puzzle.height,
+      };
+    });
+
+    expect(target).not.toBeNull();
+    if (!target) return;
+
+    const paletteIds = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-testid="palette-swatch"]')).map((el) =>
+        el.getAttribute('data-color-id')
+      )
     );
-    expect(normalizedTexts[0]).toMatch(/sky/);
-    normalizedTexts.forEach((text) => {
-      expect(text).not.toMatch(/\d+\s+left\b/);
-    });
-
-    layout.buttonMetrics.forEach((metric) => {
-      expect(metric.width).toBeLessThanOrEqual(90);
-      expect(metric.height).toBeLessThanOrEqual(90);
-    });
-
-    const menuToggle = page.locator('[data-testid="command-menu-toggle"]');
-    if ((await menuToggle.count()) > 0) {
-      await menuToggle.click();
-      await page.waitForSelector('[aria-label="Canvas command menu"]', {
-        timeout: 10_000,
-        state: 'visible',
-      });
-    }
-    await page.click('[data-testid="open-art-library"]');
-    const cardCount = await page.locator("[data-testid=\"art-library-card\"]").count();
-    expect(cardCount).toBeGreaterThan(0);
-  });
-
-  test('fills a region when clicked without throwing console errors', async ({ page }) => {
-    test.setTimeout(120000);
-    const consoleErrors = [];
-
-    page.on('pageerror', (error) => {
-      consoleErrors.push(`pageerror: ${error.message}`);
-    });
-
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        consoleErrors.push(`console error: ${msg.text()}`);
-      }
-    });
-
-    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('path[data-cell-id="c1"]', { timeout: 60_000 });
-    await page.waitForSelector('[data-testid="palette-dock"] button', { timeout: 60_000 });
-
-    await page.click('path[data-cell-id="c1"]');
-    await page.waitForTimeout(100);
-
-    const fillState = await page.evaluate(() => {
-      const interactive = document.querySelector('path[data-cell-id="c1"]');
-      const preview = interactive?.previousElementSibling;
-      return {
-        interactiveFill: interactive?.getAttribute('fill') ?? null,
-        interactiveOpacity: interactive
-          ? window.getComputedStyle(interactive).opacity
-          : null,
-        previewFill: preview?.getAttribute('fill') ?? null,
-        previewOpacity: preview?.getAttribute('opacity') ?? null,
-      };
-    });
-
-    expect(fillState.previewFill?.toLowerCase()).toBe('#86c5ff');
-    expect(fillState.previewOpacity).toBe('1');
-    expect(fillState.interactiveFill).toBe('transparent');
-    expect(parseFloat(fillState.interactiveOpacity ?? '1')).toBeLessThan(1);
-    expect(consoleErrors).toHaveLength(0);
-  });
-
-  test('renders the home page, captures a screenshot, and logs key details', async ({ page }, testInfo) => {
-    test.setTimeout(120000);
-    const consoleErrors = [];
-
-    page.on('pageerror', (error) => {
-      consoleErrors.push(`pageerror: ${error.message}`);
-    });
-
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        consoleErrors.push(`console error: ${msg.text()}`);
-      }
-    });
-
-    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('[data-testid="palette-dock"] button', {
-      timeout: 60_000,
-      state: 'attached',
-    });
-    await page.waitForSelector('path[data-cell-id]', {
-      timeout: 60_000,
-      state: 'attached',
-    });
-
-    const details = await page.evaluate(() => {
-      const paletteButtons = document.querySelectorAll('[data-testid="palette-dock"] button');
-      const cellPaths = document.querySelectorAll('path[data-cell-id]');
-      const navButtons = document.querySelectorAll('header[role="banner"] nav button');
-
-      return {
-        title: document.title,
-        paletteCount: paletteButtons.length,
-        cellCount: cellPaths.length,
-        navAriaLabels: Array.from(navButtons).map(
-          (btn) => btn.getAttribute('aria-label')?.trim() ?? ''
-        ),
-      };
-    });
-
-    const menuToggle = page.locator('[data-testid="command-menu-toggle"]');
-    await menuToggle.click();
-    await page.waitForSelector('[aria-label="Canvas command menu"]', {
-      timeout: 10_000,
-      state: 'visible',
-    });
-    const menuLibraryButtons = await page
-      .locator('[aria-label="Canvas command menu"] [data-testid="open-art-library"]')
-      .count();
-    expect(menuLibraryButtons).toBeGreaterThan(0);
-    await menuToggle.click();
-
-    const safeName =
-      testInfo.title
-        .replace(/[^a-z0-9]+/gi, '-')
-        .replace(/^-+|-+$/g, '')
-        .toLowerCase() || 'ui-review';
-
-    const screenshotPath = path.join(REVIEW_DIR, `${safeName}.png`);
-    const summaryPath = path.join(REVIEW_DIR, `${safeName}.json`);
-
-    const buffer = await page.screenshot({ path: screenshotPath, fullPage: true });
-    await testInfo.attach('ui-review screenshot', {
-      path: screenshotPath,
-      contentType: 'image/png',
-    });
-
-    const summary = {
-      ...details,
-      timestamp: new Date().toISOString(),
-      consoleErrors,
-      screenshot: path.relative(path.join(__dirname, '..'), screenshotPath),
-    };
-
-    await fs.promises.writeFile(summaryPath, JSON.stringify(summary, null, 2), 'utf8');
-
-    expect(buffer.length).toBeGreaterThan(10_000);
-    expect(consoleErrors).toHaveLength(0);
-    expect(details.title).toContain('Color-by-Number');
-    expect(details.paletteCount).toBeGreaterThan(0);
-    expect(details.cellCount).toBeGreaterThan(0);
-    expect(details.navAriaLabels).toContain('Highlight a suggested cell');
-    expect(details.navAriaLabels.some((label) => /show controls/i.test(label))).toBe(true);
-  });
-
-  test('loads each starter artwork, captures screenshots, and records metadata', async ({ page }, testInfo) => {
-    test.setTimeout(180000);
-
-    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('[data-testid="palette-dock"] button', {
-      timeout: 60_000,
-      state: 'attached',
-    });
-
-    const menuToggle = page.locator('[data-testid="command-menu-toggle"]');
-
-    async function openLibraryDialog() {
-      if ((await page.locator('[data-testid="open-art-library"]:visible').count()) === 0) {
-        await menuToggle.click();
-        await page.waitForSelector('[aria-label="Canvas command menu"]', {
-          timeout: 10_000,
-          state: 'visible',
-        });
-      }
-      const trigger = page.locator('[data-testid="open-art-library"]:visible').first();
-      await expect(trigger).toBeVisible({ timeout: 10_000 });
-      await trigger.click();
-      await page.waitForSelector('[data-testid="art-library-dialog"]', {
-        timeout: 60_000,
-        state: 'visible',
-      });
-    }
-
-    await openLibraryDialog();
-
-    const availableArtworks = await page.evaluate(() => {
-      const cards = Array.from(document.querySelectorAll('[data-testid="art-library-card"]'));
-      return cards
-        .map((card) => {
-          const id = card.getAttribute('data-artwork-id') || '';
-          const rawLabel = card.getAttribute('aria-label') || card.textContent || '';
-          const normalized = rawLabel
-            .replace(/\(active\)/gi, '')
-            .replace(/^\s*load\s+/i, '')
-            .trim();
-          return { id, title: normalized || id || 'Artwork' };
-        })
-        .filter((entry) => entry.id);
-    });
-
-    expect(availableArtworks.length).toBeGreaterThan(0);
-
-    const manifest = [];
-
-    for (let index = 0; index < availableArtworks.length; index += 1) {
-      const { id, title } = availableArtworks[index];
-
-      if (index > 0) {
-        await openLibraryDialog();
-      }
-
-      const cardLocator = page
-        .locator(`[data-testid="art-library-card"][data-artwork-id="${id}"]`)
-        .first();
-      await expect(cardLocator).toBeVisible({ timeout: 60_000 });
-      await cardLocator.click();
-      await page.waitForSelector('[data-testid="art-library-dialog"]', {
-        timeout: 60_000,
-        state: 'detached',
-      });
-
-      await page.waitForSelector('[data-testid="palette-dock"] button', {
-        timeout: 60_000,
-        state: 'attached',
-      });
-      await page.waitForSelector('path[data-cell-id]', {
-        timeout: 60_000,
-        state: 'attached',
-      });
-
-      await page.waitForFunction(
-        ({ key, expected }) => window.localStorage.getItem(key) === expected,
-        { key: ACTIVE_ART_KEY, expected: id }
-      );
-
-      const details = await page.evaluate((key) => {
-        const paletteButtons = document.querySelectorAll('[data-testid="palette-dock"] button');
-        const cellPaths = document.querySelectorAll('path[data-cell-id]');
-        const header = document.querySelector('header[role="banner"]');
-        return {
-          activeId: window.localStorage.getItem(key),
-          paletteCount: paletteButtons.length,
-          cellCount: cellPaths.length,
-          headerText: header ? header.textContent.replace(/\s+/g, ' ').trim() : '',
-        };
-      }, ACTIVE_ART_KEY);
-
-      expect(details.activeId).toBe(id);
-      expect(details.paletteCount).toBeGreaterThan(0);
-      expect(details.cellCount).toBeGreaterThan(0);
-
-      const safeSlug = (id || `artwork-${index + 1}`)
-        .replace(/[^a-z0-9-]+/gi, '-')
-        .replace(/^-+|-+$/g, '')
-        .toLowerCase() || `artwork-${index + 1}`;
-
-      const screenshotPath = path.join(ARTWORK_REVIEW_DIR, `${safeSlug}.png`);
-      const summaryPath = path.join(ARTWORK_REVIEW_DIR, `${safeSlug}.json`);
-
-      const buffer = await page.screenshot({ path: screenshotPath, fullPage: true });
-      expect(buffer.length).toBeGreaterThan(10_000);
-
-      const summary = {
-        id,
-        title,
-        paletteCount: details.paletteCount,
-        cellCount: details.cellCount,
-        headerText: details.headerText,
-        screenshot: path.relative(path.join(__dirname, '..'), screenshotPath),
-        timestamp: new Date().toISOString(),
-      };
-
-      await fs.promises.writeFile(summaryPath, JSON.stringify(summary, null, 2), 'utf8');
-      manifest.push(summary);
-    }
-
-    const manifestPath = path.join(ARTWORK_REVIEW_DIR, 'manifest.json');
-    await fs.promises.writeFile(
-      manifestPath,
-      JSON.stringify({ artworks: manifest }, null, 2),
-      'utf8'
+    await page.click(`[data-color-id="${target.colorId}"]`);
+    const activeColor = await page.evaluate(
+      () => window.capyGenerator.getState().activeColor
     );
+    const canvasBox = await page.locator('[data-testid="puzzle-canvas"]').boundingBox();
+    expect(canvasBox).not.toBeNull();
+    if (!canvasBox) return;
 
-    await testInfo.attach('starter-artwork-manifest', {
-      path: manifestPath,
-      contentType: 'application/json',
-    });
+    const offsetX = (target.cx / target.width) * canvasBox.width;
+    const offsetY = (target.cy / target.height) * canvasBox.height;
+    const clickX = canvasBox.x + offsetX;
+    const clickY = canvasBox.y + offsetY;
+    const regionAtPoint = await page.evaluate(({ x, y }) => {
+      const canvas = document.querySelector('[data-testid="puzzle-canvas"]');
+      if (!canvas) return null;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const px = Math.floor((x - rect.left) * scaleX);
+      const py = Math.floor((y - rect.top) * scaleY);
+      const state = window.capyGenerator.getState();
+      if (!state.puzzle) return null;
+      const idx = py * state.puzzle.width + px;
+      return {
+        px,
+        py,
+        regionId: state.puzzle.regionMap[idx],
+      };
+    }, { x: clickX, y: clickY });
+    expect(regionAtPoint?.regionId ?? -1).toBeGreaterThanOrEqual(0);
+    await page.evaluate(({ x, y }) => {
+      const canvas = document.querySelector('[data-testid="puzzle-canvas"]');
+      if (!canvas) return;
+      const event = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+      });
+      canvas.dispatchEvent(event);
+    }, { x: clickX, y: clickY });
+
+    await expect
+      .poll(async () => {
+        return page.evaluate(() => window.capyGenerator.getState().filled.size);
+      }, { timeout: 10_000 })
+      .toBe(1);
+    await expect(page.locator('[data-testid="progress-message"]')).toHaveText(/Filled 1 of/);
+
+    await page.click('#resetPuzzle');
+    await expect
+      .poll(async () => {
+        return page.evaluate(() => window.capyGenerator.getState().filled.size);
+      }, { timeout: 10_000 })
+      .toBe(0);
+    await expect(page.locator('[data-testid="progress-message"]')).toHaveText(/Filled 0 of/);
   });
 });
+
