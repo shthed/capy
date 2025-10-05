@@ -230,10 +230,10 @@
         flex: 1;
         display: grid;
         grid-auto-flow: column;
-        grid-auto-columns: minmax(120px, 1fr);
-        gap: 12px;
+        grid-auto-columns: minmax(72px, max-content);
+        gap: 10px;
         overflow-x: auto;
-        padding-bottom: 6px;
+        padding: 4px 0 6px;
         scrollbar-width: thin;
       }
 
@@ -328,14 +328,16 @@
 
       .swatch {
         display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 12px;
-        padding: 10px 12px;
-        border-radius: 14px;
+        gap: 6px;
+        padding: 8px 10px;
+        min-width: 72px;
+        border-radius: 12px;
         border: 1px solid rgba(148, 163, 184, 0.25);
         background: rgba(15, 23, 42, 0.85);
         color: inherit;
-        text-align: left;
+        text-align: center;
         cursor: pointer;
         transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
       }
@@ -354,26 +356,32 @@
       }
 
       .swatch .sample {
-        width: 40px;
-        height: 40px;
-        border-radius: 10px;
+        width: 32px;
+        height: 32px;
+        border-radius: 999px;
         border: 1px solid rgba(15, 23, 42, 0.35);
         flex-shrink: 0;
       }
 
-      .swatch .info {
+      .swatch .label {
         display: flex;
         flex-direction: column;
-        font-size: 0.82rem;
+        align-items: center;
         gap: 2px;
+        font-size: 0.72rem;
+        line-height: 1.2;
+        max-width: 100%;
       }
 
-      .swatch strong {
-        font-size: 0.95rem;
+      .swatch .label > strong {
+        font-size: 1rem;
       }
 
-      .swatch[data-color-id] {
-        min-width: 140px;
+      .swatch .label > span {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .sheet {
@@ -1158,11 +1166,15 @@
           region.cy = sumY / region.pixelCount;
           region.colorId += 1;
         }
-        const palette = centroids.map((c, idx) => ({
-          id: idx + 1,
-          hex: `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`,
-          rgba: c,
-        }));
+        const palette = centroids.map((c, idx) => {
+          const hex = `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`;
+          return {
+            id: idx + 1,
+            hex,
+            rgba: c,
+            name: hex.toUpperCase(),
+          };
+        });
         return {
           width,
           height,
@@ -1189,10 +1201,21 @@
         const palette = data.palette.map((entry, index) => {
           const hex = entry.hex ?? "#ffffff";
           const rgba = Array.isArray(entry.rgba) ? entry.rgba.slice(0, 3) : hexToRgb(hex);
+          const providedName =
+            typeof entry.name === "string" && entry.name.trim()
+              ? entry.name.trim()
+              : typeof entry.label === "string" && entry.label.trim()
+              ? entry.label.trim()
+              : typeof entry.title === "string" && entry.title.trim()
+              ? entry.title.trim()
+              : null;
+          const id = entry.id ?? index + 1;
+          const fallbackName = typeof hex === "string" ? hex.toUpperCase() : `Colour ${id}`;
           return {
-            id: entry.id ?? index + 1,
+            id,
             hex,
             rgba,
+            name: providedName || fallbackName,
           };
         });
         const regions = data.regions.map((region, index) => {
@@ -1334,29 +1357,40 @@
       function renderPalette() {
         paletteEl.innerHTML = "";
         if (!state.puzzle) return;
-        const colorCounts = new Map();
+        const totalByColor = new Map();
+        const remainingByColor = new Map();
         for (const region of state.puzzle.regions) {
-          const count = colorCounts.get(region.colorId) || 0;
-          colorCounts.set(region.colorId, count + 1);
+          const total = totalByColor.get(region.colorId) || 0;
+          totalByColor.set(region.colorId, total + 1);
+          if (!state.filled.has(region.id)) {
+            const remaining = remainingByColor.get(region.colorId) || 0;
+            remainingByColor.set(region.colorId, remaining + 1);
+          }
         }
         for (const color of state.puzzle.palette) {
-          const remaining = state.puzzle.regions.filter(
-            (region) => region.colorId === color.id && !state.filled.has(region.id)
-          ).length;
+          const remaining = remainingByColor.get(color.id) || 0;
+          const total = totalByColor.get(color.id) || 0;
+          const labelText =
+            (typeof color.name === "string" && color.name.trim()) ||
+            (typeof color.hex === "string" ? color.hex.toUpperCase() : `Colour ${color.id}`);
           const swatch = document.createElement("button");
           swatch.type = "button";
           swatch.className = "swatch";
           swatch.dataset.testid = "palette-swatch";
           swatch.dataset.colorId = String(color.id);
           swatch.setAttribute("role", "listitem");
+          swatch.setAttribute(
+            "aria-label",
+            `Colour ${color.id}: ${labelText}. ${remaining} of ${total} regions remaining.`
+          );
+          swatch.title = `${labelText} · ${remaining} of ${total} remaining`;
           if (state.activeColor === color.id) swatch.classList.add("active");
           if (remaining === 0) swatch.classList.add("done");
           swatch.innerHTML = `
             <span class="sample" style="background:${color.hex}"></span>
-            <span class="info">
-              <strong>Colour ${color.id}</strong>
-              <span>${color.hex.toUpperCase()} · ${colorCounts.get(color.id) || 0} cells</span>
-              <span>${remaining} remaining</span>
+            <span class="label">
+              <strong>${color.id}</strong>
+              <span>${labelText}</span>
             </span>
           `;
           swatch.addEventListener("click", () => {
@@ -1442,7 +1476,12 @@
           title: "capy-puzzle",
           width: state.puzzle.width,
           height: state.puzzle.height,
-          palette: state.puzzle.palette.map((p) => ({ id: p.id, hex: p.hex, rgba: p.rgba })),
+          palette: state.puzzle.palette.map((p) => ({
+            id: p.id,
+            hex: p.hex,
+            rgba: p.rgba,
+            name: p.name,
+          })),
           regions: state.puzzle.regions.map((region) => ({
             id: region.id,
             colorId: region.colorId,

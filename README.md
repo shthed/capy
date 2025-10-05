@@ -7,6 +7,24 @@ regions, and paint a canvas you can immediately play. A fullscreen preview, hint
 tools, a save manager, and a configurable generator all live inside a single
 `index.html` document—no build tools or extra runtime required.
 
+## Features
+
+- **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
+  previously exported JSON puzzles straight into the generator pipeline.
+- **Configurable puzzle generator.** Tune palette size, minimum region area,
+  resize detail, sampling, iteration count, and smoothing passes before
+  rebuilding the scene.
+- **Responsive painting canvas.** Click or tap numbered regions to fill them in
+  while optional auto-advance hops to the next unfinished colour.
+- **Contextual hinting.** Trigger highlight pulses for the current colour or let
+  the app surface the smallest unfinished region when you need a nudge.
+- **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
+  artwork at its final resolution without leaving the play surface.
+- **Palette manager.** Swipe through compact swatches that keep colour numbers
+  bold with human-readable names and tooltips for remaining cell counts.
+- **Progress persistence.** Snapshot runs into localStorage, reopen saves,
+  rename them, or export/import the underlying puzzle data as JSON.
+
 ## How it works
 
 1. **Load an image.** Drag a bitmap into the viewport or activate the “Choose an
@@ -48,8 +66,9 @@ tools, a save manager, and a configurable generator all live inside a single
   shows completion progress with quick actions to load, rename, export, or
   delete the save.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
-  Each swatch lists the colour number, hex value, total cell count, and
-  remaining regions while exposing `data-color-id` for automation hooks.
+  Each compact swatch keeps the colour number bold with the colour name tucked
+  underneath while tooltips and `data-color-id` attributes expose counts for
+  automation hooks.
 
 ## Keyboard and accessibility notes
 
