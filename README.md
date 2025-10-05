@@ -38,7 +38,10 @@ Interaction handlers support mouse and touch gestures including smooth,
 cursor-anchored wheel zoom, pinch zoom, left- or right-button drag panning,
 tap-to-fill (with optional drag-fill), auto-advance to the next color, hint
 pulses for tiny cells, a configurable Peek preview, and an eyedropper that
-reselects already-filled colors. Keyboard shortcuts mirror the core actions.
+reselects already-filled colors. If you tap a region with the wrong color
+selected, the palette briefly flashes the matching swatch so you can hop to
+the correct hue without opening a menu. Keyboard shortcuts mirror the core
+actions.
 Progress, remaining-cell counts, and autosave state update immediately after
 each change, while a lightweight smoke test overlay validates key invariants
 when a check fails.
@@ -86,10 +89,11 @@ Our automated Playwright run (`npm test --silent`) validates the experience end 
 - **Art library listing:** Opens the library dialog and verifies every bundled scene is present (Capybara in a Forest, Capybara Lagoon Sunrise, Twilight Marsh Study, Lush Green Forest Walk).
 - **Painting updates completion:** Fills a cell to confirm autosave and completion tracking update immediately.
 - **HUD coverage snapshot:** Captures a full-page screenshot plus a JSON summary with palette counts, cell totals, and the header button ARIA labels alongside the presence of the art-library control.
+- **Starter artwork screenshots:** Walks the art library, loads each bundled SVG, and saves per-scene captures with metadata under `artifacts/ui-review/artworks/` so regressions show up asset by asset.
 - **Tap-to-fill regression:** Clicks the first region and inspects the DOM to ensure the fill renders, opacity drops, and no console errors fire during the interaction.
 - **Mobile command rail layout:** Boots the app at a handheld viewport to ensure the header hugs the top-right edge, the two-icon cluster remains reachable, the menu toggle reveals every command, and the palette swatches stay compact while still showing their color names.
 - **Starter merge behavior:** Boots with stored data to ensure bundled scenes merge without duplication.
 - **Title preservation:** Checks that custom titles persist after a starter refresh.
-- **SVG quality checks:** Parses each bundled SVG (`capybara-forest`, `capybara-lagoon`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
+- **SVG quality checks:** Parses each bundled SVG (`capybara-forest`, `capybara-lagoon`, `capybara-terraced-market`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
 
 See [docs/test-run-2025-10-04.md](docs/test-run-2025-10-04.md) for the latest run log, timings, and raw output.
