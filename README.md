@@ -1,99 +1,89 @@
-# Capy
+# Capy Image Generator
 
-Single-page color-by-number playground powered by a lightweight React 18 setup
-served directly from static files.
+Capy turns any bitmap image into a color-by-number puzzle entirely in the
+browser. Drop a file (or load one via the hidden file picker) and the app will
+resize it, run k-means clustering to build a discrete palette, merge tiny
+regions, and paint a canvas you can immediately play. A fullscreen preview, hint
+tools, a save manager, and a configurable generator all live inside a single
+`index.html` document—no build tools or extra runtime required.
 
-## App overview
+## How it works
 
-The demo boots entirely from `index.html`, pulling React, ReactDOM, and Babel
-from the vendored runtime bundles so JSX can execute without a build step. It
-now includes four sample scenes—"Capybara in a Forest," "Capybara Lagoon
-Sunrise," "Twilight Marsh Study," and "Lush Green Forest Walk"—and keeps track of every cell you fill as
-you paint by matching colors to numbers. The library reads the segmented SVG
-files directly so you can jump in and paint while progress is tracked
-automatically. When opened via `file://`, the browser blocks direct `fetch`/XHR
-access to sibling files, so the generated `art/starter-fallbacks.js` bundle
-seeds the loader with the same SVG markup. On startup the loader now merges
-those bundled scenes with anything in localStorage so refreshed starter updates
-coexist with imported artwork.
+1. **Load an image.** Drag a bitmap into the viewport or activate the “Choose an
+   image” button. The hint overlay disappears once a source is selected.
+2. **Tune generation.** Open **Settings** to tweak palette size, minimum region
+   area, resize detail, sample rate (for faster clustering), iteration count,
+   and smoothing passes. Apply changes instantly when working from an image
+   source.
+3. **Explore the puzzle.** The game canvas shows outlines and number badges,
+   while the **Preview** button floods the entire viewport with a fullscreen
+   comparison of the clustered artwork.
+4. **Fill regions.** Pick a colour from the bottom dock, click any numbered cell,
+   and the region fills in. Auto-advance can hop to the next incomplete colour
+   once you finish the current hue.
+5. **Save or export.** The save manager captures snapshots (including progress,
+   generator options, and source metadata) in localStorage. Export the active
+   puzzle as JSON at any time.
 
-### Feature highlights
+## UI guide
 
-- **Artwork library and importer:** Browse bundled scenes with hover previews,
-  rename entries in place, or import new JSON/SVG payloads directly in the
-  dialog. Library metadata (including autosave state) persists in
-  `localStorage` so custom scenes stay available between sessions.
-- **Palette customization:** Edit color names, override swatch hex values, or
-  toggle Peek behavior from the Options panel. The palette dock now prints each
-  color name directly inside its swatch, dims colors as you finish a hue, and
-  can optionally show a minimal remaining-count badge inside the swatch.
-- **Peek preview modes:** Hold the Peek button or long-press the ✨ hint icon
-  for a transient look at the completed illustration, or toggle Peek to stay
-  active. Keyboard shortcuts mirror the on-screen controls for quick access.
-- **Improved navigation:** Cursor-anchored scroll zoom, dual-button panning,
-  and high-precision number badges make it easier to explore dense artwork
-  without losing context.
+- **Command rail** – A slim header exposing Hint, Reset, Preview, Import, Save
+  manager, and Settings buttons. Hint flashes tiny regions, Reset clears
+  progress, Preview reveals the fullscreen clustered artwork, Import accepts
+  images or JSON puzzles, Save manager opens the local snapshot vault, and
+  Settings reveals generator/gameplay options.
+- **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`).
+  The canvas renders outlines, remaining numbers, and filled regions, and
+  respects the auto-advance / hint animation toggles stored in settings.
+- **Fullscreen preview overlay** – Triggered by the Preview button. The preview
+  canvas stretches to fit the viewport so contributors can inspect the clustered
+  output in detail before painting.
+- **Status bar** – A floating card in the lower-left corner that narrates each
+  step (“Quantizing colours…”, “Smoothing regions…”, “Puzzle complete!”).
+- **Settings sheet** – A modal sheet that hides the generation sliders by
+  default. Controls include colours, minimum region size, resize detail, sample
+  rate, k-means iterations, and smoothing passes, plus toggles for auto-advance
+  and hint animations. The sheet also houses the JSON export action.
+- **Save manager** – A companion sheet listing every stored snapshot. Each entry
+  shows completion progress with quick actions to load, rename, export, or
+  delete the save.
+- **Palette dock** – A horizontal scroller anchored to the bottom of the page.
+  Each swatch lists the colour number, hex value, total cell count, and
+  remaining regions while exposing `data-color-id` for automation hooks.
 
-Interaction handlers support mouse and touch gestures including smooth,
-cursor-anchored wheel zoom, pinch zoom, left- or right-button drag panning,
-tap-to-fill (with optional drag-fill), auto-advance to the next color, hint
-pulses for tiny cells, a configurable Peek preview, and an eyedropper that
-reselects already-filled colors. If you tap a region with the wrong color
-selected, the palette briefly flashes the matching swatch so you can hop to
-the correct hue without opening a menu. Keyboard shortcuts mirror the core
-actions.
-Progress, remaining-cell counts, and autosave state update immediately after
-each change, while a lightweight smoke test overlay validates key invariants
-when a check fails.
+## Keyboard and accessibility notes
 
-### UI elements
+- The hint overlay is focusable and reacts to Enter/Space to trigger the file
+  picker, keeping the first interaction accessible.
+- Status and progress messages use `aria-live="polite"` announcements so assistive
+  tech hears every generator update.
+- Command rail buttons advertise clear labels (“Hint”, “Preview”, etc.) and stay
+  reachable via keyboard focus.
+- Palette buttons toggle the active colour and expose `data-color-id` so tests
+  and tooling can reason about selections. Auto-advance can be disabled from the
+  Settings sheet for full manual control.
+- Both the settings and save sheets trap focus while open and close via their
+  dedicated Close buttons or the shared backdrop.
 
-- **Top command rail:** Ultra-slim glass bar pinned near the top-right corner.
-  A ✨ hint icon (tap to pulse, long-press to peek at the finished art) sits
-  beside a ☰ menu toggle that reveals the library, help, options, and peek
-  controls on demand so the artwork stays unobstructed on every screen size.
-- **Canvas frame:** Fullscreen SVG stage wrapped with pan/zoom transforms,
-  per-cell strokes, number badges that stay centered inside each region, and
-  optional heatmap dots when zoomed out.
-- **Palette dock:** Floating glass strip centred beneath the canvas with a
-  single-row, horizontally scrollable set of smaller swatches. Each swatch now
-  shows both the number and color name inside the button, can surface a tiny
-  remaining-count badge, highlights the active selection, dims once its cells
-  are complete, and responds instantly to touch taps as well as clicks.
-- **Smoke Tests HUD:** Hidden by default when all checks pass. If a test fails,
-  a floating card appears with diagnostics and a reminder that the “T”
-  shortcut toggles visibility.
-- **Options panel:** Floating dialog that explains the app, lists controls,
-  and exposes toggles for autosave, auto-advance, hint pulses, eyedropper,
-  keyboard shortcuts, numbered overlays, heatmap dots, the smoke-test HUD,
-  palette labels/badges, and peek behavior. Choices persist in `localStorage` and can be restored to
-  the defaults with a single reset.
+## Testing
 
-## Getting started
+The Playwright suite exercises the core flows:
 
-Open `index.html` directly in a browser (no build step required) or serve the
-repository root with any static file server:
+- **renders command rail and generator settings on load** – Confirms the hint
+  overlay, status copy, command rail buttons, and generator controls render on
+  first boot.
+- **lets players fill a puzzle to completion** – Loads a tiny fixture via
+  `window.capyGenerator.loadPuzzleFixture`, walks through selecting palette
+  swatches, fills each region, observes the completion copy, and resets the
+  board.
+
+Run them locally with:
 
 ```bash
-python -m http.server 8000
+npm install
+npm test --silent
 ```
 
-Then visit <http://localhost:8000> to use the app.
+The suite writes artifacts (screenshots + JSON summaries) into
+`artifacts/ui-review/` if you need to inspect the DOM snapshots.
 
-## Test suite explainers
-
-Our automated Playwright run (`npm test --silent`) validates the experience end to end:
-
-- **Application shell renders:** Confirms the React runtime boots, starter artwork mounts, and HUD chrome appears.
-- **Artwork and palette presence:** Ensures the starter SVG and swatch dock render with the expected DOM structure.
-- **Art library listing:** Opens the library dialog and verifies every bundled scene is present (Capybara in a Forest, Capybara Lagoon Sunrise, Twilight Marsh Study, Lush Green Forest Walk).
-- **Painting updates completion:** Fills a cell to confirm autosave and completion tracking update immediately.
-- **HUD coverage snapshot:** Captures a full-page screenshot plus a JSON summary with palette counts, cell totals, and the header button ARIA labels alongside the presence of the art-library control.
-- **Starter artwork screenshots:** Walks the art library, loads each bundled SVG, and saves per-scene captures with metadata under `artifacts/ui-review/artworks/` so regressions show up asset by asset.
-- **Tap-to-fill regression:** Clicks the first region and inspects the DOM to ensure the fill renders, opacity drops, and no console errors fire during the interaction.
-- **Mobile command rail layout:** Boots the app at a handheld viewport to ensure the header hugs the top-right edge, the two-icon cluster remains reachable, the menu toggle reveals every command, and the palette swatches stay compact while still showing their color names.
-- **Starter merge behavior:** Boots with stored data to ensure bundled scenes merge without duplication.
-- **Title preservation:** Checks that custom titles persist after a starter refresh.
-- **SVG quality checks:** Parses each bundled SVG (`capybara-forest`, `capybara-lagoon`, `capybara-terraced-market`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
-
-See [docs/test-run-2025-10-04.md](docs/test-run-2025-10-04.md) for the latest run log, timings, and raw output.

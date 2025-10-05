@@ -26,6 +26,10 @@
         overflow: hidden;
       }
 
+      body.sheet-open {
+        overflow: hidden;
+      }
+
       body.dragging {
         cursor: copy;
       }
@@ -35,6 +39,31 @@
         width: 100vw;
         height: 100vh;
         overflow: hidden;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+      }
+
+      #commandRail {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        padding: 16px 24px;
+        z-index: 3;
+      }
+
+      #commandRail button {
+        border-radius: 14px;
+        padding: 10px 18px;
+        background: rgba(15, 23, 42, 0.8);
+        color: rgba(226, 232, 240, 0.92);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+      }
+
+      #commandRail button:disabled {
+        background: rgba(15, 23, 42, 0.55);
+        color: rgba(148, 163, 184, 0.6);
+        border-color: rgba(71, 85, 105, 0.35);
       }
 
       #viewport {
@@ -63,7 +92,7 @@
 
       #puzzleCanvas {
         max-width: calc(100vw - 160px);
-        max-height: calc(100vh - 160px);
+        max-height: calc(100vh - 220px);
         width: auto;
         height: auto;
         border-radius: 20px;
@@ -71,6 +100,35 @@
         border: 1px solid rgba(148, 163, 184, 0.45);
         box-shadow: 0 30px 60px rgba(15, 23, 42, 0.45);
         image-rendering: pixelated;
+      }
+
+      #previewOverlay {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: rgba(2, 6, 23, 0.9);
+        backdrop-filter: blur(16px);
+        z-index: 4;
+        transition: opacity 0.24s ease;
+      }
+
+      #previewOverlay.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #previewOverlay canvas {
+        width: min(100%, calc(100vh - 140px));
+        height: auto;
+        border-radius: 20px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        box-shadow: 0 32px 70px rgba(2, 6, 23, 0.65);
+        image-rendering: pixelated;
+      }
+
+      #previewOverlay button {
+        margin-top: 24px;
       }
 
       #startHint {
@@ -147,38 +205,45 @@
         font-size: 0.95rem;
         color: rgba(226, 232, 240, 0.86);
         backdrop-filter: blur(14px);
-        z-index: 1;
+        z-index: 2;
       }
 
-      #optionsPanel {
-        position: fixed;
-        top: 28px;
-        right: 28px;
-        width: 280px;
-        max-height: calc(100vh - 56px);
-        padding: 20px;
+      #paletteDock {
+        position: relative;
         display: flex;
-        flex-direction: column;
-        gap: 18px;
-        border-radius: 20px;
-        background: rgba(2, 6, 23, 0.88);
-        border: 1px solid rgba(59, 130, 246, 0.4);
-        box-shadow: 0 24px 50px rgba(8, 47, 73, 0.45);
-        overflow-y: auto;
-        backdrop-filter: blur(20px);
-        z-index: 3;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 28px 24px;
+        background: linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.85) 40%, rgba(2, 6, 23, 0.95) 100%);
+        border-top: 1px solid rgba(30, 41, 59, 0.7);
+        box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
       }
 
-      #optionsPanel h2 {
-        margin: 0 0 12px;
-        font-size: 1.05rem;
-        letter-spacing: 0.02em;
+      #progress {
+        min-width: 220px;
+        font-size: 0.9rem;
+        color: rgba(226, 232, 240, 0.82);
       }
 
-      .panel-section {
-        display: flex;
-        flex-direction: column;
+      #palette {
+        flex: 1;
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(120px, 1fr);
         gap: 12px;
+        overflow-x: auto;
+        padding-bottom: 6px;
+        scrollbar-width: thin;
+      }
+
+      #palette::-webkit-scrollbar {
+        height: 6px;
+      }
+
+      #palette::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.4);
+        border-radius: 999px;
       }
 
       .control {
@@ -261,18 +326,12 @@
         image-rendering: pixelated;
       }
 
-      #palette {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
       .swatch {
         display: flex;
         align-items: center;
         gap: 12px;
         padding: 10px 12px;
-        border-radius: 12px;
+        border-radius: 14px;
         border: 1px solid rgba(148, 163, 184, 0.25);
         background: rgba(15, 23, 42, 0.85);
         color: inherit;
@@ -313,37 +372,164 @@
         font-size: 0.95rem;
       }
 
-      #progress {
-        font-size: 0.9rem;
-        color: rgba(226, 232, 240, 0.82);
+      .swatch[data-color-id] {
+        min-width: 140px;
       }
 
-      @media (max-width: 900px) {
-        #optionsPanel {
-          width: min(100vw - 32px, 320px);
-        }
+      .sheet {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: min(420px, calc(100vw - 48px));
+        max-height: calc(100vh - 96px);
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        border-radius: 22px;
+        background: rgba(2, 6, 23, 0.95);
+        border: 1px solid rgba(59, 130, 246, 0.4);
+        box-shadow: 0 32px 80px rgba(8, 47, 73, 0.55);
+        backdrop-filter: blur(26px);
+        z-index: 6;
+        opacity: 1;
+        transition: opacity 0.2s ease;
+      }
 
-        #statusBar {
-          left: 20px;
-          right: 20px;
-          bottom: 20px;
-        }
+      .sheet.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
 
+      .sheet-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .sheet-header h2 {
+        margin: 0;
+        font-size: 1.25rem;
+      }
+
+      .close-button {
+        padding: 6px 14px;
+        border-radius: 12px;
+        background: rgba(148, 163, 184, 0.15);
+        color: rgba(226, 232, 240, 0.8);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+      }
+
+      .sheet-body {
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+
+      .sheet-section {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .sheet-section h3 {
+        margin: 0;
+        font-size: 1.05rem;
+        letter-spacing: 0.02em;
+      }
+
+      .sheet-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+      }
+
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 0.95rem;
+      }
+
+      .toggle input {
+        width: 18px;
+        height: 18px;
+      }
+
+      .backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(2, 6, 23, 0.65);
+        backdrop-filter: blur(10px);
+        z-index: 5;
+        opacity: 1;
+        transition: opacity 0.2s ease;
+      }
+
+      .backdrop.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #saveList {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .save-entry {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.75);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+      }
+
+      .save-entry header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .save-entry time {
+        font-size: 0.8rem;
+        color: rgba(148, 163, 184, 0.8);
+      }
+
+      .save-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .save-actions button {
+        flex: 1;
+        border-radius: 10px;
+        padding: 8px 12px;
+      }
+
+      @media (max-width: 1024px) {
         #puzzleCanvas {
-          max-width: calc(100vw - 40px);
-          max-height: calc(100vh - 200px);
+          max-width: calc(100vw - 60px);
+        }
+
+        #commandRail {
+          flex-wrap: wrap;
         }
       }
 
       @media (max-width: 720px) {
-        #optionsPanel {
-          position: fixed;
-          left: 16px;
-          right: 16px;
-          bottom: 16px;
-          top: auto;
-          width: auto;
-          max-height: 60vh;
+        #viewport {
+          padding: 20px;
         }
 
         #statusBar {
@@ -353,83 +539,182 @@
           top: 16px;
         }
 
-        #viewport {
-          padding: 20px;
+        #puzzleCanvas {
+          max-height: calc(100vh - 240px);
         }
 
-        #puzzleCanvas {
-          max-height: calc(100vh - 220px);
+        #paletteDock {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 12px;
+        }
+
+        #progress {
+          min-width: 0;
         }
       }
     </style>
   </head>
   <body>
     <div id="app">
+      <header id="commandRail" aria-label="Game controls">
+        <button id="hintButton" type="button" data-testid="hint-button" disabled>Hint</button>
+        <button id="resetButton" type="button" data-testid="reset-button" disabled>Reset</button>
+        <button id="previewToggle" type="button" data-testid="preview-toggle" disabled>Preview</button>
+        <button id="importButton" type="button" data-testid="import-button">Import</button>
+        <button id="saveManagerButton" type="button" data-testid="save-manager-button" disabled>Save manager</button>
+        <button id="settingsButton" type="button" data-testid="settings-button">Settings</button>
+      </header>
       <div id="viewport">
-        <canvas id="puzzleCanvas" width="640" height="480"></canvas>
-        <div id="startHint" class="hint" tabindex="0">
+        <canvas
+          id="puzzleCanvas"
+          data-testid="puzzle-canvas"
+          width="640"
+          height="480"
+        ></canvas>
+        <div id="previewOverlay" class="hidden" aria-hidden="true">
+          <div>
+            <canvas
+              id="previewCanvas"
+              data-testid="preview-canvas"
+              width="640"
+              height="480"
+            ></canvas>
+            <div style="display: grid; place-items: center; margin-top: 16px;">
+              <button id="closePreview" type="button">Return to puzzle</button>
+            </div>
+          </div>
+        </div>
+        <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
             <h1>Drop an image to start</h1>
             <p>Drag a picture anywhere on the screen or choose a file from your device.</p>
             <button id="selectImage" type="button">Choose an image</button>
           </div>
         </div>
-        <div id="statusBar" role="status">Drop an image anywhere to begin.</div>
+        <div id="statusBar" role="status" data-testid="status-bar">
+          Drop an image anywhere to begin.
+        </div>
       </div>
-      <aside id="optionsPanel" aria-label="Puzzle options">
-        <div class="panel-section">
-          <h2>Generator</h2>
+      <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
+        <div id="progress" aria-live="polite" data-testid="progress-message">
+          Drop an image to begin.
+        </div>
+        <div id="palette" role="list"></div>
+      </footer>
+    </div>
+    <input id="fileInput" type="file" accept=".json,image/*" hidden />
+    <div id="sheetBackdrop" class="backdrop hidden" tabindex="-1"></div>
+    <div
+      id="settingsSheet"
+      class="sheet hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settingsTitle"
+    >
+      <div class="sheet-header">
+        <h2 id="settingsTitle">Settings</h2>
+        <button type="button" class="close-button" data-sheet-close="settings">Close</button>
+      </div>
+      <div class="sheet-body">
+        <section class="sheet-section" aria-labelledby="gameplayHeading">
+          <h3 id="gameplayHeading">Gameplay</h3>
+          <label class="toggle">
+            <input id="autoAdvanceToggle" type="checkbox" checked />
+            <span>Auto-advance to the next colour when complete</span>
+          </label>
+          <label class="toggle">
+            <input id="hintFlashToggle" type="checkbox" checked />
+            <span>Animate hint highlights</span>
+          </label>
+        </section>
+        <section class="sheet-section" aria-labelledby="generatorHeading">
+          <h3 id="generatorHeading">Generator</h3>
           <label class="control">
             <span>Colours <output data-for="colorCount">16</output></span>
-            <input id="colorCount" type="range" min="4" max="48" value="16" />
+            <input id="colorCount" type="range" min="4" max="64" value="16" />
           </label>
           <label class="control">
             <span>Regions <output data-for="minRegion">80 px²</output></span>
-            <input id="minRegion" type="range" min="1" max="400" value="80" />
+            <input id="minRegion" type="range" min="1" max="600" value="80" />
           </label>
           <p class="control-note">Higher values merge smaller areas for fewer regions.</p>
           <label class="control">
             <span>Detail <output data-for="detailLevel">768 px</output></span>
-            <input id="detailLevel" type="range" min="320" max="1280" step="64" value="768" />
+            <input id="detailLevel" type="range" min="256" max="1600" step="64" value="768" />
           </label>
           <p class="control-note">Controls the longest edge used when resizing the source image.</p>
-          <div class="panel-actions">
-            <button id="applyOptions" type="button" disabled>Apply changes</button>
-            <button id="resetPuzzle" type="button" disabled>Reset progress</button>
-          </div>
-          <button id="downloadJson" type="button" disabled>Download JSON</button>
-        </div>
-        <div class="panel-section">
-          <h2>Preview</h2>
-          <canvas id="previewCanvas" width="320" height="240"></canvas>
-        </div>
-        <div class="panel-section">
-          <h2>Palette</h2>
-          <div id="palette" aria-live="polite"></div>
-        </div>
-        <div class="panel-section">
-          <div id="progress" aria-live="polite">Drop an image to begin.</div>
-        </div>
-      </aside>
+          <label class="control">
+            <span>Sample rate <output data-for="sampleRate">65%</output></span>
+            <input id="sampleRate" type="range" min="25" max="100" step="5" value="65" />
+          </label>
+          <p class="control-note">Lower values speed up clustering by sampling fewer pixels.</p>
+          <label class="control">
+            <span>Iterations <output data-for="kmeansIters">12</output></span>
+            <input id="kmeansIters" type="range" min="4" max="32" step="1" value="12" />
+          </label>
+          <label class="control">
+            <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
+            <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
+          </label>
+        </section>
+      </div>
+      <div class="sheet-actions">
+        <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
+        <button id="applyOptions" type="button" disabled>Apply changes</button>
+      </div>
     </div>
-    <input id="fileInput" type="file" accept="image/*" hidden />
-    <script>
+    <div
+      id="saveSheet"
+      class="sheet hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="saveTitle"
+    >
+      <div class="sheet-header">
+        <h2 id="saveTitle">Save manager</h2>
+        <button type="button" class="close-button" data-sheet-close="save">Close</button>
+      </div>
+      <div class="sheet-body">
+        <button id="saveSnapshot" type="button" disabled>Save current puzzle</button>
+        <ul id="saveList" aria-live="polite"></ul>
+      </div>
+    </div>
+        <script>
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
       const startHint = document.getElementById("startHint");
       const statusEl = document.getElementById("statusBar");
+      const hintButton = document.getElementById("hintButton");
+      const resetButton = document.getElementById("resetButton");
+      const previewToggle = document.getElementById("previewToggle");
+      const importButton = document.getElementById("importButton");
+      const saveManagerButton = document.getElementById("saveManagerButton");
+      const settingsButton = document.getElementById("settingsButton");
+      const closePreviewButton = document.getElementById("closePreview");
+      const previewOverlay = document.getElementById("previewOverlay");
+      const sheetBackdrop = document.getElementById("sheetBackdrop");
+      const settingsSheet = document.getElementById("settingsSheet");
+      const saveSheet = document.getElementById("saveSheet");
+      const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
+      const hintFlashToggle = document.getElementById("hintFlashToggle");
       const colorCountEl = document.getElementById("colorCount");
       const minRegionEl = document.getElementById("minRegion");
       const detailEl = document.getElementById("detailLevel");
+      const sampleRateEl = document.getElementById("sampleRate");
+      const kmeansItersEl = document.getElementById("kmeansIters");
+      const smoothingEl = document.getElementById("smoothingPasses");
       const applyBtn = document.getElementById("applyOptions");
-      const resetBtn = document.getElementById("resetPuzzle");
       const downloadBtn = document.getElementById("downloadJson");
-      const puzzleCanvas = document.getElementById("puzzleCanvas");
-      const previewCanvas = document.getElementById("previewCanvas");
+      const saveSnapshotBtn = document.getElementById("saveSnapshot");
+      const saveList = document.getElementById("saveList");
       const paletteEl = document.getElementById("palette");
       const progressEl = document.getElementById("progress");
+      const puzzleCanvas = document.getElementById("puzzleCanvas");
+      const previewCanvas = document.getElementById("previewCanvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
+      const SAVE_STORAGE_KEY = "capy.saves.v2";
 
       const state = {
         puzzle: null,
@@ -437,9 +722,63 @@
         filled: new Set(),
         sourceUrl: null,
         lastOptions: null,
+        settings: {
+          autoAdvance: true,
+          animateHints: true,
+        },
+        previewVisible: false,
+        saves: loadSavedEntries(),
       };
 
+      if (typeof window !== "undefined") {
+        window.capyGenerator = {
+          getState: () => state,
+          loadFromDataUrl(dataUrl) {
+            if (typeof dataUrl !== "string" || dataUrl.length === 0) {
+              return;
+            }
+            resetPuzzleUI();
+            statusEl.textContent = "Loading image...";
+            state.sourceUrl = dataUrl;
+            startHint.classList.add("hidden");
+            loadImage(dataUrl);
+          },
+          loadPuzzleFixture(puzzle) {
+            return loadPuzzleFixtureData(puzzle);
+          },
+          togglePreview(show) {
+            if (typeof show === "boolean") {
+              state.previewVisible = show;
+            } else {
+              state.previewVisible = !state.previewVisible;
+            }
+            updatePreviewState();
+          },
+          openSettings: () => openSheet(settingsSheet),
+        };
+      }
+
+      updateOptionOutputs();
+      refreshSaveList();
+      updateCommandStates();
+
       selectButton.addEventListener("click", () => fileInput.click());
+      importButton.addEventListener("click", () => fileInput.click());
+      settingsButton.addEventListener("click", () => openSheet(settingsSheet));
+      saveManagerButton.addEventListener("click", () => openSheet(saveSheet));
+
+      for (const button of document.querySelectorAll('[data-sheet-close]')) {
+        button.addEventListener("click", (event) => {
+          const target = event.currentTarget.getAttribute("data-sheet-close");
+          if (target === "settings") {
+            closeSheet(settingsSheet);
+          } else if (target === "save") {
+            closeSheet(saveSheet);
+          }
+        });
+      }
+
+      sheetBackdrop.addEventListener("click", () => closeAllSheets());
 
       startHint.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -449,11 +788,103 @@
       });
 
       fileInput.addEventListener("change", (event) => {
-        const file = event.target.files?.[0];
+        const [file] = event.target.files || [];
         if (file) {
           handleFile(file);
         }
+        fileInput.value = "";
       });
+
+      autoAdvanceToggle.addEventListener("change", () => {
+        state.settings.autoAdvance = autoAdvanceToggle.checked;
+      });
+
+      hintFlashToggle.addEventListener("change", () => {
+        state.settings.animateHints = hintFlashToggle.checked;
+      });
+
+      hintButton.addEventListener("click", () => {
+        useHint();
+      });
+
+      resetButton.addEventListener("click", () => {
+        if (!state.puzzle) return;
+        state.filled = new Set();
+        renderPuzzle();
+        renderPalette();
+        updateProgress();
+        statusEl.textContent = "Progress reset.";
+      });
+
+      previewToggle.addEventListener("click", () => {
+        state.previewVisible = !state.previewVisible;
+        updatePreviewState();
+      });
+
+      closePreviewButton.addEventListener("click", () => {
+        state.previewVisible = false;
+        updatePreviewState();
+      });
+
+      applyBtn.addEventListener("click", () => {
+        if (applyBtn.disabled) return;
+        regenerateFromSource();
+      });
+
+      downloadBtn.addEventListener("click", () => {
+        if (!state.puzzle) return;
+        const payload = serializeCurrentPuzzle();
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${payload.title ?? "color-by-number"}.json`;
+        document.body.appendChild(link);
+        link.click();
+        requestAnimationFrame(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        });
+      });
+
+      saveSnapshotBtn.addEventListener("click", () => {
+        if (!state.puzzle) return;
+        saveCurrentSnapshot();
+      });
+
+      saveList.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const entryEl = target.closest("[data-save-id]");
+        if (!entryEl) return;
+        const id = entryEl.getAttribute("data-save-id");
+        if (!id) return;
+        if (target.dataset.action === "load") {
+          loadSaveEntry(id);
+        } else if (target.dataset.action === "delete") {
+          deleteSaveEntry(id);
+        } else if (target.dataset.action === "export") {
+          exportSaveEntry(id);
+        } else if (target.dataset.action === "rename") {
+          renameSaveEntry(id);
+        }
+      });
+
+      colorCountEl.addEventListener("input", updateOptionOutputs);
+      minRegionEl.addEventListener("input", updateOptionOutputs);
+      detailEl.addEventListener("input", updateOptionOutputs);
+      sampleRateEl.addEventListener("input", updateOptionOutputs);
+      kmeansItersEl.addEventListener("input", updateOptionOutputs);
+      smoothingEl.addEventListener("input", updateOptionOutputs);
+
+      colorCountEl.addEventListener("change", markOptionsDirty);
+      minRegionEl.addEventListener("change", markOptionsDirty);
+      detailEl.addEventListener("change", markOptionsDirty);
+      sampleRateEl.addEventListener("change", markOptionsDirty);
+      kmeansItersEl.addEventListener("change", markOptionsDirty);
+      smoothingEl.addEventListener("change", markOptionsDirty);
 
       function hasFiles(event) {
         const types = event.dataTransfer?.types;
@@ -499,40 +930,6 @@
         }
       });
 
-      function syncRangeOutput(input) {
-        const output = document.querySelector(`output[data-for="${input.id}"]`);
-        if (!output) return;
-        if (input.id === "detailLevel") {
-          output.textContent = `${input.value} px`;
-        } else if (input.id === "minRegion") {
-          output.textContent = `${input.value} px²`;
-        } else {
-          output.textContent = input.value;
-        }
-      }
-
-      [colorCountEl, minRegionEl, detailEl].forEach((input) => {
-        syncRangeOutput(input);
-        input.addEventListener("input", () => {
-          syncRangeOutput(input);
-          markOptionsDirty();
-        });
-      });
-
-      applyBtn.addEventListener("click", () => {
-        if (!state.sourceUrl) return;
-        applyBtn.disabled = true;
-        regenerateFromSource();
-      });
-
-      resetBtn.addEventListener("click", () => {
-        if (!state.puzzle) return;
-        state.filled = new Set();
-        renderPuzzle();
-        renderPalette();
-        updateProgress();
-      });
-
       puzzleCanvas.addEventListener("click", (event) => {
         if (!state.puzzle || state.activeColor == null) return;
         const rect = puzzleCanvas.getBoundingClientRect();
@@ -546,69 +943,106 @@
         if (!region) return;
         if (state.filled.has(regionId)) return;
         if (region.colorId !== state.activeColor) {
-          flashRegion(regionId, "#facc15");
+          if (state.settings.animateHints) {
+            flashRegion(regionId, "rgba(250, 204, 21, 0.55)");
+          }
+          statusEl.textContent = `Try colour ${region.colorId} for that region.`;
           return;
         }
         state.filled.add(regionId);
         renderPuzzle();
         renderPalette();
         updateProgress();
+        if (state.settings.autoAdvance) {
+          autoAdvanceColor(region.colorId);
+        }
       });
 
-      downloadBtn.addEventListener("click", () => {
-        if (!state.puzzle) return;
-        const blob = new Blob([
-          JSON.stringify(
-            {
-              width: state.puzzle.width,
-              height: state.puzzle.height,
-              palette: state.puzzle.palette.map((p) => ({
-                id: p.id,
-                hex: p.hex,
-              })),
-              cells: state.puzzle.regions.map((region) => ({
-                id: region.id,
-                colorId: region.colorId,
-                center: [Number(region.cx.toFixed(2)), Number(region.cy.toFixed(2))],
-                pixelCount: region.pixelCount,
-              })),
-            },
-            null,
-            2
-          ),
-        ], {
-          type: "application/json",
-        });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "color-by-number.json";
-        document.body.appendChild(link);
-        link.click();
-        requestAnimationFrame(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        });
-      });
+      function openSheet(sheet) {
+        sheet.classList.remove("hidden");
+        sheetBackdrop.classList.remove("hidden");
+        document.body.classList.add("sheet-open");
+      }
 
-      function getCurrentOptions() {
-        return {
-          targetColors: clamp(Number(colorCountEl.value) || 16, 4, 64),
-          minRegion: clamp(Number(minRegionEl.value) || 30, 1, 2000),
-          maxSize: clamp(Number(detailEl.value) || 768, 256, 1600),
-        };
+      function closeSheet(sheet) {
+        sheet.classList.add("hidden");
+        if (settingsSheet.classList.contains("hidden") && saveSheet.classList.contains("hidden")) {
+          sheetBackdrop.classList.add("hidden");
+          document.body.classList.remove("sheet-open");
+        }
+      }
+
+      function closeAllSheets() {
+        settingsSheet.classList.add("hidden");
+        saveSheet.classList.add("hidden");
+        sheetBackdrop.classList.add("hidden");
+        document.body.classList.remove("sheet-open");
+      }
+
+      function updatePreviewState() {
+        if (state.previewVisible && state.puzzle) {
+          previewOverlay.classList.remove("hidden");
+          previewOverlay.setAttribute("aria-hidden", "false");
+          previewToggle.textContent = "Hide preview";
+        } else {
+          previewOverlay.classList.add("hidden");
+          previewOverlay.setAttribute("aria-hidden", "true");
+          previewToggle.textContent = "Preview";
+        }
+      }
+
+      function updateCommandStates() {
+        const hasPuzzle = Boolean(state.puzzle);
+        hintButton.disabled = !hasPuzzle;
+        resetButton.disabled = !hasPuzzle;
+        previewToggle.disabled = !hasPuzzle;
+        downloadBtn.disabled = !hasPuzzle;
+        saveSnapshotBtn.disabled = !hasPuzzle;
+        saveManagerButton.disabled = !hasPuzzle && state.saves.length === 0;
+      }
+
+      function updateOptionOutputs() {
+        const colorOutput = settingsSheet.querySelector('output[data-for="colorCount"]');
+        const minRegionOutput = settingsSheet.querySelector('output[data-for="minRegion"]');
+        const detailOutput = settingsSheet.querySelector('output[data-for="detailLevel"]');
+        const sampleOutput = settingsSheet.querySelector('output[data-for="sampleRate"]');
+        const iterOutput = settingsSheet.querySelector('output[data-for="kmeansIters"]');
+        const smoothOutput = settingsSheet.querySelector('output[data-for="smoothingPasses"]');
+        if (colorOutput) colorOutput.textContent = String(colorCountEl.value);
+        if (minRegionOutput) minRegionOutput.textContent = `${minRegionEl.value} px²`;
+        if (detailOutput) detailOutput.textContent = `${detailEl.value} px`;
+        if (sampleOutput) sampleOutput.textContent = `${sampleRateEl.value}%`;
+        if (iterOutput) iterOutput.textContent = String(kmeansItersEl.value);
+        if (smoothOutput) smoothOutput.textContent = String(smoothingEl.value);
       }
 
       function markOptionsDirty() {
-        if (!state.puzzle) return;
+        if (!state.puzzle || !state.sourceUrl) {
+          applyBtn.disabled = true;
+          return;
+        }
         const current = getCurrentOptions();
         const last = state.lastOptions;
         const dirty =
           !last ||
           current.targetColors !== last.targetColors ||
           current.minRegion !== last.minRegion ||
-          current.maxSize !== last.maxSize;
+          current.maxSize !== last.maxSize ||
+          current.sampleRate !== last.sampleRate ||
+          current.kmeansIters !== last.kmeansIters ||
+          current.smoothingPasses !== last.smoothingPasses;
         applyBtn.disabled = !dirty;
+      }
+
+      function getCurrentOptions() {
+        return {
+          targetColors: clamp(Number(colorCountEl.value) || 16, 4, 64),
+          minRegion: clamp(Number(minRegionEl.value) || 80, 1, 5000),
+          maxSize: clamp(Number(detailEl.value) || 768, 256, 2000),
+          sampleRate: clamp(Number(sampleRateEl.value) || 65, 10, 100) / 100,
+          kmeansIters: clamp(Number(kmeansItersEl.value) || 12, 1, 64),
+          smoothingPasses: clamp(Number(smoothingEl.value) || 1, 0, 6),
+        };
       }
 
       function regenerateFromSource() {
@@ -618,6 +1052,25 @@
       }
 
       function handleFile(file) {
+        if (file.type === "application/json" || file.name.toLowerCase().endsWith(".json")) {
+          resetPuzzleUI();
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const payload = JSON.parse(reader.result);
+              if (applyPuzzleResult(payload, { options: payload.options || getCurrentOptions(), filled: payload.filled })) {
+                statusEl.textContent = "Imported puzzle JSON.";
+                startHint.classList.add("hidden");
+                state.sourceUrl = payload.sourceUrl || null;
+              }
+            } catch (error) {
+              console.error(error);
+              statusEl.textContent = "Could not parse that JSON puzzle.";
+            }
+          };
+          reader.readAsText(file);
+          return;
+        }
         resetPuzzleUI();
         statusEl.textContent = "Loading image...";
         const reader = new FileReader();
@@ -625,9 +1078,10 @@
           const result = reader.result;
           if (typeof result === "string") {
             state.sourceUrl = result;
-            document.body.classList.remove("dragging");
             startHint.classList.add("hidden");
             loadImage(result);
+          } else {
+            statusEl.textContent = "Unsupported file format.";
           }
         };
         reader.onerror = () => {
@@ -638,9 +1092,16 @@
 
       function loadImage(url) {
         const img = new Image();
+        img.crossOrigin = "anonymous";
         img.onload = async () => {
           try {
-            await generatePuzzleFromImage(img);
+            statusEl.textContent = "Preparing puzzle...";
+            const options = getCurrentOptions();
+            const data = await createPuzzleData(img, options);
+            const applied = applyPuzzleResult(data, { options });
+            if (applied) {
+              statusEl.textContent = `Generated ${state.puzzle.regions.length} regions across ${state.puzzle.palette.length} colours.`;
+            }
           } catch (error) {
             console.error(error);
             statusEl.textContent = "Something went wrong while generating the puzzle.";
@@ -658,26 +1119,117 @@
         state.filled = new Set();
         paletteEl.innerHTML = "";
         progressEl.textContent = "Processing...";
-        resetBtn.disabled = true;
-        downloadBtn.disabled = true;
-        applyBtn.disabled = true;
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        state.previewVisible = false;
+        updatePreviewState();
+        updateCommandStates();
       }
 
-      async function generatePuzzleFromImage(img) {
-        const { targetColors, minRegion, maxSize } = getCurrentOptions();
-        statusEl.textContent = "Quantizing colours...";
-        const data = await createPuzzleData(img, {
-          targetColors,
-          minRegion,
-          maxSize,
-          kmeansIters: 12,
+      async function createPuzzleData(image, options) {
+        const { targetColors, minRegion, maxSize, sampleRate, kmeansIters, smoothingPasses } = options;
+        const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
+        const width = Math.max(8, Math.round(image.width * scale));
+        const height = Math.max(8, Math.round(image.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(image, 0, 0, width, height);
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const pixels = imageData.data;
+        statusEl.textContent = "Running k-means clustering...";
+        const { centroids, assignments } = kmeansQuantize(pixels, width, height, targetColors, kmeansIters, sampleRate);
+        let workingAssignments = assignments;
+        if (smoothingPasses > 0) {
+          statusEl.textContent = "Smoothing regions...";
+          workingAssignments = smoothAssignments(assignments, width, height, smoothingPasses);
+        }
+        statusEl.textContent = "Cleaning tiny regions...";
+        const { regionMap, regions } = segmentRegions(width, height, workingAssignments, minRegion);
+        for (const region of regions) {
+          let sumX = 0;
+          let sumY = 0;
+          for (const idx of region.pixels) {
+            sumX += idx % width;
+            sumY += (idx / width) | 0;
+          }
+          region.cx = sumX / region.pixelCount;
+          region.cy = sumY / region.pixelCount;
+          region.colorId += 1;
+        }
+        const palette = centroids.map((c, idx) => ({
+          id: idx + 1,
+          hex: `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`,
+          rgba: c,
+        }));
+        return {
+          width,
+          height,
+          palette,
+          regions,
+          regionMap,
+        };
+      }
+
+      function applyPuzzleResult(data, metadata = {}) {
+        if (!data || typeof data.width !== "number" || typeof data.height !== "number") {
+          statusEl.textContent = "Puzzle data missing required dimensions.";
+          return false;
+        }
+        if (!Array.isArray(data.palette) || !Array.isArray(data.regions)) {
+          statusEl.textContent = "Puzzle data missing palette information.";
+          return false;
+        }
+        const mapSource = Array.from(data.regionMap ?? []);
+        if (mapSource.length !== data.width * data.height) {
+          statusEl.textContent = "Puzzle data is inconsistent.";
+          return false;
+        }
+        const palette = data.palette.map((entry, index) => {
+          const hex = entry.hex ?? "#ffffff";
+          const rgba = Array.isArray(entry.rgba) ? entry.rgba.slice(0, 3) : hexToRgb(hex);
+          return {
+            id: entry.id ?? index + 1,
+            hex,
+            rgba,
+          };
         });
-        state.puzzle = data;
-        state.activeColor = data.palette[0]?.id ?? null;
-        state.filled = new Set();
-        state.lastOptions = { targetColors, minRegion, maxSize };
+        const regions = data.regions.map((region, index) => {
+          const pixels = Array.from(region.pixels ?? []);
+          const pixelCount = region.pixelCount ?? pixels.length;
+          let cx = typeof region.cx === "number" ? region.cx : null;
+          let cy = typeof region.cy === "number" ? region.cy : null;
+          if (pixels.length && (cx == null || cy == null)) {
+            let sumX = 0;
+            let sumY = 0;
+            for (const idx of pixels) {
+              sumX += idx % data.width;
+              sumY += (idx / data.width) | 0;
+            }
+            cx = sumX / pixels.length;
+            cy = sumY / pixels.length;
+          }
+          return {
+            id: region.id ?? index,
+            colorId: region.colorId ?? 1,
+            pixels,
+            pixelCount,
+            cx: cx ?? 0,
+            cy: cy ?? 0,
+          };
+        });
+        const regionMap = new Int32Array(mapSource);
+        state.puzzle = {
+          width: data.width,
+          height: data.height,
+          palette,
+          regions,
+          regionMap,
+        };
+        state.activeColor = metadata.activeColor ?? palette[0]?.id ?? null;
+        state.filled = new Set(metadata.filled ?? []);
+        state.lastOptions = metadata.options ?? getCurrentOptions();
         puzzleCanvas.width = data.width;
         puzzleCanvas.height = data.height;
         previewCanvas.width = data.width;
@@ -686,10 +1238,21 @@
         renderPuzzle();
         renderPalette();
         updateProgress();
-        resetBtn.disabled = false;
-        downloadBtn.disabled = false;
-        applyBtn.disabled = true;
-        statusEl.textContent = `Generated ${data.regions.length} regions across ${data.palette.length} colours.`;
+        updateCommandStates();
+        updatePreviewState();
+        markOptionsDirty();
+        return true;
+      }
+
+      function loadPuzzleFixtureData(puzzle) {
+        if (!puzzle) return false;
+        resetPuzzleUI();
+        const applied = applyPuzzleResult(puzzle, { options: getCurrentOptions(), filled: puzzle.filled });
+        if (applied) {
+          startHint.classList.add("hidden");
+          statusEl.textContent = `Loaded ${state.puzzle.regions.length} regions across ${state.puzzle.palette.length} colours.`;
+        }
+        return applied;
       }
 
       function renderPreview() {
@@ -737,8 +1300,8 @@
 
       function drawNumbers() {
         if (!state.puzzle) return;
-        const { regions } = state.puzzle;
-        const fontSize = Math.max(10, Math.round(state.puzzle.width / 45));
+        const { regions, width } = state.puzzle;
+        const fontSize = Math.max(10, Math.round(width / 45));
         puzzleCtx.font = `${fontSize}px "Inter", "Segoe UI", sans-serif`;
         puzzleCtx.fillStyle = "rgba(15, 23, 42, 0.95)";
         puzzleCtx.textAlign = "center";
@@ -777,15 +1340,17 @@
           colorCounts.set(region.colorId, count + 1);
         }
         for (const color of state.puzzle.palette) {
-          const swatch = document.createElement("button");
-          swatch.type = "button";
-          swatch.className = "swatch";
-          if (state.activeColor === color.id) swatch.classList.add("active");
           const remaining = state.puzzle.regions.filter(
             (region) => region.colorId === color.id && !state.filled.has(region.id)
           ).length;
-          if (remaining === 0) swatch.classList.add("done");
+          const swatch = document.createElement("button");
+          swatch.type = "button";
+          swatch.className = "swatch";
+          swatch.dataset.testid = "palette-swatch";
           swatch.dataset.colorId = String(color.id);
+          swatch.setAttribute("role", "listitem");
+          if (state.activeColor === color.id) swatch.classList.add("active");
+          if (remaining === 0) swatch.classList.add("done");
           swatch.innerHTML = `
             <span class="sample" style="background:${color.hex}"></span>
             <span class="info">
@@ -816,6 +1381,27 @@
         }
       }
 
+      function useHint() {
+        if (!state.puzzle) return;
+        const candidates = state.puzzle.regions.filter((region) => !state.filled.has(region.id));
+        if (candidates.length === 0) {
+          statusEl.textContent = "All cells are complete.";
+          return;
+        }
+        let target = candidates
+          .filter((region) => region.colorId === state.activeColor)
+          .sort((a, b) => a.pixelCount - b.pixelCount)[0];
+        if (!target) {
+          target = candidates.sort((a, b) => a.pixelCount - b.pixelCount)[0];
+          state.activeColor = target.colorId;
+          renderPalette();
+        }
+        if (state.settings.animateHints) {
+          flashRegion(target.id, "rgba(59, 130, 246, 0.45)");
+        }
+        statusEl.textContent = `Hint: Colour ${target.colorId} has ${target.pixelCount} pixels remaining.`;
+      }
+
       function flashRegion(regionId, color) {
         if (!state.puzzle) return;
         const region = state.puzzle.regions[regionId];
@@ -830,110 +1416,229 @@
         puzzleCtx.restore();
         setTimeout(() => {
           renderPuzzle();
-        }, 180);
+        }, 220);
       }
 
-      function clamp(value, min, max) {
-        if (Number.isNaN(value)) return min;
-        if (value < min) return min;
-        if (value > max) return max;
-        return value;
+      function autoAdvanceColor(currentColorId) {
+        if (!state.puzzle) return;
+        const remainingForColor = state.puzzle.regions.some(
+          (region) => region.colorId === currentColorId && !state.filled.has(region.id)
+        );
+        if (remainingForColor) return;
+        const nextColour = state.puzzle.palette.find((color) =>
+          state.puzzle.regions.some(
+            (region) => region.colorId === color.id && !state.filled.has(region.id)
+          )
+        );
+        if (nextColour) {
+          state.activeColor = nextColour.id;
+          renderPalette();
+        }
       }
 
-      async function createPuzzleData(image, options) {
-        const { targetColors, minRegion, maxSize, kmeansIters } = options;
-        const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
-        const width = Math.max(8, Math.round(image.width * scale));
-        const height = Math.max(8, Math.round(image.height * scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(image, 0, 0, width, height);
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const pixels = imageData.data;
-        statusEl.textContent = "Running k-means clustering...";
-        const { centroids, assignments } = kmeansQuantize(pixels, targetColors, kmeansIters);
-        statusEl.textContent = "Cleaning tiny regions...";
-        const { regionMap, regions } = segmentRegions(width, height, assignments, minRegion);
-        for (const region of regions) {
-          let sumX = 0;
-          let sumY = 0;
-          for (const idx of region.pixels) {
-            sumX += idx % width;
-            sumY += (idx / width) | 0;
-          }
-          region.cx = sumX / region.pixelCount;
-          region.cy = sumY / region.pixelCount;
-        }
-        const palette = centroids.map((c, idx) => ({
-          id: idx + 1,
-          hex: `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`,
-          rgba: c,
-        }));
-        for (const region of regions) {
-          region.colorId = region.colorId + 1;
-        }
-        const normalizedRegionMap = new Int32Array(regionMap.length);
-        for (let i = 0; i < regionMap.length; i++) {
-          normalizedRegionMap[i] = regionMap[i];
-        }
+      function serializeCurrentPuzzle() {
+        if (!state.puzzle) return {};
         return {
-          width,
-          height,
-          palette,
-          regions,
-          regionMap: normalizedRegionMap,
+          title: "capy-puzzle",
+          width: state.puzzle.width,
+          height: state.puzzle.height,
+          palette: state.puzzle.palette.map((p) => ({ id: p.id, hex: p.hex, rgba: p.rgba })),
+          regions: state.puzzle.regions.map((region) => ({
+            id: region.id,
+            colorId: region.colorId,
+            pixels: Array.from(region.pixels ?? []),
+            pixelCount: region.pixelCount,
+            cx: region.cx,
+            cy: region.cy,
+          })),
+          regionMap: Array.from(state.puzzle.regionMap),
+          filled: Array.from(state.filled),
+          options: state.lastOptions,
+          sourceUrl: state.sourceUrl,
+          activeColor: state.activeColor,
         };
       }
 
-      function kmeansQuantize(pixels, targetColors, iterations) {
-        const samples = [];
-        for (let i = 0; i < pixels.length; i += 4) {
-          samples.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
+      function saveCurrentSnapshot() {
+        const payload = serializeCurrentPuzzle();
+        const id = `save-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        const entry = {
+          id,
+          title: `Puzzle ${new Date().toLocaleTimeString()}`,
+          timestamp: Date.now(),
+          data: payload,
+        };
+        state.saves.unshift(entry);
+        persistSaves();
+        refreshSaveList();
+        statusEl.textContent = "Snapshot saved.";
+      }
+
+      function refreshSaveList() {
+        saveList.innerHTML = "";
+        for (const entry of state.saves) {
+          const item = document.createElement("li");
+          item.className = "save-entry";
+          item.dataset.saveId = entry.id;
+          const date = new Date(entry.timestamp);
+          const doneCount = entry.data?.filled?.length ?? 0;
+          const total = entry.data?.regions?.length ?? 0;
+          item.innerHTML = `
+            <header>
+              <strong>${entry.title || "Untitled puzzle"}</strong>
+              <time>${date.toLocaleString()}</time>
+            </header>
+            <div>${doneCount} of ${total} regions filled</div>
+            <div class="save-actions">
+              <button type="button" data-action="load">Load</button>
+              <button type="button" data-action="rename">Rename</button>
+              <button type="button" data-action="export">Export</button>
+              <button type="button" data-action="delete">Delete</button>
+            </div>
+          `;
+          saveList.appendChild(item);
+        }
+        updateCommandStates();
+      }
+
+      function persistSaves() {
+        try {
+          localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(state.saves));
+        } catch (error) {
+          console.error("Failed to persist saves", error);
+        }
+      }
+
+      function loadSavedEntries() {
+        try {
+          const raw = localStorage.getItem(SAVE_STORAGE_KEY);
+          if (!raw) return [];
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) return [];
+          return parsed.filter((entry) => entry && entry.data);
+        } catch (error) {
+          console.error("Failed to load saves", error);
+          return [];
+        }
+      }
+
+      function loadSaveEntry(id) {
+        const entry = state.saves.find((item) => item.id === id);
+        if (!entry) return;
+        if (applyPuzzleResult(entry.data, { options: entry.data.options, filled: entry.data.filled, activeColor: entry.data.activeColor })) {
+          state.sourceUrl = entry.data.sourceUrl ?? null;
+          startHint.classList.add("hidden");
+          statusEl.textContent = "Save restored.";
+        }
+      }
+
+      function deleteSaveEntry(id) {
+        state.saves = state.saves.filter((item) => item.id !== id);
+        persistSaves();
+        refreshSaveList();
+      }
+
+      function renameSaveEntry(id) {
+        const entry = state.saves.find((item) => item.id === id);
+        if (!entry) return;
+        const next = prompt("Rename save", entry.title || "Untitled puzzle");
+        if (typeof next === "string" && next.trim()) {
+          entry.title = next.trim();
+          entry.timestamp = Date.now();
+          persistSaves();
+          refreshSaveList();
+        }
+      }
+
+      function exportSaveEntry(id) {
+        const entry = state.saves.find((item) => item.id === id);
+        if (!entry) return;
+        const blob = new Blob([JSON.stringify(entry.data, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${entry.title || "capy-save"}.json`;
+        document.body.appendChild(link);
+        link.click();
+        requestAnimationFrame(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        });
+      }
+
+      function serializeAssignments(pixels, centroids) {
+        const assignments = new Uint16Array(pixels.length / 4);
+        for (let i = 0; i < assignments.length; i++) {
+          const base = i * 4;
+          let best = 0;
+          let bestDist = Infinity;
+          for (let c = 0; c < centroids.length; c++) {
+            const centroid = centroids[c];
+            const dr = pixels[base] - centroid[0];
+            const dg = pixels[base + 1] - centroid[1];
+            const db = pixels[base + 2] - centroid[2];
+            const dist = dr * dr + dg * dg + db * db;
+            if (dist < bestDist) {
+              bestDist = dist;
+              best = c;
+            }
+          }
+          assignments[i] = best;
+        }
+        return assignments;
+      }
+
+      function kmeansQuantize(pixels, width, height, targetColors, iterations, sampleRate) {
+        const totalPixels = width * height;
+        const sampleCount = Math.max(targetColors * 4, Math.floor(totalPixels * clamp(sampleRate, 0.05, 1)));
+        const sampleIndexes = new Uint32Array(Math.min(sampleCount, totalPixels));
+        const step = Math.max(1, Math.floor(totalPixels / sampleIndexes.length));
+        let pointer = 0;
+        for (let idx = 0; idx < totalPixels && pointer < sampleIndexes.length; idx += step) {
+          sampleIndexes[pointer++] = idx;
+        }
+        while (pointer < sampleIndexes.length) {
+          sampleIndexes[pointer++] = Math.floor(Math.random() * totalPixels);
         }
         const centroids = [];
-        const used = new Set();
-        while (centroids.length < targetColors && centroids.length < samples.length) {
-          let index = Math.floor(Math.random() * samples.length);
-          let guard = 0;
-          while (used.has(index) && guard < samples.length) {
-            index = (index + 1) % samples.length;
-            guard += 1;
-          }
-          used.add(index);
-          centroids.push(samples[index].slice());
+        for (let i = 0; i < targetColors; i++) {
+          const sampleIdx = sampleIndexes[i % sampleIndexes.length];
+          const base = sampleIdx * 4;
+          centroids.push([
+            pixels[base],
+            pixels[base + 1],
+            pixels[base + 2],
+          ]);
         }
-        while (centroids.length < targetColors) {
-          centroids.push(centroids[centroids.length - 1].slice());
-        }
-        const assignments = new Uint16Array(samples.length);
+        const sampleAssignments = new Uint16Array(sampleIndexes.length);
         for (let iter = 0; iter < iterations; iter++) {
-          for (let i = 0; i < samples.length; i++) {
+          for (let i = 0; i < sampleIndexes.length; i++) {
+            const base = sampleIndexes[i] * 4;
             let best = 0;
             let bestDist = Infinity;
-            const pixel = samples[i];
             for (let c = 0; c < centroids.length; c++) {
               const centroid = centroids[c];
-              const dist =
-                (pixel[0] - centroid[0]) * (pixel[0] - centroid[0]) +
-                (pixel[1] - centroid[1]) * (pixel[1] - centroid[1]) +
-                (pixel[2] - centroid[2]) * (pixel[2] - centroid[2]);
+              const dr = pixels[base] - centroid[0];
+              const dg = pixels[base + 1] - centroid[1];
+              const db = pixels[base + 2] - centroid[2];
+              const dist = dr * dr + dg * dg + db * db;
               if (dist < bestDist) {
                 bestDist = dist;
                 best = c;
               }
             }
-            assignments[i] = best;
+            sampleAssignments[i] = best;
           }
           const sums = Array.from({ length: centroids.length }, () => [0, 0, 0, 0]);
-          for (let i = 0; i < samples.length; i++) {
-            const target = assignments[i];
-            const sample = samples[i];
+          for (let i = 0; i < sampleIndexes.length; i++) {
+            const base = sampleIndexes[i] * 4;
+            const target = sampleAssignments[i];
             const bucket = sums[target];
-            bucket[0] += sample[0];
-            bucket[1] += sample[1];
-            bucket[2] += sample[2];
+            bucket[0] += pixels[base];
+            bucket[1] += pixels[base + 1];
+            bucket[2] += pixels[base + 2];
             bucket[3] += 1;
           }
           for (let c = 0; c < centroids.length; c++) {
@@ -944,7 +1649,43 @@
             centroids[c][2] = bucket[2] / bucket[3];
           }
         }
-        return { centroids: centroids.map((c) => c.map((value) => Math.round(value))), assignments };
+        const rounded = centroids.map((c) => c.map((value) => Math.round(value)));
+        const assignments = serializeAssignments(pixels, rounded);
+        return { centroids: rounded, assignments };
+      }
+
+      function smoothAssignments(assignments, width, height, passes) {
+        let current = new Uint16Array(assignments);
+        for (let pass = 0; pass < passes; pass++) {
+          const next = new Uint16Array(current);
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const idx = y * width + x;
+              const histogram = new Map();
+              const baseColor = current[idx];
+              histogram.set(baseColor, (histogram.get(baseColor) || 0) + 2);
+              if (x > 0) accumulate(histogram, current[idx - 1]);
+              if (x < width - 1) accumulate(histogram, current[idx + 1]);
+              if (y > 0) accumulate(histogram, current[idx - width]);
+              if (y < height - 1) accumulate(histogram, current[idx + width]);
+              let bestColor = baseColor;
+              let bestScore = -Infinity;
+              for (const [color, score] of histogram.entries()) {
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestColor = color;
+                }
+              }
+              next[idx] = bestColor;
+            }
+          }
+          current = next;
+        }
+        return current;
+      }
+
+      function accumulate(histogram, color) {
+        histogram.set(color, (histogram.get(color) || 0) + 1);
       }
 
       function segmentRegions(width, height, assignments, minRegion) {
@@ -1039,6 +1780,25 @@
         if (y > 0) neighbors.push((y - 1) * width + x);
         if (y < height - 1) neighbors.push((y + 1) * width + x);
         return neighbors;
+      }
+
+      function hexToRgb(hex) {
+        if (typeof hex !== "string") return [255, 255, 255];
+        const normalized = hex.replace("#", "").trim();
+        if (normalized.length !== 6) {
+          return [255, 255, 255];
+        }
+        const r = parseInt(normalized.slice(0, 2), 16);
+        const g = parseInt(normalized.slice(2, 4), 16);
+        const b = parseInt(normalized.slice(4, 6), 16);
+        return [r, g, b];
+      }
+
+      function clamp(value, min, max) {
+        if (Number.isNaN(value)) return min;
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
       }
 
       function toHex(value) {
