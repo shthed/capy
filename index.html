@@ -1164,6 +1164,85 @@ function App() {
       : { state: "idle", error: null }
   );
 
+  const { width: viewportWidth } = useViewportSize();
+  const isCompactHeader = viewportWidth <= 960;
+  const isStackedHeader = viewportWidth <= 640;
+
+  const topBarStyle = useMemo(() => {
+    const base = { ...styles.topBar };
+    if (isStackedHeader) {
+      return {
+        ...base,
+        left: 12,
+        right: 12,
+        maxWidth: "calc(100% - 24px)",
+        width: "auto",
+        flexDirection: "column",
+        alignItems: "stretch",
+        gap: 12,
+      };
+    }
+    if (isCompactHeader) {
+      return {
+        ...base,
+        maxWidth: "min(760px, calc(100% - 32px))",
+        padding: "10px 18px",
+      };
+    }
+    return base;
+  }, [isCompactHeader, isStackedHeader]);
+
+  const topContextStyle = useMemo(() => {
+    if (isStackedHeader) {
+      return {
+        ...styles.topContext,
+        width: "100%",
+        justifyContent: "space-between",
+      };
+    }
+    return styles.topContext;
+  }, [isStackedHeader]);
+
+  const topTitleStyle = useMemo(() => {
+    if (isCompactHeader) {
+      return {
+        ...styles.topTitle,
+        fontSize: isStackedHeader ? 15 : 16,
+      };
+    }
+    return styles.topTitle;
+  }, [isCompactHeader, isStackedHeader]);
+
+  const topActionsStyle = useMemo(() => {
+    if (isStackedHeader) {
+      return {
+        ...styles.topActions,
+        width: "100%",
+        flexWrap: "wrap",
+        justifyContent: "flex-start",
+        gap: 8,
+        paddingBottom: 4,
+      };
+    }
+    if (isCompactHeader) {
+      return {
+        ...styles.topActions,
+        gap: 8,
+      };
+    }
+    return styles.topActions;
+  }, [isCompactHeader, isStackedHeader]);
+
+  const controlButtonStyle = useMemo(() => {
+    if (isStackedHeader) {
+      return { ...styles.controlButton, ...styles.controlButtonStacked };
+    }
+    if (isCompactHeader) {
+      return { ...styles.controlButton, ...styles.controlButtonCompact };
+    }
+    return styles.controlButton;
+  }, [isCompactHeader, isStackedHeader]);
+
   const selectArtwork = useCallback((id) => {
     setActiveArtworkIdState(id);
     persistActiveArtworkId(id ?? null);
@@ -1412,13 +1491,18 @@ function App() {
         onClick: () => togglePeek(),
       };
 
+  const peekButtonStyle = useMemo(
+    () => ({
+      ...controlButtonStyle,
+      ...(isPeekActive ? styles.controlButtonActive : {}),
+    }),
+    [controlButtonStyle, isPeekActive]
+  );
+
   const peekButtonProps = Object.assign(
     {
       type: "button",
-      style: {
-        ...styles.controlButton,
-        ...(isPeekActive ? styles.controlButtonActive : {}),
-      },
+      style: peekButtonStyle,
       title: peekButtonTitle,
       "aria-label": peekButtonTitle,
     },
@@ -2037,11 +2121,11 @@ function App() {
       art &&
         React.createElement(
           "header",
-          { style: styles.topBar, role: "banner" },
+          { style: topBarStyle, role: "banner" },
           React.createElement(
             "div",
-            { style: styles.topContext },
-            React.createElement("span", { style: styles.topTitle }, art.title),
+            { style: topContextStyle },
+            React.createElement("span", { style: topTitleStyle }, art.title),
             React.createElement(
               "span",
               {
@@ -2056,12 +2140,12 @@ function App() {
           ),
           React.createElement(
             "nav",
-            { style: styles.topActions, "aria-label": "Canvas controls" },
+            { style: topActionsStyle, "aria-label": "Canvas controls" },
             React.createElement(
               "button",
               {
                 type: "button",
-                style: styles.controlButton,
+                style: controlButtonStyle,
                 onClick: () => {
                   setShowHelp(false);
                   setShowOptions(false);
@@ -2077,7 +2161,7 @@ function App() {
               "button",
               {
                 type: "button",
-                style: styles.controlButton,
+                style: controlButtonStyle,
                 onClick: () => {
                   setShowHelp(false);
                   setShowOptions(true);
@@ -2091,7 +2175,7 @@ function App() {
               "button",
               {
                 type: "button",
-                style: styles.controlButton,
+                style: controlButtonStyle,
                 onClick: () => {
                   setShowOptions(false);
                   setShowHelp(true);
@@ -2107,7 +2191,7 @@ function App() {
               {
                 type: "button",
                 style: {
-                  ...styles.controlButton,
+                  ...controlButtonStyle,
                   opacity: enableHintPulse ? 1 : 0.45,
                   cursor: enableHintPulse ? "pointer" : "not-allowed",
                 },
@@ -2443,7 +2527,8 @@ function Palette({
       const left = remaining[p.id] ?? 0;
       const isActive = p.id === activeColor;
       const label = p.name ?? `Color ${p.id}`;
-      const statusText = left === 0 ? "Complete" : `${left} left`;
+      const statusLabel = left === 0 ? "Complete" : `${left} cells remaining`;
+      const remainingDisplay = left === 0 ? "Complete" : `${left}`;
       const buttonStyle = {
         ...styles.swatch,
         background: p.rgba,
@@ -2465,11 +2550,12 @@ function Palette({
             onClick: () => onSelect(p.id),
             disabled: left === 0 && !isActive,
             "aria-pressed": isActive,
-            "aria-label": `${label}. ${statusText}`,
-            title: `${label} - ${statusText}`,
+            "aria-label": `${label}. ${statusLabel}`,
+            title: left === 0 ? `${label} - Complete` : `${label} - ${left} cells remaining`,
             style: buttonStyle,
           },
-          React.createElement("span", { style: styles.swatchNumber }, p.id)
+          React.createElement("span", { style: styles.swatchNumber }, p.id),
+          React.createElement("span", { style: styles.swatchLabel }, label)
         ),
         showLabels &&
           React.createElement("span", { style: styles.swatchName }, label),
@@ -2477,7 +2563,7 @@ function Palette({
           React.createElement(
             "span",
             { style: styles.swatchRemaining },
-            statusText
+            remainingDisplay
           )
       );
     })
@@ -3379,6 +3465,31 @@ function runSmokeTests(art, filled) {
   return tests;
 }
 
+// ---------- Hooks ----------
+function useViewportSize() {
+  const [size, setSize] = useState(() => {
+    if (typeof window === "undefined") {
+      return { width: 1024, height: 768 };
+    }
+    return { width: window.innerWidth, height: window.innerHeight };
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    function handleResize() {
+      setSize({ width: window.innerWidth, height: window.innerHeight });
+    }
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+    };
+  }, []);
+
+  return size;
+}
+
 // ---------- Styles ----------
 const styles = {
   app: {
@@ -3401,26 +3512,28 @@ const styles = {
   },
   topBar: {
     position: "fixed",
-    top: 16,
-    left: "50%",
-    transform: "translateX(-50%)",
-    width: "min(880px, calc(100% - 28px))",
+    top: 12,
+    right: 16,
+    left: "auto",
     display: "flex",
+    flexDirection: "row",
     flexWrap: "nowrap",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    padding: "8px 14px",
-    borderRadius: 16,
-    background: "rgba(15, 23, 42, 0.82)",
-    border: "1px solid rgba(148, 163, 184, 0.26)",
+    padding: "10px 20px",
+    borderRadius: 18,
+    background: "rgba(15, 23, 42, 0.85)",
+    border: "1px solid rgba(148, 163, 184, 0.28)",
     boxShadow: "0 18px 36px rgba(2, 6, 23, 0.55)",
     backdropFilter: "blur(14px)",
     zIndex: 20,
+    maxWidth: "min(820px, calc(100% - 32px))",
   },
   topContext: {
     display: "flex",
     alignItems: "center",
+    justifyContent: "flex-start",
     gap: 10,
     minWidth: 0,
     flex: "0 1 auto",
@@ -3449,14 +3562,14 @@ const styles = {
     display: "flex",
     flexWrap: "nowrap",
     justifyContent: "flex-end",
-    gap: 6,
+    gap: 8,
     flex: "1 1 auto",
     overflowX: "auto",
   },
   controlButton: {
     borderRadius: 10,
-    border: "1px solid rgba(148, 163, 184, 0.28)",
-    background: "linear-gradient(180deg, rgba(51, 65, 85, 0.55), rgba(15, 23, 42, 0.9))",
+    border: "1px solid rgba(148, 163, 184, 0.32)",
+    background: "linear-gradient(180deg, rgba(51, 65, 85, 0.55), rgba(15, 23, 42, 0.92))",
     color: "#f8fafc",
     fontSize: 12,
     fontWeight: 600,
@@ -3474,6 +3587,16 @@ const styles = {
     textTransform: "none",
     whiteSpace: "nowrap",
     lineHeight: 1.2,
+    flex: "0 0 auto",
+  },
+  controlButtonCompact: {
+    padding: "6px 10px",
+    flex: "1 1 calc(50% - 10px)",
+  },
+  controlButtonStacked: {
+    padding: "6px 10px",
+    flex: "1 1 100%",
+    width: "100%",
   },
   controlButtonActive: {
     border: "1px solid rgba(56, 189, 248, 0.55)",
@@ -3525,34 +3648,48 @@ const styles = {
     display: "flex",
     flexDirection: "row",
     flexWrap: "nowrap",
-    gap: 14,
+    gap: 12,
     width: "100%",
     overflowX: "auto",
-    padding: "4px 4px 2px",
+    padding: "6px 6px 4px",
     scrollSnapType: "x proximity",
-    alignItems: "flex-start",
+    alignItems: "flex-end",
   },
   swatch: {
-    width: "clamp(52px, 9vw, 72px)",
-    height: "clamp(52px, 9vw, 72px)",
-    borderRadius: 18,
+    width: "clamp(48px, 8vw, 64px)",
+    height: "clamp(48px, 8vw, 64px)",
+    borderRadius: 16,
     display: "grid",
-    placeItems: "center",
+    gridTemplateRows: "1fr auto",
+    alignItems: "center",
+    justifyItems: "center",
     position: "relative",
+    padding: "6px 6px 5px",
     transition: "transform 0.12s ease, box-shadow 0.2s ease",
     cursor: "pointer",
     color: "#f8fafc",
+    textAlign: "center",
+    rowGap: 2,
+    lineHeight: 1.1,
   },
   swatchNumber: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 700,
-    textShadow: "0 1px 4px rgba(15, 23, 42, 0.65)",
+    textShadow: "0 1px 4px rgba(15, 23, 42, 0.7)",
+  },
+  swatchLabel: {
+    fontSize: 9,
+    fontWeight: 600,
+    letterSpacing: 0.3,
+    textShadow: "0 1px 3px rgba(15, 23, 42, 0.7)",
+    whiteSpace: "normal",
+    lineHeight: 1.1,
   },
   swatchItem: {
     display: "grid",
-    gap: 6,
+    gap: 5,
     justifyItems: "center",
-    minWidth: 72,
+    minWidth: 68,
     scrollSnapAlign: "center",
   },
   swatchName: {
@@ -3566,6 +3703,8 @@ const styles = {
     fontSize: 10,
     color: "#94a3b8",
     textAlign: "center",
+    fontWeight: 600,
+    letterSpacing: 0.2,
   },
   libraryOverlay: {
     position: "fixed",

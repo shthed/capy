@@ -24,9 +24,9 @@ coexist with imported artwork.
   dialog. Library metadata (including autosave state) persists in
   `localStorage` so custom scenes stay available between sessions.
 - **Palette customization:** Edit color names, override swatch hex values, or
-  toggle Peek behavior from the Options panel. The palette dock now shows the
-  remaining cell counts beneath each swatch and dims colors as you finish a
-  hue.
+  toggle Peek behavior from the Options panel. The palette dock now prints each
+  color name directly inside its swatch, dims colors as you finish a hue, and
+  can optionally show a minimal remaining-count badge below the row.
 - **Peek preview modes:** Hold the Peek button for a transient look at the
   completed illustration or toggle it to stay active. Keyboard shortcuts mirror
   the on-screen controls for quick access.
@@ -45,17 +45,17 @@ when a check fails.
 
 ### UI elements
 
-- **Top command rail:** Ultra-slim glass bar pinned to the top edge. It shows
-  the active artwork title, a live progress chip, and compact buttons for the
-  library, help, options, peek preview, and hint pulse without crowding the
-  artwork.
+- **Top command rail:** Ultra-slim glass bar pinned near the top-right corner.
+  It shows the active artwork title, a live progress chip, and compact buttons
+  for the library, help, options, peek preview, and hint pulse while adapting
+  into a stacked layout on narrow screens.
 - **Canvas frame:** Fullscreen SVG stage wrapped with pan/zoom transforms,
   per-cell strokes, number badges that stay centered inside each region, and
   optional heatmap dots when zoomed out.
 - **Palette dock:** Floating glass strip centred beneath the canvas with a
-  single-row, horizontally scrollable set of swatches. Each swatch now shows
-  the color name and remaining count, highlights the active selection, and dims
-  once its cells are complete.
+  single-row, horizontally scrollable set of smaller swatches. Each swatch now
+  shows both the number and color name inside the button, highlights the active
+  selection, and dims once its cells are complete.
 - **Smoke Tests HUD:** Hidden by default when all checks pass. If a test fails,
   a floating card appears with diagnostics and a reminder that the “T”
   shortcut toggles visibility.
@@ -85,6 +85,7 @@ Our automated Playwright run (`npm test --silent`) validates the experience end 
 - **Art library listing:** Opens the library dialog and verifies every bundled scene is present (Capybara in a Forest, Capybara Lagoon Sunrise, Twilight Marsh Study, Lush Green Forest Walk).
 - **Painting updates progress:** Fills a cell to confirm the completion meter and progress chip react immediately.
 - **HUD coverage snapshot:** Captures a full-page screenshot plus a JSON summary with palette counts, cell totals, progress text/ARIA label, and the presence of the art-library control.
+- **Mobile command rail layout:** Boots the app at a handheld viewport to ensure the header hugs the top-right edge and the palette swatches stay compact while still showing their color names.
 - **Starter merge behavior:** Boots with stored data to ensure bundled scenes merge without duplication.
 - **Title preservation:** Checks that custom titles persist after a starter refresh.
 - **SVG quality checks:** Parses each bundled SVG (`capybara-forest`, `capybara-lagoon`, `capybara-twilight`, `lush-green-forest`) to enforce formatting and metadata quality.
