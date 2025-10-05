@@ -28,6 +28,7 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 - Configure git with `git config user.name "Codex"` and `git config user.email "codex@openai.com"` before committing.
 - Keep `core.pager` set to `cat` so command output remains deterministic in logs.
 - Run `git fetch --all --prune` at the start of a task to ensure local refs match the remote state before making changes.
+- After committing, always push the working branch and update the corresponding PR so remote history stays in sync.
 
 ## PR / Final Response
 - Summaries should call out both UI and workflow changes when present.
