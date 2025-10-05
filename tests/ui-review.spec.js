@@ -4,10 +4,16 @@ const path = require('path');
 
 const APP_URL = 'http://127.0.0.1:8000/index.html';
 const REVIEW_DIR = path.join(__dirname, '..', 'artifacts', 'ui-review');
+const ARTWORK_REVIEW_DIR = path.join(REVIEW_DIR, 'artworks');
+const ACTIVE_ART_KEY = 'capybooper_active_art';
 
 test.describe('Capybooper visual review', () => {
   test.beforeAll(async () => {
     await fs.promises.mkdir(REVIEW_DIR, { recursive: true });
+    try {
+      await fs.promises.rm(ARTWORK_REVIEW_DIR, { recursive: true, force: true });
+    } catch (err) {}
+    await fs.promises.mkdir(ARTWORK_REVIEW_DIR, { recursive: true });
   });
 
   test('keeps the header anchored and palette compact on mobile viewports', async ({ page }) => {
@@ -210,5 +216,139 @@ test.describe('Capybooper visual review', () => {
     expect(details.cellCount).toBeGreaterThan(0);
     expect(details.navAriaLabels).toContain('Highlight a suggested cell');
     expect(details.navAriaLabels.some((label) => /show controls/i.test(label))).toBe(true);
+  });
+
+  test('loads each starter artwork, captures screenshots, and records metadata', async ({ page }, testInfo) => {
+    test.setTimeout(180000);
+
+    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-testid="palette-dock"] button', {
+      timeout: 60_000,
+      state: 'attached',
+    });
+
+    const menuToggle = page.locator('[data-testid="command-menu-toggle"]');
+
+    async function openLibraryDialog() {
+      if ((await page.locator('[data-testid="open-art-library"]:visible').count()) === 0) {
+        await menuToggle.click();
+        await page.waitForSelector('[aria-label="Canvas command menu"]', {
+          timeout: 10_000,
+          state: 'visible',
+        });
+      }
+      const trigger = page.locator('[data-testid="open-art-library"]:visible').first();
+      await expect(trigger).toBeVisible({ timeout: 10_000 });
+      await trigger.click();
+      await page.waitForSelector('[data-testid="art-library-dialog"]', {
+        timeout: 60_000,
+        state: 'visible',
+      });
+    }
+
+    await openLibraryDialog();
+
+    const availableArtworks = await page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll('[data-testid="art-library-card"]'));
+      return cards
+        .map((card) => {
+          const id = card.getAttribute('data-artwork-id') || '';
+          const rawLabel = card.getAttribute('aria-label') || card.textContent || '';
+          const normalized = rawLabel
+            .replace(/\(active\)/gi, '')
+            .replace(/^\s*load\s+/i, '')
+            .trim();
+          return { id, title: normalized || id || 'Artwork' };
+        })
+        .filter((entry) => entry.id);
+    });
+
+    expect(availableArtworks.length).toBeGreaterThan(0);
+
+    const manifest = [];
+
+    for (let index = 0; index < availableArtworks.length; index += 1) {
+      const { id, title } = availableArtworks[index];
+
+      if (index > 0) {
+        await openLibraryDialog();
+      }
+
+      const cardLocator = page
+        .locator(`[data-testid="art-library-card"][data-artwork-id="${id}"]`)
+        .first();
+      await expect(cardLocator).toBeVisible({ timeout: 60_000 });
+      await cardLocator.click();
+      await page.waitForSelector('[data-testid="art-library-dialog"]', {
+        timeout: 60_000,
+        state: 'detached',
+      });
+
+      await page.waitForSelector('[data-testid="palette-dock"] button', {
+        timeout: 60_000,
+        state: 'attached',
+      });
+      await page.waitForSelector('path[data-cell-id]', {
+        timeout: 60_000,
+        state: 'attached',
+      });
+
+      await page.waitForFunction(
+        ({ key, expected }) => window.localStorage.getItem(key) === expected,
+        { key: ACTIVE_ART_KEY, expected: id }
+      );
+
+      const details = await page.evaluate((key) => {
+        const paletteButtons = document.querySelectorAll('[data-testid="palette-dock"] button');
+        const cellPaths = document.querySelectorAll('path[data-cell-id]');
+        const header = document.querySelector('header[role="banner"]');
+        return {
+          activeId: window.localStorage.getItem(key),
+          paletteCount: paletteButtons.length,
+          cellCount: cellPaths.length,
+          headerText: header ? header.textContent.replace(/\s+/g, ' ').trim() : '',
+        };
+      }, ACTIVE_ART_KEY);
+
+      expect(details.activeId).toBe(id);
+      expect(details.paletteCount).toBeGreaterThan(0);
+      expect(details.cellCount).toBeGreaterThan(0);
+
+      const safeSlug = (id || `artwork-${index + 1}`)
+        .replace(/[^a-z0-9-]+/gi, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase() || `artwork-${index + 1}`;
+
+      const screenshotPath = path.join(ARTWORK_REVIEW_DIR, `${safeSlug}.png`);
+      const summaryPath = path.join(ARTWORK_REVIEW_DIR, `${safeSlug}.json`);
+
+      const buffer = await page.screenshot({ path: screenshotPath, fullPage: true });
+      expect(buffer.length).toBeGreaterThan(10_000);
+
+      const summary = {
+        id,
+        title,
+        paletteCount: details.paletteCount,
+        cellCount: details.cellCount,
+        headerText: details.headerText,
+        screenshot: path.relative(path.join(__dirname, '..'), screenshotPath),
+        timestamp: new Date().toISOString(),
+      };
+
+      await fs.promises.writeFile(summaryPath, JSON.stringify(summary, null, 2), 'utf8');
+      manifest.push(summary);
+    }
+
+    const manifestPath = path.join(ARTWORK_REVIEW_DIR, 'manifest.json');
+    await fs.promises.writeFile(
+      manifestPath,
+      JSON.stringify({ artworks: manifest }, null, 2),
+      'utf8'
+    );
+
+    await testInfo.attach('starter-artwork-manifest', {
+      path: manifestPath,
+      contentType: 'application/json',
+    });
   });
 });

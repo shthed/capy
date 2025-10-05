@@ -280,6 +280,89 @@
   </g>
 </svg>
 `,
+    "starter-capybara-terraced-market": String.raw`<!-- Capybara Terraced Market - Segmented SVG -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-labelledby="title desc">
+  <title id="title">Capybara Terraced Market</title>
+  <desc id="desc">Layered terraces and a market walkway with a relaxed capybara resting near planters under a misty sky.</desc>
+
+  <g id="region-c01" data-cell-id="c1" data-color-id="1" data-color-name="Misty Sky" data-color-hex="#9fb596">
+    <title>Region c1 – Color #1 (Misty Sky)</title>
+    <path d="M0 0 H960 V70 C 780 55 620 52 480 60 C 320 70 160 78 0 64 Z"/>
+  </g>
+  <g id="region-c02" data-cell-id="c2" data-color-id="2" data-color-name="Dawn Haze" data-color-hex="#e8ca8b">
+    <title>Region c2 – Color #2 (Dawn Haze)</title>
+    <path d="M0 64 C 160 82 320 88 480 86 C 640 84 800 76 960 70 V150 C 780 162 620 174 480 176 C 320 178 160 170 0 154 Z"/>
+  </g>
+  <g id="region-c03" data-cell-id="c3" data-color-id="3" data-color-name="Soft Stucco" data-color-hex="#c5bd8c">
+    <title>Region c3 – Color #3 (Soft Stucco)</title>
+    <path d="M0 154 C 120 176 240 188 360 186 C 480 184 600 170 720 176 C 840 182 900 172 960 164 V228 C 780 238 620 246 480 246 C 320 246 160 238 0 224 Z"/>
+  </g>
+  <g id="region-c04" data-cell-id="c4" data-color-id="4" data-color-name="Sunlit Terrace" data-color-hex="#e9ac68">
+    <title>Region c4 – Color #4 (Sunlit Terrace)</title>
+    <path d="M0 224 C 100 260 180 284 260 296 C 340 308 440 306 520 292 C 620 274 760 262 960 270 V320 C 800 332 640 346 480 346 C 320 346 160 334 0 312 Z"/>
+  </g>
+  <g id="region-c05" data-cell-id="c5" data-color-id="5" data-color-name="Olive Walkway" data-color-hex="#979053">
+    <title>Region c5 – Color #5 (Olive Walkway)</title>
+    <path d="M0 312 C 80 332 160 344 240 350 C 320 356 400 356 480 352 C 600 346 720 332 840 322 C 900 318 940 316 960 320 V360 C 840 372 720 384 600 388 C 460 392 320 388 160 370 C 100 364 40 352 0 340 Z"/>
+  </g>
+  <g id="region-c06" data-cell-id="c6" data-color-id="6" data-color-name="Cypress Terraces" data-color-hex="#4c725c">
+    <title>Region c6 – Color #6 (Cypress Terraces)</title>
+    <path d="M0 340 C 60 360 120 380 180 396 C 240 412 320 422 420 420 C 520 418 600 400 700 388 C 800 376 880 368 960 370 V420 C 860 432 760 446 640 454 C 520 462 400 460 280 450 C 180 442 80 428 0 406 Z"/>
+  </g>
+  <g id="region-c07" data-cell-id="c7" data-color-id="7" data-color-name="Sage Shadows" data-color-hex="#62886e">
+    <title>Region c7 – Color #7 (Sage Shadows)</title>
+    <path fill-rule="evenodd" d="M0 406 C 90 432 160 456 240 472 C 320 488 420 498 520 496 C 620 494 720 474 840 460 C 880 456 920 450 960 444 V500 C 820 512 680 526 520 530 C 380 534 220 530 0 508 Z M430 436 C 390 456 384 492 412 522 C 452 562 540 562 600 528 C 640 504 644 472 620 448 C 592 422 520 416 460 422 Z M220 430 C 206 446 204 466 218 484 C 236 504 272 508 300 498 C 324 490 332 470 318 450 C 302 428 254 420 220 430 Z M708 444 C 692 460 688 482 700 500 C 718 522 758 526 786 512 C 810 500 818 478 806 460 C 790 436 738 432 708 444 Z"/>
+  </g>
+  <g id="region-c08" data-cell-id="c8" data-color-id="8" data-color-name="Harbor Teal" data-color-hex="#376760">
+    <title>Region c8 – Color #8 (Harbor Teal)</title>
+    <path d="M0 508 C 160 528 320 540 480 544 C 640 548 800 542 960 522 V560 C 780 574 600 582 420 584 C 260 586 120 582 0 566 Z"/>
+  </g>
+  <g id="region-c09" data-cell-id="c9" data-color-id="6" data-color-name="Market Lawn" data-color-hex="#4c725c">
+    <title>Region c9 – Color #6 (Market Lawn)</title>
+    <path d="M0 566 C 200 586 400 596 600 596 C 760 596 880 588 960 580 V600 H0 Z"/>
+  </g>
+  <g id="region-c10" data-cell-id="c10" data-color-id="9" data-color-name="Terracotta Fur" data-color-hex="#a06834">
+    <title>Region c10 – Color #9 (Terracotta Fur)</title>
+    <path d="M438 440 C 404 460 396 492 416 522 C 444 562 512 570 568 544 C 606 526 626 500 620 474 C 614 444 588 424 548 418 C 504 412 464 420 438 440 Z"/>
+  </g>
+  <g id="region-c11" data-cell-id="c11" data-color-id="10" data-color-name="Soil Shadow" data-color-hex="#625532">
+    <title>Region c11 – Color #10 (Soil Shadow)</title>
+    <path d="M488 470 C 464 484 460 508 476 526 C 500 550 544 548 570 528 C 588 514 594 496 584 480 C 572 458 524 454 488 470 Z"/>
+  </g>
+  <g id="region-c12" data-cell-id="c12" data-color-id="4" data-color-name="Sunlit Highlight" data-color-hex="#e9ac68">
+    <title>Region c12 – Color #4 (Sunlit Highlight)</title>
+    <path d="M540 450 C 518 440 496 440 476 448 C 456 456 450 470 456 486 C 466 506 494 516 520 512 C 546 508 566 492 564 472 C 562 460 554 452 540 450 Z"/>
+  </g>
+  <g id="region-c13" data-cell-id="c13" data-color-id="11" data-color-name="Timber Accent" data-color-hex="#997448">
+    <title>Region c13 – Color #11 (Timber Accent)</title>
+    <path d="M560 438 C 552 432 540 430 530 432 C 520 434 514 442 518 450 C 524 460 536 464 546 462 C 556 460 564 452 564 444 C 564 442 562 440 560 438 Z"/>
+  </g>
+  <g id="region-c14" data-cell-id="c14" data-color-id="12" data-color-name="Ember Eye" data-color-hex="#c17d3c">
+    <title>Region c14 – Color #12 (Ember Eye)</title>
+    <path d="M522 476 C 514 478 510 486 514 492 C 520 500 532 500 538 494 C 544 488 544 480 538 476 C 534 472 528 472 522 476 Z"/>
+  </g>
+  <g id="region-c15" data-cell-id="c15" data-color-id="13" data-color-name="Cool Glint" data-color-hex="#629281">
+    <title>Region c15 – Color #13 (Cool Glint)</title>
+    <path d="M528 482 C 526 484 526 486 528 488 C 530 490 534 490 536 488 C 538 486 538 484 536 482 C 534 480 530 480 528 482 Z"/>
+  </g>
+  <g id="region-c16" data-cell-id="c16" data-color-id="14" data-color-name="Brass Planter" data-color-hex="#a0853e">
+    <title>Region c16 – Color #14 (Brass Planter)</title>
+    <path d="M220 430 C 206 446 204 466 218 484 C 236 504 272 508 300 498 C 324 490 332 470 318 450 C 302 428 254 420 220 430 Z"/>
+  </g>
+  <g id="region-c17" data-cell-id="c17" data-color-id="11" data-color-name="Timber Planter" data-color-hex="#997448">
+    <title>Region c17 – Color #11 (Timber Planter)</title>
+    <path d="M708 444 C 692 460 688 482 700 500 C 718 522 758 526 786 512 C 810 500 818 478 806 460 C 790 436 738 432 708 444 Z"/>
+  </g>
+  <g id="region-c18" data-cell-id="c18" data-color-id="6" data-color-name="Cypress Sprigs" data-color-hex="#4c725c">
+    <title>Region c18 – Color #6 (Cypress Sprigs)</title>
+    <path d="M240 444 C 226 454 224 466 232 478 C 244 494 270 496 288 488 C 302 480 308 468 300 454 C 290 440 260 436 240 444 Z"/>
+  </g>
+  <g id="region-c19" data-cell-id="c19" data-color-id="7" data-color-name="Sage Sprigs" data-color-hex="#62886e">
+    <title>Region c19 – Color #7 (Sage Sprigs)</title>
+    <path d="M728 456 C 716 466 714 480 722 494 C 734 510 760 512 780 502 C 796 494 802 480 794 466 C 784 452 752 448 728 456 Z"/>
+  </g>
+</svg>
+`,
     "starter-twilight-marsh": String.raw`<!-- Twilight Marsh Study - Segmented SVG -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-labelledby="title desc">
   <title id="title">Twilight Marsh Study</title>
