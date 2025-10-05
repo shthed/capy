@@ -6,6 +6,7 @@ const projectRoot = path.resolve(__dirname, '..');
 const targets = [
   { id: 'starter-capybara-forest', file: path.join('art', 'capybara-forest.svg') },
   { id: 'starter-capybara-lagoon', file: path.join('art', 'capybara-lagoon.svg') },
+  { id: 'starter-capybara-terraced-market', file: path.join('art', 'capybara-terraced-market.svg') },
   { id: 'starter-twilight-marsh', file: path.join('art', 'capybara-twilight.svg') },
   { id: 'starter-lush-forest', file: path.join('art', 'lush-green-forest.svg') },
 ];
