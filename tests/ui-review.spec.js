@@ -1,354 +1,131 @@
 const { test, expect } = require('@playwright/test');
-const fs = require('fs');
-const path = require('path');
 
 const APP_URL = 'http://127.0.0.1:8000/index.html';
-const REVIEW_DIR = path.join(__dirname, '..', 'artifacts', 'ui-review');
-const ARTWORK_REVIEW_DIR = path.join(REVIEW_DIR, 'artworks');
-const ACTIVE_ART_KEY = 'capybooper_active_art';
 
-test.describe('Capybooper visual review', () => {
-  test.beforeAll(async () => {
-    await fs.promises.mkdir(REVIEW_DIR, { recursive: true });
-    try {
-      await fs.promises.rm(ARTWORK_REVIEW_DIR, { recursive: true, force: true });
-    } catch (err) {}
-    await fs.promises.mkdir(ARTWORK_REVIEW_DIR, { recursive: true });
-  });
+const FIXTURE_PUZZLE = {
+  width: 4,
+  height: 4,
+  palette: [
+    { id: 1, hex: '#e11d48', rgba: [225, 29, 72] },
+    { id: 2, hex: '#22c55e', rgba: [34, 197, 94] },
+  ],
+  regions: [
+    { id: 0, colorId: 1, pixels: [0, 1, 4, 5], pixelCount: 4, cx: 0.5, cy: 0.5 },
+    { id: 1, colorId: 2, pixels: [2, 3, 6, 7], pixelCount: 4, cx: 2.5, cy: 0.5 },
+    { id: 2, colorId: 1, pixels: [8, 9, 12, 13], pixelCount: 4, cx: 0.5, cy: 2.5 },
+    { id: 3, colorId: 2, pixels: [10, 11, 14, 15], pixelCount: 4, cx: 2.5, cy: 2.5 },
+  ],
+  regionMap: [
+    0, 0, 1, 1,
+    0, 0, 1, 1,
+    2, 2, 3, 3,
+    2, 2, 3, 3,
+  ],
+};
 
-  test('keeps the header anchored and palette compact on mobile viewports', async ({ page }) => {
-    test.setTimeout(120000);
-    await page.setViewportSize({ width: 414, height: 896 });
+async function loadFixturePuzzle(page) {
+  await page.evaluate((puzzle) => {
+    window.capyGenerator.loadPuzzleFixture(puzzle);
+  }, FIXTURE_PUZZLE);
+  await page.waitForSelector('[data-testid="palette-swatch"]');
+  await expect(page.locator('[data-testid="start-hint"]')).toHaveClass(/hidden/);
+}
+
+async function clickRegionCenter(page, region, puzzle) {
+  expect(region.pixels.length).toBeGreaterThan(0);
+  const sample = region.pixels[0];
+  await page.evaluate(({ pixel, width, height }) => {
+    const canvas = document.querySelector('[data-testid="puzzle-canvas"]');
+    if (!canvas) return;
+    const state = window.capyGenerator.getState();
+    if (!state.puzzle) return;
+    const pixelX = pixel % width;
+    const pixelY = Math.floor(pixel / width);
+    const rect = canvas.getBoundingClientRect();
+    const clientX = rect.left + ((pixelX + 0.5) / width) * rect.width;
+    const clientY = rect.top + ((pixelY + 0.5) / height) * rect.height;
+    const event = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY,
+    });
+    canvas.dispatchEvent(event);
+  }, { pixel: sample, width: puzzle.width, height: puzzle.height });
+}
+
+test.describe('Capy image generator', () => {
+  test('renders command rail and hidden generator settings on load', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('header[role="banner"]', { timeout: 60_000 });
-    await page.waitForSelector('[data-testid="palette-dock"] button', { timeout: 60_000 });
+    await page.waitForSelector('[data-testid="start-hint"]');
 
     const layout = await page.evaluate(() => {
-      const header = document.querySelector('header[role="banner"]');
-      const paletteButtons = Array.from(
-        document.querySelectorAll('[data-testid="palette-dock"] button')
-      );
-      const navButtons = header
-        ? Array.from(header.querySelectorAll('nav button'))
-        : [];
-      if (!header || paletteButtons.length === 0 || navButtons.length === 0) {
-        return null;
-      }
-      const headerRect = header.getBoundingClientRect();
-      const buttonMetrics = paletteButtons.map((btn) => {
-        const rect = btn.getBoundingClientRect();
-        return {
-          text: btn.textContent || '',
-          width: rect.width,
-          height: rect.height,
-        };
-      });
+      const status = document.querySelector('[data-testid="status-bar"]');
+      const progress = document.querySelector('[data-testid="progress-message"]');
+      const commandButtons = Array.from(
+        document.querySelectorAll('#commandRail button')
+      ).map((el) => (el.textContent || '').trim());
+      const hasSettings = Boolean(document.querySelector('#settingsSheet'));
       return {
-        headerLeft: headerRect.left,
-        headerTop: headerRect.top,
-        headerRightInset: window.innerWidth - headerRect.right,
-        buttonMetrics,
-        navLabels: navButtons.map((btn) => ({
-          text: (btn.textContent || '').trim(),
-          ariaLabel: btn.getAttribute('aria-label') || '',
-        })),
+        status: (status?.textContent || '').trim(),
+        progress: (progress?.textContent || '').trim(),
+        commandButtons,
+        hasSettings,
       };
     });
 
-    expect(layout).not.toBeNull();
-    if (!layout) return;
+    expect(layout.hasSettings).toBe(true);
+    expect(layout.status).toContain('Drop an image');
+    expect(layout.progress).toContain('Drop an image');
+    expect(layout.commandButtons.length).toBeGreaterThanOrEqual(5);
 
-    expect(layout.headerTop).toBeGreaterThanOrEqual(4);
-    expect(layout.headerRightInset).toBeLessThanOrEqual(24);
-    expect(layout.headerLeft).toBeGreaterThanOrEqual(0);
-
-    expect(layout.navLabels).toHaveLength(2);
-    const navAria = layout.navLabels.map((entry) => entry.ariaLabel.toLowerCase());
-    expect(navAria).toContain('highlight a suggested cell');
-    expect(navAria.some((label) => label.includes('show controls'))).toBe(true);
-
-    const normalizedTexts = layout.buttonMetrics.map((entry) =>
-      entry.text.replace(/\s+/g, ' ').trim().toLowerCase()
+    await page.click('#settingsButton');
+    const generatorLabels = await page.$$eval(
+      '#settingsSheet label span:first-child',
+      (nodes) => nodes.map((el) => (el.textContent || '').trim())
     );
-    expect(normalizedTexts[0]).toMatch(/sky/);
-    normalizedTexts.forEach((text) => {
-      expect(text).not.toMatch(/\d+\s+left\b/);
-    });
-
-    layout.buttonMetrics.forEach((metric) => {
-      expect(metric.width).toBeLessThanOrEqual(90);
-      expect(metric.height).toBeLessThanOrEqual(90);
-    });
-
-    const menuToggle = page.locator('[data-testid="command-menu-toggle"]');
-    if ((await menuToggle.count()) > 0) {
-      await menuToggle.click();
-      await page.waitForSelector('[aria-label="Canvas command menu"]', {
-        timeout: 10_000,
-        state: 'visible',
-      });
-    }
-    await page.click('[data-testid="open-art-library"]');
-    const cardCount = await page.locator("[data-testid=\"art-library-card\"]").count();
-    expect(cardCount).toBeGreaterThan(0);
+    expect(generatorLabels.some((label) => label.includes('Colours'))).toBe(true);
+    expect(generatorLabels.some((label) => label.includes('Sample rate'))).toBe(true);
+    await page.click('[data-sheet-close="settings"]');
   });
 
-  test('fills a region when clicked without throwing console errors', async ({ page }) => {
-    test.setTimeout(120000);
-    const consoleErrors = [];
-
-    page.on('pageerror', (error) => {
-      consoleErrors.push(`pageerror: ${error.message}`);
-    });
-
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        consoleErrors.push(`console error: ${msg.text()}`);
-      }
-    });
-
+  test('lets players fill a puzzle to completion', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('path[data-cell-id="c1"]', { timeout: 60_000 });
-    await page.waitForSelector('[data-testid="palette-dock"] button', { timeout: 60_000 });
+    await loadFixturePuzzle(page);
 
-    await page.click('path[data-cell-id="c1"]');
-    await page.waitForTimeout(100);
+    const palette = page.locator('[data-testid="palette-swatch"]');
+    await expect(palette).toHaveCount(2);
+    await page.click('#settingsButton');
+    await expect(page.locator('#downloadJson')).toBeEnabled();
+    await page.click('[data-sheet-close="settings"]');
+    await expect(page.locator('#resetButton')).toBeEnabled();
 
-    const fillState = await page.evaluate(() => {
-      const interactive = document.querySelector('path[data-cell-id="c1"]');
-      const preview = interactive?.previousElementSibling;
-      return {
-        interactiveFill: interactive?.getAttribute('fill') ?? null,
-        interactiveOpacity: interactive
-          ? window.getComputedStyle(interactive).opacity
-          : null,
-        previewFill: preview?.getAttribute('fill') ?? null,
-        previewOpacity: preview?.getAttribute('opacity') ?? null,
-      };
-    });
+    const progress = page.locator('[data-testid="progress-message"]');
+    await expect(progress).toHaveText(`Filled 0 of ${FIXTURE_PUZZLE.regions.length} regions.`);
 
-    expect(fillState.previewFill?.toLowerCase()).toBe('#86c5ff');
-    expect(fillState.previewOpacity).toBe('1');
-    expect(fillState.interactiveFill).toBe('transparent');
-    expect(parseFloat(fillState.interactiveOpacity ?? '1')).toBeLessThan(1);
-    expect(consoleErrors).toHaveLength(0);
-  });
+    for (let index = 0; index < FIXTURE_PUZZLE.regions.length; index += 1) {
+      const region = FIXTURE_PUZZLE.regions[index];
+      await page.click(`[data-color-id="${region.colorId}"]`);
+      await clickRegionCenter(page, region, FIXTURE_PUZZLE);
 
-  test('renders the home page, captures a screenshot, and logs key details', async ({ page }, testInfo) => {
-    test.setTimeout(120000);
-    const consoleErrors = [];
+      await expect
+        .poll(async () =>
+          page.evaluate(() => window.capyGenerator.getState().filled.size)
+        )
+        .toBe(index + 1);
 
-    page.on('pageerror', (error) => {
-      consoleErrors.push(`pageerror: ${error.message}`);
-    });
-
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        consoleErrors.push(`console error: ${msg.text()}`);
+      if (index + 1 < FIXTURE_PUZZLE.regions.length) {
+        await expect(progress).toHaveText(
+          `Filled ${index + 1} of ${FIXTURE_PUZZLE.regions.length} regions.`
+        );
+      } else {
+        await expect(progress).toHaveText(
+          'Puzzle complete! Download the data or try another image.'
+        );
       }
-    });
-
-    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('[data-testid="palette-dock"] button', {
-      timeout: 60_000,
-      state: 'attached',
-    });
-    await page.waitForSelector('path[data-cell-id]', {
-      timeout: 60_000,
-      state: 'attached',
-    });
-
-    const details = await page.evaluate(() => {
-      const paletteButtons = document.querySelectorAll('[data-testid="palette-dock"] button');
-      const cellPaths = document.querySelectorAll('path[data-cell-id]');
-      const navButtons = document.querySelectorAll('header[role="banner"] nav button');
-
-      return {
-        title: document.title,
-        paletteCount: paletteButtons.length,
-        cellCount: cellPaths.length,
-        navAriaLabels: Array.from(navButtons).map(
-          (btn) => btn.getAttribute('aria-label')?.trim() ?? ''
-        ),
-      };
-    });
-
-    const menuToggle = page.locator('[data-testid="command-menu-toggle"]');
-    await menuToggle.click();
-    await page.waitForSelector('[aria-label="Canvas command menu"]', {
-      timeout: 10_000,
-      state: 'visible',
-    });
-    const menuLibraryButtons = await page
-      .locator('[aria-label="Canvas command menu"] [data-testid="open-art-library"]')
-      .count();
-    expect(menuLibraryButtons).toBeGreaterThan(0);
-    await menuToggle.click();
-
-    const safeName =
-      testInfo.title
-        .replace(/[^a-z0-9]+/gi, '-')
-        .replace(/^-+|-+$/g, '')
-        .toLowerCase() || 'ui-review';
-
-    const screenshotPath = path.join(REVIEW_DIR, `${safeName}.png`);
-    const summaryPath = path.join(REVIEW_DIR, `${safeName}.json`);
-
-    const buffer = await page.screenshot({ path: screenshotPath, fullPage: true });
-    await testInfo.attach('ui-review screenshot', {
-      path: screenshotPath,
-      contentType: 'image/png',
-    });
-
-    const summary = {
-      ...details,
-      timestamp: new Date().toISOString(),
-      consoleErrors,
-      screenshot: path.relative(path.join(__dirname, '..'), screenshotPath),
-    };
-
-    await fs.promises.writeFile(summaryPath, JSON.stringify(summary, null, 2), 'utf8');
-
-    expect(buffer.length).toBeGreaterThan(10_000);
-    expect(consoleErrors).toHaveLength(0);
-    expect(details.title).toContain('Color-by-Number');
-    expect(details.paletteCount).toBeGreaterThan(0);
-    expect(details.cellCount).toBeGreaterThan(0);
-    expect(details.navAriaLabels).toContain('Highlight a suggested cell');
-    expect(details.navAriaLabels.some((label) => /show controls/i.test(label))).toBe(true);
-  });
-
-  test('loads each starter artwork, captures screenshots, and records metadata', async ({ page }, testInfo) => {
-    test.setTimeout(180000);
-
-    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('[data-testid="palette-dock"] button', {
-      timeout: 60_000,
-      state: 'attached',
-    });
-
-    const menuToggle = page.locator('[data-testid="command-menu-toggle"]');
-
-    async function openLibraryDialog() {
-      if ((await page.locator('[data-testid="open-art-library"]:visible').count()) === 0) {
-        await menuToggle.click();
-        await page.waitForSelector('[aria-label="Canvas command menu"]', {
-          timeout: 10_000,
-          state: 'visible',
-        });
-      }
-      const trigger = page.locator('[data-testid="open-art-library"]:visible').first();
-      await expect(trigger).toBeVisible({ timeout: 10_000 });
-      await trigger.click();
-      await page.waitForSelector('[data-testid="art-library-dialog"]', {
-        timeout: 60_000,
-        state: 'visible',
-      });
     }
 
-    await openLibraryDialog();
-
-    const availableArtworks = await page.evaluate(() => {
-      const cards = Array.from(document.querySelectorAll('[data-testid="art-library-card"]'));
-      return cards
-        .map((card) => {
-          const id = card.getAttribute('data-artwork-id') || '';
-          const rawLabel = card.getAttribute('aria-label') || card.textContent || '';
-          const normalized = rawLabel
-            .replace(/\(active\)/gi, '')
-            .replace(/^\s*load\s+/i, '')
-            .trim();
-          return { id, title: normalized || id || 'Artwork' };
-        })
-        .filter((entry) => entry.id);
-    });
-
-    expect(availableArtworks.length).toBeGreaterThan(0);
-
-    const manifest = [];
-
-    for (let index = 0; index < availableArtworks.length; index += 1) {
-      const { id, title } = availableArtworks[index];
-
-      if (index > 0) {
-        await openLibraryDialog();
-      }
-
-      const cardLocator = page
-        .locator(`[data-testid="art-library-card"][data-artwork-id="${id}"]`)
-        .first();
-      await expect(cardLocator).toBeVisible({ timeout: 60_000 });
-      await cardLocator.click();
-      await page.waitForSelector('[data-testid="art-library-dialog"]', {
-        timeout: 60_000,
-        state: 'detached',
-      });
-
-      await page.waitForSelector('[data-testid="palette-dock"] button', {
-        timeout: 60_000,
-        state: 'attached',
-      });
-      await page.waitForSelector('path[data-cell-id]', {
-        timeout: 60_000,
-        state: 'attached',
-      });
-
-      await page.waitForFunction(
-        ({ key, expected }) => window.localStorage.getItem(key) === expected,
-        { key: ACTIVE_ART_KEY, expected: id }
-      );
-
-      const details = await page.evaluate((key) => {
-        const paletteButtons = document.querySelectorAll('[data-testid="palette-dock"] button');
-        const cellPaths = document.querySelectorAll('path[data-cell-id]');
-        const header = document.querySelector('header[role="banner"]');
-        return {
-          activeId: window.localStorage.getItem(key),
-          paletteCount: paletteButtons.length,
-          cellCount: cellPaths.length,
-          headerText: header ? header.textContent.replace(/\s+/g, ' ').trim() : '',
-        };
-      }, ACTIVE_ART_KEY);
-
-      expect(details.activeId).toBe(id);
-      expect(details.paletteCount).toBeGreaterThan(0);
-      expect(details.cellCount).toBeGreaterThan(0);
-
-      const safeSlug = (id || `artwork-${index + 1}`)
-        .replace(/[^a-z0-9-]+/gi, '-')
-        .replace(/^-+|-+$/g, '')
-        .toLowerCase() || `artwork-${index + 1}`;
-
-      const screenshotPath = path.join(ARTWORK_REVIEW_DIR, `${safeSlug}.png`);
-      const summaryPath = path.join(ARTWORK_REVIEW_DIR, `${safeSlug}.json`);
-
-      const buffer = await page.screenshot({ path: screenshotPath, fullPage: true });
-      expect(buffer.length).toBeGreaterThan(10_000);
-
-      const summary = {
-        id,
-        title,
-        paletteCount: details.paletteCount,
-        cellCount: details.cellCount,
-        headerText: details.headerText,
-        screenshot: path.relative(path.join(__dirname, '..'), screenshotPath),
-        timestamp: new Date().toISOString(),
-      };
-
-      await fs.promises.writeFile(summaryPath, JSON.stringify(summary, null, 2), 'utf8');
-      manifest.push(summary);
-    }
-
-    const manifestPath = path.join(ARTWORK_REVIEW_DIR, 'manifest.json');
-    await fs.promises.writeFile(
-      manifestPath,
-      JSON.stringify({ artworks: manifest }, null, 2),
-      'utf8'
-    );
-
-    await testInfo.attach('starter-artwork-manifest', {
-      path: manifestPath,
-      contentType: 'application/json',
-    });
+    await page.click('#resetButton');
+    await expect(progress).toHaveText(`Filled 0 of ${FIXTURE_PUZZLE.regions.length} regions.`);
   });
 });
