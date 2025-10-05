@@ -86,6 +86,7 @@ Our automated Playwright run (`npm test --silent`) validates the experience end 
 - **Art library listing:** Opens the library dialog and verifies every bundled scene is present (Capybara in a Forest, Capybara Lagoon Sunrise, Twilight Marsh Study, Lush Green Forest Walk).
 - **Painting updates completion:** Fills a cell to confirm autosave and completion tracking update immediately.
 - **HUD coverage snapshot:** Captures a full-page screenshot plus a JSON summary with palette counts, cell totals, and the header button ARIA labels alongside the presence of the art-library control.
+- **Tap-to-fill regression:** Clicks the first region and inspects the DOM to ensure the fill renders, opacity drops, and no console errors fire during the interaction.
 - **Mobile command rail layout:** Boots the app at a handheld viewport to ensure the header hugs the top-right edge, the two-icon cluster remains reachable, the menu toggle reveals every command, and the palette swatches stay compact while still showing their color names.
 - **Starter merge behavior:** Boots with stored data to ensure bundled scenes merge without duplication.
 - **Title preservation:** Checks that custom titles persist after a starter refresh.
