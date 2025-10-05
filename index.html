@@ -1721,7 +1721,8 @@ function App() {
     eyedropCandidateRef.current = null;
 
     const target = e.target;
-    const cid = target?.dataset?.cellId;
+    const cellNode = target?.closest?.("[data-cell-id]");
+    const cid = cellNode?.dataset?.cellId;
 
     if (e.pointerType === "mouse" && (e.button === 2 || e.button === 1 || e.ctrlKey)) {
       e.preventDefault();
@@ -1778,7 +1779,8 @@ function App() {
 
     if (enableDragFill && dragIntentRef.current === "painting") {
       const target = e.target;
-      const id = target?.dataset?.cellId;
+      const cellNode = target?.closest?.("[data-cell-id]");
+      const id = cellNode?.dataset?.cellId;
       if (id && id !== pendingPaintRef.current) {
         pendingPaintRef.current = id;
         onCellTap(id);
