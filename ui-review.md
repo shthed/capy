@@ -7,12 +7,13 @@
 
 ## Positive Observations
 - The Peek control lets you preview the finished painting without leaving the canvas, either by holding or toggling the button.
-- Palette swatches now list both color names and remaining counts, so picking the next hue is faster.
+- Palette swatches now tuck their color names directly inside the button while keeping the numbers bold, so picking the next hue is faster without extra labels.
 - Tap-to-fill now happens on deliberate clicks, reducing accidental strokes on touch screens while drag gestures stay focused on panning.
 - Left-drag panning now keeps the canvas full-screen while the palette hugs the bottom edge without a frame.
 - The new Help panel delivers a simple how-to, to-do checklist, and keyboard tips so new players understand the flow right away.
 - The art library now opens with a thumbnail picker that previews each scene, making it faster to spot and load the exact artwork you want.
-- The ultra-slim glass command rail now hugs the top edge in a single line, keeping library, options, help, peek, and hint controls visible without crowding the artwork.
+- The ultra-slim glass command rail now hugs the top-right corner and reflows into a stacked layout on phones, keeping library, options, help, peek, and hint controls visible without crowding the artwork.
+- The mobile smoke run confirms the compact swatches stay legible and the top rail remains reachable at handheld sizes.
 - Mousewheel zoom now stays anchored under the cursor, eases smoothly toward the target scale, and both mouse buttons pan the scene, so navigation feels immediate and predictable.
 - The integrated progress chip beside the artwork title makes it effortless to see completion percentage at a glance as you fill cells.
 - Slimmed palette bubbles still feel tactile thanks to the inset numbering and glow, and they give the composition more breathing room around the artwork.

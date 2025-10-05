@@ -10,6 +10,63 @@ test.describe('Capybooper visual review', () => {
     await fs.promises.mkdir(REVIEW_DIR, { recursive: true });
   });
 
+  test('keeps the header anchored and palette compact on mobile viewports', async ({ page }) => {
+    test.setTimeout(120000);
+    await page.setViewportSize({ width: 414, height: 896 });
+    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('header[role="banner"]', { timeout: 60_000 });
+    await page.waitForSelector('[data-testid="palette-dock"] button', { timeout: 60_000 });
+
+    const layout = await page.evaluate(() => {
+      const header = document.querySelector('header[role="banner"]');
+      const paletteButtons = Array.from(
+        document.querySelectorAll('[data-testid="palette-dock"] button')
+      );
+      if (!header || paletteButtons.length === 0) {
+        return null;
+      }
+      const headerRect = header.getBoundingClientRect();
+      const buttonMetrics = paletteButtons.map((btn) => {
+        const rect = btn.getBoundingClientRect();
+        return {
+          text: btn.textContent || '',
+          width: rect.width,
+          height: rect.height,
+        };
+      });
+      return {
+        headerLeft: headerRect.left,
+        headerTop: headerRect.top,
+        headerRightInset: window.innerWidth - headerRect.right,
+        buttonMetrics,
+      };
+    });
+
+    expect(layout).not.toBeNull();
+    if (!layout) return;
+
+    expect(layout.headerTop).toBeGreaterThanOrEqual(4);
+    expect(layout.headerRightInset).toBeLessThanOrEqual(24);
+    expect(layout.headerLeft).toBeGreaterThanOrEqual(0);
+
+    const normalizedTexts = layout.buttonMetrics.map((entry) =>
+      entry.text.replace(/\s+/g, ' ').trim().toLowerCase()
+    );
+    expect(normalizedTexts[0]).toMatch(/sky/);
+    normalizedTexts.forEach((text) => {
+      expect(text).not.toMatch(/\d+\s+left\b/);
+    });
+
+    layout.buttonMetrics.forEach((metric) => {
+      expect(metric.width).toBeLessThanOrEqual(90);
+      expect(metric.height).toBeLessThanOrEqual(90);
+    });
+
+    await page.click('[data-testid="open-art-library"]');
+    const cardCount = await page.locator("[data-testid=\"art-library-card\"]").count();
+    expect(cardCount).toBeGreaterThan(0);
+  });
+
   test('renders the home page, captures a screenshot, and logs key details', async ({ page }, testInfo) => {
     test.setTimeout(120000);
     const consoleErrors = [];
