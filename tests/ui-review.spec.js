@@ -55,29 +55,38 @@ async function clickRegionCenter(page, region, puzzle) {
 }
 
 test.describe('Capy image generator', () => {
-  test('renders drag hint and options on load', async ({ page }) => {
+  test('renders command rail and hidden generator settings on load', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-testid="start-hint"]');
 
     const layout = await page.evaluate(() => {
-      const optionsPanel = document.querySelector('[data-testid="options-panel"]');
       const status = document.querySelector('[data-testid="status-bar"]');
       const progress = document.querySelector('[data-testid="progress-message"]');
-      const controls = Array.from(
-        optionsPanel?.querySelectorAll('label span:first-child') ?? []
+      const commandButtons = Array.from(
+        document.querySelectorAll('#commandRail button')
       ).map((el) => (el.textContent || '').trim());
+      const hasSettings = Boolean(document.querySelector('#settingsSheet'));
       return {
-        hasOptions: Boolean(optionsPanel),
         status: (status?.textContent || '').trim(),
         progress: (progress?.textContent || '').trim(),
-        controlLabels: controls,
+        commandButtons,
+        hasSettings,
       };
     });
 
-    expect(layout.hasOptions).toBe(true);
+    expect(layout.hasSettings).toBe(true);
     expect(layout.status).toContain('Drop an image');
     expect(layout.progress).toContain('Drop an image');
-    expect(layout.controlLabels.length).toBeGreaterThanOrEqual(3);
+    expect(layout.commandButtons.length).toBeGreaterThanOrEqual(5);
+
+    await page.click('#settingsButton');
+    const generatorLabels = await page.$$eval(
+      '#settingsSheet label span:first-child',
+      (nodes) => nodes.map((el) => (el.textContent || '').trim())
+    );
+    expect(generatorLabels.some((label) => label.includes('Colours'))).toBe(true);
+    expect(generatorLabels.some((label) => label.includes('Sample rate'))).toBe(true);
+    await page.click('[data-sheet-close="settings"]');
   });
 
   test('lets players fill a puzzle to completion', async ({ page }) => {
@@ -86,8 +95,10 @@ test.describe('Capy image generator', () => {
 
     const palette = page.locator('[data-testid="palette-swatch"]');
     await expect(palette).toHaveCount(2);
+    await page.click('#settingsButton');
     await expect(page.locator('#downloadJson')).toBeEnabled();
-    await expect(page.locator('#resetPuzzle')).toBeEnabled();
+    await page.click('[data-sheet-close="settings"]');
+    await expect(page.locator('#resetButton')).toBeEnabled();
 
     const progress = page.locator('[data-testid="progress-message"]');
     await expect(progress).toHaveText(`Filled 0 of ${FIXTURE_PUZZLE.regions.length} regions.`);
@@ -114,7 +125,7 @@ test.describe('Capy image generator', () => {
       }
     }
 
-    await page.click('#resetPuzzle');
+    await page.click('#resetButton');
     await expect(progress).toHaveText(`Filled 0 of ${FIXTURE_PUZZLE.regions.length} regions.`);
   });
 });
