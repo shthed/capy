@@ -53,12 +53,10 @@ The Playwright suite exercises the core flows:
 
 - **renders drag hint and options on load** – Confirms the hint overlay, status
   copy, and panel controls render on first boot.
-- **generates a puzzle and enables palette + downloads** – Calls the exposed
-  `window.capyGenerator.loadFromDataUrl` helper with a synthetic image, waits for
-  generation to finish, and asserts palette/progress state plus option
-  regeneration.
-- **fills a region and can reset progress** – Selects a colour, dispatches a
-  canvas click, verifies the filled count increments, then resets progress.
+- **lets players fill a puzzle to completion** – Loads a tiny fixture via
+  `window.capyGenerator.loadPuzzleFixture`, walks through selecting palette
+  swatches, fills each region, observes the completion copy, and resets the
+  board.
 
 Run them locally with:
 
