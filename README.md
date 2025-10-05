@@ -26,7 +26,7 @@ coexist with imported artwork.
 - **Palette customization:** Edit color names, override swatch hex values, or
   toggle Peek behavior from the Options panel. The palette dock now prints each
   color name directly inside its swatch, dims colors as you finish a hue, and
-  can optionally show a minimal remaining-count badge below the row.
+  can optionally show a minimal remaining-count badge inside the swatch.
 - **Peek preview modes:** Hold the Peek button for a transient look at the
   completed illustration or toggle it to stay active. Keyboard shortcuts mirror
   the on-screen controls for quick access.
@@ -54,15 +54,16 @@ when a check fails.
   optional heatmap dots when zoomed out.
 - **Palette dock:** Floating glass strip centred beneath the canvas with a
   single-row, horizontally scrollable set of smaller swatches. Each swatch now
-  shows both the number and color name inside the button, highlights the active
-  selection, and dims once its cells are complete.
+  shows both the number and color name inside the button, can surface a tiny
+  remaining-count badge, highlights the active selection, and dims once its
+  cells are complete.
 - **Smoke Tests HUD:** Hidden by default when all checks pass. If a test fails,
   a floating card appears with diagnostics and a reminder that the “T”
   shortcut toggles visibility.
 - **Options panel:** Floating dialog that explains the app, lists controls,
   and exposes toggles for autosave, auto-advance, hint pulses, eyedropper,
   keyboard shortcuts, numbered overlays, heatmap dots, the smoke-test HUD,
-  palette labels, and peek behavior. Choices persist in `localStorage` and can be restored to
+  palette labels/badges, and peek behavior. Choices persist in `localStorage` and can be restored to
   the defaults with a single reset.
 
 ## Getting started
