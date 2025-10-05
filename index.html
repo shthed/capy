@@ -219,7 +219,7 @@
         left: 0;
         right: 0;
         bottom: 0;
-        padding: 20px 28px 26px;
+        padding: 16px 24px 22px;
         background: linear-gradient(to top, rgba(2, 6, 23, 0.88), rgba(2, 6, 23, 0));
         pointer-events: none;
         z-index: 3;
@@ -228,10 +228,10 @@
       #paletteScroller {
         pointer-events: auto;
         display: flex;
-        gap: 12px;
+        gap: 10px;
         overflow-x: auto;
         overflow-y: hidden;
-        padding: 10px;
+        padding: 8px 10px 12px;
         border-radius: 18px;
         background: rgba(15, 23, 42, 0.78);
         border: 1px solid rgba(59, 130, 246, 0.25);
@@ -254,12 +254,12 @@
       .swatch {
         flex: 0 0 auto;
         display: grid;
-        grid-template-columns: 56px 1fr;
+        grid-template-columns: 44px 1fr;
         align-items: center;
-        gap: 12px;
-        min-width: 210px;
-        padding: 12px 16px;
-        border-radius: 16px;
+        gap: 8px;
+        min-width: 150px;
+        padding: 8px 12px;
+        border-radius: 14px;
         border: 1px solid rgba(148, 163, 184, 0.25);
         background: rgba(2, 6, 23, 0.9);
         color: inherit;
@@ -279,9 +279,9 @@
       }
 
       .swatch .sample {
-        width: 56px;
-        height: 56px;
-        border-radius: 14px;
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
         border: 1px solid rgba(15, 23, 42, 0.4);
         box-shadow: inset 0 1px 4px rgba(15, 23, 42, 0.6);
       }
@@ -289,12 +289,12 @@
       .swatch .info {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        font-size: 0.82rem;
+        gap: 2px;
+        font-size: 0.78rem;
       }
 
       .swatch .info strong {
-        font-size: 0.95rem;
+        font-size: 0.88rem;
         letter-spacing: 0.01em;
       }
 
@@ -431,7 +431,8 @@
         border-radius: 12px;
       }
 
-      #downloadJson {
+      #downloadJson,
+      #saveProgress {
         width: 100%;
         border-radius: 12px;
         padding: 10px 0;
@@ -458,11 +459,11 @@
         }
 
         #paletteDock {
-          padding: 16px 18px 22px;
+          padding: 14px 16px 18px;
         }
 
         .swatch {
-          min-width: 180px;
+          min-width: 140px;
         }
       }
 
@@ -488,20 +489,28 @@
         }
 
         #paletteScroller {
-          gap: 10px;
-          padding: 8px 10px 12px;
+          gap: 8px;
+          padding: 6px 8px 10px;
         }
 
         .swatch {
-          grid-template-columns: 48px 1fr;
-          min-width: 148px;
-          padding: 10px 12px;
+          grid-template-columns: 40px 1fr;
+          min-width: 120px;
+          padding: 8px 10px;
         }
 
         .swatch .sample {
-          width: 48px;
-          height: 48px;
-          border-radius: 12px;
+          width: 40px;
+          height: 40px;
+          border-radius: 10px;
+        }
+
+        .swatch .info {
+          font-size: 0.72rem;
+        }
+
+        .swatch .info strong {
+          font-size: 0.8rem;
         }
 
         #startHint .hint-body {
@@ -579,6 +588,7 @@
           <button id="applyOptions" type="button" disabled>Apply changes</button>
           <button id="resetPuzzle" type="button" disabled>Reset progress</button>
         </div>
+        <button id="saveProgress" type="button" disabled>Save progress</button>
         <button id="downloadJson" type="button" disabled>Download JSON</button>
       </div>
       <div class="panel-section">
@@ -604,6 +614,7 @@
       const applyBtn = document.getElementById("applyOptions");
       const resetBtn = document.getElementById("resetPuzzle");
       const downloadBtn = document.getElementById("downloadJson");
+      const saveBtn = document.getElementById("saveProgress");
       const canvasViewport = document.getElementById("canvasViewport");
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.getElementById("previewCanvas");
@@ -782,17 +793,7 @@
       canvasViewport.addEventListener("pointerup", onPointerEnd);
       canvasViewport.addEventListener("pointercancel", onPointerEnd);
       canvasViewport.addEventListener("pointerleave", onPointerEnd);
-      canvasViewport.addEventListener(
-        "wheel",
-        (event) => {
-          if (!state.puzzle || !event.ctrlKey) return;
-          event.preventDefault();
-          const scaleFactor = Math.exp(-event.deltaY / 500);
-          const nextScale = clamp(view.scale * scaleFactor, view.minScale, view.maxScale);
-          zoomAt(nextScale, { x: event.clientX, y: event.clientY });
-        },
-        { passive: false }
-      );
+      canvasViewport.addEventListener("wheel", handleViewportWheel, { passive: false });
 
       canvasViewport.addEventListener("dblclick", (event) => {
         if (!state.puzzle) return;
@@ -806,43 +807,25 @@
       });
 
       downloadBtn.addEventListener("click", () => {
-        if (!state.puzzle) return;
-        const blob = new Blob([
-          JSON.stringify(
-            {
-              width: state.puzzle.width,
-              height: state.puzzle.height,
-              palette: state.puzzle.palette.map((p) => ({
-                id: p.id,
-                hex: p.hex,
-              })),
-              cells: state.puzzle.regions.map((region) => ({
-                id: region.id,
-                colorId: region.colorId,
-                center: [Number(region.cx.toFixed(2)), Number(region.cy.toFixed(2))],
-                pixelCount: region.pixelCount,
-              })),
-            },
-            null,
-            2
-          ),
-        ], {
-          type: "application/json",
-        });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "color-by-number.json";
-        document.body.appendChild(link);
-        link.click();
-        requestAnimationFrame(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        });
+        const payload = buildPuzzleExport(false);
+        if (!payload) return;
+        downloadJsonFile(payload, "color-by-number.json");
+        statusMessage.textContent = "Puzzle data downloaded.";
       });
+
+      saveBtn.addEventListener("click", () => {
+        const payload = buildPuzzleExport(true);
+        if (!payload) return;
+        downloadJsonFile(payload, "color-by-number-progress.json");
+        statusMessage.textContent = "Progress saved as JSON.";
+      });
+
+      updateExportButtons();
 
       function onPointerDown(event) {
         if (!state.puzzle) return;
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        event.preventDefault();
         canvasViewport.setPointerCapture(event.pointerId);
         pointerState.set(event.pointerId, {
           x: event.clientX,
@@ -865,6 +848,10 @@
         const pointer = pointerState.get(event.pointerId);
         if (!pointer) return;
         if (!state.puzzle) return;
+        if (event.pointerType === "mouse" && event.buttons === 0) {
+          onPointerEnd(event);
+          return;
+        }
         const dx = event.clientX - pointer.lastX;
         const dy = event.clientY - pointer.lastY;
         pointer.lastX = event.clientX;
@@ -913,6 +900,26 @@
         if (!wasPinch && !pointer.moved) {
           handleTap(event.clientX, event.clientY);
         }
+      }
+
+      function handleViewportWheel(event) {
+        if (!state.puzzle) return;
+        const viewportHeight = canvasViewport.clientHeight || window.innerHeight || 1;
+        const lineMode = typeof WheelEvent !== "undefined" ? WheelEvent.DOM_DELTA_LINE : 1;
+        const pageMode = typeof WheelEvent !== "undefined" ? WheelEvent.DOM_DELTA_PAGE : 2;
+        const deltaMultiplier =
+          event.deltaMode === lineMode
+            ? 32
+            : event.deltaMode === pageMode
+            ? viewportHeight
+            : 1;
+        const deltaY = event.deltaY * deltaMultiplier;
+        if (!Number.isFinite(deltaY) || deltaY === 0) return;
+        event.preventDefault();
+        const damping = event.ctrlKey || event.metaKey ? 380 : 640;
+        const scaleFactor = Math.exp(-deltaY / damping);
+        const nextScale = clamp(view.scale * scaleFactor, view.minScale, view.maxScale);
+        zoomAt(nextScale, { x: event.clientX, y: event.clientY });
       }
 
       function handleTap(clientX, clientY) {
@@ -1054,6 +1061,12 @@
         }
       }
 
+      function updateExportButtons() {
+        const available = Boolean(state.puzzle);
+        downloadBtn.disabled = !available;
+        saveBtn.disabled = !available;
+      }
+
       function getCurrentOptions() {
         return {
           targetColors: clamp(Number(colorCountEl.value) || 16, 4, 64),
@@ -1136,8 +1149,8 @@
         progressSummary.textContent = "Processing...";
         progressDetail.textContent = "Processing...";
         resetBtn.disabled = true;
-        downloadBtn.disabled = true;
         applyBtn.disabled = true;
+        updateExportButtons();
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
       }
@@ -1166,8 +1179,8 @@
         renderPalette();
         updateProgress();
         resetBtn.disabled = false;
-        downloadBtn.disabled = false;
         applyBtn.disabled = true;
+        updateExportButtons();
         statusMessage.textContent = `Generated ${data.regions.length} regions across ${data.palette.length} colours.`;
       }
 
@@ -1400,6 +1413,52 @@
         if (value < min) return min;
         if (value > max) return max;
         return value;
+      }
+
+      function buildPuzzleExport(includeProgress) {
+        if (!state.puzzle) return null;
+        const base = {
+          width: state.puzzle.width,
+          height: state.puzzle.height,
+          palette: state.puzzle.palette.map((p) => ({
+            id: p.id,
+            hex: p.hex,
+          })),
+          cells: state.puzzle.regions.map((region) => ({
+            id: region.id,
+            colorId: region.colorId,
+            center: [Number(region.cx.toFixed(2)), Number(region.cy.toFixed(2))],
+            pixelCount: region.pixelCount,
+          })),
+        };
+        if (includeProgress) {
+          base.progress = {
+            filledRegions: Array.from(state.filled).sort((a, b) => a - b),
+            activeColor: state.activeColor,
+          };
+          if (state.lastOptions) {
+            base.options = { ...state.lastOptions };
+          }
+          base.savedAt = new Date().toISOString();
+        }
+        return base;
+      }
+
+      function downloadJsonFile(data, filename) {
+        if (!data) return;
+        const blob = new Blob([JSON.stringify(data, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        requestAnimationFrame(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        });
       }
 
       async function createPuzzleData(image, options) {
