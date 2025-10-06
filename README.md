@@ -24,7 +24,9 @@ demand.
   a live progress bar with a telemetry grid that surfaces the active mode,
   prompt, source and target sizes, palette counts, region totals, background
   values, and the current pipeline step (complete with progress percentages)
-  while short-lived notifications capture each processing milestone.
+  while short-lived notifications capture each processing milestone. The tray
+  now tucks itself away on narrow screens so the canvas and palette always have
+  room to breathe on phones.
 - **Detailed debug logging.** The Help sheet's live log announces ChatGPT
   requests, sample fallbacks, fills, hints, zooms, background tweaks, fullscreen
   toggles, and ignored clicks so QA can confirm the entire flow without cracking
@@ -33,8 +35,10 @@ demand.
 - **In-app key manager.** Help → ChatGPT access stores or clears the OpenAI API
   key with a single click while the prompt bar reflects the current state.
 - **Configurable puzzle generator.** Tune palette size, minimum region area,
-resize detail, sampling, iteration count, and smoothing passes before rebuilding
-the scene.
+  resize detail, sampling, iteration count, and smoothing passes before
+  rebuilding the scene. Generator sliders hide automatically on compact
+  viewports (they remain available on tablets/desktops) so mobile players can
+  focus on painting.
 - **Responsive painting canvas.** Click or tap numbered regions to fill them in
 while optional auto-advance hops to the next unfinished colour. Filled areas now
 reveal the clustered artwork beneath the outlines so the illustration gradually
@@ -166,12 +170,15 @@ instead. You can edit the prompt at any time or import your own image/JSON file.
   total regions, while a neighbouring generator card shows a live progress bar,
   a telemetry grid (mode, prompt, sizes, palette, regions, background, progress
   percentage, and the active pipeline step), and a fading feed of status updates
-  for imports, segmentation passes, and palette prep.
+  for imports, segmentation passes, and palette prep. The telemetry card hides
+  itself on phone-sized layouts so the palette stays front and centre—open the
+  Help sheet if you need the full log on mobile.
 - **Settings sheet** – A modal sheet that hides the generation sliders by
   default. Controls include colours, minimum region size, resize detail, sample
   rate, k-means iterations, smoothing passes, a background colour picker, plus
-  toggles for auto-advance and hint animations. The sheet also houses the JSON
-  export action.
+  toggles for auto-advance and hint animations. On phones the advanced generator
+  section stays hidden entirely to reduce scrolling, while larger displays keep
+  the sliders visible. The sheet also houses the JSON export action.
 - **Save manager** – A companion sheet listing every stored snapshot. Each entry
   shows completion progress with quick actions to load, rename, export, or
   delete the save.

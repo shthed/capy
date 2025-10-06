@@ -40,7 +40,8 @@ ChatGPT prompt flow, colour-by-number gameplay, and regression harness.
   populates a telemetry grid with mode, prompt, source/target sizes, palette/
   region totals, background colour, live progress percentages, and the current
   pipeline step, and emits fading notifications so you can confirm the
-  generator pipeline is advancing.
+  generator pipeline is advancing. The tray auto-hides below 768px wide—use the
+  Help sheet's mirrored log when validating flows on a handheld device.
 - **JSON manifests.** Every `npm test` run stores palette counts, header labels,
   and prompt metadata in `artifacts/ui-review/*.json`. Compare snapshots between
   iterations to spot regressions early.

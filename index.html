@@ -199,6 +199,13 @@
         flex-wrap: wrap;
         gap: 6px;
         padding: 12px 16px;
+        justify-content: center;
+      }
+
+      body[data-orientation="portrait"] .prompt-form {
+        flex: 1 1 100%;
+        max-width: none;
+        margin-right: 0;
       }
 
       body[data-orientation="portrait"] #commandRail button {
@@ -210,6 +217,68 @@
         flex-direction: column;
         align-items: stretch;
         gap: 12px;
+        padding: 14px 18px 22px;
+      }
+
+      body[data-orientation="portrait"] #palette {
+        grid-auto-columns: minmax(48px, 1fr);
+      }
+
+      body[data-orientation="portrait"] #puzzleCanvas {
+        max-width: calc(100vw - 48px);
+        max-height: calc(100vh - 260px);
+      }
+
+      body[data-orientation="portrait"] #statusDock {
+        display: none;
+      }
+
+      body[data-orientation="portrait"] .advanced-only {
+        display: none;
+      }
+
+      @media (max-width: 768px) {
+        #commandRail {
+          flex-wrap: wrap;
+          gap: 6px;
+          padding: 12px 16px;
+          justify-content: center;
+        }
+
+        .prompt-form {
+          flex: 1 1 100%;
+          max-width: none;
+          margin-right: 0;
+        }
+
+        #commandRail button {
+          width: 36px;
+          height: 36px;
+        }
+
+        #paletteDock {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 12px;
+          padding: 14px 18px 22px;
+        }
+
+        #palette {
+          grid-auto-columns: minmax(48px, 1fr);
+        }
+
+        #puzzleCanvas {
+          max-width: calc(100vw - 48px);
+          max-height: calc(100vh - 260px);
+        }
+
+        #statusDock {
+          display: none;
+        }
+
+        .advanced-only {
+          display: none;
+        }
       }
 
       #viewport {
@@ -1491,7 +1560,7 @@
             Applies to unfinished regions and adjusts outline contrast automatically.
           </p>
         </section>
-        <section class="sheet-section" aria-labelledby="generatorHeading">
+        <section class="sheet-section advanced-only" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Generator</h3>
           <label class="control">
             <span>Colours <output data-for="colorCount">16</output></span>
