@@ -32,8 +32,12 @@ ChatGPT prompt flow, colour-by-number gameplay, and regression harness.
 ## Observability checklist
 
 - **Debug log.** The Help sheet records prompt attempts, fallbacks, zooms,
-  fills, and settings adjustments. Keep it open during manual tests to confirm
-  behaviour without extra logging.
+  fills, and settings adjustments with severity badges that mirror the status
+  tray. Keep it open during manual tests to confirm behaviour without extra
+  logging.
+- **Status tray.** The footer card displays import/progress steps (file reads,
+  clustering, segmentation counts, palette prep) on a live progress bar with
+  fading notifications so you can confirm the generator pipeline is advancing.
 - **JSON manifests.** Every `npm test` run stores palette counts, header labels,
   and prompt metadata in `artifacts/ui-review/*.json`. Compare snapshots between
   iterations to spot regressions early.

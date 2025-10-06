@@ -124,7 +124,7 @@ test.describe('Capycolour image generator', () => {
     await page.click('#clearApiKey');
     await expect(apiKeyStatus).toHaveText(/No key stored/i);
 
-    const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+    const logMessages = await page.$$eval('#debugLog .log-entry .message', (nodes) =>
       nodes.map((el) => (el.textContent || '').trim())
     );
     expect(logMessages.some((message) => message.includes('Session started'))).toBe(true);
@@ -173,7 +173,7 @@ test.describe('Capycolour image generator', () => {
     }
 
     await page.click('[data-testid="sample-art-button"]');
-    const logHead = page.locator('#debugLog .log-entry span').first();
+    const logHead = page.locator('#debugLog .log-entry .message').first();
     await expect(logHead).toHaveText(/Loading sample puzzle/);
   });
 
@@ -220,7 +220,7 @@ test.describe('Capycolour image generator', () => {
     await expect.poll(zoomValue).toBeGreaterThan(afterMinus);
 
     await page.click('#helpButton');
-    const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+    const logMessages = await page.$$eval('#debugLog .log-entry .message', (nodes) =>
       nodes.map((el) => (el.textContent || '').trim())
     );
     expect(logMessages.length).toBeGreaterThan(0);
@@ -258,7 +258,7 @@ test.describe('Capycolour image generator', () => {
     expect(dataPixel).toEqual([30, 41, 59]);
 
     await page.click('#helpButton');
-    const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+    const logMessages = await page.$$eval('#debugLog .log-entry .message', (nodes) =>
       nodes.map((el) => (el.textContent || '').trim())
     );
     expect(logMessages[0]).toMatch(/Background colour set to #1E293B/);
@@ -297,7 +297,7 @@ test.describe('Capycolour image generator', () => {
     await expect(progress).toHaveText(`0/${BASIC_TEST_PATTERN.regions.length}`);
 
     await page.click('#helpButton');
-    await expect(page.locator('#debugLog .log-entry span').first()).toHaveText(/Reset puzzle progress/);
+    await expect(page.locator('#debugLog .log-entry .message').first()).toHaveText(/Reset puzzle progress/);
     await page.click('[data-sheet-close="help"]');
   });
 });

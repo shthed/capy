@@ -108,7 +108,7 @@ test.describe('ChatGPT prompt flow', () => {
     expect(state.paletteCount).toBeGreaterThan(0);
     expect(state.regionCount).toBeGreaterThan(0);
 
-    const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+    const logMessages = await page.$$eval('#debugLog .log-entry .message', (nodes) =>
       nodes.map((el) => (el.textContent || '').trim())
     );
     expect(logMessages.some((message) => message.includes('Generating ChatGPT art for “Capybara surfing a rainbow river”'))).toBe(
@@ -170,7 +170,7 @@ test.describe('ChatGPT prompt flow', () => {
     expect(state.paletteCount).toBeGreaterThan(0);
     expect(state.regionCount).toBeGreaterThan(0);
 
-    const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+    const logMessages = await page.$$eval('#debugLog .log-entry .message', (nodes) =>
       nodes.map((el) => (el.textContent || '').trim())
     );
     expect(logMessages.some((message) => message.includes('ChatGPT image request failed'))).toBe(true);

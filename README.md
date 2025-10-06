@@ -19,11 +19,16 @@ fails) Capycolour automatically reloads the bundled “Capycolour Springs” SVG
 you always land on a playable puzzle. The 🐹 button still reloads the sample on
 demand.
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
-previously exported JSON puzzles straight into the generator pipeline.
+  previously exported JSON puzzles straight into the generator pipeline.
+- **Step-by-step generator telemetry.** A status tray beneath the palette shows
+  file reads, image decoding, segmentation phases, and palette prep on a live
+  progress bar while short-lived notifications capture the data powering each
+  step.
 - **Detailed debug logging.** The Help sheet's live log announces ChatGPT
   requests, sample fallbacks, fills, hints, zooms, background tweaks, fullscreen
   toggles, and ignored clicks so QA can confirm the entire flow without cracking
-  open DevTools.
+  open DevTools. Each entry now carries a severity pill that mirrors the status
+  tray so troubleshooting at-a-glance is easier.
 - **In-app key manager.** Help → ChatGPT access stores or clears the OpenAI API
   key with a single click while the prompt bar reflects the current state.
 - **Configurable puzzle generator.** Tune palette size, minimum region area,
@@ -156,8 +161,10 @@ instead. You can edit the prompt at any time or import your own image/JSON file.
 - **Fullscreen preview overlay** – Triggered by the Preview button. The preview
   canvas stretches to fit the viewport so contributors can inspect the clustered
   output in detail before painting.
-- **Progress indicator** – A numeric tally in the palette dock that tracks
-  completed versus total regions and announces updates politely via `aria-live`.
+- **Progress & status dock** – A numeric tally still tracks completed versus
+  total regions, while a neighbouring generator card shows a live progress bar
+  and a fading feed of status updates for imports, segmentation passes, and
+  palette prep.
 - **Settings sheet** – A modal sheet that hides the generation sliders by
   default. Controls include colours, minimum region size, resize detail, sample
   rate, k-means iterations, smoothing passes, a background colour picker, plus
@@ -167,8 +174,8 @@ instead. You can edit the prompt at any time or import your own image/JSON file.
   shows completion progress with quick actions to load, rename, export, or
   delete the save.
 - **Help sheet** – Lists every command icon (including the prompt bar),
-  summarizes canvas gestures, and surfaces a live debug log so contributors can
-  confirm state changes while testing.
+  summarizes canvas gestures, and surfaces a live debug log with severity
+  badges so contributors can confirm state changes while testing.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
   Swatches keep their number badges bold while tooltips and ARIA copy preserve
   colour names and remaining counts.

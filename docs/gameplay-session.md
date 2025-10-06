@@ -26,8 +26,9 @@
 - Tweaking the new background colour control instantly repainted unfinished regions and flipped numeral contrast, so a darker backdrop stayed readable while painting.
 - Painting a cell updated the fill colour inline with the clustered artwork (no refresh needed) and click-drag panning, pinch/scroll zoom, plus `+`/`-` keyboard shortcuts made it easy to inspect tiny regions. Entering and exiting fullscreen (or rotating the device) recentred the canvas automatically.
 - The refreshed Help sheet documents every icon command (including the prompt bar and fullscreen), reiterates the gesture controls, and streams a live debug log so it was easy to verify hints, fills, zooms, sample fallbacks, and orientation changes during the session.
+- The new footer status tray surfaced each import step—file read, image decode, k-means clustering, segmentation counts, and palette prep—on a live progress bar with fading notifications so it was obvious where the generator was spending time.
 - The refreshed Help sheet now includes a ChatGPT access section, making it trivial to paste or clear the OpenAI key without touching DevTools while the debug log confirms every save/clear action.
-- Debug logging now captures ignored clicks (no puzzle, wrong colour, filled regions), viewport orientation changes, fullscreen transitions, background updates, and both the start and completion of sample reloads which helped confirm why certain taps were rejected while exercising the canvas.
+- Debug logging now captures ignored clicks (no puzzle, wrong colour, filled regions), viewport orientation changes, fullscreen transitions, background updates, and both the start and completion of sample reloads with severity badges that mirror the status tray—making it easier to spot warnings versus success events at a glance.
 - Overall responsiveness stayed smooth during the brief automation-driven play session.
 
 ## Follow-up Ideas

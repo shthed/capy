@@ -392,13 +392,20 @@
       #paletteDock {
         position: relative;
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        padding: 16px 28px 24px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 18px;
+        padding: 18px 28px 26px;
         background: linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.85) 40%, rgba(2, 6, 23, 0.95) 100%);
         border-top: 1px solid rgba(30, 41, 59, 0.7);
         box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
+      }
+
+      .palette-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
       }
 
       #progress {
@@ -407,6 +414,176 @@
         font-variant-numeric: tabular-nums;
         text-align: left;
         color: rgba(226, 232, 240, 0.82);
+      }
+
+      #statusDock {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        max-width: 360px;
+      }
+
+      .generation-status {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px 16px;
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        background: rgba(15, 23, 42, 0.7);
+        transition: opacity 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+      }
+
+      .generation-status[data-active="false"] {
+        opacity: 0.65;
+      }
+
+      .generation-status[data-state="success"] {
+        border-color: rgba(34, 197, 94, 0.55);
+        background: rgba(15, 23, 42, 0.76);
+      }
+
+      .generation-status[data-state="error"] {
+        border-color: rgba(248, 113, 113, 0.55);
+        background: rgba(30, 41, 59, 0.82);
+      }
+
+      .generation-status-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .generation-title {
+        font-weight: 600;
+        color: rgba(226, 232, 240, 0.95);
+      }
+
+      .generation-detail {
+        font-size: 0.85rem;
+        color: rgba(148, 163, 184, 0.88);
+      }
+
+      .generation-progress {
+        position: relative;
+        width: 100%;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.2);
+        overflow: hidden;
+      }
+
+      .generation-progress .progress-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        width: var(--progress, 0%);
+        border-radius: inherit;
+        background: linear-gradient(90deg, rgba(59, 130, 246, 0.95), rgba(129, 140, 248, 0.95));
+        transition: width 0.25s ease, transform 0.25s ease;
+      }
+
+      .generation-status[data-state="indeterminate"] .progress-fill {
+        width: 35%;
+        transform: translateX(-100%);
+        animation: progress-indeterminate 1.4s ease-in-out infinite;
+      }
+
+      .status-stream {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 160px;
+        overflow: hidden;
+      }
+
+      .status-entry {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 12px;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        background: rgba(15, 23, 42, 0.68);
+        font-size: 0.9rem;
+        opacity: 0;
+        transform: translateY(6px);
+        transition: opacity 0.45s ease, transform 0.45s ease;
+      }
+
+      .status-entry.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .status-entry.fading {
+        opacity: 0;
+        transform: translateY(-6px);
+      }
+
+      .status-entry .status-pill {
+        align-self: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+        text-transform: uppercase;
+        background: rgba(59, 130, 246, 0.32);
+        color: rgba(226, 232, 240, 0.95);
+      }
+
+      .status-entry.status-success .status-pill {
+        background: rgba(34, 197, 94, 0.35);
+        color: rgba(190, 242, 100, 0.96);
+      }
+
+      .status-entry.status-warn .status-pill {
+        background: rgba(234, 179, 8, 0.35);
+        color: rgba(253, 224, 71, 0.96);
+      }
+
+      .status-entry.status-error .status-pill {
+        background: rgba(248, 113, 113, 0.45);
+        color: rgba(254, 202, 202, 0.95);
+      }
+
+      .status-entry.status-debug .status-pill {
+        background: rgba(148, 163, 184, 0.28);
+        color: rgba(226, 232, 240, 0.9);
+      }
+
+      .status-entry.status-trace .status-pill {
+        background: rgba(79, 70, 229, 0.35);
+        color: rgba(196, 181, 253, 0.95);
+      }
+
+      .status-entry .status-message {
+        color: rgba(226, 232, 240, 0.95);
+      }
+
+      .status-entry .status-detail {
+        grid-column: 2 / span 1;
+        font-size: 0.8rem;
+        color: rgba(148, 163, 184, 0.9);
+      }
+
+      @keyframes progress-indeterminate {
+        0% {
+          transform: translateX(-100%);
+        }
+        50% {
+          transform: translateX(-10%);
+        }
+        100% {
+          transform: translateX(100%);
+        }
       }
 
       #palette {
@@ -712,9 +889,9 @@
 
       .debug-log .log-entry {
         display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 4px 10px;
-        align-items: baseline;
+        grid-template-columns: auto auto 1fr;
+        gap: 4px 12px;
+        align-items: center;
         font-size: 0.9rem;
       }
 
@@ -725,7 +902,33 @@
         color: rgba(148, 163, 184, 0.9);
       }
 
-      .debug-log span {
+      .debug-log .level {
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+        text-transform: uppercase;
+        background: rgba(148, 163, 184, 0.28);
+        color: rgba(226, 232, 240, 0.92);
+      }
+
+      .debug-log .level[data-level="success"] {
+        background: rgba(34, 197, 94, 0.35);
+        color: rgba(190, 242, 100, 0.96);
+      }
+
+      .debug-log .level[data-level="warn"] {
+        background: rgba(234, 179, 8, 0.35);
+        color: rgba(253, 224, 71, 0.96);
+      }
+
+      .debug-log .level[data-level="error"] {
+        background: rgba(248, 113, 113, 0.45);
+        color: rgba(254, 202, 202, 0.95);
+      }
+
+      .debug-log .message {
         color: rgba(226, 232, 240, 0.95);
       }
 
@@ -872,6 +1075,16 @@
           margin-bottom: 8px;
           max-width: 100%;
         }
+
+        .palette-row {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 12px;
+        }
+
+        #statusDock {
+          max-width: none;
+        }
       }
 
       @media (max-width: 720px) {
@@ -883,18 +1096,16 @@
           max-height: calc(100vh - 240px);
         }
 
-        #paletteDock {
-          flex-direction: column;
-          align-items: stretch;
-          gap: 12px;
-        }
-
         .prompt-form {
           margin-right: 0;
         }
 
         #progress {
           min-width: 0;
+        }
+
+        #statusDock {
+          max-width: 100%;
         }
       }
     </style>
@@ -1058,8 +1269,36 @@
         </div>
       </div>
       <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div id="progress" aria-live="polite" data-testid="progress-message">—</div>
-        <div id="palette" role="list"></div>
+        <div id="statusDock">
+          <div
+            id="generationStatus"
+            class="generation-status"
+            data-active="false"
+            data-state="idle"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <div class="generation-status-header">
+              <span id="generationStatusLabel" class="generation-title">Generator idle</span>
+              <span id="generationStatusDetail" class="generation-detail">Awaiting prompt or import.</span>
+            </div>
+            <div class="generation-progress" aria-hidden="true">
+              <div id="generationProgressFill" class="progress-fill"></div>
+            </div>
+          </div>
+          <ol
+            id="statusStream"
+            class="status-stream"
+            aria-live="polite"
+            aria-relevant="additions text"
+            aria-label="Recent status updates"
+          ></ol>
+        </div>
+        <div class="palette-row">
+          <div id="progress" aria-live="polite" data-testid="progress-message">—</div>
+          <div id="palette" role="list"></div>
+        </div>
       </footer>
     </div>
     <input id="fileInput" type="file" accept=".json,image/*" hidden />
@@ -1141,7 +1380,9 @@
         <section class="sheet-section" aria-labelledby="debugHeading">
           <h3 id="debugHeading">Debug log</h3>
           <p class="control-note">
-            Recent actions, selections, and generation events appear here while you play.
+            Recent actions, selections, and generation events appear here while you play. Each entry includes an
+            INFO/WARN/ERROR badge that matches the footer status tray so you can spot successes, warnings, or failures at a
+            glance.
           </p>
           <div
             id="debugLog"
@@ -1290,6 +1531,11 @@
       const saveList = document.getElementById("saveList");
       const paletteEl = document.getElementById("palette");
       const progressEl = document.getElementById("progress");
+      const statusStreamEl = document.getElementById("statusStream");
+      const generationStatusEl = document.getElementById("generationStatus");
+      const generationStatusLabel = document.getElementById("generationStatusLabel");
+      const generationStatusDetail = document.getElementById("generationStatusDetail");
+      const generationProgressFill = document.getElementById("generationProgressFill");
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.getElementById("previewCanvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
@@ -1372,6 +1618,16 @@
 
       const debugLogEntries = [];
       const DEBUG_LOG_LIMIT = 80;
+      const VALID_DEBUG_LEVELS = new Set(["trace", "debug", "info", "success", "warn", "warning", "error"]);
+      const STATUS_MAX_ENTRIES = 6;
+      const STATUS_DEFAULT_LIFETIME = 12000;
+      const STATUS_FADE_MS = 1400;
+      const generationProgressState = {
+        active: false,
+        steps: 1,
+        completed: 0,
+      };
+      let generationIdleTimer = null;
 
       function sanitizePromptText(prompt) {
         if (typeof prompt !== "string") return "";
@@ -1527,14 +1783,14 @@
         const apiKey = resolveOpenAIKey({ interactive });
         refreshApiKeyStatus();
         if (!apiKey) {
-          logDebug("ChatGPT image generation skipped: API key not configured.");
+          logDebug("ChatGPT image generation skipped: API key not configured.", "warn");
           setGenerationPending(false);
           if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
             loadSamplePuzzle({ announce: true });
           }
           return false;
         }
-        logDebug(`Requesting ChatGPT image for “${snippet}” (${reason})`);
+        logDebug(`Requesting ChatGPT image for “${snippet}” (${reason})`, "info");
         try {
           const response = await fetch("https://api.openai.com/v1/images/generations", {
             method: "POST",
@@ -1557,7 +1813,7 @@
             } catch (readError) {
               errorSummary = `${response.status} ${response.statusText}`;
             }
-            logDebug(`ChatGPT image request failed: ${errorSummary}`);
+            logDebug(`ChatGPT image request failed: ${errorSummary}`, "error");
             if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
               loadSamplePuzzle({ announce: true });
             }
@@ -1566,7 +1822,7 @@
           const payload = await response.json();
           const imageData = payload?.data?.[0]?.b64_json;
           if (!imageData) {
-            logDebug("ChatGPT response did not include image data.");
+            logDebug("ChatGPT response did not include image data.", "error");
             if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
               loadSamplePuzzle({ announce: true });
             }
@@ -1586,10 +1842,10 @@
           return true;
         } catch (error) {
           if (error?.name === "AbortError") {
-            logDebug("ChatGPT image request was cancelled.");
+            logDebug("ChatGPT image request was cancelled.", "warn");
           } else {
             console.error("Failed to generate ChatGPT image", error);
-            logDebug("ChatGPT image generation failed due to an unexpected error.");
+            logDebug("ChatGPT image generation failed due to an unexpected error.", "error");
           }
           if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
             loadSamplePuzzle({ announce: true });
@@ -1635,7 +1891,7 @@
                 : null;
             state.sourceTitle = metadataTitle || "External data";
             startHint.classList.add("hidden");
-            logDebug(`Loading external puzzle data: ${state.sourceTitle}`);
+            logDebug(`Loading external puzzle data: ${state.sourceTitle}`, "info");
             loadImage(dataUrl);
           },
           loadPuzzleFixture(puzzle) {
@@ -1667,14 +1923,14 @@
             const stored = persistOpenAIKey(key);
             refreshApiKeyStatus();
             if (stored) {
-              logDebug("ChatGPT API key saved via script.");
+              logDebug("ChatGPT API key saved via script.", "success");
             }
             return Boolean(stored);
           },
           clearChatGPTKey() {
             clearOpenAIKey();
             refreshApiKeyStatus();
-            logDebug("ChatGPT API key cleared via script.");
+            logDebug("ChatGPT API key cleared via script.", "warn");
           },
           getChatGPTPrompt() {
             return generationState.lastPrompt || getStoredPrompt() || DEFAULT_PROMPT;
@@ -1683,12 +1939,13 @@
         window.capycolour = window.capyGenerator;
       }
 
+      setGenerationIdle();
       updateOptionOutputs();
       refreshSaveList();
       updateCommandStates();
       renderDebugLog();
       refreshApiKeyStatus();
-      logDebug("Session started");
+      logDebug("Session started", "info");
       handleViewportChange({ log: true, recenter: true });
       resetView({ recenter: true });
 
@@ -1721,7 +1978,7 @@
           if (!trimmed) {
             clearOpenAIKey();
             refreshApiKeyStatus();
-            logDebug("Cleared the stored ChatGPT API key.");
+            logDebug("Cleared the stored ChatGPT API key.", "warn");
             if (apiKeyInput) {
               apiKeyInput.value = "";
             }
@@ -1729,7 +1986,7 @@
           }
           persistOpenAIKey(trimmed);
           refreshApiKeyStatus();
-          logDebug("ChatGPT API key saved for this browser.");
+          logDebug("ChatGPT API key saved for this browser.", "success");
         });
       }
 
@@ -1737,7 +1994,7 @@
         clearApiKeyButton.addEventListener("click", () => {
           clearOpenAIKey();
           refreshApiKeyStatus();
-          logDebug("Cleared the stored ChatGPT API key.");
+          logDebug("Cleared the stored ChatGPT API key.", "warn");
           if (apiKeyInput) {
             apiKeyInput.value = "";
             apiKeyInput.focus();
@@ -1768,7 +2025,7 @@
       document.addEventListener("fullscreenchange", () => {
         updateFullscreenState();
         const active = Boolean(document.fullscreenElement);
-        logDebug(active ? "Entered fullscreen mode" : "Exited fullscreen mode");
+        logDebug(active ? "Entered fullscreen mode" : "Exited fullscreen mode", "info");
         handleViewportChange({ log: true, recenter: true });
       });
 
@@ -1776,7 +2033,7 @@
         clearDebugLogButton.addEventListener("click", () => {
           debugLogEntries.splice(0, debugLogEntries.length);
           renderDebugLog();
-          logDebug("Debug log cleared");
+          logDebug("Debug log cleared", "info");
         });
       }
 
@@ -2131,19 +2388,19 @@
           if (document.exitFullscreen) {
             document.exitFullscreen().catch((error) => {
               console.error("Failed to exit fullscreen", error);
-              logDebug("Unable to exit fullscreen");
+              logDebug("Unable to exit fullscreen", "warn");
             });
           }
           return;
         }
         const target = appEl || document.documentElement;
         if (!document.fullscreenEnabled || !target?.requestFullscreen) {
-          logDebug("Fullscreen not supported in this browser");
+          logDebug("Fullscreen not supported in this browser", "warn");
           return;
         }
         target.requestFullscreen().catch((error) => {
           console.error("Failed to enter fullscreen", error);
-          logDebug("Fullscreen request was blocked");
+          logDebug("Fullscreen request was blocked", "warn");
         });
       }
 
@@ -2170,9 +2427,9 @@
         const metrics = updateViewportMetrics();
         const orientationChanged = metrics.changed;
         if (orientationChanged) {
-          logDebug(`Orientation changed to ${metrics.orientation}`);
+          logDebug(`Orientation changed to ${metrics.orientation}`, "info");
         } else if (log && metrics.sizeChanged) {
-          logDebug(`Viewport resized to ${metrics.width}×${metrics.height} (${metrics.orientation})`);
+          logDebug(`Viewport resized to ${metrics.width}×${metrics.height} (${metrics.orientation})`, "info");
         }
         if (state.puzzle) {
           resetView({ preserveZoom: true, recenter: recenter || orientationChanged });
@@ -2225,9 +2482,15 @@
           const time = document.createElement("time");
           time.dateTime = entry.iso;
           time.textContent = entry.display;
+          const level = document.createElement("span");
+          level.className = "level";
+          level.dataset.level = entry.level;
+          level.textContent = entry.label || (entry.level ? entry.level.toUpperCase() : "INFO");
           const message = document.createElement("span");
+          message.className = "message";
           message.textContent = entry.message;
           item.appendChild(time);
+          item.appendChild(level);
           item.appendChild(message);
           fragment.appendChild(item);
         }
@@ -2235,8 +2498,21 @@
         debugLogEl.scrollTop = 0;
       }
 
-      function logDebug(message) {
+      function normalizeDebugLevel(level) {
+        if (!level) return "info";
+        const lower = String(level).trim().toLowerCase();
+        if (lower === "warning") return "warn";
+        if (lower === "fail" || lower === "failure") return "error";
+        if (lower === "ok") return "success";
+        if (VALID_DEBUG_LEVELS.has(lower)) {
+          return lower === "warning" ? "warn" : lower;
+        }
+        return "info";
+      }
+
+      function logDebug(message, level = "info") {
         if (message == null) return;
+        const normalizedLevel = normalizeDebugLevel(level);
         const now = new Date();
         const entry = {
           iso: now.toISOString(),
@@ -2246,6 +2522,8 @@
             minute: "2-digit",
             second: "2-digit",
           }),
+          level: normalizedLevel,
+          label: normalizedLevel.toUpperCase(),
           message: String(message),
         };
         debugLogEntries.push(entry);
@@ -2253,6 +2531,247 @@
           debugLogEntries.splice(0, debugLogEntries.length - DEBUG_LOG_LIMIT);
         }
         renderDebugLog();
+      }
+
+      function pushStatus(message, options = {}) {
+        if (!statusStreamEl || message == null) return;
+        const normalizedLevel = normalizeDebugLevel(options.level);
+        const entry = document.createElement("li");
+        entry.className = `status-entry status-${normalizedLevel}`;
+        const pill = document.createElement("span");
+        pill.className = "status-pill";
+        const pillLabel = options.label ? String(options.label) : normalizedLevel.toUpperCase();
+        pill.textContent = pillLabel;
+        const text = document.createElement("span");
+        text.className = "status-message";
+        text.textContent = String(message);
+        entry.appendChild(pill);
+        entry.appendChild(text);
+        if (options.detail) {
+          const detail = document.createElement("span");
+          detail.className = "status-detail";
+          detail.textContent = String(options.detail);
+          entry.appendChild(detail);
+        }
+        statusStreamEl.appendChild(entry);
+        requestAnimationFrame(() => {
+          entry.classList.add("visible");
+        });
+        const lifetime = Math.max(0, Number.isFinite(options.lifetime) ? Number(options.lifetime) : STATUS_DEFAULT_LIFETIME);
+        if (lifetime > 0) {
+          const fadeAt = Math.max(0, lifetime - STATUS_FADE_MS);
+          if (fadeAt > 0) {
+            window.setTimeout(() => entry.classList.add("fading"), fadeAt);
+          } else {
+            entry.classList.add("fading");
+          }
+          window.setTimeout(() => {
+            entry.remove();
+          }, lifetime);
+        }
+        while (statusStreamEl.children.length > STATUS_MAX_ENTRIES) {
+          const first = statusStreamEl.firstElementChild;
+          if (!first) break;
+          first.remove();
+        }
+      }
+
+      function clearGenerationIdleTimer() {
+        if (generationIdleTimer) {
+          clearTimeout(generationIdleTimer);
+          generationIdleTimer = null;
+        }
+      }
+
+      function setGenerationIdle(detail = "Awaiting prompt or import.") {
+        if (!generationStatusEl) return;
+        clearGenerationIdleTimer();
+        generationProgressState.active = false;
+        generationProgressState.steps = Math.max(1, generationProgressState.steps);
+        generationProgressState.completed = 0;
+        generationStatusEl.dataset.active = "false";
+        generationStatusEl.dataset.state = "idle";
+        if (generationStatusLabel) {
+          generationStatusLabel.textContent = "Generator idle";
+        }
+        if (generationStatusDetail) {
+          generationStatusDetail.textContent = detail;
+        }
+        if (generationProgressFill) {
+          generationProgressFill.style.removeProperty("--progress");
+          generationProgressFill.style.removeProperty("animation");
+          generationProgressFill.style.removeProperty("transform");
+        }
+      }
+
+      function scheduleGenerationIdle(detail, delay = 2600) {
+        clearGenerationIdleTimer();
+        generationIdleTimer = window.setTimeout(() => {
+          setGenerationIdle(detail);
+        }, Math.max(0, delay));
+      }
+
+      function setGenerationIndeterminate(label, detail = "", options = {}) {
+        if (!generationStatusEl) return;
+        clearGenerationIdleTimer();
+        generationProgressState.active = true;
+        generationProgressState.steps = 1;
+        generationProgressState.completed = 0;
+        generationStatusEl.dataset.active = "true";
+        generationStatusEl.dataset.state = "indeterminate";
+        if (generationStatusLabel) {
+          generationStatusLabel.textContent = label || "Loading image…";
+        }
+        if (generationStatusDetail) {
+          generationStatusDetail.textContent = detail || "";
+        }
+        if (generationProgressFill) {
+          generationProgressFill.style.removeProperty("--progress");
+          generationProgressFill.style.removeProperty("animation");
+          generationProgressFill.style.removeProperty("transform");
+        }
+        if (options.status !== false) {
+          pushStatus(label || "Loading image data…", {
+            detail,
+            level: options.level || "info",
+            lifetime: options.lifetime,
+            label: options.statusLabel,
+          });
+        }
+      }
+
+      function startGenerationProgress(steps, options = {}) {
+        if (!generationStatusEl) return;
+        clearGenerationIdleTimer();
+        generationProgressState.active = true;
+        generationProgressState.steps = Math.max(1, Math.floor(Number(steps) || 1));
+        generationProgressState.completed = 0;
+        generationStatusEl.dataset.active = "true";
+        generationStatusEl.dataset.state = "progress";
+        if (generationStatusLabel) {
+          generationStatusLabel.textContent = options.label || "Processing puzzle…";
+        }
+        if (generationStatusDetail) {
+          generationStatusDetail.textContent = options.detail || "";
+        }
+        if (generationProgressFill) {
+          generationProgressFill.style.removeProperty("animation");
+          generationProgressFill.style.transform = "translateX(0)";
+          generationProgressFill.style.setProperty("--progress", "0%");
+        }
+        if (options.statusMessage) {
+          pushStatus(options.statusMessage, {
+            detail: options.statusDetail ?? options.detail,
+            level: options.level || "info",
+            lifetime: options.lifetime,
+            label: options.statusLabel,
+          });
+        }
+      }
+
+      function advanceGenerationProgress(label, detail, options = {}) {
+        if (!generationStatusEl) return 0;
+        if (!generationProgressState.active) {
+          startGenerationProgress(options.totalSteps ?? 1, { label, detail });
+        }
+        clearGenerationIdleTimer();
+        generationStatusEl.dataset.state = "progress";
+        if (generationStatusLabel && label) {
+          generationStatusLabel.textContent = label;
+        }
+        if (generationStatusDetail) {
+          generationStatusDetail.textContent = detail || "";
+        }
+        const steps = Math.max(1, generationProgressState.steps);
+        generationProgressState.completed = Math.min(steps, generationProgressState.completed + 1);
+        const ratio = generationProgressState.completed / steps;
+        if (generationProgressFill) {
+          generationProgressFill.style.removeProperty("animation");
+          generationProgressFill.style.transform = "translateX(0)";
+          generationProgressFill.style.setProperty(
+            "--progress",
+            `${Math.round(Math.min(1, Math.max(0, ratio)) * 10000) / 100}%`
+          );
+        }
+        if (options.status !== false) {
+          pushStatus(label, {
+            detail,
+            level: options.level || options.logLevel || "debug",
+            lifetime: options.lifetime,
+            label: options.statusLabel,
+          });
+        }
+        if (options.log !== false) {
+          const logLevel = options.logLevel || options.level || "debug";
+          logDebug(`${label}${detail ? ` – ${detail}` : ""}`, logLevel);
+        }
+        return ratio;
+      }
+
+      function completeGenerationProgress(message, detail, options = {}) {
+        if (generationStatusEl) {
+          clearGenerationIdleTimer();
+          generationStatusEl.dataset.active = "true";
+          generationStatusEl.dataset.state = "success";
+          generationProgressState.active = false;
+          generationProgressState.completed = generationProgressState.steps;
+          if (generationStatusLabel && message) {
+            generationStatusLabel.textContent = message;
+          }
+          if (generationStatusDetail) {
+            generationStatusDetail.textContent = detail || "";
+          }
+          if (generationProgressFill) {
+            generationProgressFill.style.removeProperty("animation");
+            generationProgressFill.style.transform = "translateX(0)";
+            generationProgressFill.style.setProperty("--progress", "100%");
+          }
+        }
+        if (message) {
+          pushStatus(message, {
+            detail,
+            level: options.level || "success",
+            lifetime: options.lifetime,
+            label: options.statusLabel,
+          });
+          if (options.log !== false) {
+            logDebug(`${message}${detail ? ` – ${detail}` : ""}`, options.level || "success");
+          }
+        }
+        const idleDetail = options.idleDetail || (detail ? `Ready – ${detail}` : "Ready for the next puzzle.");
+        scheduleGenerationIdle(idleDetail, options.idleDelay ?? 2600);
+      }
+
+      function failGenerationProgress(message, detail, options = {}) {
+        if (generationStatusEl) {
+          clearGenerationIdleTimer();
+          generationStatusEl.dataset.active = "true";
+          generationStatusEl.dataset.state = "error";
+          generationProgressState.active = false;
+          generationProgressState.completed = 0;
+          if (generationStatusLabel) {
+            generationStatusLabel.textContent = message || "Generation failed";
+          }
+          if (generationStatusDetail) {
+            generationStatusDetail.textContent = detail || "";
+          }
+          if (generationProgressFill) {
+            generationProgressFill.style.removeProperty("animation");
+            generationProgressFill.style.transform = "translateX(0)";
+            generationProgressFill.style.setProperty("--progress", "0%");
+          }
+        }
+        pushStatus(message || "Generation failed", {
+          detail,
+          level: options.level || "error",
+          lifetime: options.lifetime ?? STATUS_DEFAULT_LIFETIME + 4000,
+          label: options.statusLabel,
+        });
+        if (options.log !== false) {
+          logDebug(`${message || "Generation failed"}${detail ? ` – ${detail}` : ""}`, options.level || "error");
+        }
+        const idleDetail = options.idleDetail || (detail ? `Idle – ${detail}` : "Idle after error.");
+        scheduleGenerationIdle(idleDetail, options.idleDelay ?? 6000);
       }
 
       function applyBackgroundColor(hex, options = {}) {
@@ -2332,6 +2851,9 @@
       function handleFile(file) {
         if (file.type === "application/json" || file.name.toLowerCase().endsWith(".json")) {
           resetPuzzleUI();
+          setGenerationIndeterminate("Reading puzzle file…", file.name || "Puzzle import", {
+            statusLabel: "FILE",
+          });
           const reader = new FileReader();
           reader.onload = () => {
             try {
@@ -2341,6 +2863,7 @@
               const fallbackTitle = file.name || "Imported puzzle";
               const resolvedTitle = providedTitle || fallbackTitle;
               state.sourceTitle = resolvedTitle;
+              setGenerationIndeterminate("Applying puzzle data…", resolvedTitle, { statusLabel: "LOAD" });
               if (
                 applyPuzzleResult(payload, {
                   options: payload.options || getCurrentOptions(),
@@ -2352,16 +2875,23 @@
               ) {
                 startHint.classList.add("hidden");
                 state.sourceUrl = payload.sourceUrl || null;
-                logDebug(`Imported puzzle from JSON: ${resolvedTitle}`);
+                logDebug(`Imported puzzle from JSON: ${resolvedTitle}`, "success");
               }
             } catch (error) {
               console.error(error);
+              failGenerationProgress("Puzzle import failed", "Could not parse JSON payload.");
             }
+          };
+          reader.onerror = () => {
+            failGenerationProgress("Puzzle import failed", "Unable to read the JSON file.");
           };
           reader.readAsText(file);
           return;
         }
         resetPuzzleUI();
+        setGenerationIndeterminate("Reading image file…", file.name || "Imported image", {
+          statusLabel: "FILE",
+        });
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result;
@@ -2369,7 +2899,7 @@
             state.sourceUrl = result;
             state.sourceTitle = file.name || "Imported image";
             startHint.classList.add("hidden");
-            logDebug(`Generating puzzle from image: ${state.sourceTitle}`);
+            logDebug(`Generating puzzle from image: ${state.sourceTitle}`, "info");
             loadImage(result);
           } else {
             console.error("Unsupported file format");
@@ -2377,6 +2907,7 @@
         };
         reader.onerror = () => {
           console.error("Unable to read that file.");
+          failGenerationProgress("File read failed", "Capycolour could not read that image.");
         };
         reader.readAsDataURL(file);
       }
@@ -2384,12 +2915,19 @@
       function loadImage(url, loadOptions = {}) {
         const { logMessage, completionMessage, skipDefaultLog } = loadOptions;
         if (logMessage) {
-          logDebug(logMessage);
+          logDebug(logMessage, "info");
         }
+        const descriptor = state.sourceTitle || "Puzzle image";
+        setGenerationIndeterminate("Loading image data…", descriptor, { statusLabel: "LOAD" });
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.onload = async () => {
           try {
+            pushStatus("Image decoded", {
+              detail: `${img.width}×${img.height}`,
+              level: "info",
+              statusLabel: "STEP",
+            });
             const options = getCurrentOptions();
             const data = await createPuzzleData(img, options);
             const title = state.sourceTitle || "Generated puzzle";
@@ -2402,10 +2940,12 @@
             });
           } catch (error) {
             console.error("Failed to create puzzle", error);
+            failGenerationProgress("Generation failed", "Unable to create puzzle data.");
           }
         };
         img.onerror = () => {
           console.error("Unable to read that image.");
+          failGenerationProgress("Image load failed", "Capycolour could not decode that image.");
         };
         img.src = url;
       }
@@ -2415,6 +2955,7 @@
           clearTimeout(colorFlashTimer);
           colorFlashTimer = null;
         }
+        setGenerationIdle("Awaiting puzzle data…");
         delete canvasStage.dataset.flashingColor;
         state.puzzle = null;
         state.activeColor = null;
@@ -2448,15 +2989,59 @@
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        const totalSteps = 5 + (smoothingPasses > 0 ? 1 : 0);
+        startGenerationProgress(totalSteps, {
+          label: "Processing source image…",
+          detail: `${image.width}×${image.height} → ${width}×${height}`,
+          statusMessage: "Processing source image",
+          statusDetail: `${image.width}×${image.height} → ${width}×${height}`,
+          statusLabel: "STEP",
+        });
         ctx.drawImage(image, 0, 0, width, height);
+        advanceGenerationProgress("Resized source image", `${image.width}×${image.height} → ${width}×${height}`, {
+          level: "info",
+          statusLabel: "STEP",
+        });
         const imageData = ctx.getImageData(0, 0, width, height);
         const pixels = imageData.data;
-        const { centroids, assignments } = kmeansQuantize(pixels, width, height, targetColors, kmeansIters, sampleRate);
+        const { centroids, assignments } = kmeansQuantize(
+          pixels,
+          width,
+          height,
+          targetColors,
+          kmeansIters,
+          sampleRate
+        );
+        const samplePercent = Math.round(sampleRate * 100);
+        advanceGenerationProgress(
+          "Clustered palette",
+          `${targetColors} colours · ${kmeansIters} iterations @ ${samplePercent}% sample`,
+          {
+            level: "info",
+            statusLabel: "STEP",
+          }
+        );
         let workingAssignments = assignments;
         if (smoothingPasses > 0) {
           workingAssignments = smoothAssignments(assignments, width, height, smoothingPasses);
+          advanceGenerationProgress(
+            "Smoothed assignments",
+            `${smoothingPasses} pass${smoothingPasses === 1 ? "" : "es"}`,
+            {
+              level: "debug",
+              statusLabel: "STEP",
+            }
+          );
         }
         const { regionMap, regions } = segmentRegions(width, height, workingAssignments, minRegion);
+        advanceGenerationProgress(
+          "Segmented regions",
+          `${regions.length} regions (min ${minRegion} px²)`,
+          {
+            level: "info",
+            statusLabel: "STEP",
+          }
+        );
         for (const region of regions) {
           let sumX = 0;
           let sumY = 0;
@@ -2468,6 +3053,10 @@
           region.cy = sumY / region.pixelCount;
           region.colorId += 1;
         }
+        advanceGenerationProgress("Calculated region centres", `${regions.length} regions processed`, {
+          level: "debug",
+          statusLabel: "STEP",
+        });
         const palette = centroids.map((c, idx) => {
           const hex = `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`;
           return {
@@ -2476,6 +3065,10 @@
             rgba: c,
             name: hex.toUpperCase(),
           };
+        });
+        advanceGenerationProgress("Prepared palette", `${palette.length} colours`, {
+          level: "info",
+          statusLabel: "STEP",
         });
         return {
           width,
@@ -2489,15 +3082,18 @@
       function applyPuzzleResult(data, metadata = {}) {
         if (!data || typeof data.width !== "number" || typeof data.height !== "number") {
           console.error("Puzzle data missing required dimensions.");
+          failGenerationProgress("Puzzle import failed", "Puzzle data missing required dimensions.");
           return false;
         }
         if (!Array.isArray(data.palette) || !Array.isArray(data.regions)) {
           console.error("Puzzle data missing palette information.");
+          failGenerationProgress("Puzzle import failed", "Puzzle data missing palette information.");
           return false;
         }
         const mapSource = Array.from(data.regionMap ?? []);
         if (mapSource.length !== data.width * data.height) {
           console.error("Puzzle data is inconsistent.");
+          failGenerationProgress("Puzzle import failed", "Puzzle map size mismatch.");
           return false;
         }
         const palette = data.palette.map((entry, index) => {
@@ -2601,12 +3197,22 @@
           (typeof data.title === "string" && data.title.trim()) ||
           (state.sourceTitle && state.sourceTitle.trim()) ||
           "Puzzle";
+        const summaryDetail = `${paletteCount} colours, ${regionCount} regions`;
         if (completionLog) {
-          logDebug(completionLog);
+          logDebug(completionLog, "success");
+          completeGenerationProgress(completionLog, summaryDetail, {
+            log: false,
+            statusLabel: "DONE",
+          });
         } else if (!skipLoadLog) {
-          logDebug(
-            `Loaded ${descriptor} (${data.width}×${data.height}, ${paletteCount} colours, ${regionCount} regions)`
-          );
+          const message = `Loaded ${descriptor} (${data.width}×${data.height}, ${paletteCount} colours, ${regionCount} regions)`;
+          logDebug(message, "success");
+          completeGenerationProgress(message, summaryDetail, { log: false, statusLabel: "DONE" });
+        } else {
+          completeGenerationProgress(`Puzzle ready: ${descriptor}`, summaryDetail, {
+            level: "success",
+            statusLabel: "DONE",
+          });
         }
         return true;
       }
@@ -2619,6 +3225,7 @@
           (typeof puzzle.title === "string" && puzzle.title.trim()) ||
           "Fixture puzzle";
         state.sourceTitle = resolvedTitle;
+        setGenerationIndeterminate("Applying puzzle data…", resolvedTitle, { statusLabel: "LOAD" });
         const applied = applyPuzzleResult(puzzle, {
           options: getCurrentOptions(),
           filled: puzzle.filled,
