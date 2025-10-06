@@ -8,6 +8,7 @@
 - Interaction coverage also asserts that selecting a palette swatch pulses every matching region and that mouse-wheel as well as keyboard `+`/`-` zoom controls adjust the viewport scale.
 - The smoke run now expects the bundled sample puzzle to be ready on load and confirms the fullscreen control is available for edge-to-edge play.
 - The auto-load sweep now toggles the Low/Medium/High detail chips to confirm the generator sliders, palette size, and debug log entries react to each preset.
+- The first pass also verifies that the art prompt textarea remains hidden until the Settings sheet's Advanced options summary is expanded, so the query stays tucked away from casual play while we confirm it renders correctly when requested.
 - Review the generated JSON for console errors and metadata counts, then open the screenshot to confirm composition changes look right before merging.
 
 ## Positive Observations
@@ -26,6 +27,7 @@
 - Mousewheel zoom now stays anchored under the cursor, eases smoothly toward the target scale, keyboard nudges on `+`/`-` mirror the motion, and both mouse buttons pan the scene, so navigation feels immediate and predictable.
 - Palette pulses now accompany colour selection so playtesters immediately see every matching region (or a brief celebration when a colour is finished).
 - The Settings sheet now exposes a background colour picker that immediately repaints unfinished regions and recalibrates outline contrast, making dark themes workable without extra CSS overrides.
+- The Appearance section now layers in an interface scale slider so QA can enlarge or shrink the command rail and palette without altering puzzle zoom, and the Advanced options accordion hides the art prompt query until it's explicitly expanded for metadata editing.
 - Long-pressing the hint icon now peeks at the finished artwork while a tap still flashes hint pulses, so advanced guidance stays one gesture away.
 - Slimmed palette bubbles still feel tactile thanks to the inset numbering and glow, and they give the composition more breathing room around the artwork.
 - Region numerals now stay centered even inside narrow tree trunks or tapered highlights, which makes the puzzle feel more intentional when zoomed in.

@@ -150,9 +150,11 @@ numbered cell in the segmented source, see
    settings before you reload it.
 2. **Tune generation & appearance.** Open **Settings** to tweak palette size,
    minimum region area, resize detail, sample rate (for faster clustering),
-   iteration count, smoothing passes, auto-advance, hint animations, and the
-   canvas background colour. Apply changes instantly when working from an image
-   source.
+   iteration count, smoothing passes, auto-advance, hint animations, the canvas
+   background colour, and the new interface scale slider. Apply changes
+   instantly when working from an image source, then expand the **Advanced
+   options** accordion to edit the optional art prompt metadata before exporting
+   or regenerating a scene.
 3. **Explore the puzzle.** The game canvas shows outlines and number badges,
    while the **Preview** button floods the entire viewport with a fullscreen
    comparison of the clustered artwork.
@@ -200,7 +202,9 @@ before retrying.
   The canvas renders outlines, remaining numbers, and filled regions, respects
   auto-advance / hint animation toggles, and supports smooth pan + zoom so you
   can inspect fine details. Drag with the mouse or trackpad to reposition the
-  scene and use the scroll wheel (or trackpad gesture) to zoom.
+  scene and use the scroll wheel (or trackpad gesture) to zoom — mobile pinch
+  gestures now feed directly into the stage while browser-level zoom stays
+  disabled to prevent accidental page scaling.
 - **Fullscreen preview overlay** – Triggered by the Preview button. The preview
   canvas stretches to fit the viewport so contributors can inspect the clustered
   output in detail before painting.
@@ -208,10 +212,12 @@ before retrying.
   completed versus total regions and announces updates politely via `aria-live`.
 - **Settings sheet** – A modal sheet that hides the generation sliders by
   default. Controls include colours, minimum region size, resize detail, sample
-  rate, k-means iterations, smoothing passes, a background colour picker, plus
-  toggles for auto-advance and hint animations. The sheet also houses the JSON
-  export action and mirrors the Low/Medium/High detail chips so you can reload
-  the sample with tuned parameters without leaving the modal.
+  rate, k-means iterations, smoothing passes, a background colour picker, and
+  an interface scale slider, plus toggles for auto-advance and hint animations.
+  The sheet also houses the JSON export action, mirrors the Low/Medium/High
+  detail chips so you can reload the sample with tuned parameters without
+  leaving the modal, and tucks the art prompt query inside an **Advanced
+  options** accordion so casual play stays focused on painting.
 - **Detail presets** – The onboarding hint and Settings sheet both surface the
   Low/Medium/High chips with a live caption describing the active preset so you
   know how many colours, what minimum region size, and which resize edge (and

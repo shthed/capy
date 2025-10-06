@@ -128,6 +128,14 @@ test.describe('Capy image generator', () => {
     expect(generatorLabels.some((label) => label.includes('Colours'))).toBe(true);
     expect(generatorLabels.some((label) => label.includes('Sample rate'))).toBe(true);
     expect(generatorLabels.some((label) => label.includes('Background colour'))).toBe(true);
+    expect(generatorLabels.some((label) => label.includes('Interface scale'))).toBe(true);
+
+    const artPrompt = page.locator('#artPrompt');
+    await expect(artPrompt).toBeHidden();
+    await page.click('#generatorAdvanced summary');
+    await expect(artPrompt).toBeVisible();
+    await page.click('#generatorAdvanced summary');
+    await expect(artPrompt).toBeHidden();
     await page.click('[data-sheet-close="settings"]');
   });
 
@@ -375,10 +383,14 @@ test.describe('Capy image generator', () => {
 
     await page.evaluate(() => {
       window.capyGenerator.setBackgroundColor('#1e293b');
+      window.capyGenerator.setUiScale(1.2);
+      window.capyGenerator.setArtPrompt('Capybara springs remake');
     });
 
     const state = await page.evaluate(() => window.capyGenerator.getState());
     expect(state.settings.backgroundColor).toBe('#1e293b');
+    expect(state.settings.uiScale).toBeCloseTo(1.2, 2);
+    expect(state.settings.artPrompt).toBe('Capybara springs remake');
 
     const pixel = await page.evaluate(() => {
       const canvas = document.querySelector('[data-testid="puzzle-canvas"]');
@@ -401,7 +413,9 @@ test.describe('Capy image generator', () => {
     const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
       nodes.map((el) => (el.textContent || '').trim())
     );
-    expect(logMessages[0]).toMatch(/Background colour set to #1E293B/);
+    expect(logMessages.some((message) => /Background colour set to #1E293B/.test(message))).toBe(true);
+    expect(logMessages.some((message) => /Interface scale set to 120%/.test(message))).toBe(true);
+    expect(logMessages.some((message) => /Art prompt updated \(\d+ characters\)/.test(message))).toBe(true);
     await page.click('[data-sheet-close="help"]');
   });
 

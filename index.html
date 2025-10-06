@@ -23,7 +23,10 @@
   -->
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
     <title>Image to Color-by-Number</title>
     <style>
       :root {
@@ -32,13 +35,24 @@
           sans-serif;
         background: #020617;
         color: #e2e8f0;
+        --ui-scale: 1;
         --app-width: 100vw;
         --app-height: 100vh;
-        --viewport-padding: 32px;
+        --viewport-padding: calc(32px * var(--ui-scale));
+        --rail-gap: calc(8px * var(--ui-scale));
+        --rail-gap-portrait: calc(6px * var(--ui-scale));
+        --rail-padding-block: calc(12px * var(--ui-scale));
+        --rail-padding-inline: calc(24px * var(--ui-scale));
+        --command-button-size: calc(40px * var(--ui-scale));
+        --command-button-size-portrait: calc(36px * var(--ui-scale));
       }
 
       * {
         box-sizing: border-box;
+      }
+
+      html {
+        touch-action: manipulation;
       }
 
       body {
@@ -48,6 +62,9 @@
           #020617;
         color: inherit;
         overflow: hidden;
+        font-size: calc(16px * var(--ui-scale));
+        touch-action: manipulation;
+        overscroll-behavior: none;
       }
 
       body.sheet-open {
@@ -76,16 +93,17 @@
         display: flex;
         justify-content: flex-end;
         align-items: center;
-        gap: 8px;
-        padding: 12px 24px;
+        gap: var(--rail-gap);
+        padding: var(--rail-padding-block) var(--rail-padding-inline);
         z-index: 3;
+        touch-action: manipulation;
       }
 
       #commandRail button {
         border-radius: 12px;
         padding: 0;
-        width: 40px;
-        height: 40px;
+        width: var(--command-button-size);
+        height: var(--command-button-size);
         display: grid;
         place-items: center;
         background: rgba(15, 23, 42, 0.82);
@@ -112,13 +130,13 @@
 
       body[data-orientation="portrait"] #commandRail {
         flex-wrap: wrap;
-        gap: 6px;
-        padding: 12px 16px;
+        gap: var(--rail-gap-portrait);
+        padding: var(--rail-padding-block) calc(16px * var(--ui-scale));
       }
 
       body[data-orientation="portrait"] #commandRail button {
-        width: 36px;
-        height: 36px;
+        width: var(--command-button-size-portrait);
+        height: var(--command-button-size-portrait);
       }
 
       body[data-orientation="portrait"] #paletteDock {
@@ -210,14 +228,14 @@
       #previewOverlay canvas {
         width: min(100%, calc(100vh - 140px));
         height: auto;
-        border-radius: 20px;
+        border-radius: calc(20px * var(--ui-scale));
         border: 1px solid rgba(148, 163, 184, 0.4);
         box-shadow: 0 32px 70px rgba(2, 6, 23, 0.65);
         image-rendering: pixelated;
       }
 
       #previewOverlay button {
-        margin-top: 24px;
+        margin-top: calc(24px * var(--ui-scale));
       }
 
       #startHint {
@@ -244,13 +262,13 @@
         pointer-events: auto;
         text-align: center;
         max-width: 360px;
-        padding: 32px;
-        border-radius: 20px;
+        padding: calc(32px * var(--ui-scale));
+        border-radius: calc(20px * var(--ui-scale));
         background: rgba(2, 6, 23, 0.78);
         border: 1px solid rgba(59, 130, 246, 0.35);
         box-shadow: 0 20px 60px rgba(15, 23, 42, 0.6);
         display: grid;
-        gap: 20px;
+        gap: calc(20px * var(--ui-scale));
         justify-items: center;
       }
 
@@ -266,22 +284,22 @@
       }
 
       #startHint .sample-art {
-        width: min(240px, 70vw);
+        width: min(calc(240px * var(--ui-scale)), 70vw);
         max-width: 100%;
-        border-radius: 16px;
+        border-radius: calc(16px * var(--ui-scale));
         box-shadow: 0 16px 40px rgba(15, 23, 42, 0.55);
         border: 1px solid rgba(148, 163, 184, 0.25);
       }
 
       #startHint .hint-actions {
         display: grid;
-        gap: 12px;
+        gap: calc(12px * var(--ui-scale));
         width: 100%;
       }
 
         .detail-callout {
           display: grid;
-          gap: 12px;
+          gap: calc(12px * var(--ui-scale));
           width: 100%;
           text-align: center;
         }
@@ -295,7 +313,7 @@
         .detail-picker {
           display: flex;
           justify-content: center;
-          gap: 8px;
+          gap: calc(8px * var(--ui-scale));
           flex-wrap: wrap;
         }
 
@@ -341,7 +359,7 @@
         font: inherit;
         border-radius: 999px;
         border: none;
-        padding: 10px 22px;
+        padding: calc(10px * var(--ui-scale)) calc(22px * var(--ui-scale));
         background: rgba(96, 165, 250, 0.92);
         color: #021027;
         font-weight: 600;
@@ -367,11 +385,15 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 16px;
-        padding: 16px 28px 24px;
+        gap: calc(16px * var(--ui-scale));
+        padding:
+          calc(16px * var(--ui-scale))
+          calc(28px * var(--ui-scale))
+          calc(24px * var(--ui-scale));
         background: linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.85) 40%, rgba(2, 6, 23, 0.95) 100%);
         border-top: 1px solid rgba(30, 41, 59, 0.7);
         box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
+        touch-action: manipulation;
       }
 
       #progress {
@@ -386,15 +408,15 @@
         flex: 1;
         display: grid;
         grid-auto-flow: column;
-        grid-auto-columns: minmax(44px, 1fr);
-        gap: 6px;
+        grid-auto-columns: minmax(calc(44px * var(--ui-scale)), 1fr);
+        gap: calc(6px * var(--ui-scale));
         overflow-x: auto;
-        padding: 2px 0 6px;
+        padding: 2px 0 calc(6px * var(--ui-scale));
         scrollbar-width: thin;
       }
 
       #palette::-webkit-scrollbar {
-        height: 6px;
+        height: calc(6px * var(--ui-scale));
       }
 
       #palette::-webkit-scrollbar-thumb {
@@ -405,7 +427,7 @@
       .control {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: calc(6px * var(--ui-scale));
         font-size: 0.95rem;
       }
 
@@ -419,6 +441,62 @@
       .control output {
         font-size: 0.85rem;
         color: rgba(148, 163, 184, 0.9);
+      }
+
+      details.advanced-options {
+        margin-top: calc(16px * var(--ui-scale));
+        padding: calc(12px * var(--ui-scale));
+        border-radius: calc(12px * var(--ui-scale));
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(15, 23, 42, 0.45);
+      }
+
+      details.advanced-options[open] {
+        background: rgba(15, 23, 42, 0.6);
+      }
+
+      details.advanced-options summary {
+        list-style: none;
+        cursor: pointer;
+        font-weight: 600;
+        margin-bottom: calc(8px * var(--ui-scale));
+        display: flex;
+        align-items: center;
+        gap: calc(6px * var(--ui-scale));
+      }
+
+      details.advanced-options summary::after {
+        content: "▾";
+        font-size: 0.85rem;
+        opacity: 0.7;
+        transform: rotate(0deg);
+        transition: transform 0.2s ease;
+      }
+
+      details.advanced-options[open] summary::after {
+        transform: rotate(180deg);
+      }
+
+      #artPrompt {
+        width: 100%;
+        min-height: calc(120px * var(--ui-scale));
+        padding: calc(10px * var(--ui-scale));
+        border-radius: calc(12px * var(--ui-scale));
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.85);
+        color: inherit;
+        font: inherit;
+        resize: vertical;
+      }
+
+      #artPrompt:focus {
+        outline: none;
+        border-color: rgba(96, 165, 250, 0.7);
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+      }
+
+      #artPrompt::placeholder {
+        color: rgba(148, 163, 184, 0.7);
       }
 
       input[type="range"] {
@@ -505,10 +583,10 @@
         align-items: center;
         justify-content: center;
         gap: 2px;
-        padding: 6px;
-        min-width: 44px;
-        min-height: 52px;
-        border-radius: 12px;
+        padding: calc(6px * var(--ui-scale));
+        min-width: calc(44px * var(--ui-scale));
+        min-height: calc(52px * var(--ui-scale));
+        border-radius: calc(12px * var(--ui-scale));
         border: 1px solid rgba(148, 163, 184, 0.25);
         background:
           linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.82));
@@ -521,8 +599,8 @@
       .swatch::before {
         content: "";
         position: absolute;
-        inset: 4px;
-        border-radius: 10px;
+        inset: calc(4px * var(--ui-scale));
+        border-radius: calc(10px * var(--ui-scale));
         background:
           linear-gradient(140deg, rgba(15, 23, 42, 0.06), rgba(15, 23, 42, 0.28)),
           var(--swatch-color, transparent);
@@ -1017,7 +1095,10 @@
             <dt>ℹ Help</dt>
             <dd>Open this guide and inspect the live debug log.</dd>
             <dt>⚙ Settings</dt>
-            <dd>Adjust generation sliders, toggle auto-advance, customise the background, or export JSON.</dd>
+            <dd>
+              Adjust generation sliders, toggle auto-advance, customise the background, resize the interface, or export JSON.
+              Expand Advanced options to edit the hidden art prompt metadata when you need to capture the original brief.
+            </dd>
           </dl>
         </section>
         <section class="sheet-section" aria-labelledby="controlsHeading">
@@ -1080,6 +1161,18 @@
           <p class="control-note">
             Applies to unfinished regions and adjusts outline contrast automatically.
           </p>
+          <label class="control">
+            <span>Interface scale <output data-for="uiScale">100%</output></span>
+            <input
+              id="uiScale"
+              type="range"
+              min="0.85"
+              max="1.35"
+              step="0.05"
+              value="1"
+            />
+          </label>
+          <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
         </section>
         <section class="sheet-section" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Generator</h3>
@@ -1122,6 +1215,20 @@
             <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
             <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
           </label>
+          <details class="advanced-options" id="generatorAdvanced">
+            <summary>Advanced options</summary>
+            <label class="control">
+              <span>Art prompt</span>
+              <textarea
+                id="artPrompt"
+                rows="3"
+                placeholder="Describe the scene you want to reinterpret"
+              ></textarea>
+            </label>
+            <p class="control-note">
+              Stored with saves and exports so you can revisit the inspiration later.
+            </p>
+          </details>
         </section>
       </div>
       <div class="sheet-actions">
@@ -1177,12 +1284,14 @@
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
       const backgroundColorInput = document.getElementById("backgroundColor");
+      const uiScaleInput = document.getElementById("uiScale");
       const colorCountEl = document.getElementById("colorCount");
       const minRegionEl = document.getElementById("minRegion");
       const detailEl = document.getElementById("detailLevel");
       const sampleRateEl = document.getElementById("sampleRate");
       const kmeansItersEl = document.getElementById("kmeansIters");
       const smoothingEl = document.getElementById("smoothingPasses");
+      const artPromptInput = document.getElementById("artPrompt");
       const applyBtn = document.getElementById("applyOptions");
       const downloadBtn = document.getElementById("downloadJson");
       const saveSnapshotBtn = document.getElementById("saveSnapshot");
@@ -1202,6 +1311,7 @@
         sample: settingsSheet.querySelector('output[data-for="sampleRate"]'),
         iterations: settingsSheet.querySelector('output[data-for="kmeansIters"]'),
         smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
+        uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
@@ -1318,6 +1428,8 @@
           autoAdvance: true,
           animateHints: true,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
+          uiScale: 1,
+          artPrompt: "",
         },
         previewVisible: false,
         saves: loadSavedEntries(),
@@ -1338,6 +1450,12 @@
           if (hintFlashToggle) {
             hintFlashToggle.checked = settings.animateHints;
           }
+        }
+        if (typeof settings.uiScale === "number") {
+          applyUiScale(settings.uiScale, { skipLog: true, skipAutosave: true });
+        }
+        if (typeof settings.artPrompt === "string") {
+          applyArtPrompt(settings.artPrompt, { skipLog: true, skipAutosave: true });
         }
       }
 
@@ -1372,6 +1490,12 @@
           },
           setBackgroundColor(hex) {
             applyBackgroundColor(hex);
+          },
+          setUiScale(scale) {
+            applyUiScale(scale);
+          },
+          setArtPrompt(promptText) {
+            applyArtPrompt(promptText);
           },
           togglePreview(show) {
             if (typeof show === "boolean") {
@@ -1495,6 +1619,24 @@
         });
         backgroundColorInput.addEventListener("change", (event) => {
           applyBackgroundColor(event.target.value);
+        });
+      }
+
+      if (uiScaleInput) {
+        uiScaleInput.addEventListener("input", (event) => {
+          applyUiScale(event.target.value, { skipLog: true, skipAutosave: true });
+        });
+        uiScaleInput.addEventListener("change", (event) => {
+          applyUiScale(event.target.value);
+        });
+      }
+
+      if (artPromptInput) {
+        artPromptInput.addEventListener("input", (event) => {
+          applyArtPrompt(event.target.value, { skipLog: true, skipAutosave: true });
+        });
+        artPromptInput.addEventListener("change", (event) => {
+          applyArtPrompt(event.target.value);
         });
       }
 
@@ -2015,6 +2157,47 @@
         renderDebugLog();
       }
 
+      function applyUiScale(scale, options = {}) {
+        const { skipLog = false, skipAutosave = false, force = false } = options;
+        const numeric = Number(scale);
+        const resolved = clamp(Number.isFinite(numeric) ? numeric : state.settings.uiScale || 1, 0.8, 1.35);
+        const current = state.settings.uiScale ?? 1;
+        const changed = force || Math.abs(resolved - current) > 0.001;
+        state.settings.uiScale = resolved;
+        document.documentElement.style.setProperty("--ui-scale", String(resolved));
+        if (uiScaleInput && Math.abs(Number(uiScaleInput.value) - resolved) > 0.001) {
+          uiScaleInput.value = String(resolved);
+        }
+        updateOptionOutputs();
+        if (changed && !skipLog) {
+          logDebug(`Interface scale set to ${Math.round(resolved * 100)}%`);
+        }
+        if (changed && !skipAutosave) {
+          scheduleAutosave("settings-ui-scale");
+        }
+        return resolved;
+      }
+
+      function applyArtPrompt(text, options = {}) {
+        const { skipLog = false, skipAutosave = false } = options;
+        const normalized = typeof text === "string" ? text : "";
+        const previous = state.settings.artPrompt ?? "";
+        state.settings.artPrompt = normalized;
+        if (artPromptInput && artPromptInput.value !== normalized) {
+          artPromptInput.value = normalized;
+        }
+        if (normalized !== previous) {
+          if (!skipLog) {
+            const trimmed = normalized.trim();
+            logDebug(trimmed ? `Art prompt updated (${trimmed.length} characters)` : "Art prompt cleared");
+          }
+          if (!skipAutosave) {
+            scheduleAutosave("settings-art-prompt");
+          }
+        }
+        return normalized;
+      }
+
       function applyBackgroundColor(hex, options = {}) {
         const { skipRender = false, skipLog = false, force = false } = options;
         const current = state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX;
@@ -2056,6 +2239,11 @@
         if (optionOutputs.sample) optionOutputs.sample.textContent = `${sampleRateEl.value}%`;
         if (optionOutputs.iterations) optionOutputs.iterations.textContent = String(kmeansItersEl.value);
         if (optionOutputs.smoothing) optionOutputs.smoothing.textContent = String(smoothingEl.value);
+        if (optionOutputs.uiScale) {
+          const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
+          const value = Number.isFinite(source) ? source : state.settings.uiScale || 1;
+          optionOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
+        }
       }
 
       function markOptionsDirty() {
@@ -3103,6 +3291,8 @@
           settings: {
             autoAdvance: Boolean(state.settings.autoAdvance),
             animateHints: Boolean(state.settings.animateHints),
+            uiScale: Number(state.settings.uiScale) || 1,
+            artPrompt: state.settings.artPrompt || "",
           },
         };
         if (regionMapPacked) {
