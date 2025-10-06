@@ -1661,6 +1661,7 @@
       const saveList = document.getElementById("saveList");
       const paletteEl = document.getElementById("palette");
       const progressEl = document.getElementById("progress");
+      const statusDockEl = document.getElementById("statusDock");
       const statusStreamEl = document.getElementById("statusStream");
       const generationDetailsEl = document.getElementById("generationDetails");
       const generationStatusEl = document.getElementById("generationStatus");
@@ -1671,6 +1672,7 @@
       const previewCanvas = document.getElementById("previewCanvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
+      const advancedSections = Array.from(document.querySelectorAll(".advanced-only"));
 
       // Settings sheet output mirrors we update while users drag sliders.
       const optionOutputs = {
@@ -1787,6 +1789,45 @@
         order: [],
         data: new Map(),
       };
+
+      function applyAdaptiveVisibility(orientation) {
+        const isPortrait = orientation === "portrait";
+        if (statusDockEl) {
+          if (isPortrait) {
+            statusDockEl.dataset.mobileHidden = "true";
+            statusDockEl.setAttribute("aria-hidden", "true");
+            statusDockEl.setAttribute("inert", "");
+            if ("inert" in statusDockEl) {
+              statusDockEl.inert = true;
+            }
+          } else {
+            delete statusDockEl.dataset.mobileHidden;
+            statusDockEl.removeAttribute("aria-hidden");
+            statusDockEl.removeAttribute("inert");
+            if ("inert" in statusDockEl) {
+              statusDockEl.inert = false;
+            }
+          }
+        }
+        for (const section of advancedSections) {
+          if (!(section instanceof HTMLElement)) continue;
+          if (isPortrait) {
+            section.dataset.mobileHidden = "true";
+            section.setAttribute("aria-hidden", "true");
+            section.setAttribute("inert", "");
+            if ("inert" in section) {
+              section.inert = true;
+            }
+          } else {
+            delete section.dataset.mobileHidden;
+            section.removeAttribute("aria-hidden");
+            section.removeAttribute("inert");
+            if ("inert" in section) {
+              section.inert = false;
+            }
+          }
+        }
+      }
 
       function renderGenerationTelemetry() {
         if (!generationDetailsEl) return;
@@ -2763,6 +2804,7 @@
         if (document.body) {
           document.body.dataset.orientation = orientation;
         }
+        applyAdaptiveVisibility(orientation);
         const changed = orientation !== lastViewportMetrics.orientation;
         const sizeChanged = width !== lastViewportMetrics.width || height !== lastViewportMetrics.height;
         lastViewportMetrics = { orientation, width, height };
