@@ -20,15 +20,15 @@ you always land on a playable puzzle. The 🐹 button still reloads the sample o
 demand.
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
   previously exported JSON puzzles straight into the generator pipeline.
-- **Step-by-step generator telemetry.** A status tray beneath the palette shows
-  file reads, image decoding, segmentation phases, and palette prep on a live
-  progress bar while short-lived notifications capture the data powering each
-  step.
+- **Step-by-step generator telemetry.** A status tray beneath the palette pairs
+  a live progress bar with a telemetry grid that surfaces the active mode,
+  prompt, source and target sizes, palette counts, region totals, and background
+  values while short-lived notifications capture each processing step.
 - **Detailed debug logging.** The Help sheet's live log announces ChatGPT
   requests, sample fallbacks, fills, hints, zooms, background tweaks, fullscreen
   toggles, and ignored clicks so QA can confirm the entire flow without cracking
-  open DevTools. Each entry now carries a severity pill that mirrors the status
-  tray so troubleshooting at-a-glance is easier.
+  open DevTools. Each entry now carries a severity pill (TRACE/DEBUG/INFO/
+  SUCCESS/WARN/ERROR) that mirrors the status tray for faster troubleshooting.
 - **In-app key manager.** Help → ChatGPT access stores or clears the OpenAI API
   key with a single click while the prompt bar reflects the current state.
 - **Configurable puzzle generator.** Tune palette size, minimum region area,
@@ -162,9 +162,10 @@ instead. You can edit the prompt at any time or import your own image/JSON file.
   canvas stretches to fit the viewport so contributors can inspect the clustered
   output in detail before painting.
 - **Progress & status dock** – A numeric tally still tracks completed versus
-  total regions, while a neighbouring generator card shows a live progress bar
-  and a fading feed of status updates for imports, segmentation passes, and
-  palette prep.
+  total regions, while a neighbouring generator card shows a live progress bar,
+  a telemetry grid (mode, prompt, sizes, palette, regions, background), and a
+  fading feed of status updates for imports, segmentation passes, and palette
+  prep.
 - **Settings sheet** – A modal sheet that hides the generation sliders by
   default. Controls include colours, minimum region size, resize detail, sample
   rate, k-means iterations, smoothing passes, a background colour picker, plus
@@ -175,7 +176,8 @@ instead. You can edit the prompt at any time or import your own image/JSON file.
   delete the save.
 - **Help sheet** – Lists every command icon (including the prompt bar),
   summarizes canvas gestures, and surfaces a live debug log with severity
-  badges so contributors can confirm state changes while testing.
+  badges (TRACE/DEBUG/INFO/SUCCESS/WARN/ERROR) plus a legend so contributors can
+  confirm state changes while testing.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
   Swatches keep their number badges bold while tooltips and ARIA copy preserve
   colour names and remaining counts.
@@ -236,7 +238,8 @@ The quickest iteration cycle is:
    focus on specific scenarios.
 3. When tweaking prompt behaviour, keep `npm run test:prompt` handy—the command
    exercises the mocked ChatGPT handshake without rerunning the entire suite.
-4. Review the inline debug log (Help → ChatGPT access) alongside the
-   `artifacts/ui-review/*.json` summaries to confirm prompts, palette counts, and
-   fallbacks look correct between iterations.
+4. Review the inline debug log (Help → ChatGPT access), the footer telemetry
+   panel, and the `artifacts/ui-review/*.json` summaries to confirm prompts,
+   palette counts, region totals, and fallbacks look correct between
+   iterations.
 

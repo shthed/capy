@@ -108,6 +108,27 @@ test.describe('ChatGPT prompt flow', () => {
     expect(state.paletteCount).toBeGreaterThan(0);
     expect(state.regionCount).toBeGreaterThan(0);
 
+    const telemetry = await page.evaluate(() => {
+      const panel = document.getElementById('generationDetails');
+      if (!panel) return null;
+      const labels = Array.from(panel.querySelectorAll('dt')).map((node) => (node.textContent || '').trim());
+      const values = Array.from(panel.querySelectorAll('dd')).map((node) => (node.textContent || '').trim());
+      const data = {};
+      for (let index = 0; index < labels.length; index += 1) {
+        data[labels[index]] = values[index] || '';
+      }
+      return { empty: panel.dataset.empty || null, data };
+    });
+
+    expect(telemetry).not.toBeNull();
+    expect(telemetry.empty).toBe('false');
+    expect(telemetry.data).toMatchObject({
+      Mode: expect.stringContaining('ChatGPT prompt'),
+    });
+    expect(telemetry.data.Prompt).toContain('Capybara surfing a rainbow river');
+    expect(telemetry.data).toHaveProperty('Palette size');
+    expect(telemetry.data).toHaveProperty('Region count');
+
     const logMessages = await page.$$eval('#debugLog .log-entry .message', (nodes) =>
       nodes.map((el) => (el.textContent || '').trim())
     );

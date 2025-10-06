@@ -491,6 +491,36 @@
         animation: progress-indeterminate 1.4s ease-in-out infinite;
       }
 
+      .generation-details {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 12px;
+        margin: 0;
+        padding: 12px 16px;
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.25);
+        background: rgba(15, 23, 42, 0.62);
+        font-size: 0.82rem;
+        color: rgba(226, 232, 240, 0.9);
+      }
+
+      .generation-details[data-empty="true"] {
+        display: none;
+      }
+
+      .generation-details dt {
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.7rem;
+        color: rgba(148, 163, 184, 0.9);
+      }
+
+      .generation-details dd {
+        margin: 0;
+        color: rgba(226, 232, 240, 0.92);
+      }
+
       .status-stream {
         list-style: none;
         margin: 0;
@@ -623,6 +653,23 @@
       .control output {
         font-size: 0.85rem;
         color: rgba(148, 163, 184, 0.9);
+      }
+
+      .level-legend {
+        list-style: none;
+        padding: 0;
+        margin: 8px 0 0;
+        display: grid;
+        gap: 4px;
+      }
+
+      .level-legend li {
+        font-size: 0.82rem;
+        color: rgba(148, 163, 184, 0.88);
+      }
+
+      .level-legend strong {
+        color: rgba(226, 232, 240, 0.95);
       }
 
       input[type="range"] {
@@ -1287,6 +1334,13 @@
               <div id="generationProgressFill" class="progress-fill"></div>
             </div>
           </div>
+          <dl
+            id="generationDetails"
+            class="generation-details"
+            data-empty="true"
+            aria-live="polite"
+            aria-label="Generation telemetry"
+          ></dl>
           <ol
             id="statusStream"
             class="status-stream"
@@ -1380,10 +1434,17 @@
         <section class="sheet-section" aria-labelledby="debugHeading">
           <h3 id="debugHeading">Debug log</h3>
           <p class="control-note">
-            Recent actions, selections, and generation events appear here while you play. Each entry includes an
-            INFO/WARN/ERROR badge that matches the footer status tray so you can spot successes, warnings, or failures at a
-            glance.
+            Recent actions, selections, and generation events appear here while you play. Each entry includes a severity badge
+            that mirrors the footer status tray so you can scan for successes, warnings, or failures at a glance.
           </p>
+          <ul class="level-legend">
+            <li><strong>TRACE</strong> – Ultra-detailed instrumentation for segmentation tweaks and import timing.</li>
+            <li><strong>DEBUG</strong> – Generator steps, palette prep, and canvas interactions useful for QA walkthroughs.</li>
+            <li><strong>INFO</strong> – High-level events such as prompt submissions, imports, or save operations.</li>
+            <li><strong>SUCCESS</strong> – Confirmations that a request, import, or generation stage completed normally.</li>
+            <li><strong>WARN</strong> – Recoverable issues like missing keys, retries, or cancelled requests.</li>
+            <li><strong>ERROR</strong> – Failures that require attention; the sample fallback usually triggers next.</li>
+          </ul>
           <div
             id="debugLog"
             class="debug-log"
@@ -1532,6 +1593,7 @@
       const paletteEl = document.getElementById("palette");
       const progressEl = document.getElementById("progress");
       const statusStreamEl = document.getElementById("statusStream");
+      const generationDetailsEl = document.getElementById("generationDetails");
       const generationStatusEl = document.getElementById("generationStatus");
       const generationStatusLabel = document.getElementById("generationStatusLabel");
       const generationStatusDetail = document.getElementById("generationStatusDetail");
@@ -1604,6 +1666,7 @@
         filled: new Set(),
         sourceUrl: null,
         sourceTitle: null,
+        sourceMode: null,
         lastOptions: null,
         settings: {
           autoAdvance: true,
@@ -1628,6 +1691,83 @@
         completed: 0,
       };
       let generationIdleTimer = null;
+      const generationTelemetryState = {
+        order: [],
+        data: new Map(),
+      };
+
+      function renderGenerationTelemetry() {
+        if (!generationDetailsEl) return;
+        generationDetailsEl.innerHTML = "";
+        const fragment = document.createDocumentFragment();
+        for (const key of generationTelemetryState.order) {
+          const entry = generationTelemetryState.data.get(key);
+          if (!entry) continue;
+          const dt = document.createElement("dt");
+          dt.textContent = entry.label;
+          const dd = document.createElement("dd");
+          dd.textContent = entry.value;
+          fragment.appendChild(dt);
+          fragment.appendChild(dd);
+        }
+        generationDetailsEl.appendChild(fragment);
+        if (generationTelemetryState.order.length === 0) {
+          generationDetailsEl.dataset.empty = "true";
+        } else {
+          generationDetailsEl.dataset.empty = "false";
+        }
+      }
+
+      function resetGenerationTelemetry() {
+        generationTelemetryState.order = [];
+        generationTelemetryState.data.clear();
+        renderGenerationTelemetry();
+      }
+
+      function updateGenerationTelemetry(entries) {
+        if (!generationDetailsEl) return;
+        if (!entries) return;
+        const list = Array.isArray(entries) ? entries : [entries];
+        let changed = false;
+        for (const entry of list) {
+          if (!entry) continue;
+          const key = String(entry.key || "").trim();
+          if (!key) continue;
+          const label = entry.label != null ? String(entry.label) : key;
+          const value = entry.value != null ? String(entry.value) : "";
+          const existing = generationTelemetryState.data.get(key);
+          if (!existing) {
+            generationTelemetryState.order.push(key);
+            generationTelemetryState.data.set(key, { label, value });
+            changed = true;
+          } else if (existing.label !== label || existing.value !== value) {
+            generationTelemetryState.data.set(key, { label, value });
+            changed = true;
+          }
+        }
+        if (changed) {
+          renderGenerationTelemetry();
+        }
+      }
+
+      function describeSourceMode(mode) {
+        switch (mode) {
+          case "prompt":
+            return "ChatGPT prompt";
+          case "sample":
+            return "Sample puzzle";
+          case "json":
+            return "JSON import";
+          case "fixture":
+            return "Fixture puzzle";
+          case "external":
+            return "External data";
+          case "image":
+            return "Image import";
+          default:
+            return "Puzzle import";
+        }
+      }
 
       function sanitizePromptText(prompt) {
         if (typeof prompt !== "string") return "";
@@ -1790,6 +1930,15 @@
           }
           return false;
         }
+        state.sourceMode = "prompt";
+        setGenerationIndeterminate("Contacting ChatGPT…", `Awaiting response for “${snippet}”`, {
+          statusLabel: "PROMPT",
+          resetTelemetry: true,
+          telemetry: [
+            { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+            { key: "prompt", label: "Prompt", value: snippet },
+          ],
+        });
         logDebug(`Requesting ChatGPT image for “${snippet}” (${reason})`, "info");
         try {
           const response = await fetch("https://api.openai.com/v1/images/generations", {
@@ -1814,6 +1963,13 @@
               errorSummary = `${response.status} ${response.statusText}`;
             }
             logDebug(`ChatGPT image request failed: ${errorSummary}`, "error");
+            failGenerationProgress("ChatGPT request failed", errorSummary, {
+              statusLabel: "PROMPT",
+              telemetry: [
+                { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+                { key: "prompt", label: "Prompt", value: snippet },
+              ],
+            });
             if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
               loadSamplePuzzle({ announce: true });
             }
@@ -1823,6 +1979,13 @@
           const imageData = payload?.data?.[0]?.b64_json;
           if (!imageData) {
             logDebug("ChatGPT response did not include image data.", "error");
+            failGenerationProgress("ChatGPT response missing image", "The API did not return usable artwork.", {
+              statusLabel: "PROMPT",
+              telemetry: [
+                { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+                { key: "prompt", label: "Prompt", value: snippet },
+              ],
+            });
             if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
               loadSamplePuzzle({ announce: true });
             }
@@ -1830,9 +1993,14 @@
           }
           const dataUrl = `data:image/png;base64,${imageData}`;
           resetPuzzleUI();
+          state.sourceMode = "prompt";
           state.sourceUrl = dataUrl;
           state.sourceTitle = `Capycolour prompt – ${snippet}`;
           startHint.classList.add("hidden");
+          updateGenerationTelemetry([
+            { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+            { key: "prompt", label: "Prompt", value: snippet },
+          ]);
           const loadMessage = `Generating ChatGPT art for “${snippet}”`;
           loadImage(dataUrl, {
             logMessage: loadMessage,
@@ -1843,9 +2011,24 @@
         } catch (error) {
           if (error?.name === "AbortError") {
             logDebug("ChatGPT image request was cancelled.", "warn");
+            failGenerationProgress("ChatGPT request cancelled", "The request was aborted.", {
+              statusLabel: "PROMPT",
+              level: "warn",
+              telemetry: [
+                { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+                { key: "prompt", label: "Prompt", value: snippet },
+              ],
+            });
           } else {
             console.error("Failed to generate ChatGPT image", error);
             logDebug("ChatGPT image generation failed due to an unexpected error.", "error");
+            failGenerationProgress("ChatGPT request failed", "Unexpected error", {
+              statusLabel: "PROMPT",
+              telemetry: [
+                { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+                { key: "prompt", label: "Prompt", value: snippet },
+              ],
+            });
           }
           if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
             loadSamplePuzzle({ announce: true });
@@ -1880,6 +2063,7 @@
               return;
             }
             resetPuzzleUI();
+            state.sourceMode = "external";
             state.sourceUrl = dataUrl;
             const metadataTitle =
               metadata && typeof metadata === "object"
@@ -2441,6 +2625,7 @@
         const { dataUrl } = SAMPLE_ARTWORK;
         if (!dataUrl) return;
         resetPuzzleUI();
+        state.sourceMode = "sample";
         state.sourceUrl = dataUrl;
         state.sourceTitle = SAMPLE_ARTWORK.title || "Sample puzzle";
         startHint.classList.add("hidden");
@@ -2586,6 +2771,7 @@
       function setGenerationIdle(detail = "Awaiting prompt or import.") {
         if (!generationStatusEl) return;
         clearGenerationIdleTimer();
+        resetGenerationTelemetry();
         generationProgressState.active = false;
         generationProgressState.steps = Math.max(1, generationProgressState.steps);
         generationProgressState.completed = 0;
@@ -2614,6 +2800,12 @@
       function setGenerationIndeterminate(label, detail = "", options = {}) {
         if (!generationStatusEl) return;
         clearGenerationIdleTimer();
+        if (options.resetTelemetry) {
+          resetGenerationTelemetry();
+        }
+        if (options.telemetry) {
+          updateGenerationTelemetry(options.telemetry);
+        }
         generationProgressState.active = true;
         generationProgressState.steps = 1;
         generationProgressState.completed = 0;
@@ -2643,6 +2835,9 @@
       function startGenerationProgress(steps, options = {}) {
         if (!generationStatusEl) return;
         clearGenerationIdleTimer();
+        if (options.resetTelemetry) {
+          resetGenerationTelemetry();
+        }
         generationProgressState.active = true;
         generationProgressState.steps = Math.max(1, Math.floor(Number(steps) || 1));
         generationProgressState.completed = 0;
@@ -2658,6 +2853,9 @@
           generationProgressFill.style.removeProperty("animation");
           generationProgressFill.style.transform = "translateX(0)";
           generationProgressFill.style.setProperty("--progress", "0%");
+        }
+        if (options.telemetry) {
+          updateGenerationTelemetry(options.telemetry);
         }
         if (options.statusMessage) {
           pushStatus(options.statusMessage, {
@@ -2705,6 +2903,9 @@
           const logLevel = options.logLevel || options.level || "debug";
           logDebug(`${label}${detail ? ` – ${detail}` : ""}`, logLevel);
         }
+        if (options.telemetry) {
+          updateGenerationTelemetry(options.telemetry);
+        }
         return ratio;
       }
 
@@ -2728,6 +2929,9 @@
           }
         }
         if (message) {
+          if (options.telemetry) {
+            updateGenerationTelemetry(options.telemetry);
+          }
           pushStatus(message, {
             detail,
             level: options.level || "success",
@@ -2739,7 +2943,7 @@
           }
         }
         const idleDetail = options.idleDetail || (detail ? `Ready – ${detail}` : "Ready for the next puzzle.");
-        scheduleGenerationIdle(idleDetail, options.idleDelay ?? 2600);
+        scheduleGenerationIdle(idleDetail, options.idleDelay ?? 4200);
       }
 
       function failGenerationProgress(message, detail, options = {}) {
@@ -2767,6 +2971,9 @@
           lifetime: options.lifetime ?? STATUS_DEFAULT_LIFETIME + 4000,
           label: options.statusLabel,
         });
+        if (options.telemetry) {
+          updateGenerationTelemetry(options.telemetry);
+        }
         if (options.log !== false) {
           logDebug(`${message || "Generation failed"}${detail ? ` – ${detail}` : ""}`, options.level || "error");
         }
@@ -2851,8 +3058,15 @@
       function handleFile(file) {
         if (file.type === "application/json" || file.name.toLowerCase().endsWith(".json")) {
           resetPuzzleUI();
-          setGenerationIndeterminate("Reading puzzle file…", file.name || "Puzzle import", {
+          state.sourceMode = "json";
+          const sourceLabel = file.name || "Puzzle import";
+          setGenerationIndeterminate("Reading puzzle file…", sourceLabel, {
             statusLabel: "FILE",
+            resetTelemetry: true,
+            telemetry: [
+              { key: "mode", label: "Mode", value: "JSON import" },
+              { key: "source", label: "Source", value: sourceLabel },
+            ],
           });
           const reader = new FileReader();
           reader.onload = () => {
@@ -2863,7 +3077,11 @@
               const fallbackTitle = file.name || "Imported puzzle";
               const resolvedTitle = providedTitle || fallbackTitle;
               state.sourceTitle = resolvedTitle;
-              setGenerationIndeterminate("Applying puzzle data…", resolvedTitle, { statusLabel: "LOAD" });
+              updateGenerationTelemetry({ key: "puzzle", label: "Puzzle", value: resolvedTitle });
+              setGenerationIndeterminate("Applying puzzle data…", resolvedTitle, {
+                statusLabel: "LOAD",
+                telemetry: { key: "mode", label: "Mode", value: "JSON import" },
+              });
               if (
                 applyPuzzleResult(payload, {
                   options: payload.options || getCurrentOptions(),
@@ -2879,25 +3097,39 @@
               }
             } catch (error) {
               console.error(error);
-              failGenerationProgress("Puzzle import failed", "Could not parse JSON payload.");
+              failGenerationProgress("Puzzle import failed", "Could not parse JSON payload.", {
+                statusLabel: "LOAD",
+                telemetry: { key: "mode", label: "Mode", value: "JSON import" },
+              });
             }
           };
           reader.onerror = () => {
-            failGenerationProgress("Puzzle import failed", "Unable to read the JSON file.");
+            failGenerationProgress("Puzzle import failed", "Unable to read the JSON file.", {
+              statusLabel: "LOAD",
+              telemetry: { key: "mode", label: "Mode", value: "JSON import" },
+            });
           };
           reader.readAsText(file);
           return;
         }
         resetPuzzleUI();
-        setGenerationIndeterminate("Reading image file…", file.name || "Imported image", {
+        state.sourceMode = "image";
+        const imageLabel = file.name || "Imported image";
+        setGenerationIndeterminate("Reading image file…", imageLabel, {
           statusLabel: "FILE",
+          resetTelemetry: true,
+          telemetry: [
+            { key: "mode", label: "Mode", value: "Image import" },
+            { key: "source", label: "Source", value: imageLabel },
+          ],
         });
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result;
           if (typeof result === "string") {
             state.sourceUrl = result;
-            state.sourceTitle = file.name || "Imported image";
+            state.sourceTitle = imageLabel;
+            updateGenerationTelemetry({ key: "source", label: "Source", value: imageLabel });
             startHint.classList.add("hidden");
             logDebug(`Generating puzzle from image: ${state.sourceTitle}`, "info");
             loadImage(result);
@@ -2907,7 +3139,13 @@
         };
         reader.onerror = () => {
           console.error("Unable to read that file.");
-          failGenerationProgress("File read failed", "Capycolour could not read that image.");
+          failGenerationProgress("File read failed", "Capycolour could not read that image.", {
+            statusLabel: "FILE",
+            telemetry: [
+              { key: "mode", label: "Mode", value: "Image import" },
+              { key: "source", label: "Source", value: imageLabel },
+            ],
+          });
         };
         reader.readAsDataURL(file);
       }
@@ -2918,11 +3156,28 @@
           logDebug(logMessage, "info");
         }
         const descriptor = state.sourceTitle || "Puzzle image";
-        setGenerationIndeterminate("Loading image data…", descriptor, { statusLabel: "LOAD" });
+        const modeLabel = describeSourceMode(state.sourceMode);
+        setGenerationIndeterminate("Loading image data…", descriptor, {
+          statusLabel: "LOAD",
+          telemetry: [
+            { key: "mode", label: "Mode", value: modeLabel },
+            { key: "source", label: "Source", value: descriptor },
+          ],
+        });
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.onload = async () => {
           try {
+            updateGenerationTelemetry({
+              key: "mode",
+              label: "Mode",
+              value: modeLabel,
+            });
+            updateGenerationTelemetry({
+              key: "sourceSize",
+              label: "Source image",
+              value: `${img.width}×${img.height}`,
+            });
             pushStatus("Image decoded", {
               detail: `${img.width}×${img.height}`,
               level: "info",
@@ -2945,7 +3200,13 @@
         };
         img.onerror = () => {
           console.error("Unable to read that image.");
-          failGenerationProgress("Image load failed", "Capycolour could not decode that image.");
+          failGenerationProgress("Image load failed", "Capycolour could not decode that image.", {
+            statusLabel: "LOAD",
+            telemetry: [
+              { key: "mode", label: "Mode", value: modeLabel },
+              { key: "source", label: "Source", value: descriptor },
+            ],
+          });
         };
         img.src = url;
       }
@@ -2962,6 +3223,7 @@
         state.filled = new Set();
         state.sourceUrl = null;
         state.sourceTitle = null;
+        state.sourceMode = null;
         paletteEl.innerHTML = "";
         progressEl.textContent = "…";
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
@@ -2990,17 +3252,29 @@
         canvas.height = height;
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
         const totalSteps = 5 + (smoothingPasses > 0 ? 1 : 0);
+        const samplePercent = Math.round(sampleRate * 100);
         startGenerationProgress(totalSteps, {
           label: "Processing source image…",
           detail: `${image.width}×${image.height} → ${width}×${height}`,
           statusMessage: "Processing source image",
           statusDetail: `${image.width}×${image.height} → ${width}×${height}`,
           statusLabel: "STEP",
+          telemetry: [
+            { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+            { key: "sourceSize", label: "Source image", value: `${image.width}×${image.height}` },
+            { key: "targetSize", label: "Target size", value: `${width}×${height}` },
+            { key: "targetColors", label: "Target colours", value: `${targetColors}` },
+            { key: "sampleRate", label: "Sample rate", value: `${samplePercent}%` },
+            { key: "iterations", label: "K-means iterations", value: `${kmeansIters}` },
+            { key: "smoothing", label: "Smoothing passes", value: `${smoothingPasses}` },
+            { key: "pipelineSteps", label: "Pipeline steps", value: `${totalSteps}` },
+          ],
         });
         ctx.drawImage(image, 0, 0, width, height);
         advanceGenerationProgress("Resized source image", `${image.width}×${image.height} → ${width}×${height}`, {
           level: "info",
           statusLabel: "STEP",
+          telemetry: { key: "targetSize", label: "Target size", value: `${width}×${height}` },
         });
         const imageData = ctx.getImageData(0, 0, width, height);
         const pixels = imageData.data;
@@ -3012,13 +3286,16 @@
           kmeansIters,
           sampleRate
         );
-        const samplePercent = Math.round(sampleRate * 100);
         advanceGenerationProgress(
           "Clustered palette",
           `${targetColors} colours · ${kmeansIters} iterations @ ${samplePercent}% sample`,
           {
             level: "info",
             statusLabel: "STEP",
+            telemetry: [
+              { key: "paletteSize", label: "Palette size", value: `${centroids.length} colours` },
+              { key: "iterations", label: "K-means iterations", value: `${kmeansIters}` },
+            ],
           }
         );
         let workingAssignments = assignments;
@@ -3030,6 +3307,7 @@
             {
               level: "debug",
               statusLabel: "STEP",
+              telemetry: { key: "smoothing", label: "Smoothing passes", value: `${smoothingPasses}` },
             }
           );
         }
@@ -3040,6 +3318,10 @@
           {
             level: "info",
             statusLabel: "STEP",
+            telemetry: [
+              { key: "regionCount", label: "Region count", value: `${regions.length}` },
+              { key: "minRegion", label: "Minimum region", value: `${minRegion} px²` },
+            ],
           }
         );
         for (const region of regions) {
@@ -3056,6 +3338,7 @@
         advanceGenerationProgress("Calculated region centres", `${regions.length} regions processed`, {
           level: "debug",
           statusLabel: "STEP",
+          telemetry: { key: "regionCount", label: "Region count", value: `${regions.length}` },
         });
         const palette = centroids.map((c, idx) => {
           const hex = `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`;
@@ -3069,6 +3352,7 @@
         advanceGenerationProgress("Prepared palette", `${palette.length} colours`, {
           level: "info",
           statusLabel: "STEP",
+          telemetry: { key: "paletteSize", label: "Palette size", value: `${palette.length} colours` },
         });
         return {
           width,
@@ -3198,20 +3482,33 @@
           (state.sourceTitle && state.sourceTitle.trim()) ||
           "Puzzle";
         const summaryDetail = `${paletteCount} colours, ${regionCount} regions`;
+        const summaryTelemetry = [
+          { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+          { key: "targetSize", label: "Puzzle size", value: `${data.width}×${data.height}` },
+          { key: "paletteSize", label: "Palette size", value: `${paletteCount} colours` },
+          { key: "regionCount", label: "Region count", value: `${regionCount}` },
+          { key: "background", label: "Background", value: backgroundHex.toUpperCase() },
+        ];
         if (completionLog) {
           logDebug(completionLog, "success");
           completeGenerationProgress(completionLog, summaryDetail, {
             log: false,
             statusLabel: "DONE",
+            telemetry: summaryTelemetry,
           });
         } else if (!skipLoadLog) {
           const message = `Loaded ${descriptor} (${data.width}×${data.height}, ${paletteCount} colours, ${regionCount} regions)`;
           logDebug(message, "success");
-          completeGenerationProgress(message, summaryDetail, { log: false, statusLabel: "DONE" });
+          completeGenerationProgress(message, summaryDetail, {
+            log: false,
+            statusLabel: "DONE",
+            telemetry: summaryTelemetry,
+          });
         } else {
           completeGenerationProgress(`Puzzle ready: ${descriptor}`, summaryDetail, {
             level: "success",
             statusLabel: "DONE",
+            telemetry: summaryTelemetry,
           });
         }
         return true;
@@ -3220,12 +3517,20 @@
       function loadPuzzleFixtureData(puzzle) {
         if (!puzzle) return false;
         resetPuzzleUI();
+        state.sourceMode = "fixture";
         const resolvedTitle =
           (typeof puzzle.name === "string" && puzzle.name.trim()) ||
           (typeof puzzle.title === "string" && puzzle.title.trim()) ||
           "Fixture puzzle";
         state.sourceTitle = resolvedTitle;
-        setGenerationIndeterminate("Applying puzzle data…", resolvedTitle, { statusLabel: "LOAD" });
+        setGenerationIndeterminate("Applying puzzle data…", resolvedTitle, {
+          statusLabel: "LOAD",
+          resetTelemetry: true,
+          telemetry: [
+            { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+            { key: "puzzle", label: "Puzzle", value: resolvedTitle },
+          ],
+        });
         const applied = applyPuzzleResult(puzzle, {
           options: getCurrentOptions(),
           filled: puzzle.filled,
