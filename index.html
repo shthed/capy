@@ -1081,6 +1081,12 @@
       const downloadBtn = document.getElementById("downloadJson");
       const saveSnapshotBtn = document.getElementById("saveSnapshot");
       const saveList = document.getElementById("saveList");
+      const SAVE_ACTIONS = [
+        { action: "load", label: "Load" },
+        { action: "rename", label: "Rename" },
+        { action: "export", label: "Export" },
+        { action: "delete", label: "Delete" },
+      ];
       const paletteEl = document.getElementById("palette");
       const progressEl = document.getElementById("progress");
       const puzzleCanvas = document.getElementById("puzzleCanvas");
@@ -2747,13 +2753,7 @@
 
           const actions = document.createElement("div");
           actions.className = "save-actions";
-          const actionDefinitions = [
-            { action: "load", label: "Load" },
-            { action: "rename", label: "Rename" },
-            { action: "export", label: "Export" },
-            { action: "delete", label: "Delete" },
-          ];
-          for (const { action, label } of actionDefinitions) {
+          for (const { action, label } of SAVE_ACTIONS) {
             const button = document.createElement("button");
             button.type = "button";
             button.dataset.action = action;
