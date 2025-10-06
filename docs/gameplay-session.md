@@ -8,13 +8,21 @@
 - Served repository root with `python -m http.server 8000`.
 - Accessed the app at <http://localhost:8000/index.html> via an automated Chromium session (Playwright).
 
+## Merge Notes
+- The autosave/cloud-sync session log conflicted with the upstream merge because
+  both branches rewrote the opening step: one detailed the ChatGPT fallback log
+  line while the other documented the autosave shortcut retest. The entry now
+  captures both behaviours so the restored puzzle context and the shortcut
+  verification remain in sync going forward.
+
 ## Actions Performed
 1. Reloaded the page to confirm the autosave pipeline restored the last
    in-progress puzzle. In a fresh profile with no OpenAI key configured the
    runtime logged a skipped ChatGPT request before loading the “Capycolour
    Springs” fallback puzzle—complete with the orange-crowned capybara, loyal
-   dachshund, waterfall, and mushroom-ring lagoon. Pressing the 🐹 command button
-   reloaded the sample without reopening the hint overlay.
+   dachshund, waterfall, and mushroom-ring lagoon. Pressed the 🐹 command button
+   afterwards to force a fresh board and confirm the shortcut still works
+   without reopening the hint overlay.
 2. Selected the first palette swatch to activate its associated colour and
    watched the matching regions flash for guidance.
 3. Dragged the canvas with mouse and touch, pinched to zoom, toggled
@@ -22,9 +30,9 @@
    cleanly at every scale.
 
 ## Observations
-- Artwork, palette, the prompt bar, and the top-right hint/menu controls rendered
-  without errors once the page finished hydrating, and either the ChatGPT
-  illustration or bundled sample was playable immediately.
+- Artwork, palette, the prompt bar, and the top-right hint/menu controls
+  rendered without errors once the page finished hydrating, and either the
+  ChatGPT illustration or bundled sample was playable immediately.
 - The top-right command rail now shows icon-only controls (including the
   fullscreen toggle) tucked to the right edge so opening settings or the save
   manager never obscures the artwork.
@@ -48,7 +56,7 @@
   updates, autosave restore messages, and both the start and completion of
   sample reloads with severity badges that mirror the status tray—making it
   easier to spot warnings versus success events at a glance.
-- The new footer status tray surfaced each import step—file read, image decode,
+- The footer status tray surfaced each import step—file read, image decode,
   k-means clustering, segmentation counts, palette prep, and rolling progress—on
   a live progress bar, populated a telemetry grid with the active mode/prompt
   plus source/target sizes, palette/region totals, progress percentages, and the
