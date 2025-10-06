@@ -140,16 +140,16 @@ test.describe('Capy image generator', () => {
     await expect(detailButtons).toHaveCount(6);
     await expect(page.locator('#startHint [data-detail-level]')).toHaveCount(3);
     await expect(page.locator('#settingsSheet [data-detail-level]')).toHaveCount(3);
-    await expect(page.locator('#startHint [data-detail-level="medium"]')).toHaveAttribute(
+    await expect(page.locator('#startHint [data-detail-level="high"]')).toHaveAttribute(
       'aria-pressed',
       'true'
     );
-    await expect(page.locator('#settingsSheet [data-detail-level="medium"]')).toHaveAttribute(
+    await expect(page.locator('#settingsSheet [data-detail-level="high"]')).toHaveAttribute(
       'aria-pressed',
       'true'
     );
     const detailCaption = page.locator('[data-detail-caption]').first();
-    await expect(detailCaption).toHaveText(/Medium detail/i);
+    await expect(detailCaption).toHaveText(/High detail/i);
 
     const progress = page.locator('[data-testid="progress-message"]');
     await expect(progress).toHaveText(/0\/\d+/);
@@ -167,19 +167,39 @@ test.describe('Capy image generator', () => {
     });
 
     expect(state.hasPuzzle).toBe(true);
-    expect(state.paletteCount).toBe(26);
-    expect(state.regionCount).toBeGreaterThanOrEqual(38);
-    expect(state.regionCount).toBeLessThanOrEqual(60);
+    expect(state.paletteCount).toBe(32);
+    expect(state.regionCount).toBeGreaterThanOrEqual(120);
+    expect(state.regionCount).toBeLessThanOrEqual(190);
     expect(state.sourceUrl).toContain('data:image/svg+xml;base64,');
-    expect(state.detailLevel).toBe('medium');
-    expect(state.targetColors).toBe(26);
+    expect(state.detailLevel).toBe('high');
+    expect(state.targetColors).toBe(32);
 
     await page.click('[data-testid="sample-art-button"]');
     const logHead = page.locator('#debugLog .log-entry span').first();
-    await expect(logHead).toHaveText(/Loading medium detail sample puzzle/);
+    await expect(logHead).toHaveText(/Loading high detail sample puzzle/);
 
     await page.click('#settingsButton');
     await expect(page.locator('#settingsSheet')).toBeVisible();
+
+    await page.click('#settingsSheet [data-detail-level="medium"]');
+    await expect.poll(() =>
+      page.evaluate(() => window.capyGenerator.getState().sampleDetailLevel)
+    ).toBe('medium');
+    await expect(logHead).toHaveText(/Medium detail sample puzzle ready/);
+    const mediumState = await page.evaluate(() => {
+      const { puzzle, sampleDetailLevel, lastOptions } = window.capyGenerator.getState();
+      return {
+        detailLevel: sampleDetailLevel,
+        paletteCount: puzzle?.palette?.length || 0,
+        regionCount: puzzle?.regions?.length || 0,
+        targetColors: lastOptions?.targetColors || null,
+      };
+    });
+    expect(mediumState.detailLevel).toBe('medium');
+    expect(mediumState.paletteCount).toBe(26);
+    expect(mediumState.targetColors).toBe(26);
+    expect(mediumState.regionCount).toBeGreaterThanOrEqual(38);
+    expect(mediumState.regionCount).toBeLessThanOrEqual(60);
 
     await page.click('#settingsSheet [data-detail-level="high"]');
     await expect.poll(() =>
