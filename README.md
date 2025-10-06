@@ -50,8 +50,13 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Palette manager.** Swipe through compact, tinted swatches that promote the
   colour number while tooltips, titles, and ARIA copy preserve human-readable
   names and remaining region counts.
-- **Progress persistence.** Snapshot runs into localStorage, reopen saves,
-  rename them, or export/import the underlying puzzle data as JSON.
+- **Progress persistence & recovery.** Every stroke updates a rolling
+  autosave so the latest session is restored automatically on launch. Manual
+  snapshots still land in the save manager where you can rename, export, or
+  delete entries at will.
+- **Cloud-ready sync.** A lightweight broadcast channel mirrors autosaves
+  across browser tabs and exposes a `window.capyCloudSync` adapter hook so
+  teams can plug in remote storage when available.
 
 ## Code architecture tour
 
@@ -106,8 +111,9 @@ tools, a save manager, and a configurable generator all live inside a single
 
 ## How it works
 
-1. **Load an image.** The bundled “Capybara Springs” puzzle loads automatically
-   on boot so you can start painting immediately. Drag a bitmap into the
+1. **Resume or load an image.** The app restores your most recent autosave on
+   boot; if nothing is stored yet the bundled “Capybara Springs” puzzle loads
+   automatically so you can start painting immediately. Drag a bitmap into the
    viewport, activate the “Choose an image” button, or press the 🐹 command
    button to reload the bundled scene. The hint overlay disappears once a new
    source is selected.
