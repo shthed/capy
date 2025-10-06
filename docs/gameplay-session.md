@@ -8,6 +8,13 @@
 - Served repository root with `python -m http.server 8000`.
 - Accessed the app at <http://localhost:8000/index.html> via an automated Chromium session (Playwright).
 
+## Merge Notes
+- The autosave/cloud-sync session log conflicted with the upstream merge because
+  both branches rewrote the opening step: one detailed the ChatGPT fallback log
+  line while the other documented the autosave shortcut retest. The entry now
+  captures both behaviours so the restored puzzle context and the shortcut
+  verification remain in sync going forward.
+
 ## Actions Performed
 1. Reloaded the page to confirm the autosave pipeline restored the last
    in-progress puzzle. In a fresh profile with no OpenAI key configured the
