@@ -2329,7 +2329,6 @@
         panCandidate = null;
         const isTouch = event.pointerType === "touch";
         if (isTouch) {
-          event.preventDefault();
           activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
           if (!pinchSession && activeTouches.size >= 2) {
             const entries = Array.from(activeTouches.entries()).slice(0, 2);
@@ -2349,24 +2348,20 @@
                 centerY: (a.y + b.y) / 2,
                 hasChanged: false,
               };
+              event.preventDefault();
               document.body.classList.add("panning");
               isPanning = true;
               logDebug("Pinch zoom started");
+              return;
             }
-          } else if (!pinchSession) {
-            panCandidate = {
-              pointerId: event.pointerId,
-              startX: event.clientX,
-              startY: event.clientY,
-              panX: viewState.panX,
-              panY: viewState.panY,
-              pointerType: "touch",
-            };
           }
-          return;
+          if (pinchSession) {
+            event.preventDefault();
+            return;
+          }
         }
         const usesModifier = spacePressed || event.altKey || event.ctrlKey || event.metaKey;
-        const auxButton = event.button === 1 || event.button === 2;
+        const auxButton = !isTouch && (event.button === 1 || event.button === 2);
         if (auxButton || usesModifier) {
           event.preventDefault();
           beginPanSession(
@@ -2378,14 +2373,15 @@
           );
           return;
         }
-        if (event.button === 0) {
+        const isPrimaryPointer = isTouch || event.button === 0;
+        if (isPrimaryPointer) {
           panCandidate = {
             pointerId: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
             panX: viewState.panX,
             panY: viewState.panY,
-            pointerType: "mouse",
+            pointerType: event.pointerType || "mouse",
           };
         }
       }
