@@ -39,10 +39,11 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 - `package.json` / `package-lock.json` – Node metadata, npm scripts (`dev`, `start`, `test`, etc.), dependency versions, and the Playwright postinstall hook.
 - `docs/` – Supplemental documentation:
   - `development_guide.md` – Setup checklist, daily workflow (including ChatGPT key usage), and asset guidelines.
--  - `gameplay-session.md` – Logged play session with observations about prompt fallbacks and canvas interactions.
--  - `svg-art-file-spec.md` – Specification for segmented SVG inputs consumed by the generator.
--  - `test-run-2025-10-04.md` – Historical Playwright run output with scenario breakdown.
--  - `testing-feedback-loop.md` – Commands and observability tips for keeping the mocked prompt and gameplay loop tight.
+  - `gameplay-session.md` – Logged play session with observations about prompt fallbacks and canvas interactions.
+  - `development-quality-review.md` – Analysis of git history, PR practices, and the quality-improvement feedback loop.
+  - `svg-art-file-spec.md` – Specification for segmented SVG inputs consumed by the generator.
+  - `test-run-2025-10-04.md` – Historical Playwright run output with scenario breakdown.
+  - `testing-feedback-loop.md` – Commands and observability tips for keeping the mocked prompt and gameplay loop tight.
 - `tests/` – Playwright suites:
   - `ui-review.spec.js` – Smoke/regression coverage for prompt availability, sample fallback, palette behaviour, zoom, and save helpers.
   - `prompt-flow.spec.js` – Mocks the ChatGPT image endpoint to assert successful imports and sample fallbacks during generation.

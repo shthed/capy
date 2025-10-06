@@ -272,3 +272,9 @@ The quickest iteration cycle is:
 - After resolving conflicts, rerun `npm test --silent` to confirm the prompt
   flow and responsive HUD still pass the Playwright suites before committing.
 
+## Development quality review
+
+See [`docs/development-quality-review.md`](docs/development-quality-review.md)
+for an analysis of the recent git history, PR patterns, and a proposed feedback
+loop that keeps Capycolour's single-file workflow healthy.
+
