@@ -9,6 +9,19 @@ region sizes, but every preset ultimately resolves to the same underlying SVG
 annotates every numbered cell so you can cross-reference gameplay captures,
 exports, or QA transcripts with the original artwork.
 
+## Detail presets at a glance
+
+- **Low detail** – 18 colours, ≈26 regions. Keeps broad shoreline shapes intact so
+  onboarding demos land quickly while still highlighting both characters.
+- **Medium detail** – 26 colours, ≈42 regions. Preserves the capybara’s fur bands
+  and lagoon reflections without overwhelming playtesters with tiny targets.
+- **High detail** – 32 colours, ≈140 regions. Reveals mushroom caps, ripples, and
+  background reeds for showcase captures or deep-dive QA passes.
+
+Regardless of the preset, the region identifiers below remain stable. Exported
+JSON and Playwright logs therefore map cleanly back to the SVG even as higher
+detail runs subdivide the same silhouettes into more paintable regions.
+
 ## Palette overview
 
 | # | Name | Hex | Notes |

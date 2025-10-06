@@ -13,7 +13,7 @@
 ## Positive Observations
 - The Peek control lets you preview the finished painting without leaving the canvas, either by holding or toggling the button.
 - The bundled capybara sample now appears automatically on load and showcases the detailed "Capybara Springs" lagoon scene, so testers can start painting without importing external art.
-- The onboarding hint and Settings sheet now share Low/Medium/High detail chips with a running summary so QA can swap between coarse and high-fidelity palettes without touching raw sliders.
+- The onboarding hint and Settings sheet now share Low/Medium/High detail chips with a running summary that calls out the ≈26/≈42/≈140-region presets, so QA can swap between breezy and high-fidelity palettes without touching raw sliders.
 - Palette swatches now tuck their color names directly inside the button while keeping the numbers bold, so picking the next hue is faster without extra labels.
 - Tap-to-fill now fires on deliberate taps, and palette swatches respect the same pointer handling so choosing a color on touch devices never requires a second press while drag gestures stay focused on panning.
 - Left-drag panning now keeps the canvas full-screen while the palette hugs the bottom edge without a frame.
