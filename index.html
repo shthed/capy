@@ -2387,7 +2387,9 @@
       }
 
       function handlePanMove(event) {
-        const isTouch = event.pointerType === "touch";
+        if (!state.puzzle) return;
+        const pointerType = event.pointerType || "mouse";
+        const isTouch = pointerType === "touch";
         if (isTouch) {
           if (activeTouches.has(event.pointerId)) {
             activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
