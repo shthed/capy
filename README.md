@@ -64,10 +64,15 @@ the app surface the smallest unfinished region when you need a nudge.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
 artwork at its final resolution without leaving the play surface.
 - **Palette manager.** Swipe through compact, tinted swatches that promote the
-colour number while tooltips, titles, and ARIA copy preserve human-readable
-names and remaining region counts.
-- **Progress persistence.** Snapshot runs into localStorage, reopen saves,
-rename them, or export/import the underlying puzzle data as JSON.
+  colour number while tooltips, titles, and ARIA copy preserve human-readable
+  names and remaining region counts.
+- **Progress persistence & recovery.** Every stroke updates a rolling autosave
+  so the latest session is restored automatically on launch. Manual snapshots
+  still land in the save manager where you can rename, export/import the
+  underlying puzzle data as JSON, or delete entries at will.
+- **Cloud-ready sync.** A lightweight broadcast channel mirrors autosaves
+  across browser tabs and exposes a `window.capyCloudSync` adapter hook so teams
+  can plug in remote storage when available.
 
 ## Code architecture tour
 
@@ -126,10 +131,14 @@ tracking.
 
 ## How it works
 
-1. **Generate or load art.** On boot Capycolour sends the stored prompt (or a
-   built-in default) to ChatGPT and, if successful, imports the returned PNG. If
-the request is skipped or fails, the bundled “Capycolour Springs” puzzle loads
-instead. You can edit the prompt at any time or import your own image/JSON file.
+1. **Resume or generate art.** On boot Capycolour restores your most recent
+   autosave (including any cloud-backed copy) so you can pick up exactly where
+   you left off. If nothing is stored yet, the app sends the saved prompt (or a
+   bundled default) to ChatGPT, imports the generated PNG, and falls back to the
+   “Capycolour Springs” sample if the request is skipped or fails. You can edit
+   the prompt at any time, drag a bitmap into the viewport, activate the “Choose
+   an image” button, or press the 🐹 command button to reload the bundled scene;
+   the hint overlay disappears after any new source loads.
 2. **Tune generation & appearance.** Open **Settings** to tweak palette size,
    minimum region area, resize detail, sample rate (for faster clustering),
    iteration count, smoothing passes, auto-advance, hint animations, and the

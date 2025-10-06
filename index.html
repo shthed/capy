@@ -1682,6 +1682,8 @@
         smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
+      const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
+      const CLOUD_STORAGE_KEY = "capy.cloud.backup.v1";
       const OPENAI_KEY_STORAGE = "capycolour.openaiKey";
       const PROMPT_STORAGE_KEY = "capycolour.lastPrompt";
       const DEFAULT_PROMPT =
@@ -1689,6 +1691,9 @@
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
+      const cloudSync = createCloudSync();
+      let autosaveTimer = null;
+      let pendingAutosaveReason = null;
 
       const generationState = {
         pending: false,
@@ -1747,6 +1752,22 @@
         previewImageData: null,
         puzzleImageData: null,
       };
+
+      function applyGameplaySettings(settings = {}) {
+        if (!settings || typeof settings !== "object") return;
+        if (typeof settings.autoAdvance === "boolean") {
+          state.settings.autoAdvance = settings.autoAdvance;
+          if (autoAdvanceToggle) {
+            autoAdvanceToggle.checked = settings.autoAdvance;
+          }
+        }
+        if (typeof settings.animateHints === "boolean") {
+          state.settings.animateHints = settings.animateHints;
+          if (hintFlashToggle) {
+            hintFlashToggle.checked = settings.animateHints;
+          }
+        }
+      }
 
       const debugLogEntries = [];
       const DEBUG_LOG_LIMIT = 80;
@@ -2251,6 +2272,7 @@
         window.capycolour = window.capyGenerator;
       }
 
+      applyGameplaySettings(state.settings);
       setGenerationIdle();
       updateOptionOutputs();
       refreshSaveList();
@@ -2279,6 +2301,21 @@
             persistPromptValue: true,
             reason: "manual",
           });
+        });
+      }
+
+      const initialPromptText = getStoredPrompt() || DEFAULT_PROMPT;
+      if (promptInput && !promptInput.value) {
+        promptInput.value = initialPromptText;
+      }
+
+      const bootRestored = loadInitialSession();
+      if (!bootRestored) {
+        attemptInitialGeneration().catch((error) => {
+          console.error("Initial ChatGPT generation failed", error);
+          if (SAMPLE_ARTWORK?.dataUrl) {
+            loadSamplePuzzle({ announce: true });
+          }
         });
       }
 
@@ -2313,13 +2350,6 @@
           }
         });
       }
-
-      attemptInitialGeneration().catch((error) => {
-        console.error("Initial ChatGPT generation failed", error);
-        if (SAMPLE_ARTWORK?.dataUrl) {
-          loadSamplePuzzle({ announce: true });
-        }
-      });
 
       selectButton.addEventListener("click", () => fileInput.click());
       importButton.addEventListener("click", () => fileInput.click());
@@ -2382,11 +2412,13 @@
       autoAdvanceToggle.addEventListener("change", () => {
         state.settings.autoAdvance = autoAdvanceToggle.checked;
         logDebug(`Auto-advance ${autoAdvanceToggle.checked ? "enabled" : "disabled"}`);
+        scheduleAutosave("settings-auto-advance");
       });
 
       hintFlashToggle.addEventListener("change", () => {
         state.settings.animateHints = hintFlashToggle.checked;
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
+        scheduleAutosave("settings-hint-animations");
       });
 
       if (backgroundColorInput) {
@@ -2395,6 +2427,7 @@
         });
         backgroundColorInput.addEventListener("change", (event) => {
           applyBackgroundColor(event.target.value);
+          scheduleAutosave("background-colour");
         });
       }
 
@@ -2412,6 +2445,7 @@
           flashColorRegions(state.activeColor);
         }
         updateProgress();
+        scheduleAutosave("reset-progress");
         logDebug("Reset puzzle progress");
       });
 
@@ -2627,6 +2661,7 @@
           flashColorRegions(state.activeColor);
         }
         updateProgress();
+        scheduleAutosave("fill-region");
         logDebug(
           `Filled region ${region.id} with colour #${region.colorId} (${state.filled.size}/${state.puzzle.regions.length})`
         );
@@ -3607,6 +3642,10 @@
             : palette[0]?.id ?? null;
         state.filled = new Set(metadata.filled ?? []);
         state.lastOptions = metadata.options ?? getCurrentOptions();
+        const resolvedSettings = metadata.settings ?? data.settings;
+        if (resolvedSettings) {
+          applyGameplaySettings(resolvedSettings);
+        }
         applyBackgroundColor(backgroundHex, { skipRender: true, skipLog: true });
         puzzleCanvas.width = data.width;
         puzzleCanvas.height = data.height;
@@ -3623,7 +3662,10 @@
         updateCommandStates();
         updatePreviewState();
         markOptionsDirty();
-        resetView({ recenter: true });
+        const restoredViewport = metadata.viewport ?? data.viewport;
+        if (!restoreViewport(restoredViewport)) {
+          resetView({ recenter: true });
+        }
         const paletteCount = palette.length;
         const regionCount = regions.length;
         const descriptor =
@@ -3661,6 +3703,7 @@
             telemetry: summaryTelemetry,
           });
         }
+        scheduleAutosave("puzzle-load", { immediate: true });
         return true;
       }
 
@@ -3823,6 +3866,9 @@
         }
         const remaining = getRegionsByColor(colorId, { includeFilled: false }).length;
         const suffix = remaining > 0 ? `${remaining} regions remaining` : "complete";
+        if (changed) {
+          scheduleAutosave("color-select");
+        }
         logDebug(`${changed ? "Selected" : "Re-selected"} colour #${colorId} (${suffix})`);
         return changed;
       }
@@ -4206,6 +4252,25 @@
         applyViewTransform();
       }
 
+      function restoreViewport(viewport = {}) {
+        if (!state.puzzle || !viewport || typeof viewport !== "object") {
+          return false;
+        }
+        const nextBase = computeFitScale();
+        const savedBase = Number.isFinite(viewport.baseScale) ? viewport.baseScale : nextBase;
+        const scaleRatio = savedBase && Number.isFinite(savedBase) ? nextBase / savedBase : 1;
+        const savedZoom = Number.isFinite(viewport.zoom) ? viewport.zoom : 1;
+        const targetZoom = savedBase && Number.isFinite(savedBase)
+          ? (savedBase * savedZoom) / (nextBase || savedBase)
+          : savedZoom;
+        viewState.baseScale = nextBase;
+        viewState.zoom = clamp(targetZoom, 0.05, 16);
+        viewState.panX = Number.isFinite(viewport.panX) ? viewport.panX * scaleRatio : 0;
+        viewState.panY = Number.isFinite(viewport.panY) ? viewport.panY * scaleRatio : 0;
+        applyViewTransform();
+        return true;
+      }
+
       function useHint() {
         if (!state.puzzle) return;
         const candidates = state.puzzle.regions.filter((region) => !state.filled.has(region.id));
@@ -4301,7 +4366,7 @@
       function serializeCurrentPuzzle() {
         if (!state.puzzle) return {};
         return {
-          title: "capy-puzzle",
+          title: state.sourceTitle || "capy-puzzle",
           width: state.puzzle.width,
           height: state.puzzle.height,
           palette: state.puzzle.palette.map((p) => ({
@@ -4324,7 +4389,260 @@
           sourceUrl: state.sourceUrl,
           activeColor: state.activeColor,
           backgroundColor: state.settings.backgroundColor,
+          viewport: {
+            panX: viewState.panX,
+            panY: viewState.panY,
+            zoom: viewState.zoom,
+            baseScale: viewState.baseScale,
+          },
+          settings: {
+            autoAdvance: Boolean(state.settings.autoAdvance),
+            animateHints: Boolean(state.settings.animateHints),
+          },
         };
+      }
+
+      function scheduleAutosave(reason, options = {}) {
+        if (!state.puzzle) return null;
+        const { immediate = false, delay = 350 } = options;
+        const resolvedReason = reason || pendingAutosaveReason || "update";
+        if (immediate) {
+          pendingAutosaveReason = null;
+          if (autosaveTimer) {
+            window.clearTimeout(autosaveTimer);
+            autosaveTimer = null;
+          }
+          return persistAutosave(resolvedReason);
+        }
+        pendingAutosaveReason = resolvedReason;
+        if (autosaveTimer) {
+          window.clearTimeout(autosaveTimer);
+        }
+        const timeout = Math.max(120, delay);
+        autosaveTimer = window.setTimeout(() => {
+          autosaveTimer = null;
+          const finalReason = pendingAutosaveReason || "update";
+          pendingAutosaveReason = null;
+          persistAutosave(finalReason);
+        }, timeout);
+        return null;
+      }
+
+      function persistAutosave(reason = "update") {
+        if (!state.puzzle) return null;
+        const snapshot = serializeCurrentPuzzle();
+        const record = {
+          version: 1,
+          timestamp: Date.now(),
+          reason,
+          title: snapshot.title || state.sourceTitle || "capy-puzzle",
+          data: snapshot,
+        };
+        try {
+          localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(record));
+        } catch (error) {
+          console.error("Failed to persist autosave", error);
+        }
+        cloudSync.persist(record);
+        return record;
+      }
+
+      function loadAutosave() {
+        try {
+          const raw = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.data) {
+            return parsed;
+          }
+        } catch (error) {
+          console.error("Failed to load autosave", error);
+        }
+        return null;
+      }
+
+      function getLatestBackupRecord() {
+        const candidates = [];
+        const autosave = loadAutosave();
+        if (autosave && autosave.data) {
+          candidates.push({ ...autosave, origin: "local autosave" });
+        }
+        const cloudRecord = cloudSync.getSnapshot ? cloudSync.getSnapshot() : null;
+        if (cloudRecord && cloudRecord.data) {
+          candidates.push({ ...cloudRecord, origin: "cloud backup" });
+        }
+        if (Array.isArray(state.saves) && state.saves.length > 0) {
+          const [latestManual] = [...state.saves].sort(
+            (a, b) => (b.timestamp || 0) - (a.timestamp || 0)
+          );
+          if (latestManual && latestManual.data) {
+            candidates.push({
+              timestamp: latestManual.timestamp,
+              data: latestManual.data,
+              title: latestManual.title,
+              origin: "manual save",
+            });
+          }
+        }
+        if (candidates.length === 0) return null;
+        candidates.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        return candidates[0];
+      }
+
+      function loadInitialSession() {
+        const latest = getLatestBackupRecord();
+        if (latest && latest.data) {
+          const descriptor =
+            latest.title ||
+            latest.data.title ||
+            state.sourceTitle ||
+            "Puzzle";
+          const applied = applyPuzzleResult(latest.data, {
+            options: latest.data.options,
+            filled: latest.data.filled,
+            activeColor: latest.data.activeColor,
+            backgroundColor: latest.data.backgroundColor,
+            viewport: latest.data.viewport,
+            settings: latest.data.settings,
+            title: descriptor,
+            logMessage: `Restoring ${descriptor} from backup`,
+            skipDefaultLog: true,
+          });
+          if (applied) {
+            state.sourceUrl = latest.data.sourceUrl ?? null;
+            state.sourceTitle = descriptor;
+            startHint.classList.add("hidden");
+            logDebug(`Restored previous session from ${latest.origin || "backup storage"}`);
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function createCloudSync() {
+        const subscribers = new Set();
+        const key = CLOUD_STORAGE_KEY;
+        let lastRecord = null;
+        const hasBroadcast = typeof BroadcastChannel !== "undefined";
+        const channel = hasBroadcast ? new BroadcastChannel("capy-cloud-sync") : null;
+
+        function readFromStorage() {
+          try {
+            const raw = localStorage.getItem(key);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object") return null;
+            return parsed;
+          } catch (error) {
+            console.error("Failed to read cloud backup", error);
+            return null;
+          }
+        }
+
+        function notify(record) {
+          lastRecord = record || null;
+          subscribers.forEach((listener) => {
+            try {
+              listener(lastRecord);
+            } catch (error) {
+              console.error("Cloud sync listener failed", error);
+            }
+          });
+        }
+
+        function writeRecord(record) {
+          if (record == null) {
+            try {
+              localStorage.removeItem(key);
+            } catch (error) {
+              console.error("Failed to clear cloud backup", error);
+            }
+            notify(null);
+            if (channel) {
+              channel.postMessage({ type: "cloud-sync", record: null });
+            }
+            return null;
+          }
+          try {
+            localStorage.setItem(key, JSON.stringify(record));
+          } catch (error) {
+            console.error("Failed to persist cloud backup", error);
+          }
+          notify(record);
+          if (channel) {
+            channel.postMessage({ type: "cloud-sync", record });
+          }
+          return record;
+        }
+
+        if (channel) {
+          channel.addEventListener("message", (event) => {
+            if (!event || typeof event.data !== "object") return;
+            if ("record" in event.data) {
+              notify(event.data.record);
+            }
+          });
+        }
+
+        if (typeof window !== "undefined") {
+          window.addEventListener("storage", (event) => {
+            if (event.key === key) {
+              if (event.newValue) {
+                try {
+                  notify(JSON.parse(event.newValue));
+                } catch (error) {
+                  console.error("Failed to parse cloud backup update", error);
+                }
+              } else {
+                notify(null);
+              }
+            }
+          });
+        }
+
+        const api = {
+          persist(record) {
+            return writeRecord(record);
+          },
+          getSnapshot() {
+            return lastRecord;
+          },
+          subscribe(listener) {
+            if (typeof listener !== "function") return () => {};
+            subscribers.add(listener);
+            if (lastRecord) {
+              try {
+                listener(lastRecord);
+              } catch (error) {
+                console.error("Cloud sync listener failed", error);
+              }
+            }
+            return () => subscribers.delete(listener);
+          },
+          clear() {
+            writeRecord(null);
+          },
+          hydrate() {
+            const record = readFromStorage();
+            if (record) {
+              notify(record);
+            }
+            return record;
+          },
+        };
+
+        if (typeof window !== "undefined") {
+          window.capyCloudSync = {
+            persist: api.persist,
+            getSnapshot: api.getSnapshot,
+            subscribe: api.subscribe,
+            clear: api.clear,
+            hydrate: api.hydrate,
+          };
+        }
+
+        api.hydrate();
+        return api;
       }
 
       function saveCurrentSnapshot() {
@@ -4339,6 +4657,7 @@
         state.saves.unshift(entry);
         persistSaves();
         refreshSaveList();
+        scheduleAutosave("manual-save", { immediate: true });
         logDebug(`Saved snapshot: ${entry.title}`);
       }
 
@@ -4399,6 +4718,9 @@
             filled: entry.data.filled,
             activeColor: entry.data.activeColor,
             backgroundColor: entry.data.backgroundColor,
+            viewport: entry.data.viewport,
+            settings: entry.data.settings,
+            title: entry.title || entry.data.title,
           })
         ) {
           state.sourceUrl = entry.data.sourceUrl ?? null;
