@@ -4,6 +4,7 @@
 - Node.js 18 or newer (Playwright currently targets Node 18 in CI).
 - npm 9+ (ships with recent Node releases).
 - The bundled Playwright browsers (run `npm install` once to trigger `playwright install`).
+- (Optional) An OpenAI API key saved through the in-app **Help → ChatGPT access** form (or via `window.capyGenerator.setChatGPTKey('sk-...')`) if you want to exercise the ChatGPT prompt bar locally.
 
 ## Initial Setup
 1. Install dependencies:
@@ -23,15 +24,16 @@
 
 ## Daily Workflow
 - **Start the app:** `npm run dev` (or `npm run start`).
+- **Load a prompt:** Before relying on the ChatGPT workflow, open **Help → ChatGPT access** to paste your OpenAI key (or call `window.capyGenerator.setChatGPTKey('sk-...')`) so the prompt bar can reach the API. Without a key the runtime logs the omission and falls back to the bundled sample.
 - **Run smoke tests:** `npm test` executes the Playwright UI review harness in `tests/ui-review.spec.js`.
 - **Inspect reports:** After a test run, open `playwright-report/index.html` or run `npm run show-report`.
-- **Review UI artifacts:** Check `artifacts/ui-review/*.json` for palette counts, cell totals, header button ARIA labels, and art-library presence alongside the captured screenshot.
+- **Review UI artifacts:** Check `artifacts/ui-review/*.json` for palette counts, cell totals, header button ARIA labels, and prompt/button state alongside the captured screenshot.
 - **Mobile HUD check:** The UI review suite now boots a handheld viewport to ensure the header hugs the top-right edge, the menu toggle exposes every command, and the palette swatches stay compact with their inline labels/badges.
 - **Static assets:** React, ReactDOM, and Babel live under `vendor/`. Update them with `npx playwright` or direct downloads and keep versions in sync with `package.json`.
 - **Editor tasks:** VS Code tasks (`.vscode/tasks.json`) expose a "Start http-server" background task that mirrors `npm run dev`.
 
 ## Project Structure
-- `index.html` - single-file React application plus inline logic.
+- `index.html` - single-file Capycolour application (markup, styles, generator logic, and ChatGPT integration live here).
 - `vendor/` - vendored runtime dependencies required for offline execution.
 - `tests/` - Playwright UI review harness (`ui-review.spec.js`).
 - `.github/workflows/ci.yml` - Windows CI pipeline running Playwright.

@@ -24,7 +24,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Image to Color-by-Number</title>
+    <title>Capycolour – ChatGPT-powered color-by-number</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -48,6 +48,18 @@
           #020617;
         color: inherit;
         overflow: hidden;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
 
       body.sheet-open {
@@ -79,6 +91,79 @@
         gap: 8px;
         padding: 12px 24px;
         z-index: 3;
+        flex-wrap: wrap;
+      }
+
+      .prompt-form {
+        display: flex;
+        align-items: stretch;
+        margin-right: auto;
+        min-width: 220px;
+        max-width: min(420px, 50vw);
+      }
+
+      .prompt-form[data-generating="true"] {
+        opacity: 0.8;
+      }
+
+      .prompt-field {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px 8px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        background: rgba(15, 23, 42, 0.82);
+        box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.12);
+        width: 100%;
+      }
+
+      .prompt-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        font-size: 1rem;
+        color: rgba(226, 232, 240, 0.88);
+      }
+
+      #promptInput {
+        flex: 1;
+        min-width: 0;
+        border: none;
+        background: transparent;
+        color: rgba(226, 232, 240, 0.95);
+        font: inherit;
+        font-size: 0.95rem;
+        padding: 0;
+        outline: none;
+      }
+
+      #promptInput::placeholder {
+        color: rgba(148, 163, 184, 0.7);
+      }
+
+      #promptSubmit {
+        border-radius: 999px;
+        padding: 6px 14px;
+        border: 1px solid rgba(96, 165, 250, 0.55);
+        background: rgba(37, 99, 235, 0.28);
+        color: rgba(226, 232, 240, 0.98);
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      #promptSubmit:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
+      }
+
+      #promptSubmit:disabled {
+        cursor: not-allowed;
+        opacity: 0.7;
+        box-shadow: none;
       }
 
       #commandRail button {
@@ -656,6 +741,46 @@
         gap: 12px;
       }
 
+      .api-key-form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .api-key-form label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-weight: 600;
+      }
+
+      .api-key-form input {
+        border-radius: 10px;
+        border: 1px solid rgba(59, 130, 246, 0.45);
+        background: rgba(15, 23, 42, 0.8);
+        color: rgba(226, 232, 240, 0.95);
+        padding: 8px 12px;
+        font: inherit;
+        letter-spacing: 0.03em;
+      }
+
+      .api-key-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .api-key-actions button {
+        flex: 1 1 140px;
+        border-radius: 10px;
+        padding: 8px 12px;
+      }
+
+      .api-key-status {
+        font-size: 0.85rem;
+        color: rgba(148, 163, 184, 0.88);
+      }
+
       .sheet-actions {
         display: flex;
         justify-content: flex-end;
@@ -740,6 +865,13 @@
           flex-wrap: wrap;
           justify-content: flex-end;
         }
+
+        .prompt-form {
+          order: 1;
+          flex: 1 1 100%;
+          margin-bottom: 8px;
+          max-width: 100%;
+        }
       }
 
       @media (max-width: 720px) {
@@ -757,6 +889,10 @@
           gap: 12px;
         }
 
+        .prompt-form {
+          margin-right: 0;
+        }
+
         #progress {
           min-width: 0;
         }
@@ -766,6 +902,24 @@
   <body>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
+        <form id="promptForm" class="prompt-form" autocomplete="off">
+          <label class="sr-only" for="promptInput">Describe an image for Capycolour</label>
+          <div class="prompt-field">
+            <span class="prompt-icon" aria-hidden="true">?</span>
+            <input
+              id="promptInput"
+              type="text"
+              name="prompt"
+              autocomplete="off"
+              placeholder="Describe a Capycolour scene…"
+              aria-describedby="promptHelper"
+            />
+            <button id="promptSubmit" type="submit" aria-label="Generate ChatGPT art">Draw</button>
+          </div>
+          <p id="promptHelper" class="sr-only">
+            Capycolour will ask ChatGPT to draw this description and import it as a new puzzle.
+          </p>
+        </form>
         <button
           id="hintButton"
           type="button"
@@ -882,12 +1036,12 @@
             <img
               id="sampleArtPreview"
               class="sample-art"
-              alt="Capybara sample illustration"
+              alt="Capycolour sample illustration"
             />
-            <h1>Drop an image to start</h1>
+            <h1>Ask ChatGPT or drop an image</h1>
             <p>
-              Drag a picture anywhere on the screen, choose a file from your device,
-              or jump straight into our capybara sample scene.
+              Describe your dream scene in the prompt bar, drag a picture anywhere on the screen,
+              or choose a file from your device. You can also jump straight into our Capycolour sample puzzle.
             </p>
             <div class="hint-actions">
               <button id="selectImage" type="button">Choose an image</button>
@@ -897,7 +1051,7 @@
                 data-action="load-sample"
                 aria-label="Load capybara sample puzzle"
               >
-                Try the capybara sample
+                Try the Capycolour sample
               </button>
             </div>
           </div>
@@ -925,6 +1079,8 @@
         <section class="sheet-section" aria-labelledby="commandsHeading">
           <h3 id="commandsHeading">Command buttons</h3>
           <dl class="command-list">
+            <dt>? Prompt</dt>
+            <dd>Send your description to ChatGPT and import the generated Capycolour puzzle.</dd>
             <dt>? Hint</dt>
             <dd>Flash the smallest unfinished region and switch colours if needed.</dd>
             <dt>↺ Reset</dt>
@@ -932,7 +1088,7 @@
             <dt>🖼 Preview</dt>
             <dd>Toggle the finished artwork overlay to compare your progress.</dd>
             <dt>🐹 Sample</dt>
-            <dd>Reload the built-in capybara puzzle for a fresh board.</dd>
+            <dd>Reload the built-in Capycolour puzzle for a fresh board.</dd>
             <dt>⛶ Fullscreen</dt>
             <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
             <dt>⬆ Import</dt>
@@ -954,6 +1110,33 @@
             <li><kbd>Space</kbd> + drag (or middle/right drag) Pan the canvas.</li>
             <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
           </ul>
+        </section>
+        <section class="sheet-section" aria-labelledby="apiKeyHeading">
+          <h3 id="apiKeyHeading">ChatGPT access</h3>
+          <p class="control-note">
+            Store an OpenAI API key locally to let Capycolour request fresh illustrations when you use the prompt bar.
+          </p>
+          <form id="apiKeyForm" class="api-key-form">
+            <label for="apiKeyInput">
+              OpenAI API key
+              <input
+                id="apiKeyInput"
+                type="password"
+                name="openai-key"
+                placeholder="sk-..."
+                autocomplete="off"
+                spellcheck="false"
+                inputmode="text"
+              />
+            </label>
+            <div class="api-key-actions">
+              <button type="submit">Save ChatGPT key</button>
+              <button id="clearApiKey" type="button" disabled>Clear stored key</button>
+            </div>
+            <p id="apiKeyStatus" class="api-key-status" role="status">
+              No key stored. Capycolour will fall back to the bundled sample until you save one.
+            </p>
+          </form>
         </section>
         <section class="sheet-section" aria-labelledby="debugHeading">
           <h3 id="debugHeading">Debug log</h3>
@@ -1060,6 +1243,9 @@
     </div>
         <script>
       // Cached DOM references so we can wire handlers without repeated lookups.
+      const promptForm = document.getElementById("promptForm");
+      const promptInput = document.getElementById("promptInput");
+      const promptSubmit = document.getElementById("promptSubmit");
       const appEl = document.getElementById("app");
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
@@ -1082,6 +1268,10 @@
       const helpSheet = document.getElementById("helpSheet");
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
+      const apiKeyForm = document.getElementById("apiKeyForm");
+      const apiKeyInput = document.getElementById("apiKeyInput");
+      const apiKeyStatus = document.getElementById("apiKeyStatus");
+      const clearApiKeyButton = document.getElementById("clearApiKey");
       const viewportEl = document.getElementById("viewport");
       const canvasStage = document.getElementById("canvasStage");
       const canvasTransform = document.getElementById("canvasTransform");
@@ -1115,14 +1305,23 @@
         smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
+      const OPENAI_KEY_STORAGE = "capycolour.openaiKey";
+      const PROMPT_STORAGE_KEY = "capycolour.lastPrompt";
+      const DEFAULT_PROMPT =
+        "A cheerful capybara painting in luminous watercolour, surrounded by vibrant jungle flowers and sparkling water";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
 
+      const generationState = {
+        pending: false,
+        lastPrompt: null,
+      };
+
       // Embedded sample used for onboarding and smoke tests.
       const SAMPLE_ARTWORK = {
-        title: "Capybara Springs",
-        description: "A capybara with an orange crown relaxes beside a dachshund in a forest lagoon.",
+        title: "Capycolour Springs",
+        description: "A capybara with an orange crown relaxes beside a dachshund in a forest lagoon, painted in Capycolour hues.",
         dataUrl:
           "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMjAgMjQwIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ic2t5IiB4MT0iMCIgeDI9IjAiIHkxPSIwIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2Y5ZThjOCIgLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOGNjMGZmIiAvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0id2F0ZXIiIHgxPSIwIiB4Mj0iMCIgeTE9IjAiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjNGU4Y2M5IiAvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMyNDRiNzQiIC8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJoaWxsIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzNmN2IzZiIgLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMjM1NzJmIiAvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ic3VuIiBjeD0iMC4xIiBjeT0iMC4xIiByPSIwLjgiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmZmY3YzMiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2YyYTkzYSIgLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIzMjAiIGhlaWdodD0iMTYwIiBmaWxsPSJ1cmwoI3NreSkiIC8+CiAgPHJlY3QgeT0iMTQwIiB3aWR0aD0iMzIwIiBoZWlnaHQ9IjEwMCIgZmlsbD0idXJsKCN3YXRlcikiIC8+CiAgPGVsbGlwc2UgY3g9IjI2MCIgY3k9IjY1IiByeD0iMjgiIHJ5PSIyOCIgZmlsbD0idXJsKCNzdW4pIiBvcGFjaXR5PSIwLjkiIC8+CiAgPHBhdGggZD0iTTAgMTIwIFE4MCA2MCAxNjAgMTIwIFQzMjAgMTIwIFYxNzAgSDAgWiIgZmlsbD0idXJsKCNoaWxsKSIgLz4KICA8cGF0aCBkPSJNMjgwIDQwIFEyNzAgMTEwIDMwMCAxMzAgTDMwMCAxNjAgUTI1MCAxNDAgMjYwIDgwIiBmaWxsPSIjNzRhMmRlIiBvcGFjaXR5PSIwLjciIC8+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNTIsMTIwKSI+CiAgICA8cGF0aCBkPSJNMjggMjggcTQwIC00MCA5NiAtMTggdDcyIDYwIHEtOCAzNiAtNDYgNDQgbC05MCA0IHEtNDAgLTYgLTUyIC0zNiB0MjAgLTU0IHoiIGZpbGw9IiNjMzhhNTUiIC8+CiAgICA8cGF0aCBkPSJNMzggMjYgcTIyIC0yMiA0NCAtMjQgdDQ2IDEyIHEyMCAxMCAzMiAzMCB0NCA0NCBxLTQgMjQgLTMyIDMyIGwtNjIgNiBxLTM0IDAgLTQ2IC0yMCB0LTIgLTQ4IHoiIGZpbGw9IiNhZTc0NDIiIC8+CiAgICA8ZWxsaXBzZSBjeD0iODYiIGN5PSI2NiIgcng9IjE2IiByeT0iMjAiIGZpbGw9IiNmNWM5OTUiIC8+CiAgICA8ZWxsaXBzZSBjeD0iNjAiIGN5PSI3NiIgcng9IjE4IiByeT0iMjIiIGZpbGw9IiNiOTdiNDMiIC8+CiAgICA8ZWxsaXBzZSBjeD0iMTA4IiBjeT0iNTYiIHJ4PSIxNCIgcnk9IjE4IiBmaWxsPSIjYjk3YjQzIiAvPgogICAgPGVsbGlwc2UgY3g9IjE0NiIgY3k9IjY0IiByeD0iMzIiIHJ5PSIzOCIgZmlsbD0iI2Q0OWI2MiIgLz4KICAgIDxlbGxpcHNlIGN4PSIxNjQiIGN5PSI3MCIgcng9IjIwIiByeT0iMjQiIGZpbGw9IiNjMzhhNTUiIC8+CiAgICA8ZWxsaXBzZSBjeD0iMTcwIiBjeT0iODAiIHJ4PSIxMCIgcnk9IjEyIiBmaWxsPSIjNzg0ZjMyIiAvPgogICAgPGVsbGlwc2UgY3g9IjEzNCIgY3k9IjYwIiByeD0iNiIgcnk9IjgiIGZpbGw9IiMyZDFjMTAiIC8+CiAgICA8ZWxsaXBzZSBjeD0iMTg4IiBjeT0iNzQiIHJ4PSI2IiByeT0iOCIgZmlsbD0iIzJkMWMxMCIgLz4KICAgIDxwYXRoIGQ9Ik0xNDAgOTYgcTE2IDEwIDMyIDAiIHN0cm9rZT0iIzJkMWMxMCIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIGZpbGw9Im5vbmUiIC8+CiAgICA8cGF0aCBkPSJNMTIyIDMyIHEyMCAtMjYgNDQgLTIyIHQ0MCAyNCBsLTEyIDggcS0yNCAtMTggLTQwIC0xOCB0LTMyIDEyIHoiIGZpbGw9IiNiNTc0MzUiIC8+CiAgICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxNDMsLTE4KSI+CiAgICAgIDxlbGxpcHNlIGN4PSIxMCIgY3k9IjEwIiByeD0iMTIiIHJ5PSIxMiIgZmlsbD0iI2YzN2IyNSIgLz4KICAgICAgPHBhdGggZD0iTTYgNiBsLTQgLTgiIHN0cm9rZT0iIzJkNjcyOSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIC8+CiAgICAgIDxwYXRoIGQ9Ik0xMCA1IHE0IC02IDEwIC0xMCIgc3Ryb2tlPSIjMmQ2NzI5IiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgLz4KICAgIDwvZz4KICA8L2c+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTg0LDE1NikiPgogICAgPHBhdGggZD0iTTAgMTQgcTEwIC0xOCAzMCAtMTggdDM2IDE2IHExMCAxNiAyIDMyIHQtMzAgMjAgcS0yNCA0IC0zNiAtOCB0LTEyIC0yOCBxMCAtOCAxMCAtMTQgeiIgZmlsbD0iIzhlNTIyOCIgLz4KICAgIDxlbGxpcHNlIGN4PSIzMCIgY3k9IjM4IiByeD0iMTgiIHJ5PSIxNiIgZmlsbD0iI2E3NjUzNCIgLz4KICAgIDxlbGxpcHNlIGN4PSI1NCIgY3k9IjM2IiByeD0iMTYiIHJ5PSIxMiIgZmlsbD0iI2JjN2E0NSIgLz4KICAgIDxlbGxpcHNlIGN4PSI3MCIgY3k9IjM0IiByeD0iMTIiIHJ5PSIxMCIgZmlsbD0iIzc4NDMyNCIgLz4KICAgIDxlbGxpcHNlIGN4PSI3MiIgY3k9IjMyIiByeD0iNCIgcnk9IjYiIGZpbGw9IiMyZDFjMTAiIC8+CiAgICA8cGF0aCBkPSJNMzAgMTYgcTE0IC02IDIyIDYiIHN0cm9rZT0iIzJkMWMxMCIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIC8+CiAgPC9nPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDMyLDE4NikiPgogICAgPGVsbGlwc2UgY3g9IjEyIiBjeT0iMTIiIHJ4PSIxMiIgcnk9IjEyIiBmaWxsPSIjZmJjZGQxIiAvPgogICAgPHJlY3QgeD0iOCIgeT0iMiIgd2lkdGg9IjgiIGhlaWdodD0iMTYiIHJ4PSI0IiBmaWxsPSIjZDU1ODY0IiAvPgogICAgPGNpcmNsZSBjeD0iMTIiIGN5PSI0IiByPSIzIiBmaWxsPSIjZmZmIiAvPgogIDwvZz4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3MCwxOTgpIj4KICAgIDxlbGxpcHNlIGN4PSIxMCIgY3k9IjEwIiByeD0iMTAiIHJ5PSIxMCIgZmlsbD0iI2ZiZDdhOCIgLz4KICAgIDxyZWN0IHg9IjYiIHk9IjIiIHdpZHRoPSI4IiBoZWlnaHQ9IjE0IiByeD0iNCIgZmlsbD0iI2QxNmYzMyIgLz4KICAgIDxjaXJjbGUgY3g9IjEwIiBjeT0iNCIgcj0iMyIgZmlsbD0iI2ZmZiIgLz4KICA8L2c+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMjgwLDE4OCkiPgogICAgPGVsbGlwc2UgY3g9IjEwIiBjeT0iMTAiIHJ4PSIxMCIgcnk9IjEwIiBmaWxsPSIjZmJkN2E4IiAvPgogICAgPHJlY3QgeD0iNiIgeT0iMiIgd2lkdGg9IjgiIGhlaWdodD0iMTQiIHJ4PSI0IiBmaWxsPSIjZDE2ZjMzIiAvPgogICAgPGNpcmNsZSBjeD0iMTAiIGN5PSI0IiByPSIzIiBmaWxsPSIjZmZmIiAvPgogIDwvZz4KICA8cGF0aCBkPSJNNDAgMjAwIHE2MCAyMCAxNDAgMCB0MTIwIDEyIHEtNDggMjQgLTE2MCAyMCB0LTE0MCAtMzIgcTIwIC0xMiA0MCAwIHoiIGZpbGw9IiMzZDZkYTUiIG9wYWNpdHk9IjAuNiIgLz4KPC9zdmc+Cg==",
       };
@@ -1174,6 +1373,248 @@
       const debugLogEntries = [];
       const DEBUG_LOG_LIMIT = 80;
 
+      function sanitizePromptText(prompt) {
+        if (typeof prompt !== "string") return "";
+        return prompt.replace(/\s+/g, " ").trim();
+      }
+
+      function getStoredPrompt() {
+        try {
+          const stored = window.localStorage?.getItem(PROMPT_STORAGE_KEY) ?? "";
+          return sanitizePromptText(stored) || "";
+        } catch (error) {
+          return "";
+        }
+      }
+
+      function storePrompt(prompt) {
+        const sanitized = sanitizePromptText(prompt);
+        generationState.lastPrompt = sanitized || null;
+        try {
+          if (sanitized) {
+            window.localStorage?.setItem(PROMPT_STORAGE_KEY, sanitized);
+          } else {
+            window.localStorage?.removeItem(PROMPT_STORAGE_KEY);
+          }
+        } catch (error) {
+          // Ignore storage errors (private browsing, quotas, etc.).
+        }
+        if (promptInput && promptInput.value !== sanitized) {
+          promptInput.value = sanitized;
+        }
+        return sanitized;
+      }
+
+      function getStoredOpenAIKey() {
+        try {
+          const stored = window.localStorage?.getItem(OPENAI_KEY_STORAGE) ?? null;
+          if (typeof stored === "string" && stored.trim()) {
+            return stored.trim();
+          }
+        } catch (error) {
+          // Ignore storage access issues.
+        }
+        return null;
+      }
+
+      function persistOpenAIKey(key) {
+        const trimmed = typeof key === "string" ? key.trim() : "";
+        if (!trimmed) return null;
+        try {
+          window.localStorage?.setItem(OPENAI_KEY_STORAGE, trimmed);
+        } catch (error) {
+          // Ignore storage errors.
+        }
+        return trimmed;
+      }
+
+      function clearOpenAIKey() {
+        try {
+          window.localStorage?.removeItem(OPENAI_KEY_STORAGE);
+        } catch (error) {
+          // Ignore storage errors.
+        }
+      }
+
+      function resolveOpenAIKey(options = {}) {
+        const { interactive = false } = options;
+        const stored = getStoredOpenAIKey();
+        if (stored) {
+          return stored;
+        }
+        if (interactive && typeof window.prompt === "function") {
+          const input = window.prompt("Enter your OpenAI API key for Capycolour (sk-...)");
+          if (typeof input === "string" && input.trim()) {
+            return persistOpenAIKey(input.trim());
+          }
+        }
+        return null;
+      }
+
+      function maskOpenAIKey(key) {
+        if (!key) return "";
+        if (key.length <= 8) {
+          return `${key.slice(0, 2)}…${key.slice(-2)}`;
+        }
+        return `${key.slice(0, 4)}…${key.slice(-4)}`;
+      }
+
+      function refreshApiKeyStatus() {
+        if (!apiKeyStatus) return;
+        const storedKey = getStoredOpenAIKey();
+        if (clearApiKeyButton) {
+          clearApiKeyButton.disabled = !storedKey;
+        }
+        if (storedKey) {
+          apiKeyStatus.textContent = `Key stored locally (${maskOpenAIKey(storedKey)}).`;
+          if (apiKeyInput && document.activeElement !== apiKeyInput) {
+            apiKeyInput.value = storedKey;
+          }
+        } else {
+          apiKeyStatus.textContent =
+            "No key stored. Capycolour will fall back to the bundled sample until you save one.";
+          if (apiKeyInput && document.activeElement !== apiKeyInput) {
+            apiKeyInput.value = "";
+          }
+        }
+      }
+
+      function formatPromptSnippet(prompt) {
+        const sanitized = sanitizePromptText(prompt);
+        if (!sanitized) return "Prompt";
+        if (sanitized.length <= 64) return sanitized;
+        return `${sanitized.slice(0, 61).trim()}…`;
+      }
+
+      function setGenerationPending(active) {
+        generationState.pending = Boolean(active);
+        if (promptForm) {
+          if (active) {
+            promptForm.dataset.generating = "true";
+          } else {
+            delete promptForm.dataset.generating;
+          }
+        }
+        if (promptInput) {
+          promptInput.disabled = active;
+        }
+        if (promptSubmit) {
+          promptSubmit.disabled = active;
+          promptSubmit.textContent = active ? "Drawing…" : "Draw";
+        }
+        for (const button of sampleButtons) {
+          if (button) {
+            button.disabled = active;
+          }
+        }
+      }
+
+      async function generatePromptedPuzzle(prompt, options = {}) {
+        const {
+          interactive = false,
+          fallbackToSample = false,
+          persistPromptValue = true,
+          reason = "manual",
+        } = options;
+        const sanitized = sanitizePromptText(prompt) || DEFAULT_PROMPT;
+        if (persistPromptValue) {
+          storePrompt(sanitized);
+        } else if (promptInput && promptInput.value.trim() !== sanitized) {
+          promptInput.value = sanitized;
+        }
+        const snippet = formatPromptSnippet(sanitized);
+        setGenerationPending(true);
+        const apiKey = resolveOpenAIKey({ interactive });
+        refreshApiKeyStatus();
+        if (!apiKey) {
+          logDebug("ChatGPT image generation skipped: API key not configured.");
+          setGenerationPending(false);
+          if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
+            loadSamplePuzzle({ announce: true });
+          }
+          return false;
+        }
+        logDebug(`Requesting ChatGPT image for “${snippet}” (${reason})`);
+        try {
+          const response = await fetch("https://api.openai.com/v1/images/generations", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: "gpt-image-1",
+              prompt: sanitized,
+              size: "768x768",
+              response_format: "b64_json",
+            }),
+          });
+          if (!response.ok) {
+            let errorSummary = `${response.status}`;
+            try {
+              const text = await response.text();
+              errorSummary = `${response.status} ${response.statusText} – ${text.slice(0, 120)}`;
+            } catch (readError) {
+              errorSummary = `${response.status} ${response.statusText}`;
+            }
+            logDebug(`ChatGPT image request failed: ${errorSummary}`);
+            if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
+              loadSamplePuzzle({ announce: true });
+            }
+            return false;
+          }
+          const payload = await response.json();
+          const imageData = payload?.data?.[0]?.b64_json;
+          if (!imageData) {
+            logDebug("ChatGPT response did not include image data.");
+            if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
+              loadSamplePuzzle({ announce: true });
+            }
+            return false;
+          }
+          const dataUrl = `data:image/png;base64,${imageData}`;
+          resetPuzzleUI();
+          state.sourceUrl = dataUrl;
+          state.sourceTitle = `Capycolour prompt – ${snippet}`;
+          startHint.classList.add("hidden");
+          const loadMessage = `Generating ChatGPT art for “${snippet}”`;
+          loadImage(dataUrl, {
+            logMessage: loadMessage,
+            completionMessage: `${loadMessage} complete`,
+            skipDefaultLog: true,
+          });
+          return true;
+        } catch (error) {
+          if (error?.name === "AbortError") {
+            logDebug("ChatGPT image request was cancelled.");
+          } else {
+            console.error("Failed to generate ChatGPT image", error);
+            logDebug("ChatGPT image generation failed due to an unexpected error.");
+          }
+          if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
+            loadSamplePuzzle({ announce: true });
+          }
+          return false;
+        } finally {
+          setGenerationPending(false);
+        }
+      }
+
+      async function attemptInitialGeneration() {
+        const storedPrompt = getStoredPrompt();
+        const initialPrompt = storedPrompt || DEFAULT_PROMPT;
+        if (promptInput) {
+          promptInput.value = initialPrompt;
+        }
+        const success = await generatePromptedPuzzle(initialPrompt, {
+          interactive: false,
+          fallbackToSample: true,
+          persistPromptValue: true,
+          reason: "initial",
+        });
+        return success;
+      }
+
       if (typeof window !== "undefined") {
         // Public hooks for tests and manual loading. Keep backwards compatible.
         window.capyGenerator = {
@@ -1212,13 +1653,41 @@
             updatePreviewState();
           },
           openSettings: () => openSheet(settingsSheet),
+          async generateFromPrompt(prompt, options = {}) {
+            const { interactive = false, fallbackToSample = false, persistPromptValue = true, reason = "external" } = options;
+            return generatePromptedPuzzle(prompt, {
+              interactive,
+              fallbackToSample,
+              persistPromptValue,
+              reason,
+            });
+          },
+          setChatGPTKey(key) {
+            if (typeof key !== "string") return false;
+            const stored = persistOpenAIKey(key);
+            refreshApiKeyStatus();
+            if (stored) {
+              logDebug("ChatGPT API key saved via script.");
+            }
+            return Boolean(stored);
+          },
+          clearChatGPTKey() {
+            clearOpenAIKey();
+            refreshApiKeyStatus();
+            logDebug("ChatGPT API key cleared via script.");
+          },
+          getChatGPTPrompt() {
+            return generationState.lastPrompt || getStoredPrompt() || DEFAULT_PROMPT;
+          },
         };
+        window.capycolour = window.capyGenerator;
       }
 
       updateOptionOutputs();
       refreshSaveList();
       updateCommandStates();
       renderDebugLog();
+      refreshApiKeyStatus();
       logDebug("Session started");
       handleViewportChange({ log: true, recenter: true });
       resetView({ recenter: true });
@@ -1231,9 +1700,57 @@
         });
       }
 
-      if (SAMPLE_ARTWORK?.dataUrl) {
-        loadSamplePuzzle();
+      if (promptForm) {
+        promptForm.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const value = promptInput ? promptInput.value : "";
+          generatePromptedPuzzle(value, {
+            interactive: true,
+            fallbackToSample: false,
+            persistPromptValue: true,
+            reason: "manual",
+          });
+        });
       }
+
+      if (apiKeyForm) {
+        apiKeyForm.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const value = apiKeyInput ? apiKeyInput.value || "" : "";
+          const trimmed = typeof value === "string" ? value.trim() : "";
+          if (!trimmed) {
+            clearOpenAIKey();
+            refreshApiKeyStatus();
+            logDebug("Cleared the stored ChatGPT API key.");
+            if (apiKeyInput) {
+              apiKeyInput.value = "";
+            }
+            return;
+          }
+          persistOpenAIKey(trimmed);
+          refreshApiKeyStatus();
+          logDebug("ChatGPT API key saved for this browser.");
+        });
+      }
+
+      if (clearApiKeyButton) {
+        clearApiKeyButton.addEventListener("click", () => {
+          clearOpenAIKey();
+          refreshApiKeyStatus();
+          logDebug("Cleared the stored ChatGPT API key.");
+          if (apiKeyInput) {
+            apiKeyInput.value = "";
+            apiKeyInput.focus();
+          }
+        });
+      }
+
+      attemptInitialGeneration().catch((error) => {
+        console.error("Initial ChatGPT generation failed", error);
+        if (SAMPLE_ARTWORK?.dataUrl) {
+          loadSamplePuzzle({ announce: true });
+        }
+      });
 
       selectButton.addEventListener("click", () => fileInput.click());
       importButton.addEventListener("click", () => fileInput.click());

@@ -1,10 +1,10 @@
 # Agent Instructions
 
 ## Project Summary
-Capybooper is a browser-based color-by-number experience. The `index.html` document hosts the entire application, including
-embedded SVG art, a responsive command rail, palette controls, and the Playwright-driven UI review harness. Supporting
-documentation lives under `docs/`, while helper scripts and generated starter art bundles reside in `tools/` and `art/`
-respectively.
+Capycolour is a single-file, browser-based colour-by-number experience with a ChatGPT-powered art prompt flow. The `index.html`
+document hosts the entire application, including the prompt bar, responsive command rail, palette controls, segmentation
+pipeline, and the Playwright-driven UI review harness. Supporting documentation lives under `docs/`, while helper scripts and
+bundled starter art reside in `tools/` and `art/` respectively.
 
 ## Scope
 These instructions apply to the entire repository unless a nested `AGENTS.md` overrides them.
@@ -21,8 +21,36 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 
 ## Documentation & Notes
 - Update `SEGMENTATION_GUIDE.md`, `ui-review.md`, or other relevant docs whenever the workflow or UI meaningfully changes.
-- When adjusting the UI review harness, also refresh README/test docs to mention new metadata captured (e.g., header button ARIA labels or library controls).
-- Note responsive header or palette adjustments in `README.md` and `docs/gameplay-session.md` so contributors understand current UX expectations.
+- When adjusting the UI review harness, also refresh README/test docs to mention new metadata captured (e.g., header button ARIA labels, prompt state, or library controls).
+- Note responsive header, prompt, or palette adjustments in `README.md` and `docs/gameplay-session.md` so contributors understand current UX expectations.
+- Document ChatGPT prompt/key handling whenever the generation flow changes.
+
+## Detailed File Summary
+- `index.html` – Single-page Capycolour application containing markup, styles, the segmentation/rendering pipeline, ChatGPT prompt handling, the in-app API key manager, sample fallback logic, and exported harness helpers.
+- `README.md` – High-level overview covering ChatGPT integration, gameplay features, developer workflow, and setup guidance.
+- `AGENTS.md` – Repository-wide instructions (this document) plus a full file inventory.
+- `PR_REVIEW.md` – Latest reviewer notes summarising prior feedback, regression expectations, and verification context.
+- `coloring_screen_requirements.md` – Product requirements for the colouring experience (layout, interactions, accessibility, telemetry, QA scenarios).
+- `ui-review.md` – Explanation of the automated visual capture process, positive observations, and improvement ideas.
+- `capy.prompt.yml` – GPT prompt template used when generating starter SVG art assets.
+- `playwright.config.js` – Shared Playwright configuration for local and CI runs.
+- `package.json` / `package-lock.json` – Node metadata, npm scripts (`dev`, `start`, `test`, etc.), dependency versions, and the Playwright postinstall hook.
+- `docs/` – Supplemental documentation:
+  - `development_guide.md` – Setup checklist, daily workflow (including ChatGPT key usage), and asset guidelines.
+  - `gameplay-session.md` – Logged play session with observations about prompt fallbacks and canvas interactions.
+  - `svg-art-file-spec.md` – Specification for segmented SVG inputs consumed by the generator.
+  - `test-run-2025-10-04.md` – Historical Playwright run output with scenario breakdown.
+- `tests/` – Playwright suites:
+  - `ui-review.spec.js` – Smoke/regression coverage for prompt availability, sample fallback, palette behaviour, zoom, and save helpers.
+- `tools/` – Build utilities:
+  - `build-starter-fallbacks.js` – Converts source SVGs into the inline `starter-fallbacks.js` payload used for offline bundling.
+- `art/` – Bundled artwork:
+  - `capybara-forest.svg`, `capybara-lagoon.svg`, `capybara-terraced-market.svg` – Segmented starter scenes.
+  - `starter-fallbacks.js` – Prebuilt inline SVG payloads used when filesystem assets are unavailable.
+- `artifacts/` – Playwright output directory containing screenshots, JSON manifests, and log files from recent UI review runs.
+- `vendor/` – Vendored runtime dependencies (React, ReactDOM, Babel) referenced directly by `index.html`.
+- `node_modules/` – Installed npm dependencies supporting the dev server and Playwright (auto-generated, not manually edited).
+- `artifacts/ui-review/` – Per-run visual regression artifacts produced by `npm test`.
 
 ## Git Preferences
 - Configure git with `git config user.name "Codex"` and `git config user.email "codex@openai.com"` before committing.

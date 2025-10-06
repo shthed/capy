@@ -2,18 +2,17 @@
 
 ## Session Overview
 - **Date:** 2025-10-04
-- **Objective:** Explore the Capy color-by-number experience and validate that gameplay interactions (palette selection and canvas painting) respond as expected when served locally.
+- **Objective:** Explore the Capycolour color-by-number experience (including the ChatGPT prompt flow) and validate that gameplay interactions respond as expected when served locally.
 
 ## Environment
 - Served repository root with `python -m http.server 8000`.
 - Accessed the app at <http://localhost:8000/index.html> via an automated Chromium session (Playwright).
 
 ## Actions Performed
-1. Observed that the "Capybara Springs" scene now loads automatically on boot,
-   showcasing the orange-crowned capybara, loyal dachshund, waterfall, and
-   mushroom-ring lagoon, then pressed the 🐹 command button to reload it and
-   confirm the built-in shortcut still works without reopening the hint
-   overlay.
+1. Launched the app with no OpenAI key configured and watched the runtime log a
+   skipped ChatGPT request before loading the “Capycolour Springs” fallback
+   puzzle, then pressed the 🐹 command button to reload it without reopening the
+   hint overlay.
 2. Selected the first palette swatch to activate its associated colour and
    watched the matching regions flash for guidance.
 3. Dragged the canvas with mouse and touch, pinched to zoom, toggled
@@ -21,12 +20,13 @@
    cleanly at every scale.
 
 ## Observations
-- Artwork, palette, and the top-right hint/menu controls rendered without errors once the page finished hydrating, and the bundled sample was already playable before touching any UI.
+- Artwork, palette, the prompt bar, and the top-right hint/menu controls rendered without errors once the page finished hydrating, and either the ChatGPT illustration or bundled sample was playable immediately.
 - The top-right command rail now shows icon-only controls (including the fullscreen toggle) tucked to the right edge so opening settings or the save manager never obscures the artwork.
 - Palette selection immediately highlighted the active swatch, flashed every matching region (with a celebratory flash once a colour is complete), and kept the compact number-only label crisp while remaining counts surfaced via tooltip copy.
 - Tweaking the new background colour control instantly repainted unfinished regions and flipped numeral contrast, so a darker backdrop stayed readable while painting.
 - Painting a cell updated the fill colour inline with the clustered artwork (no refresh needed) and click-drag panning, pinch/scroll zoom, plus `+`/`-` keyboard shortcuts made it easy to inspect tiny regions. Entering and exiting fullscreen (or rotating the device) recentred the canvas automatically.
-- The refreshed Help sheet documents every icon command (including fullscreen), reiterates the gesture controls, and streams a live debug log so it was easy to verify hints, fills, zooms, and orientation changes during the session.
+- The refreshed Help sheet documents every icon command (including the prompt bar and fullscreen), reiterates the gesture controls, and streams a live debug log so it was easy to verify hints, fills, zooms, sample fallbacks, and orientation changes during the session.
+- The refreshed Help sheet now includes a ChatGPT access section, making it trivial to paste or clear the OpenAI key without touching DevTools while the debug log confirms every save/clear action.
 - Debug logging now captures ignored clicks (no puzzle, wrong colour, filled regions), viewport orientation changes, fullscreen transitions, background updates, and both the start and completion of sample reloads which helped confirm why certain taps were rejected while exercising the canvas.
 - Overall responsiveness stayed smooth during the brief automation-driven play session.
 

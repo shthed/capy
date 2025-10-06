@@ -62,8 +62,8 @@ async function getStageFlashValue(page) {
   });
 }
 
-test.describe('Capy image generator', () => {
-  test('renders command rail and hidden generator settings on load', async ({ page }) => {
+test.describe('Capycolour image generator', () => {
+  test('renders prompt bar, command rail, and hidden generator settings on load', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-testid="palette-swatch"]');
     await expect(page.locator('[data-testid="start-hint"]')).toHaveClass(/hidden/);
@@ -90,6 +90,7 @@ test.describe('Capy image generator', () => {
     expect(layout.orientation).toMatch(/landscape|portrait/);
     expect(layout.commandButtons).toEqual(
       expect.arrayContaining([
+        'Generate ChatGPT art',
         'Hint',
         'Reset puzzle',
         'Show preview',
@@ -109,8 +110,19 @@ test.describe('Capy image generator', () => {
       nodes.map((node) => (node.textContent || '').trim())
     );
     expect(helpLegend).toEqual(
-      expect.arrayContaining(['? Hint', '🖼 Preview', '🐹 Sample', '⛶ Fullscreen', 'ℹ Help', '⚙ Settings'])
+      expect.arrayContaining(['? Prompt', '? Hint', '🖼 Preview', '🐹 Sample', '⛶ Fullscreen', 'ℹ Help', '⚙ Settings'])
     );
+
+    const apiKeyStatus = page.locator('#apiKeyStatus');
+    await expect(apiKeyStatus).toBeVisible();
+    await expect(apiKeyStatus).toHaveText(/No key stored/i);
+
+    await page.fill('#apiKeyInput', 'sk-test-example-key');
+    await page.click('#apiKeyForm button[type="submit"]');
+    await expect(apiKeyStatus).toHaveText(/Key stored locally/);
+    await expect(page.locator('#clearApiKey')).toBeEnabled();
+    await page.click('#clearApiKey');
+    await expect(apiKeyStatus).toHaveText(/No key stored/i);
 
     const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
       nodes.map((el) => (el.textContent || '').trim())
@@ -131,7 +143,7 @@ test.describe('Capy image generator', () => {
     await page.click('[data-sheet-close="settings"]');
   });
 
-  test('auto loads and reloads the capybara sample scene', async ({ page }) => {
+  test('auto loads a ChatGPT puzzle or sample fallback', async ({ page }) => {
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-testid="palette-swatch"]');
     await expect(page.locator('[data-testid="start-hint"]')).toHaveClass(/hidden/);
@@ -140,19 +152,25 @@ test.describe('Capy image generator', () => {
     await expect(progress).toHaveText(/0\/\d+/);
 
     const state = await page.evaluate(() => {
-      const { puzzle, sourceUrl } = window.capyGenerator.getState();
+      const { puzzle, sourceUrl, sourceTitle } = window.capyGenerator.getState();
       return {
         hasPuzzle: Boolean(puzzle),
         regionCount: puzzle?.regions?.length || 0,
         paletteCount: puzzle?.palette?.length || 0,
         sourceUrl,
+        sourceTitle: sourceTitle || null,
       };
     });
 
     expect(state.hasPuzzle).toBe(true);
     expect(state.paletteCount).toBeGreaterThan(3);
     expect(state.regionCount).toBeGreaterThan(4);
-    expect(state.sourceUrl).toContain('data:image/svg+xml;base64,');
+    if (state.sourceUrl?.startsWith('data:image/png;base64,')) {
+      expect(state.sourceTitle).toMatch(/Capycolour prompt/);
+    } else {
+      expect(state.sourceUrl).toContain('data:image/svg+xml;base64,');
+      expect(state.sourceTitle).toContain('Capycolour Springs');
+    }
 
     await page.click('[data-testid="sample-art-button"]');
     const logHead = page.locator('#debugLog .log-entry span').first();
