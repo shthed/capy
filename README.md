@@ -57,8 +57,13 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Palette manager.** Swipe through compact, tinted swatches that promote the
   colour number while tooltips, titles, and ARIA copy preserve human-readable
   names and remaining region counts.
-- **Progress persistence & recovery.** Every stroke updates a rolling autosave using a compact payload so the latest session is restored automatically on launch. Manual snapshots still land in the save manager where you can rename, export, or delete entries at will.
-- **Cloud-ready sync.** A lightweight broadcast channel mirrors autosaves across browser tabs and exposes a `window.capyCloudSync` adapter hook so teams can plug in remote storage when available.
+- **Progress persistence & recovery.** Every stroke updates a rolling autosave
+  using a compact payload so the latest session is restored automatically on
+  launch. Manual snapshots still land in the save manager where you can rename,
+  export, or delete entries at will.
+- **Cloud-ready sync.** A lightweight broadcast channel mirrors autosaves
+  across browser tabs and exposes a `window.capyCloudSync` adapter hook so
+  teams can plug in remote storage when available.
 
 ### Capybara Springs detail presets
 
@@ -135,7 +140,14 @@ numbered cell in the segmented source, see
 
 ## How it works
 
-1. **Resume or load an image.** The app restores your most recent autosave on boot; if nothing is stored yet the bundled “Capybara Springs” puzzle loads automatically in the high detail preset so you can start painting immediately. Drag a bitmap into the viewport, activate the “Choose an image” button, or press the 🐹 command button to reload the bundled scene. The hint overlay disappears once a new source is selected, and the Low/Medium/High detail chips can pre-seed the capybara sample with relaxed or high-fidelity settings before you reload it.
+1. **Resume or load an image.** The app restores your most recent autosave on
+   boot; if nothing is stored yet the bundled “Capybara Springs” puzzle loads
+   automatically in the high detail preset so you can start painting
+   immediately. Drag a bitmap into the viewport, activate the “Choose an image”
+   button, or press the 🐹 command button to reload the bundled scene. The hint
+   overlay disappears once a new source is selected, and the Low/Medium/High
+   detail chips can pre-seed the capybara sample with relaxed or high-fidelity
+   settings before you reload it.
 2. **Tune generation & appearance.** Open **Settings** to tweak palette size,
    minimum region area, resize detail, sample rate (for faster clustering),
    iteration count, smoothing passes, auto-advance, hint animations, and the
@@ -244,10 +256,10 @@ The Playwright suite exercises the core flows:
 - **renders command rail and generator settings on load** – Confirms the hint
   overlay, iconized command rail, compact progress tally, and generator controls
   render on first boot.
-- **auto loads the capybara sample scene** – Verifies the bundled illustration is
-  ready as soon as the app boots, that the sample button still reloads it on
-  demand, and that the Low/Medium/High detail chips update generator sliders,
-  debug logging, and palette/region counts as expected.
+ - **auto loads the capybara sample scene** – Verifies the bundled illustration is
+    ready as soon as the app boots, that the sample button still reloads it on
+    demand, and that the Low/Medium/High detail chips update generator sliders,
+    debug logging, and palette/region counts as expected.
 - **allows adjusting the canvas background colour** – Uses the fixture loader to
   set a new background via the exposed harness helper, verifies pixel data,
   and confirms the debug log records the change.

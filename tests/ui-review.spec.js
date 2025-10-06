@@ -150,7 +150,6 @@ test.describe('Capy image generator', () => {
     );
     const detailCaption = page.locator('[data-detail-caption]').first();
     await expect(detailCaption).toHaveText(/High detail/i);
-
     const progress = page.locator('[data-testid="progress-message"]');
     await expect(progress).toHaveText(/0\/\d+/);
 
