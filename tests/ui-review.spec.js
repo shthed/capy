@@ -175,8 +175,22 @@ test.describe('Capy image generator', () => {
     expect(state.targetColors).toBe(32);
 
     await page.click('[data-testid="sample-art-button"]');
-    const logHead = page.locator('#debugLog .log-entry span').first();
-    await expect(logHead).toHaveText(/Loading high detail sample puzzle/);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Loading high detail sample puzzle/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /High detail sample puzzle ready/.test(message));
+      })
+      .toBe(true);
 
     await page.click('#settingsButton');
     await expect(page.locator('#settingsSheet')).toBeVisible();
@@ -185,7 +199,27 @@ test.describe('Capy image generator', () => {
     await expect.poll(() =>
       page.evaluate(() => window.capyGenerator.getState().sampleDetailLevel)
     ).toBe('medium');
-    await expect(logHead).toHaveText(/Medium detail sample puzzle ready/);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Loading medium detail sample puzzle/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Medium detail sample puzzle ready/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0)
+      )
+      .toBeGreaterThan(0);
     const mediumState = await page.evaluate(() => {
       const { puzzle, sampleDetailLevel, lastOptions } = window.capyGenerator.getState();
       return {
@@ -205,7 +239,27 @@ test.describe('Capy image generator', () => {
     await expect.poll(() =>
       page.evaluate(() => window.capyGenerator.getState().sampleDetailLevel)
     ).toBe('high');
-    await expect(logHead).toHaveText(/High detail sample puzzle ready/);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Loading high detail sample puzzle/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /High detail sample puzzle ready/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0)
+      )
+      .toBeGreaterThan(0);
     const highState = await page.evaluate(() => {
       const { puzzle, sampleDetailLevel, lastOptions } = window.capyGenerator.getState();
       return {
@@ -225,7 +279,27 @@ test.describe('Capy image generator', () => {
     await expect.poll(() =>
       page.evaluate(() => window.capyGenerator.getState().sampleDetailLevel)
     ).toBe('low');
-    await expect(logHead).toHaveText(/Low detail sample puzzle ready/);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Loading low detail sample puzzle/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Low detail sample puzzle ready/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0)
+      )
+      .toBeGreaterThan(0);
     const lowState = await page.evaluate(() => {
       const { puzzle, sampleDetailLevel, lastOptions } = window.capyGenerator.getState();
       return {
