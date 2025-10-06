@@ -1099,6 +1099,8 @@
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
+      const DEFAULT_PUZZLE_TITLE = "Capy puzzle";
+      const DEFAULT_EXPORT_FILENAME = "capy-puzzle";
       let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
 
@@ -1332,13 +1334,15 @@
       downloadBtn.addEventListener("click", () => {
         if (!state.puzzle) return;
         const payload = serializeCurrentPuzzle();
+        const resolvedTitle = payload.title || resolvePuzzleTitle();
+        const filename = sanitizeExportFilename(resolvedTitle, DEFAULT_PUZZLE_TITLE);
         const blob = new Blob([JSON.stringify(payload, null, 2)], {
           type: "application/json",
         });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `${payload.title ?? "color-by-number"}.json`;
+        link.download = `${filename}.json`;
         document.body.appendChild(link);
         link.click();
         requestAnimationFrame(() => {
@@ -2678,10 +2682,18 @@
         puzzleCtx.restore();
       }
 
+      function resolvePuzzleTitle() {
+        if (typeof state.sourceTitle === "string" && state.sourceTitle.trim()) {
+          return state.sourceTitle.trim();
+        }
+        return DEFAULT_PUZZLE_TITLE;
+      }
+
       function serializeCurrentPuzzle() {
         if (!state.puzzle) return {};
+        const title = resolvePuzzleTitle();
         return {
-          title: "capy-puzzle",
+          title,
           width: state.puzzle.width,
           height: state.puzzle.height,
           palette: state.puzzle.palette.map((p) => ({
@@ -3040,6 +3052,27 @@
         if (y > 0) neighbors.push((y - 1) * width + x);
         if (y < height - 1) neighbors.push((y + 1) * width + x);
         return neighbors;
+      }
+
+      function sanitizeExportFilename(name, fallback = DEFAULT_PUZZLE_TITLE) {
+        const scrub = (value) =>
+          value
+            .trim()
+            .replace(/[\\/\?%\*:|"<>]+/g, "_")
+            .replace(/\s+/g, "-");
+        if (typeof name === "string" && name.trim()) {
+          const sanitized = scrub(name);
+          if (sanitized.length > 0) {
+            return sanitized;
+          }
+        }
+        if (typeof fallback === "string" && fallback.trim()) {
+          const sanitizedFallback = scrub(fallback);
+          if (sanitizedFallback.length > 0) {
+            return sanitizedFallback;
+          }
+        }
+        return DEFAULT_EXPORT_FILENAME;
       }
 
       function sanitizeHexColor(value, fallback = DEFAULT_BACKGROUND_HEX) {
