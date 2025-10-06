@@ -25,7 +25,10 @@
 ## Daily Workflow
 - **Start the app:** `npm run dev` (or `npm run start`).
 - **Load a prompt:** Before relying on the ChatGPT workflow, open **Help → ChatGPT access** to paste your OpenAI key (or call `window.capyGenerator.setChatGPTKey('sk-...')`) so the prompt bar can reach the API. Without a key the runtime logs the omission and falls back to the bundled sample.
-- **Run smoke tests:** `npm test` executes the Playwright UI review harness in `tests/ui-review.spec.js`.
+- **Run smoke tests:** `npm test` executes the Playwright UI review harness in `tests/ui-review.spec.js` and the mocked prompt
+  flow checks in `tests/prompt-flow.spec.js`.
+- **Tight loop:** Use `npm run test:loop` to open Playwright's UI runner for fast re-runs while iterating on UI or prompt code.
+- **Prompt-only checks:** `npm run test:prompt` focuses on the ChatGPT handshake without invoking the full suite.
 - **Inspect reports:** After a test run, open `playwright-report/index.html` or run `npm run show-report`.
 - **Review UI artifacts:** Check `artifacts/ui-review/*.json` for palette counts, cell totals, header button ARIA labels, and prompt/button state alongside the captured screenshot.
 - **Mobile HUD check:** The UI review suite now boots a handheld viewport to ensure the header hugs the top-right edge, the menu toggle exposes every command, and the palette swatches stay compact with their inline labels/badges.
@@ -35,9 +38,10 @@
 ## Project Structure
 - `index.html` - single-file Capycolour application (markup, styles, generator logic, and ChatGPT integration live here).
 - `vendor/` - vendored runtime dependencies required for offline execution.
-- `tests/` - Playwright UI review harness (`ui-review.spec.js`).
+- `tests/` - Playwright suites (`ui-review.spec.js`, `prompt-flow.spec.js`).
 - `.github/workflows/ci.yml` - Windows CI pipeline running Playwright.
 - `docs/` - Project documentation (this guide, requirements, etc.).
+  - `testing-feedback-loop.md` - Suggested commands and observability tips for keeping the prompt/gameplay loop tight.
 
 ## Importing Artwork
 - Open the in-app Art Library and use the import section to paste JSON payloads or upload `.json`/`.svg` files.

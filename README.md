@@ -191,15 +191,45 @@ window.capyGenerator.setChatGPTKey('sk-...');
 If no key is saved Capycolour logs the omission and immediately reloads the
 bundled sample puzzle instead of attempting a network request.
 
+## Validating the Capycolour approach
+
+- **Boot logic.** Capycolour always attempts a ChatGPT draw first when a key is
+  stored, then immediately falls back to the bundled "Capycolour Springs" SVG if
+  the request fails. The new mocked Playwright spec (`tests/prompt-flow.spec.js`)
+  exercises both paths so regressions surface quickly during development.
+- **In-browser generation.** The segmentation and painting pipeline runs fully
+  inside `index.html`, keeping the experience offline-friendly once the art has
+  been generated. No additional build tooling is required.
+- **Harness-first instrumentation.** `window.capyGenerator` exposes helper
+  methods (load fixtures, toggle preview, set the background colour, etc.) so
+  both the UI review suite and manual debugging can orchestrate puzzles without
+  digging into internals.
+
 ## Development workflow
 
 1. Install dependencies: `npm install` (Playwright browsers install automatically
    via the postinstall hook).
 2. Start the dev server: `npm run dev` and open <http://127.0.0.1:8000/index.html>.
 3. Run Playwright smoke tests: `npm test --silent`.
-4. ChatGPT calls originate from the browser, so store an OpenAI key via
-   **Help → ChatGPT access** (or `window.capyGenerator.setChatGPTKey('sk-...')`) before
+4. Run the ChatGPT flow checks: `npm run test:prompt` (mocks the API to cover
+   both the happy path and sample fallback).
+5. ChatGPT calls originate from the browser, so store an OpenAI key via **Help →
+   ChatGPT access** (or `window.capyGenerator.setChatGPTKey('sk-...')`) before
    relying on the prompt bar locally.
-5. Review `artifacts/ui-review/` after tests for captured screenshots and JSON
+6. Review `artifacts/ui-review/` after tests for captured screenshots and JSON
    summaries (palette counts, header labels, etc.).
+
+## Testing feedback loop
+
+The quickest iteration cycle is:
+
+1. Launch the dev server with `npm run dev`.
+2. In another terminal run `npm run test:loop` to open Playwright's UI runner in
+   Chromium-only mode. Toggle the `ui-review` and `prompt-flow` specs on/off to
+   focus on specific scenarios.
+3. When tweaking prompt behaviour, keep `npm run test:prompt` handy—the command
+   exercises the mocked ChatGPT handshake without rerunning the entire suite.
+4. Review the inline debug log (Help → ChatGPT access) alongside the
+   `artifacts/ui-review/*.json` summaries to confirm prompts, palette counts, and
+   fallbacks look correct between iterations.
 
