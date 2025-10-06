@@ -9,11 +9,12 @@
 - Accessed the app at <http://localhost:8000/index.html> via an automated Chromium session (Playwright).
 
 ## Actions Performed
-1. Observed that the "Capybara Springs" scene now loads automatically on boot,
-   showcasing the orange-crowned capybara, loyal dachshund, waterfall, and
-   mushroom-ring lagoon, then pressed the 🐹 command button to reload it and
-   confirm the built-in shortcut still works without reopening the hint
-   overlay.
+1. Reloaded the page to confirm the new autosave pipeline restored the last
+   in-progress puzzle; with no prior data the "Capybara Springs" scene still
+   loads automatically, showcasing the orange-crowned capybara, loyal
+   dachshund, waterfall, and mushroom-ring lagoon. Pressed the 🐹 command button
+   afterwards to force a fresh board and confirm the shortcut still works
+   without reopening the hint overlay.
 2. Selected the first palette swatch to activate its associated colour and
    watched the matching regions flash for guidance.
 3. Dragged the canvas with mouse and touch, pinched to zoom, toggled
@@ -27,7 +28,8 @@
 - Tweaking the new background colour control instantly repainted unfinished regions and flipped numeral contrast, so a darker backdrop stayed readable while painting.
 - Painting a cell updated the fill colour inline with the clustered artwork (no refresh needed) and click-drag panning, pinch/scroll zoom, plus `+`/`-` keyboard shortcuts made it easy to inspect tiny regions. Entering and exiting fullscreen (or rotating the device) recentred the canvas automatically.
 - The refreshed Help sheet documents every icon command (including fullscreen), reiterates the gesture controls, and streams a live debug log so it was easy to verify hints, fills, zooms, and orientation changes during the session.
-- Debug logging now captures ignored clicks (no puzzle, wrong colour, filled regions), viewport orientation changes, fullscreen transitions, background updates, and both the start and completion of sample reloads which helped confirm why certain taps were rejected while exercising the canvas.
+- Debug logging now captures ignored clicks (no puzzle, wrong colour, filled regions), viewport orientation changes, fullscreen transitions, background updates, autosave restore messages, and both the start and completion of sample reloads which helped confirm why certain taps were rejected while exercising the canvas.
+- Rolling autosaves hit local storage on each stroke and immediately mirror to any open tabs via the new cloud sync channel, so the session resumed intact after hard refreshes.
 - Overall responsiveness stayed smooth during the brief automation-driven play session.
 
 ## Follow-up Ideas
