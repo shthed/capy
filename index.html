@@ -2002,9 +2002,6 @@
         const metadataTitle =
           typeof metadata.title === "string" && metadata.title.trim() ? metadata.title.trim() : null;
         const dataTitle = typeof data.title === "string" && data.title.trim() ? data.title.trim() : null;
-        const sourceTitle =
-          typeof state.sourceTitle === "string" && state.sourceTitle.trim() ? state.sourceTitle.trim() : null;
-        const resolvedTitle = metadataTitle || dataTitle || sourceTitle || null;
         if (metadataTitle) {
           state.sourceTitle = metadataTitle;
         } else if (dataTitle) {
@@ -2023,7 +2020,6 @@
           regions,
           regionMap,
         };
-        state.puzzle.title = resolvedTitle;
         state.puzzle.backgroundColor = backgroundHex;
         state.activeColor =
           requestedColor != null && paletteIds.has(requestedColor)
@@ -2687,16 +2683,10 @@
       }
 
       function resolveExportTitle() {
-        const fromSource =
-          typeof state.sourceTitle === "string" && state.sourceTitle.trim()
-            ? state.sourceTitle.trim()
-            : "";
-        const fromPuzzle =
-          state.puzzle && typeof state.puzzle.title === "string" && state.puzzle.title.trim()
-            ? state.puzzle.title.trim()
-            : "";
-        const candidate = fromSource || fromPuzzle;
-        return candidate || DEFAULT_EXPORT_TITLE;
+        if (typeof state.sourceTitle === "string" && state.sourceTitle.trim()) {
+          return state.sourceTitle.trim();
+        }
+        return DEFAULT_EXPORT_TITLE;
       }
 
       function toFileSafeName(title, fallback = DEFAULT_EXPORT_TITLE) {
