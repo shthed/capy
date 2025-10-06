@@ -22,8 +22,9 @@ demand.
   previously exported JSON puzzles straight into the generator pipeline.
 - **Step-by-step generator telemetry.** A status tray beneath the palette pairs
   a live progress bar with a telemetry grid that surfaces the active mode,
-  prompt, source and target sizes, palette counts, region totals, and background
-  values while short-lived notifications capture each processing step.
+  prompt, source and target sizes, palette counts, region totals, background
+  values, and the current pipeline step (complete with progress percentages)
+  while short-lived notifications capture each processing milestone.
 - **Detailed debug logging.** The Help sheet's live log announces ChatGPT
   requests, sample fallbacks, fills, hints, zooms, background tweaks, fullscreen
   toggles, and ignored clicks so QA can confirm the entire flow without cracking
@@ -163,9 +164,9 @@ instead. You can edit the prompt at any time or import your own image/JSON file.
   output in detail before painting.
 - **Progress & status dock** – A numeric tally still tracks completed versus
   total regions, while a neighbouring generator card shows a live progress bar,
-  a telemetry grid (mode, prompt, sizes, palette, regions, background), and a
-  fading feed of status updates for imports, segmentation passes, and palette
-  prep.
+  a telemetry grid (mode, prompt, sizes, palette, regions, background, progress
+  percentage, and the active pipeline step), and a fading feed of status updates
+  for imports, segmentation passes, and palette prep.
 - **Settings sheet** – A modal sheet that hides the generation sliders by
   default. Controls include colours, minimum region size, resize detail, sample
   rate, k-means iterations, smoothing passes, a background colour picker, plus
@@ -239,7 +240,8 @@ The quickest iteration cycle is:
 3. When tweaking prompt behaviour, keep `npm run test:prompt` handy—the command
    exercises the mocked ChatGPT handshake without rerunning the entire suite.
 4. Review the inline debug log (Help → ChatGPT access), the footer telemetry
-   panel, and the `artifacts/ui-review/*.json` summaries to confirm prompts,
-   palette counts, region totals, and fallbacks look correct between
-   iterations.
+   panel (progress percentages + active step, mode, prompt, sizes, palette,
+   regions, background), and the `artifacts/ui-review/*.json` summaries to
+   confirm prompts, palette counts, region totals, and fallbacks look correct
+   between iterations.
 

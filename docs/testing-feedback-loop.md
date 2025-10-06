@@ -38,8 +38,9 @@ ChatGPT prompt flow, colour-by-number gameplay, and regression harness.
 - **Status tray.** The footer card displays import/progress steps (file reads,
   clustering, segmentation counts, palette prep) on a live progress bar,
   populates a telemetry grid with mode, prompt, source/target sizes, palette/
-  region totals, and background colour, and emits fading notifications so you
-  can confirm the generator pipeline is advancing.
+  region totals, background colour, live progress percentages, and the current
+  pipeline step, and emits fading notifications so you can confirm the
+  generator pipeline is advancing.
 - **JSON manifests.** Every `npm test` run stores palette counts, header labels,
   and prompt metadata in `artifacts/ui-review/*.json`. Compare snapshots between
   iterations to spot regressions early.

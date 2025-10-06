@@ -128,6 +128,10 @@ test.describe('ChatGPT prompt flow', () => {
     expect(telemetry.data.Prompt).toContain('Capybara surfing a rainbow river');
     expect(telemetry.data).toHaveProperty('Palette size');
     expect(telemetry.data).toHaveProperty('Region count');
+    expect(telemetry.data).toHaveProperty('Progress');
+    expect(telemetry.data.Progress).toMatch(/Complete/);
+    expect(telemetry.data).toHaveProperty('Current step');
+    expect(telemetry.data['Current step']).toMatch(/regions/i);
 
     const logMessages = await page.$$eval('#debugLog .log-entry .message', (nodes) =>
       nodes.map((el) => (el.textContent || '').trim())

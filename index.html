@@ -1690,6 +1690,8 @@
         steps: 1,
         completed: 0,
       };
+      const TELEMETRY_PROGRESS_KEY = "progress";
+      const TELEMETRY_PROGRESS_STEP_KEY = "progressStep";
       let generationIdleTimer = null;
       const generationTelemetryState = {
         order: [],
@@ -1747,6 +1749,63 @@
         }
         if (changed) {
           renderGenerationTelemetry();
+        }
+      }
+
+      function applyProgressTelemetry(state, detail = "", options = {}) {
+        const totalSteps = Math.max(
+          1,
+          Number.isFinite(options.steps)
+            ? Number(options.steps)
+            : generationProgressState.steps || 1
+        );
+        const completedSteps = Math.min(
+          totalSteps,
+          Math.max(
+            0,
+            Number.isFinite(options.completed)
+              ? Number(options.completed)
+              : generationProgressState.completed || 0
+          )
+        );
+        const percent = Math.round((completedSteps / totalSteps) * 100);
+        let progressValue = `${completedSteps}/${totalSteps} (${percent}%)`;
+        if (state === "idle") {
+          progressValue = "Idle";
+        } else if (state === "indeterminate") {
+          progressValue = "Working…";
+        } else if (state === "success") {
+          progressValue = `Complete (${percent}%)`;
+        } else if (state === "error") {
+          progressValue = `Failed (${completedSteps}/${totalSteps}, ${percent}%)`;
+        }
+
+        updateGenerationTelemetry({
+          key: TELEMETRY_PROGRESS_KEY,
+          label: "Progress",
+          value: progressValue,
+        });
+
+        const label = options.label ? String(options.label) : "";
+        const currentDetail = detail || label;
+        let stepValue = currentDetail;
+        if (!stepValue) {
+          if (state === "idle") {
+            stepValue = "Idle";
+          } else if (state === "indeterminate") {
+            stepValue = "Working…";
+          } else if (state === "success") {
+            stepValue = "Complete";
+          } else if (state === "error") {
+            stepValue = "Failed";
+          }
+        }
+        if (stepValue) {
+          updateGenerationTelemetry({
+            key: TELEMETRY_PROGRESS_STEP_KEY,
+            label: "Current step",
+            value: stepValue,
+          });
         }
       }
 
@@ -2788,6 +2847,7 @@
           generationProgressFill.style.removeProperty("animation");
           generationProgressFill.style.removeProperty("transform");
         }
+        applyProgressTelemetry("idle", detail);
       }
 
       function scheduleGenerationIdle(detail, delay = 2600) {
@@ -2830,6 +2890,7 @@
             label: options.statusLabel,
           });
         }
+        applyProgressTelemetry("indeterminate", detail || label, { label });
       }
 
       function startGenerationProgress(steps, options = {}) {
@@ -2854,6 +2915,11 @@
           generationProgressFill.style.transform = "translateX(0)";
           generationProgressFill.style.setProperty("--progress", "0%");
         }
+        applyProgressTelemetry("progress", options.detail || options.label, {
+          steps: generationProgressState.steps,
+          label: options.label,
+          completed: 0,
+        });
         if (options.telemetry) {
           updateGenerationTelemetry(options.telemetry);
         }
@@ -2906,6 +2972,11 @@
         if (options.telemetry) {
           updateGenerationTelemetry(options.telemetry);
         }
+        applyProgressTelemetry("progress", detail || label, {
+          label,
+          completed: generationProgressState.completed,
+          steps,
+        });
         return ratio;
       }
 
@@ -2942,6 +3013,11 @@
             logDebug(`${message}${detail ? ` – ${detail}` : ""}`, options.level || "success");
           }
         }
+        applyProgressTelemetry("success", detail || message, {
+          label: message,
+          completed: generationProgressState.steps,
+          steps: generationProgressState.steps,
+        });
         const idleDetail = options.idleDetail || (detail ? `Ready – ${detail}` : "Ready for the next puzzle.");
         scheduleGenerationIdle(idleDetail, options.idleDelay ?? 4200);
       }
@@ -2977,6 +3053,11 @@
         if (options.log !== false) {
           logDebug(`${message || "Generation failed"}${detail ? ` – ${detail}` : ""}`, options.level || "error");
         }
+        applyProgressTelemetry("error", detail || message, {
+          label: message,
+          completed: generationProgressState.completed,
+          steps: generationProgressState.steps,
+        });
         const idleDetail = options.idleDetail || (detail ? `Idle – ${detail}` : "Idle after error.");
         scheduleGenerationIdle(idleDetail, options.idleDelay ?? 6000);
       }
