@@ -1670,10 +1670,14 @@
         state.sourceUrl = dataUrl;
         state.sourceTitle = SAMPLE_ARTWORK.title || "Sample puzzle";
         startHint.classList.add("hidden");
-        if (announce) {
-          logDebug(`Loading sample puzzle: ${state.sourceTitle}`);
-        }
-        loadImage(dataUrl);
+        const loadOptions = announce
+          ? {
+              logMessage: `Loading sample puzzle: ${state.sourceTitle}`,
+              completionMessage: `Loading sample puzzle complete: ${state.sourceTitle}`,
+              skipDefaultLog: true,
+            }
+          : undefined;
+        loadImage(dataUrl, loadOptions);
       }
 
       function updateCommandStates() {
@@ -1860,7 +1864,11 @@
         reader.readAsDataURL(file);
       }
 
-      function loadImage(url) {
+      function loadImage(url, loadOptions = {}) {
+        const { logMessage, completionMessage, skipDefaultLog } = loadOptions;
+        if (logMessage) {
+          logDebug(logMessage);
+        }
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.onload = async () => {
@@ -1872,6 +1880,8 @@
               options,
               title,
               backgroundColor: state.settings.backgroundColor,
+              logMessage: completionMessage,
+              skipDefaultLog,
             });
           } catch (error) {
             console.error("Failed to create puzzle", error);
@@ -2020,6 +2030,11 @@
         const regionMap = new Int32Array(mapSource);
         const metadataTitle =
           typeof metadata.title === "string" && metadata.title.trim() ? metadata.title.trim() : null;
+        const completionLog =
+          metadata.logMessage != null && metadata.logMessage !== ""
+            ? String(metadata.logMessage)
+            : null;
+        const skipLoadLog = Boolean(metadata.skipDefaultLog);
         if (metadataTitle) {
           state.sourceTitle = metadataTitle;
         } else if (typeof data.title === "string" && data.title.trim()) {
@@ -2069,9 +2084,13 @@
           (typeof data.title === "string" && data.title.trim()) ||
           (state.sourceTitle && state.sourceTitle.trim()) ||
           "Puzzle";
-        logDebug(
-          `Loaded ${descriptor} (${data.width}×${data.height}, ${paletteCount} colours, ${regionCount} regions)`
-        );
+        if (completionLog) {
+          logDebug(completionLog);
+        } else if (!skipLoadLog) {
+          logDebug(
+            `Loaded ${descriptor} (${data.width}×${data.height}, ${paletteCount} colours, ${regionCount} regions)`
+          );
+        }
         return true;
       }
 
