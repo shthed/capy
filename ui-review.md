@@ -15,7 +15,7 @@
 - Palette swatches now tuck their color names directly inside the button while keeping the numbers bold, so picking the next hue is faster without extra labels.
 - Tap-to-fill now fires on deliberate taps, and palette swatches respect the same pointer handling so choosing a color on touch devices never requires a second press while drag gestures stay focused on panning.
 - Left-drag panning now keeps the canvas full-screen while the palette hugs the bottom edge without a frame.
-- The Help & shortcuts sheet now lists every command icon, reiterates the gesture cheatsheet, and pipes a live debug log so QA can confirm fills, hints, and zooms as they happen.
+- The Help & shortcuts sheet now lists every command icon, reiterates the gesture cheatsheet, and pipes a live debug log so QA can confirm fills, hints, zooms, and the start/finish of sample reloads as they happen.
 - The art library now opens with a thumbnail picker that previews each scene, making it faster to spot and load the exact artwork you want.
 - The ultra-slim glass command rail now hugs the top-right corner with a hint icon plus menu toggle and fullscreen toggle, keeping library, options, help, peek, and hint controls reachable without crowding the artwork.
 - The mobile smoke run confirms the compact swatches stay legible and the top rail remains reachable at handheld sizes.

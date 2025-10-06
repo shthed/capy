@@ -27,7 +27,7 @@
 - Tweaking the new background colour control instantly repainted unfinished regions and flipped numeral contrast, so a darker backdrop stayed readable while painting.
 - Painting a cell updated the fill colour inline with the clustered artwork (no refresh needed) and click-drag panning, pinch/scroll zoom, plus `+`/`-` keyboard shortcuts made it easy to inspect tiny regions. Entering and exiting fullscreen (or rotating the device) recentred the canvas automatically.
 - The refreshed Help sheet documents every icon command (including fullscreen), reiterates the gesture controls, and streams a live debug log so it was easy to verify hints, fills, zooms, and orientation changes during the session.
-- Debug logging now captures ignored clicks (no puzzle, wrong colour, filled regions), viewport orientation changes, fullscreen transitions, and background updates which helped confirm why certain taps were rejected while exercising the canvas.
+- Debug logging now captures ignored clicks (no puzzle, wrong colour, filled regions), viewport orientation changes, fullscreen transitions, background updates, and both the start and completion of sample reloads which helped confirm why certain taps were rejected while exercising the canvas.
 - Overall responsiveness stayed smooth during the brief automation-driven play session.
 
 ## Follow-up Ideas

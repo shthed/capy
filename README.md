@@ -16,6 +16,10 @@ tools, a save manager, and a configurable generator all live inside a single
   The vignette features an orange-balanced capybara lounging in a lagoon with a
   curious dachshund, water mushrooms, and a distant waterfall, and the 🐹
   command rail button instantly reloads it whenever you want a fresh board.
+- **Detailed debug logging.** The Help sheet's live log now announces when the
+  sample puzzle begins loading and when it completes, alongside fills, hints,
+  zooms, background tweaks, fullscreen toggles, and ignored clicks, so QA can
+  confirm the entire flow without cracking open DevTools.
 - **Configurable puzzle generator.** Tune palette size, minimum region area,
   resize detail, sampling, iteration count, and smoothing passes before
   rebuilding the scene.
