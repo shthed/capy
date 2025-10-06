@@ -118,7 +118,9 @@ tools, a save manager, and a configurable generator all live inside a single
    once you finish the current hue.
 5. **Save or export.** The save manager captures snapshots (including progress,
    generator options, and source metadata) in localStorage. Export the active
-   puzzle as JSON at any time.
+   puzzle as JSON at any time—the download name mirrors the source title (with
+   filename-safe cleanup) so imported art like “Capybara Meadow” becomes
+   `Capybara-Meadow.json`.
 
 ## UI guide
 
