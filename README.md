@@ -261,3 +261,14 @@ The quickest iteration cycle is:
    confirm prompts, palette counts, region totals, and fallbacks look correct
    between iterations.
 
+## Git hygiene
+
+- Sync the working tree before writing code with `git fetch --all --prune`
+  followed by `git status -sb` to highlight unexpected changes or conflicts.
+- When integrating the latest default-branch changes, prefer
+  `git pull --rebase` (or explicitly `git merge origin/main` when a merge commit
+  is required) so the single-file app stays readable and avoids duplicated
+  sections in `index.html`.
+- After resolving conflicts, rerun `npm test --silent` to confirm the prompt
+  flow and responsive HUD still pass the Playwright suites before committing.
+

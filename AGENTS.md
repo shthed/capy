@@ -29,6 +29,7 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 - `index.html` – Single-page Capycolour application containing markup, styles, the segmentation/rendering pipeline, ChatGPT prompt handling, the in-app API key manager, sample fallback logic, and exported harness helpers.
 - `README.md` – High-level overview covering ChatGPT integration, gameplay features, developer workflow, and setup guidance.
 - `AGENTS.md` – Repository-wide instructions (this document) plus a full file inventory.
+- `.github/workflows/ci.yml` – Runs the Playwright smoke suite in CI to guard the prompt flow and responsive HUD.
 - `.github/workflows/static.yml` – Deploys the single-page app to GitHub Pages when `main` updates.
 - `PR_REVIEW.md` – Latest reviewer notes summarising prior feedback, regression expectations, and verification context.
 - `coloring_screen_requirements.md` – Product requirements for the colouring experience (layout, interactions, accessibility, telemetry, QA scenarios).

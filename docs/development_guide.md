@@ -40,7 +40,9 @@
 - `index.html` - single-file Capycolour application (markup, styles, generator logic, and ChatGPT integration live here).
 - `vendor/` - vendored runtime dependencies required for offline execution.
 - `tests/` - Playwright suites (`ui-review.spec.js`, `prompt-flow.spec.js`).
-- `.github/workflows/ci.yml` - Windows CI pipeline running Playwright.
+- `.github/workflows/ci.yml` - Playwright smoke suite executed in CI to guard the prompt bar, telemetry tray, and responsive
+  layout.
+- `.github/workflows/static.yml` - GitHub Pages deployment workflow that publishes the single-page app when `main` updates.
 - `docs/` - Project documentation (this guide, requirements, etc.).
   - `testing-feedback-loop.md` - Suggested commands and observability tips for keeping the prompt/gameplay loop tight.
 
@@ -55,6 +57,15 @@
 - Manually verify keyboard shortcuts (W/A/S/D panning, hints, toggles) when touching interaction code.
 - Confirm bundled assets remain up to date if upgrading React/Babel.
 - Review accessibility: confirm the hint icon and menu toggle announce their actions and the Options button exposes dialog affordances.
+
+## Git hygiene
+
+- Start each session with `git fetch --all --prune` so local refs mirror the remote repository (the command removes stale
+  branches and downloads new commits).
+- Confirm the working tree is clean before branching or installing dependencies via `git status -sb`.
+- When synchronising with `main`, prefer `git pull --rebase` (or an explicit `git merge origin/main` if the workflow demands a
+  merge commit) so the single-file app avoids needless conflict rounds.
+- After landing changes, push the branch and re-run `npm test --silent` if the merge introduced new code.
 
 Update this guide when workflows change.
 
