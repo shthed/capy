@@ -2723,7 +2723,7 @@
       }
 
       function refreshSaveList() {
-        saveList.textContent = "";
+        const fragment = document.createDocumentFragment();
         for (const entry of state.saves) {
           const item = document.createElement("li");
           item.className = "save-entry";
@@ -2738,6 +2738,7 @@
           title.textContent = entry.title || "Untitled puzzle";
           const timeEl = document.createElement("time");
           timeEl.textContent = date.toLocaleString();
+          timeEl.dateTime = date.toISOString();
           header.appendChild(title);
           header.appendChild(timeEl);
 
@@ -2763,8 +2764,9 @@
           item.appendChild(header);
           item.appendChild(progress);
           item.appendChild(actions);
-          saveList.appendChild(item);
+          fragment.appendChild(item);
         }
+        saveList.replaceChildren(fragment);
         updateCommandStates();
       }
 
