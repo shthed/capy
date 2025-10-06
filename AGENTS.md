@@ -6,6 +6,36 @@ embedded SVG art, a responsive command rail, palette controls, and the Playwrigh
 documentation lives under `docs/`, while helper scripts and generated starter art bundles reside in `tools/` and `art/`
 respectively.
 
+## Repository Remotes
+- `origin`: https://github.com/shthed/capy (primary upstream repository).
+
+## File Inventory
+- `AGENTS.md`: Contributor instructions and repository overview (this document).
+- `README.md`: Project introduction, setup guidance, and gameplay overview.
+- `PR_REVIEW.md`: Checklist for reviewing pull requests in this repository.
+- `ui-review.md`: Notes describing the UI review harness and expected behaviors.
+- `coloring_screen_requirements.md`: Product requirements for the coloring screen experience.
+- `capy.prompt.yml`: Prompt configuration for automated agents contributing to the project.
+- `index.html`: Main single-page application delivering the Capybooper experience with embedded SVG and UI logic.
+- `package.json`: Node.js project manifest defining scripts, dependencies, and metadata.
+- `package-lock.json`: Locked dependency graph for deterministic installs.
+- `playwright.config.js`: Playwright test runner configuration targeting the UI review spec.
+- `test.txt`: Placeholder test content file.
+- `art/SEGMENTATION_GUIDE.md`: Instructions for segmenting SVG art assets.
+- `art/capybara-forest.svg`, `art/capybara-lagoon.svg`, `art/capybara-terraced-market.svg`, `art/capybara-twilight.svg`,
+  `art/lush-green-forest.svg`: Playable SVG art scenes used by the application.
+- `art/starter-fallbacks.js`: Generated helper defining starter palettes and fallback color data for art assets.
+- `artifacts/app.png`: Reference screenshot of the application UI.
+- `docs/development_guide.md`: Contributor workflow guidance and tooling instructions.
+- `docs/gameplay-session.md`: Narrative walkthrough of a gameplay session and UX expectations.
+- `docs/svg-art-file-spec.md`: Specification describing the expected structure of SVG art files.
+- `docs/test-run-2025-10-04.md`: Logged results from an October 2025 test run.
+- `node_modules/`: Installed third-party dependencies required for development and testing.
+- `tests/ui-review.spec.js`: Playwright UI regression test covering core flows.
+- `tools/build-starter-fallbacks.js`: Script used to build the starter fallback palette bundle.
+- `vendor/babel.min.js`, `vendor/babel.min.js.map`, `vendor/react.development.js`, `vendor/react-dom.development.js`: Bundled
+  vendor libraries served directly by the application.
+
 ## Scope
 These instructions apply to the entire repository unless a nested `AGENTS.md` overrides them.
 
