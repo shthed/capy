@@ -2723,27 +2723,46 @@
       }
 
       function refreshSaveList() {
-        saveList.innerHTML = "";
+        saveList.textContent = "";
         for (const entry of state.saves) {
           const item = document.createElement("li");
           item.className = "save-entry";
           item.dataset.saveId = entry.id;
+
           const date = new Date(entry.timestamp);
           const doneCount = entry.data?.filled?.length ?? 0;
           const total = entry.data?.regions?.length ?? 0;
-          item.innerHTML = `
-            <header>
-              <strong>${entry.title || "Untitled puzzle"}</strong>
-              <time>${date.toLocaleString()}</time>
-            </header>
-            <div>${doneCount} of ${total} regions filled</div>
-            <div class="save-actions">
-              <button type="button" data-action="load">Load</button>
-              <button type="button" data-action="rename">Rename</button>
-              <button type="button" data-action="export">Export</button>
-              <button type="button" data-action="delete">Delete</button>
-            </div>
-          `;
+
+          const header = document.createElement("header");
+          const title = document.createElement("strong");
+          title.textContent = entry.title || "Untitled puzzle";
+          const timeEl = document.createElement("time");
+          timeEl.textContent = date.toLocaleString();
+          header.appendChild(title);
+          header.appendChild(timeEl);
+
+          const progress = document.createElement("div");
+          progress.textContent = `${doneCount} of ${total} regions filled`;
+
+          const actions = document.createElement("div");
+          actions.className = "save-actions";
+          const actionDefinitions = [
+            { action: "load", label: "Load" },
+            { action: "rename", label: "Rename" },
+            { action: "export", label: "Export" },
+            { action: "delete", label: "Delete" },
+          ];
+          for (const { action, label } of actionDefinitions) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.dataset.action = action;
+            button.textContent = label;
+            actions.appendChild(button);
+          }
+
+          item.appendChild(header);
+          item.appendChild(progress);
+          item.appendChild(actions);
           saveList.appendChild(item);
         }
         updateCommandStates();
