@@ -1322,6 +1322,53 @@
       const cloudSync = createCloudSync();
       let autosaveTimer = null;
       let pendingAutosaveReason = null;
+      let preventingBrowserZoom = false;
+      const DOUBLE_TAP_GUARD_MS = 350;
+
+      function isInteractiveElementForZoomGuard(node) {
+        return (
+          node instanceof Element &&
+          Boolean(
+            node.closest(
+              "input, textarea, select, button, [role=\"button\"], [role=\"textbox\"], [role=\"slider\"], [contenteditable=\"true\"]"
+            )
+          )
+        );
+      }
+
+      function installBrowserZoomGuards() {
+        if (typeof window === "undefined") return;
+        let lastTouchEndTime = 0;
+
+        window.addEventListener(
+          "touchend",
+          (event) => {
+            const now = Date.now();
+            const remainingTouches = event.touches ? event.touches.length : 0;
+            if (remainingTouches === 0 && now - lastTouchEndTime <= DOUBLE_TAP_GUARD_MS) {
+              if (!isInteractiveElementForZoomGuard(event.target)) {
+                event.preventDefault();
+              }
+            }
+            lastTouchEndTime = now;
+          },
+          { passive: false }
+        );
+
+        ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
+          window.addEventListener(
+            type,
+            (event) => {
+              if (event && typeof event.preventDefault === "function") {
+                event.preventDefault();
+              }
+            },
+            { passive: false }
+          );
+        });
+
+        preventingBrowserZoom = true;
+      }
 
       // Embedded sample used for onboarding and smoke tests.
       const SAMPLE_ARTWORK = {
@@ -1463,6 +1510,7 @@
       const DEBUG_LOG_LIMIT = 80;
 
       if (typeof window !== "undefined") {
+        installBrowserZoomGuards();
         // Public hooks for tests and manual loading. Keep backwards compatible.
         window.capyGenerator = {
           getState: () => state,
@@ -1496,6 +1544,9 @@
           },
           setArtPrompt(promptText) {
             applyArtPrompt(promptText);
+          },
+          isBrowserZoomSuppressed() {
+            return preventingBrowserZoom;
           },
           togglePreview(show) {
             if (typeof show === "boolean") {

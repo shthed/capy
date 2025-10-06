@@ -31,7 +31,7 @@
 - Tweaking the background colour control instantly repainted unfinished regions and flipped numeral contrast, and the new interface scale slider resized the command rail and palette without touching puzzle zoom so HUD tweaks no longer require custom CSS.
 - The generator's art prompt query now lives inside a collapsed Advanced options panel in Settings, keeping the onboarding hint clean while still letting us document the inspiration alongside saves and exports when needed.
 - Painting a cell updated the fill colour inline with the clustered artwork (no refresh needed) and click-drag panning, pinch/scroll zoom, plus `+`/`-` keyboard shortcuts made it easy to inspect tiny regions. Entering and exiting fullscreen (or rotating the device) recentred the canvas automatically.
-- Mobile pinch gestures now stay focused on the canvas — the viewport meta clamps browser zoom so the interface never scales accidentally while still letting our custom pan/zoom math run.
+- Mobile pinch gestures now stay focused on the canvas — the viewport meta clamps browser zoom and a double-tap guard blocks accidental page scaling while still letting our custom pan/zoom math run.
 - The refreshed Help sheet documents every icon command (including fullscreen), reiterates the gesture controls, and streams a live debug log so it was easy to verify hints, fills, zooms, and orientation changes during the session.
 - Debug logging now captures ignored clicks (no puzzle, wrong colour, filled
   regions), viewport orientation changes, fullscreen transitions, background
