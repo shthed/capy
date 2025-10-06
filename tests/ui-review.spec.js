@@ -167,11 +167,12 @@ test.describe('Capy image generator', () => {
     });
 
     expect(state.hasPuzzle).toBe(true);
-    expect(state.paletteCount).toBeGreaterThan(3);
-    expect(state.regionCount).toBeGreaterThan(4);
+    expect(state.paletteCount).toBe(26);
+    expect(state.regionCount).toBeGreaterThanOrEqual(38);
+    expect(state.regionCount).toBeLessThanOrEqual(60);
     expect(state.sourceUrl).toContain('data:image/svg+xml;base64,');
     expect(state.detailLevel).toBe('medium');
-    expect(state.targetColors).toBe(18);
+    expect(state.targetColors).toBe(26);
 
     await page.click('[data-testid="sample-art-button"]');
     const logHead = page.locator('#debugLog .log-entry span').first();
@@ -190,11 +191,15 @@ test.describe('Capy image generator', () => {
       return {
         detailLevel: sampleDetailLevel,
         paletteCount: puzzle?.palette?.length || 0,
+        regionCount: puzzle?.regions?.length || 0,
         targetColors: lastOptions?.targetColors || null,
       };
     });
     expect(highState.detailLevel).toBe('high');
-    expect(highState.targetColors).toBe(28);
+    expect(highState.paletteCount).toBe(32);
+    expect(highState.targetColors).toBe(32);
+    expect(highState.regionCount).toBeGreaterThanOrEqual(120);
+    expect(highState.regionCount).toBeLessThanOrEqual(190);
 
     await page.click('#settingsSheet [data-detail-level="low"]');
     await expect.poll(() =>
@@ -206,11 +211,15 @@ test.describe('Capy image generator', () => {
       return {
         detailLevel: sampleDetailLevel,
         paletteCount: puzzle?.palette?.length || 0,
+        regionCount: puzzle?.regions?.length || 0,
         targetColors: lastOptions?.targetColors || null,
       };
     });
     expect(lowState.detailLevel).toBe('low');
-    expect(lowState.targetColors).toBe(12);
+    expect(lowState.paletteCount).toBe(18);
+    expect(lowState.targetColors).toBe(18);
+    expect(lowState.regionCount).toBeGreaterThanOrEqual(20);
+    expect(lowState.regionCount).toBeLessThanOrEqual(40);
 
     await page.click('[data-sheet-close="settings"]');
   });

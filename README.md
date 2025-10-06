@@ -20,7 +20,8 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Sample detail presets.** Low/Medium/High chips live on the onboarding hint
   and inside Settings, instantly reloading the sample with tuned colour counts,
   resize targets, k-means iterations, and smoothing passes so QA can cycle
-  between relaxed, balanced, or high-fidelity boards.
+  between breezy ≈26-region boards, balanced ≈42-region sessions, or high-fidelity
+  ≈140-region showpieces.
 - **Detailed debug logging.** The Help sheet's live log now announces when the
   sample puzzle begins loading and when it completes, alongside fills, hints,
   zooms, background tweaks, fullscreen toggles, and ignored clicks, so QA can
@@ -63,16 +64,18 @@ tools, a save manager, and a configurable generator all live inside a single
 The Low/Medium/High detail chips on the onboarding hint and Settings sheet
 toggle tuned generator options for the built-in capybara vignette:
 
-| Preset | Colours | Min region | Resize edge | Sample rate | Iterations | Smoothing | Use it when… |
-| ------ | ------- | ---------- | ----------- | ----------- | ---------- | --------- | ------------ |
-| Low detail | 12 | 200 px² | 896 px | 55% | 10 | 1 | Quick demos that favour broad shapes and wider painting targets. |
-| Medium detail | 18 | 120 px² | 1152 px | 70% | 14 | 2 | Balanced play sessions that echo the previous default while preserving facial cues. |
-| High detail | 28 | 60 px² | 1472 px | 90% | 20 | 3 | Showcase captures where fine fur bands, reflections, and mushroom caps should remain distinct. |
+| Preset | Colours | Approx. regions | Min region | Resize edge | Sample rate | Iterations | Smoothing | Use it when… |
+| ------ | ------- | --------------- | ---------- | ----------- | ----------- | ---------- | --------- | ------------ |
+| Low detail | 18 | ≈26 | 15 px² | 1216 px | 90% | 20 | 1 | Quick demos that favour broad shapes while keeping the characters readable. |
+| Medium detail | 26 | ≈42 | 8 px² | 1408 px | 95% | 24 | 1 | Balanced play sessions that capture the lagoon’s reflections without overwhelming region counts. |
+| High detail | 32 | ≈140 | 3 px² | 1536 px | 100% | 28 | 1 | Showcase captures where fur bands, ripples, and foliage clusters should stay distinct. |
 
 Each preset reloads the sample puzzle immediately, updates the generator sliders
 to mirror the chosen settings, and stamps the debug log with the relevant detail
-level so QA transcripts record every switch. For a full tour of the palette and
-every numbered region in the lagoon scene, see
+level so QA transcripts record every switch. The region counts above are based on
+the bundled Capybara Springs artwork and keep every preset playable—from the
+breezy ≈26-region low detail board to the ≈140-region high fidelity scene. For a
+full tour of the palette and every numbered cell in the segmented source, see
 [`docs/capybara-springs-map.md`](docs/capybara-springs-map.md).
 
 ## Code architecture tour

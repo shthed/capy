@@ -1002,12 +1002,12 @@
             <dt>🐹 Sample</dt>
             <dd>
               Reload the built-in capybara puzzle for a fresh board. Pair it with the Low/Medium/High
-              detail presets to change colour counts and region granularity.
+              detail presets to jump between ≈26, ≈42, or ≈140 regions.
             </dd>
             <dt>🎚 Detail</dt>
             <dd>
               Toggle the capybara detail chips (start hint or Settings) to reload the sample with tuned
-              palette sizes, minimum region areas, and resize targets.
+              palette sizes, minimum region areas, resize targets, and the region counts noted above.
             </dd>
             <dt>⛶ Fullscreen</dt>
             <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
@@ -1222,15 +1222,17 @@
           id: "low",
           label: "Low detail",
           shortLabel: "Low",
-          summary: "Low detail • 12 colours / 200 px² min regions / 896 px resize",
-          ariaLabel: "Low detail – 12 colours, 200 pixel minimum regions, 896px resize target",
+          summary: "Low detail • 18 colours / 15 px² min regions / 1216 px resize • ≈26 regions",
+          ariaLabel:
+            "Low detail – 18 colours, 15 pixel minimum regions, 1216px resize target, about 26 regions",
           logDescriptor: "low detail",
+          approxRegions: 26,
           settings: {
-            targetColors: 12,
-            minRegion: 200,
-            maxSize: 896,
-            sampleRate: 55,
-            kmeansIters: 10,
+            targetColors: 18,
+            minRegion: 15,
+            maxSize: 1216,
+            sampleRate: 90,
+            kmeansIters: 20,
             smoothingPasses: 1,
           },
         },
@@ -1238,32 +1240,36 @@
           id: "medium",
           label: "Medium detail",
           shortLabel: "Medium",
-          summary: "Medium detail • 18 colours / 120 px² min regions / 1152 px resize",
-          ariaLabel: "Medium detail – 18 colours, 120 pixel minimum regions, 1152px resize target",
+          summary: "Medium detail • 26 colours / 8 px² min regions / 1408 px resize • ≈42 regions",
+          ariaLabel:
+            "Medium detail – 26 colours, 8 pixel minimum regions, 1408px resize target, about 42 regions",
           logDescriptor: "medium detail",
+          approxRegions: 42,
           settings: {
-            targetColors: 18,
-            minRegion: 120,
-            maxSize: 1152,
-            sampleRate: 70,
-            kmeansIters: 14,
-            smoothingPasses: 2,
+            targetColors: 26,
+            minRegion: 8,
+            maxSize: 1408,
+            sampleRate: 95,
+            kmeansIters: 24,
+            smoothingPasses: 1,
           },
         },
         high: {
           id: "high",
           label: "High detail",
           shortLabel: "High",
-          summary: "High detail • 28 colours / 60 px² min regions / 1472 px resize",
-          ariaLabel: "High detail – 28 colours, 60 pixel minimum regions, 1472px resize target",
+          summary: "High detail • 32 colours / 3 px² min regions / 1536 px resize • ≈140 regions",
+          ariaLabel:
+            "High detail – 32 colours, 3 pixel minimum regions, 1536px resize target, about 140 regions",
           logDescriptor: "high detail",
+          approxRegions: 140,
           settings: {
-            targetColors: 28,
-            minRegion: 60,
-            maxSize: 1472,
-            sampleRate: 90,
-            kmeansIters: 20,
-            smoothingPasses: 3,
+            targetColors: 32,
+            minRegion: 3,
+            maxSize: 1536,
+            sampleRate: 100,
+            kmeansIters: 28,
+            smoothingPasses: 1,
           },
         },
       };
@@ -1843,11 +1849,23 @@
         for (const button of sampleButtons) {
           if (!button) continue;
           const labelBase = `Reload ${SAMPLE_ARTWORK.title}`;
-          button.title = `${labelBase} – ${config.label}`;
-          button.setAttribute("aria-label", `${labelBase} (${config.label})`);
+          const detailSummary = config.summary || config.label;
+          const titleText = detailSummary ? `${labelBase} – ${detailSummary}` : `${labelBase} – ${config.label}`;
+          const ariaText = detailSummary ? `${labelBase} (${detailSummary})` : `${labelBase} (${config.label})`;
+          button.title = titleText;
+          button.setAttribute("aria-label", ariaText);
+          if (config.approxRegions != null) {
+            button.dataset.detailRegions = String(config.approxRegions);
+          }
         }
         if (samplePreview) {
-          samplePreview.title = `${SAMPLE_ARTWORK.title} – ${config.label}`;
+          const previewSummary = config.summary || config.label;
+          samplePreview.title = previewSummary
+            ? `${SAMPLE_ARTWORK.title} – ${previewSummary}`
+            : `${SAMPLE_ARTWORK.title} – ${config.label}`;
+          if (config.approxRegions != null) {
+            samplePreview.dataset.detailRegions = String(config.approxRegions);
+          }
         }
         if (!skipOptions) {
           const settings = config.settings || {};

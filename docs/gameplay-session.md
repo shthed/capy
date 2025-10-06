@@ -15,8 +15,8 @@
    confirm the built-in shortcut still works without reopening the hint
    overlay.
 2. Clicked the Low/Medium/High detail chips to confirm each preset updates the
-   generator sliders, reloads the sample, and writes its summary to the debug
-   log.
+   generator sliders, reloads the sample with the expected ≈26/≈42/≈140 region
+   breakdowns, and writes its summary to the debug log.
 3. Selected the first palette swatch to activate its associated colour and
    watched the matching regions flash for guidance.
 4. Dragged the canvas with mouse and touch, pinched to zoom, toggled
@@ -34,7 +34,7 @@
 - Detail preset switches add "Loading <preset> detail" entries before the usual
   completion log, and the Settings sheet mirrors the same chips for mid-session
   adjustments, making it easy to trace which configuration produced a given
-  palette or region count.
+  palette or region count (≈26 for low, ≈42 for medium, ≈140 for high).
 - Overall responsiveness stayed smooth during the brief automation-driven play session.
 
 ## Follow-up Ideas
