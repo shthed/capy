@@ -2682,9 +2682,12 @@
         puzzleCtx.restore();
       }
 
-      function resolveExportTitle() {
-        if (typeof state.sourceTitle === "string" && state.sourceTitle.trim()) {
-          return state.sourceTitle.trim();
+      function resolveExportTitle(sourceTitle = state.sourceTitle) {
+        if (typeof sourceTitle === "string") {
+          const trimmed = sourceTitle.trim();
+          if (trimmed) {
+            return trimmed;
+          }
         }
         return DEFAULT_EXPORT_TITLE;
       }
@@ -2803,8 +2806,7 @@
           })
         ) {
           state.sourceUrl = entry.data.sourceUrl ?? null;
-          state.sourceTitle =
-            (typeof entry.title === "string" && entry.title.trim()) || state.sourceTitle;
+          state.sourceTitle = resolveExportTitle(entry.data?.title ?? entry.title);
           startHint.classList.add("hidden");
           logDebug(`Loaded save: ${entry.title || "Untitled puzzle"}`);
         }
@@ -2840,14 +2842,16 @@
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `${entry.title || "capy-save"}.json`;
+        const resolvedTitle = resolveExportTitle(entry.data?.title ?? entry.title);
+        const fileStem = toFileSafeName(resolvedTitle);
+        link.download = `${fileStem}.json`;
         document.body.appendChild(link);
         link.click();
         requestAnimationFrame(() => {
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
         });
-        logDebug(`Exported save: ${entry.title || "capy-save"}`);
+        logDebug(`Exported save: ${entry.title || resolvedTitle}`);
       }
 
       function serializeAssignments(pixels, centroids) {

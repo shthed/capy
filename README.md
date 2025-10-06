@@ -121,7 +121,8 @@ tools, a save manager, and a configurable generator all live inside a single
    puzzle as JSON at any time—the download name mirrors the source title (with
    filename-safe cleanup) so imported art like “Capybara Meadow” becomes
    `Capybara-Meadow.json`. If no source metadata is available the export falls
-   back to `Untitled-puzzle.json`.
+   back to `Untitled-puzzle.json`. Exports triggered from the save manager reuse
+   the same naming so reopened saves still download with the original title.
 
 ## UI guide
 
