@@ -2836,13 +2836,14 @@
       function exportSaveEntry(id) {
         const entry = state.saves.find((item) => item.id === id);
         if (!entry) return;
-        const blob = new Blob([JSON.stringify(entry.data, null, 2)], {
+        const resolvedTitle = resolveExportTitle(entry.data?.title ?? entry.title);
+        const payload = entry.data ? { ...entry.data, title: resolvedTitle } : { title: resolvedTitle };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {
           type: "application/json",
         });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        const resolvedTitle = resolveExportTitle(entry.data?.title ?? entry.title);
         const fileStem = toFileSafeName(resolvedTitle);
         link.download = `${fileStem}.json`;
         document.body.appendChild(link);
