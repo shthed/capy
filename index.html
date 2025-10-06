@@ -2723,29 +2723,56 @@
       }
 
       function refreshSaveList() {
-        saveList.innerHTML = "";
+        const fragment = document.createDocumentFragment();
+
         for (const entry of state.saves) {
           const item = document.createElement("li");
           item.className = "save-entry";
           item.dataset.saveId = entry.id;
+
           const date = new Date(entry.timestamp);
           const doneCount = entry.data?.filled?.length ?? 0;
           const total = entry.data?.regions?.length ?? 0;
-          item.innerHTML = `
-            <header>
-              <strong>${entry.title || "Untitled puzzle"}</strong>
-              <time>${date.toLocaleString()}</time>
-            </header>
-            <div>${doneCount} of ${total} regions filled</div>
-            <div class="save-actions">
-              <button type="button" data-action="load">Load</button>
-              <button type="button" data-action="rename">Rename</button>
-              <button type="button" data-action="export">Export</button>
-              <button type="button" data-action="delete">Delete</button>
-            </div>
-          `;
-          saveList.appendChild(item);
+
+          const header = document.createElement("header");
+          const title = document.createElement("strong");
+          const titleText = entry.title && entry.title.trim();
+          title.textContent = titleText || "Untitled puzzle";
+          header.appendChild(title);
+
+          const time = document.createElement("time");
+          time.dateTime = date.toISOString();
+          time.textContent = date.toLocaleString();
+          header.appendChild(time);
+          item.appendChild(header);
+
+          const progress = document.createElement("div");
+          progress.textContent = `${doneCount} of ${total} regions filled`;
+          item.appendChild(progress);
+
+          const actions = document.createElement("div");
+          actions.className = "save-actions";
+
+          const actionButtons = [
+            ["load", "Load"],
+            ["rename", "Rename"],
+            ["export", "Export"],
+            ["delete", "Delete"],
+          ];
+
+          for (const [action, label] of actionButtons) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.dataset.action = action;
+            button.textContent = label;
+            actions.appendChild(button);
+          }
+
+          item.appendChild(actions);
+          fragment.appendChild(item);
         }
+
+        saveList.replaceChildren(fragment);
         updateCommandStates();
       }
 
