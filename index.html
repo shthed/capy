@@ -1331,14 +1331,14 @@
 
       downloadBtn.addEventListener("click", () => {
         if (!state.puzzle) return;
-        const payload = serializeCurrentPuzzle();
+        const resolvedTitle = resolvePuzzleTitle();
+        const payload = serializeCurrentPuzzle(resolvedTitle);
         const blob = new Blob([JSON.stringify(payload, null, 2)], {
           type: "application/json",
         });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        const resolvedTitle = payload.title || resolvePuzzleTitle();
         const fileStem = toFileSafeName(resolvedTitle);
         link.download = `${fileStem}.json`;
         document.body.appendChild(link);
@@ -2696,10 +2696,10 @@
         return dashed || fallback;
       }
 
-      function serializeCurrentPuzzle() {
+      function serializeCurrentPuzzle(resolvedTitle = resolvePuzzleTitle()) {
         if (!state.puzzle) return {};
         return {
-          title: resolvePuzzleTitle(),
+          title: resolvedTitle,
           width: state.puzzle.width,
           height: state.puzzle.height,
           palette: state.puzzle.palette.map((p) => ({
