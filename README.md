@@ -12,16 +12,17 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
   previously exported JSON puzzles straight into the generator pipeline.
 - **Built-in capybara sample.** The "Capybara Springs" illustration now loads
-  automatically on boot in the high detail preset so you can start painting
-  without importing anything. The vignette features an orange-balanced capybara
-  lounging in a lagoon with a curious dachshund, water mushrooms, and a distant
-  waterfall, and the 🐹 command rail button instantly reloads it whenever you
-  want a fresh board while reflecting whichever detail preset you last chose.
+  automatically on boot in the high detail preset (when no autosave is
+  available) so you can start painting without importing anything. The vignette
+  features an orange-balanced capybara lounging in a lagoon with a curious
+  dachshund, water mushrooms, and a distant waterfall, and the 🐹 command rail
+  button instantly reloads it whenever you want a fresh board while reflecting
+  whichever detail preset you last chose.
 - **Sample detail presets.** Low/Medium/High chips live on the onboarding hint
   and inside Settings, instantly reloading the sample with tuned colour counts,
   resize targets, k-means iterations, and smoothing passes so QA can cycle
-  between breezy ≈26-region boards, balanced ≈42-region sessions, or high-fidelity
-  ≈140-region showpieces.
+  between breezy ≈26-region boards, balanced ≈42-region sessions, or
+  high-fidelity ≈140-region showpieces.
 - **Detailed debug logging.** The Help sheet's live log now announces when the
   sample puzzle begins loading and when it completes, alongside fills, hints,
   zooms, background tweaks, fullscreen toggles, and ignored clicks, so QA can
@@ -56,8 +57,8 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Palette manager.** Swipe through compact, tinted swatches that promote the
   colour number while tooltips, titles, and ARIA copy preserve human-readable
   names and remaining region counts.
-- **Progress persistence.** Snapshot runs into localStorage, reopen saves,
-  rename them, or export/import the underlying puzzle data as JSON.
+- **Progress persistence & recovery.** Every stroke updates a rolling autosave using a compact payload so the latest session is restored automatically on launch. Manual snapshots still land in the save manager where you can rename, export, or delete entries at will.
+- **Cloud-ready sync.** A lightweight broadcast channel mirrors autosaves across browser tabs and exposes a `window.capyCloudSync` adapter hook so teams can plug in remote storage when available.
 
 ### Capybara Springs detail presets
 
@@ -70,15 +71,15 @@ toggle tuned generator options for the built-in capybara vignette:
 | Medium detail | 26 | ≈42 | 8 px² | 1408 px | 95% | 24 | 1 | Balanced play sessions that capture the lagoon’s reflections without overwhelming region counts. |
 | High detail | 32 | ≈140 | 3 px² | 1536 px | 100% | 28 | 1 | Showcase captures where fur bands, ripples, and foliage clusters should stay distinct. |
 
-Each preset reloads the sample puzzle immediately, updates the generator sliders
-to mirror the chosen settings, and stamps the debug log with the relevant detail
-level so QA transcripts record every switch. The app boots in the high preset so
-playtesters immediately see the full ≈140-region canvas, but the remembered
-preset keeps medium or low runs sticky after you switch. The region counts above
-are based on the bundled Capybara Springs artwork and keep every preset
-playable—from the breezy ≈26-region low detail board to the ≈140-region high
-fidelity scene. For a full tour of the palette and every numbered cell in the
-segmented source, see
+Each preset reloads the sample puzzle immediately, updates the generator
+sliders to mirror the chosen settings, and stamps the debug log with the
+relevant detail level so QA transcripts record every switch. The app boots in
+the high preset so playtesters immediately see the full ≈140-region canvas, but
+the remembered preset keeps medium or low runs sticky after you switch. The
+region counts above are based on the bundled Capybara Springs artwork and keep
+every preset playable—from the breezy ≈26-region low detail board to the
+≈140-region high fidelity scene. For a full tour of the palette and every
+numbered cell in the segmented source, see
 [`docs/capybara-springs-map.md`](docs/capybara-springs-map.md).
 
 ## Code architecture tour
@@ -134,12 +135,7 @@ segmented source, see
 
 ## How it works
 
-1. **Load an image.** The bundled “Capybara Springs” puzzle loads automatically
-   on boot so you can start painting immediately. Drag a bitmap into the
-   viewport, activate the “Choose an image” button, or press the 🐹 command
-   button to reload the bundled scene. The hint overlay disappears once a new
-   source is selected, and the Low/Medium/High detail chips can pre-seed the
-   capybara sample with relaxed or high-fidelity settings before you reload it.
+1. **Resume or load an image.** The app restores your most recent autosave on boot; if nothing is stored yet the bundled “Capybara Springs” puzzle loads automatically in the high detail preset so you can start painting immediately. Drag a bitmap into the viewport, activate the “Choose an image” button, or press the 🐹 command button to reload the bundled scene. The hint overlay disappears once a new source is selected, and the Low/Medium/High detail chips can pre-seed the capybara sample with relaxed or high-fidelity settings before you reload it.
 2. **Tune generation & appearance.** Open **Settings** to tweak palette size,
    minimum region area, resize detail, sample rate (for faster clustering),
    iteration count, smoothing passes, auto-advance, hint animations, and the
@@ -169,8 +165,8 @@ Autosaves, manual exports, and the Playwright fixtures all share a
   `regionMap` array; the loader hydrates whichever is available and rebuilds the
   per-region pixel lists on the fly.
 - `filled` – Region ids that the player has already painted.
-- `backgroundColor`, `options`, `activeColor`, and `sourceUrl` – The appearance
-  and generator state needed to restore the session.
+- `backgroundColor`, `options`, `activeColor`, `viewport`, `settings`, and
+  `sourceUrl` – The appearance and generator state needed to restore the session.
 
 Packing the region map trims autosave/export payloads by more than half compared
 to the old verbose arrays, which prevents the `QuotaExceededError` console
@@ -206,8 +202,8 @@ before retrying.
   the sample with tuned parameters without leaving the modal.
 - **Detail presets** – The onboarding hint and Settings sheet both surface the
   Low/Medium/High chips with a live caption describing the active preset so you
-  know how many colours, what minimum region size, and which resize edge the
-  next sample reload will use.
+  know how many colours, what minimum region size, and which resize edge (and
+  approximate region count) the next sample reload will use.
 - **Save manager** – A companion sheet listing every stored snapshot. Each entry
   shows completion progress with quick actions to load, rename, export, or
   delete the save.
