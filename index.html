@@ -1,5 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
+  <!--
+    Developer Map
+    ==========
+    - UI chrome (header/footer modals): command rail + sheets define primary controls and expose
+      buttons that wire into the handler helpers inside the script. Look for "Command button"
+      listeners when adjusting layout interactions.
+    - Viewport + stage: #viewport, #canvasStage, and #canvasTransform cooperate with the
+      viewState structure. applyViewTransform, applyZoom, resetView, and the pointer handlers are
+      the touch/mouse entry points for navigation. Pointerdown/up/move feed handlePan* while
+      wheel/key events route through applyZoom.
+    - Puzzle state + rendering: the state object captures palette, regions, fill progress, and
+      metadata. Rendering flows through renderPuzzle → drawOutlines/drawNumbers with helpers like
+      applyRegionToImage.
+    - Generation pipeline: loadImage → createPuzzleData orchestrates quantization (kmeansQuantize),
+      segmentation (segmentRegions), and palette prep. Regeneration, fixture loading, and saves all
+      call applyPuzzleResult to hydrate UI.
+    - Persistence + exports: local storage helpers (persistSaves/loadSavedEntries) back the save
+      sheet. serializeCurrentPuzzle produces an export-safe object.
+    - External API: window.capyGenerator exposes entry points that Playwright and manual testing
+      rely on. Keep it stable whenever you shuffle internal wiring.
+  -->
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -11,6 +32,9 @@
           sans-serif;
         background: #020617;
         color: #e2e8f0;
+        --app-width: 100vw;
+        --app-height: 100vh;
+        --viewport-padding: 32px;
       }
 
       * {
@@ -34,10 +58,14 @@
         cursor: copy;
       }
 
+      body.panning {
+        cursor: grabbing;
+      }
+
       #app {
         position: relative;
-        width: 100vw;
-        height: 100vh;
+        width: var(--app-width, 100vw);
+        height: var(--app-height, 100vh);
         overflow: hidden;
         display: grid;
         grid-template-rows: auto 1fr auto;
@@ -46,18 +74,34 @@
       #commandRail {
         position: relative;
         display: flex;
-        justify-content: center;
-        gap: 12px;
-        padding: 16px 24px;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 24px;
         z-index: 3;
       }
 
       #commandRail button {
-        border-radius: 14px;
-        padding: 10px 18px;
-        background: rgba(15, 23, 42, 0.8);
+        border-radius: 12px;
+        padding: 0;
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        background: rgba(15, 23, 42, 0.82);
         color: rgba(226, 232, 240, 0.92);
-        border: 1px solid rgba(148, 163, 184, 0.3);
+        border: 1px solid rgba(148, 163, 184, 0.28);
+      }
+
+      #commandRail button.active {
+        background: rgba(37, 99, 235, 0.28);
+        border-color: rgba(96, 165, 250, 0.55);
+        color: rgba(226, 232, 240, 1);
+      }
+
+      #commandRail button .icon {
+        font-size: 1.1rem;
+        line-height: 1;
       }
 
       #commandRail button:disabled {
@@ -66,13 +110,56 @@
         border-color: rgba(71, 85, 105, 0.35);
       }
 
+      body[data-orientation="portrait"] #commandRail {
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 12px 16px;
+      }
+
+      body[data-orientation="portrait"] #commandRail button {
+        width: 36px;
+        height: 36px;
+      }
+
+      body[data-orientation="portrait"] #paletteDock {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+      }
+
       #viewport {
         position: relative;
         width: 100%;
         height: 100%;
         display: grid;
         place-items: center;
-        padding: 32px;
+        padding: var(--viewport-padding, 32px);
+        overflow: hidden;
+      }
+
+      #canvasStage {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        --pan-x: 0px;
+        --pan-y: 0px;
+        transform: translate(calc(-50% + var(--pan-x)), calc(-50% + var(--pan-y)));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        touch-action: none;
+        will-change: transform;
+        z-index: 1;
+        cursor: grab;
+      }
+
+      #canvasTransform {
+        transform-origin: center;
+        --zoom: 1;
+        transform: scale(var(--zoom));
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       #viewport::before {
@@ -86,7 +173,8 @@
         transition: opacity 0.18s ease;
       }
 
-      body.dragging #viewport::before {
+      body.dragging #viewport::before,
+      body.panning #viewport::before {
         opacity: 1;
       }
 
@@ -100,6 +188,7 @@
         border: 1px solid rgba(148, 163, 184, 0.45);
         box-shadow: 0 30px 60px rgba(15, 23, 42, 0.45);
         image-rendering: pixelated;
+        touch-action: none;
       }
 
       #previewOverlay {
@@ -147,6 +236,10 @@
         pointer-events: none;
       }
 
+      #startHint.hidden * {
+        pointer-events: none !important;
+      }
+
       #startHint .hint-body {
         pointer-events: auto;
         text-align: center;
@@ -156,6 +249,9 @@
         background: rgba(2, 6, 23, 0.78);
         border: 1px solid rgba(59, 130, 246, 0.35);
         box-shadow: 0 20px 60px rgba(15, 23, 42, 0.6);
+        display: grid;
+        gap: 20px;
+        justify-items: center;
       }
 
       #startHint h1 {
@@ -167,6 +263,20 @@
         margin: 0 0 20px;
         color: rgba(226, 232, 240, 0.8);
         font-size: 1rem;
+      }
+
+      #startHint .sample-art {
+        width: min(240px, 70vw);
+        max-width: 100%;
+        border-radius: 16px;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+      }
+
+      #startHint .hint-actions {
+        display: grid;
+        gap: 12px;
+        width: 100%;
       }
 
       button {
@@ -194,20 +304,6 @@
         box-shadow: none;
       }
 
-      #statusBar {
-        position: absolute;
-        left: 32px;
-        bottom: 32px;
-        padding: 10px 16px;
-        background: rgba(2, 6, 23, 0.8);
-        border-radius: 16px;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        font-size: 0.95rem;
-        color: rgba(226, 232, 240, 0.86);
-        backdrop-filter: blur(14px);
-        z-index: 2;
-      }
-
       #paletteDock {
         position: relative;
         display: flex;
@@ -221,8 +317,10 @@
       }
 
       #progress {
-        min-width: 220px;
-        font-size: 0.9rem;
+        min-width: 120px;
+        font-size: 1.05rem;
+        font-variant-numeric: tabular-nums;
+        text-align: left;
         color: rgba(226, 232, 240, 0.82);
       }
 
@@ -230,10 +328,10 @@
         flex: 1;
         display: grid;
         grid-auto-flow: column;
-        grid-auto-columns: minmax(120px, 1fr);
-        gap: 12px;
+        grid-auto-columns: minmax(44px, 1fr);
+        gap: 6px;
         overflow-x: auto;
-        padding-bottom: 6px;
+        padding: 2px 0 6px;
         scrollbar-width: thin;
       }
 
@@ -295,6 +393,22 @@
         cursor: pointer;
       }
 
+      input[type="color"] {
+        width: 100%;
+        height: 38px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.85);
+        padding: 0;
+        cursor: pointer;
+      }
+
+      input[type="color"]::-webkit-color-swatch,
+      input[type="color"]::-moz-color-swatch {
+        border: none;
+        border-radius: 10px;
+      }
+
       .control-note {
         margin-top: -8px;
         font-size: 0.8rem;
@@ -327,17 +441,35 @@
       }
 
       .swatch {
+        position: relative;
         display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 12px;
-        padding: 10px 12px;
-        border-radius: 14px;
+        justify-content: center;
+        gap: 2px;
+        padding: 6px;
+        min-width: 44px;
+        min-height: 52px;
+        border-radius: 12px;
         border: 1px solid rgba(148, 163, 184, 0.25);
-        background: rgba(15, 23, 42, 0.85);
+        background:
+          linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.82));
         color: inherit;
-        text-align: left;
+        text-align: center;
         cursor: pointer;
         transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+      }
+
+      .swatch::before {
+        content: "";
+        position: absolute;
+        inset: 4px;
+        border-radius: 10px;
+        background:
+          linear-gradient(140deg, rgba(15, 23, 42, 0.06), rgba(15, 23, 42, 0.28)),
+          var(--swatch-color, transparent);
+        opacity: 0.9;
+        pointer-events: none;
       }
 
       .swatch:hover {
@@ -345,35 +477,28 @@
       }
 
       .swatch.active {
-        border-color: rgba(96, 165, 250, 0.8);
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+        border-color: rgba(96, 165, 250, 0.85);
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
       }
 
       .swatch.done {
         opacity: 0.55;
       }
 
-      .swatch .sample {
-        width: 40px;
-        height: 40px;
-        border-radius: 10px;
-        border: 1px solid rgba(15, 23, 42, 0.35);
-        flex-shrink: 0;
-      }
-
-      .swatch .info {
+      .swatch .label {
+        position: relative;
         display: flex;
         flex-direction: column;
-        font-size: 0.82rem;
-        gap: 2px;
+        align-items: center;
+        font-size: 0.8rem;
+        line-height: 1.2;
+        max-width: 100%;
+        z-index: 1;
       }
 
-      .swatch strong {
-        font-size: 0.95rem;
-      }
-
-      .swatch[data-color-id] {
-        min-width: 140px;
+      .swatch .label > strong {
+        font-size: 1.05rem;
+        letter-spacing: 0.02em;
       }
 
       .sheet {
@@ -440,6 +565,95 @@
         margin: 0;
         font-size: 1.05rem;
         letter-spacing: 0.02em;
+      }
+
+      .command-list {
+        display: grid;
+        grid-template-columns: minmax(0, auto) 1fr;
+        gap: 6px 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .command-list dt {
+        font-weight: 600;
+        color: rgba(148, 163, 184, 0.9);
+        font-size: 0.95rem;
+      }
+
+      .command-list dd {
+        margin: 0;
+        font-size: 0.95rem;
+      }
+
+      .control-list {
+        margin: 0;
+        padding-left: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 0.95rem;
+        list-style: none;
+      }
+
+      .control-list kbd {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.4em;
+        padding: 2px 6px;
+        margin-right: 6px;
+        border-radius: 6px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.65);
+        font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco,
+          Consolas, 'Liberation Mono', 'Courier New', monospace;
+        font-size: 0.85rem;
+        color: rgba(226, 232, 240, 0.9);
+      }
+
+      .debug-log {
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        background: rgba(15, 23, 42, 0.85);
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 240px;
+        overflow-y: auto;
+      }
+
+      .debug-log .log-entry {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 10px;
+        align-items: baseline;
+        font-size: 0.9rem;
+      }
+
+      .debug-log time {
+        font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco,
+          Consolas, 'Liberation Mono', 'Courier New', monospace;
+        font-size: 0.8rem;
+        color: rgba(148, 163, 184, 0.9);
+      }
+
+      .debug-log span {
+        color: rgba(226, 232, 240, 0.95);
+      }
+
+      .log-empty {
+        margin: 0;
+        font-style: italic;
+        color: rgba(148, 163, 184, 0.8);
+      }
+
+      .log-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
       }
 
       .sheet-actions {
@@ -524,19 +738,13 @@
 
         #commandRail {
           flex-wrap: wrap;
+          justify-content: flex-end;
         }
       }
 
       @media (max-width: 720px) {
         #viewport {
           padding: 20px;
-        }
-
-        #statusBar {
-          left: 16px;
-          right: 16px;
-          bottom: auto;
-          top: 16px;
         }
 
         #puzzleCanvas {
@@ -558,20 +766,104 @@
   <body>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
-        <button id="hintButton" type="button" data-testid="hint-button" disabled>Hint</button>
-        <button id="resetButton" type="button" data-testid="reset-button" disabled>Reset</button>
-        <button id="previewToggle" type="button" data-testid="preview-toggle" disabled>Preview</button>
-        <button id="importButton" type="button" data-testid="import-button">Import</button>
-        <button id="saveManagerButton" type="button" data-testid="save-manager-button" disabled>Save manager</button>
-        <button id="settingsButton" type="button" data-testid="settings-button">Settings</button>
+        <button
+          id="hintButton"
+          type="button"
+          data-testid="hint-button"
+          aria-label="Hint"
+          title="Hint"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">?</span>
+        </button>
+        <button
+          id="resetButton"
+          type="button"
+          data-testid="reset-button"
+          aria-label="Reset puzzle"
+          title="Reset puzzle"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">↺</span>
+        </button>
+        <button
+          id="previewToggle"
+          type="button"
+          data-testid="preview-toggle"
+          aria-label="Show preview"
+          title="Show preview"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">🖼</span>
+        </button>
+        <button
+          id="sampleCommand"
+          type="button"
+          data-testid="sample-art-button"
+          data-action="load-sample"
+          aria-label="Reload sample puzzle"
+          title="Reload sample puzzle"
+        >
+          <span class="icon" aria-hidden="true">🐹</span>
+        </button>
+        <button
+          id="fullscreenButton"
+          type="button"
+          data-testid="fullscreen-button"
+          aria-label="Enter fullscreen"
+          title="Enter fullscreen"
+        >
+          <span class="icon" aria-hidden="true">⛶</span>
+        </button>
+        <button
+          id="importButton"
+          type="button"
+          data-testid="import-button"
+          aria-label="Import"
+          title="Import"
+        >
+          <span class="icon" aria-hidden="true">⬆</span>
+        </button>
+        <button
+          id="saveManagerButton"
+          type="button"
+          data-testid="save-manager-button"
+          aria-label="Save manager"
+          title="Save manager"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">💾</span>
+        </button>
+        <button
+          id="helpButton"
+          type="button"
+          data-testid="help-button"
+          aria-label="Help &amp; shortcuts"
+          title="Help &amp; shortcuts"
+        >
+          <span class="icon" aria-hidden="true">ℹ</span>
+        </button>
+        <button
+          id="settingsButton"
+          type="button"
+          data-testid="settings-button"
+          aria-label="Settings"
+          title="Settings"
+        >
+          <span class="icon" aria-hidden="true">⚙</span>
+        </button>
       </header>
       <div id="viewport">
-        <canvas
-          id="puzzleCanvas"
-          data-testid="puzzle-canvas"
-          width="640"
-          height="480"
-        ></canvas>
+        <div id="canvasStage">
+          <div id="canvasTransform">
+            <canvas
+              id="puzzleCanvas"
+              data-testid="puzzle-canvas"
+              width="640"
+              height="480"
+            ></canvas>
+          </div>
+        </div>
         <div id="previewOverlay" class="hidden" aria-hidden="true">
           <div>
             <canvas
@@ -587,24 +879,100 @@
         </div>
         <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
+            <img
+              id="sampleArtPreview"
+              class="sample-art"
+              alt="Capybara sample illustration"
+            />
             <h1>Drop an image to start</h1>
-            <p>Drag a picture anywhere on the screen or choose a file from your device.</p>
-            <button id="selectImage" type="button">Choose an image</button>
+            <p>
+              Drag a picture anywhere on the screen, choose a file from your device,
+              or jump straight into our capybara sample scene.
+            </p>
+            <div class="hint-actions">
+              <button id="selectImage" type="button">Choose an image</button>
+              <button
+                id="samplePuzzle"
+                type="button"
+                data-action="load-sample"
+                aria-label="Load capybara sample puzzle"
+              >
+                Try the capybara sample
+              </button>
+            </div>
           </div>
-        </div>
-        <div id="statusBar" role="status" data-testid="status-bar">
-          Drop an image anywhere to begin.
         </div>
       </div>
       <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div id="progress" aria-live="polite" data-testid="progress-message">
-          Drop an image to begin.
-        </div>
+        <div id="progress" aria-live="polite" data-testid="progress-message">—</div>
         <div id="palette" role="list"></div>
       </footer>
     </div>
     <input id="fileInput" type="file" accept=".json,image/*" hidden />
     <div id="sheetBackdrop" class="backdrop hidden" tabindex="-1"></div>
+    <div
+      id="helpSheet"
+      class="sheet hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="helpTitle"
+    >
+      <div class="sheet-header">
+        <h2 id="helpTitle">Help &amp; shortcuts</h2>
+        <button type="button" class="close-button" data-sheet-close="help">Close</button>
+      </div>
+      <div class="sheet-body">
+        <section class="sheet-section" aria-labelledby="commandsHeading">
+          <h3 id="commandsHeading">Command buttons</h3>
+          <dl class="command-list">
+            <dt>? Hint</dt>
+            <dd>Flash the smallest unfinished region and switch colours if needed.</dd>
+            <dt>↺ Reset</dt>
+            <dd>Clear every painted region and restart the current puzzle.</dd>
+            <dt>🖼 Preview</dt>
+            <dd>Toggle the finished artwork overlay to compare your progress.</dd>
+            <dt>🐹 Sample</dt>
+            <dd>Reload the built-in capybara puzzle for a fresh board.</dd>
+            <dt>⛶ Fullscreen</dt>
+            <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
+            <dt>⬆ Import</dt>
+            <dd>Load a new image or JSON puzzle from disk.</dd>
+            <dt>💾 Saves</dt>
+            <dd>Manage snapshots — load, rename, export, or delete stored games.</dd>
+            <dt>ℹ Help</dt>
+            <dd>Open this guide and inspect the live debug log.</dd>
+            <dt>⚙ Settings</dt>
+            <dd>Adjust generation sliders, toggle auto-advance, customise the background, or export JSON.</dd>
+          </dl>
+        </section>
+        <section class="sheet-section" aria-labelledby="controlsHeading">
+          <h3 id="controlsHeading">Canvas controls</h3>
+          <ul class="control-list">
+            <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
+            <li>Select a palette swatch to set the active colour and flash every matching region.</li>
+            <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
+            <li><kbd>Space</kbd> + drag (or middle/right drag) Pan the canvas.</li>
+            <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
+          </ul>
+        </section>
+        <section class="sheet-section" aria-labelledby="debugHeading">
+          <h3 id="debugHeading">Debug log</h3>
+          <p class="control-note">
+            Recent actions, selections, and generation events appear here while you play.
+          </p>
+          <div
+            id="debugLog"
+            class="debug-log"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions text"
+          ></div>
+          <div class="log-actions">
+            <button id="clearDebugLog" type="button">Clear log</button>
+          </div>
+        </section>
+      </div>
+    </div>
     <div
       id="settingsSheet"
       class="sheet hidden"
@@ -627,6 +995,16 @@
             <input id="hintFlashToggle" type="checkbox" checked />
             <span>Animate hint highlights</span>
           </label>
+        </section>
+        <section class="sheet-section" aria-labelledby="appearanceHeading">
+          <h3 id="appearanceHeading">Appearance</h3>
+          <label class="control">
+            <span>Background colour</span>
+            <input id="backgroundColor" type="color" value="#f8fafc" />
+          </label>
+          <p class="control-note">
+            Applies to unfinished regions and adjusts outline contrast automatically.
+          </p>
         </section>
         <section class="sheet-section" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Generator</h3>
@@ -681,23 +1059,35 @@
       </div>
     </div>
         <script>
+      // Cached DOM references so we can wire handlers without repeated lookups.
+      const appEl = document.getElementById("app");
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
+      const sampleButtons = Array.from(document.querySelectorAll('[data-action="load-sample"]'));
+      const samplePreview = document.getElementById("sampleArtPreview");
       const startHint = document.getElementById("startHint");
-      const statusEl = document.getElementById("statusBar");
       const hintButton = document.getElementById("hintButton");
       const resetButton = document.getElementById("resetButton");
       const previewToggle = document.getElementById("previewToggle");
+      const fullscreenButton = document.getElementById("fullscreenButton");
       const importButton = document.getElementById("importButton");
       const saveManagerButton = document.getElementById("saveManagerButton");
       const settingsButton = document.getElementById("settingsButton");
+      const helpButton = document.getElementById("helpButton");
       const closePreviewButton = document.getElementById("closePreview");
       const previewOverlay = document.getElementById("previewOverlay");
       const sheetBackdrop = document.getElementById("sheetBackdrop");
       const settingsSheet = document.getElementById("settingsSheet");
       const saveSheet = document.getElementById("saveSheet");
+      const helpSheet = document.getElementById("helpSheet");
+      const debugLogEl = document.getElementById("debugLog");
+      const clearDebugLogButton = document.getElementById("clearDebugLog");
+      const viewportEl = document.getElementById("viewport");
+      const canvasStage = document.getElementById("canvasStage");
+      const canvasTransform = document.getElementById("canvasTransform");
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
+      const backgroundColorInput = document.getElementById("backgroundColor");
       const colorCountEl = document.getElementById("colorCount");
       const minRegionEl = document.getElementById("minRegion");
       const detailEl = document.getElementById("detailLevel");
@@ -714,37 +1104,104 @@
       const previewCanvas = document.getElementById("previewCanvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
-      const SAVE_STORAGE_KEY = "capy.saves.v2";
 
+      // Settings sheet output mirrors we update while users drag sliders.
+      const optionOutputs = {
+        colorCount: settingsSheet.querySelector('output[data-for="colorCount"]'),
+        minRegion: settingsSheet.querySelector('output[data-for="minRegion"]'),
+        detail: settingsSheet.querySelector('output[data-for="detailLevel"]'),
+        sample: settingsSheet.querySelector('output[data-for="sampleRate"]'),
+        iterations: settingsSheet.querySelector('output[data-for="kmeansIters"]'),
+        smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
+      };
+      const SAVE_STORAGE_KEY = "capy.saves.v2";
+      const DEFAULT_BACKGROUND_HEX = "#f8fafc";
+      let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
+      let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
+
+      // Embedded sample used for onboarding and smoke tests.
+      const SAMPLE_ARTWORK = {
+        title: "Capybara Springs",
+        description: "A capybara with an orange crown relaxes beside a dachshund in a forest lagoon.",
+        dataUrl:
+          "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMjAgMjQwIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ic2t5IiB4MT0iMCIgeDI9IjAiIHkxPSIwIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2Y5ZThjOCIgLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOGNjMGZmIiAvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0id2F0ZXIiIHgxPSIwIiB4Mj0iMCIgeTE9IjAiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjNGU4Y2M5IiAvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMyNDRiNzQiIC8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJoaWxsIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzNmN2IzZiIgLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMjM1NzJmIiAvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ic3VuIiBjeD0iMC4xIiBjeT0iMC4xIiByPSIwLjgiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmZmY3YzMiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2YyYTkzYSIgLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIzMjAiIGhlaWdodD0iMTYwIiBmaWxsPSJ1cmwoI3NreSkiIC8+CiAgPHJlY3QgeT0iMTQwIiB3aWR0aD0iMzIwIiBoZWlnaHQ9IjEwMCIgZmlsbD0idXJsKCN3YXRlcikiIC8+CiAgPGVsbGlwc2UgY3g9IjI2MCIgY3k9IjY1IiByeD0iMjgiIHJ5PSIyOCIgZmlsbD0idXJsKCNzdW4pIiBvcGFjaXR5PSIwLjkiIC8+CiAgPHBhdGggZD0iTTAgMTIwIFE4MCA2MCAxNjAgMTIwIFQzMjAgMTIwIFYxNzAgSDAgWiIgZmlsbD0idXJsKCNoaWxsKSIgLz4KICA8cGF0aCBkPSJNMjgwIDQwIFEyNzAgMTEwIDMwMCAxMzAgTDMwMCAxNjAgUTI1MCAxNDAgMjYwIDgwIiBmaWxsPSIjNzRhMmRlIiBvcGFjaXR5PSIwLjciIC8+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNTIsMTIwKSI+CiAgICA8cGF0aCBkPSJNMjggMjggcTQwIC00MCA5NiAtMTggdDcyIDYwIHEtOCAzNiAtNDYgNDQgbC05MCA0IHEtNDAgLTYgLTUyIC0zNiB0MjAgLTU0IHoiIGZpbGw9IiNjMzhhNTUiIC8+CiAgICA8cGF0aCBkPSJNMzggMjYgcTIyIC0yMiA0NCAtMjQgdDQ2IDEyIHEyMCAxMCAzMiAzMCB0NCA0NCBxLTQgMjQgLTMyIDMyIGwtNjIgNiBxLTM0IDAgLTQ2IC0yMCB0LTIgLTQ4IHoiIGZpbGw9IiNhZTc0NDIiIC8+CiAgICA8ZWxsaXBzZSBjeD0iODYiIGN5PSI2NiIgcng9IjE2IiByeT0iMjAiIGZpbGw9IiNmNWM5OTUiIC8+CiAgICA8ZWxsaXBzZSBjeD0iNjAiIGN5PSI3NiIgcng9IjE4IiByeT0iMjIiIGZpbGw9IiNiOTdiNDMiIC8+CiAgICA8ZWxsaXBzZSBjeD0iMTA4IiBjeT0iNTYiIHJ4PSIxNCIgcnk9IjE4IiBmaWxsPSIjYjk3YjQzIiAvPgogICAgPGVsbGlwc2UgY3g9IjE0NiIgY3k9IjY0IiByeD0iMzIiIHJ5PSIzOCIgZmlsbD0iI2Q0OWI2MiIgLz4KICAgIDxlbGxpcHNlIGN4PSIxNjQiIGN5PSI3MCIgcng9IjIwIiByeT0iMjQiIGZpbGw9IiNjMzhhNTUiIC8+CiAgICA8ZWxsaXBzZSBjeD0iMTcwIiBjeT0iODAiIHJ4PSIxMCIgcnk9IjEyIiBmaWxsPSIjNzg0ZjMyIiAvPgogICAgPGVsbGlwc2UgY3g9IjEzNCIgY3k9IjYwIiByeD0iNiIgcnk9IjgiIGZpbGw9IiMyZDFjMTAiIC8+CiAgICA8ZWxsaXBzZSBjeD0iMTg4IiBjeT0iNzQiIHJ4PSI2IiByeT0iOCIgZmlsbD0iIzJkMWMxMCIgLz4KICAgIDxwYXRoIGQ9Ik0xNDAgOTYgcTE2IDEwIDMyIDAiIHN0cm9rZT0iIzJkMWMxMCIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIGZpbGw9Im5vbmUiIC8+CiAgICA8cGF0aCBkPSJNMTIyIDMyIHEyMCAtMjYgNDQgLTIyIHQ0MCAyNCBsLTEyIDggcS0yNCAtMTggLTQwIC0xOCB0LTMyIDEyIHoiIGZpbGw9IiNiNTc0MzUiIC8+CiAgICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxNDMsLTE4KSI+CiAgICAgIDxlbGxpcHNlIGN4PSIxMCIgY3k9IjEwIiByeD0iMTIiIHJ5PSIxMiIgZmlsbD0iI2YzN2IyNSIgLz4KICAgICAgPHBhdGggZD0iTTYgNiBsLTQgLTgiIHN0cm9rZT0iIzJkNjcyOSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIC8+CiAgICAgIDxwYXRoIGQ9Ik0xMCA1IHE0IC02IDEwIC0xMCIgc3Ryb2tlPSIjMmQ2NzI5IiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgLz4KICAgIDwvZz4KICA8L2c+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTg0LDE1NikiPgogICAgPHBhdGggZD0iTTAgMTQgcTEwIC0xOCAzMCAtMTggdDM2IDE2IHExMCAxNiAyIDMyIHQtMzAgMjAgcS0yNCA0IC0zNiAtOCB0LTEyIC0yOCBxMCAtOCAxMCAtMTQgeiIgZmlsbD0iIzhlNTIyOCIgLz4KICAgIDxlbGxpcHNlIGN4PSIzMCIgY3k9IjM4IiByeD0iMTgiIHJ5PSIxNiIgZmlsbD0iI2E3NjUzNCIgLz4KICAgIDxlbGxpcHNlIGN4PSI1NCIgY3k9IjM2IiByeD0iMTYiIHJ5PSIxMiIgZmlsbD0iI2JjN2E0NSIgLz4KICAgIDxlbGxpcHNlIGN4PSI3MCIgY3k9IjM0IiByeD0iMTIiIHJ5PSIxMCIgZmlsbD0iIzc4NDMyNCIgLz4KICAgIDxlbGxpcHNlIGN4PSI3MiIgY3k9IjMyIiByeD0iNCIgcnk9IjYiIGZpbGw9IiMyZDFjMTAiIC8+CiAgICA8cGF0aCBkPSJNMzAgMTYgcTE0IC02IDIyIDYiIHN0cm9rZT0iIzJkMWMxMCIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIC8+CiAgPC9nPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDMyLDE4NikiPgogICAgPGVsbGlwc2UgY3g9IjEyIiBjeT0iMTIiIHJ4PSIxMiIgcnk9IjEyIiBmaWxsPSIjZmJjZGQxIiAvPgogICAgPHJlY3QgeD0iOCIgeT0iMiIgd2lkdGg9IjgiIGhlaWdodD0iMTYiIHJ4PSI0IiBmaWxsPSIjZDU1ODY0IiAvPgogICAgPGNpcmNsZSBjeD0iMTIiIGN5PSI0IiByPSIzIiBmaWxsPSIjZmZmIiAvPgogIDwvZz4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3MCwxOTgpIj4KICAgIDxlbGxpcHNlIGN4PSIxMCIgY3k9IjEwIiByeD0iMTAiIHJ5PSIxMCIgZmlsbD0iI2ZiZDdhOCIgLz4KICAgIDxyZWN0IHg9IjYiIHk9IjIiIHdpZHRoPSI4IiBoZWlnaHQ9IjE0IiByeD0iNCIgZmlsbD0iI2QxNmYzMyIgLz4KICAgIDxjaXJjbGUgY3g9IjEwIiBjeT0iNCIgcj0iMyIgZmlsbD0iI2ZmZiIgLz4KICA8L2c+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMjgwLDE4OCkiPgogICAgPGVsbGlwc2UgY3g9IjEwIiBjeT0iMTAiIHJ4PSIxMCIgcnk9IjEwIiBmaWxsPSIjZmJkN2E4IiAvPgogICAgPHJlY3QgeD0iNiIgeT0iMiIgd2lkdGg9IjgiIGhlaWdodD0iMTQiIHJ4PSI0IiBmaWxsPSIjZDE2ZjMzIiAvPgogICAgPGNpcmNsZSBjeD0iMTAiIGN5PSI0IiByPSIzIiBmaWxsPSIjZmZmIiAvPgogIDwvZz4KICA8cGF0aCBkPSJNNDAgMjAwIHE2MCAyMCAxNDAgMCB0MTIwIDEyIHEtNDggMjQgLTE2MCAyMCB0LTE0MCAtMzIgcTIwIC0xMiA0MCAwIHoiIGZpbGw9IiMzZDZkYTUiIG9wYWNpdHk9IjAuNiIgLz4KPC9zdmc+Cg==",
+      };
+
+      if (samplePreview) {
+        samplePreview.src = SAMPLE_ARTWORK.dataUrl;
+        samplePreview.alt = SAMPLE_ARTWORK.description;
+        samplePreview.title = SAMPLE_ARTWORK.title;
+      }
+
+      // View state drives pan/zoom transforms. baseScale keeps the puzzle fit-to-screen while
+      // zoom holds user-controlled scaling.
+      const viewState = {
+        panX: 0,
+        panY: 0,
+        zoom: 1,
+        baseScale: 1,
+      };
+
+      let panPointerId = null;
+      const panOrigin = { x: 0, y: 0, panX: 0, panY: 0 };
+      let panCandidate = null;
+      let isPanning = false;
+      let spacePressed = false;
+      let colorFlashTimer = null;
+      const activeTouches = new Map();
+      let pinchSession = null;
+      let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
+
+      // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
         puzzle: null,
         activeColor: null,
         filled: new Set(),
         sourceUrl: null,
+        sourceTitle: null,
         lastOptions: null,
         settings: {
           autoAdvance: true,
           animateHints: true,
+          backgroundColor: DEFAULT_BACKGROUND_HEX,
         },
         previewVisible: false,
         saves: loadSavedEntries(),
+        previewImageData: null,
+        puzzleImageData: null,
       };
 
+      const debugLogEntries = [];
+      const DEBUG_LOG_LIMIT = 80;
+
       if (typeof window !== "undefined") {
+        // Public hooks for tests and manual loading. Keep backwards compatible.
         window.capyGenerator = {
           getState: () => state,
-          loadFromDataUrl(dataUrl) {
+          loadFromDataUrl(dataUrl, metadata) {
             if (typeof dataUrl !== "string" || dataUrl.length === 0) {
               return;
             }
             resetPuzzleUI();
-            statusEl.textContent = "Loading image...";
             state.sourceUrl = dataUrl;
+            const metadataTitle =
+              metadata && typeof metadata === "object"
+                ? typeof metadata.title === "string" && metadata.title.trim()
+                  ? metadata.title.trim()
+                  : null
+                : typeof metadata === "string" && metadata.trim()
+                ? metadata.trim()
+                : null;
+            state.sourceTitle = metadataTitle || "External data";
             startHint.classList.add("hidden");
+            logDebug(`Loading external puzzle data: ${state.sourceTitle}`);
             loadImage(dataUrl);
           },
           loadPuzzleFixture(puzzle) {
             return loadPuzzleFixtureData(puzzle);
+          },
+          setBackgroundColor(hex) {
+            applyBackgroundColor(hex);
           },
           togglePreview(show) {
             if (typeof show === "boolean") {
@@ -761,11 +1218,50 @@
       updateOptionOutputs();
       refreshSaveList();
       updateCommandStates();
+      renderDebugLog();
+      logDebug("Session started");
+      handleViewportChange({ log: true, recenter: true });
+      resetView({ recenter: true });
+
+      for (const button of sampleButtons) {
+        if (!button) continue;
+        button.title = `Play ${SAMPLE_ARTWORK.title}`;
+        button.addEventListener("click", () => {
+          loadSamplePuzzle();
+        });
+      }
+
+      if (SAMPLE_ARTWORK?.dataUrl) {
+        loadSamplePuzzle();
+      }
 
       selectButton.addEventListener("click", () => fileInput.click());
       importButton.addEventListener("click", () => fileInput.click());
       settingsButton.addEventListener("click", () => openSheet(settingsSheet));
       saveManagerButton.addEventListener("click", () => openSheet(saveSheet));
+      if (helpButton) {
+        helpButton.addEventListener("click", () => openSheet(helpSheet));
+      }
+
+      if (fullscreenButton) {
+        fullscreenButton.addEventListener("click", () => toggleFullscreen());
+        updateFullscreenState();
+      }
+
+      document.addEventListener("fullscreenchange", () => {
+        updateFullscreenState();
+        const active = Boolean(document.fullscreenElement);
+        logDebug(active ? "Entered fullscreen mode" : "Exited fullscreen mode");
+        handleViewportChange({ log: true, recenter: true });
+      });
+
+      if (clearDebugLogButton) {
+        clearDebugLogButton.addEventListener("click", () => {
+          debugLogEntries.splice(0, debugLogEntries.length);
+          renderDebugLog();
+          logDebug("Debug log cleared");
+        });
+      }
 
       for (const button of document.querySelectorAll('[data-sheet-close]')) {
         button.addEventListener("click", (event) => {
@@ -774,6 +1270,8 @@
             closeSheet(settingsSheet);
           } else if (target === "save") {
             closeSheet(saveSheet);
+          } else if (target === "help") {
+            closeSheet(helpSheet);
           }
         });
       }
@@ -797,11 +1295,22 @@
 
       autoAdvanceToggle.addEventListener("change", () => {
         state.settings.autoAdvance = autoAdvanceToggle.checked;
+        logDebug(`Auto-advance ${autoAdvanceToggle.checked ? "enabled" : "disabled"}`);
       });
 
       hintFlashToggle.addEventListener("change", () => {
         state.settings.animateHints = hintFlashToggle.checked;
+        logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
       });
+
+      if (backgroundColorInput) {
+        backgroundColorInput.addEventListener("input", (event) => {
+          applyBackgroundColor(event.target.value, { skipLog: true });
+        });
+        backgroundColorInput.addEventListener("change", (event) => {
+          applyBackgroundColor(event.target.value);
+        });
+      }
 
       hintButton.addEventListener("click", () => {
         useHint();
@@ -810,24 +1319,31 @@
       resetButton.addEventListener("click", () => {
         if (!state.puzzle) return;
         state.filled = new Set();
+        initializePuzzleImage();
         renderPuzzle();
         renderPalette();
+        if (state.activeColor != null) {
+          flashColorRegions(state.activeColor);
+        }
         updateProgress();
-        statusEl.textContent = "Progress reset.";
+        logDebug("Reset puzzle progress");
       });
 
       previewToggle.addEventListener("click", () => {
         state.previewVisible = !state.previewVisible;
         updatePreviewState();
+        logDebug(state.previewVisible ? "Opened preview overlay" : "Closed preview overlay");
       });
 
       closePreviewButton.addEventListener("click", () => {
         state.previewVisible = false;
         updatePreviewState();
+        logDebug("Closed preview overlay");
       });
 
       applyBtn.addEventListener("click", () => {
         if (applyBtn.disabled) return;
+        logDebug("Regenerating puzzle with current generator settings");
         regenerateFromSource();
       });
 
@@ -847,6 +1363,7 @@
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
         });
+        logDebug("Exported puzzle JSON");
       });
 
       saveSnapshotBtn.addEventListener("click", () => {
@@ -930,8 +1447,67 @@
         }
       });
 
+      // Viewport gesture wiring (mouse + pen):
+      // - pointerdown delegates to handlePanStart so modifier / middle / right clicks immediately
+      //   kick off panning while primary-button drags become "candidates" until they travel a few
+      //   pixels. That keeps simple taps available for the canvas click handler below.
+      // - pointermove promotes a stored candidate into a full pan session (capturing the pointer)
+      //   once it travels ~4px, then continuously applies deltas via handlePanMove.
+      // - pointerup/pointercancel tear down the session and restore the grab cursor. We also listen
+      //   for lostpointercapture so releasing the mouse outside the stage still resets state.
+      const pointerSurface = canvasStage || puzzleCanvas;
+      if (pointerSurface) {
+        const pointerOptions = { capture: true };
+        pointerSurface.addEventListener("pointerdown", handlePanStart, pointerOptions);
+        pointerSurface.addEventListener("pointermove", handlePanMove, pointerOptions);
+        pointerSurface.addEventListener("pointerup", handlePanEnd, pointerOptions);
+        pointerSurface.addEventListener("pointercancel", handlePanEnd, pointerOptions);
+        pointerSurface.addEventListener("lostpointercapture", handlePanEnd);
+        pointerSurface.addEventListener("wheel", handleWheel, { passive: false });
+        pointerSurface.addEventListener("contextmenu", (event) => event.preventDefault());
+      }
+      window.addEventListener("keydown", handleKeyDown, true);
+      window.addEventListener("keyup", handleKeyUp, true);
+      window.addEventListener("resize", () => handleViewportChange({ log: true }));
+      window.addEventListener("blur", () => {
+        spacePressed = false;
+        if (panPointerId != null) {
+          try {
+            canvasStage.releasePointerCapture(panPointerId);
+          } catch (error) {}
+        }
+        panPointerId = null;
+        panCandidate = null;
+        if (isPanning) {
+          document.body.classList.remove("panning");
+          isPanning = false;
+        }
+      });
+
+      if (window.screen?.orientation && typeof window.screen.orientation.addEventListener === "function") {
+        window.screen.orientation.addEventListener("change", () =>
+          handleViewportChange({ log: true, recenter: true })
+        );
+      } else if (window.matchMedia) {
+        const orientationQuery = window.matchMedia("(orientation: portrait)");
+        const orientationListener = () => handleViewportChange({ log: true, recenter: true });
+        if (typeof orientationQuery.addEventListener === "function") {
+          orientationQuery.addEventListener("change", orientationListener);
+        } else if (typeof orientationQuery.addListener === "function") {
+          orientationQuery.addListener(orientationListener);
+        }
+      }
+
+      // Puzzle fill interaction: click to paint if the region matches the active colour.
       puzzleCanvas.addEventListener("click", (event) => {
-        if (!state.puzzle || state.activeColor == null) return;
+        if (!state.puzzle) {
+          logDebug("Ignoring canvas click: no puzzle loaded yet");
+          return;
+        }
+        if (state.activeColor == null) {
+          logDebug("Ignoring canvas click: no active colour selected");
+          return;
+        }
         const rect = puzzleCanvas.getBoundingClientRect();
         const scaleX = puzzleCanvas.width / rect.width;
         const scaleY = puzzleCanvas.height / rect.height;
@@ -940,19 +1516,34 @@
         const idx = y * puzzleCanvas.width + x;
         const regionId = state.puzzle.regionMap[idx];
         const region = state.puzzle.regions[regionId];
-        if (!region) return;
-        if (state.filled.has(regionId)) return;
+        if (!region) {
+          logDebug("Ignoring canvas click: no region mapped under pointer");
+          return;
+        }
+        if (state.filled.has(regionId)) {
+          logDebug(`Region ${region.id} already filled; ignoring click`);
+          return;
+        }
         if (region.colorId !== state.activeColor) {
           if (state.settings.animateHints) {
             flashRegion(regionId, "rgba(250, 204, 21, 0.55)");
           }
-          statusEl.textContent = `Try colour ${region.colorId} for that region.`;
+          logDebug(
+            `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
+          );
           return;
         }
         state.filled.add(regionId);
+        applyRegionToImage(regionId);
         renderPuzzle();
         renderPalette();
+        if (state.activeColor != null) {
+          flashColorRegions(state.activeColor);
+        }
         updateProgress();
+        logDebug(
+          `Filled region ${region.id} with colour #${region.colorId} (${state.filled.size}/${state.puzzle.regions.length})`
+        );
         if (state.settings.autoAdvance) {
           autoAdvanceColor(region.colorId);
         }
@@ -966,15 +1557,21 @@
 
       function closeSheet(sheet) {
         sheet.classList.add("hidden");
-        if (settingsSheet.classList.contains("hidden") && saveSheet.classList.contains("hidden")) {
+        const sheets = [settingsSheet, saveSheet, helpSheet];
+        const anyOpen = sheets.some((panel) => panel && !panel.classList.contains("hidden"));
+        if (!anyOpen) {
           sheetBackdrop.classList.add("hidden");
           document.body.classList.remove("sheet-open");
         }
       }
 
       function closeAllSheets() {
-        settingsSheet.classList.add("hidden");
-        saveSheet.classList.add("hidden");
+        const sheets = [settingsSheet, saveSheet, helpSheet];
+        for (const panel of sheets) {
+          if (panel) {
+            panel.classList.add("hidden");
+          }
+        }
         sheetBackdrop.classList.add("hidden");
         document.body.classList.remove("sheet-open");
       }
@@ -983,12 +1580,100 @@
         if (state.previewVisible && state.puzzle) {
           previewOverlay.classList.remove("hidden");
           previewOverlay.setAttribute("aria-hidden", "false");
-          previewToggle.textContent = "Hide preview";
+          previewToggle.setAttribute("aria-pressed", "true");
+          previewToggle.setAttribute("aria-label", "Hide preview");
+          previewToggle.title = "Hide preview";
+          previewToggle.classList.add("active");
         } else {
           previewOverlay.classList.add("hidden");
           previewOverlay.setAttribute("aria-hidden", "true");
-          previewToggle.textContent = "Preview";
+          previewToggle.setAttribute("aria-pressed", "false");
+          previewToggle.setAttribute("aria-label", "Show preview");
+          previewToggle.title = "Show preview";
+          previewToggle.classList.remove("active");
         }
+      }
+
+      function updateFullscreenState() {
+        if (!fullscreenButton) return;
+        const active = Boolean(document.fullscreenElement);
+        fullscreenButton.classList.toggle("active", active);
+        fullscreenButton.setAttribute("aria-pressed", active ? "true" : "false");
+        fullscreenButton.setAttribute("aria-label", active ? "Exit fullscreen" : "Enter fullscreen");
+        fullscreenButton.title = active ? "Exit fullscreen" : "Enter fullscreen";
+        const icon = fullscreenButton.querySelector(".icon");
+        if (icon) {
+          icon.textContent = active ? "🗗" : "⛶";
+        }
+        fullscreenButton.disabled = !document.fullscreenEnabled && !active;
+      }
+
+      function toggleFullscreen() {
+        if (!fullscreenButton) return;
+        if (document.fullscreenElement) {
+          if (document.exitFullscreen) {
+            document.exitFullscreen().catch((error) => {
+              console.error("Failed to exit fullscreen", error);
+              logDebug("Unable to exit fullscreen");
+            });
+          }
+          return;
+        }
+        const target = appEl || document.documentElement;
+        if (!document.fullscreenEnabled || !target?.requestFullscreen) {
+          logDebug("Fullscreen not supported in this browser");
+          return;
+        }
+        target.requestFullscreen().catch((error) => {
+          console.error("Failed to enter fullscreen", error);
+          logDebug("Fullscreen request was blocked");
+        });
+      }
+
+      function updateViewportMetrics() {
+        const width = Math.round(window.innerWidth || document.documentElement.clientWidth || 0);
+        const height = Math.round(window.innerHeight || document.documentElement.clientHeight || 0);
+        const orientation = width >= height ? "landscape" : "portrait";
+        document.documentElement.style.setProperty("--app-width", `${width}px`);
+        document.documentElement.style.setProperty("--app-height", `${height}px`);
+        const minSide = Math.max(1, Math.min(width, height));
+        const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
+        document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
+        if (document.body) {
+          document.body.dataset.orientation = orientation;
+        }
+        const changed = orientation !== lastViewportMetrics.orientation;
+        const sizeChanged = width !== lastViewportMetrics.width || height !== lastViewportMetrics.height;
+        lastViewportMetrics = { orientation, width, height };
+        return { orientation, changed, sizeChanged, width, height };
+      }
+
+      function handleViewportChange(options = {}) {
+        const { log = false, recenter = false } = options;
+        const metrics = updateViewportMetrics();
+        const orientationChanged = metrics.changed;
+        if (orientationChanged) {
+          logDebug(`Orientation changed to ${metrics.orientation}`);
+        } else if (log && metrics.sizeChanged) {
+          logDebug(`Viewport resized to ${metrics.width}×${metrics.height} (${metrics.orientation})`);
+        }
+        if (state.puzzle) {
+          resetView({ preserveZoom: true, recenter: recenter || orientationChanged });
+        }
+      }
+
+      function loadSamplePuzzle(options = {}) {
+        const { announce = true } = options;
+        const { dataUrl } = SAMPLE_ARTWORK;
+        if (!dataUrl) return;
+        resetPuzzleUI();
+        state.sourceUrl = dataUrl;
+        state.sourceTitle = SAMPLE_ARTWORK.title || "Sample puzzle";
+        startHint.classList.add("hidden");
+        if (announce) {
+          logDebug(`Loading sample puzzle: ${state.sourceTitle}`);
+        }
+        loadImage(dataUrl);
       }
 
       function updateCommandStates() {
@@ -1001,19 +1686,92 @@
         saveManagerButton.disabled = !hasPuzzle && state.saves.length === 0;
       }
 
+      function renderDebugLog() {
+        if (!debugLogEl) return;
+        debugLogEl.innerHTML = "";
+        if (debugLogEntries.length === 0) {
+          const empty = document.createElement("p");
+          empty.className = "log-empty";
+          empty.textContent = "No events yet.";
+          debugLogEl.appendChild(empty);
+          return;
+        }
+        const fragment = document.createDocumentFragment();
+        for (let index = debugLogEntries.length - 1; index >= 0; index -= 1) {
+          const entry = debugLogEntries[index];
+          const item = document.createElement("div");
+          item.className = "log-entry";
+          const time = document.createElement("time");
+          time.dateTime = entry.iso;
+          time.textContent = entry.display;
+          const message = document.createElement("span");
+          message.textContent = entry.message;
+          item.appendChild(time);
+          item.appendChild(message);
+          fragment.appendChild(item);
+        }
+        debugLogEl.appendChild(fragment);
+        debugLogEl.scrollTop = 0;
+      }
+
+      function logDebug(message) {
+        if (message == null) return;
+        const now = new Date();
+        const entry = {
+          iso: now.toISOString(),
+          display: now.toLocaleTimeString([], {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+          message: String(message),
+        };
+        debugLogEntries.push(entry);
+        if (debugLogEntries.length > DEBUG_LOG_LIMIT) {
+          debugLogEntries.splice(0, debugLogEntries.length - DEBUG_LOG_LIMIT);
+        }
+        renderDebugLog();
+      }
+
+      function applyBackgroundColor(hex, options = {}) {
+        const { skipRender = false, skipLog = false, force = false } = options;
+        const current = state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX;
+        const normalized = sanitizeHexColor(hex, current);
+        const changed = force || normalized !== current;
+        state.settings.backgroundColor = normalized;
+        backgroundPixel = [...hexToRgb(normalized), 255];
+        backgroundInk = computeInkStyles(normalized);
+        if (backgroundColorInput && backgroundColorInput.value !== normalized) {
+          backgroundColorInput.value = normalized;
+        }
+        if (!changed) {
+          return normalized;
+        }
+        if (!skipRender) {
+          if (state.puzzle) {
+            initializePuzzleImage();
+            renderPuzzle();
+          } else {
+            puzzleCtx.save();
+            puzzleCtx.fillStyle = normalized;
+            puzzleCtx.fillRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
+            puzzleCtx.restore();
+          }
+        }
+        if (changed && !skipLog) {
+          logDebug(`Background colour set to ${normalized.toUpperCase()}`);
+        }
+        return normalized;
+      }
+
       function updateOptionOutputs() {
-        const colorOutput = settingsSheet.querySelector('output[data-for="colorCount"]');
-        const minRegionOutput = settingsSheet.querySelector('output[data-for="minRegion"]');
-        const detailOutput = settingsSheet.querySelector('output[data-for="detailLevel"]');
-        const sampleOutput = settingsSheet.querySelector('output[data-for="sampleRate"]');
-        const iterOutput = settingsSheet.querySelector('output[data-for="kmeansIters"]');
-        const smoothOutput = settingsSheet.querySelector('output[data-for="smoothingPasses"]');
-        if (colorOutput) colorOutput.textContent = String(colorCountEl.value);
-        if (minRegionOutput) minRegionOutput.textContent = `${minRegionEl.value} px²`;
-        if (detailOutput) detailOutput.textContent = `${detailEl.value} px`;
-        if (sampleOutput) sampleOutput.textContent = `${sampleRateEl.value}%`;
-        if (iterOutput) iterOutput.textContent = String(kmeansItersEl.value);
-        if (smoothOutput) smoothOutput.textContent = String(smoothingEl.value);
+        if (optionOutputs.colorCount) optionOutputs.colorCount.textContent = String(colorCountEl.value);
+        if (optionOutputs.minRegion) optionOutputs.minRegion.textContent = `${minRegionEl.value} px²`;
+        if (optionOutputs.detail) optionOutputs.detail.textContent = `${detailEl.value} px`;
+        if (optionOutputs.sample) optionOutputs.sample.textContent = `${sampleRateEl.value}%`;
+        if (optionOutputs.iterations) optionOutputs.iterations.textContent = String(kmeansItersEl.value);
+        if (optionOutputs.smoothing) optionOutputs.smoothing.textContent = String(smoothingEl.value);
       }
 
       function markOptionsDirty() {
@@ -1047,7 +1805,6 @@
 
       function regenerateFromSource() {
         if (!state.sourceUrl) return;
-        statusEl.textContent = "Updating puzzle with new settings...";
         loadImage(state.sourceUrl);
       }
 
@@ -1058,34 +1815,47 @@
           reader.onload = () => {
             try {
               const payload = JSON.parse(reader.result);
-              if (applyPuzzleResult(payload, { options: payload.options || getCurrentOptions(), filled: payload.filled })) {
-                statusEl.textContent = "Imported puzzle JSON.";
+              const providedTitle =
+                typeof payload.title === "string" && payload.title.trim() ? payload.title.trim() : null;
+              const fallbackTitle = file.name || "Imported puzzle";
+              const resolvedTitle = providedTitle || fallbackTitle;
+              state.sourceTitle = resolvedTitle;
+              if (
+                applyPuzzleResult(payload, {
+                  options: payload.options || getCurrentOptions(),
+                  filled: payload.filled,
+                  activeColor: payload.activeColor,
+                  backgroundColor: payload.backgroundColor,
+                  title: resolvedTitle,
+                })
+              ) {
                 startHint.classList.add("hidden");
                 state.sourceUrl = payload.sourceUrl || null;
+                logDebug(`Imported puzzle from JSON: ${resolvedTitle}`);
               }
             } catch (error) {
               console.error(error);
-              statusEl.textContent = "Could not parse that JSON puzzle.";
             }
           };
           reader.readAsText(file);
           return;
         }
         resetPuzzleUI();
-        statusEl.textContent = "Loading image...";
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result;
           if (typeof result === "string") {
             state.sourceUrl = result;
+            state.sourceTitle = file.name || "Imported image";
             startHint.classList.add("hidden");
+            logDebug(`Generating puzzle from image: ${state.sourceTitle}`);
             loadImage(result);
           } else {
-            statusEl.textContent = "Unsupported file format.";
+            console.error("Unsupported file format");
           }
         };
         reader.onerror = () => {
-          statusEl.textContent = "Unable to read that file.";
+          console.error("Unable to read that file.");
         };
         reader.readAsDataURL(file);
       }
@@ -1095,35 +1865,51 @@
         img.crossOrigin = "anonymous";
         img.onload = async () => {
           try {
-            statusEl.textContent = "Preparing puzzle...";
             const options = getCurrentOptions();
             const data = await createPuzzleData(img, options);
-            const applied = applyPuzzleResult(data, { options });
-            if (applied) {
-              statusEl.textContent = `Generated ${state.puzzle.regions.length} regions across ${state.puzzle.palette.length} colours.`;
-            }
+            const title = state.sourceTitle || "Generated puzzle";
+            applyPuzzleResult(data, {
+              options,
+              title,
+              backgroundColor: state.settings.backgroundColor,
+            });
           } catch (error) {
-            console.error(error);
-            statusEl.textContent = "Something went wrong while generating the puzzle.";
+            console.error("Failed to create puzzle", error);
           }
         };
         img.onerror = () => {
-          statusEl.textContent = "Unable to read that image.";
+          console.error("Unable to read that image.");
         };
         img.src = url;
       }
 
       function resetPuzzleUI() {
+        if (colorFlashTimer) {
+          clearTimeout(colorFlashTimer);
+          colorFlashTimer = null;
+        }
+        delete canvasStage.dataset.flashingColor;
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
+        state.sourceUrl = null;
+        state.sourceTitle = null;
         paletteEl.innerHTML = "";
-        progressEl.textContent = "Processing...";
+        progressEl.textContent = "…";
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        state.previewImageData = null;
+        state.puzzleImageData = null;
         state.previewVisible = false;
         updatePreviewState();
         updateCommandStates();
+        activeTouches.clear();
+        pinchSession = null;
+        panPointerId = null;
+        panCandidate = null;
+        isPanning = false;
+        document.body.classList.remove("panning");
+        resetView({ recenter: true });
       }
 
       async function createPuzzleData(image, options) {
@@ -1138,14 +1924,11 @@
         ctx.drawImage(image, 0, 0, width, height);
         const imageData = ctx.getImageData(0, 0, width, height);
         const pixels = imageData.data;
-        statusEl.textContent = "Running k-means clustering...";
         const { centroids, assignments } = kmeansQuantize(pixels, width, height, targetColors, kmeansIters, sampleRate);
         let workingAssignments = assignments;
         if (smoothingPasses > 0) {
-          statusEl.textContent = "Smoothing regions...";
           workingAssignments = smoothAssignments(assignments, width, height, smoothingPasses);
         }
-        statusEl.textContent = "Cleaning tiny regions...";
         const { regionMap, regions } = segmentRegions(width, height, workingAssignments, minRegion);
         for (const region of regions) {
           let sumX = 0;
@@ -1158,11 +1941,15 @@
           region.cy = sumY / region.pixelCount;
           region.colorId += 1;
         }
-        const palette = centroids.map((c, idx) => ({
-          id: idx + 1,
-          hex: `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`,
-          rgba: c,
-        }));
+        const palette = centroids.map((c, idx) => {
+          const hex = `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`;
+          return {
+            id: idx + 1,
+            hex,
+            rgba: c,
+            name: hex.toUpperCase(),
+          };
+        });
         return {
           width,
           height,
@@ -1174,25 +1961,36 @@
 
       function applyPuzzleResult(data, metadata = {}) {
         if (!data || typeof data.width !== "number" || typeof data.height !== "number") {
-          statusEl.textContent = "Puzzle data missing required dimensions.";
+          console.error("Puzzle data missing required dimensions.");
           return false;
         }
         if (!Array.isArray(data.palette) || !Array.isArray(data.regions)) {
-          statusEl.textContent = "Puzzle data missing palette information.";
+          console.error("Puzzle data missing palette information.");
           return false;
         }
         const mapSource = Array.from(data.regionMap ?? []);
         if (mapSource.length !== data.width * data.height) {
-          statusEl.textContent = "Puzzle data is inconsistent.";
+          console.error("Puzzle data is inconsistent.");
           return false;
         }
         const palette = data.palette.map((entry, index) => {
           const hex = entry.hex ?? "#ffffff";
           const rgba = Array.isArray(entry.rgba) ? entry.rgba.slice(0, 3) : hexToRgb(hex);
+          const providedName =
+            typeof entry.name === "string" && entry.name.trim()
+              ? entry.name.trim()
+              : typeof entry.label === "string" && entry.label.trim()
+              ? entry.label.trim()
+              : typeof entry.title === "string" && entry.title.trim()
+              ? entry.title.trim()
+              : null;
+          const id = entry.id ?? index + 1;
+          const fallbackName = typeof hex === "string" ? hex.toUpperCase() : `Colour ${id}`;
           return {
-            id: entry.id ?? index + 1,
+            id,
             hex,
             rgba,
+            name: providedName || fallbackName,
           };
         });
         const regions = data.regions.map((region, index) => {
@@ -1220,6 +2018,19 @@
           };
         });
         const regionMap = new Int32Array(mapSource);
+        const metadataTitle =
+          typeof metadata.title === "string" && metadata.title.trim() ? metadata.title.trim() : null;
+        if (metadataTitle) {
+          state.sourceTitle = metadataTitle;
+        } else if (typeof data.title === "string" && data.title.trim()) {
+          state.sourceTitle = data.title.trim();
+        }
+        const paletteIds = new Set(palette.map((entry) => entry.id));
+        const requestedColor = metadata.activeColor ?? palette[0]?.id ?? null;
+        const backgroundHex = sanitizeHexColor(
+          metadata.backgroundColor ?? data.backgroundColor ?? state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX,
+          state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX
+        );
         state.puzzle = {
           width: data.width,
           height: data.height,
@@ -1227,30 +2038,60 @@
           regions,
           regionMap,
         };
-        state.activeColor = metadata.activeColor ?? palette[0]?.id ?? null;
+        state.puzzle.backgroundColor = backgroundHex;
+        state.activeColor =
+          requestedColor != null && paletteIds.has(requestedColor)
+            ? requestedColor
+            : palette[0]?.id ?? null;
         state.filled = new Set(metadata.filled ?? []);
         state.lastOptions = metadata.options ?? getCurrentOptions();
+        applyBackgroundColor(backgroundHex, { skipRender: true, skipLog: true });
         puzzleCanvas.width = data.width;
         puzzleCanvas.height = data.height;
         previewCanvas.width = data.width;
         previewCanvas.height = data.height;
         renderPreview();
+        initializePuzzleImage();
         renderPuzzle();
         renderPalette();
+        if (state.activeColor != null) {
+          flashColorRegions(state.activeColor, { duration: 360 });
+        }
         updateProgress();
         updateCommandStates();
         updatePreviewState();
         markOptionsDirty();
+        resetView({ recenter: true });
+        const paletteCount = palette.length;
+        const regionCount = regions.length;
+        const descriptor =
+          metadataTitle ||
+          (typeof data.title === "string" && data.title.trim()) ||
+          (state.sourceTitle && state.sourceTitle.trim()) ||
+          "Puzzle";
+        logDebug(
+          `Loaded ${descriptor} (${data.width}×${data.height}, ${paletteCount} colours, ${regionCount} regions)`
+        );
         return true;
       }
 
       function loadPuzzleFixtureData(puzzle) {
         if (!puzzle) return false;
         resetPuzzleUI();
-        const applied = applyPuzzleResult(puzzle, { options: getCurrentOptions(), filled: puzzle.filled });
+        const resolvedTitle =
+          (typeof puzzle.name === "string" && puzzle.name.trim()) ||
+          (typeof puzzle.title === "string" && puzzle.title.trim()) ||
+          "Fixture puzzle";
+        state.sourceTitle = resolvedTitle;
+        const applied = applyPuzzleResult(puzzle, {
+          options: getCurrentOptions(),
+          filled: puzzle.filled,
+          activeColor: puzzle.activeColor,
+          backgroundColor: puzzle.backgroundColor,
+          title: resolvedTitle,
+        });
         if (applied) {
           startHint.classList.add("hidden");
-          statusEl.textContent = `Loaded ${state.puzzle.regions.length} regions across ${state.puzzle.palette.length} colours.`;
         }
         return applied;
       }
@@ -1273,29 +2114,66 @@
           }
         }
         previewCtx.putImageData(imageData, 0, 0);
+        state.previewImageData = imageData;
+      }
+
+      function initializePuzzleImage() {
+        if (!state.puzzle) return;
+        const { width, height } = state.puzzle;
+        const imageData = new ImageData(width, height);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = backgroundPixel[0];
+          data[i + 1] = backgroundPixel[1];
+          data[i + 2] = backgroundPixel[2];
+          data[i + 3] = backgroundPixel[3];
+        }
+        state.puzzleImageData = imageData;
+        if (state.filled.size > 0) {
+          applyFilledRegionsToImage();
+        }
+      }
+
+      function applyFilledRegionsToImage() {
+        if (!state.puzzle || !state.puzzleImageData) return;
+        for (const regionId of state.filled) {
+          applyRegionToImage(regionId);
+        }
+      }
+
+      function applyRegionToImage(regionId) {
+        if (!state.puzzle || !state.previewImageData || !state.puzzleImageData) return;
+        const region = state.puzzle.regions[regionId];
+        if (!region) return;
+        const previewData = state.previewImageData.data;
+        const targetData = state.puzzleImageData.data;
+        for (const idx of region.pixels) {
+          const base = idx * 4;
+          targetData[base] = previewData[base];
+          targetData[base + 1] = previewData[base + 1];
+          targetData[base + 2] = previewData[base + 2];
+          targetData[base + 3] = 255;
+        }
       }
 
       function renderPuzzle() {
         if (!state.puzzle) return;
-        const { width, height, regions, palette } = state.puzzle;
-        puzzleCtx.save();
-        puzzleCtx.clearRect(0, 0, width, height);
-        puzzleCtx.fillStyle = "#f8fafc";
-        puzzleCtx.fillRect(0, 0, width, height);
-        for (const region of regions) {
-          if (!state.filled.has(region.id)) continue;
-          const color = palette[region.colorId - 1];
-          if (!color) continue;
-          puzzleCtx.fillStyle = color.hex;
-          for (const idx of region.pixels) {
-            const x = idx % width;
-            const y = (idx / width) | 0;
-            puzzleCtx.fillRect(x, y, 1, 1);
-          }
+        const { width, height } = state.puzzle;
+        if (
+          !state.puzzleImageData ||
+          state.puzzleImageData.width !== width ||
+          state.puzzleImageData.height !== height
+        ) {
+          initializePuzzleImage();
+        }
+        if (state.puzzleImageData) {
+          puzzleCtx.putImageData(state.puzzleImageData, 0, 0);
+        } else {
+          puzzleCtx.fillStyle = state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX;
+          puzzleCtx.fillRect(0, 0, width, height);
         }
         drawOutlines();
         drawNumbers();
-        puzzleCtx.restore();
       }
 
       function drawNumbers() {
@@ -1303,7 +2181,7 @@
         const { regions, width } = state.puzzle;
         const fontSize = Math.max(10, Math.round(width / 45));
         puzzleCtx.font = `${fontSize}px "Inter", "Segoe UI", sans-serif`;
-        puzzleCtx.fillStyle = "rgba(15, 23, 42, 0.95)";
+        puzzleCtx.fillStyle = backgroundInk.number;
         puzzleCtx.textAlign = "center";
         puzzleCtx.textBaseline = "middle";
         for (const region of regions) {
@@ -1315,7 +2193,7 @@
       function drawOutlines() {
         if (!state.puzzle) return;
         const { width, height, regionMap } = state.puzzle;
-        puzzleCtx.fillStyle = "rgba(15, 23, 42, 0.65)";
+        puzzleCtx.fillStyle = backgroundInk.outline;
         for (let y = 0; y < height; y++) {
           for (let x = 0; x < width; x++) {
             const idx = y * width + x;
@@ -1331,37 +2209,66 @@
         }
       }
 
+      function activateColor(colorId, options = {}) {
+        if (!state.puzzle) return false;
+        if (colorId == null) return false;
+        const { flash = true, redraw = true } = options;
+        const hasColour = state.puzzle.palette.some((entry) => entry.id === colorId);
+        if (!hasColour) return false;
+        const changed = state.activeColor !== colorId;
+        state.activeColor = colorId;
+        if (redraw) {
+          renderPalette();
+        }
+        if (flash) {
+          flashColorRegions(colorId);
+        }
+        const remaining = getRegionsByColor(colorId, { includeFilled: false }).length;
+        const suffix = remaining > 0 ? `${remaining} regions remaining` : "complete";
+        logDebug(`${changed ? "Selected" : "Re-selected"} colour #${colorId} (${suffix})`);
+        return changed;
+      }
+
       function renderPalette() {
         paletteEl.innerHTML = "";
         if (!state.puzzle) return;
-        const colorCounts = new Map();
+        const totalByColor = new Map();
+        const remainingByColor = new Map();
         for (const region of state.puzzle.regions) {
-          const count = colorCounts.get(region.colorId) || 0;
-          colorCounts.set(region.colorId, count + 1);
+          const total = totalByColor.get(region.colorId) || 0;
+          totalByColor.set(region.colorId, total + 1);
+          if (!state.filled.has(region.id)) {
+            const remaining = remainingByColor.get(region.colorId) || 0;
+            remainingByColor.set(region.colorId, remaining + 1);
+          }
         }
         for (const color of state.puzzle.palette) {
-          const remaining = state.puzzle.regions.filter(
-            (region) => region.colorId === color.id && !state.filled.has(region.id)
-          ).length;
+          const remaining = remainingByColor.get(color.id) || 0;
+          const total = totalByColor.get(color.id) || 0;
+          const labelText =
+            (typeof color.name === "string" && color.name.trim()) ||
+            (typeof color.hex === "string" ? color.hex.toUpperCase() : `Colour ${color.id}`);
           const swatch = document.createElement("button");
           swatch.type = "button";
           swatch.className = "swatch";
           swatch.dataset.testid = "palette-swatch";
           swatch.dataset.colorId = String(color.id);
           swatch.setAttribute("role", "listitem");
+          swatch.setAttribute(
+            "aria-label",
+            `Colour ${color.id}: ${labelText}. ${remaining} of ${total} regions remaining.`
+          );
+          swatch.title = `${labelText} · ${remaining} of ${total} remaining`;
           if (state.activeColor === color.id) swatch.classList.add("active");
           if (remaining === 0) swatch.classList.add("done");
+          swatch.style.setProperty("--swatch-color", color.hex || "transparent");
           swatch.innerHTML = `
-            <span class="sample" style="background:${color.hex}"></span>
-            <span class="info">
-              <strong>Colour ${color.id}</strong>
-              <span>${color.hex.toUpperCase()} · ${colorCounts.get(color.id) || 0} cells</span>
-              <span>${remaining} remaining</span>
+            <span class="label">
+              <strong>${color.id}</strong>
             </span>
           `;
           swatch.addEventListener("click", () => {
-            state.activeColor = color.id;
-            renderPalette();
+            activateColor(color.id);
           });
           paletteEl.appendChild(swatch);
         }
@@ -1369,23 +2276,343 @@
 
       function updateProgress() {
         if (!state.puzzle) {
-          progressEl.textContent = "Load an image to begin.";
+          progressEl.textContent = "—";
           return;
         }
         const total = state.puzzle.regions.length;
         const done = state.filled.size;
-        if (done === total) {
-          progressEl.textContent = "Puzzle complete! Download the data or try another image.";
-        } else {
-          progressEl.textContent = `Filled ${done} of ${total} regions.`;
+        progressEl.textContent = `${done}/${total}`;
+      }
+
+      function handleKeyDown(event) {
+        const target = event.target;
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          (target instanceof HTMLElement && target.isContentEditable)
+        ) {
+          return;
         }
+
+        if (event.code === "Space") {
+          if (!event.repeat) {
+            spacePressed = true;
+          }
+          if (
+            target === document.body ||
+            target === viewportEl ||
+            target === canvasStage ||
+            target === canvasTransform ||
+            target === puzzleCanvas
+          ) {
+            event.preventDefault();
+          }
+          return;
+        }
+
+        if (!state.puzzle) return;
+
+        const key = event.key;
+        if (key === "+" || key === "=" || event.code === "Equal" || event.code === "NumpadAdd") {
+          event.preventDefault();
+          applyZoom(1.1);
+          return;
+        }
+
+        if (key === "-" || event.code === "Minus" || event.code === "NumpadSubtract") {
+          event.preventDefault();
+          applyZoom(0.9);
+        }
+      }
+
+      function handleKeyUp(event) {
+        if (event.code === "Space") {
+          spacePressed = false;
+        }
+      }
+
+      function beginPanSession(pointerId, originX, originY, startPanX, startPanY) {
+        panPointerId = pointerId;
+        panOrigin.x = originX;
+        panOrigin.y = originY;
+        panOrigin.panX = startPanX;
+        panOrigin.panY = startPanY;
+        panCandidate = null;
+        isPanning = true;
+        document.body.classList.add("panning");
+        logDebug("Began panning view");
+        try {
+          canvasStage.setPointerCapture(pointerId);
+        } catch (error) {}
+      }
+
+      function handlePanStart(event) {
+        if (!state.puzzle) return;
+        panCandidate = null;
+        const isTouch = event.pointerType === "touch";
+        if (isTouch) {
+          event.preventDefault();
+          activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          if (!pinchSession && activeTouches.size >= 2) {
+            const entries = Array.from(activeTouches.entries()).slice(0, 2);
+            const first = entries[0];
+            const second = entries[1];
+            if (first && second) {
+              const a = first[1];
+              const b = second[1];
+              const distance = Math.max(10, Math.hypot(b.x - a.x, b.y - a.y));
+              pinchSession = {
+                ids: [first[0], second[0]],
+                initialDistance: distance,
+                initialZoom: viewState.zoom,
+                initialPanX: viewState.panX,
+                initialPanY: viewState.panY,
+                centerX: (a.x + b.x) / 2,
+                centerY: (a.y + b.y) / 2,
+                hasChanged: false,
+              };
+              document.body.classList.add("panning");
+              isPanning = true;
+              logDebug("Pinch zoom started");
+            }
+          } else if (!pinchSession) {
+            panCandidate = {
+              pointerId: event.pointerId,
+              startX: event.clientX,
+              startY: event.clientY,
+              panX: viewState.panX,
+              panY: viewState.panY,
+              pointerType: "touch",
+            };
+          }
+          return;
+        }
+        const usesModifier = spacePressed || event.altKey || event.ctrlKey || event.metaKey;
+        const auxButton = event.button === 1 || event.button === 2;
+        if (auxButton || usesModifier) {
+          event.preventDefault();
+          beginPanSession(
+            event.pointerId,
+            event.clientX,
+            event.clientY,
+            viewState.panX,
+            viewState.panY
+          );
+          return;
+        }
+        if (event.button === 0) {
+          panCandidate = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            panX: viewState.panX,
+            panY: viewState.panY,
+            pointerType: "mouse",
+          };
+        }
+      }
+
+      function handlePanMove(event) {
+        const isTouch = event.pointerType === "touch";
+        if (isTouch) {
+          if (activeTouches.has(event.pointerId)) {
+            activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          }
+          if (
+            pinchSession &&
+            pinchSession.ids.every((id) => activeTouches.has(id))
+          ) {
+            event.preventDefault();
+            const [firstId, secondId] = pinchSession.ids;
+            const first = activeTouches.get(firstId);
+            const second = activeTouches.get(secondId);
+            if (first && second) {
+              const distance = Math.max(10, Math.hypot(second.x - first.x, second.y - first.y));
+              const ratio = distance / pinchSession.initialDistance;
+              const currentZoom = viewState.zoom;
+              const targetZoom = clamp(pinchSession.initialZoom * ratio, 0.2, 6);
+              if (Math.abs(targetZoom - currentZoom) > 0.0001) {
+                pinchSession.hasChanged = true;
+                const multiplier = targetZoom / currentZoom;
+                const centerX = (first.x + second.x) / 2;
+                const centerY = (first.y + second.y) / 2;
+                applyZoom(multiplier, centerX, centerY, { skipLog: true });
+              }
+              const centerX = (first.x + second.x) / 2;
+              const centerY = (first.y + second.y) / 2;
+              viewState.panX = pinchSession.initialPanX + (centerX - pinchSession.centerX);
+              viewState.panY = pinchSession.initialPanY + (centerY - pinchSession.centerY);
+              applyViewTransform();
+            }
+            return;
+          }
+        }
+        if (panPointerId === event.pointerId && isPanning) {
+          event.preventDefault();
+          const dx = event.clientX - panOrigin.x;
+          const dy = event.clientY - panOrigin.y;
+          viewState.panX = panOrigin.panX + dx;
+          viewState.panY = panOrigin.panY + dy;
+          applyViewTransform();
+          return;
+        }
+        if (!panCandidate || panCandidate.pointerId !== event.pointerId) return;
+        const dx = event.clientX - panCandidate.startX;
+        const dy = event.clientY - panCandidate.startY;
+        const distance = Math.hypot(dx, dy);
+        const threshold = panCandidate.pointerType === "touch" ? 6 : 4;
+        if (distance < threshold) return;
+        event.preventDefault();
+        beginPanSession(
+          event.pointerId,
+          panCandidate.startX,
+          panCandidate.startY,
+          panCandidate.panX,
+          panCandidate.panY
+        );
+        panCandidate = null;
+        handlePanMove(event);
+      }
+
+      function handlePanEnd(event) {
+        if (event.pointerType === "touch") {
+          activeTouches.delete(event.pointerId);
+          if (pinchSession && !pinchSession.ids.every((id) => activeTouches.has(id))) {
+            const changed = pinchSession.hasChanged;
+            pinchSession = null;
+            if (isPanning && panPointerId == null) {
+              document.body.classList.remove("panning");
+              isPanning = false;
+            }
+            if (changed) {
+              logDebug(`Pinch zoom ended at ${(viewState.zoom * 100).toFixed(0)}%`);
+            } else {
+              logDebug("Pinch zoom ended");
+            }
+            if (activeTouches.size === 1) {
+              const [nextId, point] = activeTouches.entries().next().value || [];
+              if (nextId != null && point) {
+                panCandidate = {
+                  pointerId: nextId,
+                  startX: point.x,
+                  startY: point.y,
+                  panX: viewState.panX,
+                  panY: viewState.panY,
+                  pointerType: "touch",
+                };
+              }
+            }
+          }
+        }
+        if (panCandidate && panCandidate.pointerId === event.pointerId) {
+          panCandidate = null;
+        }
+        if (event.pointerId !== panPointerId) return;
+        panPointerId = null;
+        if (isPanning) {
+          isPanning = false;
+          document.body.classList.remove("panning");
+          logDebug("Stopped panning view");
+        }
+        try {
+          canvasStage.releasePointerCapture(event.pointerId);
+        } catch (error) {}
+      }
+
+      function applyZoom(multiplier, clientX, clientY, options = {}) {
+        if (!state.puzzle) return;
+        const previousZoom = viewState.zoom;
+        const nextZoom = clamp(previousZoom * multiplier, 0.2, 6);
+        const change = nextZoom / previousZoom;
+        if (!Number.isFinite(change) || change === 1) return;
+        const significant = Math.abs(nextZoom - previousZoom) >= 0.01;
+        const viewportRect = viewportEl.getBoundingClientRect();
+        const centerX = viewportRect.left + viewportRect.width / 2;
+        const centerY = viewportRect.top + viewportRect.height / 2;
+        const anchorX = typeof clientX === "number" ? clientX : centerX;
+        const anchorY = typeof clientY === "number" ? clientY : centerY;
+        const offsetX = anchorX - centerX - viewState.panX;
+        const offsetY = anchorY - centerY - viewState.panY;
+        viewState.panX += offsetX - offsetX * change;
+        viewState.panY += offsetY - offsetY * change;
+        viewState.zoom = nextZoom;
+        applyViewTransform();
+        if (significant && !options.skipLog) {
+          logDebug(`Zoom set to ${(viewState.zoom * 100).toFixed(0)}%`);
+        }
+      }
+
+      function handleWheel(event) {
+        if (!state.puzzle) return;
+        event.preventDefault();
+        const multiplier = event.deltaY > 0 ? 0.9 : 1.1;
+        applyZoom(multiplier, event.clientX, event.clientY);
+      }
+
+      function applyViewTransform() {
+        const zoomValue = Math.max(0.05, viewState.baseScale * viewState.zoom);
+        canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
+        canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
+        canvasTransform.style.setProperty("--zoom", zoomValue.toFixed(4));
+      }
+
+      function computeFitScale() {
+        if (!state.puzzle) return 1;
+        const styles = window.getComputedStyle(viewportEl);
+        const paddingX =
+          parseFloat(styles.paddingLeft || "0") + parseFloat(styles.paddingRight || "0");
+        const paddingY =
+          parseFloat(styles.paddingTop || "0") + parseFloat(styles.paddingBottom || "0");
+        const availableWidth = Math.max(1, viewportEl.clientWidth - paddingX);
+        const availableHeight = Math.max(1, viewportEl.clientHeight - paddingY);
+        const widthScale = availableWidth / state.puzzle.width;
+        const heightScale = availableHeight / state.puzzle.height;
+        const fit = Math.min(widthScale, heightScale);
+        if (!Number.isFinite(fit) || fit <= 0) {
+          return 1;
+        }
+        return fit;
+      }
+
+      function resetView(options = {}) {
+        const { preserveZoom = false, recenter = false } = options;
+        if (!state.puzzle) {
+          viewState.panX = 0;
+          viewState.panY = 0;
+          viewState.zoom = 1;
+          viewState.baseScale = 1;
+          applyViewTransform();
+          return;
+        }
+        const nextBase = computeFitScale();
+        if (preserveZoom && viewState.baseScale > 0) {
+          const ratio = nextBase / viewState.baseScale;
+          if (Number.isFinite(ratio)) {
+            viewState.panX *= ratio;
+            viewState.panY *= ratio;
+          }
+          if (recenter) {
+            viewState.panX = 0;
+            viewState.panY = 0;
+          }
+        } else {
+          viewState.panX = 0;
+          viewState.panY = 0;
+          viewState.zoom = 1;
+        }
+        if (recenter && !preserveZoom) {
+          viewState.panX = 0;
+          viewState.panY = 0;
+        }
+        viewState.baseScale = nextBase;
+        applyViewTransform();
       }
 
       function useHint() {
         if (!state.puzzle) return;
         const candidates = state.puzzle.regions.filter((region) => !state.filled.has(region.id));
         if (candidates.length === 0) {
-          statusEl.textContent = "All cells are complete.";
+          logDebug("Hint requested, but puzzle is complete");
           return;
         }
         let target = candidates
@@ -1393,47 +2620,84 @@
           .sort((a, b) => a.pixelCount - b.pixelCount)[0];
         if (!target) {
           target = candidates.sort((a, b) => a.pixelCount - b.pixelCount)[0];
-          state.activeColor = target.colorId;
-          renderPalette();
+          activateColor(target.colorId, { flash: false });
         }
         if (state.settings.animateHints) {
           flashRegion(target.id, "rgba(59, 130, 246, 0.45)");
         }
-        statusEl.textContent = `Hint: Colour ${target.colorId} has ${target.pixelCount} pixels remaining.`;
+        logDebug(`Hint spotlighted region ${target.id} (colour #${target.colorId})`);
+      }
+
+      function flashColorRegions(colorId, options = {}) {
+        if (!state.puzzle) return;
+        if (colorId == null) return;
+        const { tint = "rgba(96, 165, 250, 0.32)", duration = 280 } = options;
+        const unfinished = getRegionsByColor(colorId, { includeFilled: false });
+        const targets = unfinished.length > 0 ? unfinished : getRegionsByColor(colorId, { includeFilled: true });
+        if (targets.length === 0) {
+          delete canvasStage.dataset.flashingColor;
+          return;
+        }
+        if (colorFlashTimer) {
+          clearTimeout(colorFlashTimer);
+          colorFlashTimer = null;
+        }
+        renderPuzzle();
+        canvasStage.dataset.flashingColor = String(colorId);
+        paintRegions(targets, tint);
+        colorFlashTimer = window.setTimeout(() => {
+          colorFlashTimer = null;
+          delete canvasStage.dataset.flashingColor;
+          renderPuzzle();
+        }, duration);
       }
 
       function flashRegion(regionId, color) {
         if (!state.puzzle) return;
         const region = state.puzzle.regions[regionId];
         if (!region) return;
-        puzzleCtx.save();
-        puzzleCtx.fillStyle = color;
-        for (const idx of region.pixels) {
-          const x = idx % state.puzzle.width;
-          const y = (idx / state.puzzle.width) | 0;
-          puzzleCtx.fillRect(x, y, 1, 1);
-        }
-        puzzleCtx.restore();
-        setTimeout(() => {
+        paintRegions([region], color);
+        window.setTimeout(() => {
           renderPuzzle();
         }, 220);
       }
 
       function autoAdvanceColor(currentColorId) {
         if (!state.puzzle) return;
-        const remainingForColor = state.puzzle.regions.some(
-          (region) => region.colorId === currentColorId && !state.filled.has(region.id)
-        );
-        if (remainingForColor) return;
+        const remainingForColor = getRegionsByColor(currentColorId, { includeFilled: false });
+        if (remainingForColor.length > 0) return;
         const nextColour = state.puzzle.palette.find((color) =>
-          state.puzzle.regions.some(
-            (region) => region.colorId === color.id && !state.filled.has(region.id)
-          )
+          getRegionsByColor(color.id, { includeFilled: false }).length > 0
         );
         if (nextColour) {
-          state.activeColor = nextColour.id;
-          renderPalette();
+          activateColor(nextColour.id);
         }
+      }
+
+      // Helper to collect regions for a colour with optional filtering of filled cells.
+      function getRegionsByColor(colorId, options = {}) {
+        const { includeFilled = true } = options;
+        if (!state.puzzle) return [];
+        return state.puzzle.regions.filter((region) => {
+          if (region.colorId !== colorId) return false;
+          if (!includeFilled && state.filled.has(region.id)) return false;
+          return true;
+        });
+      }
+
+      // Shared renderer for flashing overlays (hints + colour selection pulses).
+      function paintRegions(regions, fillStyle) {
+        if (!state.puzzle || regions.length === 0) return;
+        puzzleCtx.save();
+        puzzleCtx.fillStyle = fillStyle;
+        for (const region of regions) {
+          for (const idx of region.pixels) {
+            const x = idx % state.puzzle.width;
+            const y = (idx / state.puzzle.width) | 0;
+            puzzleCtx.fillRect(x, y, 1, 1);
+          }
+        }
+        puzzleCtx.restore();
       }
 
       function serializeCurrentPuzzle() {
@@ -1442,7 +2706,12 @@
           title: "capy-puzzle",
           width: state.puzzle.width,
           height: state.puzzle.height,
-          palette: state.puzzle.palette.map((p) => ({ id: p.id, hex: p.hex, rgba: p.rgba })),
+          palette: state.puzzle.palette.map((p) => ({
+            id: p.id,
+            hex: p.hex,
+            rgba: p.rgba,
+            name: p.name,
+          })),
           regions: state.puzzle.regions.map((region) => ({
             id: region.id,
             colorId: region.colorId,
@@ -1456,6 +2725,7 @@
           options: state.lastOptions,
           sourceUrl: state.sourceUrl,
           activeColor: state.activeColor,
+          backgroundColor: state.settings.backgroundColor,
         };
       }
 
@@ -1471,7 +2741,7 @@
         state.saves.unshift(entry);
         persistSaves();
         refreshSaveList();
-        statusEl.textContent = "Snapshot saved.";
+        logDebug(`Saved snapshot: ${entry.title}`);
       }
 
       function refreshSaveList() {
@@ -1525,17 +2795,27 @@
       function loadSaveEntry(id) {
         const entry = state.saves.find((item) => item.id === id);
         if (!entry) return;
-        if (applyPuzzleResult(entry.data, { options: entry.data.options, filled: entry.data.filled, activeColor: entry.data.activeColor })) {
+        if (
+          applyPuzzleResult(entry.data, {
+            options: entry.data.options,
+            filled: entry.data.filled,
+            activeColor: entry.data.activeColor,
+            backgroundColor: entry.data.backgroundColor,
+          })
+        ) {
           state.sourceUrl = entry.data.sourceUrl ?? null;
+          state.sourceTitle = entry.title || state.sourceTitle;
           startHint.classList.add("hidden");
-          statusEl.textContent = "Save restored.";
+          logDebug(`Loaded save: ${entry.title || "Untitled puzzle"}`);
         }
       }
 
       function deleteSaveEntry(id) {
+        const entry = state.saves.find((item) => item.id === id);
         state.saves = state.saves.filter((item) => item.id !== id);
         persistSaves();
         refreshSaveList();
+        logDebug(`Deleted save: ${(entry && entry.title) || id}`);
       }
 
       function renameSaveEntry(id) {
@@ -1547,6 +2827,7 @@
           entry.timestamp = Date.now();
           persistSaves();
           refreshSaveList();
+          logDebug(`Renamed save to: ${entry.title}`);
         }
       }
 
@@ -1566,6 +2847,7 @@
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
         });
+        logDebug(`Exported save: ${entry.title || "capy-save"}`);
       }
 
       function serializeAssignments(pixels, centroids) {
@@ -1780,6 +3062,44 @@
         if (y > 0) neighbors.push((y - 1) * width + x);
         if (y < height - 1) neighbors.push((y + 1) * width + x);
         return neighbors;
+      }
+
+      function sanitizeHexColor(value, fallback = DEFAULT_BACKGROUND_HEX) {
+        if (typeof value !== "string") return fallback;
+        const trimmed = value.trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
+          return `#${trimmed.slice(1).toLowerCase()}`;
+        }
+        if (/^[0-9a-fA-F]{6}$/.test(trimmed)) {
+          return `#${trimmed.toLowerCase()}`;
+        }
+        return fallback;
+      }
+
+      function computeInkStyles(hex) {
+        const [r, g, b] = hexToRgb(hex);
+        const luminance = relativeLuminance([r, g, b]);
+        if (luminance < 0.45) {
+          return {
+            outline: "rgba(248, 250, 252, 0.75)",
+            number: "rgba(248, 250, 252, 0.95)",
+          };
+        }
+        return {
+          outline: "rgba(15, 23, 42, 0.65)",
+          number: "rgba(15, 23, 42, 0.95)",
+        };
+      }
+
+      function relativeLuminance([r, g, b]) {
+        const toLinear = (channel) => {
+          const value = channel / 255;
+          return value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+        };
+        const linearR = toLinear(r);
+        const linearG = toLinear(g);
+        const linearB = toLinear(b);
+        return 0.2126 * linearR + 0.7152 * linearG + 0.0722 * linearB;
       }
 
       function hexToRgb(hex) {
