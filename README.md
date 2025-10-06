@@ -34,6 +34,10 @@ tools, a save manager, and a configurable generator all live inside a single
   while optional auto-advance hops to the next unfinished colour. Filled areas
   now reveal the clustered artwork beneath the outlines so the illustration
   gradually emerges as you work.
+- **Mobile-friendly zoom guard.** Double-tap and pinch gestures no longer
+  trigger browser-level zoom; a global guard redirects them to the custom
+  canvas handlers so the HUD stays stable while pan/zoom gestures still feel
+  natural on touchscreens.
 - **Colour cues and feedback.** Choosing a swatch briefly pulses every matching
   region (falling back to a celebratory flash when a colour is finished) so
   it's obvious where to paint next, and correctly filled regions immediately
@@ -203,8 +207,8 @@ before retrying.
   auto-advance / hint animation toggles, and supports smooth pan + zoom so you
   can inspect fine details. Drag with the mouse or trackpad to reposition the
   scene and use the scroll wheel (or trackpad gesture) to zoom — mobile pinch
-  gestures now feed directly into the stage while browser-level zoom stays
-  disabled to prevent accidental page scaling.
+  gestures now feed directly into the stage, and a double-tap guard keeps the
+  browser from scaling the interface accidentally while you navigate.
 - **Fullscreen preview overlay** – Triggered by the Preview button. The preview
   canvas stretches to fit the viewport so contributors can inspect the clustered
   output in detail before painting.

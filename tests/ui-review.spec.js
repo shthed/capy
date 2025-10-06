@@ -75,12 +75,20 @@ test.describe('Capy image generator', () => {
       );
       const hasSettings = Boolean(document.querySelector('#settingsSheet'));
       const hasSampleButton = Boolean(document.querySelector('[data-testid="sample-art-button"]'));
+      const viewportMeta = document
+        .querySelector('meta[name="viewport"]')
+        ?.getAttribute('content');
+      const zoomGuardActive =
+        typeof window.capyGenerator?.isBrowserZoomSuppressed === 'function' &&
+        window.capyGenerator.isBrowserZoomSuppressed();
       return {
         progress: (progress?.textContent || '').trim(),
         commandButtons,
         hasSettings,
         hasSampleButton,
         orientation: document.body?.dataset.orientation || null,
+        viewportMeta,
+        zoomGuardActive,
       };
     });
 
@@ -88,6 +96,8 @@ test.describe('Capy image generator', () => {
     expect(layout.progress).toMatch(/^0\/\d+/);
     expect(layout.hasSampleButton).toBe(true);
     expect(layout.orientation).toMatch(/landscape|portrait/);
+    expect(layout.viewportMeta || '').toMatch(/user-scalable=no/);
+    expect(layout.zoomGuardActive).toBe(true);
     expect(layout.commandButtons).toEqual(
       expect.arrayContaining([
         'Hint',

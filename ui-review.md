@@ -9,6 +9,7 @@
 - The smoke run now expects the bundled sample puzzle to be ready on load and confirms the fullscreen control is available for edge-to-edge play.
 - The auto-load sweep now toggles the Low/Medium/High detail chips to confirm the generator sliders, palette size, and debug log entries react to each preset.
 - The first pass also verifies that the art prompt textarea remains hidden until the Settings sheet's Advanced options summary is expanded, so the query stays tucked away from casual play while we confirm it renders correctly when requested.
+- Initial assertions now confirm the viewport meta disables browser zoom and the runtime exposes an active double-tap guard so handheld sessions stay focused on the custom pan/zoom handlers.
 - Review the generated JSON for console errors and metadata counts, then open the screenshot to confirm composition changes look right before merging.
 
 ## Positive Observations
