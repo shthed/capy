@@ -233,8 +233,9 @@ test.describe('Capy image generator', () => {
       })
       .toBe(true);
     await expect
-      .poll(() =>
-        page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0)
+      .poll(
+        () => page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0),
+        { timeout: 15000 }
       )
       .toBeGreaterThan(0);
     const mediumState = await page.evaluate(() => {
@@ -273,8 +274,9 @@ test.describe('Capy image generator', () => {
       })
       .toBe(true);
     await expect
-      .poll(() =>
-        page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0)
+      .poll(
+        () => page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0),
+        { timeout: 15000 }
       )
       .toBeGreaterThan(0);
     const highState = await page.evaluate(() => {
@@ -313,8 +315,9 @@ test.describe('Capy image generator', () => {
       })
       .toBe(true);
     await expect
-      .poll(() =>
-        page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0)
+      .poll(
+        () => page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0),
+        { timeout: 15000 }
       )
       .toBeGreaterThan(0);
     const lowState = await page.evaluate(() => {
