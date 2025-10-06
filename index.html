@@ -1099,7 +1099,7 @@
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
-      const DEFAULT_PUZZLE_TITLE = "Untitled puzzle";
+      const DEFAULT_EXPORT_TITLE = "Untitled puzzle";
       let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
 
@@ -1143,7 +1143,6 @@
         filled: new Set(),
         sourceUrl: null,
         sourceTitle: null,
-        puzzleTitle: null,
         lastOptions: null,
         settings: {
           autoAdvance: true,
@@ -1333,7 +1332,7 @@
 
       downloadBtn.addEventListener("click", () => {
         if (!state.puzzle) return;
-        const resolvedTitle = resolvePuzzleTitle();
+        const resolvedTitle = resolveExportTitle();
         const payload = serializeCurrentPuzzle(resolvedTitle);
         const blob = new Blob([JSON.stringify(payload, null, 2)], {
           type: "application/json",
@@ -1876,7 +1875,6 @@
         state.filled = new Set();
         state.sourceUrl = null;
         state.sourceTitle = null;
-        state.puzzleTitle = null;
         paletteEl.innerHTML = "";
         progressEl.textContent = "…";
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
@@ -2026,7 +2024,6 @@
           regionMap,
         };
         state.puzzle.title = resolvedTitle;
-        state.puzzleTitle = resolvedTitle;
         state.puzzle.backgroundColor = backgroundHex;
         state.activeColor =
           requestedColor != null && paletteIds.has(requestedColor)
@@ -2689,24 +2686,20 @@
         puzzleCtx.restore();
       }
 
-      function resolvePuzzleTitle() {
-        const fromState =
-          typeof state.puzzleTitle === "string" && state.puzzleTitle.trim()
-            ? state.puzzleTitle.trim()
+      function resolveExportTitle() {
+        const fromSource =
+          typeof state.sourceTitle === "string" && state.sourceTitle.trim()
+            ? state.sourceTitle.trim()
             : "";
         const fromPuzzle =
           state.puzzle && typeof state.puzzle.title === "string" && state.puzzle.title.trim()
             ? state.puzzle.title.trim()
             : "";
-        const fromSource =
-          typeof state.sourceTitle === "string" && state.sourceTitle.trim()
-            ? state.sourceTitle.trim()
-            : "";
-        const candidate = fromState || fromPuzzle || fromSource;
-        return candidate || DEFAULT_PUZZLE_TITLE;
+        const candidate = fromSource || fromPuzzle;
+        return candidate || DEFAULT_EXPORT_TITLE;
       }
 
-      function toFileSafeName(title, fallback = DEFAULT_PUZZLE_TITLE) {
+      function toFileSafeName(title, fallback = DEFAULT_EXPORT_TITLE) {
         const raw = typeof title === "string" ? title.trim() : "";
         const base = raw || fallback;
         const stripped = base.replace(/[<>:"/\\|?*\x00-\x1F]/g, "");
@@ -2716,7 +2709,7 @@
         return dashed || fallback;
       }
 
-      function serializeCurrentPuzzle(resolvedTitle = resolvePuzzleTitle()) {
+      function serializeCurrentPuzzle(resolvedTitle = resolveExportTitle()) {
         if (!state.puzzle) return {};
         return {
           title: resolvedTitle,
@@ -2811,22 +2804,17 @@
       function loadSaveEntry(id) {
         const entry = state.saves.find((item) => item.id === id);
         if (!entry) return;
-        const entryTitle =
-          typeof entry.title === "string" && entry.title.trim() ? entry.title.trim() : null;
         if (
           applyPuzzleResult(entry.data, {
             options: entry.data.options,
             filled: entry.data.filled,
             activeColor: entry.data.activeColor,
             backgroundColor: entry.data.backgroundColor,
-            title: entryTitle,
           })
         ) {
           state.sourceUrl = entry.data.sourceUrl ?? null;
-          if (entryTitle) {
-            state.sourceTitle = entryTitle;
-            state.puzzleTitle = entryTitle;
-          }
+          state.sourceTitle =
+            (typeof entry.title === "string" && entry.title.trim()) || state.sourceTitle;
           startHint.classList.add("hidden");
           logDebug(`Loaded save: ${entry.title || "Untitled puzzle"}`);
         }
