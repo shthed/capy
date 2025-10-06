@@ -1273,7 +1273,7 @@
           },
         },
       };
-      const DEFAULT_SAMPLE_DETAIL = "medium";
+      const DEFAULT_SAMPLE_DETAIL = "high";
 
       if (samplePreview) {
         samplePreview.src = SAMPLE_ARTWORK.dataUrl;
@@ -2227,10 +2227,35 @@
           console.error("Puzzle data missing palette information.");
           return false;
         }
-        const mapSource = Array.from(data.regionMap ?? []);
-        if (mapSource.length !== data.width * data.height) {
+        const expectedCells = data.width * data.height;
+        const regionMapSource =
+          unpackRegionMap(data.regionMapPacked, expectedCells) ||
+          unpackRegionMap(data.regionMap, expectedCells);
+        if (!regionMapSource || regionMapSource.length !== expectedCells) {
           console.error("Puzzle data is inconsistent.");
           return false;
+        }
+        let needsPixelHydration = false;
+        for (const region of data.regions) {
+          if (!Array.isArray(region.pixels) || region.pixels.length === 0) {
+            needsPixelHydration = true;
+            break;
+          }
+        }
+        let hydratedPixels = null;
+        if (needsPixelHydration) {
+          hydratedPixels = new Map();
+          for (let i = 0; i < data.regions.length; i++) {
+            const region = data.regions[i];
+            const resolvedId = region.id != null ? region.id : i;
+            hydratedPixels.set(resolvedId, []);
+          }
+          for (let idx = 0; idx < regionMapSource.length; idx++) {
+            const regionId = regionMapSource[idx];
+            if (hydratedPixels.has(regionId)) {
+              hydratedPixels.get(regionId).push(idx);
+            }
+          }
         }
         const palette = data.palette.map((entry, index) => {
           const hex = entry.hex ?? "#ffffff";
@@ -2253,7 +2278,12 @@
           };
         });
         const regions = data.regions.map((region, index) => {
-          const pixels = Array.from(region.pixels ?? []);
+          const resolvedId = region.id != null ? region.id : index;
+          const pixelsSource =
+            Array.isArray(region.pixels) && region.pixels.length > 0
+              ? region.pixels
+              : hydratedPixels?.get(resolvedId) || [];
+          const pixels = Array.from(pixelsSource);
           const pixelCount = region.pixelCount ?? pixels.length;
           let cx = typeof region.cx === "number" ? region.cx : null;
           let cy = typeof region.cy === "number" ? region.cy : null;
@@ -2268,7 +2298,7 @@
             cy = sumY / pixels.length;
           }
           return {
-            id: region.id ?? index,
+            id: resolvedId,
             colorId: region.colorId ?? 1,
             pixels,
             pixelCount,
@@ -2276,7 +2306,9 @@
             cy: cy ?? 0,
           };
         });
-        const regionMap = new Int32Array(mapSource);
+        const regionMap = regionMapSource instanceof Int32Array
+          ? regionMapSource
+          : new Int32Array(regionMapSource);
         const metadataTitle =
           typeof metadata.title === "string" && metadata.title.trim() ? metadata.title.trim() : null;
         const completionLog =
@@ -2970,31 +3002,99 @@
 
       function serializeCurrentPuzzle() {
         if (!state.puzzle) return {};
-        return {
+        const regionMapPacked = packRegionMap(state.puzzle.regionMap);
+        const payload = {
+          format: "capy-puzzle@2",
           title: "capy-puzzle",
           width: state.puzzle.width,
           height: state.puzzle.height,
           palette: state.puzzle.palette.map((p) => ({
             id: p.id,
             hex: p.hex,
-            rgba: p.rgba,
             name: p.name,
           })),
           regions: state.puzzle.regions.map((region) => ({
             id: region.id,
             colorId: region.colorId,
-            pixels: Array.from(region.pixels ?? []),
             pixelCount: region.pixelCount,
             cx: region.cx,
             cy: region.cy,
           })),
-          regionMap: Array.from(state.puzzle.regionMap),
           filled: Array.from(state.filled),
           options: state.lastOptions,
           sourceUrl: state.sourceUrl,
           activeColor: state.activeColor,
           backgroundColor: state.settings.backgroundColor,
         };
+        if (regionMapPacked) {
+          payload.regionMapPacked = regionMapPacked;
+        } else if (state.puzzle.regionMap) {
+          payload.regionMap = Array.from(state.puzzle.regionMap);
+        }
+        return payload;
+      }
+
+      function packRegionMap(map) {
+        if (!map || typeof map.length !== "number") return null;
+        try {
+          const typed =
+            map instanceof Int32Array
+              ? new Int32Array(map)
+              : map instanceof Uint32Array
+              ? new Int32Array(map)
+              : new Int32Array(Array.from(map));
+          const bytes = new Uint8Array(typed.buffer);
+          let binary = "";
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          return btoa(binary);
+        } catch (error) {
+          console.error("Failed to pack region map", error);
+          return null;
+        }
+      }
+
+      function unpackRegionMap(source, expectedLength) {
+        if (!source) return null;
+        try {
+          if (typeof source === "string") {
+            const binary = atob(source);
+            const buffer = new ArrayBuffer(binary.length);
+            const bytes = new Uint8Array(buffer);
+            for (let i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+            if (typeof expectedLength === "number" && buffer.byteLength / 4 !== expectedLength) {
+              return null;
+            }
+            return new Int32Array(buffer);
+          }
+          if (source instanceof Int32Array) {
+            if (typeof expectedLength === "number" && source.length !== expectedLength) {
+              return null;
+            }
+            return new Int32Array(source);
+          }
+          if (source instanceof Uint32Array) {
+            const copy = new Int32Array(source);
+            if (typeof expectedLength === "number" && copy.length !== expectedLength) {
+              return null;
+            }
+            return copy;
+          }
+          if (Array.isArray(source) || ArrayBuffer.isView(source)) {
+            const array = Array.isArray(source) ? source : Array.from(source);
+            if (typeof expectedLength === "number" && array.length !== expectedLength) {
+              return null;
+            }
+            return new Int32Array(array);
+          }
+        } catch (error) {
+          console.error("Failed to unpack region map", error);
+          return null;
+        }
+        return null;
       }
 
       function saveCurrentSnapshot() {
@@ -3044,6 +3144,9 @@
           localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(state.saves));
         } catch (error) {
           console.error("Failed to persist saves", error);
+          if (error && error.name === "QuotaExceededError") {
+            logDebug("Storage full: unable to write save snapshot. Delete old saves or exports and retry.");
+          }
         }
       }
 

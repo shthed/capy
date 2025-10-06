@@ -12,11 +12,11 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
   previously exported JSON puzzles straight into the generator pipeline.
 - **Built-in capybara sample.** The "Capybara Springs" illustration now loads
-  automatically on boot so you can start painting without importing anything.
-  The vignette features an orange-balanced capybara lounging in a lagoon with a
-  curious dachshund, water mushrooms, and a distant waterfall, and the 🐹
-  command rail button instantly reloads it whenever you want a fresh board while
-  reflecting whichever detail preset you last chose.
+  automatically on boot in the high detail preset so you can start painting
+  without importing anything. The vignette features an orange-balanced capybara
+  lounging in a lagoon with a curious dachshund, water mushrooms, and a distant
+  waterfall, and the 🐹 command rail button instantly reloads it whenever you
+  want a fresh board while reflecting whichever detail preset you last chose.
 - **Sample detail presets.** Low/Medium/High chips live on the onboarding hint
   and inside Settings, instantly reloading the sample with tuned colour counts,
   resize targets, k-means iterations, and smoothing passes so QA can cycle
@@ -72,10 +72,13 @@ toggle tuned generator options for the built-in capybara vignette:
 
 Each preset reloads the sample puzzle immediately, updates the generator sliders
 to mirror the chosen settings, and stamps the debug log with the relevant detail
-level so QA transcripts record every switch. The region counts above are based on
-the bundled Capybara Springs artwork and keep every preset playable—from the
-breezy ≈26-region low detail board to the ≈140-region high fidelity scene. For a
-full tour of the palette and every numbered cell in the segmented source, see
+level so QA transcripts record every switch. The app boots in the high preset so
+playtesters immediately see the full ≈140-region canvas, but the remembered
+preset keeps medium or low runs sticky after you switch. The region counts above
+are based on the bundled Capybara Springs artwork and keep every preset
+playable—from the breezy ≈26-region low detail board to the ≈140-region high
+fidelity scene. For a full tour of the palette and every numbered cell in the
+segmented source, see
 [`docs/capybara-springs-map.md`](docs/capybara-springs-map.md).
 
 ## Code architecture tour
@@ -149,8 +152,31 @@ full tour of the palette and every numbered cell in the segmented source, see
    and the region fills in. Auto-advance can hop to the next incomplete colour
    once you finish the current hue.
 5. **Save or export.** The save manager captures snapshots (including progress,
-   generator options, and source metadata) in localStorage. Export the active
-   puzzle as JSON at any time.
+   generator options, and source metadata) in localStorage using a compact
+   schema. Export the active puzzle as JSON at any time.
+
+## Puzzle JSON format
+
+Autosaves, manual exports, and the Playwright fixtures all share a
+`capy-puzzle@2` payload. Key fields include:
+
+- `format` – Indicates the schema version (`capy-puzzle@2`).
+- `width`/`height` – Pixel dimensions of the clustered canvas.
+- `palette` – Colour entries with `id`, `hex`, and display `name`.
+- `regions` – Region metadata (`id`, `colorId`, centroid, and `pixelCount`).
+- `regionMapPacked` – Base64-encoded little-endian `Int32Array` describing
+  which region id occupies each pixel. Legacy imports can still provide a plain
+  `regionMap` array; the loader hydrates whichever is available and rebuilds the
+  per-region pixel lists on the fly.
+- `filled` – Region ids that the player has already painted.
+- `backgroundColor`, `options`, `activeColor`, and `sourceUrl` – The appearance
+  and generator state needed to restore the session.
+
+Packing the region map trims autosave/export payloads by more than half compared
+to the old verbose arrays, which prevents the `QuotaExceededError` console
+messages browsers emitted when large puzzles overflowed localStorage. If storage
+does fill up, the app now logs a debug reminder prompting you to clear old saves
+before retrying.
 
 ## UI guide
 

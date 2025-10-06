@@ -9,11 +9,11 @@
 - Accessed the app at <http://localhost:8000/index.html> via an automated Chromium session (Playwright).
 
 ## Actions Performed
-1. Observed that the "Capybara Springs" scene now loads automatically on boot,
-   showcasing the orange-crowned capybara, loyal dachshund, waterfall, and
-   mushroom-ring lagoon, then pressed the 🐹 command button to reload it and
-   confirm the built-in shortcut still works without reopening the hint
-   overlay.
+1. Observed that the "Capybara Springs" scene now loads automatically on boot
+   in the high detail preset, showcasing the orange-crowned capybara, loyal
+   dachshund, waterfall, and mushroom-ring lagoon, then pressed the 🐹 command
+   button to reload it and confirm the built-in shortcut still works without
+   reopening the hint overlay.
 2. Clicked the Low/Medium/High detail chips to confirm each preset updates the
    generator sliders, reloads the sample with the expected ≈26/≈42/≈140 region
    breakdowns, and writes its summary to the debug log.
