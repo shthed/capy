@@ -1099,6 +1099,7 @@
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
+      const DEFAULT_PUZZLE_TITLE = "Untitled puzzle";
       let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
 
@@ -1142,6 +1143,7 @@
         filled: new Set(),
         sourceUrl: null,
         sourceTitle: null,
+        puzzleTitle: null,
         lastOptions: null,
         settings: {
           autoAdvance: true,
@@ -1874,6 +1876,7 @@
         state.filled = new Set();
         state.sourceUrl = null;
         state.sourceTitle = null;
+        state.puzzleTitle = null;
         paletteEl.innerHTML = "";
         progressEl.textContent = "…";
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
@@ -2000,10 +2003,14 @@
         const regionMap = new Int32Array(mapSource);
         const metadataTitle =
           typeof metadata.title === "string" && metadata.title.trim() ? metadata.title.trim() : null;
+        const dataTitle = typeof data.title === "string" && data.title.trim() ? data.title.trim() : null;
+        const sourceTitle =
+          typeof state.sourceTitle === "string" && state.sourceTitle.trim() ? state.sourceTitle.trim() : null;
+        const resolvedTitle = metadataTitle || dataTitle || sourceTitle || null;
         if (metadataTitle) {
           state.sourceTitle = metadataTitle;
-        } else if (typeof data.title === "string" && data.title.trim()) {
-          state.sourceTitle = data.title.trim();
+        } else if (dataTitle) {
+          state.sourceTitle = dataTitle;
         }
         const paletteIds = new Set(palette.map((entry) => entry.id));
         const requestedColor = metadata.activeColor ?? palette[0]?.id ?? null;
@@ -2018,6 +2025,8 @@
           regions,
           regionMap,
         };
+        state.puzzle.title = resolvedTitle;
+        state.puzzleTitle = resolvedTitle;
         state.puzzle.backgroundColor = backgroundHex;
         state.activeColor =
           requestedColor != null && paletteIds.has(requestedColor)
@@ -2681,12 +2690,23 @@
       }
 
       function resolvePuzzleTitle() {
-        const candidate =
-          typeof state.sourceTitle === "string" ? state.sourceTitle.trim() : "";
-        return candidate || "capy-puzzle";
+        const fromState =
+          typeof state.puzzleTitle === "string" && state.puzzleTitle.trim()
+            ? state.puzzleTitle.trim()
+            : "";
+        const fromPuzzle =
+          state.puzzle && typeof state.puzzle.title === "string" && state.puzzle.title.trim()
+            ? state.puzzle.title.trim()
+            : "";
+        const fromSource =
+          typeof state.sourceTitle === "string" && state.sourceTitle.trim()
+            ? state.sourceTitle.trim()
+            : "";
+        const candidate = fromState || fromPuzzle || fromSource;
+        return candidate || DEFAULT_PUZZLE_TITLE;
       }
 
-      function toFileSafeName(title, fallback = "capy-puzzle") {
+      function toFileSafeName(title, fallback = DEFAULT_PUZZLE_TITLE) {
         const raw = typeof title === "string" ? title.trim() : "";
         const base = raw || fallback;
         const stripped = base.replace(/[<>:"/\\|?*\x00-\x1F]/g, "");
@@ -2791,16 +2811,22 @@
       function loadSaveEntry(id) {
         const entry = state.saves.find((item) => item.id === id);
         if (!entry) return;
+        const entryTitle =
+          typeof entry.title === "string" && entry.title.trim() ? entry.title.trim() : null;
         if (
           applyPuzzleResult(entry.data, {
             options: entry.data.options,
             filled: entry.data.filled,
             activeColor: entry.data.activeColor,
             backgroundColor: entry.data.backgroundColor,
+            title: entryTitle,
           })
         ) {
           state.sourceUrl = entry.data.sourceUrl ?? null;
-          state.sourceTitle = entry.title || state.sourceTitle;
+          if (entryTitle) {
+            state.sourceTitle = entryTitle;
+            state.puzzleTitle = entryTitle;
+          }
           startHint.classList.add("hidden");
           logDebug(`Loaded save: ${entry.title || "Untitled puzzle"}`);
         }

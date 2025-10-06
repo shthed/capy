@@ -120,7 +120,8 @@ tools, a save manager, and a configurable generator all live inside a single
    generator options, and source metadata) in localStorage. Export the active
    puzzle as JSON at any time—the download name mirrors the source title (with
    filename-safe cleanup) so imported art like “Capybara Meadow” becomes
-   `Capybara-Meadow.json`.
+   `Capybara-Meadow.json`. If no source metadata is available the export falls
+   back to `Untitled-puzzle.json`.
 
 ## UI guide
 
