@@ -7,12 +7,17 @@
 - A dedicated interaction check clicks the first paintable region, ensuring the DOM reflects the filled state and no console errors appear while tapping-to-fill.
 - Interaction coverage also asserts that selecting a palette swatch pulses every matching region and that mouse-wheel as well as keyboard `+`/`-` zoom controls adjust the viewport scale.
 - The smoke run now expects the bundled sample puzzle to be ready on load and confirms the fullscreen control is available for edge-to-edge play.
+- The auto-load sweep now toggles the Low/Medium/High detail chips to confirm the generator sliders, palette size, and debug log entries react to each preset.
+- The first pass also verifies that the art prompt textarea remains hidden until the Settings sheet's Advanced options summary is expanded, so the query stays tucked away from casual play while we confirm it renders correctly when requested.
+- Initial assertions now confirm the viewport meta disables browser zoom and the runtime exposes an active double-tap guard so handheld sessions stay focused on the custom pan/zoom handlers.
 - Review the generated JSON for console errors and metadata counts, then open the screenshot to confirm composition changes look right before merging.
 
 ## Positive Observations
 - The Peek control lets you preview the finished painting without leaving the canvas, either by holding or toggling the button.
-- The bundled capybara sample now appears automatically on load and showcases the detailed "Capybara Springs" lagoon scene, so testers can start painting without importing external art.
+- The bundled capybara sample now appears automatically on load in the high-detail preset and showcases the detailed "Capybara Springs" lagoon scene, so testers can start painting without importing external art.
+- The onboarding hint and Settings sheet now share Low/Medium/High detail chips with a running summary that calls out the ≈26/≈42/≈140-region presets, so QA can swap between breezy and high-fidelity palettes without touching raw sliders.
 - Palette swatches now tuck their color names directly inside the button while keeping the numbers bold, so picking the next hue is faster without extra labels.
+- Rolling autosaves restore the latest session on refresh and mirror through the cloud sync hook, so QA can reload mid-play and keep their progress in step across tabs.
 - Tap-to-fill now fires on deliberate taps, and palette swatches respect the same pointer handling so choosing a color on touch devices never requires a second press while drag gestures stay focused on panning.
 - Left-drag panning now keeps the canvas full-screen while the palette hugs the bottom edge without a frame.
 - The Help & shortcuts sheet now lists every command icon, reiterates the gesture cheatsheet, and pipes a live debug log so QA can confirm fills, hints, zooms, and the start/finish of sample reloads as they happen.
@@ -23,6 +28,7 @@
 - Mousewheel zoom now stays anchored under the cursor, eases smoothly toward the target scale, keyboard nudges on `+`/`-` mirror the motion, and both mouse buttons pan the scene, so navigation feels immediate and predictable.
 - Palette pulses now accompany colour selection so playtesters immediately see every matching region (or a brief celebration when a colour is finished).
 - The Settings sheet now exposes a background colour picker that immediately repaints unfinished regions and recalibrates outline contrast, making dark themes workable without extra CSS overrides.
+- The Appearance section now layers in an interface scale slider so QA can enlarge or shrink the command rail and palette without altering puzzle zoom, and the Advanced options accordion hides the art prompt query until it's explicitly expanded for metadata editing.
 - Long-pressing the hint icon now peeks at the finished artwork while a tap still flashes hint pulses, so advanced guidance stays one gesture away.
 - Slimmed palette bubbles still feel tactile thanks to the inset numbering and glow, and they give the composition more breathing room around the artwork.
 - Region numerals now stay centered even inside narrow tree trunks or tapered highlights, which makes the puzzle feel more intentional when zoomed in.
