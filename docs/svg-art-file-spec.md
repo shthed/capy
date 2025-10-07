@@ -1,6 +1,6 @@
 # SVG Art File Specification
 
-This document defines the structure and metadata requirements for segmented SVG scenes that ship with Capybooper (all files in `art/*.svg` that are intended to be imported into the coloring runtime). Follow this checklist when exporting art or reviewing pull requests that touch SVG assets.
+This document defines the structure and metadata requirements for segmented SVG scenes that ship with Capycolour (all files in `art/*.svg` that are intended to be imported into the coloring runtime). Follow this checklist when exporting art or reviewing pull requests that touch SVG assets.
 
 ## Canvas & Accessibility Metadata
 - Export scenes at 960×600 (or document the actual size) and include explicit `width`, `height`, and `viewBox` attributes on the root `<svg>` element so the runtime can scale reliably.

@@ -1,7 +1,7 @@
-﻿{
-  "name": "capy",
+{
+  "name": "capycolour",
   "version": "1.0.0",
-  "description": "Color-by-number demo (single-file React + Playwright smoke tests)",
+  "description": "Capycolour: single-file ChatGPT-assisted colour-by-number demo with Playwright smoke tests",
   "scripts": {
     "start": "http-server . -p 8000 -c-1",
     "dev": "http-server . -p 8000 -c-1",
@@ -10,13 +10,16 @@
     "test:smoke": "playwright test tests/ui-review.spec.js",
     "test:ci": "playwright test --reporter=github --workers=2",
     "show-report": "playwright show-report",
-    "postinstall": "playwright install --with-deps"
+    "postinstall": "playwright install --with-deps",
+    "test:loop": "playwright test --ui --project=chromium",
+    "test:prompt": "playwright test tests/prompt-flow.spec.js",
+    "git:update": "node tools/git-update.js"
   },
   "devDependencies": {
     "@babel/standalone": "^7.24.8",
     "@playwright/test": "^1.55.1",
-    "playwright": "^1.55.1",
     "http-server": "^14.1.1",
+    "playwright": "^1.55.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   }

@@ -2,20 +2,22 @@
 
 ## Automated Visual Capture
 - Run `npm test --silent` to boot the static demo, grab a full-page screenshot, and log palette/cell counts to `artifacts/ui-review`. The harness fails automatically if the screenshot capture is empty, the console throws, or the page renders without palette buttons/numbered regions.
+- The companion prompt-flow suite (`tests/prompt-flow.spec.js`) mocks the ChatGPT image API so we can assert both the successful import and sample fallback without relying on the network. Trigger it on its own with `npm run test:prompt` during prompt work.
 - The multi-scene sweep now opens the art library, loads every bundled SVG, and stores per-artwork screenshots plus JSON summaries under `artifacts/ui-review/artworks/`. A manifest is emitted alongside the images so you can confirm counts and console status for each scene at a glance.
 - The JSON summary now records the header button ARIA labels and whether the art-library affordance is present so regressions are obvious during review.
 - A dedicated interaction check clicks the first paintable region, ensuring the DOM reflects the filled state and no console errors appear while tapping-to-fill.
 - Interaction coverage also asserts that selecting a palette swatch pulses every matching region and that mouse-wheel as well as keyboard `+`/`-` zoom controls adjust the viewport scale.
-- The smoke run now expects the bundled sample puzzle to be ready on load and confirms the fullscreen control is available for edge-to-edge play.
+- The smoke run now exercises the ChatGPT prompt on load (falling back to the bundled sample puzzle when no API key is available) and confirms the fullscreen control is available for edge-to-edge play.
 - Review the generated JSON for console errors and metadata counts, then open the screenshot to confirm composition changes look right before merging.
 
 ## Positive Observations
 - The Peek control lets you preview the finished painting without leaving the canvas, either by holding or toggling the button.
-- The bundled capybara sample now appears automatically on load and showcases the detailed "Capybara Springs" lagoon scene, so testers can start painting without importing external art.
+- The ChatGPT prompt bar now drives first-run art generation, gracefully falling back to the bundled “Capycolour Springs” scene so testers always land on a paintable puzzle without importing anything.
 - Palette swatches now tuck their color names directly inside the button while keeping the numbers bold, so picking the next hue is faster without extra labels.
 - Tap-to-fill now fires on deliberate taps, and palette swatches respect the same pointer handling so choosing a color on touch devices never requires a second press while drag gestures stay focused on panning.
 - Left-drag panning now keeps the canvas full-screen while the palette hugs the bottom edge without a frame.
-- The Help & shortcuts sheet now lists every command icon, reiterates the gesture cheatsheet, and pipes a live debug log so QA can confirm fills, hints, zooms, and the start/finish of sample reloads as they happen.
+- The Help & shortcuts sheet now lists every command icon (including the prompt bar), reiterates the gesture cheatsheet, offers a ChatGPT access form for storing/clearing the API key, and pipes a live debug log with severity pills and a legend so QA can confirm fills, hints, zooms, ChatGPT requests, and the start/finish of sample reloads as they happen.
+- The new generator status tray in the palette dock shows a live progress bar, a telemetry grid (mode/prompt, source & target sizes, palette/region totals, background, live progress percentages, current pipeline step), plus fading notifications for file reads, k-means clustering, smoothing, segmentation counts, and palette prep, making it obvious when the import pipeline is working or blocked. On handheld screenshots the tray collapses completely so the palette has breathing room while the mirrored Help log keeps telemetry reachable.
 - The art library now opens with a thumbnail picker that previews each scene, making it faster to spot and load the exact artwork you want.
 - The ultra-slim glass command rail now hugs the top-right corner with a hint icon plus menu toggle and fullscreen toggle, keeping library, options, help, peek, and hint controls reachable without crowding the artwork.
 - The mobile smoke run confirms the compact swatches stay legible and the top rail remains reachable at handheld sizes.

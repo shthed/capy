@@ -24,7 +24,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Image to Color-by-Number</title>
+    <title>Capycolour – ChatGPT-powered color-by-number</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -48,6 +48,18 @@
           #020617;
         color: inherit;
         overflow: hidden;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
 
       body.sheet-open {
@@ -79,6 +91,79 @@
         gap: 8px;
         padding: 12px 24px;
         z-index: 3;
+        flex-wrap: wrap;
+      }
+
+      .prompt-form {
+        display: flex;
+        align-items: stretch;
+        margin-right: auto;
+        min-width: 220px;
+        max-width: min(420px, 50vw);
+      }
+
+      .prompt-form[data-generating="true"] {
+        opacity: 0.8;
+      }
+
+      .prompt-field {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px 8px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        background: rgba(15, 23, 42, 0.82);
+        box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.12);
+        width: 100%;
+      }
+
+      .prompt-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        font-size: 1rem;
+        color: rgba(226, 232, 240, 0.88);
+      }
+
+      #promptInput {
+        flex: 1;
+        min-width: 0;
+        border: none;
+        background: transparent;
+        color: rgba(226, 232, 240, 0.95);
+        font: inherit;
+        font-size: 0.95rem;
+        padding: 0;
+        outline: none;
+      }
+
+      #promptInput::placeholder {
+        color: rgba(148, 163, 184, 0.7);
+      }
+
+      #promptSubmit {
+        border-radius: 999px;
+        padding: 6px 14px;
+        border: 1px solid rgba(96, 165, 250, 0.55);
+        background: rgba(37, 99, 235, 0.28);
+        color: rgba(226, 232, 240, 0.98);
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      #promptSubmit:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
+      }
+
+      #promptSubmit:disabled {
+        cursor: not-allowed;
+        opacity: 0.7;
+        box-shadow: none;
       }
 
       #commandRail button {
@@ -114,6 +199,13 @@
         flex-wrap: wrap;
         gap: 6px;
         padding: 12px 16px;
+        justify-content: center;
+      }
+
+      body[data-orientation="portrait"] .prompt-form {
+        flex: 1 1 100%;
+        max-width: none;
+        margin-right: 0;
       }
 
       body[data-orientation="portrait"] #commandRail button {
@@ -125,6 +217,68 @@
         flex-direction: column;
         align-items: stretch;
         gap: 12px;
+        padding: 14px 18px 22px;
+      }
+
+      body[data-orientation="portrait"] #palette {
+        grid-auto-columns: minmax(48px, 1fr);
+      }
+
+      body[data-orientation="portrait"] #puzzleCanvas {
+        max-width: calc(100vw - 48px);
+        max-height: calc(100vh - 260px);
+      }
+
+      body[data-orientation="portrait"] #statusDock {
+        display: none;
+      }
+
+      body[data-orientation="portrait"] .advanced-only {
+        display: none;
+      }
+
+      @media (max-width: 768px) {
+        #commandRail {
+          flex-wrap: wrap;
+          gap: 6px;
+          padding: 12px 16px;
+          justify-content: center;
+        }
+
+        .prompt-form {
+          flex: 1 1 100%;
+          max-width: none;
+          margin-right: 0;
+        }
+
+        #commandRail button {
+          width: 36px;
+          height: 36px;
+        }
+
+        #paletteDock {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 12px;
+          padding: 14px 18px 22px;
+        }
+
+        #palette {
+          grid-auto-columns: minmax(48px, 1fr);
+        }
+
+        #puzzleCanvas {
+          max-width: calc(100vw - 48px);
+          max-height: calc(100vh - 260px);
+        }
+
+        #statusDock {
+          display: none;
+        }
+
+        .advanced-only {
+          display: none;
+        }
       }
 
       #viewport {
@@ -307,13 +461,20 @@
       #paletteDock {
         position: relative;
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        padding: 16px 28px 24px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 18px;
+        padding: 18px 28px 26px;
         background: linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.85) 40%, rgba(2, 6, 23, 0.95) 100%);
         border-top: 1px solid rgba(30, 41, 59, 0.7);
         box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
+      }
+
+      .palette-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
       }
 
       #progress {
@@ -322,6 +483,206 @@
         font-variant-numeric: tabular-nums;
         text-align: left;
         color: rgba(226, 232, 240, 0.82);
+      }
+
+      #statusDock {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        max-width: 360px;
+      }
+
+      .generation-status {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px 16px;
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        background: rgba(15, 23, 42, 0.7);
+        transition: opacity 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+      }
+
+      .generation-status[data-active="false"] {
+        opacity: 0.65;
+      }
+
+      .generation-status[data-state="success"] {
+        border-color: rgba(34, 197, 94, 0.55);
+        background: rgba(15, 23, 42, 0.76);
+      }
+
+      .generation-status[data-state="error"] {
+        border-color: rgba(248, 113, 113, 0.55);
+        background: rgba(30, 41, 59, 0.82);
+      }
+
+      .generation-status-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .generation-title {
+        font-weight: 600;
+        color: rgba(226, 232, 240, 0.95);
+      }
+
+      .generation-detail {
+        font-size: 0.85rem;
+        color: rgba(148, 163, 184, 0.88);
+      }
+
+      .generation-progress {
+        position: relative;
+        width: 100%;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.2);
+        overflow: hidden;
+      }
+
+      .generation-progress .progress-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        width: var(--progress, 0%);
+        border-radius: inherit;
+        background: linear-gradient(90deg, rgba(59, 130, 246, 0.95), rgba(129, 140, 248, 0.95));
+        transition: width 0.25s ease, transform 0.25s ease;
+      }
+
+      .generation-status[data-state="indeterminate"] .progress-fill {
+        width: 35%;
+        transform: translateX(-100%);
+        animation: progress-indeterminate 1.4s ease-in-out infinite;
+      }
+
+      .generation-details {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 12px;
+        margin: 0;
+        padding: 12px 16px;
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.25);
+        background: rgba(15, 23, 42, 0.62);
+        font-size: 0.82rem;
+        color: rgba(226, 232, 240, 0.9);
+      }
+
+      .generation-details[data-empty="true"] {
+        display: none;
+      }
+
+      .generation-details dt {
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.7rem;
+        color: rgba(148, 163, 184, 0.9);
+      }
+
+      .generation-details dd {
+        margin: 0;
+        color: rgba(226, 232, 240, 0.92);
+      }
+
+      .status-stream {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 160px;
+        overflow: hidden;
+      }
+
+      .status-entry {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 12px;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        background: rgba(15, 23, 42, 0.68);
+        font-size: 0.9rem;
+        opacity: 0;
+        transform: translateY(6px);
+        transition: opacity 0.45s ease, transform 0.45s ease;
+      }
+
+      .status-entry.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .status-entry.fading {
+        opacity: 0;
+        transform: translateY(-6px);
+      }
+
+      .status-entry .status-pill {
+        align-self: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+        text-transform: uppercase;
+        background: rgba(59, 130, 246, 0.32);
+        color: rgba(226, 232, 240, 0.95);
+      }
+
+      .status-entry.status-success .status-pill {
+        background: rgba(34, 197, 94, 0.35);
+        color: rgba(190, 242, 100, 0.96);
+      }
+
+      .status-entry.status-warn .status-pill {
+        background: rgba(234, 179, 8, 0.35);
+        color: rgba(253, 224, 71, 0.96);
+      }
+
+      .status-entry.status-error .status-pill {
+        background: rgba(248, 113, 113, 0.45);
+        color: rgba(254, 202, 202, 0.95);
+      }
+
+      .status-entry.status-debug .status-pill {
+        background: rgba(148, 163, 184, 0.28);
+        color: rgba(226, 232, 240, 0.9);
+      }
+
+      .status-entry.status-trace .status-pill {
+        background: rgba(79, 70, 229, 0.35);
+        color: rgba(196, 181, 253, 0.95);
+      }
+
+      .status-entry .status-message {
+        color: rgba(226, 232, 240, 0.95);
+      }
+
+      .status-entry .status-detail {
+        grid-column: 2 / span 1;
+        font-size: 0.8rem;
+        color: rgba(148, 163, 184, 0.9);
+      }
+
+      @keyframes progress-indeterminate {
+        0% {
+          transform: translateX(-100%);
+        }
+        50% {
+          transform: translateX(-10%);
+        }
+        100% {
+          transform: translateX(100%);
+        }
       }
 
       #palette {
@@ -361,6 +722,23 @@
       .control output {
         font-size: 0.85rem;
         color: rgba(148, 163, 184, 0.9);
+      }
+
+      .level-legend {
+        list-style: none;
+        padding: 0;
+        margin: 8px 0 0;
+        display: grid;
+        gap: 4px;
+      }
+
+      .level-legend li {
+        font-size: 0.82rem;
+        color: rgba(148, 163, 184, 0.88);
+      }
+
+      .level-legend strong {
+        color: rgba(226, 232, 240, 0.95);
       }
 
       input[type="range"] {
@@ -627,9 +1005,9 @@
 
       .debug-log .log-entry {
         display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 4px 10px;
-        align-items: baseline;
+        grid-template-columns: auto auto 1fr;
+        gap: 4px 12px;
+        align-items: center;
         font-size: 0.9rem;
       }
 
@@ -640,7 +1018,33 @@
         color: rgba(148, 163, 184, 0.9);
       }
 
-      .debug-log span {
+      .debug-log .level {
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+        text-transform: uppercase;
+        background: rgba(148, 163, 184, 0.28);
+        color: rgba(226, 232, 240, 0.92);
+      }
+
+      .debug-log .level[data-level="success"] {
+        background: rgba(34, 197, 94, 0.35);
+        color: rgba(190, 242, 100, 0.96);
+      }
+
+      .debug-log .level[data-level="warn"] {
+        background: rgba(234, 179, 8, 0.35);
+        color: rgba(253, 224, 71, 0.96);
+      }
+
+      .debug-log .level[data-level="error"] {
+        background: rgba(248, 113, 113, 0.45);
+        color: rgba(254, 202, 202, 0.95);
+      }
+
+      .debug-log .message {
         color: rgba(226, 232, 240, 0.95);
       }
 
@@ -654,6 +1058,46 @@
         display: flex;
         justify-content: flex-end;
         gap: 12px;
+      }
+
+      .api-key-form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .api-key-form label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-weight: 600;
+      }
+
+      .api-key-form input {
+        border-radius: 10px;
+        border: 1px solid rgba(59, 130, 246, 0.45);
+        background: rgba(15, 23, 42, 0.8);
+        color: rgba(226, 232, 240, 0.95);
+        padding: 8px 12px;
+        font: inherit;
+        letter-spacing: 0.03em;
+      }
+
+      .api-key-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .api-key-actions button {
+        flex: 1 1 140px;
+        border-radius: 10px;
+        padding: 8px 12px;
+      }
+
+      .api-key-status {
+        font-size: 0.85rem;
+        color: rgba(148, 163, 184, 0.88);
       }
 
       .sheet-actions {
@@ -740,6 +1184,23 @@
           flex-wrap: wrap;
           justify-content: flex-end;
         }
+
+        .prompt-form {
+          order: 1;
+          flex: 1 1 100%;
+          margin-bottom: 8px;
+          max-width: 100%;
+        }
+
+        .palette-row {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 12px;
+        }
+
+        #statusDock {
+          max-width: none;
+        }
       }
 
       @media (max-width: 720px) {
@@ -751,14 +1212,16 @@
           max-height: calc(100vh - 240px);
         }
 
-        #paletteDock {
-          flex-direction: column;
-          align-items: stretch;
-          gap: 12px;
+        .prompt-form {
+          margin-right: 0;
         }
 
         #progress {
           min-width: 0;
+        }
+
+        #statusDock {
+          max-width: 100%;
         }
       }
     </style>
@@ -766,6 +1229,24 @@
   <body>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
+        <form id="promptForm" class="prompt-form" autocomplete="off">
+          <label class="sr-only" for="promptInput">Describe an image for Capycolour</label>
+          <div class="prompt-field">
+            <span class="prompt-icon" aria-hidden="true">?</span>
+            <input
+              id="promptInput"
+              type="text"
+              name="prompt"
+              autocomplete="off"
+              placeholder="Describe a Capycolour scene…"
+              aria-describedby="promptHelper"
+            />
+            <button id="promptSubmit" type="submit" aria-label="Generate ChatGPT art">Draw</button>
+          </div>
+          <p id="promptHelper" class="sr-only">
+            Capycolour will ask ChatGPT to draw this description and import it as a new puzzle.
+          </p>
+        </form>
         <button
           id="hintButton"
           type="button"
@@ -882,12 +1363,12 @@
             <img
               id="sampleArtPreview"
               class="sample-art"
-              alt="Capybara sample illustration"
+              alt="Capycolour sample illustration"
             />
-            <h1>Drop an image to start</h1>
+            <h1>Ask ChatGPT or drop an image</h1>
             <p>
-              Drag a picture anywhere on the screen, choose a file from your device,
-              or jump straight into our capybara sample scene.
+              Describe your dream scene in the prompt bar, drag a picture anywhere on the screen,
+              or choose a file from your device. You can also jump straight into our Capycolour sample puzzle.
             </p>
             <div class="hint-actions">
               <button id="selectImage" type="button">Choose an image</button>
@@ -897,15 +1378,50 @@
                 data-action="load-sample"
                 aria-label="Load capybara sample puzzle"
               >
-                Try the capybara sample
+                Try the Capycolour sample
               </button>
             </div>
           </div>
         </div>
       </div>
       <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div id="progress" aria-live="polite" data-testid="progress-message">—</div>
-        <div id="palette" role="list"></div>
+        <div id="statusDock">
+          <div
+            id="generationStatus"
+            class="generation-status"
+            data-active="false"
+            data-state="idle"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <div class="generation-status-header">
+              <span id="generationStatusLabel" class="generation-title">Generator idle</span>
+              <span id="generationStatusDetail" class="generation-detail">Awaiting prompt or import.</span>
+            </div>
+            <div class="generation-progress" aria-hidden="true">
+              <div id="generationProgressFill" class="progress-fill"></div>
+            </div>
+          </div>
+          <dl
+            id="generationDetails"
+            class="generation-details"
+            data-empty="true"
+            aria-live="polite"
+            aria-label="Generation telemetry"
+          ></dl>
+          <ol
+            id="statusStream"
+            class="status-stream"
+            aria-live="polite"
+            aria-relevant="additions text"
+            aria-label="Recent status updates"
+          ></ol>
+        </div>
+        <div class="palette-row">
+          <div id="progress" aria-live="polite" data-testid="progress-message">—</div>
+          <div id="palette" role="list"></div>
+        </div>
       </footer>
     </div>
     <input id="fileInput" type="file" accept=".json,image/*" hidden />
@@ -925,6 +1441,8 @@
         <section class="sheet-section" aria-labelledby="commandsHeading">
           <h3 id="commandsHeading">Command buttons</h3>
           <dl class="command-list">
+            <dt>? Prompt</dt>
+            <dd>Send your description to ChatGPT and import the generated Capycolour puzzle.</dd>
             <dt>? Hint</dt>
             <dd>Flash the smallest unfinished region and switch colours if needed.</dd>
             <dt>↺ Reset</dt>
@@ -932,7 +1450,7 @@
             <dt>🖼 Preview</dt>
             <dd>Toggle the finished artwork overlay to compare your progress.</dd>
             <dt>🐹 Sample</dt>
-            <dd>Reload the built-in capybara puzzle for a fresh board.</dd>
+            <dd>Reload the built-in Capycolour puzzle for a fresh board.</dd>
             <dt>⛶ Fullscreen</dt>
             <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
             <dt>⬆ Import</dt>
@@ -955,11 +1473,47 @@
             <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
           </ul>
         </section>
+        <section class="sheet-section" aria-labelledby="apiKeyHeading">
+          <h3 id="apiKeyHeading">ChatGPT access</h3>
+          <p class="control-note">
+            Store an OpenAI API key locally to let Capycolour request fresh illustrations when you use the prompt bar.
+          </p>
+          <form id="apiKeyForm" class="api-key-form">
+            <label for="apiKeyInput">
+              OpenAI API key
+              <input
+                id="apiKeyInput"
+                type="password"
+                name="openai-key"
+                placeholder="sk-..."
+                autocomplete="off"
+                spellcheck="false"
+                inputmode="text"
+              />
+            </label>
+            <div class="api-key-actions">
+              <button type="submit">Save ChatGPT key</button>
+              <button id="clearApiKey" type="button" disabled>Clear stored key</button>
+            </div>
+            <p id="apiKeyStatus" class="api-key-status" role="status">
+              No key stored. Capycolour will fall back to the bundled sample until you save one.
+            </p>
+          </form>
+        </section>
         <section class="sheet-section" aria-labelledby="debugHeading">
           <h3 id="debugHeading">Debug log</h3>
           <p class="control-note">
-            Recent actions, selections, and generation events appear here while you play.
+            Recent actions, selections, and generation events appear here while you play. Each entry includes a severity badge
+            that mirrors the footer status tray so you can scan for successes, warnings, or failures at a glance.
           </p>
+          <ul class="level-legend">
+            <li><strong>TRACE</strong> – Ultra-detailed instrumentation for segmentation tweaks and import timing.</li>
+            <li><strong>DEBUG</strong> – Generator steps, palette prep, and canvas interactions useful for QA walkthroughs.</li>
+            <li><strong>INFO</strong> – High-level events such as prompt submissions, imports, or save operations.</li>
+            <li><strong>SUCCESS</strong> – Confirmations that a request, import, or generation stage completed normally.</li>
+            <li><strong>WARN</strong> – Recoverable issues like missing keys, retries, or cancelled requests.</li>
+            <li><strong>ERROR</strong> – Failures that require attention; the sample fallback usually triggers next.</li>
+          </ul>
           <div
             id="debugLog"
             class="debug-log"
@@ -1006,7 +1560,7 @@
             Applies to unfinished regions and adjusts outline contrast automatically.
           </p>
         </section>
-        <section class="sheet-section" aria-labelledby="generatorHeading">
+        <section class="sheet-section advanced-only" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Generator</h3>
           <label class="control">
             <span>Colours <output data-for="colorCount">16</output></span>
@@ -1060,6 +1614,9 @@
     </div>
         <script>
       // Cached DOM references so we can wire handlers without repeated lookups.
+      const promptForm = document.getElementById("promptForm");
+      const promptInput = document.getElementById("promptInput");
+      const promptSubmit = document.getElementById("promptSubmit");
       const appEl = document.getElementById("app");
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
@@ -1082,6 +1639,10 @@
       const helpSheet = document.getElementById("helpSheet");
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
+      const apiKeyForm = document.getElementById("apiKeyForm");
+      const apiKeyInput = document.getElementById("apiKeyInput");
+      const apiKeyStatus = document.getElementById("apiKeyStatus");
+      const clearApiKeyButton = document.getElementById("clearApiKey");
       const viewportEl = document.getElementById("viewport");
       const canvasStage = document.getElementById("canvasStage");
       const canvasTransform = document.getElementById("canvasTransform");
@@ -1100,10 +1661,18 @@
       const saveList = document.getElementById("saveList");
       const paletteEl = document.getElementById("palette");
       const progressEl = document.getElementById("progress");
+      const statusDockEl = document.getElementById("statusDock");
+      const statusStreamEl = document.getElementById("statusStream");
+      const generationDetailsEl = document.getElementById("generationDetails");
+      const generationStatusEl = document.getElementById("generationStatus");
+      const generationStatusLabel = document.getElementById("generationStatusLabel");
+      const generationStatusDetail = document.getElementById("generationStatusDetail");
+      const generationProgressFill = document.getElementById("generationProgressFill");
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.getElementById("previewCanvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
+      const advancedSections = Array.from(document.querySelectorAll(".advanced-only"));
 
       // Settings sheet output mirrors we update while users drag sliders.
       const optionOutputs = {
@@ -1115,14 +1684,28 @@
         smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
+      const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
+      const CLOUD_STORAGE_KEY = "capy.cloud.backup.v1";
+      const OPENAI_KEY_STORAGE = "capycolour.openaiKey";
+      const PROMPT_STORAGE_KEY = "capycolour.lastPrompt";
+      const DEFAULT_PROMPT =
+        "A cheerful capybara painting in luminous watercolour, surrounded by vibrant jungle flowers and sparkling water";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
+      const cloudSync = createCloudSync();
+      let autosaveTimer = null;
+      let pendingAutosaveReason = null;
+
+      const generationState = {
+        pending: false,
+        lastPrompt: null,
+      };
 
       // Embedded sample used for onboarding and smoke tests.
       const SAMPLE_ARTWORK = {
-        title: "Capybara Springs",
-        description: "A capybara with an orange crown relaxes beside a dachshund in a forest lagoon.",
+        title: "Capycolour Springs",
+        description: "A capybara with an orange crown relaxes beside a dachshund in a forest lagoon, painted in Capycolour hues.",
         dataUrl:
           "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMjAgMjQwIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ic2t5IiB4MT0iMCIgeDI9IjAiIHkxPSIwIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2Y5ZThjOCIgLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOGNjMGZmIiAvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0id2F0ZXIiIHgxPSIwIiB4Mj0iMCIgeTE9IjAiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjNGU4Y2M5IiAvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMyNDRiNzQiIC8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJoaWxsIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzNmN2IzZiIgLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMjM1NzJmIiAvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ic3VuIiBjeD0iMC4xIiBjeT0iMC4xIiByPSIwLjgiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmZmY3YzMiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2YyYTkzYSIgLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIzMjAiIGhlaWdodD0iMTYwIiBmaWxsPSJ1cmwoI3NreSkiIC8+CiAgPHJlY3QgeT0iMTQwIiB3aWR0aD0iMzIwIiBoZWlnaHQ9IjEwMCIgZmlsbD0idXJsKCN3YXRlcikiIC8+CiAgPGVsbGlwc2UgY3g9IjI2MCIgY3k9IjY1IiByeD0iMjgiIHJ5PSIyOCIgZmlsbD0idXJsKCNzdW4pIiBvcGFjaXR5PSIwLjkiIC8+CiAgPHBhdGggZD0iTTAgMTIwIFE4MCA2MCAxNjAgMTIwIFQzMjAgMTIwIFYxNzAgSDAgWiIgZmlsbD0idXJsKCNoaWxsKSIgLz4KICA8cGF0aCBkPSJNMjgwIDQwIFEyNzAgMTEwIDMwMCAxMzAgTDMwMCAxNjAgUTI1MCAxNDAgMjYwIDgwIiBmaWxsPSIjNzRhMmRlIiBvcGFjaXR5PSIwLjciIC8+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNTIsMTIwKSI+CiAgICA8cGF0aCBkPSJNMjggMjggcTQwIC00MCA5NiAtMTggdDcyIDYwIHEtOCAzNiAtNDYgNDQgbC05MCA0IHEtNDAgLTYgLTUyIC0zNiB0MjAgLTU0IHoiIGZpbGw9IiNjMzhhNTUiIC8+CiAgICA8cGF0aCBkPSJNMzggMjYgcTIyIC0yMiA0NCAtMjQgdDQ2IDEyIHEyMCAxMCAzMiAzMCB0NCA0NCBxLTQgMjQgLTMyIDMyIGwtNjIgNiBxLTM0IDAgLTQ2IC0yMCB0LTIgLTQ4IHoiIGZpbGw9IiNhZTc0NDIiIC8+CiAgICA8ZWxsaXBzZSBjeD0iODYiIGN5PSI2NiIgcng9IjE2IiByeT0iMjAiIGZpbGw9IiNmNWM5OTUiIC8+CiAgICA8ZWxsaXBzZSBjeD0iNjAiIGN5PSI3NiIgcng9IjE4IiByeT0iMjIiIGZpbGw9IiNiOTdiNDMiIC8+CiAgICA8ZWxsaXBzZSBjeD0iMTA4IiBjeT0iNTYiIHJ4PSIxNCIgcnk9IjE4IiBmaWxsPSIjYjk3YjQzIiAvPgogICAgPGVsbGlwc2UgY3g9IjE0NiIgY3k9IjY0IiByeD0iMzIiIHJ5PSIzOCIgZmlsbD0iI2Q0OWI2MiIgLz4KICAgIDxlbGxpcHNlIGN4PSIxNjQiIGN5PSI3MCIgcng9IjIwIiByeT0iMjQiIGZpbGw9IiNjMzhhNTUiIC8+CiAgICA8ZWxsaXBzZSBjeD0iMTcwIiBjeT0iODAiIHJ4PSIxMCIgcnk9IjEyIiBmaWxsPSIjNzg0ZjMyIiAvPgogICAgPGVsbGlwc2UgY3g9IjEzNCIgY3k9IjYwIiByeD0iNiIgcnk9IjgiIGZpbGw9IiMyZDFjMTAiIC8+CiAgICA8ZWxsaXBzZSBjeD0iMTg4IiBjeT0iNzQiIHJ4PSI2IiByeT0iOCIgZmlsbD0iIzJkMWMxMCIgLz4KICAgIDxwYXRoIGQ9Ik0xNDAgOTYgcTE2IDEwIDMyIDAiIHN0cm9rZT0iIzJkMWMxMCIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIGZpbGw9Im5vbmUiIC8+CiAgICA8cGF0aCBkPSJNMTIyIDMyIHEyMCAtMjYgNDQgLTIyIHQ0MCAyNCBsLTEyIDggcS0yNCAtMTggLTQwIC0xOCB0LTMyIDEyIHoiIGZpbGw9IiNiNTc0MzUiIC8+CiAgICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxNDMsLTE4KSI+CiAgICAgIDxlbGxpcHNlIGN4PSIxMCIgY3k9IjEwIiByeD0iMTIiIHJ5PSIxMiIgZmlsbD0iI2YzN2IyNSIgLz4KICAgICAgPHBhdGggZD0iTTYgNiBsLTQgLTgiIHN0cm9rZT0iIzJkNjcyOSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIC8+CiAgICAgIDxwYXRoIGQ9Ik0xMCA1IHE0IC02IDEwIC0xMCIgc3Ryb2tlPSIjMmQ2NzI5IiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgLz4KICAgIDwvZz4KICA8L2c+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTg0LDE1NikiPgogICAgPHBhdGggZD0iTTAgMTQgcTEwIC0xOCAzMCAtMTggdDM2IDE2IHExMCAxNiAyIDMyIHQtMzAgMjAgcS0yNCA0IC0zNiAtOCB0LTEyIC0yOCBxMCAtOCAxMCAtMTQgeiIgZmlsbD0iIzhlNTIyOCIgLz4KICAgIDxlbGxpcHNlIGN4PSIzMCIgY3k9IjM4IiByeD0iMTgiIHJ5PSIxNiIgZmlsbD0iI2E3NjUzNCIgLz4KICAgIDxlbGxpcHNlIGN4PSI1NCIgY3k9IjM2IiByeD0iMTYiIHJ5PSIxMiIgZmlsbD0iI2JjN2E0NSIgLz4KICAgIDxlbGxpcHNlIGN4PSI3MCIgY3k9IjM0IiByeD0iMTIiIHJ5PSIxMCIgZmlsbD0iIzc4NDMyNCIgLz4KICAgIDxlbGxpcHNlIGN4PSI3MiIgY3k9IjMyIiByeD0iNCIgcnk9IjYiIGZpbGw9IiMyZDFjMTAiIC8+CiAgICA8cGF0aCBkPSJNMzAgMTYgcTE0IC02IDIyIDYiIHN0cm9rZT0iIzJkMWMxMCIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIC8+CiAgPC9nPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDMyLDE4NikiPgogICAgPGVsbGlwc2UgY3g9IjEyIiBjeT0iMTIiIHJ4PSIxMiIgcnk9IjEyIiBmaWxsPSIjZmJjZGQxIiAvPgogICAgPHJlY3QgeD0iOCIgeT0iMiIgd2lkdGg9IjgiIGhlaWdodD0iMTYiIHJ4PSI0IiBmaWxsPSIjZDU1ODY0IiAvPgogICAgPGNpcmNsZSBjeD0iMTIiIGN5PSI0IiByPSIzIiBmaWxsPSIjZmZmIiAvPgogIDwvZz4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3MCwxOTgpIj4KICAgIDxlbGxpcHNlIGN4PSIxMCIgY3k9IjEwIiByeD0iMTAiIHJ5PSIxMCIgZmlsbD0iI2ZiZDdhOCIgLz4KICAgIDxyZWN0IHg9IjYiIHk9IjIiIHdpZHRoPSI4IiBoZWlnaHQ9IjE0IiByeD0iNCIgZmlsbD0iI2QxNmYzMyIgLz4KICAgIDxjaXJjbGUgY3g9IjEwIiBjeT0iNCIgcj0iMyIgZmlsbD0iI2ZmZiIgLz4KICA8L2c+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMjgwLDE4OCkiPgogICAgPGVsbGlwc2UgY3g9IjEwIiBjeT0iMTAiIHJ4PSIxMCIgcnk9IjEwIiBmaWxsPSIjZmJkN2E4IiAvPgogICAgPHJlY3QgeD0iNiIgeT0iMiIgd2lkdGg9IjgiIGhlaWdodD0iMTQiIHJ4PSI0IiBmaWxsPSIjZDE2ZjMzIiAvPgogICAgPGNpcmNsZSBjeD0iMTAiIGN5PSI0IiByPSIzIiBmaWxsPSIjZmZmIiAvPgogIDwvZz4KICA8cGF0aCBkPSJNNDAgMjAwIHE2MCAyMCAxNDAgMCB0MTIwIDEyIHEtNDggMjQgLTE2MCAyMCB0LTE0MCAtMzIgcTIwIC0xMiA0MCAwIHoiIGZpbGw9IiMzZDZkYTUiIG9wYWNpdHk9IjAuNiIgLz4KPC9zdmc+Cg==",
       };
@@ -1159,6 +1742,7 @@
         filled: new Set(),
         sourceUrl: null,
         sourceTitle: null,
+        sourceMode: null,
         lastOptions: null,
         settings: {
           autoAdvance: true,
@@ -1171,8 +1755,494 @@
         puzzleImageData: null,
       };
 
+      function applyGameplaySettings(settings = {}) {
+        if (!settings || typeof settings !== "object") return;
+        if (typeof settings.autoAdvance === "boolean") {
+          state.settings.autoAdvance = settings.autoAdvance;
+          if (autoAdvanceToggle) {
+            autoAdvanceToggle.checked = settings.autoAdvance;
+          }
+        }
+        if (typeof settings.animateHints === "boolean") {
+          state.settings.animateHints = settings.animateHints;
+          if (hintFlashToggle) {
+            hintFlashToggle.checked = settings.animateHints;
+          }
+        }
+      }
+
       const debugLogEntries = [];
       const DEBUG_LOG_LIMIT = 80;
+      const VALID_DEBUG_LEVELS = new Set(["trace", "debug", "info", "success", "warn", "warning", "error"]);
+      const STATUS_MAX_ENTRIES = 6;
+      const STATUS_DEFAULT_LIFETIME = 12000;
+      const STATUS_FADE_MS = 1400;
+      const generationProgressState = {
+        active: false,
+        steps: 1,
+        completed: 0,
+      };
+      const TELEMETRY_PROGRESS_KEY = "progress";
+      const TELEMETRY_PROGRESS_STEP_KEY = "progressStep";
+      let generationIdleTimer = null;
+      const generationTelemetryState = {
+        order: [],
+        data: new Map(),
+      };
+
+      function applyAdaptiveVisibility(orientation) {
+        const isPortrait = orientation === "portrait";
+        if (statusDockEl) {
+          if (isPortrait) {
+            statusDockEl.dataset.mobileHidden = "true";
+            statusDockEl.setAttribute("aria-hidden", "true");
+            statusDockEl.setAttribute("inert", "");
+            if ("inert" in statusDockEl) {
+              statusDockEl.inert = true;
+            }
+          } else {
+            delete statusDockEl.dataset.mobileHidden;
+            statusDockEl.removeAttribute("aria-hidden");
+            statusDockEl.removeAttribute("inert");
+            if ("inert" in statusDockEl) {
+              statusDockEl.inert = false;
+            }
+          }
+        }
+        for (const section of advancedSections) {
+          if (!(section instanceof HTMLElement)) continue;
+          if (isPortrait) {
+            section.dataset.mobileHidden = "true";
+            section.setAttribute("aria-hidden", "true");
+            section.setAttribute("inert", "");
+            if ("inert" in section) {
+              section.inert = true;
+            }
+          } else {
+            delete section.dataset.mobileHidden;
+            section.removeAttribute("aria-hidden");
+            section.removeAttribute("inert");
+            if ("inert" in section) {
+              section.inert = false;
+            }
+          }
+        }
+      }
+
+      function renderGenerationTelemetry() {
+        if (!generationDetailsEl) return;
+        generationDetailsEl.innerHTML = "";
+        const fragment = document.createDocumentFragment();
+        for (const key of generationTelemetryState.order) {
+          const entry = generationTelemetryState.data.get(key);
+          if (!entry) continue;
+          const dt = document.createElement("dt");
+          dt.textContent = entry.label;
+          const dd = document.createElement("dd");
+          dd.textContent = entry.value;
+          fragment.appendChild(dt);
+          fragment.appendChild(dd);
+        }
+        generationDetailsEl.appendChild(fragment);
+        if (generationTelemetryState.order.length === 0) {
+          generationDetailsEl.dataset.empty = "true";
+        } else {
+          generationDetailsEl.dataset.empty = "false";
+        }
+      }
+
+      function resetGenerationTelemetry() {
+        generationTelemetryState.order = [];
+        generationTelemetryState.data.clear();
+        renderGenerationTelemetry();
+      }
+
+      function updateGenerationTelemetry(entries) {
+        if (!generationDetailsEl) return;
+        if (!entries) return;
+        const list = Array.isArray(entries) ? entries : [entries];
+        let changed = false;
+        for (const entry of list) {
+          if (!entry) continue;
+          const key = String(entry.key || "").trim();
+          if (!key) continue;
+          const label = entry.label != null ? String(entry.label) : key;
+          const value = entry.value != null ? String(entry.value) : "";
+          const existing = generationTelemetryState.data.get(key);
+          if (!existing) {
+            generationTelemetryState.order.push(key);
+            generationTelemetryState.data.set(key, { label, value });
+            changed = true;
+          } else if (existing.label !== label || existing.value !== value) {
+            generationTelemetryState.data.set(key, { label, value });
+            changed = true;
+          }
+        }
+        if (changed) {
+          renderGenerationTelemetry();
+        }
+      }
+
+      function applyProgressTelemetry(state, detail = "", options = {}) {
+        const totalSteps = Math.max(
+          1,
+          Number.isFinite(options.steps)
+            ? Number(options.steps)
+            : generationProgressState.steps || 1
+        );
+        const completedSteps = Math.min(
+          totalSteps,
+          Math.max(
+            0,
+            Number.isFinite(options.completed)
+              ? Number(options.completed)
+              : generationProgressState.completed || 0
+          )
+        );
+        const percent = Math.round((completedSteps / totalSteps) * 100);
+        let progressValue = `${completedSteps}/${totalSteps} (${percent}%)`;
+        if (state === "idle") {
+          progressValue = "Idle";
+        } else if (state === "indeterminate") {
+          progressValue = "Working…";
+        } else if (state === "success") {
+          progressValue = `Complete (${percent}%)`;
+        } else if (state === "error") {
+          progressValue = `Failed (${completedSteps}/${totalSteps}, ${percent}%)`;
+        }
+
+        updateGenerationTelemetry({
+          key: TELEMETRY_PROGRESS_KEY,
+          label: "Progress",
+          value: progressValue,
+        });
+
+        const label = options.label ? String(options.label) : "";
+        const currentDetail = detail || label;
+        let stepValue = currentDetail;
+        if (!stepValue) {
+          if (state === "idle") {
+            stepValue = "Idle";
+          } else if (state === "indeterminate") {
+            stepValue = "Working…";
+          } else if (state === "success") {
+            stepValue = "Complete";
+          } else if (state === "error") {
+            stepValue = "Failed";
+          }
+        }
+        if (stepValue) {
+          updateGenerationTelemetry({
+            key: TELEMETRY_PROGRESS_STEP_KEY,
+            label: "Current step",
+            value: stepValue,
+          });
+        }
+      }
+
+      function describeSourceMode(mode) {
+        switch (mode) {
+          case "prompt":
+            return "ChatGPT prompt";
+          case "sample":
+            return "Sample puzzle";
+          case "json":
+            return "JSON import";
+          case "fixture":
+            return "Fixture puzzle";
+          case "external":
+            return "External data";
+          case "image":
+            return "Image import";
+          default:
+            return "Puzzle import";
+        }
+      }
+
+      function sanitizePromptText(prompt) {
+        if (typeof prompt !== "string") return "";
+        return prompt.replace(/\s+/g, " ").trim();
+      }
+
+      function getStoredPrompt() {
+        try {
+          const stored = window.localStorage?.getItem(PROMPT_STORAGE_KEY) ?? "";
+          return sanitizePromptText(stored) || "";
+        } catch (error) {
+          return "";
+        }
+      }
+
+      function storePrompt(prompt) {
+        const sanitized = sanitizePromptText(prompt);
+        generationState.lastPrompt = sanitized || null;
+        try {
+          if (sanitized) {
+            window.localStorage?.setItem(PROMPT_STORAGE_KEY, sanitized);
+          } else {
+            window.localStorage?.removeItem(PROMPT_STORAGE_KEY);
+          }
+        } catch (error) {
+          // Ignore storage errors (private browsing, quotas, etc.).
+        }
+        if (promptInput && promptInput.value !== sanitized) {
+          promptInput.value = sanitized;
+        }
+        return sanitized;
+      }
+
+      function getStoredOpenAIKey() {
+        try {
+          const stored = window.localStorage?.getItem(OPENAI_KEY_STORAGE) ?? null;
+          if (typeof stored === "string" && stored.trim()) {
+            return stored.trim();
+          }
+        } catch (error) {
+          // Ignore storage access issues.
+        }
+        return null;
+      }
+
+      function persistOpenAIKey(key) {
+        const trimmed = typeof key === "string" ? key.trim() : "";
+        if (!trimmed) return null;
+        try {
+          window.localStorage?.setItem(OPENAI_KEY_STORAGE, trimmed);
+        } catch (error) {
+          // Ignore storage errors.
+        }
+        return trimmed;
+      }
+
+      function clearOpenAIKey() {
+        try {
+          window.localStorage?.removeItem(OPENAI_KEY_STORAGE);
+        } catch (error) {
+          // Ignore storage errors.
+        }
+      }
+
+      function resolveOpenAIKey(options = {}) {
+        const { interactive = false } = options;
+        const stored = getStoredOpenAIKey();
+        if (stored) {
+          return stored;
+        }
+        if (interactive && typeof window.prompt === "function") {
+          const input = window.prompt("Enter your OpenAI API key for Capycolour (sk-...)");
+          if (typeof input === "string" && input.trim()) {
+            return persistOpenAIKey(input.trim());
+          }
+        }
+        return null;
+      }
+
+      function maskOpenAIKey(key) {
+        if (!key) return "";
+        if (key.length <= 8) {
+          return `${key.slice(0, 2)}…${key.slice(-2)}`;
+        }
+        return `${key.slice(0, 4)}…${key.slice(-4)}`;
+      }
+
+      function refreshApiKeyStatus() {
+        if (!apiKeyStatus) return;
+        const storedKey = getStoredOpenAIKey();
+        if (clearApiKeyButton) {
+          clearApiKeyButton.disabled = !storedKey;
+        }
+        if (storedKey) {
+          apiKeyStatus.textContent = `Key stored locally (${maskOpenAIKey(storedKey)}).`;
+          if (apiKeyInput && document.activeElement !== apiKeyInput) {
+            apiKeyInput.value = storedKey;
+          }
+        } else {
+          apiKeyStatus.textContent =
+            "No key stored. Capycolour will fall back to the bundled sample until you save one.";
+          if (apiKeyInput && document.activeElement !== apiKeyInput) {
+            apiKeyInput.value = "";
+          }
+        }
+      }
+
+      function formatPromptSnippet(prompt) {
+        const sanitized = sanitizePromptText(prompt);
+        if (!sanitized) return "Prompt";
+        if (sanitized.length <= 64) return sanitized;
+        return `${sanitized.slice(0, 61).trim()}…`;
+      }
+
+      function setGenerationPending(active) {
+        generationState.pending = Boolean(active);
+        if (promptForm) {
+          if (active) {
+            promptForm.dataset.generating = "true";
+          } else {
+            delete promptForm.dataset.generating;
+          }
+        }
+        if (promptInput) {
+          promptInput.disabled = active;
+        }
+        if (promptSubmit) {
+          promptSubmit.disabled = active;
+          promptSubmit.textContent = active ? "Drawing…" : "Draw";
+        }
+        for (const button of sampleButtons) {
+          if (button) {
+            button.disabled = active;
+          }
+        }
+      }
+
+      async function generatePromptedPuzzle(prompt, options = {}) {
+        const {
+          interactive = false,
+          fallbackToSample = false,
+          persistPromptValue = true,
+          reason = "manual",
+        } = options;
+        const sanitized = sanitizePromptText(prompt) || DEFAULT_PROMPT;
+        if (persistPromptValue) {
+          storePrompt(sanitized);
+        } else if (promptInput && promptInput.value.trim() !== sanitized) {
+          promptInput.value = sanitized;
+        }
+        const snippet = formatPromptSnippet(sanitized);
+        setGenerationPending(true);
+        const apiKey = resolveOpenAIKey({ interactive });
+        refreshApiKeyStatus();
+        if (!apiKey) {
+          logDebug("ChatGPT image generation skipped: API key not configured.", "warn");
+          setGenerationPending(false);
+          if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
+            loadSamplePuzzle({ announce: true });
+          }
+          return false;
+        }
+        state.sourceMode = "prompt";
+        setGenerationIndeterminate("Contacting ChatGPT…", `Awaiting response for “${snippet}”`, {
+          statusLabel: "PROMPT",
+          resetTelemetry: true,
+          telemetry: [
+            { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+            { key: "prompt", label: "Prompt", value: snippet },
+          ],
+        });
+        logDebug(`Requesting ChatGPT image for “${snippet}” (${reason})`, "info");
+        try {
+          const response = await fetch("https://api.openai.com/v1/images/generations", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: "gpt-image-1",
+              prompt: sanitized,
+              size: "768x768",
+              response_format: "b64_json",
+            }),
+          });
+          if (!response.ok) {
+            let errorSummary = `${response.status}`;
+            try {
+              const text = await response.text();
+              errorSummary = `${response.status} ${response.statusText} – ${text.slice(0, 120)}`;
+            } catch (readError) {
+              errorSummary = `${response.status} ${response.statusText}`;
+            }
+            logDebug(`ChatGPT image request failed: ${errorSummary}`, "error");
+            failGenerationProgress("ChatGPT request failed", errorSummary, {
+              statusLabel: "PROMPT",
+              telemetry: [
+                { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+                { key: "prompt", label: "Prompt", value: snippet },
+              ],
+            });
+            if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
+              loadSamplePuzzle({ announce: true });
+            }
+            return false;
+          }
+          const payload = await response.json();
+          const imageData = payload?.data?.[0]?.b64_json;
+          if (!imageData) {
+            logDebug("ChatGPT response did not include image data.", "error");
+            failGenerationProgress("ChatGPT response missing image", "The API did not return usable artwork.", {
+              statusLabel: "PROMPT",
+              telemetry: [
+                { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+                { key: "prompt", label: "Prompt", value: snippet },
+              ],
+            });
+            if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
+              loadSamplePuzzle({ announce: true });
+            }
+            return false;
+          }
+          const dataUrl = `data:image/png;base64,${imageData}`;
+          resetPuzzleUI();
+          state.sourceMode = "prompt";
+          state.sourceUrl = dataUrl;
+          state.sourceTitle = `Capycolour prompt – ${snippet}`;
+          startHint.classList.add("hidden");
+          updateGenerationTelemetry([
+            { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+            { key: "prompt", label: "Prompt", value: snippet },
+          ]);
+          const loadMessage = `Generating ChatGPT art for “${snippet}”`;
+          loadImage(dataUrl, {
+            logMessage: loadMessage,
+            completionMessage: `${loadMessage} complete`,
+            skipDefaultLog: true,
+          });
+          return true;
+        } catch (error) {
+          if (error?.name === "AbortError") {
+            logDebug("ChatGPT image request was cancelled.", "warn");
+            failGenerationProgress("ChatGPT request cancelled", "The request was aborted.", {
+              statusLabel: "PROMPT",
+              level: "warn",
+              telemetry: [
+                { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+                { key: "prompt", label: "Prompt", value: snippet },
+              ],
+            });
+          } else {
+            console.error("Failed to generate ChatGPT image", error);
+            logDebug("ChatGPT image generation failed due to an unexpected error.", "error");
+            failGenerationProgress("ChatGPT request failed", "Unexpected error", {
+              statusLabel: "PROMPT",
+              telemetry: [
+                { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+                { key: "prompt", label: "Prompt", value: snippet },
+              ],
+            });
+          }
+          if (fallbackToSample && SAMPLE_ARTWORK?.dataUrl) {
+            loadSamplePuzzle({ announce: true });
+          }
+          return false;
+        } finally {
+          setGenerationPending(false);
+        }
+      }
+
+      async function attemptInitialGeneration() {
+        const storedPrompt = getStoredPrompt();
+        const initialPrompt = storedPrompt || DEFAULT_PROMPT;
+        if (promptInput) {
+          promptInput.value = initialPrompt;
+        }
+        const success = await generatePromptedPuzzle(initialPrompt, {
+          interactive: false,
+          fallbackToSample: true,
+          persistPromptValue: true,
+          reason: "initial",
+        });
+        return success;
+      }
 
       if (typeof window !== "undefined") {
         // Public hooks for tests and manual loading. Keep backwards compatible.
@@ -1183,6 +2253,7 @@
               return;
             }
             resetPuzzleUI();
+            state.sourceMode = "external";
             state.sourceUrl = dataUrl;
             const metadataTitle =
               metadata && typeof metadata === "object"
@@ -1194,7 +2265,7 @@
                 : null;
             state.sourceTitle = metadataTitle || "External data";
             startHint.classList.add("hidden");
-            logDebug(`Loading external puzzle data: ${state.sourceTitle}`);
+            logDebug(`Loading external puzzle data: ${state.sourceTitle}`, "info");
             loadImage(dataUrl);
           },
           loadPuzzleFixture(puzzle) {
@@ -1212,14 +2283,44 @@
             updatePreviewState();
           },
           openSettings: () => openSheet(settingsSheet),
+          async generateFromPrompt(prompt, options = {}) {
+            const { interactive = false, fallbackToSample = false, persistPromptValue = true, reason = "external" } = options;
+            return generatePromptedPuzzle(prompt, {
+              interactive,
+              fallbackToSample,
+              persistPromptValue,
+              reason,
+            });
+          },
+          setChatGPTKey(key) {
+            if (typeof key !== "string") return false;
+            const stored = persistOpenAIKey(key);
+            refreshApiKeyStatus();
+            if (stored) {
+              logDebug("ChatGPT API key saved via script.", "success");
+            }
+            return Boolean(stored);
+          },
+          clearChatGPTKey() {
+            clearOpenAIKey();
+            refreshApiKeyStatus();
+            logDebug("ChatGPT API key cleared via script.", "warn");
+          },
+          getChatGPTPrompt() {
+            return generationState.lastPrompt || getStoredPrompt() || DEFAULT_PROMPT;
+          },
         };
+        window.capycolour = window.capyGenerator;
       }
 
+      applyGameplaySettings(state.settings);
+      setGenerationIdle();
       updateOptionOutputs();
       refreshSaveList();
       updateCommandStates();
       renderDebugLog();
-      logDebug("Session started");
+      refreshApiKeyStatus();
+      logDebug("Session started", "info");
       handleViewportChange({ log: true, recenter: true });
       resetView({ recenter: true });
 
@@ -1231,8 +2332,64 @@
         });
       }
 
-      if (SAMPLE_ARTWORK?.dataUrl) {
-        loadSamplePuzzle();
+      if (promptForm) {
+        promptForm.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const value = promptInput ? promptInput.value : "";
+          generatePromptedPuzzle(value, {
+            interactive: true,
+            fallbackToSample: false,
+            persistPromptValue: true,
+            reason: "manual",
+          });
+        });
+      }
+
+      const initialPromptText = getStoredPrompt() || DEFAULT_PROMPT;
+      if (promptInput && !promptInput.value) {
+        promptInput.value = initialPromptText;
+      }
+
+      const bootRestored = loadInitialSession();
+      if (!bootRestored) {
+        attemptInitialGeneration().catch((error) => {
+          console.error("Initial ChatGPT generation failed", error);
+          if (SAMPLE_ARTWORK?.dataUrl) {
+            loadSamplePuzzle({ announce: true });
+          }
+        });
+      }
+
+      if (apiKeyForm) {
+        apiKeyForm.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const value = apiKeyInput ? apiKeyInput.value || "" : "";
+          const trimmed = typeof value === "string" ? value.trim() : "";
+          if (!trimmed) {
+            clearOpenAIKey();
+            refreshApiKeyStatus();
+            logDebug("Cleared the stored ChatGPT API key.", "warn");
+            if (apiKeyInput) {
+              apiKeyInput.value = "";
+            }
+            return;
+          }
+          persistOpenAIKey(trimmed);
+          refreshApiKeyStatus();
+          logDebug("ChatGPT API key saved for this browser.", "success");
+        });
+      }
+
+      if (clearApiKeyButton) {
+        clearApiKeyButton.addEventListener("click", () => {
+          clearOpenAIKey();
+          refreshApiKeyStatus();
+          logDebug("Cleared the stored ChatGPT API key.", "warn");
+          if (apiKeyInput) {
+            apiKeyInput.value = "";
+            apiKeyInput.focus();
+          }
+        });
       }
 
       selectButton.addEventListener("click", () => fileInput.click());
@@ -1251,7 +2408,7 @@
       document.addEventListener("fullscreenchange", () => {
         updateFullscreenState();
         const active = Boolean(document.fullscreenElement);
-        logDebug(active ? "Entered fullscreen mode" : "Exited fullscreen mode");
+        logDebug(active ? "Entered fullscreen mode" : "Exited fullscreen mode", "info");
         handleViewportChange({ log: true, recenter: true });
       });
 
@@ -1259,7 +2416,7 @@
         clearDebugLogButton.addEventListener("click", () => {
           debugLogEntries.splice(0, debugLogEntries.length);
           renderDebugLog();
-          logDebug("Debug log cleared");
+          logDebug("Debug log cleared", "info");
         });
       }
 
@@ -1296,11 +2453,13 @@
       autoAdvanceToggle.addEventListener("change", () => {
         state.settings.autoAdvance = autoAdvanceToggle.checked;
         logDebug(`Auto-advance ${autoAdvanceToggle.checked ? "enabled" : "disabled"}`);
+        scheduleAutosave("settings-auto-advance");
       });
 
       hintFlashToggle.addEventListener("change", () => {
         state.settings.animateHints = hintFlashToggle.checked;
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
+        scheduleAutosave("settings-hint-animations");
       });
 
       if (backgroundColorInput) {
@@ -1309,6 +2468,7 @@
         });
         backgroundColorInput.addEventListener("change", (event) => {
           applyBackgroundColor(event.target.value);
+          scheduleAutosave("background-colour");
         });
       }
 
@@ -1326,6 +2486,7 @@
           flashColorRegions(state.activeColor);
         }
         updateProgress();
+        scheduleAutosave("reset-progress");
         logDebug("Reset puzzle progress");
       });
 
@@ -1541,6 +2702,7 @@
           flashColorRegions(state.activeColor);
         }
         updateProgress();
+        scheduleAutosave("fill-region");
         logDebug(
           `Filled region ${region.id} with colour #${region.colorId} (${state.filled.size}/${state.puzzle.regions.length})`
         );
@@ -1614,19 +2776,19 @@
           if (document.exitFullscreen) {
             document.exitFullscreen().catch((error) => {
               console.error("Failed to exit fullscreen", error);
-              logDebug("Unable to exit fullscreen");
+              logDebug("Unable to exit fullscreen", "warn");
             });
           }
           return;
         }
         const target = appEl || document.documentElement;
         if (!document.fullscreenEnabled || !target?.requestFullscreen) {
-          logDebug("Fullscreen not supported in this browser");
+          logDebug("Fullscreen not supported in this browser", "warn");
           return;
         }
         target.requestFullscreen().catch((error) => {
           console.error("Failed to enter fullscreen", error);
-          logDebug("Fullscreen request was blocked");
+          logDebug("Fullscreen request was blocked", "warn");
         });
       }
 
@@ -1642,6 +2804,7 @@
         if (document.body) {
           document.body.dataset.orientation = orientation;
         }
+        applyAdaptiveVisibility(orientation);
         const changed = orientation !== lastViewportMetrics.orientation;
         const sizeChanged = width !== lastViewportMetrics.width || height !== lastViewportMetrics.height;
         lastViewportMetrics = { orientation, width, height };
@@ -1653,9 +2816,9 @@
         const metrics = updateViewportMetrics();
         const orientationChanged = metrics.changed;
         if (orientationChanged) {
-          logDebug(`Orientation changed to ${metrics.orientation}`);
+          logDebug(`Orientation changed to ${metrics.orientation}`, "info");
         } else if (log && metrics.sizeChanged) {
-          logDebug(`Viewport resized to ${metrics.width}×${metrics.height} (${metrics.orientation})`);
+          logDebug(`Viewport resized to ${metrics.width}×${metrics.height} (${metrics.orientation})`, "info");
         }
         if (state.puzzle) {
           resetView({ preserveZoom: true, recenter: recenter || orientationChanged });
@@ -1667,6 +2830,7 @@
         const { dataUrl } = SAMPLE_ARTWORK;
         if (!dataUrl) return;
         resetPuzzleUI();
+        state.sourceMode = "sample";
         state.sourceUrl = dataUrl;
         state.sourceTitle = SAMPLE_ARTWORK.title || "Sample puzzle";
         startHint.classList.add("hidden");
@@ -1708,9 +2872,15 @@
           const time = document.createElement("time");
           time.dateTime = entry.iso;
           time.textContent = entry.display;
+          const level = document.createElement("span");
+          level.className = "level";
+          level.dataset.level = entry.level;
+          level.textContent = entry.label || (entry.level ? entry.level.toUpperCase() : "INFO");
           const message = document.createElement("span");
+          message.className = "message";
           message.textContent = entry.message;
           item.appendChild(time);
+          item.appendChild(level);
           item.appendChild(message);
           fragment.appendChild(item);
         }
@@ -1718,8 +2888,21 @@
         debugLogEl.scrollTop = 0;
       }
 
-      function logDebug(message) {
+      function normalizeDebugLevel(level) {
+        if (!level) return "info";
+        const lower = String(level).trim().toLowerCase();
+        if (lower === "warning") return "warn";
+        if (lower === "fail" || lower === "failure") return "error";
+        if (lower === "ok") return "success";
+        if (VALID_DEBUG_LEVELS.has(lower)) {
+          return lower === "warning" ? "warn" : lower;
+        }
+        return "info";
+      }
+
+      function logDebug(message, level = "info") {
         if (message == null) return;
+        const normalizedLevel = normalizeDebugLevel(level);
         const now = new Date();
         const entry = {
           iso: now.toISOString(),
@@ -1729,6 +2912,8 @@
             minute: "2-digit",
             second: "2-digit",
           }),
+          level: normalizedLevel,
+          label: normalizedLevel.toUpperCase(),
           message: String(message),
         };
         debugLogEntries.push(entry);
@@ -1736,6 +2921,291 @@
           debugLogEntries.splice(0, debugLogEntries.length - DEBUG_LOG_LIMIT);
         }
         renderDebugLog();
+      }
+
+      function pushStatus(message, options = {}) {
+        if (!statusStreamEl || message == null) return;
+        const normalizedLevel = normalizeDebugLevel(options.level);
+        const entry = document.createElement("li");
+        entry.className = `status-entry status-${normalizedLevel}`;
+        const pill = document.createElement("span");
+        pill.className = "status-pill";
+        const pillLabel = options.label ? String(options.label) : normalizedLevel.toUpperCase();
+        pill.textContent = pillLabel;
+        const text = document.createElement("span");
+        text.className = "status-message";
+        text.textContent = String(message);
+        entry.appendChild(pill);
+        entry.appendChild(text);
+        if (options.detail) {
+          const detail = document.createElement("span");
+          detail.className = "status-detail";
+          detail.textContent = String(options.detail);
+          entry.appendChild(detail);
+        }
+        statusStreamEl.appendChild(entry);
+        requestAnimationFrame(() => {
+          entry.classList.add("visible");
+        });
+        const lifetime = Math.max(0, Number.isFinite(options.lifetime) ? Number(options.lifetime) : STATUS_DEFAULT_LIFETIME);
+        if (lifetime > 0) {
+          const fadeAt = Math.max(0, lifetime - STATUS_FADE_MS);
+          if (fadeAt > 0) {
+            window.setTimeout(() => entry.classList.add("fading"), fadeAt);
+          } else {
+            entry.classList.add("fading");
+          }
+          window.setTimeout(() => {
+            entry.remove();
+          }, lifetime);
+        }
+        while (statusStreamEl.children.length > STATUS_MAX_ENTRIES) {
+          const first = statusStreamEl.firstElementChild;
+          if (!first) break;
+          first.remove();
+        }
+      }
+
+      function clearGenerationIdleTimer() {
+        if (generationIdleTimer) {
+          clearTimeout(generationIdleTimer);
+          generationIdleTimer = null;
+        }
+      }
+
+      function setGenerationIdle(detail = "Awaiting prompt or import.") {
+        if (!generationStatusEl) return;
+        clearGenerationIdleTimer();
+        resetGenerationTelemetry();
+        generationProgressState.active = false;
+        generationProgressState.steps = Math.max(1, generationProgressState.steps);
+        generationProgressState.completed = 0;
+        generationStatusEl.dataset.active = "false";
+        generationStatusEl.dataset.state = "idle";
+        if (generationStatusLabel) {
+          generationStatusLabel.textContent = "Generator idle";
+        }
+        if (generationStatusDetail) {
+          generationStatusDetail.textContent = detail;
+        }
+        if (generationProgressFill) {
+          generationProgressFill.style.removeProperty("--progress");
+          generationProgressFill.style.removeProperty("animation");
+          generationProgressFill.style.removeProperty("transform");
+        }
+        applyProgressTelemetry("idle", detail);
+      }
+
+      function scheduleGenerationIdle(detail, delay = 2600) {
+        clearGenerationIdleTimer();
+        generationIdleTimer = window.setTimeout(() => {
+          setGenerationIdle(detail);
+        }, Math.max(0, delay));
+      }
+
+      function setGenerationIndeterminate(label, detail = "", options = {}) {
+        if (!generationStatusEl) return;
+        clearGenerationIdleTimer();
+        if (options.resetTelemetry) {
+          resetGenerationTelemetry();
+        }
+        if (options.telemetry) {
+          updateGenerationTelemetry(options.telemetry);
+        }
+        generationProgressState.active = true;
+        generationProgressState.steps = 1;
+        generationProgressState.completed = 0;
+        generationStatusEl.dataset.active = "true";
+        generationStatusEl.dataset.state = "indeterminate";
+        if (generationStatusLabel) {
+          generationStatusLabel.textContent = label || "Loading image…";
+        }
+        if (generationStatusDetail) {
+          generationStatusDetail.textContent = detail || "";
+        }
+        if (generationProgressFill) {
+          generationProgressFill.style.removeProperty("--progress");
+          generationProgressFill.style.removeProperty("animation");
+          generationProgressFill.style.removeProperty("transform");
+        }
+        if (options.status !== false) {
+          pushStatus(label || "Loading image data…", {
+            detail,
+            level: options.level || "info",
+            lifetime: options.lifetime,
+            label: options.statusLabel,
+          });
+        }
+        applyProgressTelemetry("indeterminate", detail || label, { label });
+      }
+
+      function startGenerationProgress(steps, options = {}) {
+        if (!generationStatusEl) return;
+        clearGenerationIdleTimer();
+        if (options.resetTelemetry) {
+          resetGenerationTelemetry();
+        }
+        generationProgressState.active = true;
+        generationProgressState.steps = Math.max(1, Math.floor(Number(steps) || 1));
+        generationProgressState.completed = 0;
+        generationStatusEl.dataset.active = "true";
+        generationStatusEl.dataset.state = "progress";
+        if (generationStatusLabel) {
+          generationStatusLabel.textContent = options.label || "Processing puzzle…";
+        }
+        if (generationStatusDetail) {
+          generationStatusDetail.textContent = options.detail || "";
+        }
+        if (generationProgressFill) {
+          generationProgressFill.style.removeProperty("animation");
+          generationProgressFill.style.transform = "translateX(0)";
+          generationProgressFill.style.setProperty("--progress", "0%");
+        }
+        applyProgressTelemetry("progress", options.detail || options.label, {
+          steps: generationProgressState.steps,
+          label: options.label,
+          completed: 0,
+        });
+        if (options.telemetry) {
+          updateGenerationTelemetry(options.telemetry);
+        }
+        if (options.statusMessage) {
+          pushStatus(options.statusMessage, {
+            detail: options.statusDetail ?? options.detail,
+            level: options.level || "info",
+            lifetime: options.lifetime,
+            label: options.statusLabel,
+          });
+        }
+      }
+
+      function advanceGenerationProgress(label, detail, options = {}) {
+        if (!generationStatusEl) return 0;
+        if (!generationProgressState.active) {
+          startGenerationProgress(options.totalSteps ?? 1, { label, detail });
+        }
+        clearGenerationIdleTimer();
+        generationStatusEl.dataset.state = "progress";
+        if (generationStatusLabel && label) {
+          generationStatusLabel.textContent = label;
+        }
+        if (generationStatusDetail) {
+          generationStatusDetail.textContent = detail || "";
+        }
+        const steps = Math.max(1, generationProgressState.steps);
+        generationProgressState.completed = Math.min(steps, generationProgressState.completed + 1);
+        const ratio = generationProgressState.completed / steps;
+        if (generationProgressFill) {
+          generationProgressFill.style.removeProperty("animation");
+          generationProgressFill.style.transform = "translateX(0)";
+          generationProgressFill.style.setProperty(
+            "--progress",
+            `${Math.round(Math.min(1, Math.max(0, ratio)) * 10000) / 100}%`
+          );
+        }
+        if (options.status !== false) {
+          pushStatus(label, {
+            detail,
+            level: options.level || options.logLevel || "debug",
+            lifetime: options.lifetime,
+            label: options.statusLabel,
+          });
+        }
+        if (options.log !== false) {
+          const logLevel = options.logLevel || options.level || "debug";
+          logDebug(`${label}${detail ? ` – ${detail}` : ""}`, logLevel);
+        }
+        if (options.telemetry) {
+          updateGenerationTelemetry(options.telemetry);
+        }
+        applyProgressTelemetry("progress", detail || label, {
+          label,
+          completed: generationProgressState.completed,
+          steps,
+        });
+        return ratio;
+      }
+
+      function completeGenerationProgress(message, detail, options = {}) {
+        if (generationStatusEl) {
+          clearGenerationIdleTimer();
+          generationStatusEl.dataset.active = "true";
+          generationStatusEl.dataset.state = "success";
+          generationProgressState.active = false;
+          generationProgressState.completed = generationProgressState.steps;
+          if (generationStatusLabel && message) {
+            generationStatusLabel.textContent = message;
+          }
+          if (generationStatusDetail) {
+            generationStatusDetail.textContent = detail || "";
+          }
+          if (generationProgressFill) {
+            generationProgressFill.style.removeProperty("animation");
+            generationProgressFill.style.transform = "translateX(0)";
+            generationProgressFill.style.setProperty("--progress", "100%");
+          }
+        }
+        if (message) {
+          if (options.telemetry) {
+            updateGenerationTelemetry(options.telemetry);
+          }
+          pushStatus(message, {
+            detail,
+            level: options.level || "success",
+            lifetime: options.lifetime,
+            label: options.statusLabel,
+          });
+          if (options.log !== false) {
+            logDebug(`${message}${detail ? ` – ${detail}` : ""}`, options.level || "success");
+          }
+        }
+        applyProgressTelemetry("success", detail || message, {
+          label: message,
+          completed: generationProgressState.steps,
+          steps: generationProgressState.steps,
+        });
+        const idleDetail = options.idleDetail || (detail ? `Ready – ${detail}` : "Ready for the next puzzle.");
+        scheduleGenerationIdle(idleDetail, options.idleDelay ?? 4200);
+      }
+
+      function failGenerationProgress(message, detail, options = {}) {
+        if (generationStatusEl) {
+          clearGenerationIdleTimer();
+          generationStatusEl.dataset.active = "true";
+          generationStatusEl.dataset.state = "error";
+          generationProgressState.active = false;
+          generationProgressState.completed = 0;
+          if (generationStatusLabel) {
+            generationStatusLabel.textContent = message || "Generation failed";
+          }
+          if (generationStatusDetail) {
+            generationStatusDetail.textContent = detail || "";
+          }
+          if (generationProgressFill) {
+            generationProgressFill.style.removeProperty("animation");
+            generationProgressFill.style.transform = "translateX(0)";
+            generationProgressFill.style.setProperty("--progress", "0%");
+          }
+        }
+        pushStatus(message || "Generation failed", {
+          detail,
+          level: options.level || "error",
+          lifetime: options.lifetime ?? STATUS_DEFAULT_LIFETIME + 4000,
+          label: options.statusLabel,
+        });
+        if (options.telemetry) {
+          updateGenerationTelemetry(options.telemetry);
+        }
+        if (options.log !== false) {
+          logDebug(`${message || "Generation failed"}${detail ? ` – ${detail}` : ""}`, options.level || "error");
+        }
+        applyProgressTelemetry("error", detail || message, {
+          label: message,
+          completed: generationProgressState.completed,
+          steps: generationProgressState.steps,
+        });
+        const idleDetail = options.idleDetail || (detail ? `Idle – ${detail}` : "Idle after error.");
+        scheduleGenerationIdle(idleDetail, options.idleDelay ?? 6000);
       }
 
       function applyBackgroundColor(hex, options = {}) {
@@ -1815,6 +3285,16 @@
       function handleFile(file) {
         if (file.type === "application/json" || file.name.toLowerCase().endsWith(".json")) {
           resetPuzzleUI();
+          state.sourceMode = "json";
+          const sourceLabel = file.name || "Puzzle import";
+          setGenerationIndeterminate("Reading puzzle file…", sourceLabel, {
+            statusLabel: "FILE",
+            resetTelemetry: true,
+            telemetry: [
+              { key: "mode", label: "Mode", value: "JSON import" },
+              { key: "source", label: "Source", value: sourceLabel },
+            ],
+          });
           const reader = new FileReader();
           reader.onload = () => {
             try {
@@ -1824,6 +3304,11 @@
               const fallbackTitle = file.name || "Imported puzzle";
               const resolvedTitle = providedTitle || fallbackTitle;
               state.sourceTitle = resolvedTitle;
+              updateGenerationTelemetry({ key: "puzzle", label: "Puzzle", value: resolvedTitle });
+              setGenerationIndeterminate("Applying puzzle data…", resolvedTitle, {
+                statusLabel: "LOAD",
+                telemetry: { key: "mode", label: "Mode", value: "JSON import" },
+              });
               if (
                 applyPuzzleResult(payload, {
                   options: payload.options || getCurrentOptions(),
@@ -1835,24 +3320,45 @@
               ) {
                 startHint.classList.add("hidden");
                 state.sourceUrl = payload.sourceUrl || null;
-                logDebug(`Imported puzzle from JSON: ${resolvedTitle}`);
+                logDebug(`Imported puzzle from JSON: ${resolvedTitle}`, "success");
               }
             } catch (error) {
               console.error(error);
+              failGenerationProgress("Puzzle import failed", "Could not parse JSON payload.", {
+                statusLabel: "LOAD",
+                telemetry: { key: "mode", label: "Mode", value: "JSON import" },
+              });
             }
+          };
+          reader.onerror = () => {
+            failGenerationProgress("Puzzle import failed", "Unable to read the JSON file.", {
+              statusLabel: "LOAD",
+              telemetry: { key: "mode", label: "Mode", value: "JSON import" },
+            });
           };
           reader.readAsText(file);
           return;
         }
         resetPuzzleUI();
+        state.sourceMode = "image";
+        const imageLabel = file.name || "Imported image";
+        setGenerationIndeterminate("Reading image file…", imageLabel, {
+          statusLabel: "FILE",
+          resetTelemetry: true,
+          telemetry: [
+            { key: "mode", label: "Mode", value: "Image import" },
+            { key: "source", label: "Source", value: imageLabel },
+          ],
+        });
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result;
           if (typeof result === "string") {
             state.sourceUrl = result;
-            state.sourceTitle = file.name || "Imported image";
+            state.sourceTitle = imageLabel;
+            updateGenerationTelemetry({ key: "source", label: "Source", value: imageLabel });
             startHint.classList.add("hidden");
-            logDebug(`Generating puzzle from image: ${state.sourceTitle}`);
+            logDebug(`Generating puzzle from image: ${state.sourceTitle}`, "info");
             loadImage(result);
           } else {
             console.error("Unsupported file format");
@@ -1860,6 +3366,13 @@
         };
         reader.onerror = () => {
           console.error("Unable to read that file.");
+          failGenerationProgress("File read failed", "Capycolour could not read that image.", {
+            statusLabel: "FILE",
+            telemetry: [
+              { key: "mode", label: "Mode", value: "Image import" },
+              { key: "source", label: "Source", value: imageLabel },
+            ],
+          });
         };
         reader.readAsDataURL(file);
       }
@@ -1867,12 +3380,36 @@
       function loadImage(url, loadOptions = {}) {
         const { logMessage, completionMessage, skipDefaultLog } = loadOptions;
         if (logMessage) {
-          logDebug(logMessage);
+          logDebug(logMessage, "info");
         }
+        const descriptor = state.sourceTitle || "Puzzle image";
+        const modeLabel = describeSourceMode(state.sourceMode);
+        setGenerationIndeterminate("Loading image data…", descriptor, {
+          statusLabel: "LOAD",
+          telemetry: [
+            { key: "mode", label: "Mode", value: modeLabel },
+            { key: "source", label: "Source", value: descriptor },
+          ],
+        });
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.onload = async () => {
           try {
+            updateGenerationTelemetry({
+              key: "mode",
+              label: "Mode",
+              value: modeLabel,
+            });
+            updateGenerationTelemetry({
+              key: "sourceSize",
+              label: "Source image",
+              value: `${img.width}×${img.height}`,
+            });
+            pushStatus("Image decoded", {
+              detail: `${img.width}×${img.height}`,
+              level: "info",
+              statusLabel: "STEP",
+            });
             const options = getCurrentOptions();
             const data = await createPuzzleData(img, options);
             const title = state.sourceTitle || "Generated puzzle";
@@ -1885,10 +3422,18 @@
             });
           } catch (error) {
             console.error("Failed to create puzzle", error);
+            failGenerationProgress("Generation failed", "Unable to create puzzle data.");
           }
         };
         img.onerror = () => {
           console.error("Unable to read that image.");
+          failGenerationProgress("Image load failed", "Capycolour could not decode that image.", {
+            statusLabel: "LOAD",
+            telemetry: [
+              { key: "mode", label: "Mode", value: modeLabel },
+              { key: "source", label: "Source", value: descriptor },
+            ],
+          });
         };
         img.src = url;
       }
@@ -1898,12 +3443,14 @@
           clearTimeout(colorFlashTimer);
           colorFlashTimer = null;
         }
+        setGenerationIdle("Awaiting puzzle data…");
         delete canvasStage.dataset.flashingColor;
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
         state.sourceUrl = null;
         state.sourceTitle = null;
+        state.sourceMode = null;
         paletteEl.innerHTML = "";
         progressEl.textContent = "…";
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
@@ -1931,15 +3478,79 @@
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        const totalSteps = 5 + (smoothingPasses > 0 ? 1 : 0);
+        const samplePercent = Math.round(sampleRate * 100);
+        startGenerationProgress(totalSteps, {
+          label: "Processing source image…",
+          detail: `${image.width}×${image.height} → ${width}×${height}`,
+          statusMessage: "Processing source image",
+          statusDetail: `${image.width}×${image.height} → ${width}×${height}`,
+          statusLabel: "STEP",
+          telemetry: [
+            { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+            { key: "sourceSize", label: "Source image", value: `${image.width}×${image.height}` },
+            { key: "targetSize", label: "Target size", value: `${width}×${height}` },
+            { key: "targetColors", label: "Target colours", value: `${targetColors}` },
+            { key: "sampleRate", label: "Sample rate", value: `${samplePercent}%` },
+            { key: "iterations", label: "K-means iterations", value: `${kmeansIters}` },
+            { key: "smoothing", label: "Smoothing passes", value: `${smoothingPasses}` },
+            { key: "pipelineSteps", label: "Pipeline steps", value: `${totalSteps}` },
+          ],
+        });
         ctx.drawImage(image, 0, 0, width, height);
+        advanceGenerationProgress("Resized source image", `${image.width}×${image.height} → ${width}×${height}`, {
+          level: "info",
+          statusLabel: "STEP",
+          telemetry: { key: "targetSize", label: "Target size", value: `${width}×${height}` },
+        });
         const imageData = ctx.getImageData(0, 0, width, height);
         const pixels = imageData.data;
-        const { centroids, assignments } = kmeansQuantize(pixels, width, height, targetColors, kmeansIters, sampleRate);
+        const { centroids, assignments } = kmeansQuantize(
+          pixels,
+          width,
+          height,
+          targetColors,
+          kmeansIters,
+          sampleRate
+        );
+        advanceGenerationProgress(
+          "Clustered palette",
+          `${targetColors} colours · ${kmeansIters} iterations @ ${samplePercent}% sample`,
+          {
+            level: "info",
+            statusLabel: "STEP",
+            telemetry: [
+              { key: "paletteSize", label: "Palette size", value: `${centroids.length} colours` },
+              { key: "iterations", label: "K-means iterations", value: `${kmeansIters}` },
+            ],
+          }
+        );
         let workingAssignments = assignments;
         if (smoothingPasses > 0) {
           workingAssignments = smoothAssignments(assignments, width, height, smoothingPasses);
+          advanceGenerationProgress(
+            "Smoothed assignments",
+            `${smoothingPasses} pass${smoothingPasses === 1 ? "" : "es"}`,
+            {
+              level: "debug",
+              statusLabel: "STEP",
+              telemetry: { key: "smoothing", label: "Smoothing passes", value: `${smoothingPasses}` },
+            }
+          );
         }
         const { regionMap, regions } = segmentRegions(width, height, workingAssignments, minRegion);
+        advanceGenerationProgress(
+          "Segmented regions",
+          `${regions.length} regions (min ${minRegion} px²)`,
+          {
+            level: "info",
+            statusLabel: "STEP",
+            telemetry: [
+              { key: "regionCount", label: "Region count", value: `${regions.length}` },
+              { key: "minRegion", label: "Minimum region", value: `${minRegion} px²` },
+            ],
+          }
+        );
         for (const region of regions) {
           let sumX = 0;
           let sumY = 0;
@@ -1951,6 +3562,11 @@
           region.cy = sumY / region.pixelCount;
           region.colorId += 1;
         }
+        advanceGenerationProgress("Calculated region centres", `${regions.length} regions processed`, {
+          level: "debug",
+          statusLabel: "STEP",
+          telemetry: { key: "regionCount", label: "Region count", value: `${regions.length}` },
+        });
         const palette = centroids.map((c, idx) => {
           const hex = `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`;
           return {
@@ -1959,6 +3575,11 @@
             rgba: c,
             name: hex.toUpperCase(),
           };
+        });
+        advanceGenerationProgress("Prepared palette", `${palette.length} colours`, {
+          level: "info",
+          statusLabel: "STEP",
+          telemetry: { key: "paletteSize", label: "Palette size", value: `${palette.length} colours` },
         });
         return {
           width,
@@ -1972,15 +3593,18 @@
       function applyPuzzleResult(data, metadata = {}) {
         if (!data || typeof data.width !== "number" || typeof data.height !== "number") {
           console.error("Puzzle data missing required dimensions.");
+          failGenerationProgress("Puzzle import failed", "Puzzle data missing required dimensions.");
           return false;
         }
         if (!Array.isArray(data.palette) || !Array.isArray(data.regions)) {
           console.error("Puzzle data missing palette information.");
+          failGenerationProgress("Puzzle import failed", "Puzzle data missing palette information.");
           return false;
         }
         const mapSource = Array.from(data.regionMap ?? []);
         if (mapSource.length !== data.width * data.height) {
           console.error("Puzzle data is inconsistent.");
+          failGenerationProgress("Puzzle import failed", "Puzzle map size mismatch.");
           return false;
         }
         const palette = data.palette.map((entry, index) => {
@@ -2060,6 +3684,10 @@
             : palette[0]?.id ?? null;
         state.filled = new Set(metadata.filled ?? []);
         state.lastOptions = metadata.options ?? getCurrentOptions();
+        const resolvedSettings = metadata.settings ?? data.settings;
+        if (resolvedSettings) {
+          applyGameplaySettings(resolvedSettings);
+        }
         applyBackgroundColor(backgroundHex, { skipRender: true, skipLog: true });
         puzzleCanvas.width = data.width;
         puzzleCanvas.height = data.height;
@@ -2076,7 +3704,10 @@
         updateCommandStates();
         updatePreviewState();
         markOptionsDirty();
-        resetView({ recenter: true });
+        const restoredViewport = metadata.viewport ?? data.viewport;
+        if (!restoreViewport(restoredViewport)) {
+          resetView({ recenter: true });
+        }
         const paletteCount = palette.length;
         const regionCount = regions.length;
         const descriptor =
@@ -2084,24 +3715,57 @@
           (typeof data.title === "string" && data.title.trim()) ||
           (state.sourceTitle && state.sourceTitle.trim()) ||
           "Puzzle";
+        const summaryDetail = `${paletteCount} colours, ${regionCount} regions`;
+        const summaryTelemetry = [
+          { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+          { key: "targetSize", label: "Puzzle size", value: `${data.width}×${data.height}` },
+          { key: "paletteSize", label: "Palette size", value: `${paletteCount} colours` },
+          { key: "regionCount", label: "Region count", value: `${regionCount}` },
+          { key: "background", label: "Background", value: backgroundHex.toUpperCase() },
+        ];
         if (completionLog) {
-          logDebug(completionLog);
+          logDebug(completionLog, "success");
+          completeGenerationProgress(completionLog, summaryDetail, {
+            log: false,
+            statusLabel: "DONE",
+            telemetry: summaryTelemetry,
+          });
         } else if (!skipLoadLog) {
-          logDebug(
-            `Loaded ${descriptor} (${data.width}×${data.height}, ${paletteCount} colours, ${regionCount} regions)`
-          );
+          const message = `Loaded ${descriptor} (${data.width}×${data.height}, ${paletteCount} colours, ${regionCount} regions)`;
+          logDebug(message, "success");
+          completeGenerationProgress(message, summaryDetail, {
+            log: false,
+            statusLabel: "DONE",
+            telemetry: summaryTelemetry,
+          });
+        } else {
+          completeGenerationProgress(`Puzzle ready: ${descriptor}`, summaryDetail, {
+            level: "success",
+            statusLabel: "DONE",
+            telemetry: summaryTelemetry,
+          });
         }
+        scheduleAutosave("puzzle-load", { immediate: true });
         return true;
       }
 
       function loadPuzzleFixtureData(puzzle) {
         if (!puzzle) return false;
         resetPuzzleUI();
+        state.sourceMode = "fixture";
         const resolvedTitle =
           (typeof puzzle.name === "string" && puzzle.name.trim()) ||
           (typeof puzzle.title === "string" && puzzle.title.trim()) ||
           "Fixture puzzle";
         state.sourceTitle = resolvedTitle;
+        setGenerationIndeterminate("Applying puzzle data…", resolvedTitle, {
+          statusLabel: "LOAD",
+          resetTelemetry: true,
+          telemetry: [
+            { key: "mode", label: "Mode", value: describeSourceMode(state.sourceMode) },
+            { key: "puzzle", label: "Puzzle", value: resolvedTitle },
+          ],
+        });
         const applied = applyPuzzleResult(puzzle, {
           options: getCurrentOptions(),
           filled: puzzle.filled,
@@ -2244,6 +3908,9 @@
         }
         const remaining = getRegionsByColor(colorId, { includeFilled: false }).length;
         const suffix = remaining > 0 ? `${remaining} regions remaining` : "complete";
+        if (changed) {
+          scheduleAutosave("color-select");
+        }
         logDebug(`${changed ? "Selected" : "Re-selected"} colour #${colorId} (${suffix})`);
         return changed;
       }
@@ -2627,6 +4294,25 @@
         applyViewTransform();
       }
 
+      function restoreViewport(viewport = {}) {
+        if (!state.puzzle || !viewport || typeof viewport !== "object") {
+          return false;
+        }
+        const nextBase = computeFitScale();
+        const savedBase = Number.isFinite(viewport.baseScale) ? viewport.baseScale : nextBase;
+        const scaleRatio = savedBase && Number.isFinite(savedBase) ? nextBase / savedBase : 1;
+        const savedZoom = Number.isFinite(viewport.zoom) ? viewport.zoom : 1;
+        const targetZoom = savedBase && Number.isFinite(savedBase)
+          ? (savedBase * savedZoom) / (nextBase || savedBase)
+          : savedZoom;
+        viewState.baseScale = nextBase;
+        viewState.zoom = clamp(targetZoom, 0.05, 16);
+        viewState.panX = Number.isFinite(viewport.panX) ? viewport.panX * scaleRatio : 0;
+        viewState.panY = Number.isFinite(viewport.panY) ? viewport.panY * scaleRatio : 0;
+        applyViewTransform();
+        return true;
+      }
+
       function useHint() {
         if (!state.puzzle) return;
         const candidates = state.puzzle.regions.filter((region) => !state.filled.has(region.id));
@@ -2722,7 +4408,7 @@
       function serializeCurrentPuzzle() {
         if (!state.puzzle) return {};
         return {
-          title: "capy-puzzle",
+          title: state.sourceTitle || "capy-puzzle",
           width: state.puzzle.width,
           height: state.puzzle.height,
           palette: state.puzzle.palette.map((p) => ({
@@ -2745,7 +4431,260 @@
           sourceUrl: state.sourceUrl,
           activeColor: state.activeColor,
           backgroundColor: state.settings.backgroundColor,
+          viewport: {
+            panX: viewState.panX,
+            panY: viewState.panY,
+            zoom: viewState.zoom,
+            baseScale: viewState.baseScale,
+          },
+          settings: {
+            autoAdvance: Boolean(state.settings.autoAdvance),
+            animateHints: Boolean(state.settings.animateHints),
+          },
         };
+      }
+
+      function scheduleAutosave(reason, options = {}) {
+        if (!state.puzzle) return null;
+        const { immediate = false, delay = 350 } = options;
+        const resolvedReason = reason || pendingAutosaveReason || "update";
+        if (immediate) {
+          pendingAutosaveReason = null;
+          if (autosaveTimer) {
+            window.clearTimeout(autosaveTimer);
+            autosaveTimer = null;
+          }
+          return persistAutosave(resolvedReason);
+        }
+        pendingAutosaveReason = resolvedReason;
+        if (autosaveTimer) {
+          window.clearTimeout(autosaveTimer);
+        }
+        const timeout = Math.max(120, delay);
+        autosaveTimer = window.setTimeout(() => {
+          autosaveTimer = null;
+          const finalReason = pendingAutosaveReason || "update";
+          pendingAutosaveReason = null;
+          persistAutosave(finalReason);
+        }, timeout);
+        return null;
+      }
+
+      function persistAutosave(reason = "update") {
+        if (!state.puzzle) return null;
+        const snapshot = serializeCurrentPuzzle();
+        const record = {
+          version: 1,
+          timestamp: Date.now(),
+          reason,
+          title: snapshot.title || state.sourceTitle || "capy-puzzle",
+          data: snapshot,
+        };
+        try {
+          localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(record));
+        } catch (error) {
+          console.error("Failed to persist autosave", error);
+        }
+        cloudSync.persist(record);
+        return record;
+      }
+
+      function loadAutosave() {
+        try {
+          const raw = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.data) {
+            return parsed;
+          }
+        } catch (error) {
+          console.error("Failed to load autosave", error);
+        }
+        return null;
+      }
+
+      function getLatestBackupRecord() {
+        const candidates = [];
+        const autosave = loadAutosave();
+        if (autosave && autosave.data) {
+          candidates.push({ ...autosave, origin: "local autosave" });
+        }
+        const cloudRecord = cloudSync.getSnapshot ? cloudSync.getSnapshot() : null;
+        if (cloudRecord && cloudRecord.data) {
+          candidates.push({ ...cloudRecord, origin: "cloud backup" });
+        }
+        if (Array.isArray(state.saves) && state.saves.length > 0) {
+          const [latestManual] = [...state.saves].sort(
+            (a, b) => (b.timestamp || 0) - (a.timestamp || 0)
+          );
+          if (latestManual && latestManual.data) {
+            candidates.push({
+              timestamp: latestManual.timestamp,
+              data: latestManual.data,
+              title: latestManual.title,
+              origin: "manual save",
+            });
+          }
+        }
+        if (candidates.length === 0) return null;
+        candidates.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        return candidates[0];
+      }
+
+      function loadInitialSession() {
+        const latest = getLatestBackupRecord();
+        if (latest && latest.data) {
+          const descriptor =
+            latest.title ||
+            latest.data.title ||
+            state.sourceTitle ||
+            "Puzzle";
+          const applied = applyPuzzleResult(latest.data, {
+            options: latest.data.options,
+            filled: latest.data.filled,
+            activeColor: latest.data.activeColor,
+            backgroundColor: latest.data.backgroundColor,
+            viewport: latest.data.viewport,
+            settings: latest.data.settings,
+            title: descriptor,
+            logMessage: `Restoring ${descriptor} from backup`,
+            skipDefaultLog: true,
+          });
+          if (applied) {
+            state.sourceUrl = latest.data.sourceUrl ?? null;
+            state.sourceTitle = descriptor;
+            startHint.classList.add("hidden");
+            logDebug(`Restored previous session from ${latest.origin || "backup storage"}`);
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function createCloudSync() {
+        const subscribers = new Set();
+        const key = CLOUD_STORAGE_KEY;
+        let lastRecord = null;
+        const hasBroadcast = typeof BroadcastChannel !== "undefined";
+        const channel = hasBroadcast ? new BroadcastChannel("capy-cloud-sync") : null;
+
+        function readFromStorage() {
+          try {
+            const raw = localStorage.getItem(key);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object") return null;
+            return parsed;
+          } catch (error) {
+            console.error("Failed to read cloud backup", error);
+            return null;
+          }
+        }
+
+        function notify(record) {
+          lastRecord = record || null;
+          subscribers.forEach((listener) => {
+            try {
+              listener(lastRecord);
+            } catch (error) {
+              console.error("Cloud sync listener failed", error);
+            }
+          });
+        }
+
+        function writeRecord(record) {
+          if (record == null) {
+            try {
+              localStorage.removeItem(key);
+            } catch (error) {
+              console.error("Failed to clear cloud backup", error);
+            }
+            notify(null);
+            if (channel) {
+              channel.postMessage({ type: "cloud-sync", record: null });
+            }
+            return null;
+          }
+          try {
+            localStorage.setItem(key, JSON.stringify(record));
+          } catch (error) {
+            console.error("Failed to persist cloud backup", error);
+          }
+          notify(record);
+          if (channel) {
+            channel.postMessage({ type: "cloud-sync", record });
+          }
+          return record;
+        }
+
+        if (channel) {
+          channel.addEventListener("message", (event) => {
+            if (!event || typeof event.data !== "object") return;
+            if ("record" in event.data) {
+              notify(event.data.record);
+            }
+          });
+        }
+
+        if (typeof window !== "undefined") {
+          window.addEventListener("storage", (event) => {
+            if (event.key === key) {
+              if (event.newValue) {
+                try {
+                  notify(JSON.parse(event.newValue));
+                } catch (error) {
+                  console.error("Failed to parse cloud backup update", error);
+                }
+              } else {
+                notify(null);
+              }
+            }
+          });
+        }
+
+        const api = {
+          persist(record) {
+            return writeRecord(record);
+          },
+          getSnapshot() {
+            return lastRecord;
+          },
+          subscribe(listener) {
+            if (typeof listener !== "function") return () => {};
+            subscribers.add(listener);
+            if (lastRecord) {
+              try {
+                listener(lastRecord);
+              } catch (error) {
+                console.error("Cloud sync listener failed", error);
+              }
+            }
+            return () => subscribers.delete(listener);
+          },
+          clear() {
+            writeRecord(null);
+          },
+          hydrate() {
+            const record = readFromStorage();
+            if (record) {
+              notify(record);
+            }
+            return record;
+          },
+        };
+
+        if (typeof window !== "undefined") {
+          window.capyCloudSync = {
+            persist: api.persist,
+            getSnapshot: api.getSnapshot,
+            subscribe: api.subscribe,
+            clear: api.clear,
+            hydrate: api.hydrate,
+          };
+        }
+
+        api.hydrate();
+        return api;
       }
 
       function saveCurrentSnapshot() {
@@ -2760,6 +4699,7 @@
         state.saves.unshift(entry);
         persistSaves();
         refreshSaveList();
+        scheduleAutosave("manual-save", { immediate: true });
         logDebug(`Saved snapshot: ${entry.title}`);
       }
 
@@ -2820,6 +4760,9 @@
             filled: entry.data.filled,
             activeColor: entry.data.activeColor,
             backgroundColor: entry.data.backgroundColor,
+            viewport: entry.data.viewport,
+            settings: entry.data.settings,
+            title: entry.title || entry.data.title,
           })
         ) {
           state.sourceUrl = entry.data.sourceUrl ?? null;
