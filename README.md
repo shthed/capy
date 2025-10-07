@@ -21,6 +21,20 @@ tools, a save manager, and a configurable generator all live inside a single
   - `.gitignore` – Ignores dependency installs, Playwright artifacts, and transient reports.
 - **Process notes**
   - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
+  - `docs/automation-loop.md` – Blueprint for the automated branching, testing, merging, and feedback loop.
+
+## Development workflow
+
+- **Automation branches.** Create short-lived branches named `automation/<change>` so CI reports and Playwright artifacts map
+  directly to the experiment under review.
+- **Continuous smoke tests.** Let every push trigger `npm test --silent` across desktop and mobile viewports; publish the
+  resulting `artifacts/ui-review/` bundle for asynchronous review and attach key screenshots when UI changes land.
+- **Fast-forward merges.** Rebase onto `main`, rerun the Playwright suite, and merge with `--ff-only` to preserve a linear
+  history that keeps bisects practical for the single-file runtime.
+- **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up work in a standing Friday issue so the team has
+  a shared backlog of automation improvements.
+- **Close the loop.** Update PR descriptions and linked issues with branch names, CI run URLs, and artifact locations so the
+  automation history remains searchable.
 
 ## Features
 
@@ -305,4 +319,6 @@ The suite writes artifacts (screenshots + JSON summaries) into
 
 - [ ] Restore artwork documentation once a new segmentation pipeline is ready for publication.
 - [ ] Add automated visual regression coverage beyond the current smoke test to guard the trimmed UI.
+- [ ] Wire the Playwright CI job to automatically upload `artifacts/ui-review/` bundles to the Automation Sync dashboard.
+- [ ] Draft a GitHub issue template for the weekly Automation Sync summary and link it from the contributor guide.
 
