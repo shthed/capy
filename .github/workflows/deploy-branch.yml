@@ -21,17 +21,14 @@ jobs:
           ref: ${{ github.ref }}
           path: source
 
-      - name: Checkout gh-pages branch
-        uses: actions/checkout@v4
-        with:
-          ref: gh-pages
-          path: gh-pages
-        continue-on-error: true
-
-      - name: Initialize gh-pages branch if needed
+      - name: Setup gh-pages branch
         run: |
-          if [ ! -d "gh-pages/.git" ]; then
-            echo "Creating new gh-pages branch"
+          # Check if gh-pages branch exists remotely
+          if git ls-remote --exit-code --heads https://github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
+            echo "gh-pages branch exists, cloning it"
+            git clone --branch gh-pages --single-branch https://github.com/${{ github.repository }}.git gh-pages
+          else
+            echo "gh-pages branch doesn't exist, initializing it"
             mkdir -p gh-pages
             cd gh-pages
             git init
@@ -80,25 +77,25 @@ jobs:
 
           # Generate index page listing all branches dynamically
           BRANCHES=$(ls -d */ | grep -v '^index.html$' | sed 's#/##')
-          cat > index.html <<EOF
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Capy Branch Deployments</title>
-</head>
-<body>
-  <h1>Capy Image Generator - Branch Deployments</h1>
-  <ul>
-EOF
-for branch in $BRANCHES; do
-  echo "    <li><a href='${branch}/'>${branch}</a></li>" >> index.html
-done
-cat >> index.html <<EOF
-  </ul>
-</body>
-</html>
-EOF
+          cat > index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <title>Capy Branch Deployments</title>
+          </head>
+          <body>
+            <h1>Capy Image Generator - Branch Deployments</h1>
+            <ul>
+          EOF
+          for branch in $BRANCHES; do
+            echo "    <li><a href='${branch}/'>${branch}</a></li>" >> index.html
+          done
+          cat >> index.html <<'EOF'
+            </ul>
+          </body>
+          </html>
+          EOF
 
           # Commit and push
           git config user.name "github-actions[bot]"
@@ -132,4 +129,8 @@ EOF
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'.
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
