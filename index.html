@@ -2817,33 +2817,41 @@
         if (!bounds) return null;
         const text = String(region.colorId);
         const area = Math.max(1, region.pixelCount || region.pixels.length);
-        const MIN_LABEL_SIZE = 5;
+        const MIN_LABEL_SIZE = 1.75;
         const MAX_LABEL_SIZE = 96;
-        const safeWidth = Math.max(1, bounds.width - 2);
-        const safeHeight = Math.max(1, bounds.height - 2);
+        const safeWidth = Math.max(1, bounds.width - 0.75);
+        const safeHeight = Math.max(1, bounds.height - 0.75);
         if (safeWidth <= 0 || safeHeight <= 0) return null;
-        const approxCharacters = Math.max(1, text.length * 0.72);
+        const approxCharacters = text.length <= 1 ? 1 : text.length * 0.62 + 0.4;
         const widthLimit = safeWidth / approxCharacters;
         const heightLimit = safeHeight * 0.92;
-        const areaLimit = Math.sqrt(area) * 0.8;
-        const initialSize = clamp(
-          Math.min(widthLimit, heightLimit, areaLimit, MAX_LABEL_SIZE),
-          MIN_LABEL_SIZE,
-          MAX_LABEL_SIZE
+        const areaLimit = Math.sqrt(area) * 0.9;
+        const theoreticalMax = Math.max(
+          MIN_LABEL_SIZE + 0.15,
+          Math.min(widthLimit, heightLimit, areaLimit, MAX_LABEL_SIZE)
         );
+        const floorCandidate = Math.min(
+          theoreticalMax,
+          Math.max(MIN_LABEL_SIZE, Math.min(widthLimit, heightLimit, areaLimit * 0.92))
+        );
+        const minAttemptSize = Math.max(MIN_LABEL_SIZE, Math.min(floorCandidate, theoreticalMax));
         const attempts = [];
-        let nextSize = initialSize;
-        while (nextSize >= MIN_LABEL_SIZE && attempts.length < 8) {
+        let nextSize = theoreticalMax;
+        while (nextSize >= minAttemptSize && attempts.length < 9) {
           attempts.push(nextSize);
-          nextSize *= 0.88;
+          nextSize *= 0.86;
         }
         if (attempts.length === 0) {
-          attempts.push(MIN_LABEL_SIZE);
+          attempts.push(minAttemptSize);
         } else {
           const last = attempts[attempts.length - 1];
-          if (last > MIN_LABEL_SIZE) {
-            attempts.push(MIN_LABEL_SIZE);
+          if (last > minAttemptSize) {
+            attempts.push(minAttemptSize);
           }
+        }
+        const smallest = Math.max(MIN_LABEL_SIZE, minAttemptSize * 0.88);
+        if (attempts[attempts.length - 1] > smallest + 0.05) {
+          attempts.push(smallest);
         }
         for (const size of attempts) {
           const metrics = measureLabelMetrics(text, size);
@@ -2921,9 +2929,17 @@
         const ascent = metrics.actualBoundingBoxAscent || size * 0.78;
         const descent = metrics.actualBoundingBoxDescent || size * 0.22;
         const textHeight = ascent + descent;
-        const strokeWidth = Math.max(0.8, size * 0.12);
-        const paddingX = Math.max(2, size * 0.35);
-        const paddingY = Math.max(2, size * 0.28);
+        const strokeWidth = clamp(size * 0.18, 0.65, Math.max(2.6, size * 0.24));
+        const paddingX = clamp(
+          size <= 7 ? size * 0.26 : size * 0.32,
+          0.85,
+          Math.max(3.6, size * 0.42)
+        );
+        const paddingY = clamp(
+          size <= 7 ? size * 0.22 : size * 0.28,
+          0.7,
+          Math.max(3, size * 0.36)
+        );
         const paddedWidth = textWidth + paddingX * 2 + strokeWidth;
         const paddedHeight = textHeight + paddingY * 2 + strokeWidth;
         return {
@@ -2937,50 +2953,114 @@
       }
 
       function findRegionLabelAnchor(region, halfWidth, halfHeight, bounds, width, height, regionMap) {
-        const marginX = Math.ceil(halfWidth);
-        const marginY = Math.ceil(halfHeight);
-        const minX = Math.max(bounds.minX + marginX, 0);
-        const maxX = Math.min(bounds.maxX - marginX, width - 1);
-        const minY = Math.max(bounds.minY + marginY, 0);
-        const maxY = Math.min(bounds.maxY - marginY, height - 1);
-        if (minX > maxX || minY > maxY) return null;
+        const marginX = Math.max(0, Math.ceil(halfWidth - 0.5));
+        const marginY = Math.max(0, Math.ceil(halfHeight - 0.5));
+        const minCenterX = Math.max(bounds.minX + halfWidth, halfWidth);
+        const maxCenterX = Math.min(bounds.maxX + 1 - halfWidth, width - halfWidth);
+        const minCenterY = Math.max(bounds.minY + halfHeight, halfHeight);
+        const maxCenterY = Math.min(bounds.maxY + 1 - halfHeight, height - halfHeight);
+        if (minCenterX > maxCenterX || minCenterY > maxCenterY) return null;
         const centroidX = Number.isFinite(region.cx)
           ? region.cx
-          : (bounds.minX + bounds.maxX) / 2;
+          : (bounds.minX + bounds.maxX + 1) / 2;
         const centroidY = Number.isFinite(region.cy)
           ? region.cy
-          : (bounds.minY + bounds.maxY) / 2;
-        let best = null;
-        let bestScore = Number.POSITIVE_INFINITY;
+          : (bounds.minY + bounds.maxY + 1) / 2;
+        const seen = new Set();
+        const candidates = [];
+        const addCandidate = (x, y, weight = 1) => {
+          const clampedX = clamp(x, minCenterX, maxCenterX);
+          const clampedY = clamp(y, minCenterY, maxCenterY);
+          const key = `${clampedX.toFixed(3)}:${clampedY.toFixed(3)}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          candidates.push({ x: clampedX, y: clampedY, weight });
+        };
+        addCandidate(centroidX, centroidY, 2);
+        const minY = Math.max(bounds.minY + marginY, 0);
+        const maxY = Math.min(bounds.maxY - marginY, height - 1);
+        const startX = Math.max(bounds.minX, Math.floor(minCenterX - halfWidth));
+        const endX = Math.min(bounds.maxX, Math.ceil(maxCenterX + halfWidth) - 1);
         for (let y = minY; y <= maxY; y++) {
           const rowOffset = y * width;
-          for (let x = minX; x <= maxX; x++) {
-            if (regionMap[rowOffset + x] !== region.id) continue;
-            const centerX = x + 0.5;
-            const centerY = y + 0.5;
-            if (
-              !rectangleFitsRegion(
-                region.id,
-                centerX,
-                centerY,
-                halfWidth,
-                halfHeight,
-                width,
-                height,
-                regionMap
-              )
-            ) {
-              continue;
+          let runStart = null;
+          for (let x = startX; x <= endX; x++) {
+            const belongs = regionMap[rowOffset + x] === region.id;
+            if (belongs && runStart == null) {
+              runStart = x;
             }
-            const dx = centerX - centroidX;
-            const dy = centerY - centroidY;
-            const score = dx * dx + dy * dy;
-            if (score < bestScore) {
-              bestScore = score;
-              best = { x: centerX, y: centerY };
-              if (score <= 0.25) {
-                return best;
+            const isRunEnd = !belongs || x === endX;
+            if (runStart != null && isRunEnd) {
+              const runEnd = belongs ? x : x - 1;
+              const safeStart = Math.max(runStart, Math.floor(minCenterX - halfWidth));
+              const safeEnd = Math.min(runEnd, Math.ceil(maxCenterX + halfWidth) - 1);
+              if (safeStart <= safeEnd) {
+                const runWidth = safeEnd - safeStart + 1;
+                const rowY = y + 0.5;
+                const centerX = safeStart + runWidth / 2;
+                addCandidate(centerX, rowY, runWidth);
+                if (runWidth > halfWidth * 2 + 1) {
+                  const offset = Math.min(runWidth / 2 - 0.5, Math.max(1, halfWidth));
+                  addCandidate(safeStart + 0.5 + offset, rowY, runWidth / 2);
+                  addCandidate(safeEnd + 0.5 - offset, rowY, runWidth / 2);
+                }
               }
+              runStart = null;
+            }
+          }
+        }
+        if (candidates.length === 0) {
+          for (let y = minY; y <= maxY; y++) {
+            const rowOffset = y * width;
+            for (let x = startX; x <= endX; x++) {
+              if (regionMap[rowOffset + x] !== region.id) continue;
+              addCandidate(x + 0.5, y + 0.5, 0.5);
+            }
+          }
+        }
+        candidates.sort((a, b) => {
+          const aDist = (a.x - centroidX) * (a.x - centroidX) + (a.y - centroidY) * (a.y - centroidY);
+          const bDist = (b.x - centroidX) * (b.x - centroidX) + (b.y - centroidY) * (b.y - centroidY);
+          if (aDist === bDist) {
+            return b.weight - a.weight;
+          }
+          return aDist - bDist;
+        });
+        let best = null;
+        let bestScore = Number.POSITIVE_INFINITY;
+        for (const candidate of candidates) {
+          if (
+            !rectangleFitsRegion(
+              region.id,
+              candidate.x,
+              candidate.y,
+              halfWidth,
+              halfHeight,
+              width,
+              height,
+              regionMap
+            )
+          ) {
+            continue;
+          }
+          const dx = candidate.x - centroidX;
+          const dy = candidate.y - centroidY;
+          const slack = estimateAnchorSlack(
+            region.id,
+            candidate.x,
+            candidate.y,
+            halfWidth,
+            halfHeight,
+            width,
+            height,
+            regionMap
+          );
+          const score = dx * dx + dy * dy - slack * 4 - candidate.weight * 0.05;
+          if (score < bestScore) {
+            bestScore = score;
+            best = { x: candidate.x, y: candidate.y };
+            if (score <= 0) {
+              break;
             }
           }
         }
@@ -3001,6 +3081,30 @@
           }
         }
         return true;
+      }
+
+      function estimateAnchorSlack(regionId, centerX, centerY, halfWidth, halfHeight, width, height, regionMap) {
+        let slack = 0;
+        const steps = [0.25, 0.5, 0.75, 1, 1.5, 2];
+        for (const step of steps) {
+          if (
+            rectangleFitsRegion(
+              regionId,
+              centerX,
+              centerY,
+              halfWidth + step,
+              halfHeight + step,
+              width,
+              height,
+              regionMap
+            )
+          ) {
+            slack = step;
+          } else {
+            break;
+          }
+        }
+        return slack;
       }
 
       function drawOutlines() {
