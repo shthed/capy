@@ -74,18 +74,13 @@ tools, a save manager, and a configurable generator all live inside a single
   trigger browser-level zoom; a global guard redirects them to the custom
   canvas handlers so the HUD stays stable while pan/zoom gestures still feel
   natural on touchscreens.
-- **Responsive command rail.** Controls are grouped into gameplay, view, and system clusters
-  so they rebalance gracefully across screen sizes. Wide layouts reveal button labels while
-  smaller devices collapse the rail into centred stacks. A dedicated detail button cycles the
-  Capybara sample presets without diving back into Settings.
+- **Responsive command rail.** Header icons now clamp to the viewport, wrap when
+  space runs short, and respect safe-area insets so controls stay reachable on
+  phones, tablets, and desktop window resizes.
 - **Colour cues and feedback.** Choosing a swatch briefly pulses every matching
   region (falling back to a celebratory flash when a colour is finished) so
   it's obvious where to paint next, and correctly filled regions immediately
   display the underlying illustration.
-- **Palette focus tools.** The dock now highlights the active colour with a live badge showing
-  its name, identifier, and remaining region count. A hide-finished toggle (also configurable in
-  Settings) collapses completed swatches so you can concentrate on unfinished colours while keeping
-  the current choice visible.
 - **Customisable background.** Pick a backdrop colour for unfinished regions in
   the Settings sheet; outlines and numbers automatically switch contrast so dark
   or light themes stay legible while you paint.
@@ -118,9 +113,7 @@ tools, a save manager, and a configurable generator all live inside a single
 ### Capybara Springs detail presets
 
 The Low/Medium/High detail chips on the onboarding hint and Settings sheet
-toggle tuned generator options for the built-in capybara vignette, and the
-command rail includes a shortcut button that cycles through the presets in
-play:
+toggle tuned generator options for the built-in capybara vignette:
 
 | Preset | Colours | Approx. regions | Min region | Resize edge | Sample rate | Iterations | Smoothing | Use it when… |
 | ------ | ------- | --------------- | ---------- | ----------- | ----------- | ---------- | --------- | ------------ |
@@ -258,8 +251,9 @@ before retrying.
 - **Fullscreen preview overlay** – Triggered by the Preview button. The preview
   canvas stretches to fit the viewport so contributors can inspect the clustered
   output in detail before painting.
-- **Progress indicator** – A numeric tally in the palette dock that tracks
-  completed versus total regions and announces updates politely via `aria-live`.
+- **Progress indicator** – A friendly status message in the palette dock that
+  announces progress changes (Ready to colour, Keep colouring, All done!) via
+  `aria-live` rather than exposing raw region counts.
 - **Settings sheet** – A modal sheet that hides the generation sliders by
   default. Controls include colours, minimum region size, resize detail, sample
   rate, k-means iterations, smoothing passes, a background colour picker, and
@@ -287,7 +281,7 @@ before retrying.
 
 - The hint overlay is focusable and reacts to Enter/Space to trigger the file
   picker, keeping the first interaction accessible.
-- The progress tally uses `aria-live="polite"` announcements so assistive tech
+- The progress status uses `aria-live="polite"` announcements so assistive tech
   hears every completion update, and the help sheet’s debug log mirrors the same
   polite live region for gameplay telemetry.
 - Command rail buttons expose descriptive `aria-label` and `title` attributes
@@ -310,7 +304,7 @@ before retrying.
 The Playwright suite exercises the core flows:
 
 - **renders command rail and generator settings on load** – Confirms the hint
-  overlay, iconized command rail, compact progress tally, and generator controls
+  overlay, iconized command rail, compact progress status, and generator controls
   render on first boot.
  - **auto loads the capybara sample scene** – Verifies the bundled illustration is
     ready as soon as the app boots, that the sample button still reloads it on
@@ -334,24 +328,10 @@ npm test --silent
 The suite writes artifacts (screenshots + JSON summaries) into
 `artifacts/ui-review/` if you need to inspect the DOM snapshots.
 
-### Automation-first workflow
+## TODO
 
-Keep the repository automation-friendly by following this loop:
-
-1. `git fetch --all --prune` and merge or rebase `main` so local work starts
-   from the freshest automation expectations.
-2. Implement the change behind a focused branch, updating docs like
-   `AGENTS.md` when workflow guidance shifts.
-3. Run `npm test --silent` (or targeted subsets when iterating) to exercise the
-   UI review harness before committing.
-4. Commit with descriptive summaries, push the branch, and open a PR that calls
-   out any workflow impacts for reviewers.
-
-### Safe repository searches
-
-Ripgrep is configured via [`.ripgreprc`](.ripgreprc) to clamp printed line
-widths and avoid flooding the terminal with megabyte-long rows. The matching
-ignore file [`.rgignore`](.rgignore) skips generated assets and Playwright
-artifacts so ad-hoc searches stay fast even on large fixtures. If you need to
-inspect those folders, pass `--no-ignore` explicitly.
+- [ ] Restore artwork documentation once a new segmentation pipeline is ready for publication.
+- [ ] Add automated visual regression coverage beyond the current smoke test to guard the trimmed UI.
+- [ ] Wire the Playwright CI job to automatically upload `artifacts/ui-review/` bundles to the Automation Sync dashboard.
+- [ ] Draft a GitHub issue template for the weekly Automation Sync summary and link it from the contributor guide.
 
