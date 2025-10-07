@@ -206,14 +206,14 @@
       }
 
       #pointerOverlay .pointer-indicator {
-        width: calc(26px * var(--ui-scale));
-        height: calc(26px * var(--ui-scale));
+        width: calc(20px * var(--ui-scale));
+        height: calc(20px * var(--ui-scale));
         border-radius: 50%;
         border: 2px solid var(--cursor-ring);
         background: var(--cursor-fill);
-        box-shadow: 0 8px 18px rgba(2, 6, 23, 0.45), 0 0 0 1px rgba(15, 23, 42, 0.6);
+        box-shadow: 0 6px 14px rgba(2, 6, 23, 0.45), 0 0 0 1px rgba(15, 23, 42, 0.6);
         transform: translate(-50%, -50%);
-        backdrop-filter: blur(6px);
+        backdrop-filter: blur(4px);
       }
 
       #pointerOverlay.matching .pointer-indicator {
@@ -229,15 +229,18 @@
       }
 
       #pointerOverlay .pointer-tooltip {
-        display: grid;
-        gap: 6px;
-        min-width: calc(160px * var(--ui-scale));
-        padding: calc(10px * var(--ui-scale)) calc(12px * var(--ui-scale));
-        border-radius: calc(12px * var(--ui-scale));
-        background: rgba(2, 6, 23, 0.85);
+        display: inline-flex;
+        align-items: center;
+        gap: calc(6px * var(--ui-scale));
+        min-width: 0;
+        padding: calc(4px * var(--ui-scale)) calc(6px * var(--ui-scale));
+        border-radius: calc(6px * var(--ui-scale));
+        background: rgba(248, 250, 252, 0.95);
         border: 1px solid rgba(148, 163, 184, 0.35);
-        box-shadow: 0 16px 34px rgba(2, 6, 23, 0.45);
-        transform: translate(calc(-50% + 18px), calc(-50% + 26px));
+        box-shadow: 0 12px 24px rgba(2, 6, 23, 0.25);
+        transform: translate(calc(-50% + 14px), calc(-50% + 20px));
+        font-size: calc(14px * var(--ui-scale));
+        line-height: 1;
       }
 
       #pointerOverlay.matching .pointer-tooltip {
@@ -252,54 +255,20 @@
         border-color: rgba(148, 163, 184, 0.5);
       }
 
-      #pointerOverlay .pointer-status {
-        font-size: 0.7rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: rgba(148, 163, 184, 0.7);
-      }
-
-      #pointerOverlay .pointer-status:empty {
-        display: none;
-      }
-
-      #pointerOverlay.matching .pointer-status {
-        color: rgba(134, 239, 172, 0.95);
-      }
-
-      #pointerOverlay.mismatch .pointer-status {
-        color: rgba(248, 113, 113, 0.95);
-      }
-
-      #pointerOverlay.filled .pointer-status {
-        color: rgba(125, 211, 252, 0.95);
-      }
-
       #pointerOverlay .pointer-number {
-        font-size: 0.95rem;
-        letter-spacing: 0.04em;
-        color: rgba(226, 232, 240, 0.95);
-      }
-
-      #pointerOverlay .pointer-color {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 0.8rem;
-        color: rgba(203, 213, 225, 0.92);
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: rgba(15, 23, 42, 0.88);
+        text-shadow: 0 0 4px rgba(15, 23, 42, 0.35);
       }
 
       #pointerOverlay .pointer-swatch {
-        width: calc(18px * var(--ui-scale));
-        height: calc(18px * var(--ui-scale));
-        border-radius: calc(6px * var(--ui-scale));
+        width: calc(14px * var(--ui-scale));
+        height: calc(14px * var(--ui-scale));
+        border-radius: calc(4px * var(--ui-scale));
         border: 1px solid rgba(148, 163, 184, 0.7);
         background: var(--cursor-swatch);
         box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.4);
-      }
-
-      #pointerOverlay .pointer-color-label {
-        white-space: nowrap;
       }
 
       #canvasTransform {
@@ -1155,12 +1124,8 @@
         <div id="pointerOverlay" aria-hidden="true">
           <div class="pointer-indicator"></div>
           <div class="pointer-tooltip">
-            <span class="pointer-status" data-pointer-status></span>
+            <span class="pointer-swatch" data-pointer-color-swatch aria-hidden="true"></span>
             <strong class="pointer-number" data-pointer-number></strong>
-            <span class="pointer-color">
-              <span class="pointer-swatch" data-pointer-color-swatch aria-hidden="true"></span>
-              <span class="pointer-color-label" data-pointer-color></span>
-            </span>
           </div>
         </div>
         <div id="previewOverlay" class="hidden" aria-hidden="true">
@@ -1446,8 +1411,6 @@
       const canvasTransform = document.getElementById("canvasTransform");
       const cursorOverlay = document.getElementById("pointerOverlay");
       const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
-      const cursorColorLabelEl = cursorOverlay?.querySelector("[data-pointer-color]") || null;
-      const cursorStatusEl = cursorOverlay?.querySelector("[data-pointer-status]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
       const backgroundColorInput = document.getElementById("backgroundColor");
@@ -2952,16 +2915,23 @@
       function drawNumbers() {
         if (!state.puzzle) return;
         puzzleCtx.save();
-        puzzleCtx.fillStyle = backgroundInk.number;
+        const fallbackNumberInk = backgroundInk.number;
+        const fallbackOutlineInk = backgroundInk.outline;
         puzzleCtx.textAlign = "center";
         puzzleCtx.textBaseline = "middle";
-        puzzleCtx.strokeStyle = backgroundInk.outline;
+        puzzleCtx.strokeStyle = fallbackOutlineInk;
         puzzleCtx.lineJoin = "round";
         puzzleCtx.lineCap = "round";
         for (const region of state.puzzle.regions) {
           if (state.filled.has(region.id)) continue;
           const layout = getRegionLabelLayout(region);
           if (!layout) continue;
+          const paletteColor = getPaletteEntry(region.colorId);
+          const regionInk =
+            paletteColor?.hex && typeof paletteColor.hex === "string"
+              ? rgbaFromHex(paletteColor.hex, 1)
+              : fallbackNumberInk;
+          puzzleCtx.fillStyle = regionInk;
           puzzleCtx.font = layout.font;
           if (layout.strokeWidth) {
             puzzleCtx.lineWidth = layout.strokeWidth;
@@ -3628,12 +3598,7 @@
         cursorOverlay.style.removeProperty("--cursor-swatch");
         if (cursorNumberEl) {
           cursorNumberEl.textContent = "";
-        }
-        if (cursorColorLabelEl) {
-          cursorColorLabelEl.textContent = "";
-        }
-        if (cursorStatusEl) {
-          cursorStatusEl.textContent = "";
+          cursorNumberEl.style.removeProperty("color");
         }
         cursorHoverRegionId = null;
         cursorLastClientX = null;
@@ -3657,21 +3622,13 @@
         cursorOverlay.style.setProperty("--cursor-x", `${cursorLastClientX}px`);
         cursorOverlay.style.setProperty("--cursor-y", `${cursorLastClientY}px`);
         const colorId = paletteColor?.id ?? region.colorId;
-        const providedName =
-          typeof paletteColor?.name === "string" && paletteColor.name.trim()
-            ? paletteColor.name.trim()
-            : null;
-        const fallbackHex =
-          !providedName && typeof paletteColor?.hex === "string"
-            ? paletteColor.hex.trim().toUpperCase()
-            : null;
-        const colorName = providedName || fallbackHex;
-        const colorLabel = colorName ? `Colour ${colorId} · ${colorName}` : `Colour ${colorId}`;
         if (cursorNumberEl) {
-          cursorNumberEl.textContent = `Region ${region.id}`;
-        }
-        if (cursorColorLabelEl) {
-          cursorColorLabelEl.textContent = colorLabel;
+          cursorNumberEl.textContent = String(colorId);
+          if (paletteColor?.hex) {
+            cursorNumberEl.style.color = paletteColor.hex;
+          } else {
+            cursorNumberEl.style.removeProperty("color");
+          }
         }
         const fillTint = paletteColor?.hex ? rgbaFromHex(paletteColor.hex, 0.3) : "rgba(148, 163, 184, 0.3)";
         const ringTint = paletteColor?.hex ? rgbaFromHex(paletteColor.hex, 0.85) : "rgba(226, 232, 240, 0.95)";
@@ -3686,17 +3643,6 @@
         cursorOverlay.classList.toggle("filled", isFilled);
         cursorOverlay.classList.toggle("matching", matchesActive);
         cursorOverlay.classList.toggle("mismatch", mismatchActive);
-        if (cursorStatusEl) {
-          let status = "";
-          if (isFilled) {
-            status = "Filled";
-          } else if (matchesActive) {
-            status = "Active colour selected";
-          } else if (mismatchActive) {
-            status = `Select colour ${colorId}`;
-          }
-          cursorStatusEl.textContent = status;
-        }
         cursorOverlay.classList.add("active");
       }
 
