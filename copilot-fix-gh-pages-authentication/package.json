@@ -1,0 +1,19 @@
+{
+  "name": "capy",
+  "version": "1.0.0",
+  "description": "Color-by-number demo (single-file React + Playwright smoke tests)",
+  "scripts": {
+    "start": "http-server . -p 8000 -c-1",
+    "dev": "http-server . -p 8000 -c-1",
+    "test": "playwright test",
+    "test:smoke": "playwright test tests/ui-review.spec.js",
+    "test:ci": "playwright test --reporter=github --workers=2",
+    "show-report": "playwright show-report",
+    "postinstall": "playwright install --with-deps"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.1",
+    "playwright": "^1.55.1",
+    "http-server": "^14.1.1"
+  }
+}
