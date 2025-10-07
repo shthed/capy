@@ -7,6 +7,42 @@ regions, and paint a canvas you can immediately play. A fullscreen preview, hint
 tools, a save manager, and a configurable generator all live inside a single
 `index.html` document—no build tools or extra runtime required.
 
+## Repository report
+
+- **Core application**
+  - `index.html` – Single-file UI, styles, and generator logic powering the coloring experience.
+  - `README.md` – Usage guide and architecture reference for contributors.
+- **Testing & QA**
+  - `tests/ui-review.spec.js` – Playwright smoke test that exercises onboarding, palette, and sample reload flows.
+  - `playwright.config.js` – Playwright runner configuration bound to the static http-server.
+- **Tooling & metadata**
+  - `package.json` – npm scripts plus the http-server and Playwright dependencies required to run the app and tests.
+  - `package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
+  - `.gitignore` – Ignores dependency installs, Playwright artifacts, and transient reports.
+- **CI & Deployment**
+  - `.github/workflows/ci.yml` – Runs Playwright tests on Windows for every push and PR.
+  - `.github/workflows/deploy-branch.yml` – Deploys every branch to GitHub Pages under a subfolder matching the branch name.
+- **Process notes**
+  - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
+  - `docs/automation-loop.md` – Blueprint for the automated branching, testing, merging, and feedback loop.
+  - `docs/branch-deployments.md` – Detailed guide to the multi-branch GitHub Pages deployment system.
+
+## Development workflow
+
+- **Automation branches.** Create short-lived branches named `automation/<change>` so CI reports and Playwright artifacts map
+  directly to the experiment under review.
+- **Branch deployments.** Every push to any branch automatically deploys to GitHub Pages under a subfolder named after the branch
+  (e.g., `automation/feature` deploys to `/automation-feature/`). This lets reviewers preview changes in a live environment
+  without local setup. The main branch deploys to the root path.
+- **Continuous smoke tests.** Let every push trigger `npm test --silent` across desktop and mobile viewports; publish the
+  resulting `artifacts/ui-review/` bundle for asynchronous review and attach key screenshots when UI changes land.
+- **Fast-forward merges.** Rebase onto `main`, rerun the Playwright suite, and merge with `--ff-only` to preserve a linear
+  history that keeps bisects practical for the single-file runtime.
+- **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up work in a standing Friday issue so the team has
+  a shared backlog of automation improvements.
+- **Close the loop.** Update PR descriptions and linked issues with branch names, CI run URLs, artifact locations, and live
+  preview URLs so the automation history remains searchable.
+
 ## Features
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
@@ -38,6 +74,9 @@ tools, a save manager, and a configurable generator all live inside a single
   trigger browser-level zoom; a global guard redirects them to the custom
   canvas handlers so the HUD stays stable while pan/zoom gestures still feel
   natural on touchscreens.
+- **Responsive command rail.** Header icons now clamp to the viewport, wrap when
+  space runs short, and respect safe-area insets so controls stay reachable on
+  phones, tablets, and desktop window resizes.
 - **Colour cues and feedback.** Choosing a swatch briefly pulses every matching
   region (falling back to a celebratory flash when a colour is finished) so
   it's obvious where to paint next, and correctly filled regions immediately
@@ -48,9 +87,11 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Precision view controls.** Pan the puzzle by click-dragging with the
   primary mouse button (spacebar, middle, and right buttons still work), use
   pinch gestures or the mouse wheel to zoom in and out, or tap `+`/`-` on the
-  keyboard for incremental adjustments. The canvas now stretches to fill the
-  viewport, centres itself automatically, and honours device orientation
-  changes without losing your place.
+  keyboard for incremental adjustments. Ctrl/Cmd zoom shortcuts now target the
+  puzzle instead of the surrounding UI so the HUD stays crisp while the canvas
+  reacts. The canvas stretches to fill the viewport, centres itself
+  automatically, and honours device orientation changes without losing your
+  place.
 - **Edge-to-edge stage.** A fullscreen toggle, rotation-aware sizing, and
   dynamic viewport padding ensure the command rail and palette scale cleanly on
   phones, tablets, or desktops while the artwork stays centred.
@@ -87,9 +128,7 @@ the high preset so playtesters immediately see the full ≈140-region canvas, bu
 the remembered preset keeps medium or low runs sticky after you switch. The
 region counts above are based on the bundled Capybara Springs artwork and keep
 every preset playable—from the breezy ≈26-region low detail board to the
-≈140-region high fidelity scene. For a full tour of the palette and every
-numbered cell in the segmented source, see
-[`docs/capybara-springs-map.md`](docs/capybara-springs-map.md).
+≈140-region high fidelity scene.
 
 ## Code architecture tour
 
