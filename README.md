@@ -19,6 +19,8 @@ tools, a save manager, and a configurable generator all live inside a single
   - `package.json` – npm scripts plus the http-server and Playwright dependencies required to run the app and tests.
   - `package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, Playwright artifacts, and transient reports.
+  - `.rgignore` – Skips dependencies and generated artifacts so ripgrep stays fast and avoids dumping giant lines into the shell.
+  - `.ripgreprc` – Caps printed line width and keeps highlighting consistent, preventing terminal overflow when searching long files.
 - **Process notes**
   - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
   - `docs/automation-loop.md` – Blueprint for the automated branching, testing, merging, and feedback loop.
