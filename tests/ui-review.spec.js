@@ -112,6 +112,24 @@ test.describe('Capy image generator', () => {
       ])
     );
 
+    await expect(page.locator('#detailCycleButton')).toBeVisible();
+    const detailAria = await page.locator('#detailCycleButton').getAttribute('aria-label');
+    expect(detailAria || '').toMatch(/Next:/);
+
+    const paletteToggle = page.locator('#toggleCompletedColors');
+    await expect(paletteToggle).toBeVisible();
+    await expect(paletteToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(paletteToggle).toHaveText(/Hide finished colours/i);
+
+    await expect(page.locator('#activeColorBadge')).toHaveAttribute('data-has-colour', 'true');
+
+    await paletteToggle.click();
+    await expect(paletteToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(paletteToggle).toHaveText(/Show all colours/i);
+    await paletteToggle.click();
+    await expect(paletteToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(paletteToggle).toHaveText(/Hide finished colours/i);
+
     await page.click('#helpButton');
     await expect(page.locator('#helpSheet')).toBeVisible();
 
@@ -139,6 +157,7 @@ test.describe('Capy image generator', () => {
     expect(generatorLabels.some((label) => label.includes('Sample rate'))).toBe(true);
     expect(generatorLabels.some((label) => label.includes('Background colour'))).toBe(true);
     expect(generatorLabels.some((label) => label.includes('Interface scale'))).toBe(true);
+    await expect(page.locator('#hideCompletedToggle')).toBeVisible();
 
     const artPrompt = page.locator('#artPrompt');
     await expect(artPrompt).toBeHidden();
@@ -190,6 +209,16 @@ test.describe('Capy image generator', () => {
     expect(state.sourceUrl).toContain('data:image/svg+xml;base64,');
     expect(state.detailLevel).toBe('high');
     expect(state.targetColors).toBe(32);
+
+    const badgeState = await page.evaluate(() => {
+      const badge = document.querySelector('#activeColorBadge');
+      return {
+        hasColour: badge?.dataset.hasColour || null,
+        remaining: badge?.querySelector('[data-active-color-remaining]')?.textContent?.trim() || '',
+      };
+    });
+    expect(badgeState.hasColour).toBe('true');
+    expect(badgeState.remaining).toMatch(/regions/);
 
     await page.click('[data-testid="sample-art-button"]');
     await expect
