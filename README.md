@@ -7,6 +7,21 @@ regions, and paint a canvas you can immediately play. A fullscreen preview, hint
 tools, a save manager, and a configurable generator all live inside a single
 `index.html` document—no build tools or extra runtime required.
 
+## Repository report
+
+- **Core application**
+  - `index.html` – Single-file UI, styles, and generator logic powering the coloring experience.
+  - `README.md` – Usage guide and architecture reference for contributors.
+- **Testing & QA**
+  - `tests/ui-review.spec.js` – Playwright smoke test that exercises onboarding, palette, and sample reload flows.
+  - `playwright.config.js` – Playwright runner configuration bound to the static http-server.
+- **Tooling & metadata**
+  - `package.json` – npm scripts plus the http-server and Playwright dependencies required to run the app and tests.
+  - `package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
+  - `.gitignore` – Ignores dependency installs, Playwright artifacts, and transient reports.
+- **Process notes**
+  - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
+
 ## Features
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
@@ -87,9 +102,7 @@ the high preset so playtesters immediately see the full ≈140-region canvas, bu
 the remembered preset keeps medium or low runs sticky after you switch. The
 region counts above are based on the bundled Capybara Springs artwork and keep
 every preset playable—from the breezy ≈26-region low detail board to the
-≈140-region high fidelity scene. For a full tour of the palette and every
-numbered cell in the segmented source, see
-[`docs/capybara-springs-map.md`](docs/capybara-springs-map.md).
+≈140-region high fidelity scene.
 
 ## Code architecture tour
 
@@ -287,4 +300,9 @@ npm test --silent
 
 The suite writes artifacts (screenshots + JSON summaries) into
 `artifacts/ui-review/` if you need to inspect the DOM snapshots.
+
+## TODO
+
+- [ ] Restore artwork documentation once a new segmentation pipeline is ready for publication.
+- [ ] Add automated visual regression coverage beyond the current smoke test to guard the trimmed UI.
 

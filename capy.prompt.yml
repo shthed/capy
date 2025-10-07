@@ -1,6 +1,0 @@
-messages:
-  - role: system
-    content: write a svg file for a colour by numbers game
-  - role: user
-    content: draw a forest
-model: openai/gpt-4o
