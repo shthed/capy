@@ -63,6 +63,10 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 - Run `git fetch --all --prune` at the start of a task to ensure local refs match the remote state before making changes.
 - `npm run git:update` is available as a shorthand for the fetch + status routine if you prefer a single command.
 - After committing, always push the working branch and update the corresponding PR so remote history stays in sync.
+- When GitHub reports merge conflicts, re-run the fetch routine, inspect each flagged path for conflict markers, and prefer
+  rewriting the whole section cleanly rather than leaving `<<<<<<<` markers for reviewers to untangle.
+- Document the reconciliation in `PR_REVIEW.md` (or the relevant design diary) so the PR history records how the conflict was
+  resolved.
 
 ## PR / Final Response
 - Summaries should call out both UI and workflow changes when present.

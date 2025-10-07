@@ -13,7 +13,8 @@
     "postinstall": "playwright install --with-deps",
     "test:loop": "playwright test --ui --project=chromium",
     "test:prompt": "playwright test tests/prompt-flow.spec.js",
-    "git:update": "node tools/git-update.js"
+    "git:update": "node tools/git-update.js",
+    "lint:conflicts": "rg --files-with-matches '<<<<<<<[[:space:]]' --glob '!node_modules' --glob '!.git' || true"
   },
   "devDependencies": {
     "@babel/standalone": "^7.24.8",

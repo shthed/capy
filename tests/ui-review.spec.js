@@ -1,6 +1,8 @@
 const { test, expect } = require('@playwright/test');
 
 const APP_URL = 'http://127.0.0.1:8000/index.html';
+// Merge tip: if upstream renames files or routes, update APP_URL and dependent selectors
+// here before re-running the Playwright suite so conflict resolutions reflect the latest UI.
 
 const BASIC_TEST_PATTERN = {
   name: 'Basic test pattern',

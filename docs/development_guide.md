@@ -66,6 +66,9 @@
   short-status output you would normally inspect for untracked files or conflicts.
 - When synchronising with `main`, prefer `git pull --rebase` (or an explicit `git merge origin/main` if the workflow demands a
   merge commit) so the single-file app avoids needless conflict rounds.
+- If GitHub reports conflicts, work through the highlighted files locally, check for `<<<<<<<` markers, and fold upstream text
+  in place (docs, `index.html`, and the Playwright specs are the usual touch points) before committing the resolution.
+- Use `npm run lint:conflicts` for a final sweep to ensure no markers remain before pushing your fix.
 - After landing changes, push the branch and re-run `npm test --silent` if the merge introduced new code.
 
 Update this guide when workflows change.

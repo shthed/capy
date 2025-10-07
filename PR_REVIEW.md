@@ -31,3 +31,5 @@ Approved. All blocking feedback has been addressed and the visual regression har
 ## Merge conflict review
 - Re-ran `npm run git:update` and inspected `git status -sb`; no staged or unstaged edits surfaced beyond this review update.
 - Searched the repository for merge markers to confirm none are present, keeping the branch conflict-free ahead of the next rebase or merge.
+- Cross-referenced the files GitHub reported in conflict (`AGENTS.md`, `README.md`, docs, `index.html`, `package.json`, and the Playwright harness)
+  and manually reviewed each to ensure our branch incorporates upstream wording and helpers before pushing the refreshed revisions.

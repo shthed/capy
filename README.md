@@ -271,6 +271,11 @@ The quickest iteration cycle is:
   `git pull --rebase` (or explicitly `git merge origin/main` when a merge commit
   is required) so the single-file app stays readable and avoids duplicated
   sections in `index.html`.
+- If GitHub flags conflicts, inspect the specific files it lists (commonly the
+  docs, `index.html`, `package.json`, and the Playwright suites), reconcile them
+  locally, and note the outcome in `PR_REVIEW.md` before pushing.
+- Run `npm run lint:conflicts` for a quick sweep of stray `<<<<<<<` markers
+  before you commit the resolution.
 - After resolving conflicts, rerun `npm test --silent` to confirm the prompt
   flow and responsive HUD still pass the Playwright suites before committing.
 

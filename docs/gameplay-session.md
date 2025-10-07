@@ -48,6 +48,9 @@
   updates, autosave restore messages, and both the start and completion of
   sample reloads with severity badges that mirror the status tray—making it
   easier to spot warnings versus success events at a glance.
+- After reconciling the branch with the latest `main`, the generator progress
+  tray and Help log still marched through the same sequence of messages—handy
+  confirmation that the merge left our telemetry intact.
 - The new footer status tray surfaced each import step—file read, image decode,
   k-means clustering, segmentation counts, palette prep, and rolling progress—on
   a live progress bar, populated a telemetry grid with the active mode/prompt

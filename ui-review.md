@@ -9,6 +9,7 @@
 - Interaction coverage also asserts that selecting a palette swatch pulses every matching region and that mouse-wheel as well as keyboard `+`/`-` zoom controls adjust the viewport scale.
 - The smoke run now exercises the ChatGPT prompt on load (falling back to the bundled sample puzzle when no API key is available) and confirms the fullscreen control is available for edge-to-edge play.
 - Review the generated JSON for console errors and metadata counts, then open the screenshot to confirm composition changes look right before merging.
+- When GitHub surfaces conflicts in this harness, resolve them locally, rerun `npm test --silent`, and capture the outcome in the PR review log so the visual baseline stays trustworthy.
 
 ## Positive Observations
 - The Peek control lets you preview the finished painting without leaving the canvas, either by holding or toggling the button.

@@ -20,6 +20,8 @@
       sheet. serializeCurrentPuzzle produces an export-safe object.
     - External API: window.capyGenerator exposes entry points that Playwright and manual testing
       rely on. Keep it stable whenever you shuffle internal wiring.
+    - Merge hygiene: if `main` lands markup or telemetry updates, resolve conflicts by editing the
+      affected section wholesale—partial merges tend to duplicate helpers in this single file.
   -->
   <head>
     <meta charset="utf-8" />
