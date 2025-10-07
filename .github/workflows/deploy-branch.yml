@@ -6,7 +6,6 @@ on:
       - '**'  # Trigger on all branches
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN
 permissions:
   contents: write
   pages: write
@@ -79,64 +78,27 @@ jobs:
                     --exclude='artifacts' \
                     ../source/ "$BRANCH_FOLDER/"
 
-          # Generate index page listing all branches if main branch
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "Updating main branch index"
-            cp "$BRANCH_FOLDER/index.html" index.html 2>/dev/null || true
-          fi
-
-          # Create a simple index.html at root if it doesn't exist
-          if [ ! -f "index.html" ] && [ "${{ github.ref_name }}" != "main" ]; then
-            cat > index.html << 'HTMLEOF'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Capy - Branch Deployments</title>
-            <style>
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-                max-width: 800px;
-                margin: 50px auto;
-                padding: 20px;
-                line-height: 1.6;
-              }
-              h1 { color: #333; }
-              ul { list-style: none; padding: 0; }
-              li { margin: 10px 0; }
-              a {
-                display: inline-block;
-                padding: 10px 15px;
-                background: #3b82f6;
-                color: white;
-                text-decoration: none;
-                border-radius: 5px;
-                transition: background 0.2s;
-              }
-              a:hover { background: #2563eb; }
-            </style>
-          </head>
-          <body>
-            <h1>Capy Image Generator - Branch Deployments</h1>
-            <p>Select a branch to view:</p>
-            <ul id="branches"></ul>
-            <script>
-              const branches = [];
-              const list = document.getElementById('branches');
-              branches.forEach(branch => {
-                const li = document.createElement('li');
-                const a = document.createElement('a');
-                a.href = branch + '/';
-                a.textContent = branch;
-                li.appendChild(a);
-                list.appendChild(li);
-              });
-            </script>
-          </body>
-          </html>
-          HTMLEOF
-          fi
+          # Generate index page listing all branches dynamically
+          BRANCHES=$(ls -d */ | grep -v '^index.html$' | sed 's#/##')
+          cat > index.html <<EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Capy Branch Deployments</title>
+</head>
+<body>
+  <h1>Capy Image Generator - Branch Deployments</h1>
+  <ul>
+EOF
+for branch in $BRANCHES; do
+  echo "    <li><a href='${branch}/'>${branch}</a></li>" >> index.html
+done
+cat >> index.html <<EOF
+  </ul>
+</body>
+</html>
+EOF
 
           # Commit and push
           git config user.name "github-actions[bot]"
@@ -170,8 +132,4 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          path: '.'.
