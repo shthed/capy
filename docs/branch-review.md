@@ -15,7 +15,8 @@
 ## Git update status
 - Ran `git fetch --all --prune` to refresh local refs before auditing the branch.
 - Confirmed `git status` reports a clean working tree on `work`, indicating no pending merges or conflicts after the update.
+- Verified both `main` and `work` point at commit `ebd610a` after the merge rehearsal by inspecting `git branch -vv`.
 
 ## Merge execution
-- Checked out `main` at commit `f7af674` and fast-forwarded it to `work` (`f4be938`) with `git merge work`.
-- Verified `git status` remains clean on both `main` and `work`, confirming the merge completed without additional edits.
+- Created local `main` at commit `f7af674` and fast-forwarded it to the current `work` head (`ebd610a`) with `git merge work`.
+- Switched back to `work` and confirmed `git status` remains clean on both branches, confirming the merge completed without additional edits.
