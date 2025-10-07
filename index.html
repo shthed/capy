@@ -43,7 +43,6 @@
         --viewport-padding: calc(32px * var(--ui-scale));
         --rail-gap: calc(8px * var(--ui-scale));
         --rail-gap-portrait: calc(6px * var(--ui-scale));
-        --rail-group-gap: calc(14px * var(--ui-scale));
         --rail-padding-block: calc(12px * var(--ui-scale));
         --rail-padding-inline: calc(24px * var(--ui-scale));
         --command-button-size: clamp(
@@ -102,10 +101,10 @@
       #commandRail {
         position: relative;
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-end;
         align-items: center;
         flex-wrap: wrap;
-        gap: var(--rail-group-gap);
+        gap: var(--rail-gap);
         padding: var(--rail-padding-block) var(--rail-padding-inline);
         padding-block-start:
           calc(var(--rail-padding-block) + env(safe-area-inset-top, 0px));
@@ -120,33 +119,13 @@
         width: 100%;
       }
 
-      #commandRail .command-group {
-        flex: 1 1 clamp(220px, 34vw, 420px);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: var(--rail-gap);
-        padding: calc(6px * var(--ui-scale)) calc(12px * var(--ui-scale));
-        border-radius: calc(24px * var(--ui-scale));
-        background: rgba(15, 23, 42, 0.68);
-        border: 1px solid rgba(148, 163, 184, 0.2);
-        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.45);
-        backdrop-filter: blur(14px);
-      }
-
-      #commandRail .command-group[data-group="system"] {
-        justify-content: flex-end;
-      }
-
       #commandRail button {
-        border-radius: calc(18px * var(--ui-scale));
-        padding: calc(8px * var(--ui-scale)) calc(12px * var(--ui-scale));
-        min-width: var(--command-button-size);
-        min-height: var(--command-button-size);
+        border-radius: 12px;
+        padding: 0;
+        width: var(--command-button-size);
+        height: var(--command-button-size);
         display: grid;
-        grid-template-rows: auto auto;
         place-items: center;
-        gap: calc(4px * var(--ui-scale));
         background: rgba(15, 23, 42, 0.82);
         color: rgba(226, 232, 240, 0.92);
         border: 1px solid rgba(148, 163, 184, 0.28);
@@ -159,18 +138,8 @@
       }
 
       #commandRail button .icon {
-        font-size: 1.15rem;
+        font-size: 1.1rem;
         line-height: 1;
-      }
-
-      #commandRail button .label {
-        display: none;
-        font-size: 0.65rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        line-height: 1.1;
-        opacity: 0.85;
       }
 
       #commandRail button:disabled {
@@ -180,21 +149,15 @@
       }
 
       body[data-orientation="portrait"] #commandRail {
-        gap: var(--rail-group-gap);
+        gap: var(--rail-gap-portrait);
         padding: var(--rail-padding-block) calc(16px * var(--ui-scale));
         justify-content: center;
         width: 100%;
       }
 
-      body[data-orientation="portrait"] #commandRail .command-group {
-        flex: 1 1 100%;
-        justify-content: center;
-        flex-wrap: wrap;
-      }
-
       body[data-orientation="portrait"] #commandRail button {
-        min-width: var(--command-button-size-portrait);
-        min-height: var(--command-button-size-portrait);
+        width: var(--command-button-size-portrait);
+        height: var(--command-button-size-portrait);
       }
 
       body.compact-commands #commandRail {
@@ -203,35 +166,9 @@
         padding-inline: calc(16px * var(--ui-scale));
       }
 
-      body.compact-commands #commandRail .command-group {
-        flex: 1 1 100%;
-        justify-content: center;
-        gap: calc(10px * var(--ui-scale));
-        padding-inline: calc(10px * var(--ui-scale));
-      }
-
       body.compact-commands #commandRail button {
-        width: min(var(--command-button-size), calc(16vw));
-        min-width: 0;
-        min-height: min(var(--command-button-size), calc(16vw));
-        padding: calc(8px * var(--ui-scale));
-      }
-
-      body.compact-commands #commandRail button .label {
-        display: none !important;
-      }
-
-      body.show-command-labels #commandRail .command-group {
-        justify-content: space-evenly;
-      }
-
-      body.show-command-labels #commandRail button {
-        min-width: calc(var(--command-button-size) * 1.18);
-        padding-block: calc(10px * var(--ui-scale));
-      }
-
-      body.show-command-labels #commandRail button .label {
-        display: block;
+        width: min(var(--command-button-size), calc(14vw));
+        height: min(var(--command-button-size), calc(14vw));
       }
 
       body[data-orientation="portrait"] #paletteDock {
@@ -577,8 +514,10 @@
 
       #paletteDock {
         position: relative;
-        display: grid;
-        gap: calc(18px * var(--ui-scale));
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: calc(16px * var(--ui-scale));
         padding:
           calc(16px * var(--ui-scale))
           calc(28px * var(--ui-scale))
@@ -589,155 +528,24 @@
         touch-action: manipulation;
       }
 
-      .palette-meta {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: calc(16px * var(--ui-scale));
-      }
-
-      .active-color {
-        flex: 1 1 320px;
-        display: flex;
-        align-items: center;
-        gap: calc(12px * var(--ui-scale));
-        padding: calc(10px * var(--ui-scale)) calc(14px * var(--ui-scale));
-        border-radius: calc(20px * var(--ui-scale));
-        background: rgba(15, 23, 42, 0.78);
-        border: 1px solid rgba(148, 163, 184, 0.22);
-        box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.12);
-      }
-
-      body.compact-palette .active-color {
-        width: 100%;
-      }
-
-      .active-color[data-has-colour="false"] {
-        background: rgba(15, 23, 42, 0.6);
-        border-style: dashed;
-        border-color: rgba(148, 163, 184, 0.3);
-      }
-
-      .active-color .active-swatch {
-        width: calc(40px * var(--ui-scale));
-        height: calc(40px * var(--ui-scale));
-        border-radius: 14px;
-        background: linear-gradient(135deg, rgba(148, 163, 184, 0.12), rgba(15, 23, 42, 0.6));
-        border: 1px solid rgba(148, 163, 184, 0.28);
-        position: relative;
-        overflow: hidden;
-      }
-
-      .active-color .active-swatch::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        background: var(--active-color, linear-gradient(135deg, rgba(148, 163, 184, 0.2), rgba(71, 85, 105, 0.35)));
-      }
-
-      .active-color .active-info {
-        display: grid;
-        gap: 2px;
-        min-width: 0;
-      }
-
-      .active-color .active-label {
-        font-size: 0.85rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: rgba(148, 163, 184, 0.85);
-      }
-
-      .active-color strong {
-        font-size: 1.05rem;
-        letter-spacing: 0.05em;
-        color: rgba(226, 232, 240, 0.95);
-      }
-
-      .active-color .active-name {
-        font-weight: 600;
-        font-size: 1.05rem;
-        margin: 0;
-        color: rgba(226, 232, 240, 0.95);
-        white-space: nowrap;
-        text-overflow: ellipsis;
-        overflow: hidden;
-      }
-
-      .active-color .active-remaining {
-        margin: 0;
-        font-size: 0.85rem;
-        color: rgba(148, 163, 184, 0.9);
-      }
-
-      .palette-controls {
-        display: flex;
-        align-items: center;
-        gap: calc(12px * var(--ui-scale));
-        flex-wrap: wrap;
-        justify-content: flex-end;
-      }
-
-      body.compact-palette #paletteDock {
-        gap: calc(14px * var(--ui-scale));
-      }
-
-      body.compact-palette .palette-meta {
-        flex-direction: column;
-        align-items: stretch;
-        gap: calc(12px * var(--ui-scale));
-      }
-
-      body.compact-palette .palette-controls {
-        justify-content: space-between;
-      }
-
-      body.compact-palette #progress {
-        text-align: left;
-      }
-
       #progress {
-        min-width: 112px;
+        min-width: 120px;
         font-size: 1.05rem;
         font-variant-numeric: tabular-nums;
-        text-align: right;
+        text-align: left;
         color: rgba(226, 232, 240, 0.82);
       }
 
       #palette {
         flex: 1;
-        display: grid;
-        grid-auto-flow: column;
-        grid-auto-columns: minmax(calc(44px * var(--ui-scale)), 1fr);
+        display: flex;
         gap: calc(6px * var(--ui-scale));
         overflow-x: auto;
+        overflow-y: hidden;
         padding: 2px 0 calc(6px * var(--ui-scale));
         scrollbar-width: thin;
-      }
-
-      #palette.hide-complete .swatch.done:not(.active) {
-        display: none;
-      }
-
-      button.ghost {
-        background: rgba(15, 23, 42, 0.55);
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        color: rgba(226, 232, 240, 0.85);
-        box-shadow: none;
-      }
-
-      button.ghost:hover:not(:disabled) {
-        transform: none;
-        box-shadow: none;
-        background: rgba(96, 165, 250, 0.16);
-      }
-
-      button.ghost.active {
-        background: rgba(37, 99, 235, 0.22);
-        border-color: rgba(96, 165, 250, 0.6);
-        color: rgba(226, 232, 240, 0.95);
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x;
       }
 
       #palette::-webkit-scrollbar {
@@ -902,6 +710,7 @@
       }
 
       .swatch {
+        flex: 0 0 auto;
         position: relative;
         display: flex;
         flex-direction: column;
@@ -1219,11 +1028,8 @@
         }
 
         #commandRail {
-          justify-content: center;
-        }
-
-        #commandRail .command-group {
-          flex: 1 1 100%;
+          flex-wrap: wrap;
+          justify-content: flex-end;
         }
       }
 
@@ -1236,19 +1042,14 @@
           max-height: calc(100vh - 240px);
         }
 
-        .palette-meta {
+        #paletteDock {
           flex-direction: column;
           align-items: stretch;
-          gap: calc(12px * var(--ui-scale));
-        }
-
-        .palette-controls {
-          justify-content: space-between;
+          gap: 12px;
         }
 
         #progress {
           min-width: 0;
-          text-align: left;
         }
       }
     </style>
@@ -1256,117 +1057,92 @@
   <body>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
-        <div class="command-group" data-group="play">
-          <button
-            id="hintButton"
-            type="button"
-            data-testid="hint-button"
-            aria-label="Hint"
-            title="Hint"
-            disabled
-          >
-            <span class="icon" aria-hidden="true">?</span>
-            <span class="label">Hint</span>
-          </button>
-          <button
-            id="resetButton"
-            type="button"
-            data-testid="reset-button"
-            aria-label="Reset puzzle"
-            title="Reset puzzle"
-            disabled
-          >
-            <span class="icon" aria-hidden="true">↺</span>
-            <span class="label">Reset</span>
-          </button>
-          <button
-            id="sampleCommand"
-            type="button"
-            data-testid="sample-art-button"
-            data-action="load-sample"
-            aria-label="Reload sample puzzle"
-            title="Reload sample puzzle"
-          >
-            <span class="icon" aria-hidden="true">🐹</span>
-            <span class="label">Sample</span>
-          </button>
-          <button
-            id="detailCycleButton"
-            type="button"
-            data-testid="detail-cycle-button"
-            aria-label="Cycle detail presets"
-            title="Cycle detail presets"
-          >
-            <span class="icon" aria-hidden="true">🎚</span>
-            <span class="label" data-detail-label>Detail</span>
-          </button>
-        </div>
-        <div class="command-group" data-group="view">
-          <button
-            id="previewToggle"
-            type="button"
-            data-testid="preview-toggle"
-            aria-label="Show preview"
-            title="Show preview"
-            disabled
-          >
-            <span class="icon" aria-hidden="true">🖼</span>
-            <span class="label">Preview</span>
-          </button>
-          <button
-            id="fullscreenButton"
-            type="button"
-            data-testid="fullscreen-button"
-            aria-label="Enter fullscreen"
-            title="Enter fullscreen"
-          >
-            <span class="icon" aria-hidden="true">⛶</span>
-            <span class="label">Fullscreen</span>
-          </button>
-        </div>
-        <div class="command-group" data-group="system">
-          <button
-            id="importButton"
-            type="button"
-            data-testid="import-button"
-            aria-label="Import"
-            title="Import"
-          >
-            <span class="icon" aria-hidden="true">⬆</span>
-            <span class="label">Import</span>
-          </button>
-          <button
-            id="saveManagerButton"
-            type="button"
-            data-testid="save-manager-button"
-            aria-label="Save manager"
-            title="Save manager"
-            disabled
-          >
-            <span class="icon" aria-hidden="true">💾</span>
-            <span class="label">Saves</span>
-          </button>
-          <button
-            id="helpButton"
-            type="button"
-            data-testid="help-button"
-            aria-label="Help &amp; shortcuts"
-            title="Help &amp; shortcuts"
-          >
-            <span class="icon" aria-hidden="true">ℹ</span>
-            <span class="label">Help</span>
-          </button>
-          <button
-            id="settingsButton"
-            type="button"
-            data-testid="settings-button"
-            aria-label="Settings"
-            title="Settings"
-          >
-            <span class="icon" aria-hidden="true">⚙</span>
-            <span class="label">Settings</span>
-          </button>
-        </div>
+        <button
+          id="hintButton"
+          type="button"
+          data-testid="hint-button"
+          aria-label="Hint"
+          title="Hint"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">?</span>
+        </button>
+        <button
+          id="resetButton"
+          type="button"
+          data-testid="reset-button"
+          aria-label="Reset puzzle"
+          title="Reset puzzle"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">↺</span>
+        </button>
+        <button
+          id="previewToggle"
+          type="button"
+          data-testid="preview-toggle"
+          aria-label="Show preview"
+          title="Show preview"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">🖼</span>
+        </button>
+        <button
+          id="sampleCommand"
+          type="button"
+          data-testid="sample-art-button"
+          data-action="load-sample"
+          aria-label="Reload sample puzzle"
+          title="Reload sample puzzle"
+        >
+          <span class="icon" aria-hidden="true">🐹</span>
+        </button>
+        <button
+          id="fullscreenButton"
+          type="button"
+          data-testid="fullscreen-button"
+          aria-label="Enter fullscreen"
+          title="Enter fullscreen"
+        >
+          <span class="icon" aria-hidden="true">⛶</span>
+        </button>
+        <button
+          id="importButton"
+          type="button"
+          data-testid="import-button"
+          aria-label="Import"
+          title="Import"
+        >
+          <span class="icon" aria-hidden="true">⬆</span>
+        </button>
+        <button
+          id="saveManagerButton"
+          type="button"
+          data-testid="save-manager-button"
+          aria-label="Save manager"
+          title="Save manager"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">💾</span>
+        </button>
+        <button
+          id="helpButton"
+          type="button"
+          data-testid="help-button"
+          aria-label="Help &amp; shortcuts"
+          title="Help &amp; shortcuts"
+        >
+          <span class="icon" aria-hidden="true">ℹ</span>
+        </button>
+        <button
+          id="settingsButton"
+          type="button"
+          data-testid="settings-button"
+          aria-label="Settings"
+          title="Settings"
+        >
+          <span class="icon" aria-hidden="true">⚙</span>
+        </button>
       </header>
       <div id="viewport">
         <div id="canvasStage">
@@ -1435,36 +1211,13 @@
         </div>
       </div>
       <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div class="palette-meta">
-          <div
-            id="activeColorBadge"
-            class="active-color"
-            aria-live="polite"
-            data-has-colour="false"
-          >
-            <span class="active-swatch" data-active-color-swatch aria-hidden="true"></span>
-            <div class="active-info">
-              <span class="active-label">
-                <strong data-active-color-number>—</strong>
-              </span>
-              <p class="active-name" data-active-color-name>Pick a colour to start painting</p>
-              <p class="active-remaining" data-active-color-remaining>
-                Tap any swatch to highlight matching regions.
-              </p>
-            </div>
-          </div>
-          <div class="palette-controls">
-            <div id="progress" aria-live="polite" data-testid="progress-message">—</div>
-            <button
-              id="toggleCompletedColors"
-              type="button"
-              class="ghost"
-              aria-pressed="false"
-              title="Hide finished colours"
-            >
-              Hide finished colours
-            </button>
-          </div>
+        <div
+          id="progress"
+          aria-live="polite"
+          data-testid="progress-message"
+          data-status="idle"
+        >
+          Choose an artwork to start
         </div>
         <div id="palette" role="list"></div>
       </footer>
@@ -1499,9 +1252,8 @@
               </dd>
               <dt>🎚 Detail</dt>
               <dd>
-                Cycle the sample detail presets from the command rail or use the chips in the start hint and
-                Settings sheet to reload the demo with tuned palette sizes, minimum region areas, resize
-                targets, and the region counts noted above.
+                Toggle the capybara detail chips (start hint or Settings) to reload the sample with tuned
+                palette sizes, minimum region areas, resize targets, and the region counts noted above.
               </dd>
             <dt>⛶ Fullscreen</dt>
             <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
@@ -1516,10 +1268,6 @@
               Adjust generation sliders, toggle auto-advance, customise the background, resize the interface, or export JSON.
               Expand Advanced options to edit the hidden art prompt metadata when you need to capture the original brief.
             </dd>
-            <dt>👁 Hide finished colours</dt>
-            <dd>
-              Collapse completed swatches from the palette dock to focus on remaining colours; toggle again to show the full set.
-            </dd>
           </dl>
         </section>
         <section class="sheet-section" aria-labelledby="controlsHeading">
@@ -1530,7 +1278,6 @@
             <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
             <li><kbd>Space</kbd> + drag (or middle/right drag) Pan the canvas.</li>
             <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
-            <li>Use the palette toggle to hide finished colours when you want a cleaner strip of remaining swatches.</li>
           </ul>
         </section>
         <section class="sheet-section" aria-labelledby="debugHeading">
@@ -1582,13 +1329,6 @@
           </label>
           <p class="control-note">
             Applies to unfinished regions and adjusts outline contrast automatically.
-          </p>
-          <label class="toggle">
-            <input id="hideCompletedToggle" type="checkbox" />
-            <span>Hide finished colours in the palette</span>
-          </label>
-          <p class="control-note">
-            Completed swatches disappear until you show them again; the active colour stays visible.
           </p>
           <label class="control">
             <span>Interface scale <output data-for="uiScale">100%</output></span>
@@ -1690,7 +1430,6 @@
       const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
       const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
       const samplePreview = document.getElementById("sampleArtPreview");
-      const detailCycleButton = document.getElementById("detailCycleButton");
       const startHint = document.getElementById("startHint");
       const hintButton = document.getElementById("hintButton");
       const resetButton = document.getElementById("resetButton");
@@ -1715,7 +1454,6 @@
       const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
-      const hideCompletedToggle = document.getElementById("hideCompletedToggle");
       const backgroundColorInput = document.getElementById("backgroundColor");
       const uiScaleInput = document.getElementById("uiScale");
       const colorCountEl = document.getElementById("colorCount");
@@ -1731,13 +1469,13 @@
       const saveList = document.getElementById("saveList");
       const paletteEl = document.getElementById("palette");
       const progressEl = document.getElementById("progress");
-      const toggleCompletedButton = document.getElementById("toggleCompletedColors");
-      const activeColorBadge = document.getElementById("activeColorBadge");
-      const activeColorSwatch = activeColorBadge?.querySelector("[data-active-color-swatch]") || null;
-      const activeColorNumberEl = activeColorBadge?.querySelector("[data-active-color-number]") || null;
-      const activeColorNameEl = activeColorBadge?.querySelector("[data-active-color-name]") || null;
-      const activeColorRemainingEl =
-        activeColorBadge?.querySelector("[data-active-color-remaining]") || null;
+      const PROGRESS_MESSAGES = {
+        idle: "Choose an artwork to start",
+        loading: "Loading puzzle…",
+        ready: "Ready to colour",
+        active: "Keep colouring",
+        complete: "All done!",
+      };
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.getElementById("previewCanvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
@@ -1778,6 +1516,7 @@
 
       function installBrowserZoomGuards() {
         if (typeof window === "undefined") return;
+        if (preventingBrowserZoom) return;
         let lastTouchEndTime = 0;
         const isGameSurface = (node) => {
           if (!(node instanceof Node)) return false;
@@ -1820,8 +1559,11 @@
           (event) => {
             if (!event) return;
             if (!event.ctrlKey && !event.metaKey) return;
-            if (isInteractiveElementForZoomGuard(event.target)) return;
-            if (isGameSurface(event.target)) return;
+            const isInteractive = isInteractiveElementForZoomGuard(event.target);
+            const isStageTarget = isGameSurface(event.target);
+            if (isInteractive || isStageTarget) {
+              return;
+            }
             event.preventDefault();
           },
           { passive: false, capture: true }
@@ -1833,7 +1575,8 @@
             if (!event) return;
             if (!event.ctrlKey && !event.metaKey) return;
             if (event.altKey) return;
-            if (isInteractiveElementForZoomGuard(event.target)) return;
+            const isInteractive = isInteractiveElementForZoomGuard(event.target);
+            if (isInteractive) return;
             const key = event.key;
             const code = event.code;
             const wantsReset = key === "0" || code === "Digit0" || code === "Numpad0";
@@ -1973,7 +1716,6 @@
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: 1,
           artPrompt: "",
-          hideCompletedColors: false,
         },
         previewVisible: false,
         saves: loadSavedEntries(),
@@ -1994,13 +1736,6 @@
           if (hintFlashToggle) {
             hintFlashToggle.checked = settings.animateHints;
           }
-        }
-        if (typeof settings.hideCompletedColors === "boolean") {
-          applyHideCompletedColors(settings.hideCompletedColors, {
-            skipLog: true,
-            skipAutosave: true,
-            skipRender: true,
-          });
         }
         if (typeof settings.uiScale === "number") {
           applyUiScale(settings.uiScale, { skipLog: true, skipAutosave: true });
@@ -2091,19 +1826,6 @@
         });
       }
 
-      if (detailCycleButton) {
-        detailCycleButton.addEventListener("click", () => {
-          const order = Object.keys(SAMPLE_DETAIL_LEVELS);
-          const currentId =
-            state.sampleDetailLevel && SAMPLE_DETAIL_LEVELS[state.sampleDetailLevel]
-              ? state.sampleDetailLevel
-              : DEFAULT_SAMPLE_DETAIL;
-          const currentIndex = Math.max(0, order.indexOf(currentId));
-          const nextId = order[(currentIndex + 1) % order.length];
-          applySampleDetailLevel(nextId);
-        });
-      }
-
       applySampleDetailLevel(DEFAULT_SAMPLE_DETAIL, { skipReload: true, skipLog: true });
 
       const restoredSession = loadInitialSession();
@@ -2118,16 +1840,6 @@
       if (helpButton) {
         helpButton.addEventListener("click", () => openSheet(helpSheet));
       }
-
-      if (toggleCompletedButton) {
-        toggleCompletedButton.addEventListener("click", () => {
-          applyHideCompletedColors(!state.settings.hideCompletedColors);
-        });
-      }
-
-      updateHideCompletedButton();
-      updateActiveColorBadge(null);
-      updateDetailCycleButtonState();
 
       if (fullscreenButton) {
         fullscreenButton.addEventListener("click", () => toggleFullscreen());
@@ -2191,12 +1903,6 @@
         scheduleAutosave("settings-hint-animations");
       });
 
-      if (hideCompletedToggle) {
-        hideCompletedToggle.addEventListener("change", (event) => {
-          applyHideCompletedColors(Boolean(event.target.checked));
-        });
-      }
-
       if (backgroundColorInput) {
         backgroundColorInput.addEventListener("input", (event) => {
           applyBackgroundColor(event.target.value, { skipLog: true, skipAutosave: true });
@@ -2242,6 +1948,10 @@
         scheduleAutosave("reset-progress");
         logDebug("Reset puzzle progress");
       });
+
+      if (paletteEl) {
+        paletteEl.addEventListener("wheel", handlePaletteWheel, { passive: false });
+      }
 
       previewToggle.addEventListener("click", () => {
         state.previewVisible = !state.previewVisible;
@@ -2614,12 +2324,8 @@
         document.documentElement.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
         if (document.body) {
           document.body.dataset.orientation = orientation;
-          const compactCommands = visualWidth < 720 || visualHeight < 540;
-          const compactPalette = visualHeight < 600 || visualWidth < 880;
-          const showLabels = visualWidth >= 1280 && visualHeight >= 720;
-          document.body.classList.toggle("compact-commands", compactCommands);
-          document.body.classList.toggle("compact-palette", compactPalette);
-          document.body.classList.toggle("show-command-labels", showLabels);
+          const compact = visualWidth < 720 || visualHeight < 540;
+          document.body.classList.toggle("compact-commands", compact);
         }
         syncComputedUiScale();
         const changed = orientation !== lastViewportMetrics.orientation;
@@ -2642,30 +2348,6 @@
           resetView({ preserveZoom: true, recenter: recenter || orientationChanged });
         }
         hideCustomCursor();
-      }
-
-      function updateDetailCycleButtonState() {
-        if (!detailCycleButton) return;
-        const activeConfig =
-          SAMPLE_DETAIL_LEVELS[state.sampleDetailLevel] || SAMPLE_DETAIL_LEVELS[DEFAULT_SAMPLE_DETAIL];
-        const labelEl = detailCycleButton.querySelector("[data-detail-label]");
-        if (labelEl) {
-          labelEl.textContent = activeConfig?.shortLabel || activeConfig?.label || "Detail";
-        }
-        const order = Object.keys(SAMPLE_DETAIL_LEVELS);
-        const currentId = activeConfig?.id || DEFAULT_SAMPLE_DETAIL;
-        const currentIndex = Math.max(0, order.indexOf(currentId));
-        const nextId = order[(currentIndex + 1) % order.length];
-        const nextConfig = SAMPLE_DETAIL_LEVELS[nextId];
-        const summary = activeConfig?.summary || activeConfig?.label || "Detail presets";
-        const nextLabel = nextConfig?.label || nextConfig?.summary || nextId;
-        const aria = nextLabel
-          ? `${summary} active. Next: ${nextLabel}.`
-          : `${summary} active.`;
-        detailCycleButton.setAttribute("aria-label", aria);
-        detailCycleButton.title = nextLabel
-          ? `Cycle detail presets (next: ${nextLabel})`
-          : "Cycle detail presets";
       }
 
       function applySampleDetailLevel(level, options = {}) {
@@ -2692,7 +2374,6 @@
             caption.textContent = config.summary;
           }
         }
-        updateDetailCycleButtonState();
         for (const button of sampleButtons) {
           if (!button) continue;
           const labelBase = `Reload ${SAMPLE_ARTWORK.title}`;
@@ -2910,83 +2591,6 @@
         return normalized;
       }
 
-      function updateHideCompletedButton() {
-        if (!toggleCompletedButton) return;
-        const active = Boolean(state.settings.hideCompletedColors);
-        toggleCompletedButton.classList.toggle("active", active);
-        toggleCompletedButton.setAttribute("aria-pressed", active ? "true" : "false");
-        const label = active ? "Show finished colours" : "Hide finished colours";
-        toggleCompletedButton.textContent = active ? "Show all colours" : "Hide finished colours";
-        toggleCompletedButton.title = label;
-        toggleCompletedButton.setAttribute("aria-label", label);
-      }
-
-      function updateActiveColorBadge(stats = null) {
-        if (!activeColorBadge) return;
-        const hasColour = Boolean(stats && stats.paletteEntry);
-        activeColorBadge.dataset.hasColour = hasColour ? "true" : "false";
-        if (!hasColour) {
-          if (activeColorSwatch) {
-            activeColorSwatch.style.removeProperty("--active-color");
-          }
-          if (activeColorNumberEl) {
-            activeColorNumberEl.textContent = "—";
-          }
-          if (activeColorNameEl) {
-            activeColorNameEl.textContent = "Pick a colour to start painting";
-          }
-          if (activeColorRemainingEl) {
-            activeColorRemainingEl.textContent = "Tap any swatch to highlight matching regions.";
-          }
-          return;
-        }
-        const { paletteEntry, total = 0, remaining = 0 } = stats;
-        if (activeColorSwatch) {
-          if (paletteEntry?.hex) {
-            activeColorSwatch.style.setProperty("--active-color", paletteEntry.hex);
-          } else {
-            activeColorSwatch.style.removeProperty("--active-color");
-          }
-        }
-        if (activeColorNumberEl) {
-          activeColorNumberEl.textContent = `#${paletteEntry.id}`;
-        }
-        if (activeColorNameEl) {
-          activeColorNameEl.textContent = paletteEntry.name || `Colour ${paletteEntry.id}`;
-        }
-        if (activeColorRemainingEl) {
-          const message =
-            remaining > 0
-              ? `${remaining} of ${total} regions unfinished`
-              : `All ${total} regions complete`;
-          activeColorRemainingEl.textContent = message;
-        }
-      }
-
-      function applyHideCompletedColors(value, options = {}) {
-        const { skipLog = false, skipAutosave = false, skipRender = false } = options;
-        const resolved = Boolean(value);
-        const previous = Boolean(state.settings.hideCompletedColors);
-        state.settings.hideCompletedColors = resolved;
-        if (paletteEl) {
-          paletteEl.classList.toggle("hide-complete", resolved);
-        }
-        if (hideCompletedToggle && hideCompletedToggle.checked !== resolved) {
-          hideCompletedToggle.checked = resolved;
-        }
-        updateHideCompletedButton();
-        if (!skipRender && previous !== resolved) {
-          renderPalette();
-        }
-        if (previous !== resolved && !skipLog) {
-          logDebug(resolved ? "Hiding completed colours from palette" : "Showing all palette colours");
-        }
-        if (previous !== resolved && !skipAutosave) {
-          scheduleAutosave("settings-hide-complete");
-        }
-        return resolved;
-      }
-
       function updateOptionOutputs() {
         if (optionOutputs.colorCount) optionOutputs.colorCount.textContent = String(colorCountEl.value);
         if (optionOutputs.minRegion) optionOutputs.minRegion.textContent = `${minRegionEl.value} px²`;
@@ -3047,22 +2651,28 @@
               const fallbackTitle = file.name || "Imported puzzle";
               const resolvedTitle = providedTitle || fallbackTitle;
               state.sourceTitle = resolvedTitle;
-              if (
-                applyPuzzleResult(payload, {
-                  options: payload.options || getCurrentOptions(),
-                  filled: payload.filled,
-                  activeColor: payload.activeColor,
-                  backgroundColor: payload.backgroundColor,
-                  title: resolvedTitle,
-                })
-              ) {
+              const applied = applyPuzzleResult(payload, {
+                options: payload.options || getCurrentOptions(),
+                filled: payload.filled,
+                activeColor: payload.activeColor,
+                backgroundColor: payload.backgroundColor,
+                title: resolvedTitle,
+              });
+              if (applied) {
                 startHint.classList.add("hidden");
                 state.sourceUrl = payload.sourceUrl || null;
                 logDebug(`Imported puzzle from JSON: ${resolvedTitle}`);
+              } else {
+                setProgressMessage("idle");
               }
             } catch (error) {
               console.error(error);
+              setProgressMessage("idle");
             }
+          };
+          reader.onerror = () => {
+            console.error("Unable to read that file.");
+            setProgressMessage("idle");
           };
           reader.readAsText(file);
           return;
@@ -3079,10 +2689,12 @@
             loadImage(result);
           } else {
             console.error("Unsupported file format");
+            setProgressMessage("idle");
           }
         };
         reader.onerror = () => {
           console.error("Unable to read that file.");
+          setProgressMessage("idle");
         };
         reader.readAsDataURL(file);
       }
@@ -3099,19 +2711,24 @@
             const options = getCurrentOptions();
             const data = await createPuzzleData(img, options);
             const title = state.sourceTitle || "Generated puzzle";
-            applyPuzzleResult(data, {
+            const applied = applyPuzzleResult(data, {
               options,
               title,
               backgroundColor: state.settings.backgroundColor,
               logMessage: completionMessage,
               skipDefaultLog,
             });
+            if (!applied) {
+              setProgressMessage("idle");
+            }
           } catch (error) {
             console.error("Failed to create puzzle", error);
+            setProgressMessage("idle");
           }
         };
         img.onerror = () => {
           console.error("Unable to read that image.");
+          setProgressMessage("idle");
         };
         img.src = url;
       }
@@ -3127,15 +2744,8 @@
         state.filled = new Set();
         state.sourceUrl = null;
         state.sourceTitle = null;
-        if (paletteEl) {
-          paletteEl.innerHTML = "";
-          paletteEl.classList.toggle("hide-complete", Boolean(state.settings.hideCompletedColors));
-        }
-        if (progressEl) {
-          progressEl.textContent = "…";
-        }
-        updateActiveColorBadge(null);
-        updateHideCompletedButton();
+        paletteEl.innerHTML = "";
+        setProgressMessage("loading");
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         state.previewImageData = null;
@@ -3203,10 +2813,12 @@
       function applyPuzzleResult(data, metadata = {}) {
         if (!data || typeof data.width !== "number" || typeof data.height !== "number") {
           console.error("Puzzle data missing required dimensions.");
+          setProgressMessage("idle");
           return false;
         }
         if (!Array.isArray(data.palette) || !Array.isArray(data.regions)) {
           console.error("Puzzle data missing palette information.");
+          setProgressMessage("idle");
           return false;
         }
         const expectedCells = data.width * data.height;
@@ -3215,6 +2827,7 @@
           unpackRegionMap(data.regionMap, expectedCells);
         if (!regionMapSource || regionMapSource.length !== expectedCells) {
           console.error("Puzzle data is inconsistent.");
+          setProgressMessage("idle");
           return false;
         }
         let needsPixelHydration = false;
@@ -3326,16 +2939,6 @@
         const resolvedSettings = metadata.settings ?? data.settings;
         if (resolvedSettings) {
           applyGameplaySettings(resolvedSettings);
-        }
-        const resolvedDetailLevel = metadata.sampleDetailLevel ?? data.sampleDetailLevel;
-        if (resolvedDetailLevel) {
-          applySampleDetailLevel(resolvedDetailLevel, {
-            skipReload: true,
-            skipLog: true,
-            skipOptions: true,
-          });
-        } else {
-          updateDetailCycleButtonState();
         }
         applyBackgroundColor(backgroundHex, { skipRender: true, skipLog: true });
         puzzleCanvas.width = data.width;
@@ -3856,14 +3459,8 @@
       }
 
       function renderPalette() {
-        if (!paletteEl) return;
         paletteEl.innerHTML = "";
-        paletteEl.classList.toggle("hide-complete", Boolean(state.settings.hideCompletedColors));
-        if (!state.puzzle) {
-          updateActiveColorBadge(null);
-          updateHideCompletedButton();
-          return;
-        }
+        if (!state.puzzle) return;
         const totalByColor = new Map();
         const remainingByColor = new Map();
         for (const region of state.puzzle.regions) {
@@ -3904,29 +3501,55 @@
           });
           paletteEl.appendChild(swatch);
         }
-        const activeId = state.activeColor;
-        const paletteEntry =
-          activeId != null ? state.puzzle.palette.find((entry) => entry.id === activeId) || null : null;
-        const stats =
-          paletteEntry && paletteEntry.id != null
-            ? {
-                paletteEntry,
-                total: totalByColor.get(paletteEntry.id) || 0,
-                remaining: remainingByColor.get(paletteEntry.id) || 0,
-              }
-            : null;
-        updateActiveColorBadge(stats);
-        updateHideCompletedButton();
+      }
+
+      function handlePaletteWheel(event) {
+        if (!paletteEl) return;
+        if (event.defaultPrevented) return;
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          return;
+        }
+        const { deltaX, deltaY, deltaMode } = event;
+        if (Math.abs(deltaX) >= Math.abs(deltaY) || deltaY === 0) {
+          return;
+        }
+        event.preventDefault();
+        const WHEEL_DELTA_LINE = 1;
+        const WHEEL_DELTA_PAGE = 2;
+        let delta = deltaY;
+        if (deltaMode === WHEEL_DELTA_LINE) {
+          delta *= 24;
+        } else if (deltaMode === WHEEL_DELTA_PAGE) {
+          delta *= paletteEl.clientWidth;
+        }
+        paletteEl.scrollLeft += delta;
+      }
+
+      function setProgressMessage(status) {
+        const message = PROGRESS_MESSAGES[status] || PROGRESS_MESSAGES.idle;
+        if (!progressEl) return;
+        progressEl.textContent = message;
+        progressEl.setAttribute("data-status", status || "idle");
       }
 
       function updateProgress() {
         if (!state.puzzle) {
-          progressEl.textContent = "—";
+          setProgressMessage("idle");
           return;
         }
         const total = state.puzzle.regions.length;
         const done = state.filled.size;
-        progressEl.textContent = `${done}/${total}`;
+        if (!total || total <= 0) {
+          setProgressMessage("ready");
+          return;
+        }
+        if (done >= total) {
+          setProgressMessage("complete");
+        } else if (done === 0) {
+          setProgressMessage("ready");
+        } else {
+          setProgressMessage("active");
+        }
       }
 
       function handleKeyDown(event) {
@@ -4601,9 +4224,7 @@
             animateHints: Boolean(state.settings.animateHints),
             uiScale: Number(state.settings.uiScale) || 1,
             artPrompt: state.settings.artPrompt || "",
-            hideCompletedColors: Boolean(state.settings.hideCompletedColors),
           },
-          sampleDetailLevel: state.sampleDetailLevel,
         };
         if (regionMapPacked) {
           payload.regionMapPacked = regionMapPacked;
