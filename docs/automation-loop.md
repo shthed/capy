@@ -44,6 +44,8 @@ merging, and feedback collection so that single-file updates stay trustworthy.
    references stay identical across the set.
 4. **Validate before continuing.** Stage the fixes, run `npm test --silent`, and only resume the merge or rebase once the suite
    passes on the reconciled state.
+5. **Finish cleanly.** Complete the merge or rebase, push the reconciled branch, and update or close the PR so automation and
+   reviewers acknowledge the final guidance.
 
 ## Feedback loop
 

@@ -30,6 +30,7 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 2. **Merge both intents.** Open each conflicted file—especially this playbook, `README.md`, and `docs/automation-loop.md`—and weave the competing edits together so guidance from both sides survives, updating headings or links if they moved.
 3. **Synchronise wording.** After resolving one document, cross-check the other workflow guides so terminology, numbering, and references stay identical across the set.
 4. **Validate before continuing.** Stage the fixes, run `npm test --silent`, and only resume the merge or rebase once the suite passes on the reconciled state.
+5. **Finish cleanly.** Complete the merge or rebase, push the reconciled branch, and update or close the PR so reviewers and automation pick up the final state.
 
 ## Documentation & Notes
 - Update the repository report and TODO sections in `README.md` when the workflow or UI meaningfully changes.

@@ -38,6 +38,8 @@ tools, a save manager, and a configurable generator all live inside a single
      together, updating headings or links if they shifted.
   3. Cross-check the workflow docs so terminology, numbering, and references match across the set.
   4. Stage the fixes, rerun `npm test --silent`, and only continue the rebase or merge after the suite passes.
+  5. Finish the merge or rebase, push the reconciled branch, and update or close the PR so reviewers and automation see the final
+     state.
 - **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up work in a standing Friday issue so the team has
   a shared backlog of automation improvements.
 - **Close the loop.** Update PR descriptions and linked issues with branch names, CI run URLs, and artifact locations so the
