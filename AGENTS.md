@@ -25,6 +25,11 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 - After review, merge via a fast-forward with `--ff-only` so the automation history remains linear; if conflicts occur, rebase the branch and rerun the tests before retrying.
 - Schedule a weekly "Automation Sync" issue summarising failing runs, flake investigations, and TODO updates; link to the issue from the PR body when the work is related.
 
+### Conflict resolution playbook
+- When a rebase or merge introduces conflict markers, resolve them immediately rather than committing partial work; prioritise keeping automation guidance (`docs/automation-loop.md`) and contributor docs (`README.md`) consistent with the resolved behaviour.
+- If both sides edited the same instruction, fold the intent of each change into a single authoritative line item instead of choosing one side verbatim, then re-read the surrounding context for continuity.
+- Once conflicts are cleared, run `npm test --silent` before the final push so the branch reflects the reconciled state that reviewers will evaluate.
+
 ## Documentation & Notes
 - Update the repository report and TODO sections in `README.md` when the workflow or UI meaningfully changes.
 - When adjusting the UI review harness, refresh README/test docs to mention new metadata captured (e.g., header button ARIA labels or library controls).

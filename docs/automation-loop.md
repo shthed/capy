@@ -34,6 +34,15 @@ merging, and feedback collection so that single-file updates stay trustworthy.
    pipeline, create a lightweight tag (e.g., `automation-v1`) so future audits
    can correlate infrastructure improvements with test behaviour.
 
+### Conflict handling
+
+1. **Stop at the first marker.** When `git rebase` or `git merge` halts, open each conflicted file (notably `AGENTS.md`,
+   `README.md`, and this document) and decide how to combine the competing edits into a cohesive instruction set.
+2. **Preserve both intents.** Instead of discarding one side, fold any unique guidance—such as new automation steps or
+   documentation links—into the final copy so downstream contributors do not lose context.
+3. **Re-run validation.** After clearing the conflicts and staging the fixes, execute `npm test --silent` before continuing the
+   rebase so CI and reviewers see the reconciled behaviour.
+
 ## Feedback loop
 
 1. **Record outcomes.** Append the CI job result, Playwright summary, and any
