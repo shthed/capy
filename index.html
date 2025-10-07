@@ -1559,11 +1559,9 @@
           (event) => {
             if (!event) return;
             if (!event.ctrlKey && !event.metaKey) return;
-            const isInteractive = isInteractiveElementForZoomGuard(event.target);
+            if (isInteractiveElementForZoomGuard(event.target)) return;
+            if (isGameSurface(event.target)) return;
             event.preventDefault();
-            if (isInteractive || isGameSurface(event.target)) {
-              return;
-            }
           },
           { passive: false, capture: true }
         );
@@ -1574,6 +1572,7 @@
             if (!event) return;
             if (!event.ctrlKey && !event.metaKey) return;
             if (event.altKey) return;
+            if (isInteractiveElementForZoomGuard(event.target)) return;
             const key = event.key;
             const code = event.code;
             const wantsReset = key === "0" || code === "Digit0" || code === "Numpad0";
