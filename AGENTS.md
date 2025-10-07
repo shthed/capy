@@ -19,6 +19,9 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 - Run `npm test --silent` after making changes that can affect functionality. If the command cannot be executed, explain the limitation in the final response.
 - The UI review spec (`tests/ui-review.spec.js`) is expected to pass on both desktop and mobile viewports; update the assertions if the UI flow changes.
 
+## Tooling
+- Use the repository ripgrep defaults (`.ripgreprc` and `.rgignore`) so large fixture dumps do not overflow the terminal. Pass `--no-ignore` or `--max-columns` overrides explicitly if you need raw output.
+
 ## Documentation & Notes
 - Update `SEGMENTATION_GUIDE.md`, `ui-review.md`, or other relevant docs whenever the workflow or UI meaningfully changes.
 - When adjusting the UI review harness, also refresh README/test docs to mention new metadata captured (e.g., header button ARIA labels or library controls).
