@@ -1,6 +1,7 @@
 # Agent Handbook
 
 ## Changelog
+- **v5 (2025-02-24)** – Re-ran the Playwright UI review after syncing refs, recorded the slower timing profile, and reconfirmed that the `work` branch merges cleanly with no pending conflicts.
 - **v4 (2025-02-23)** – Audited repository state post-merge, confirmed a clean `work` branch with no outstanding conflicts, updated the regression log with the latest Playwright timings, and refreshed the handbook with the newest review notes and test results.
 - **v3 (2025-02-22)** – Restored the Playwright UI review harness and retired the temporary Node smoke runner after merging the branch request; refreshed the workflow notes and recorded the latest regression run.
 - **v2 (2025-02-21)** – Replaced the Playwright UI review dependency with a lightweight Node smoke test, refreshed setup instructions, and recorded the first run on the new harness.
@@ -48,7 +49,7 @@
 - Cite the tests that were run (or justify why they were skipped) in the final response.
 
 ## Repository Status
-- Active branch: `work`; `git fetch --all --prune` and `git status` on 2025-02-23 confirmed a clean tree with no outstanding merge conflicts or divergent upstream history.
+- Active branch: `work`; `git fetch --all --prune` and `git status` on 2025-02-24 confirmed a clean tree with no outstanding merge conflicts or divergent upstream history.
 - Recent merge: `chore: restore Playwright UI review harness` (c37cb49) re-established the Playwright workflow; the follow-up audit verified no regressions in the generator UI or tooling.
 - Shipped feature highlights: onboarding detail presets (low/medium/high) that drive generator sliders, command rail with icon-only controls and fullscreen toggle, public `window.capyGenerator` API, autosave with cloud sync channel, and refreshed help sheet with live debug logging.
 - Gameplay validation (2025-10-04 log) confirms palette highlighting, canvas pan/zoom responsiveness, fullscreen handling, and background/custom HUD scale controls operate smoothly on desktop and handheld viewports.
@@ -60,6 +61,7 @@
 - Follow manual exploratory testing for UI or gameplay changes, capturing notes in the docs when workflows or expectations shift.
 
 ## Test Results
+- **2025-02-24:** `npm test --silent` – Pass in 1m 06s (Playwright UI review; poll assertions logged extra retries while confirming onboarding reloads, palette feedback, background adjustments, and scripted fills.)
 - **2025-02-23:** `npm test --silent` – Pass in 55.3s (Playwright UI review verifying onboarding presets, palette/zoom workflows, background adjustments, and scripted fills after the merge audit).
 - **2025-02-22:** `npm test --silent` – Pass in 40.7s (Playwright UI review covering onboarding presets, palette interactions, background controls, and basic fixture fills).
 - **2025-02-21:** `npm test --silent` – Pass in 0.4s (Node smoke harness validating handbook and index.html scaffolding).
