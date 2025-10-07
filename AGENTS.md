@@ -21,6 +21,7 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 
 ## Automation loop
 - Open a short-lived branch per change and name it `automation/<feature>` so the continuous Playwright run history stays searchable.
+- Every branch push automatically deploys to GitHub Pages under a subfolder matching the branch name, providing live preview URLs for reviewers.
 - For every branch push, trigger the CI pipeline that runs `npm test --silent`, publishes Playwright artifacts, and records the outcome in the team dashboard.
 - After review, merge via a fast-forward with `--ff-only` so the automation history remains linear; if conflicts occur, rebase the branch and rerun the tests before retrying.
 - Schedule a weekly "Automation Sync" issue summarising failing runs, flake investigations, and TODO updates; link to the issue from the PR body when the work is related.
@@ -38,4 +39,5 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 
 ## PR / Final Response
 - Summaries should call out both UI and workflow changes when present.
+- Include the live preview URL from GitHub Pages deployment when available.
 - Reference the tests that were run (or why they were skipped) in the final response.
