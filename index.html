@@ -35,7 +35,9 @@
           sans-serif;
         background: #020617;
         color: #e2e8f0;
-        --ui-scale: 1;
+        --ui-scale-user: 1;
+        --ui-scale-auto: 1;
+        --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
         --app-width: 100vw;
         --app-height: 100vh;
         --viewport-padding: calc(32px * var(--ui-scale));
@@ -43,8 +45,16 @@
         --rail-gap-portrait: calc(6px * var(--ui-scale));
         --rail-padding-block: calc(12px * var(--ui-scale));
         --rail-padding-inline: calc(24px * var(--ui-scale));
-        --command-button-size: calc(40px * var(--ui-scale));
-        --command-button-size-portrait: calc(36px * var(--ui-scale));
+        --command-button-size: clamp(
+          calc(32px * var(--ui-scale)),
+          calc(40px * var(--ui-scale)),
+          calc(48px * var(--ui-scale))
+        );
+        --command-button-size-portrait: clamp(
+          calc(30px * var(--ui-scale)),
+          calc(36px * var(--ui-scale)),
+          calc(44px * var(--ui-scale))
+        );
       }
 
       * {
@@ -93,10 +103,20 @@
         display: flex;
         justify-content: flex-end;
         align-items: center;
+        flex-wrap: wrap;
         gap: var(--rail-gap);
         padding: var(--rail-padding-block) var(--rail-padding-inline);
+        padding-block-start:
+          calc(var(--rail-padding-block) + env(safe-area-inset-top, 0px));
+        padding-block-end:
+          calc(var(--rail-padding-block) + env(safe-area-inset-bottom, 0px));
+        padding-inline-start:
+          calc(var(--rail-padding-inline) + env(safe-area-inset-left, 0px));
+        padding-inline-end:
+          calc(var(--rail-padding-inline) + env(safe-area-inset-right, 0px));
         z-index: 3;
         touch-action: manipulation;
+        width: 100%;
       }
 
       #commandRail button {
@@ -129,14 +149,26 @@
       }
 
       body[data-orientation="portrait"] #commandRail {
-        flex-wrap: wrap;
         gap: var(--rail-gap-portrait);
         padding: var(--rail-padding-block) calc(16px * var(--ui-scale));
+        justify-content: center;
+        width: 100%;
       }
 
       body[data-orientation="portrait"] #commandRail button {
         width: var(--command-button-size-portrait);
         height: var(--command-button-size-portrait);
+      }
+
+      body.compact-commands #commandRail {
+        justify-content: center;
+        gap: var(--rail-gap-portrait);
+        padding-inline: calc(16px * var(--ui-scale));
+      }
+
+      body.compact-commands #commandRail button {
+        width: min(var(--command-button-size), calc(14vw));
+        height: min(var(--command-button-size), calc(14vw));
       }
 
       body[data-orientation="portrait"] #paletteDock {
@@ -169,6 +201,106 @@
         will-change: transform;
         z-index: 1;
         cursor: grab;
+      }
+
+      body.custom-cursor:not(.panning) #canvasStage {
+        cursor: none;
+      }
+
+      #pointerOverlay {
+        --cursor-x: -9999px;
+        --cursor-y: -9999px;
+        --cursor-ring: rgba(226, 232, 240, 0.95);
+        --cursor-fill: rgba(15, 23, 42, 0.55);
+        --cursor-swatch: transparent;
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 6;
+        pointer-events: none;
+        transform: translate3d(var(--cursor-x), var(--cursor-y), 0);
+        opacity: 0;
+        transition: opacity 0.12s ease;
+      }
+
+      #pointerOverlay.active {
+        opacity: 1;
+      }
+
+      body:not(.custom-cursor) #pointerOverlay {
+        opacity: 0;
+      }
+
+      body.panning #pointerOverlay,
+      body.sheet-open #pointerOverlay,
+      body.dragging #pointerOverlay {
+        opacity: 0;
+      }
+
+      #pointerOverlay .pointer-indicator {
+        width: calc(20px * var(--ui-scale));
+        height: calc(20px * var(--ui-scale));
+        border-radius: 50%;
+        border: 2px solid var(--cursor-ring);
+        background: var(--cursor-fill);
+        box-shadow: 0 6px 14px rgba(2, 6, 23, 0.45), 0 0 0 1px rgba(15, 23, 42, 0.6);
+        transform: translate(-50%, -50%);
+        backdrop-filter: blur(4px);
+      }
+
+      #pointerOverlay.matching .pointer-indicator {
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.42), 0 8px 18px rgba(2, 6, 23, 0.4);
+      }
+
+      #pointerOverlay.mismatch .pointer-indicator {
+        box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.45), 0 8px 18px rgba(2, 6, 23, 0.4);
+      }
+
+      #pointerOverlay.filled .pointer-indicator {
+        box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.35), 0 8px 18px rgba(2, 6, 23, 0.4);
+      }
+
+      #pointerOverlay .pointer-tooltip {
+        display: inline-flex;
+        align-items: center;
+        gap: calc(6px * var(--ui-scale));
+        min-width: 0;
+        padding: calc(4px * var(--ui-scale)) calc(6px * var(--ui-scale));
+        border-radius: calc(6px * var(--ui-scale));
+        background: rgba(248, 250, 252, 0.95);
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        box-shadow: 0 12px 24px rgba(2, 6, 23, 0.25);
+        transform: translate(calc(-50% + 14px), calc(-50% + 20px));
+        font-size: calc(14px * var(--ui-scale));
+        line-height: 1;
+      }
+
+      #pointerOverlay.matching .pointer-tooltip {
+        border-color: rgba(34, 197, 94, 0.55);
+      }
+
+      #pointerOverlay.mismatch .pointer-tooltip {
+        border-color: rgba(248, 113, 113, 0.55);
+      }
+
+      #pointerOverlay.filled .pointer-tooltip {
+        border-color: rgba(148, 163, 184, 0.5);
+      }
+
+      #pointerOverlay .pointer-number {
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: rgba(15, 23, 42, 0.88);
+        text-shadow: 0 0 4px rgba(15, 23, 42, 0.35);
+      }
+
+      #pointerOverlay .pointer-swatch {
+        width: calc(14px * var(--ui-scale));
+        height: calc(14px * var(--ui-scale));
+        border-radius: calc(4px * var(--ui-scale));
+        border: 1px solid rgba(148, 163, 184, 0.7);
+        background: var(--cursor-swatch);
+        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.4);
       }
 
       #canvasTransform {
@@ -594,6 +726,8 @@
         text-align: center;
         cursor: pointer;
         transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+        --flash-color: rgba(59, 130, 246, 0.65);
+        --flash-border: rgba(96, 165, 250, 0.9);
       }
 
       .swatch::before {
@@ -619,6 +753,25 @@
 
       .swatch.done {
         opacity: 0.55;
+      }
+
+      .swatch.flash {
+        animation: swatchHintPulse 0.48s ease;
+      }
+
+      @keyframes swatchHintPulse {
+        0% {
+          box-shadow: 0 0 0 0 var(--flash-color, rgba(59, 130, 246, 0.65));
+          border-color: var(--flash-border, rgba(96, 165, 250, 0.9));
+        }
+        60% {
+          box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+          border-color: rgba(148, 163, 184, 0.25);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+          border-color: rgba(148, 163, 184, 0.25);
+        }
       }
 
       .swatch .label {
@@ -1000,6 +1153,13 @@
             ></canvas>
           </div>
         </div>
+        <div id="pointerOverlay" aria-hidden="true">
+          <div class="pointer-indicator"></div>
+          <div class="pointer-tooltip">
+            <span class="pointer-swatch" data-pointer-color-swatch aria-hidden="true"></span>
+            <strong class="pointer-number" data-pointer-number></strong>
+          </div>
+        </div>
         <div id="previewOverlay" class="hidden" aria-hidden="true">
           <div>
             <canvas
@@ -1258,8 +1418,8 @@
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
       const sampleButtons = Array.from(document.querySelectorAll('[data-action="load-sample"]'));
-        const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
-        const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
+      const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
+      const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
       const samplePreview = document.getElementById("sampleArtPreview");
       const startHint = document.getElementById("startHint");
       const hintButton = document.getElementById("hintButton");
@@ -1281,6 +1441,8 @@
       const viewportEl = document.getElementById("viewport");
       const canvasStage = document.getElementById("canvasStage");
       const canvasTransform = document.getElementById("canvasTransform");
+      const cursorOverlay = document.getElementById("pointerOverlay");
+      const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
       const backgroundColorInput = document.getElementById("backgroundColor");
@@ -1339,6 +1501,14 @@
       function installBrowserZoomGuards() {
         if (typeof window === "undefined") return;
         let lastTouchEndTime = 0;
+        const isGameSurface = (node) => {
+          if (!(node instanceof Node)) return false;
+          if (canvasStage && canvasStage.contains(node)) return true;
+          if (canvasTransform && canvasTransform.contains(node)) return true;
+          if (puzzleCanvas && puzzleCanvas.contains(node)) return true;
+          if (viewportEl && viewportEl.contains(node)) return true;
+          return false;
+        };
 
         window.addEventListener(
           "touchend",
@@ -1366,6 +1536,51 @@
             { passive: false }
           );
         });
+
+        window.addEventListener(
+          "wheel",
+          (event) => {
+            if (!event) return;
+            if (!event.ctrlKey && !event.metaKey) return;
+            if (isInteractiveElementForZoomGuard(event.target)) return;
+            if (isGameSurface(event.target)) return;
+            event.preventDefault();
+          },
+          { passive: false, capture: true }
+        );
+
+        window.addEventListener(
+          "keydown",
+          (event) => {
+            if (!event) return;
+            if (!event.ctrlKey && !event.metaKey) return;
+            if (event.altKey) return;
+            if (isInteractiveElementForZoomGuard(event.target)) return;
+            const key = event.key;
+            const code = event.code;
+            const wantsReset = key === "0" || code === "Digit0" || code === "Numpad0";
+            const wantsZoomIn =
+              key === "+" || key === "=" || code === "Equal" || code === "NumpadAdd";
+            const wantsZoomOut = key === "-" || code === "Minus" || code === "NumpadSubtract";
+            if (!wantsReset && !wantsZoomIn && !wantsZoomOut) {
+              return;
+            }
+            event.preventDefault();
+            if (wantsReset) {
+              resetView({ preserveZoom: false, recenter: true });
+              return;
+            }
+            const allowShortcutTarget =
+              isGameSurface(event.target) ||
+              event.target === document.body ||
+              event.target === document.documentElement;
+            if (!allowShortcutTarget) {
+              return;
+            }
+            applyZoom(wantsZoomIn ? 1.1 : 0.9);
+          },
+          { capture: true }
+        );
 
         preventingBrowserZoom = true;
       }
@@ -1461,6 +1676,9 @@
       const activeTouches = new Map();
       let pinchSession = null;
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
+      let cursorHoverRegionId = null;
+      let cursorLastClientX = null;
+      let cursorLastClientY = null;
 
       // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
@@ -1705,6 +1923,7 @@
           flashColorRegions(state.activeColor);
         }
         updateProgress();
+        refreshCustomCursorHighlight();
         scheduleAutosave("reset-progress");
         logDebug("Reset puzzle progress");
       });
@@ -1846,9 +2065,28 @@
         pointerSurface.addEventListener("wheel", handleWheel, { passive: false });
         pointerSurface.addEventListener("contextmenu", (event) => event.preventDefault());
       }
+      if (cursorOverlay && puzzleCanvas) {
+        const handleCursorHover = (event) => updateCustomCursor(event);
+        puzzleCanvas.addEventListener("pointermove", handleCursorHover);
+        puzzleCanvas.addEventListener("pointerdown", handleCursorHover);
+        puzzleCanvas.addEventListener("pointerenter", handleCursorHover);
+        puzzleCanvas.addEventListener("pointerleave", hideCustomCursor);
+        if (canvasStage) {
+          canvasStage.addEventListener("pointerleave", hideCustomCursor);
+        }
+        if (viewportEl) {
+          viewportEl.addEventListener("pointerleave", hideCustomCursor);
+        }
+        window.addEventListener("scroll", hideCustomCursor, { passive: true });
+      }
+      setupCustomCursorPreference();
       window.addEventListener("keydown", handleKeyDown, true);
       window.addEventListener("keyup", handleKeyUp, true);
       window.addEventListener("resize", () => handleViewportChange({ log: true }));
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", () => handleViewportChange({ log: true }));
+        window.visualViewport.addEventListener("scroll", () => handleViewportChange({ log: false }));
+      }
       window.addEventListener("blur", () => {
         spacePressed = false;
         if (panPointerId != null) {
@@ -1862,6 +2100,7 @@
           document.body.classList.remove("panning");
           isPanning = false;
         }
+        hideCustomCursor();
       });
 
       if (window.screen?.orientation && typeof window.screen.orientation.addEventListener === "function") {
@@ -1905,9 +2144,12 @@
           return;
         }
         if (region.colorId !== state.activeColor) {
+          const paletteColor = getPaletteEntry(region.colorId);
           if (state.settings.animateHints) {
-            flashRegion(regionId, "rgba(250, 204, 21, 0.55)");
+            const tint = paletteColor ? rgbaFromHex(paletteColor.hex, 0.5) : "rgba(250, 204, 21, 0.55)";
+            flashRegion(regionId, tint);
           }
+          flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
           logDebug(
             `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
           );
@@ -1928,6 +2170,7 @@
         if (state.settings.autoAdvance) {
           autoAdvanceColor(region.colorId);
         }
+        refreshCustomCursorHighlight();
       });
 
       function openSheet(sheet) {
@@ -1965,6 +2208,7 @@
           previewToggle.setAttribute("aria-label", "Hide preview");
           previewToggle.title = "Hide preview";
           previewToggle.classList.add("active");
+          hideCustomCursor();
         } else {
           previewOverlay.classList.add("hidden");
           previewOverlay.setAttribute("aria-hidden", "true");
@@ -1972,6 +2216,7 @@
           previewToggle.setAttribute("aria-label", "Show preview");
           previewToggle.title = "Show preview";
           previewToggle.classList.remove("active");
+          refreshCustomCursorHighlight();
         }
       }
 
@@ -2011,22 +2256,58 @@
         });
       }
 
+      function syncComputedUiScale() {
+        const root = document.documentElement;
+        const userValue =
+          typeof state?.settings?.uiScale === "number" ? state.settings.uiScale : 1;
+        if (!root) {
+          return userValue;
+        }
+        let autoValue = 1;
+        if (typeof window !== "undefined" && window.getComputedStyle) {
+          const styles = getComputedStyle(root);
+          const parsed = Number.parseFloat(styles.getPropertyValue("--ui-scale-auto"));
+          if (Number.isFinite(parsed)) {
+            autoValue = parsed;
+          }
+        } else {
+          const inlineAuto = Number.parseFloat(root.style.getPropertyValue("--ui-scale-auto"));
+          if (Number.isFinite(inlineAuto)) {
+            autoValue = inlineAuto;
+          }
+        }
+        const combined = clamp(userValue * autoValue, 0.6, 1.8);
+        root.style.setProperty("--ui-scale", combined.toFixed(4));
+        return combined;
+      }
+
       function updateViewportMetrics() {
-        const width = Math.round(window.innerWidth || document.documentElement.clientWidth || 0);
-        const height = Math.round(window.innerHeight || document.documentElement.clientHeight || 0);
-        const orientation = width >= height ? "landscape" : "portrait";
-        document.documentElement.style.setProperty("--app-width", `${width}px`);
-        document.documentElement.style.setProperty("--app-height", `${height}px`);
-        const minSide = Math.max(1, Math.min(width, height));
+        const viewport = window.visualViewport;
+        const visualWidth = Math.round(
+          viewport?.width || window.innerWidth || document.documentElement.clientWidth || 0
+        );
+        const visualHeight = Math.round(
+          viewport?.height || window.innerHeight || document.documentElement.clientHeight || 0
+        );
+        const orientation = visualWidth >= visualHeight ? "landscape" : "portrait";
+        document.documentElement.style.setProperty("--app-width", `${visualWidth}px`);
+        document.documentElement.style.setProperty("--app-height", `${visualHeight}px`);
+        const minSide = Math.max(1, Math.min(visualWidth, visualHeight));
         const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
         document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
+        const autoScale = clamp(minSide / 880, 0.8, 1.1);
+        document.documentElement.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
         if (document.body) {
           document.body.dataset.orientation = orientation;
+          const compact = visualWidth < 720 || visualHeight < 540;
+          document.body.classList.toggle("compact-commands", compact);
         }
+        syncComputedUiScale();
         const changed = orientation !== lastViewportMetrics.orientation;
-        const sizeChanged = width !== lastViewportMetrics.width || height !== lastViewportMetrics.height;
-        lastViewportMetrics = { orientation, width, height };
-        return { orientation, changed, sizeChanged, width, height };
+        const sizeChanged =
+          visualWidth !== lastViewportMetrics.width || visualHeight !== lastViewportMetrics.height;
+        lastViewportMetrics = { orientation, width: visualWidth, height: visualHeight };
+        return { orientation, changed, sizeChanged, width: visualWidth, height: visualHeight };
       }
 
       function handleViewportChange(options = {}) {
@@ -2041,6 +2322,7 @@
         if (state.puzzle) {
           resetView({ preserveZoom: true, recenter: recenter || orientationChanged });
         }
+        hideCustomCursor();
       }
 
       function applySampleDetailLevel(level, options = {}) {
@@ -2215,7 +2497,8 @@
         const current = state.settings.uiScale ?? 1;
         const changed = force || Math.abs(resolved - current) > 0.001;
         state.settings.uiScale = resolved;
-        document.documentElement.style.setProperty("--ui-scale", String(resolved));
+        document.documentElement.style.setProperty("--ui-scale-user", String(resolved));
+        syncComputedUiScale();
         if (uiScaleInput && Math.abs(Number(uiScaleInput.value) - resolved) > 0.001) {
           uiScaleInput.value = String(resolved);
         }
@@ -2439,6 +2722,7 @@
         isPanning = false;
         document.body.classList.remove("panning");
         resetView({ recenter: true });
+        hideCustomCursor();
       }
 
       async function createPuzzleData(image, options) {
@@ -2756,16 +3040,338 @@
 
       function drawNumbers() {
         if (!state.puzzle) return;
-        const { regions, width } = state.puzzle;
-        const fontSize = Math.max(10, Math.round(width / 45));
-        puzzleCtx.font = `${fontSize}px "Inter", "Segoe UI", sans-serif`;
-        puzzleCtx.fillStyle = backgroundInk.number;
+        puzzleCtx.save();
+        const fallbackNumberInk = backgroundInk.number;
+        const fallbackOutlineInk = backgroundInk.outline;
         puzzleCtx.textAlign = "center";
         puzzleCtx.textBaseline = "middle";
-        for (const region of regions) {
+        puzzleCtx.strokeStyle = fallbackOutlineInk;
+        puzzleCtx.lineJoin = "round";
+        puzzleCtx.lineCap = "round";
+        for (const region of state.puzzle.regions) {
           if (state.filled.has(region.id)) continue;
-          puzzleCtx.fillText(String(region.colorId), region.cx, region.cy);
+          const layout = getRegionLabelLayout(region);
+          if (!layout) continue;
+          const paletteColor = getPaletteEntry(region.colorId);
+          const regionInk =
+            paletteColor?.hex && typeof paletteColor.hex === "string"
+              ? rgbaFromHex(paletteColor.hex, 1)
+              : fallbackNumberInk;
+          puzzleCtx.fillStyle = regionInk;
+          puzzleCtx.font = layout.font;
+          if (layout.strokeWidth) {
+            puzzleCtx.lineWidth = layout.strokeWidth;
+            puzzleCtx.strokeText(layout.text, layout.x, layout.y);
+          }
+          puzzleCtx.fillText(layout.text, layout.x, layout.y);
         }
+        puzzleCtx.restore();
+      }
+
+      function getRegionLabelLayout(region) {
+        if (!region || !state.puzzle) return null;
+        if (!region.labelLayout) {
+          region.labelLayout = computeRegionLabelLayout(region);
+        }
+        return region.labelLayout;
+      }
+
+      function computeRegionLabelLayout(region) {
+        if (!state.puzzle) return null;
+        if (!Array.isArray(region.pixels) || region.pixels.length === 0) return null;
+        const { width, height, regionMap } = state.puzzle;
+        const bounds = ensureRegionBounds(region, width);
+        if (!bounds) return null;
+        const text = String(region.colorId);
+        const area = Math.max(1, region.pixelCount || region.pixels.length);
+        const MIN_LABEL_SIZE = 1.75;
+        const MAX_LABEL_SIZE = 96;
+        const safeWidth = Math.max(1, bounds.width - 0.75);
+        const safeHeight = Math.max(1, bounds.height - 0.75);
+        if (safeWidth <= 0 || safeHeight <= 0) return null;
+        const approxCharacters = text.length <= 1 ? 1 : text.length * 0.62 + 0.4;
+        const widthLimit = safeWidth / approxCharacters;
+        const heightLimit = safeHeight * 0.92;
+        const areaLimit = Math.sqrt(area) * 0.9;
+        const theoreticalMax = Math.max(
+          MIN_LABEL_SIZE + 0.15,
+          Math.min(widthLimit, heightLimit, areaLimit, MAX_LABEL_SIZE)
+        );
+        const floorCandidate = Math.min(
+          theoreticalMax,
+          Math.max(MIN_LABEL_SIZE, Math.min(widthLimit, heightLimit, areaLimit * 0.92))
+        );
+        const minAttemptSize = Math.max(MIN_LABEL_SIZE, Math.min(floorCandidate, theoreticalMax));
+        const attempts = [];
+        let nextSize = theoreticalMax;
+        while (nextSize >= minAttemptSize && attempts.length < 9) {
+          attempts.push(nextSize);
+          nextSize *= 0.86;
+        }
+        if (attempts.length === 0) {
+          attempts.push(minAttemptSize);
+        } else {
+          const last = attempts[attempts.length - 1];
+          if (last > minAttemptSize) {
+            attempts.push(minAttemptSize);
+          }
+        }
+        const smallest = Math.max(MIN_LABEL_SIZE, minAttemptSize * 0.88);
+        if (attempts[attempts.length - 1] > smallest + 0.05) {
+          attempts.push(smallest);
+        }
+        for (const size of attempts) {
+          const metrics = measureLabelMetrics(text, size);
+          if (!metrics) continue;
+          if (metrics.paddedWidth > safeWidth + 2 || metrics.paddedHeight > safeHeight + 2) {
+            continue;
+          }
+          const anchor = findRegionLabelAnchor(
+            region,
+            metrics.halfWidth,
+            metrics.halfHeight,
+            bounds,
+            width,
+            height,
+            regionMap
+          );
+          if (anchor) {
+            return {
+              text,
+              fontSize: size,
+              font: metrics.font,
+              x: anchor.x,
+              y: anchor.y,
+              strokeWidth: metrics.strokeWidth,
+            };
+          }
+        }
+        return null;
+      }
+
+      function ensureRegionBounds(region, width) {
+        if (region.bounds && Number.isFinite(region.bounds.minX)) {
+          return region.bounds;
+        }
+        const bounds = calculateRegionBounds(region.pixels, width);
+        region.bounds = bounds;
+        return bounds;
+      }
+
+      function calculateRegionBounds(pixels, width) {
+        if (!Array.isArray(pixels) || pixels.length === 0) {
+          return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0 };
+        }
+        let minX = width;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxX = 0;
+        let maxY = 0;
+        for (const idx of pixels) {
+          const x = idx % width;
+          const y = (idx / width) | 0;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+        if (!Number.isFinite(minY)) {
+          return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0 };
+        }
+        return {
+          minX,
+          maxX,
+          minY,
+          maxY,
+          width: maxX - minX + 1,
+          height: maxY - minY + 1,
+        };
+      }
+
+      function measureLabelMetrics(text, size) {
+        if (!text || size <= 0) return null;
+        const font = `${size}px "Inter", "Segoe UI", sans-serif`;
+        puzzleCtx.font = font;
+        const metrics = puzzleCtx.measureText(text);
+        const textWidth = metrics.width || size;
+        const ascent = metrics.actualBoundingBoxAscent || size * 0.78;
+        const descent = metrics.actualBoundingBoxDescent || size * 0.22;
+        const textHeight = ascent + descent;
+        const strokeWidth = clamp(size * 0.18, 0.65, Math.max(2.6, size * 0.24));
+        const paddingX = clamp(
+          size <= 7 ? size * 0.26 : size * 0.32,
+          0.85,
+          Math.max(3.6, size * 0.42)
+        );
+        const paddingY = clamp(
+          size <= 7 ? size * 0.22 : size * 0.28,
+          0.7,
+          Math.max(3, size * 0.36)
+        );
+        const paddedWidth = textWidth + paddingX * 2 + strokeWidth;
+        const paddedHeight = textHeight + paddingY * 2 + strokeWidth;
+        return {
+          font,
+          paddedWidth,
+          paddedHeight,
+          halfWidth: paddedWidth / 2,
+          halfHeight: paddedHeight / 2,
+          strokeWidth,
+        };
+      }
+
+      function findRegionLabelAnchor(region, halfWidth, halfHeight, bounds, width, height, regionMap) {
+        const marginX = Math.max(0, Math.ceil(halfWidth - 0.5));
+        const marginY = Math.max(0, Math.ceil(halfHeight - 0.5));
+        const minCenterX = Math.max(bounds.minX + halfWidth, halfWidth);
+        const maxCenterX = Math.min(bounds.maxX + 1 - halfWidth, width - halfWidth);
+        const minCenterY = Math.max(bounds.minY + halfHeight, halfHeight);
+        const maxCenterY = Math.min(bounds.maxY + 1 - halfHeight, height - halfHeight);
+        if (minCenterX > maxCenterX || minCenterY > maxCenterY) return null;
+        const centroidX = Number.isFinite(region.cx)
+          ? region.cx
+          : (bounds.minX + bounds.maxX + 1) / 2;
+        const centroidY = Number.isFinite(region.cy)
+          ? region.cy
+          : (bounds.minY + bounds.maxY + 1) / 2;
+        const seen = new Set();
+        const candidates = [];
+        const addCandidate = (x, y, weight = 1) => {
+          const clampedX = clamp(x, minCenterX, maxCenterX);
+          const clampedY = clamp(y, minCenterY, maxCenterY);
+          const key = `${clampedX.toFixed(3)}:${clampedY.toFixed(3)}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          candidates.push({ x: clampedX, y: clampedY, weight });
+        };
+        addCandidate(centroidX, centroidY, 2);
+        const minY = Math.max(bounds.minY + marginY, 0);
+        const maxY = Math.min(bounds.maxY - marginY, height - 1);
+        const startX = Math.max(bounds.minX, Math.floor(minCenterX - halfWidth));
+        const endX = Math.min(bounds.maxX, Math.ceil(maxCenterX + halfWidth) - 1);
+        for (let y = minY; y <= maxY; y++) {
+          const rowOffset = y * width;
+          let runStart = null;
+          for (let x = startX; x <= endX; x++) {
+            const belongs = regionMap[rowOffset + x] === region.id;
+            if (belongs && runStart == null) {
+              runStart = x;
+            }
+            const isRunEnd = !belongs || x === endX;
+            if (runStart != null && isRunEnd) {
+              const runEnd = belongs ? x : x - 1;
+              const safeStart = Math.max(runStart, Math.floor(minCenterX - halfWidth));
+              const safeEnd = Math.min(runEnd, Math.ceil(maxCenterX + halfWidth) - 1);
+              if (safeStart <= safeEnd) {
+                const runWidth = safeEnd - safeStart + 1;
+                const rowY = y + 0.5;
+                const centerX = safeStart + runWidth / 2;
+                addCandidate(centerX, rowY, runWidth);
+                if (runWidth > halfWidth * 2 + 1) {
+                  const offset = Math.min(runWidth / 2 - 0.5, Math.max(1, halfWidth));
+                  addCandidate(safeStart + 0.5 + offset, rowY, runWidth / 2);
+                  addCandidate(safeEnd + 0.5 - offset, rowY, runWidth / 2);
+                }
+              }
+              runStart = null;
+            }
+          }
+        }
+        if (candidates.length === 0) {
+          for (let y = minY; y <= maxY; y++) {
+            const rowOffset = y * width;
+            for (let x = startX; x <= endX; x++) {
+              if (regionMap[rowOffset + x] !== region.id) continue;
+              addCandidate(x + 0.5, y + 0.5, 0.5);
+            }
+          }
+        }
+        candidates.sort((a, b) => {
+          const aDist = (a.x - centroidX) * (a.x - centroidX) + (a.y - centroidY) * (a.y - centroidY);
+          const bDist = (b.x - centroidX) * (b.x - centroidX) + (b.y - centroidY) * (b.y - centroidY);
+          if (aDist === bDist) {
+            return b.weight - a.weight;
+          }
+          return aDist - bDist;
+        });
+        let best = null;
+        let bestScore = Number.POSITIVE_INFINITY;
+        for (const candidate of candidates) {
+          if (
+            !rectangleFitsRegion(
+              region.id,
+              candidate.x,
+              candidate.y,
+              halfWidth,
+              halfHeight,
+              width,
+              height,
+              regionMap
+            )
+          ) {
+            continue;
+          }
+          const dx = candidate.x - centroidX;
+          const dy = candidate.y - centroidY;
+          const slack = estimateAnchorSlack(
+            region.id,
+            candidate.x,
+            candidate.y,
+            halfWidth,
+            halfHeight,
+            width,
+            height,
+            regionMap
+          );
+          const score = dx * dx + dy * dy - slack * 4 - candidate.weight * 0.05;
+          if (score < bestScore) {
+            bestScore = score;
+            best = { x: candidate.x, y: candidate.y };
+            if (score <= 0) {
+              break;
+            }
+          }
+        }
+        return best;
+      }
+
+      function rectangleFitsRegion(regionId, centerX, centerY, halfWidth, halfHeight, width, height, regionMap) {
+        const minX = Math.max(0, Math.floor(centerX - halfWidth));
+        const maxX = Math.min(width - 1, Math.ceil(centerX + halfWidth));
+        const minY = Math.max(0, Math.floor(centerY - halfHeight));
+        const maxY = Math.min(height - 1, Math.ceil(centerY + halfHeight));
+        for (let y = minY; y <= maxY; y++) {
+          const rowOffset = y * width;
+          for (let x = minX; x <= maxX; x++) {
+            if (regionMap[rowOffset + x] !== regionId) {
+              return false;
+            }
+          }
+        }
+        return true;
+      }
+
+      function estimateAnchorSlack(regionId, centerX, centerY, halfWidth, halfHeight, width, height, regionMap) {
+        let slack = 0;
+        const steps = [0.25, 0.5, 0.75, 1, 1.5, 2];
+        for (const step of steps) {
+          if (
+            rectangleFitsRegion(
+              regionId,
+              centerX,
+              centerY,
+              halfWidth + step,
+              halfHeight + step,
+              width,
+              height,
+              regionMap
+            )
+          ) {
+            slack = step;
+          } else {
+            break;
+          }
+        }
+        return slack;
       }
 
       function drawOutlines() {
@@ -2807,6 +3413,7 @@
           scheduleAutosave("color-select");
         }
         logDebug(`${changed ? "Selected" : "Re-selected"} colour #${colorId} (${suffix})`);
+        refreshCustomCursorHighlight();
         return changed;
       }
 
@@ -2867,6 +3474,9 @@
 
       function handleKeyDown(event) {
         const target = event.target;
+        if (event.ctrlKey || event.metaKey) {
+          return;
+        }
         if (
           target instanceof HTMLInputElement ||
           target instanceof HTMLTextAreaElement ||
@@ -2922,6 +3532,7 @@
         isPanning = true;
         document.body.classList.add("panning");
         logDebug("Began panning view");
+        hideCustomCursor();
         try {
           canvasStage.setPointerCapture(pointerId);
         } catch (error) {}
@@ -2933,6 +3544,7 @@
         const isTouch = event.pointerType === "touch";
         if (isTouch) {
           event.preventDefault();
+          hideCustomCursor();
           activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
           if (!pinchSession && activeTouches.size >= 2) {
             const entries = Array.from(activeTouches.entries()).slice(0, 2);
@@ -3098,6 +3710,154 @@
         try {
           canvasStage.releasePointerCapture(event.pointerId);
         } catch (error) {}
+        if (event.pointerType === "touch") {
+          hideCustomCursor();
+        } else {
+          updateCustomCursor(event);
+        }
+      }
+
+      function hideCustomCursor() {
+        if (!cursorOverlay) return;
+        cursorOverlay.classList.remove("active", "matching", "mismatch", "filled");
+        cursorOverlay.style.setProperty("--cursor-x", "-9999px");
+        cursorOverlay.style.setProperty("--cursor-y", "-9999px");
+        cursorOverlay.style.removeProperty("--cursor-ring");
+        cursorOverlay.style.removeProperty("--cursor-fill");
+        cursorOverlay.style.removeProperty("--cursor-swatch");
+        if (cursorNumberEl) {
+          cursorNumberEl.textContent = "";
+          cursorNumberEl.style.removeProperty("color");
+        }
+        cursorHoverRegionId = null;
+        cursorLastClientX = null;
+        cursorLastClientY = null;
+      }
+
+      function applyCustomCursor(region, paletteColor, clientX, clientY) {
+        if (!cursorOverlay) return;
+        const hasPoint = typeof clientX === "number" && typeof clientY === "number";
+        if (hasPoint) {
+          cursorLastClientX = clientX;
+          cursorLastClientY = clientY;
+        }
+        cursorHoverRegionId = region.id;
+        if (!document.body.classList.contains("custom-cursor")) {
+          return;
+        }
+        if (cursorLastClientX == null || cursorLastClientY == null) {
+          return;
+        }
+        cursorOverlay.style.setProperty("--cursor-x", `${cursorLastClientX}px`);
+        cursorOverlay.style.setProperty("--cursor-y", `${cursorLastClientY}px`);
+        const colorId = paletteColor?.id ?? region.colorId;
+        if (cursorNumberEl) {
+          cursorNumberEl.textContent = String(colorId);
+          if (paletteColor?.hex) {
+            cursorNumberEl.style.color = paletteColor.hex;
+          } else {
+            cursorNumberEl.style.removeProperty("color");
+          }
+        }
+        const fillTint = paletteColor?.hex ? rgbaFromHex(paletteColor.hex, 0.3) : "rgba(148, 163, 184, 0.3)";
+        const ringTint = paletteColor?.hex ? rgbaFromHex(paletteColor.hex, 0.85) : "rgba(226, 232, 240, 0.95)";
+        cursorOverlay.style.setProperty("--cursor-fill", fillTint);
+        cursorOverlay.style.setProperty("--cursor-ring", ringTint);
+        cursorOverlay.style.setProperty("--cursor-swatch", paletteColor?.hex || "transparent");
+        const isFilled = state.filled.has(region.id);
+        const matchesActive =
+          !isFilled && state.activeColor != null && state.activeColor === region.colorId;
+        const mismatchActive =
+          !isFilled && state.activeColor != null && state.activeColor !== region.colorId;
+        cursorOverlay.classList.toggle("filled", isFilled);
+        cursorOverlay.classList.toggle("matching", matchesActive);
+        cursorOverlay.classList.toggle("mismatch", mismatchActive);
+        cursorOverlay.classList.add("active");
+      }
+
+      function updateCustomCursor(event) {
+        if (!cursorOverlay || !puzzleCanvas) return;
+        if (!state.puzzle || state.previewVisible) {
+          hideCustomCursor();
+          return;
+        }
+        if (event && event.pointerType === "touch") {
+          hideCustomCursor();
+          return;
+        }
+        if (isPanning) {
+          return;
+        }
+        const rect = puzzleCanvas.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) {
+          hideCustomCursor();
+          return;
+        }
+        const withinX = event.clientX >= rect.left && event.clientX <= rect.right;
+        const withinY = event.clientY >= rect.top && event.clientY <= rect.bottom;
+        if (!withinX || !withinY) {
+          hideCustomCursor();
+          return;
+        }
+        const scaleX = puzzleCanvas.width / rect.width;
+        const scaleY = puzzleCanvas.height / rect.height;
+        const x = Math.floor((event.clientX - rect.left) * scaleX);
+        const y = Math.floor((event.clientY - rect.top) * scaleY);
+        if (x < 0 || y < 0 || x >= puzzleCanvas.width || y >= puzzleCanvas.height) {
+          hideCustomCursor();
+          return;
+        }
+        const idx = y * puzzleCanvas.width + x;
+        const regionId = state.puzzle.regionMap[idx];
+        const region = state.puzzle.regions[regionId];
+        if (!region) {
+          hideCustomCursor();
+          return;
+        }
+        const paletteColor = getPaletteEntry(region.colorId);
+        applyCustomCursor(region, paletteColor, event.clientX, event.clientY);
+      }
+
+      function refreshCustomCursorHighlight() {
+        if (!cursorOverlay) return;
+        if (cursorHoverRegionId == null) return;
+        if (!state.puzzle) {
+          hideCustomCursor();
+          return;
+        }
+        const region = state.puzzle.regions[cursorHoverRegionId];
+        if (!region) {
+          hideCustomCursor();
+          return;
+        }
+        const paletteColor = getPaletteEntry(region.colorId);
+        applyCustomCursor(region, paletteColor);
+      }
+
+      function setupCustomCursorPreference() {
+        if (!cursorOverlay) return;
+        if (typeof window === "undefined") return;
+        const applyPreference = (matches) => {
+          if (matches) {
+            document.body.classList.add("custom-cursor");
+            refreshCustomCursorHighlight();
+          } else {
+            document.body.classList.remove("custom-cursor");
+            hideCustomCursor();
+          }
+        };
+        if (!window.matchMedia) {
+          applyPreference(true);
+          return;
+        }
+        const pointerQuery = window.matchMedia("(pointer: fine)");
+        applyPreference(pointerQuery.matches);
+        const listener = (event) => applyPreference(event.matches);
+        if (typeof pointerQuery.addEventListener === "function") {
+          pointerQuery.addEventListener("change", listener);
+        } else if (typeof pointerQuery.addListener === "function") {
+          pointerQuery.addListener(listener);
+        }
       }
 
       function applyZoom(multiplier, clientX, clientY, options = {}) {
@@ -3238,7 +3998,18 @@
       function flashColorRegions(colorId, options = {}) {
         if (!state.puzzle) return;
         if (colorId == null) return;
-        const { tint = "rgba(96, 165, 250, 0.32)", duration = 280 } = options;
+        const paletteColor = getPaletteEntry(colorId);
+        const duration =
+          typeof options.duration === "number" && Number.isFinite(options.duration)
+            ? options.duration
+            : 280;
+        const alpha =
+          typeof options.alpha === "number" && Number.isFinite(options.alpha)
+            ? clamp(options.alpha, 0.05, 1)
+            : 0.45;
+        const tint =
+          options.tint ||
+          (paletteColor ? rgbaFromHex(paletteColor.hex, alpha) : "rgba(96, 165, 250, 0.32)");
         const unfinished = getRegionsByColor(colorId, { includeFilled: false });
         const targets = unfinished.length > 0 ? unfinished : getRegionsByColor(colorId, { includeFilled: true });
         if (targets.length === 0) {
@@ -3292,6 +4063,11 @@
         });
       }
 
+      function getPaletteEntry(colorId) {
+        if (!state.puzzle) return null;
+        return state.puzzle.palette.find((entry) => entry.id === colorId) || null;
+      }
+
       // Shared renderer for flashing overlays (hints + colour selection pulses).
       function paintRegions(regions, fillStyle) {
         if (!state.puzzle || regions.length === 0) return;
@@ -3305,6 +4081,30 @@
           }
         }
         puzzleCtx.restore();
+      }
+
+      function flashPaletteSwatch(colorId, options = {}) {
+        if (!paletteEl) return;
+        const swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
+        if (!swatch) return;
+        const hex = typeof options.hex === "string" && options.hex ? options.hex : null;
+        if (hex) {
+          swatch.style.setProperty("--flash-color", rgbaFromHex(hex, 0.6));
+          swatch.style.setProperty("--flash-border", rgbaFromHex(hex, 0.95));
+        } else {
+          swatch.style.removeProperty("--flash-color");
+          swatch.style.removeProperty("--flash-border");
+        }
+        swatch.classList.remove("flash");
+        void swatch.offsetWidth;
+        swatch.classList.add("flash");
+        window.setTimeout(() => {
+          swatch.classList.remove("flash");
+          if (hex) {
+            swatch.style.removeProperty("--flash-color");
+            swatch.style.removeProperty("--flash-border");
+          }
+        }, 480);
       }
 
       function serializeCurrentPuzzle() {
@@ -4057,6 +4857,12 @@
         const g = parseInt(normalized.slice(2, 4), 16);
         const b = parseInt(normalized.slice(4, 6), 16);
         return [r, g, b];
+      }
+
+      function rgbaFromHex(hex, alpha = 1) {
+        const [r, g, b] = hexToRgb(hex);
+        const normalized = clamp(alpha, 0, 1);
+        return `rgba(${r}, ${g}, ${b}, ${normalized})`;
       }
 
       function clamp(value, min, max) {
