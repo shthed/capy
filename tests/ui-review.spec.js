@@ -471,6 +471,7 @@ test.describe('Capy image generator', () => {
 
     const hideToggle = page.locator('#hideCompletedToggle');
     const sortSelect = page.locator('#paletteSort');
+    const palette = page.locator('#palette');
     await expect(hideToggle).toBeChecked();
     await expect(sortSelect).toHaveValue('id');
 
@@ -479,9 +480,31 @@ test.describe('Capy image generator', () => {
 
     await expect(page.locator('[data-testid="palette-swatch"].hidden')).toHaveCount(1);
     await expect(page.locator('[data-testid="palette-swatch"]:not(.hidden)')).toHaveCount(1);
+    await expect(palette).toHaveAttribute('data-empty', 'false');
 
     await hideToggle.uncheck();
     await expect(page.locator('[data-testid="palette-swatch"].hidden')).toHaveCount(0);
+    await expect.poll(() =>
+      page.evaluate(() => Boolean(window.capyGenerator.getState().settings.hideCompletedColors))
+    ).toBe(false);
+    await expect(palette).toHaveAttribute('data-empty', 'false');
+
+    await hideToggle.check();
+    await expect.poll(() =>
+      page.evaluate(() => Boolean(window.capyGenerator.getState().settings.hideCompletedColors))
+    ).toBe(true);
+
+    await page.click('[data-color-id="2"]');
+    await clickRegionCenter(page, BASIC_TEST_PATTERN.regions[1], BASIC_TEST_PATTERN);
+    await clickRegionCenter(page, BASIC_TEST_PATTERN.regions[3], BASIC_TEST_PATTERN);
+
+    await expect(page.locator('[data-testid="palette-swatch"].hidden')).toHaveCount(2);
+    await expect(page.locator('[data-testid="palette-swatch"]:not(.hidden)')).toHaveCount(0);
+    await expect(palette).toHaveAttribute('data-empty', 'true');
+
+    await hideToggle.uncheck();
+    await expect(page.locator('[data-testid="palette-swatch"].hidden')).toHaveCount(0);
+    await expect(palette).toHaveAttribute('data-empty', 'false');
     await expect.poll(() =>
       page.evaluate(() => Boolean(window.capyGenerator.getState().settings.hideCompletedColors))
     ).toBe(false);

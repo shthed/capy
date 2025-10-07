@@ -60,8 +60,9 @@ tools, a save manager, and a configurable generator all live inside a single
   artwork at its final resolution without leaving the play surface.
 - **Palette manager.** Drag-scroll through compact, tinted swatches that
   promote the colour number, automatically hide completed hues, and let you
-  sort by number, remaining regions, or grouped colour families while tooltips,
-  titles, and ARIA copy preserve human-readable names and counts.
+  sort by number, remaining regions, or grouped colour families. Swatches now
+  update in-place, keeping counts, tooltips, and hint pulses in sync without
+  rebuilding the list, so even thousand-colour boards stay responsive.
 - **Progress persistence & recovery.** Every stroke updates a rolling autosave
   using a compact payload so the latest session is restored automatically on
   launch. Manual snapshots still land in the save manager where you can rename,

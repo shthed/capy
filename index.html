@@ -1605,7 +1605,9 @@
         puzzleImageData: null,
         paletteStats: new Map(),
         paletteSwatches: new Map(),
+        paletteVisibleCount: 0,
       };
+      const colorMetricCache = new Map();
 
       function applyGameplaySettings(settings = {}) {
         if (!settings || typeof settings !== "object") return;
@@ -2191,7 +2193,10 @@
         markRegionFilled(regionId);
         applyRegionToImage(regionId);
         renderPuzzle();
-        renderPalette();
+        const needsFullRefresh = updatePaletteEntry(region.colorId);
+        if (needsFullRefresh) {
+          renderPalette();
+        }
         if (state.activeColor != null) {
           flashColorRegions(state.activeColor);
         }
@@ -2700,6 +2705,7 @@
         state.sourceTitle = null;
         state.paletteStats = new Map();
         state.paletteSwatches = new Map();
+        state.paletteVisibleCount = 0;
         paletteEl.innerHTML = "";
         delete paletteEl.dataset.empty;
         progressEl.textContent = "…";
@@ -2902,6 +2908,7 @@
         state.filled = filledSet;
         state.lastOptions = metadata.options ?? getCurrentOptions();
         state.paletteSwatches = new Map();
+        state.paletteVisibleCount = 0;
         rebuildPaletteStats();
         const resolvedSettings = metadata.settings ?? data.settings;
         if (resolvedSettings) {
@@ -3401,9 +3408,45 @@
         const hasColour = state.puzzle.palette.some((entry) => entry.id === colorId);
         if (!hasColour) return false;
         const changed = state.activeColor !== colorId;
+        const previousColor = state.activeColor;
         state.activeColor = colorId;
         if (redraw) {
-          renderPalette();
+          let refreshed = false;
+          const colorEntry = getPaletteEntry(colorId);
+          const stats = getPaletteStats(colorId);
+          const record = colorEntry && stats ? getPaletteRecord(colorId) : null;
+          if (
+            paletteEl &&
+            record &&
+            record.element &&
+            paletteEl.contains(record.element) &&
+            colorEntry &&
+            stats
+          ) {
+            applyPaletteRecord(record, colorEntry, stats, {
+              hideCompleted: state.settings.hideCompletedColors,
+            });
+            if (changed && previousColor != null) {
+              const prevEntry = getPaletteEntry(previousColor);
+              const prevStats = getPaletteStats(previousColor);
+              const prevRecord = prevEntry && prevStats ? getPaletteRecord(previousColor) : null;
+              if (
+                prevRecord &&
+                prevRecord.element &&
+                paletteEl.contains(prevRecord.element) &&
+                prevEntry &&
+                prevStats
+              ) {
+                applyPaletteRecord(prevRecord, prevEntry, prevStats, {
+                  hideCompleted: state.settings.hideCompletedColors,
+                });
+              }
+            }
+            refreshed = true;
+          }
+          if (!refreshed) {
+            renderPalette();
+          }
         }
         if (flash) {
           flashColorRegions(colorId);
@@ -3449,6 +3492,85 @@
           state.paletteSwatches.set(key, record);
         }
         return record;
+      }
+
+      function getPaletteRecord(colorId) {
+        if (!(state.paletteSwatches instanceof Map)) {
+          return null;
+        }
+        const key = toColorKey(colorId);
+        return state.paletteSwatches.get(key) || null;
+      }
+
+      function applyPaletteRecord(record, color, stats, options = {}) {
+        if (!record || !record.element || !color) {
+          return { remaining: 0, total: 0, hiddenChanged: false, nowHidden: false };
+        }
+        const hideCompleted = Boolean(options.hideCompleted);
+        const element = record.element;
+        const remaining = stats?.remaining ?? 0;
+        const total = stats?.total ?? 0;
+        const labelText = getPaletteLabel(color);
+        const prevHidden = element.classList.contains("hidden");
+        element.dataset.colorId = String(color.id);
+        element.style.setProperty("--swatch-color", color.hex || "transparent");
+        record.numberEl.textContent = String(color.id);
+        record.countsEl.textContent = total === 0 ? "—" : remaining > 0 ? `${remaining}/${total}` : "Done";
+        record.nameEl.textContent = labelText;
+        element.setAttribute(
+          "aria-label",
+          remaining > 0
+            ? `Colour ${color.id}: ${labelText}. ${remaining} of ${total} regions remaining.`
+            : `Colour ${color.id}: ${labelText}. Complete.`
+        );
+        element.title =
+          remaining > 0 ? `${labelText} · ${remaining} of ${total} remaining` : `${labelText} · complete`;
+        const shouldHide = hideCompleted && total > 0 && remaining === 0;
+        element.classList.toggle("hidden", shouldHide);
+        element.classList.toggle("done", total > 0 && remaining === 0);
+        element.classList.toggle("active", state.activeColor === color.id);
+        element.dataset.remaining = String(remaining);
+        element.dataset.total = String(total);
+        const nowHidden = element.classList.contains("hidden");
+        return { remaining, total, hiddenChanged: prevHidden !== nowHidden, nowHidden };
+      }
+
+      function updatePaletteEntry(colorId) {
+        if (!paletteEl || !state.puzzle) {
+          return true;
+        }
+        const stats = getPaletteStats(colorId);
+        if (!stats) {
+          return true;
+        }
+        const color = getPaletteEntry(colorId);
+        if (!color) {
+          return true;
+        }
+        const record = getPaletteRecord(color.id) || ensurePaletteSwatch(color);
+        if (!record || !record.element) {
+          return true;
+        }
+        const update = applyPaletteRecord(record, color, stats, {
+          hideCompleted: state.settings.hideCompletedColors,
+        });
+        if (typeof state.paletteVisibleCount !== "number" || Number.isNaN(state.paletteVisibleCount)) {
+          const visible = paletteEl.querySelectorAll(".swatch:not(.hidden)").length;
+          state.paletteVisibleCount = visible;
+        }
+        if (update.hiddenChanged) {
+          if (update.nowHidden) {
+            state.paletteVisibleCount = Math.max(0, (state.paletteVisibleCount || 0) - 1);
+          } else {
+            state.paletteVisibleCount = (state.paletteVisibleCount || 0) + 1;
+          }
+        }
+        paletteEl.dataset.empty = state.paletteVisibleCount <= 0 ? "true" : "false";
+        if (!paletteEl.contains(record.element)) {
+          return true;
+        }
+        const sortMode = resolvePaletteSortMode(state.settings.paletteSortMode);
+        return sortMode === "remaining";
       }
 
       function getPaletteLabel(color) {
@@ -3565,6 +3687,7 @@
         if (!state.puzzle) {
           paletteEl.innerHTML = "";
           delete paletteEl.dataset.empty;
+          state.paletteVisibleCount = 0;
           return;
         }
         if (!(state.paletteStats instanceof Map) || state.paletteStats.size === 0) {
@@ -3598,35 +3721,14 @@
         for (const entry of entries) {
           const { color, stats } = entry;
           const record = ensurePaletteSwatch(color);
-          const element = record.element;
-          const remaining = stats.remaining ?? 0;
-          const total = stats.total ?? 0;
-          const labelText = getPaletteLabel(color);
-          element.dataset.colorId = String(color.id);
-          element.style.setProperty("--swatch-color", color.hex || "transparent");
-          record.numberEl.textContent = String(color.id);
-          record.countsEl.textContent =
-            total === 0 ? "—" : remaining > 0 ? `${remaining}/${total}` : "Done";
-          record.nameEl.textContent = labelText;
-          element.setAttribute(
-            "aria-label",
-            remaining > 0
-              ? `Colour ${color.id}: ${labelText}. ${remaining} of ${total} regions remaining.`
-              : `Colour ${color.id}: ${labelText}. Complete.`
-          );
-          element.title =
-            remaining > 0 ? `${labelText} · ${remaining} of ${total} remaining` : `${labelText} · complete`;
-          element.classList.toggle("active", state.activeColor === color.id);
-          element.classList.toggle("done", total > 0 && remaining === 0);
-          element.classList.toggle("hidden", hideCompleted && total > 0 && remaining === 0);
-          element.dataset.remaining = String(remaining);
-          element.dataset.total = String(total);
-          fragment.appendChild(element);
-          if (!element.classList.contains("hidden")) {
+          applyPaletteRecord(record, color, stats, { hideCompleted });
+          fragment.appendChild(record.element);
+          if (!record.element.classList.contains("hidden")) {
             visibleCount += 1;
           }
         }
         paletteEl.replaceChildren(fragment);
+        state.paletteVisibleCount = visibleCount;
         paletteEl.dataset.empty = visibleCount === 0 ? "true" : "false";
       }
 
@@ -4095,7 +4197,8 @@
 
       function getPaletteEntry(colorId) {
         if (!state.puzzle) return null;
-        return state.puzzle.palette.find((entry) => entry.id === colorId) || null;
+        const key = toColorKey(colorId);
+        return state.puzzle.palette.find((entry) => toColorKey(entry.id) === key) || null;
       }
 
       // Shared renderer for flashing overlays (hints + colour selection pulses).
@@ -4857,9 +4960,18 @@
       }
 
       function colorMetricsFromHex(hex) {
+        if (typeof hex === "string") {
+          const key = hex.trim().toLowerCase();
+          if (colorMetricCache.has(key)) {
+            return colorMetricCache.get(key);
+          }
+          const [cachedR, cachedG, cachedB] = hexToRgb(hex);
+          const metrics = rgbToHsl(cachedR, cachedG, cachedB);
+          colorMetricCache.set(key, metrics);
+          return metrics;
+        }
         const [r, g, b] = hexToRgb(hex);
-        const { h, s, l } = rgbToHsl(r, g, b);
-        return { h, s, l };
+        return rgbToHsl(r, g, b);
       }
 
       function rgbToHsl(r, g, b) {
