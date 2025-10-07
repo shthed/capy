@@ -75,9 +75,9 @@ jobs:
                     --exclude='artifacts' \
                     ../source/ "$BRANCH_FOLDER/"
 
-          # Generate index page listing all branches dynamically
+          # Generate branch index page listing all branches dynamically
           BRANCHES=$(ls -d */ | grep -v '^index.html$' | sed 's#/##')
-          cat > index.html <<'EOF'
+          cat > branchindex.html <<'EOF'
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -89,9 +89,9 @@ jobs:
             <ul>
           EOF
           for branch in $BRANCHES; do
-            echo "    <li><a href='${branch}/'>${branch}</a></li>" >> index.html
+            echo "    <li><a href='${branch}/'>${branch}</a></li>" >> branchindex.html
           done
-          cat >> index.html <<'EOF'
+          cat >> branchindex.html <<'EOF'
             </ul>
           </body>
           </html>
@@ -107,7 +107,8 @@ jobs:
           else
             git commit -m "Deploy branch: ${{ github.ref_name }} (commit: ${{ github.sha }})"
             git push origin gh-pages --force
-            echo "Deployed successfully to: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/$BRANCH_FOLDER/"
+            echo "Published branch to: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/$BRANCH_FOLDER/"
+            echo "Branch index available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/branchindex.html"
           fi
 
   # Deploy to GitHub Pages from gh-pages branch
