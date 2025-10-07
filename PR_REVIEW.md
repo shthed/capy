@@ -23,6 +23,11 @@ Approved. All blocking feedback has been addressed and the visual regression har
 - Ran `git fetch --all --prune` followed by `npm run git:update` to confirm the branch is aligned; no remote updates were available and `git status` reported a clean `work` branch.
 - With the tree clean and no merge conflicts present, the PR remains ready for review without additional rebasing.
 
+## Pre-merge readiness check (2025-02-15)
+- Re-ran `npm run git:update` and `git status -sb` to verify no new upstream commits or local edits appeared while preparing to merge.
+- Searched for conflict markers with `rg "<<<<<<<"` (excluding the generated copies under `node_modules/`) and confirmed the source tree is marker-free.
+- Executed the full Playwright suite via `npm test --silent`; all seven specs passed, confirming the prompt flow, telemetry tray, and responsive behaviours remain stable prior to merge.
+
 ## Merge conflict review
 - Re-ran `npm run git:update` and inspected `git status -sb`; no staged or unstaged edits surfaced beyond this review update.
 - Searched the repository for merge markers to confirm none are present, keeping the branch conflict-free ahead of the next rebase or merge.
