@@ -6,7 +6,7 @@
 
 ## Environment
 - Served repository root with `python -m http.server 8000`.
-- Accessed the app at <http://localhost:8000/index.html> via a scripted Chromium session using the in-browser automation hooks.
+- Accessed the app at <http://localhost:8000/index.html> via an automated Chromium session (Playwright).
 
 ## Actions Performed
 1. Reloaded the page to confirm the autosave pipeline restored the last

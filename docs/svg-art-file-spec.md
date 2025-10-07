@@ -24,4 +24,4 @@ This document defines the structure and metadata requirements for segmented SVG 
 - Use clean, closed path data. Refer to `art/SEGMENTATION_GUIDE.md` for composition advice around overlaps, fill rules, and shape hygiene.
 
 ## Validation
-Run `npm test --silent` before committing new or updated art. The Node smoke harness confirms `index.html` and the handbook still document the testing contract; pair it with a manual import of the SVG to verify palette counts, numbered regions, and console output before signing off.
+Run `npm test --silent` before committing new or updated art. The Playwright visual review harness loads the static demo, captures a full-page screenshot, and records palette/cell counts in `artifacts/ui-review`. The test fails if the screenshot is missing, if the console logs an error, or if the rendered scene exposes zero palette buttons or numbered regions. Inspect the generated JSON and PNG output to confirm the scene renders as expected and that no console errors fired during the capture.
