@@ -19,22 +19,29 @@ tools, a save manager, and a configurable generator all live inside a single
   - `package.json` – npm scripts plus the http-server and Playwright dependencies required to run the app and tests.
   - `package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, Playwright artifacts, and transient reports.
+- **CI & Deployment**
+  - `.github/workflows/ci.yml` – Runs Playwright tests on Windows for every push and PR.
+  - `.github/workflows/deploy-branch.yml` – Deploys every branch to GitHub Pages under a subfolder matching the branch name.
 - **Process notes**
   - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
   - `docs/automation-loop.md` – Blueprint for the automated branching, testing, merging, and feedback loop.
+  - `docs/branch-deployments.md` – Detailed guide to the multi-branch GitHub Pages deployment system.
 
 ## Development workflow
 
 - **Automation branches.** Create short-lived branches named `automation/<change>` so CI reports and Playwright artifacts map
   directly to the experiment under review.
+- **Branch deployments.** Every push to any branch automatically deploys to GitHub Pages under a subfolder named after the branch
+  (e.g., `automation/feature` deploys to `/automation-feature/`). This lets reviewers preview changes in a live environment
+  without local setup. The main branch deploys to the root path.
 - **Continuous smoke tests.** Let every push trigger `npm test --silent` across desktop and mobile viewports; publish the
   resulting `artifacts/ui-review/` bundle for asynchronous review and attach key screenshots when UI changes land.
 - **Fast-forward merges.** Rebase onto `main`, rerun the Playwright suite, and merge with `--ff-only` to preserve a linear
   history that keeps bisects practical for the single-file runtime.
 - **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up work in a standing Friday issue so the team has
   a shared backlog of automation improvements.
-- **Close the loop.** Update PR descriptions and linked issues with branch names, CI run URLs, and artifact locations so the
-  automation history remains searchable.
+- **Close the loop.** Update PR descriptions and linked issues with branch names, CI run URLs, artifact locations, and live
+  preview URLs so the automation history remains searchable.
 
 ## Features
 
