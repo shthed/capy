@@ -35,7 +35,9 @@
           sans-serif;
         background: #020617;
         color: #e2e8f0;
-        --ui-scale: 1;
+        --ui-scale-user: 1;
+        --ui-scale-auto: 1;
+        --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
         --app-width: 100vw;
         --app-height: 100vh;
         --viewport-padding: calc(32px * var(--ui-scale));
@@ -43,8 +45,16 @@
         --rail-gap-portrait: calc(6px * var(--ui-scale));
         --rail-padding-block: calc(12px * var(--ui-scale));
         --rail-padding-inline: calc(24px * var(--ui-scale));
-        --command-button-size: calc(40px * var(--ui-scale));
-        --command-button-size-portrait: calc(36px * var(--ui-scale));
+        --command-button-size: clamp(
+          calc(32px * var(--ui-scale)),
+          calc(40px * var(--ui-scale)),
+          calc(48px * var(--ui-scale))
+        );
+        --command-button-size-portrait: clamp(
+          calc(30px * var(--ui-scale)),
+          calc(36px * var(--ui-scale)),
+          calc(44px * var(--ui-scale))
+        );
       }
 
       * {
@@ -93,10 +103,20 @@
         display: flex;
         justify-content: flex-end;
         align-items: center;
+        flex-wrap: wrap;
         gap: var(--rail-gap);
         padding: var(--rail-padding-block) var(--rail-padding-inline);
+        padding-block-start:
+          calc(var(--rail-padding-block) + env(safe-area-inset-top, 0px));
+        padding-block-end:
+          calc(var(--rail-padding-block) + env(safe-area-inset-bottom, 0px));
+        padding-inline-start:
+          calc(var(--rail-padding-inline) + env(safe-area-inset-left, 0px));
+        padding-inline-end:
+          calc(var(--rail-padding-inline) + env(safe-area-inset-right, 0px));
         z-index: 3;
         touch-action: manipulation;
+        width: 100%;
       }
 
       #commandRail button {
@@ -129,14 +149,26 @@
       }
 
       body[data-orientation="portrait"] #commandRail {
-        flex-wrap: wrap;
         gap: var(--rail-gap-portrait);
         padding: var(--rail-padding-block) calc(16px * var(--ui-scale));
+        justify-content: center;
+        width: 100%;
       }
 
       body[data-orientation="portrait"] #commandRail button {
         width: var(--command-button-size-portrait);
         height: var(--command-button-size-portrait);
+      }
+
+      body.compact-commands #commandRail {
+        justify-content: center;
+        gap: var(--rail-gap-portrait);
+        padding-inline: calc(16px * var(--ui-scale));
+      }
+
+      body.compact-commands #commandRail button {
+        width: min(var(--command-button-size), calc(14vw));
+        height: min(var(--command-button-size), calc(14vw));
       }
 
       body[data-orientation="portrait"] #paletteDock {
@@ -506,13 +538,14 @@
 
       #palette {
         flex: 1;
-        display: grid;
-        grid-auto-flow: column;
-        grid-auto-columns: minmax(calc(44px * var(--ui-scale)), 1fr);
+        display: flex;
         gap: calc(6px * var(--ui-scale));
         overflow-x: auto;
+        overflow-y: hidden;
         padding: 2px 0 calc(6px * var(--ui-scale));
         scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x;
       }
 
       #palette::-webkit-scrollbar {
@@ -677,6 +710,7 @@
       }
 
       .swatch {
+        flex: 0 0 auto;
         position: relative;
         display: flex;
         flex-direction: column;
@@ -1177,7 +1211,14 @@
         </div>
       </div>
       <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div id="progress" aria-live="polite" data-testid="progress-message">—</div>
+        <div
+          id="progress"
+          aria-live="polite"
+          data-testid="progress-message"
+          data-status="idle"
+        >
+          Choose an artwork to start
+        </div>
         <div id="palette" role="list"></div>
       </footer>
     </div>
@@ -1428,6 +1469,13 @@
       const saveList = document.getElementById("saveList");
       const paletteEl = document.getElementById("palette");
       const progressEl = document.getElementById("progress");
+      const PROGRESS_MESSAGES = {
+        idle: "Choose an artwork to start",
+        loading: "Loading puzzle…",
+        ready: "Ready to colour",
+        active: "Keep colouring",
+        complete: "All done!",
+      };
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.getElementById("previewCanvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
@@ -1468,7 +1516,16 @@
 
       function installBrowserZoomGuards() {
         if (typeof window === "undefined") return;
+        if (preventingBrowserZoom) return;
         let lastTouchEndTime = 0;
+        const isGameSurface = (node) => {
+          if (!(node instanceof Node)) return false;
+          if (canvasStage && canvasStage.contains(node)) return true;
+          if (canvasTransform && canvasTransform.contains(node)) return true;
+          if (puzzleCanvas && puzzleCanvas.contains(node)) return true;
+          if (viewportEl && viewportEl.contains(node)) return true;
+          return false;
+        };
 
         window.addEventListener(
           "touchend",
@@ -1496,6 +1553,52 @@
             { passive: false }
           );
         });
+
+        window.addEventListener(
+          "wheel",
+          (event) => {
+            if (!event) return;
+            if (!event.ctrlKey && !event.metaKey) return;
+            const isInteractive = isInteractiveElementForZoomGuard(event.target);
+            event.preventDefault();
+            if (isInteractive || isGameSurface(event.target)) {
+              return;
+            }
+          },
+          { passive: false, capture: true }
+        );
+
+        window.addEventListener(
+          "keydown",
+          (event) => {
+            if (!event) return;
+            if (!event.ctrlKey && !event.metaKey) return;
+            if (event.altKey) return;
+            const key = event.key;
+            const code = event.code;
+            const wantsReset = key === "0" || code === "Digit0" || code === "Numpad0";
+            const wantsZoomIn =
+              key === "+" || key === "=" || code === "Equal" || code === "NumpadAdd";
+            const wantsZoomOut = key === "-" || code === "Minus" || code === "NumpadSubtract";
+            if (!wantsReset && !wantsZoomIn && !wantsZoomOut) {
+              return;
+            }
+            event.preventDefault();
+            if (wantsReset) {
+              resetView({ preserveZoom: false, recenter: true });
+              return;
+            }
+            const allowShortcutTarget =
+              isGameSurface(event.target) ||
+              event.target === document.body ||
+              event.target === document.documentElement;
+            if (!allowShortcutTarget) {
+              return;
+            }
+            applyZoom(wantsZoomIn ? 1.1 : 0.9);
+          },
+          { capture: true }
+        );
 
         preventingBrowserZoom = true;
       }
@@ -1843,6 +1946,10 @@
         logDebug("Reset puzzle progress");
       });
 
+      if (paletteEl) {
+        paletteEl.addEventListener("wheel", handlePaletteWheel, { passive: false });
+      }
+
       previewToggle.addEventListener("click", () => {
         state.previewVisible = !state.previewVisible;
         updatePreviewState();
@@ -1998,6 +2105,10 @@
       window.addEventListener("keydown", handleKeyDown, true);
       window.addEventListener("keyup", handleKeyUp, true);
       window.addEventListener("resize", () => handleViewportChange({ log: true }));
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", () => handleViewportChange({ log: true }));
+        window.visualViewport.addEventListener("scroll", () => handleViewportChange({ log: false }));
+      }
       window.addEventListener("blur", () => {
         spacePressed = false;
         if (panPointerId != null) {
@@ -2167,22 +2278,58 @@
         });
       }
 
+      function syncComputedUiScale() {
+        const root = document.documentElement;
+        const userValue =
+          typeof state?.settings?.uiScale === "number" ? state.settings.uiScale : 1;
+        if (!root) {
+          return userValue;
+        }
+        let autoValue = 1;
+        if (typeof window !== "undefined" && window.getComputedStyle) {
+          const styles = getComputedStyle(root);
+          const parsed = Number.parseFloat(styles.getPropertyValue("--ui-scale-auto"));
+          if (Number.isFinite(parsed)) {
+            autoValue = parsed;
+          }
+        } else {
+          const inlineAuto = Number.parseFloat(root.style.getPropertyValue("--ui-scale-auto"));
+          if (Number.isFinite(inlineAuto)) {
+            autoValue = inlineAuto;
+          }
+        }
+        const combined = clamp(userValue * autoValue, 0.6, 1.8);
+        root.style.setProperty("--ui-scale", combined.toFixed(4));
+        return combined;
+      }
+
       function updateViewportMetrics() {
-        const width = Math.round(window.innerWidth || document.documentElement.clientWidth || 0);
-        const height = Math.round(window.innerHeight || document.documentElement.clientHeight || 0);
-        const orientation = width >= height ? "landscape" : "portrait";
-        document.documentElement.style.setProperty("--app-width", `${width}px`);
-        document.documentElement.style.setProperty("--app-height", `${height}px`);
-        const minSide = Math.max(1, Math.min(width, height));
+        const viewport = window.visualViewport;
+        const visualWidth = Math.round(
+          viewport?.width || window.innerWidth || document.documentElement.clientWidth || 0
+        );
+        const visualHeight = Math.round(
+          viewport?.height || window.innerHeight || document.documentElement.clientHeight || 0
+        );
+        const orientation = visualWidth >= visualHeight ? "landscape" : "portrait";
+        document.documentElement.style.setProperty("--app-width", `${visualWidth}px`);
+        document.documentElement.style.setProperty("--app-height", `${visualHeight}px`);
+        const minSide = Math.max(1, Math.min(visualWidth, visualHeight));
         const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
         document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
+        const autoScale = clamp(minSide / 880, 0.8, 1.1);
+        document.documentElement.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
         if (document.body) {
           document.body.dataset.orientation = orientation;
+          const compact = visualWidth < 720 || visualHeight < 540;
+          document.body.classList.toggle("compact-commands", compact);
         }
+        syncComputedUiScale();
         const changed = orientation !== lastViewportMetrics.orientation;
-        const sizeChanged = width !== lastViewportMetrics.width || height !== lastViewportMetrics.height;
-        lastViewportMetrics = { orientation, width, height };
-        return { orientation, changed, sizeChanged, width, height };
+        const sizeChanged =
+          visualWidth !== lastViewportMetrics.width || visualHeight !== lastViewportMetrics.height;
+        lastViewportMetrics = { orientation, width: visualWidth, height: visualHeight };
+        return { orientation, changed, sizeChanged, width: visualWidth, height: visualHeight };
       }
 
       function handleViewportChange(options = {}) {
@@ -2372,7 +2519,8 @@
         const current = state.settings.uiScale ?? 1;
         const changed = force || Math.abs(resolved - current) > 0.001;
         state.settings.uiScale = resolved;
-        document.documentElement.style.setProperty("--ui-scale", String(resolved));
+        document.documentElement.style.setProperty("--ui-scale-user", String(resolved));
+        syncComputedUiScale();
         if (uiScaleInput && Math.abs(Number(uiScaleInput.value) - resolved) > 0.001) {
           uiScaleInput.value = String(resolved);
         }
@@ -2500,22 +2648,28 @@
               const fallbackTitle = file.name || "Imported puzzle";
               const resolvedTitle = providedTitle || fallbackTitle;
               state.sourceTitle = resolvedTitle;
-              if (
-                applyPuzzleResult(payload, {
-                  options: payload.options || getCurrentOptions(),
-                  filled: payload.filled,
-                  activeColor: payload.activeColor,
-                  backgroundColor: payload.backgroundColor,
-                  title: resolvedTitle,
-                })
-              ) {
+              const applied = applyPuzzleResult(payload, {
+                options: payload.options || getCurrentOptions(),
+                filled: payload.filled,
+                activeColor: payload.activeColor,
+                backgroundColor: payload.backgroundColor,
+                title: resolvedTitle,
+              });
+              if (applied) {
                 startHint.classList.add("hidden");
                 state.sourceUrl = payload.sourceUrl || null;
                 logDebug(`Imported puzzle from JSON: ${resolvedTitle}`);
+              } else {
+                setProgressMessage("idle");
               }
             } catch (error) {
               console.error(error);
+              setProgressMessage("idle");
             }
+          };
+          reader.onerror = () => {
+            console.error("Unable to read that file.");
+            setProgressMessage("idle");
           };
           reader.readAsText(file);
           return;
@@ -2532,10 +2686,12 @@
             loadImage(result);
           } else {
             console.error("Unsupported file format");
+            setProgressMessage("idle");
           }
         };
         reader.onerror = () => {
           console.error("Unable to read that file.");
+          setProgressMessage("idle");
         };
         reader.readAsDataURL(file);
       }
@@ -2552,19 +2708,24 @@
             const options = getCurrentOptions();
             const data = await createPuzzleData(img, options);
             const title = state.sourceTitle || "Generated puzzle";
-            applyPuzzleResult(data, {
+            const applied = applyPuzzleResult(data, {
               options,
               title,
               backgroundColor: state.settings.backgroundColor,
               logMessage: completionMessage,
               skipDefaultLog,
             });
+            if (!applied) {
+              setProgressMessage("idle");
+            }
           } catch (error) {
             console.error("Failed to create puzzle", error);
+            setProgressMessage("idle");
           }
         };
         img.onerror = () => {
           console.error("Unable to read that image.");
+          setProgressMessage("idle");
         };
         img.src = url;
       }
@@ -2581,7 +2742,7 @@
         state.sourceUrl = null;
         state.sourceTitle = null;
         paletteEl.innerHTML = "";
-        progressEl.textContent = "…";
+        setProgressMessage("loading");
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         state.previewImageData = null;
@@ -2649,10 +2810,12 @@
       function applyPuzzleResult(data, metadata = {}) {
         if (!data || typeof data.width !== "number" || typeof data.height !== "number") {
           console.error("Puzzle data missing required dimensions.");
+          setProgressMessage("idle");
           return false;
         }
         if (!Array.isArray(data.palette) || !Array.isArray(data.regions)) {
           console.error("Puzzle data missing palette information.");
+          setProgressMessage("idle");
           return false;
         }
         const expectedCells = data.width * data.height;
@@ -2661,6 +2824,7 @@
           unpackRegionMap(data.regionMap, expectedCells);
         if (!regionMapSource || regionMapSource.length !== expectedCells) {
           console.error("Puzzle data is inconsistent.");
+          setProgressMessage("idle");
           return false;
         }
         let needsPixelHydration = false;
@@ -3336,18 +3500,60 @@
         }
       }
 
+      function handlePaletteWheel(event) {
+        if (!paletteEl) return;
+        if (event.defaultPrevented) return;
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          return;
+        }
+        const { deltaX, deltaY, deltaMode } = event;
+        if (Math.abs(deltaX) >= Math.abs(deltaY) || deltaY === 0) {
+          return;
+        }
+        event.preventDefault();
+        const WHEEL_DELTA_LINE = 1;
+        const WHEEL_DELTA_PAGE = 2;
+        let delta = deltaY;
+        if (deltaMode === WHEEL_DELTA_LINE) {
+          delta *= 24;
+        } else if (deltaMode === WHEEL_DELTA_PAGE) {
+          delta *= paletteEl.clientWidth;
+        }
+        paletteEl.scrollLeft += delta;
+      }
+
+      function setProgressMessage(status) {
+        const message = PROGRESS_MESSAGES[status] || PROGRESS_MESSAGES.idle;
+        if (!progressEl) return;
+        progressEl.textContent = message;
+        progressEl.setAttribute("data-status", status || "idle");
+      }
+
       function updateProgress() {
         if (!state.puzzle) {
-          progressEl.textContent = "—";
+          setProgressMessage("idle");
           return;
         }
         const total = state.puzzle.regions.length;
         const done = state.filled.size;
-        progressEl.textContent = `${done}/${total}`;
+        if (!total || total <= 0) {
+          setProgressMessage("ready");
+          return;
+        }
+        if (done >= total) {
+          setProgressMessage("complete");
+        } else if (done === 0) {
+          setProgressMessage("ready");
+        } else {
+          setProgressMessage("active");
+        }
       }
 
       function handleKeyDown(event) {
         const target = event.target;
+        if (event.ctrlKey || event.metaKey) {
+          return;
+        }
         if (
           target instanceof HTMLInputElement ||
           target instanceof HTMLTextAreaElement ||
