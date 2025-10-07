@@ -26,11 +26,10 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 - Schedule a weekly "Automation Sync" issue summarising failing runs, flake investigations, and TODO updates; link to the issue from the PR body when the work is related.
 
 ### Conflict resolution playbook
-- Stop and inspect `git status` as soon as a rebase or merge introduces markers so you know exactly which files need attention before making any other edits.
-- Resolve conflicts immediately rather than committing partial work; prioritise keeping automation guidance (`docs/automation-loop.md`) and contributor docs (`README.md`) consistent with the reconciled behaviour.
-- When both sides touched the same paragraph, fold the intent of each change into a single authoritative line item instead of choosing one side verbatim; re-read the surrounding context and update inline links if a heading moved.
-- After clearing markers in one file, cross-check the other workflow documents (usually this file, `README.md`, and `docs/automation-loop.md`) so terminology, numbering, and checklists match everywhere.
-- Stage the resolved files, run `npm test --silent`, and only then continue the rebase or merge to guarantee reviewers see the reconciled state.
+1. **Pause and inspect.** The moment a merge or rebase surfaces markers, run `git status` to list every conflicted file before touching anything else so you have the full scope of work.
+2. **Merge both intents.** Open each conflicted file—especially this playbook, `README.md`, and `docs/automation-loop.md`—and weave the competing edits together so guidance from both sides survives, updating headings or links if they moved.
+3. **Synchronise wording.** After resolving one document, cross-check the other workflow guides so terminology, numbering, and references stay identical across the set.
+4. **Validate before continuing.** Stage the fixes, run `npm test --silent`, and only resume the merge or rebase once the suite passes on the reconciled state.
 
 ## Documentation & Notes
 - Update the repository report and TODO sections in `README.md` when the workflow or UI meaningfully changes.
