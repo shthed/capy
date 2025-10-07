@@ -145,6 +145,14 @@
         gap: 12px;
       }
 
+      body[data-orientation="portrait"] #paletteMeta {
+        width: 100%;
+      }
+
+      body[data-orientation="portrait"] #paletteControls {
+        justify-content: flex-start;
+      }
+
       #viewport {
         position: relative;
         width: 100%;
@@ -383,9 +391,9 @@
       #paletteDock {
         position: relative;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
-        gap: calc(16px * var(--ui-scale));
+        gap: calc(18px * var(--ui-scale));
         padding:
           calc(16px * var(--ui-scale))
           calc(28px * var(--ui-scale))
@@ -393,15 +401,59 @@
         background: linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.85) 40%, rgba(2, 6, 23, 0.95) 100%);
         border-top: 1px solid rgba(30, 41, 59, 0.7);
         box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
+        flex-wrap: wrap;
         touch-action: manipulation;
       }
 
+      #paletteMeta {
+        display: flex;
+        flex-direction: column;
+        gap: calc(10px * var(--ui-scale));
+        min-width: calc(200px * var(--ui-scale));
+      }
+
       #progress {
-        min-width: 120px;
         font-size: 1.05rem;
         font-variant-numeric: tabular-nums;
         text-align: left;
         color: rgba(226, 232, 240, 0.82);
+      }
+
+      #paletteControls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: calc(8px * var(--ui-scale));
+        align-items: center;
+      }
+
+      #paletteControls label {
+        display: inline-flex;
+        align-items: center;
+        gap: calc(6px * var(--ui-scale));
+        font-size: 0.8rem;
+        color: rgba(148, 163, 184, 0.95);
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: calc(10px * var(--ui-scale));
+        padding: calc(4px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        cursor: pointer;
+      }
+
+      #paletteControls label select,
+      #paletteControls label input {
+        cursor: pointer;
+      }
+
+      #paletteControls select {
+        font: inherit;
+        border: none;
+        background: transparent;
+        color: inherit;
+        padding: 2px 6px;
+      }
+
+      #paletteControls input[type="checkbox"] {
+        accent-color: rgba(96, 165, 250, 0.9);
       }
 
       #palette {
@@ -413,6 +465,8 @@
         overflow-x: auto;
         padding: 2px 0 calc(6px * var(--ui-scale));
         scrollbar-width: thin;
+        min-height: calc(60px * var(--ui-scale));
+        touch-action: pan-y;
       }
 
       #palette::-webkit-scrollbar {
@@ -594,6 +648,8 @@
         text-align: center;
         cursor: pointer;
         transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+        --flash-color: rgba(59, 130, 246, 0.65);
+        --flash-border: rgba(96, 165, 250, 0.9);
       }
 
       .swatch::before {
@@ -621,6 +677,25 @@
         opacity: 0.55;
       }
 
+      .swatch.flash {
+        animation: swatchHintPulse 0.48s ease;
+      }
+
+      @keyframes swatchHintPulse {
+        0% {
+          box-shadow: 0 0 0 0 var(--flash-color, rgba(59, 130, 246, 0.65));
+          border-color: var(--flash-border, rgba(96, 165, 250, 0.9));
+        }
+        60% {
+          box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+          border-color: rgba(148, 163, 184, 0.25);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+          border-color: rgba(148, 163, 184, 0.25);
+        }
+      }
+
       .swatch .label {
         position: relative;
         display: flex;
@@ -629,12 +704,36 @@
         font-size: 0.8rem;
         line-height: 1.2;
         max-width: 100%;
+        gap: 2px;
         z-index: 1;
       }
 
       .swatch .label > strong {
         font-size: 1.05rem;
         letter-spacing: 0.02em;
+      }
+
+      .swatch .counts {
+        font-size: 0.68rem;
+        opacity: 0.85;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .swatch .name {
+        font-size: 0.7rem;
+        opacity: 0.78;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .swatch.hidden {
+        display: none;
+      }
+
+      #palette[data-dragging="true"] {
+        cursor: grabbing;
       }
 
       .sheet {
@@ -1049,7 +1148,23 @@
         </div>
       </div>
       <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div id="progress" aria-live="polite" data-testid="progress-message">—</div>
+        <div id="paletteMeta">
+          <div id="progress" aria-live="polite" data-testid="progress-message">—</div>
+          <div id="paletteControls" role="group" aria-label="Palette display options">
+            <label for="hideCompletedToggle">
+              <input id="hideCompletedToggle" type="checkbox" checked />
+              Hide completed
+            </label>
+            <label for="paletteSort">
+              Sort
+              <select id="paletteSort" aria-label="Palette sort mode">
+                <option value="id">By number</option>
+                <option value="remaining">By remaining</option>
+                <option value="hue">Grouped by colour</option>
+              </select>
+            </label>
+          </div>
+        </div>
         <div id="palette" role="list"></div>
       </footer>
     </div>
@@ -1298,6 +1413,8 @@
       const saveList = document.getElementById("saveList");
       const paletteEl = document.getElementById("palette");
       const progressEl = document.getElementById("progress");
+      const paletteSortSelect = document.getElementById("paletteSort");
+      const hideCompletedToggle = document.getElementById("hideCompletedToggle");
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.getElementById("previewCanvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
@@ -1461,6 +1578,8 @@
       const activeTouches = new Map();
       let pinchSession = null;
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
+      let paletteScrollState = null;
+      let paletteSuppressClick = false;
 
       // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
@@ -1477,11 +1596,15 @@
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: 1,
           artPrompt: "",
+          hideCompletedColors: true,
+          paletteSortMode: "id",
         },
         previewVisible: false,
         saves: loadSavedEntries(),
         previewImageData: null,
         puzzleImageData: null,
+        paletteStats: new Map(),
+        paletteSwatches: new Map(),
       };
 
       function applyGameplaySettings(settings = {}) {
@@ -1504,6 +1627,130 @@
         if (typeof settings.artPrompt === "string") {
           applyArtPrompt(settings.artPrompt, { skipLog: true, skipAutosave: true });
         }
+        if (typeof settings.hideCompletedColors === "boolean") {
+          state.settings.hideCompletedColors = settings.hideCompletedColors;
+          if (hideCompletedToggle) {
+            hideCompletedToggle.checked = settings.hideCompletedColors;
+          }
+        } else if (hideCompletedToggle) {
+          hideCompletedToggle.checked = Boolean(state.settings.hideCompletedColors);
+        }
+        if (typeof settings.paletteSortMode === "string") {
+          const normalized = resolvePaletteSortMode(settings.paletteSortMode);
+          state.settings.paletteSortMode = normalized;
+          if (paletteSortSelect) {
+            paletteSortSelect.value = normalized;
+          }
+        } else if (paletteSortSelect) {
+          paletteSortSelect.value = resolvePaletteSortMode(state.settings.paletteSortMode);
+        }
+      }
+
+      function resolvePaletteSortMode(mode) {
+        if (mode === "remaining" || mode === "hue") {
+          return mode;
+        }
+        return "id";
+      }
+
+      function toColorKey(id) {
+        const numeric = Number(id);
+        return Number.isFinite(numeric) ? numeric : String(id);
+      }
+
+      if (paletteEl) {
+        paletteEl.addEventListener("pointerdown", handlePalettePointerDown);
+        paletteEl.addEventListener("pointermove", handlePalettePointerMove);
+        paletteEl.addEventListener("pointerup", handlePalettePointerUp);
+        paletteEl.addEventListener("pointercancel", handlePalettePointerCancel);
+        paletteEl.addEventListener("pointerleave", handlePalettePointerCancel);
+        paletteEl.addEventListener(
+          "click",
+          (event) => {
+            if (paletteSuppressClick) {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              paletteSuppressClick = false;
+            }
+          },
+          true
+        );
+      }
+
+      function handlePalettePointerDown(event) {
+        if (!paletteEl) return;
+        if (event.pointerType === "mouse" && event.button !== 0) {
+          return;
+        }
+        const swatch = event.target instanceof HTMLElement ? event.target.closest(".swatch") : null;
+        paletteSuppressClick = false;
+        paletteScrollState = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startScroll: paletteEl.scrollLeft,
+          moved: false,
+          swatch,
+        };
+        try {
+          paletteEl.setPointerCapture(event.pointerId);
+        } catch (error) {}
+      }
+
+      function handlePalettePointerMove(event) {
+        if (!paletteEl || !paletteScrollState) return;
+        if (paletteScrollState.pointerId !== event.pointerId) return;
+        const dx = event.clientX - paletteScrollState.startX;
+        if (!paletteScrollState.moved && Math.abs(dx) > 4) {
+          paletteScrollState.moved = true;
+          paletteEl.dataset.dragging = "true";
+        }
+        if (paletteScrollState.moved) {
+          const target = paletteScrollState.startScroll - dx;
+          paletteEl.scrollLeft = target;
+          paletteSuppressClick = true;
+          event.preventDefault();
+        }
+      }
+
+      function handlePalettePointerUp(event) {
+        if (!paletteEl || !paletteScrollState) return;
+        if (paletteScrollState.pointerId !== event.pointerId) return;
+        if (paletteScrollState.moved) {
+          event.preventDefault();
+        }
+        const pendingActivation =
+          !paletteScrollState.moved && paletteScrollState.swatch instanceof HTMLElement
+            ? paletteScrollState.swatch
+            : null;
+        try {
+          paletteEl.releasePointerCapture(event.pointerId);
+        } catch (error) {}
+        paletteScrollState = null;
+        delete paletteEl.dataset.dragging;
+        if (pendingActivation) {
+          const id = Number.parseInt(pendingActivation.dataset.colorId || "", 10);
+          if (!Number.isNaN(id)) {
+            paletteSuppressClick = true;
+            pendingActivation.focus({ preventScroll: true });
+            activateColor(id);
+            window.setTimeout(() => {
+              paletteSuppressClick = false;
+            }, 0);
+          }
+        }
+      }
+
+      function handlePalettePointerCancel(event) {
+        if (!paletteEl || !paletteScrollState) return;
+        if (paletteScrollState.pointerId !== event.pointerId) return;
+        try {
+          paletteEl.releasePointerCapture(event.pointerId);
+        } catch (error) {}
+        paletteScrollState = null;
+        delete paletteEl.dataset.dragging;
+        window.setTimeout(() => {
+          paletteSuppressClick = false;
+        }, 0);
       }
 
       const debugLogEntries = [];
@@ -1664,6 +1911,29 @@
         scheduleAutosave("settings-hint-animations");
       });
 
+      if (hideCompletedToggle) {
+        hideCompletedToggle.addEventListener("change", () => {
+          state.settings.hideCompletedColors = hideCompletedToggle.checked;
+          logDebug(
+            `Hide completed colours ${hideCompletedToggle.checked ? "enabled" : "disabled"}`
+          );
+          renderPalette();
+          scheduleAutosave("palette-visibility");
+        });
+      }
+
+      if (paletteSortSelect) {
+        paletteSortSelect.addEventListener("change", () => {
+          const mode = resolvePaletteSortMode(paletteSortSelect.value);
+          state.settings.paletteSortMode = mode;
+          const caption =
+            mode === "remaining" ? "remaining regions" : mode === "hue" ? "colour groups" : "number";
+          logDebug(`Palette sort set to ${caption}`);
+          renderPalette();
+          scheduleAutosave("palette-sort");
+        });
+      }
+
       if (backgroundColorInput) {
         backgroundColorInput.addEventListener("input", (event) => {
           applyBackgroundColor(event.target.value, { skipLog: true, skipAutosave: true });
@@ -1698,6 +1968,7 @@
       resetButton.addEventListener("click", () => {
         if (!state.puzzle) return;
         state.filled = new Set();
+        rebuildPaletteStats();
         initializePuzzleImage();
         renderPuzzle();
         renderPalette();
@@ -1905,15 +2176,19 @@
           return;
         }
         if (region.colorId !== state.activeColor) {
+          const paletteColor = getPaletteEntry(region.colorId);
           if (state.settings.animateHints) {
-            flashRegion(regionId, "rgba(250, 204, 21, 0.55)");
+            const tint = paletteColor ? rgbaFromHex(paletteColor.hex, 0.5) : "rgba(250, 204, 21, 0.55)";
+            flashRegion(regionId, tint);
           }
+          flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
           logDebug(
             `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
           );
           return;
         }
         state.filled.add(regionId);
+        markRegionFilled(regionId);
         applyRegionToImage(regionId);
         renderPuzzle();
         renderPalette();
@@ -2423,7 +2698,10 @@
         state.filled = new Set();
         state.sourceUrl = null;
         state.sourceTitle = null;
+        state.paletteStats = new Map();
+        state.paletteSwatches = new Map();
         paletteEl.innerHTML = "";
+        delete paletteEl.dataset.empty;
         progressEl.textContent = "…";
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
@@ -2609,8 +2887,22 @@
           requestedColor != null && paletteIds.has(requestedColor)
             ? requestedColor
             : palette[0]?.id ?? null;
-        state.filled = new Set(metadata.filled ?? []);
+        const filledSource = Array.isArray(metadata.filled)
+          ? metadata.filled
+          : Array.isArray(data.filled)
+          ? data.filled
+          : [];
+        const filledSet = new Set();
+        for (const entry of filledSource) {
+          const numeric = Number(entry);
+          if (Number.isInteger(numeric) && numeric >= 0 && numeric < regions.length) {
+            filledSet.add(numeric);
+          }
+        }
+        state.filled = filledSet;
         state.lastOptions = metadata.options ?? getCurrentOptions();
+        state.paletteSwatches = new Map();
+        rebuildPaletteStats();
         const resolvedSettings = metadata.settings ?? data.settings;
         if (resolvedSettings) {
           applyGameplaySettings(resolvedSettings);
@@ -2756,16 +3048,331 @@
 
       function drawNumbers() {
         if (!state.puzzle) return;
-        const { regions, width } = state.puzzle;
-        const fontSize = Math.max(10, Math.round(width / 45));
-        puzzleCtx.font = `${fontSize}px "Inter", "Segoe UI", sans-serif`;
+        puzzleCtx.save();
         puzzleCtx.fillStyle = backgroundInk.number;
         puzzleCtx.textAlign = "center";
         puzzleCtx.textBaseline = "middle";
-        for (const region of regions) {
+        puzzleCtx.strokeStyle = backgroundInk.outline;
+        puzzleCtx.lineJoin = "round";
+        puzzleCtx.lineCap = "round";
+        for (const region of state.puzzle.regions) {
           if (state.filled.has(region.id)) continue;
-          puzzleCtx.fillText(String(region.colorId), region.cx, region.cy);
+          const layout = getRegionLabelLayout(region);
+          if (!layout) continue;
+          puzzleCtx.font = layout.font;
+          if (layout.strokeWidth) {
+            puzzleCtx.lineWidth = layout.strokeWidth;
+            puzzleCtx.strokeText(layout.text, layout.x, layout.y);
+          }
+          puzzleCtx.fillText(layout.text, layout.x, layout.y);
         }
+        puzzleCtx.restore();
+      }
+
+      function getRegionLabelLayout(region) {
+        if (!region || !state.puzzle) return null;
+        if (!region.labelLayout) {
+          region.labelLayout = computeRegionLabelLayout(region);
+        }
+        return region.labelLayout;
+      }
+
+      function computeRegionLabelLayout(region) {
+        if (!state.puzzle) return null;
+        if (!Array.isArray(region.pixels) || region.pixels.length === 0) return null;
+        const { width, height, regionMap } = state.puzzle;
+        const bounds = ensureRegionBounds(region, width);
+        if (!bounds) return null;
+        const text = String(region.colorId);
+        const area = Math.max(1, region.pixelCount || region.pixels.length);
+        const MIN_LABEL_SIZE = 1.75;
+        const MAX_LABEL_SIZE = 96;
+        const safeWidth = Math.max(1, bounds.width - 0.75);
+        const safeHeight = Math.max(1, bounds.height - 0.75);
+        if (safeWidth <= 0 || safeHeight <= 0) return null;
+        const approxCharacters = text.length <= 1 ? 1 : text.length * 0.62 + 0.4;
+        const widthLimit = safeWidth / approxCharacters;
+        const heightLimit = safeHeight * 0.92;
+        const areaLimit = Math.sqrt(area) * 0.9;
+        const theoreticalMax = Math.max(
+          MIN_LABEL_SIZE + 0.15,
+          Math.min(widthLimit, heightLimit, areaLimit, MAX_LABEL_SIZE)
+        );
+        const floorCandidate = Math.min(
+          theoreticalMax,
+          Math.max(MIN_LABEL_SIZE, Math.min(widthLimit, heightLimit, areaLimit * 0.92))
+        );
+        const minAttemptSize = Math.max(MIN_LABEL_SIZE, Math.min(floorCandidate, theoreticalMax));
+        const attempts = [];
+        let nextSize = theoreticalMax;
+        while (nextSize >= minAttemptSize && attempts.length < 9) {
+          attempts.push(nextSize);
+          nextSize *= 0.86;
+        }
+        if (attempts.length === 0) {
+          attempts.push(minAttemptSize);
+        } else {
+          const last = attempts[attempts.length - 1];
+          if (last > minAttemptSize) {
+            attempts.push(minAttemptSize);
+          }
+        }
+        const smallest = Math.max(MIN_LABEL_SIZE, minAttemptSize * 0.88);
+        if (attempts[attempts.length - 1] > smallest + 0.05) {
+          attempts.push(smallest);
+        }
+        for (const size of attempts) {
+          const metrics = measureLabelMetrics(text, size);
+          if (!metrics) continue;
+          if (metrics.paddedWidth > safeWidth + 2 || metrics.paddedHeight > safeHeight + 2) {
+            continue;
+          }
+          const anchor = findRegionLabelAnchor(
+            region,
+            metrics.halfWidth,
+            metrics.halfHeight,
+            bounds,
+            width,
+            height,
+            regionMap
+          );
+          if (anchor) {
+            return {
+              text,
+              fontSize: size,
+              font: metrics.font,
+              x: anchor.x,
+              y: anchor.y,
+              strokeWidth: metrics.strokeWidth,
+            };
+          }
+        }
+        return null;
+      }
+
+      function ensureRegionBounds(region, width) {
+        if (region.bounds && Number.isFinite(region.bounds.minX)) {
+          return region.bounds;
+        }
+        const bounds = calculateRegionBounds(region.pixels, width);
+        region.bounds = bounds;
+        return bounds;
+      }
+
+      function calculateRegionBounds(pixels, width) {
+        if (!Array.isArray(pixels) || pixels.length === 0) {
+          return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0 };
+        }
+        let minX = width;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxX = 0;
+        let maxY = 0;
+        for (const idx of pixels) {
+          const x = idx % width;
+          const y = (idx / width) | 0;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+        if (!Number.isFinite(minY)) {
+          return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0 };
+        }
+        return {
+          minX,
+          maxX,
+          minY,
+          maxY,
+          width: maxX - minX + 1,
+          height: maxY - minY + 1,
+        };
+      }
+
+      function measureLabelMetrics(text, size) {
+        if (!text || size <= 0) return null;
+        const font = `${size}px "Inter", "Segoe UI", sans-serif`;
+        puzzleCtx.font = font;
+        const metrics = puzzleCtx.measureText(text);
+        const textWidth = metrics.width || size;
+        const ascent = metrics.actualBoundingBoxAscent || size * 0.78;
+        const descent = metrics.actualBoundingBoxDescent || size * 0.22;
+        const textHeight = ascent + descent;
+        const strokeWidth = clamp(size * 0.18, 0.65, Math.max(2.6, size * 0.24));
+        const paddingX = clamp(
+          size <= 7 ? size * 0.26 : size * 0.32,
+          0.85,
+          Math.max(3.6, size * 0.42)
+        );
+        const paddingY = clamp(
+          size <= 7 ? size * 0.22 : size * 0.28,
+          0.7,
+          Math.max(3, size * 0.36)
+        );
+        const paddedWidth = textWidth + paddingX * 2 + strokeWidth;
+        const paddedHeight = textHeight + paddingY * 2 + strokeWidth;
+        return {
+          font,
+          paddedWidth,
+          paddedHeight,
+          halfWidth: paddedWidth / 2,
+          halfHeight: paddedHeight / 2,
+          strokeWidth,
+        };
+      }
+
+      function findRegionLabelAnchor(region, halfWidth, halfHeight, bounds, width, height, regionMap) {
+        const marginX = Math.max(0, Math.ceil(halfWidth - 0.5));
+        const marginY = Math.max(0, Math.ceil(halfHeight - 0.5));
+        const minCenterX = Math.max(bounds.minX + halfWidth, halfWidth);
+        const maxCenterX = Math.min(bounds.maxX + 1 - halfWidth, width - halfWidth);
+        const minCenterY = Math.max(bounds.minY + halfHeight, halfHeight);
+        const maxCenterY = Math.min(bounds.maxY + 1 - halfHeight, height - halfHeight);
+        if (minCenterX > maxCenterX || minCenterY > maxCenterY) return null;
+        const centroidX = Number.isFinite(region.cx)
+          ? region.cx
+          : (bounds.minX + bounds.maxX + 1) / 2;
+        const centroidY = Number.isFinite(region.cy)
+          ? region.cy
+          : (bounds.minY + bounds.maxY + 1) / 2;
+        const seen = new Set();
+        const candidates = [];
+        const addCandidate = (x, y, weight = 1) => {
+          const clampedX = clamp(x, minCenterX, maxCenterX);
+          const clampedY = clamp(y, minCenterY, maxCenterY);
+          const key = `${clampedX.toFixed(3)}:${clampedY.toFixed(3)}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          candidates.push({ x: clampedX, y: clampedY, weight });
+        };
+        addCandidate(centroidX, centroidY, 2);
+        const minY = Math.max(bounds.minY + marginY, 0);
+        const maxY = Math.min(bounds.maxY - marginY, height - 1);
+        const startX = Math.max(bounds.minX, Math.floor(minCenterX - halfWidth));
+        const endX = Math.min(bounds.maxX, Math.ceil(maxCenterX + halfWidth) - 1);
+        for (let y = minY; y <= maxY; y++) {
+          const rowOffset = y * width;
+          let runStart = null;
+          for (let x = startX; x <= endX; x++) {
+            const belongs = regionMap[rowOffset + x] === region.id;
+            if (belongs && runStart == null) {
+              runStart = x;
+            }
+            const isRunEnd = !belongs || x === endX;
+            if (runStart != null && isRunEnd) {
+              const runEnd = belongs ? x : x - 1;
+              const safeStart = Math.max(runStart, Math.floor(minCenterX - halfWidth));
+              const safeEnd = Math.min(runEnd, Math.ceil(maxCenterX + halfWidth) - 1);
+              if (safeStart <= safeEnd) {
+                const runWidth = safeEnd - safeStart + 1;
+                const rowY = y + 0.5;
+                const centerX = safeStart + runWidth / 2;
+                addCandidate(centerX, rowY, runWidth);
+                if (runWidth > halfWidth * 2 + 1) {
+                  const offset = Math.min(runWidth / 2 - 0.5, Math.max(1, halfWidth));
+                  addCandidate(safeStart + 0.5 + offset, rowY, runWidth / 2);
+                  addCandidate(safeEnd + 0.5 - offset, rowY, runWidth / 2);
+                }
+              }
+              runStart = null;
+            }
+          }
+        }
+        if (candidates.length === 0) {
+          for (let y = minY; y <= maxY; y++) {
+            const rowOffset = y * width;
+            for (let x = startX; x <= endX; x++) {
+              if (regionMap[rowOffset + x] !== region.id) continue;
+              addCandidate(x + 0.5, y + 0.5, 0.5);
+            }
+          }
+        }
+        candidates.sort((a, b) => {
+          const aDist = (a.x - centroidX) * (a.x - centroidX) + (a.y - centroidY) * (a.y - centroidY);
+          const bDist = (b.x - centroidX) * (b.x - centroidX) + (b.y - centroidY) * (b.y - centroidY);
+          if (aDist === bDist) {
+            return b.weight - a.weight;
+          }
+          return aDist - bDist;
+        });
+        let best = null;
+        let bestScore = Number.POSITIVE_INFINITY;
+        for (const candidate of candidates) {
+          if (
+            !rectangleFitsRegion(
+              region.id,
+              candidate.x,
+              candidate.y,
+              halfWidth,
+              halfHeight,
+              width,
+              height,
+              regionMap
+            )
+          ) {
+            continue;
+          }
+          const dx = candidate.x - centroidX;
+          const dy = candidate.y - centroidY;
+          const slack = estimateAnchorSlack(
+            region.id,
+            candidate.x,
+            candidate.y,
+            halfWidth,
+            halfHeight,
+            width,
+            height,
+            regionMap
+          );
+          const score = dx * dx + dy * dy - slack * 4 - candidate.weight * 0.05;
+          if (score < bestScore) {
+            bestScore = score;
+            best = { x: candidate.x, y: candidate.y };
+            if (score <= 0) {
+              break;
+            }
+          }
+        }
+        return best;
+      }
+
+      function rectangleFitsRegion(regionId, centerX, centerY, halfWidth, halfHeight, width, height, regionMap) {
+        const minX = Math.max(0, Math.floor(centerX - halfWidth));
+        const maxX = Math.min(width - 1, Math.ceil(centerX + halfWidth));
+        const minY = Math.max(0, Math.floor(centerY - halfHeight));
+        const maxY = Math.min(height - 1, Math.ceil(centerY + halfHeight));
+        for (let y = minY; y <= maxY; y++) {
+          const rowOffset = y * width;
+          for (let x = minX; x <= maxX; x++) {
+            if (regionMap[rowOffset + x] !== regionId) {
+              return false;
+            }
+          }
+        }
+        return true;
+      }
+
+      function estimateAnchorSlack(regionId, centerX, centerY, halfWidth, halfHeight, width, height, regionMap) {
+        let slack = 0;
+        const steps = [0.25, 0.5, 0.75, 1, 1.5, 2];
+        for (const step of steps) {
+          if (
+            rectangleFitsRegion(
+              regionId,
+              centerX,
+              centerY,
+              halfWidth + step,
+              halfHeight + step,
+              width,
+              height,
+              regionMap
+            )
+          ) {
+            slack = step;
+          } else {
+            break;
+          }
+        }
+        return slack;
       }
 
       function drawOutlines() {
@@ -2810,49 +3417,217 @@
         return changed;
       }
 
-      function renderPalette() {
-        paletteEl.innerHTML = "";
-        if (!state.puzzle) return;
-        const totalByColor = new Map();
-        const remainingByColor = new Map();
+      function ensurePaletteSwatch(color) {
+        if (!(state.paletteSwatches instanceof Map)) {
+          state.paletteSwatches = new Map();
+        }
+        const key = toColorKey(color.id);
+        let record = state.paletteSwatches.get(key);
+        if (!record) {
+          const element = document.createElement("button");
+          element.type = "button";
+          element.className = "swatch";
+          element.dataset.testid = "palette-swatch";
+          element.setAttribute("role", "listitem");
+          const label = document.createElement("span");
+          label.className = "label";
+          const numberEl = document.createElement("strong");
+          numberEl.className = "number";
+          const countsEl = document.createElement("span");
+          countsEl.className = "counts";
+          const nameEl = document.createElement("span");
+          nameEl.className = "name";
+          label.append(numberEl, countsEl, nameEl);
+          element.appendChild(label);
+          element.addEventListener("click", () => {
+            const id = Number.parseInt(element.dataset.colorId || "", 10);
+            if (!Number.isNaN(id)) {
+              activateColor(id);
+            }
+          });
+          record = { element, numberEl, countsEl, nameEl };
+          state.paletteSwatches.set(key, record);
+        }
+        return record;
+      }
+
+      function getPaletteLabel(color) {
+        if (!color) return "";
+        if (typeof color.name === "string" && color.name.trim()) {
+          return color.name.trim();
+        }
+        if (typeof color.hex === "string" && color.hex) {
+          return color.hex.toUpperCase();
+        }
+        return `Colour ${color.id}`;
+      }
+
+      function rebuildPaletteStats() {
+        if (!state.puzzle) {
+          state.paletteStats = new Map();
+          return;
+        }
+        const statsMap = new Map();
+        const filled = state.filled;
+        for (const color of state.puzzle.palette) {
+          const key = toColorKey(color.id);
+          const metrics = colorMetricsFromHex(color.hex);
+          statsMap.set(key, {
+            colorId: key,
+            regions: [],
+            remainingRegions: new Set(),
+            total: 0,
+            remaining: 0,
+            hue: metrics.h,
+            saturation: metrics.s,
+            lightness: metrics.l,
+          });
+        }
         for (const region of state.puzzle.regions) {
-          const total = totalByColor.get(region.colorId) || 0;
-          totalByColor.set(region.colorId, total + 1);
-          if (!state.filled.has(region.id)) {
-            const remaining = remainingByColor.get(region.colorId) || 0;
-            remainingByColor.set(region.colorId, remaining + 1);
+          const colorId = toColorKey(region.colorId);
+          let stats = statsMap.get(colorId);
+          if (!stats) {
+            const paletteEntry = state.puzzle.palette.find((entry) => toColorKey(entry.id) === colorId);
+            const metrics = colorMetricsFromHex(paletteEntry?.hex);
+            stats = {
+              colorId,
+              regions: [],
+              remainingRegions: new Set(),
+              total: 0,
+              remaining: 0,
+              hue: metrics.h,
+              saturation: metrics.s,
+              lightness: metrics.l,
+            };
+            statsMap.set(colorId, stats);
+          }
+          stats.regions.push(region);
+          stats.total += 1;
+          if (!filled.has(region.id)) {
+            stats.remaining += 1;
+            stats.remainingRegions.add(region);
           }
         }
-        for (const color of state.puzzle.palette) {
-          const remaining = remainingByColor.get(color.id) || 0;
-          const total = totalByColor.get(color.id) || 0;
-          const labelText =
-            (typeof color.name === "string" && color.name.trim()) ||
-            (typeof color.hex === "string" ? color.hex.toUpperCase() : `Colour ${color.id}`);
-          const swatch = document.createElement("button");
-          swatch.type = "button";
-          swatch.className = "swatch";
-          swatch.dataset.testid = "palette-swatch";
-          swatch.dataset.colorId = String(color.id);
-          swatch.setAttribute("role", "listitem");
-          swatch.setAttribute(
-            "aria-label",
-            `Colour ${color.id}: ${labelText}. ${remaining} of ${total} regions remaining.`
-          );
-          swatch.title = `${labelText} · ${remaining} of ${total} remaining`;
-          if (state.activeColor === color.id) swatch.classList.add("active");
-          if (remaining === 0) swatch.classList.add("done");
-          swatch.style.setProperty("--swatch-color", color.hex || "transparent");
-          swatch.innerHTML = `
-            <span class="label">
-              <strong>${color.id}</strong>
-            </span>
-          `;
-          swatch.addEventListener("click", () => {
-            activateColor(color.id);
-          });
-          paletteEl.appendChild(swatch);
+        state.paletteStats = statsMap;
+      }
+
+      function getPaletteStats(colorId) {
+        if (!state.puzzle) return null;
+        if (!(state.paletteStats instanceof Map)) {
+          state.paletteStats = new Map();
         }
+        if (state.paletteStats.size === 0) {
+          rebuildPaletteStats();
+        }
+        const key = toColorKey(colorId);
+        let stats = state.paletteStats.get(key) || null;
+        if (!stats) {
+          rebuildPaletteStats();
+          stats = state.paletteStats.get(key) || null;
+        }
+        return stats;
+      }
+
+      function paletteSortComparator(a, b, mode) {
+        const aId = Number.isFinite(Number(a.color.id)) ? Number(a.color.id) : 0;
+        const bId = Number.isFinite(Number(b.color.id)) ? Number(b.color.id) : 0;
+        if (mode === "remaining") {
+          const aRemaining = a.stats?.remaining ?? 0;
+          const bRemaining = b.stats?.remaining ?? 0;
+          if (aRemaining !== bRemaining) {
+            return bRemaining - aRemaining;
+          }
+          const aTotal = a.stats?.total ?? 0;
+          const bTotal = b.stats?.total ?? 0;
+          if (aTotal !== bTotal) {
+            return bTotal - aTotal;
+          }
+          return aId - bId;
+        }
+        if (mode === "hue") {
+          const aHue = a.stats?.hue ?? 0;
+          const bHue = b.stats?.hue ?? 0;
+          if (aHue !== bHue) {
+            return aHue - bHue;
+          }
+          const aLight = a.stats?.lightness ?? 0;
+          const bLight = b.stats?.lightness ?? 0;
+          if (aLight !== bLight) {
+            return aLight - bLight;
+          }
+          return aId - bId;
+        }
+        return aId - bId;
+      }
+
+      function renderPalette() {
+        if (!paletteEl) return;
+        if (!state.puzzle) {
+          paletteEl.innerHTML = "";
+          delete paletteEl.dataset.empty;
+          return;
+        }
+        if (!(state.paletteStats instanceof Map) || state.paletteStats.size === 0) {
+          rebuildPaletteStats();
+        }
+        const hideCompleted = Boolean(state.settings.hideCompletedColors);
+        const sortMode = resolvePaletteSortMode(state.settings.paletteSortMode);
+        if (paletteSortSelect) {
+          paletteSortSelect.value = sortMode;
+        }
+        if (hideCompletedToggle) {
+          hideCompletedToggle.checked = hideCompleted;
+        }
+        const entries = state.puzzle.palette.map((color) => ({
+          color,
+          stats:
+            getPaletteStats(color.id) || {
+              colorId: toColorKey(color.id),
+              regions: [],
+              remainingRegions: new Set(),
+              total: 0,
+              remaining: 0,
+              hue: 0,
+              saturation: 0,
+              lightness: 0,
+            },
+        }));
+        entries.sort((a, b) => paletteSortComparator(a, b, sortMode));
+        const fragment = document.createDocumentFragment();
+        let visibleCount = 0;
+        for (const entry of entries) {
+          const { color, stats } = entry;
+          const record = ensurePaletteSwatch(color);
+          const element = record.element;
+          const remaining = stats.remaining ?? 0;
+          const total = stats.total ?? 0;
+          const labelText = getPaletteLabel(color);
+          element.dataset.colorId = String(color.id);
+          element.style.setProperty("--swatch-color", color.hex || "transparent");
+          record.numberEl.textContent = String(color.id);
+          record.countsEl.textContent =
+            total === 0 ? "—" : remaining > 0 ? `${remaining}/${total}` : "Done";
+          record.nameEl.textContent = labelText;
+          element.setAttribute(
+            "aria-label",
+            remaining > 0
+              ? `Colour ${color.id}: ${labelText}. ${remaining} of ${total} regions remaining.`
+              : `Colour ${color.id}: ${labelText}. Complete.`
+          );
+          element.title =
+            remaining > 0 ? `${labelText} · ${remaining} of ${total} remaining` : `${labelText} · complete`;
+          element.classList.toggle("active", state.activeColor === color.id);
+          element.classList.toggle("done", total > 0 && remaining === 0);
+          element.classList.toggle("hidden", hideCompleted && total > 0 && remaining === 0);
+          element.dataset.remaining = String(remaining);
+          element.dataset.total = String(total);
+          fragment.appendChild(element);
+          if (!element.classList.contains("hidden")) {
+            visibleCount += 1;
+          }
+        }
+        paletteEl.replaceChildren(fragment);
+        paletteEl.dataset.empty = visibleCount === 0 ? "true" : "false";
       }
 
       function updateProgress() {
@@ -3238,7 +4013,18 @@
       function flashColorRegions(colorId, options = {}) {
         if (!state.puzzle) return;
         if (colorId == null) return;
-        const { tint = "rgba(96, 165, 250, 0.32)", duration = 280 } = options;
+        const paletteColor = getPaletteEntry(colorId);
+        const duration =
+          typeof options.duration === "number" && Number.isFinite(options.duration)
+            ? options.duration
+            : 480;
+        const alpha =
+          typeof options.alpha === "number" && Number.isFinite(options.alpha)
+            ? clamp(options.alpha, 0.05, 1)
+            : 0.45;
+        const tint =
+          options.tint ||
+          (paletteColor ? rgbaFromHex(paletteColor.hex, alpha) : "rgba(96, 165, 250, 0.32)");
         const unfinished = getRegionsByColor(colorId, { includeFilled: false });
         const targets = unfinished.length > 0 ? unfinished : getRegionsByColor(colorId, { includeFilled: true });
         if (targets.length === 0) {
@@ -3271,11 +4057,12 @@
 
       function autoAdvanceColor(currentColorId) {
         if (!state.puzzle) return;
-        const remainingForColor = getRegionsByColor(currentColorId, { includeFilled: false });
-        if (remainingForColor.length > 0) return;
-        const nextColour = state.puzzle.palette.find((color) =>
-          getRegionsByColor(color.id, { includeFilled: false }).length > 0
-        );
+        const currentStats = getPaletteStats(currentColorId);
+        if (currentStats && currentStats.remaining > 0) return;
+        const nextColour = state.puzzle.palette.find((color) => {
+          const stats = getPaletteStats(color.id);
+          return stats && stats.remaining > 0;
+        });
         if (nextColour) {
           activateColor(nextColour.id);
         }
@@ -3285,11 +4072,30 @@
       function getRegionsByColor(colorId, options = {}) {
         const { includeFilled = true } = options;
         if (!state.puzzle) return [];
-        return state.puzzle.regions.filter((region) => {
-          if (region.colorId !== colorId) return false;
-          if (!includeFilled && state.filled.has(region.id)) return false;
-          return true;
-        });
+        const stats = getPaletteStats(colorId);
+        if (!stats) return [];
+        if (includeFilled) {
+          return stats.regions.slice();
+        }
+        return Array.from(stats.remainingRegions);
+      }
+
+      function markRegionFilled(regionId) {
+        if (!state.puzzle || !(state.paletteStats instanceof Map)) return;
+        const region = state.puzzle.regions[regionId];
+        if (!region) return;
+        const stats = getPaletteStats(region.colorId);
+        if (!stats) return;
+        if (stats.remainingRegions instanceof Set && stats.remainingRegions.delete(region)) {
+          stats.remaining = stats.remainingRegions.size;
+        } else if (typeof stats.remaining === "number" && stats.remaining > 0) {
+          stats.remaining -= 1;
+        }
+      }
+
+      function getPaletteEntry(colorId) {
+        if (!state.puzzle) return null;
+        return state.puzzle.palette.find((entry) => entry.id === colorId) || null;
       }
 
       // Shared renderer for flashing overlays (hints + colour selection pulses).
@@ -3305,6 +4111,33 @@
           }
         }
         puzzleCtx.restore();
+      }
+
+      function flashPaletteSwatch(colorId, options = {}) {
+        if (!paletteEl) return;
+        let swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
+        if (!swatch && state.paletteSwatches instanceof Map) {
+          swatch = state.paletteSwatches.get(toColorKey(colorId))?.element || null;
+        }
+        if (!swatch) return;
+        const hex = typeof options.hex === "string" && options.hex ? options.hex : null;
+        if (hex) {
+          swatch.style.setProperty("--flash-color", rgbaFromHex(hex, 0.6));
+          swatch.style.setProperty("--flash-border", rgbaFromHex(hex, 0.95));
+        } else {
+          swatch.style.removeProperty("--flash-color");
+          swatch.style.removeProperty("--flash-border");
+        }
+        swatch.classList.remove("flash");
+        void swatch.offsetWidth;
+        swatch.classList.add("flash");
+        window.setTimeout(() => {
+          swatch.classList.remove("flash");
+          if (hex) {
+            swatch.style.removeProperty("--flash-color");
+            swatch.style.removeProperty("--flash-border");
+          }
+        }, 480);
       }
 
       function serializeCurrentPuzzle() {
@@ -3344,6 +4177,8 @@
             animateHints: Boolean(state.settings.animateHints),
             uiScale: Number(state.settings.uiScale) || 1,
             artPrompt: state.settings.artPrompt || "",
+            hideCompletedColors: Boolean(state.settings.hideCompletedColors),
+            paletteSortMode: resolvePaletteSortMode(state.settings.paletteSortMode),
           },
         };
         if (regionMapPacked) {
@@ -4021,6 +4856,40 @@
         return fallback;
       }
 
+      function colorMetricsFromHex(hex) {
+        const [r, g, b] = hexToRgb(hex);
+        const { h, s, l } = rgbToHsl(r, g, b);
+        return { h, s, l };
+      }
+
+      function rgbToHsl(r, g, b) {
+        const rn = clamp(r, 0, 255) / 255;
+        const gn = clamp(g, 0, 255) / 255;
+        const bn = clamp(b, 0, 255) / 255;
+        const max = Math.max(rn, gn, bn);
+        const min = Math.min(rn, gn, bn);
+        const delta = max - min;
+        let hue = 0;
+        let saturation = 0;
+        const lightness = (max + min) / 2;
+        if (delta !== 0) {
+          saturation = lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+          switch (max) {
+            case rn:
+              hue = (gn - bn) / delta + (gn < bn ? 6 : 0);
+              break;
+            case gn:
+              hue = (bn - rn) / delta + 2;
+              break;
+            default:
+              hue = (rn - gn) / delta + 4;
+              break;
+          }
+          hue *= 60;
+        }
+        return { h: hue, s: saturation, l: lightness };
+      }
+
       function computeInkStyles(hex) {
         const [r, g, b] = hexToRgb(hex);
         const luminance = relativeLuminance([r, g, b]);
@@ -4057,6 +4926,12 @@
         const g = parseInt(normalized.slice(2, 4), 16);
         const b = parseInt(normalized.slice(4, 6), 16);
         return [r, g, b];
+      }
+
+      function rgbaFromHex(hex, alpha = 1) {
+        const [r, g, b] = hexToRgb(hex);
+        const normalized = clamp(alpha, 0, 1);
+        return `rgba(${r}, ${g}, ${b}, ${normalized})`;
       }
 
       function clamp(value, min, max) {

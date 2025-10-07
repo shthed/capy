@@ -464,4 +464,38 @@ test.describe('Capy image generator', () => {
     await expect(page.locator('#debugLog .log-entry span').first()).toHaveText(/Reset puzzle progress/);
     await page.click('[data-sheet-close="help"]');
   });
+
+  test('palette controls hide completed colours and support sorting', async ({ page }) => {
+    await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await loadBasicTestPattern(page);
+
+    const hideToggle = page.locator('#hideCompletedToggle');
+    const sortSelect = page.locator('#paletteSort');
+    await expect(hideToggle).toBeChecked();
+    await expect(sortSelect).toHaveValue('id');
+
+    await clickRegionCenter(page, BASIC_TEST_PATTERN.regions[0], BASIC_TEST_PATTERN);
+    await clickRegionCenter(page, BASIC_TEST_PATTERN.regions[2], BASIC_TEST_PATTERN);
+
+    await expect(page.locator('[data-testid="palette-swatch"].hidden')).toHaveCount(1);
+    await expect(page.locator('[data-testid="palette-swatch"]:not(.hidden)')).toHaveCount(1);
+
+    await hideToggle.uncheck();
+    await expect(page.locator('[data-testid="palette-swatch"].hidden')).toHaveCount(0);
+    await expect.poll(() =>
+      page.evaluate(() => Boolean(window.capyGenerator.getState().settings.hideCompletedColors))
+    ).toBe(false);
+
+    await sortSelect.selectOption('remaining');
+    await expect(sortSelect).toHaveValue('remaining');
+    await expect.poll(() =>
+      page.evaluate(() => window.capyGenerator.getState().settings.paletteSortMode)
+    ).toBe('remaining');
+
+    await sortSelect.selectOption('hue');
+    await expect(sortSelect).toHaveValue('hue');
+    await expect.poll(() =>
+      page.evaluate(() => window.capyGenerator.getState().settings.paletteSortMode)
+    ).toBe('hue');
+  });
 });

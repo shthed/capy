@@ -58,9 +58,10 @@ tools, a save manager, and a configurable generator all live inside a single
   the app surface the smallest unfinished region when you need a nudge.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
   artwork at its final resolution without leaving the play surface.
-- **Palette manager.** Swipe through compact, tinted swatches that promote the
-  colour number while tooltips, titles, and ARIA copy preserve human-readable
-  names and remaining region counts.
+- **Palette manager.** Drag-scroll through compact, tinted swatches that
+  promote the colour number, automatically hide completed hues, and let you
+  sort by number, remaining regions, or grouped colour families while tooltips,
+  titles, and ARIA copy preserve human-readable names and counts.
 - **Progress persistence & recovery.** Every stroke updates a rolling autosave
   using a compact payload so the latest session is restored automatically on
   launch. Manual snapshots still land in the save manager where you can rename,
