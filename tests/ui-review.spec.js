@@ -93,7 +93,7 @@ test.describe('Capy image generator', () => {
     });
 
     expect(layout.hasSettings).toBe(true);
-    expect(layout.progress).toMatch(/^0\/\d+/);
+    expect(layout.progress).toBe('Ready to colour');
     expect(layout.hasSampleButton).toBe(true);
     expect(layout.orientation).toMatch(/landscape|portrait/);
     expect(layout.viewportMeta || '').toMatch(/user-scalable=no/);
@@ -169,7 +169,7 @@ test.describe('Capy image generator', () => {
     const detailCaption = page.locator('[data-detail-caption]').first();
     await expect(detailCaption).toHaveText(/High detail/i);
     const progress = page.locator('[data-testid="progress-message"]');
-    await expect(progress).toHaveText(/0\/\d+/);
+    await expect(progress).toHaveText('Ready to colour');
 
     const state = await page.evaluate(() => {
       const { puzzle, sourceUrl, sampleDetailLevel, lastOptions } = window.capyGenerator.getState();
@@ -441,7 +441,7 @@ test.describe('Capy image generator', () => {
     await expect(page.locator('#resetButton')).toBeEnabled();
 
     const progress = page.locator('[data-testid="progress-message"]');
-    await expect(progress).toHaveText(`0/${BASIC_TEST_PATTERN.regions.length}`);
+    await expect(progress).toHaveText('Ready to colour');
 
     for (let index = 0; index < BASIC_TEST_PATTERN.regions.length; index += 1) {
       const region = BASIC_TEST_PATTERN.regions[index];
@@ -454,11 +454,13 @@ test.describe('Capy image generator', () => {
         )
         .toBe(index + 1);
 
-      await expect(progress).toHaveText(`${index + 1}/${BASIC_TEST_PATTERN.regions.length}`);
+      const isLastFill = index + 1 === BASIC_TEST_PATTERN.regions.length;
+      const expectedStatus = isLastFill ? 'All done!' : 'Keep colouring';
+      await expect(progress).toHaveText(expectedStatus);
     }
 
     await page.click('#resetButton');
-    await expect(progress).toHaveText(`0/${BASIC_TEST_PATTERN.regions.length}`);
+    await expect(progress).toHaveText('Ready to colour');
 
     await page.click('#helpButton');
     await expect(page.locator('#debugLog .log-entry span').first()).toHaveText(/Reset puzzle progress/);

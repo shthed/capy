@@ -74,6 +74,9 @@ tools, a save manager, and a configurable generator all live inside a single
   trigger browser-level zoom; a global guard redirects them to the custom
   canvas handlers so the HUD stays stable while pan/zoom gestures still feel
   natural on touchscreens.
+- **Responsive command rail.** Header icons now clamp to the viewport, wrap when
+  space runs short, and respect safe-area insets so controls stay reachable on
+  phones, tablets, and desktop window resizes.
 - **Colour cues and feedback.** Choosing a swatch briefly pulses every matching
   region (falling back to a celebratory flash when a colour is finished) so
   it's obvious where to paint next, and correctly filled regions immediately
@@ -84,9 +87,11 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Precision view controls.** Pan the puzzle by click-dragging with the
   primary mouse button (spacebar, middle, and right buttons still work), use
   pinch gestures or the mouse wheel to zoom in and out, or tap `+`/`-` on the
-  keyboard for incremental adjustments. The canvas now stretches to fill the
-  viewport, centres itself automatically, and honours device orientation
-  changes without losing your place.
+  keyboard for incremental adjustments. Ctrl/Cmd zoom shortcuts now target the
+  puzzle instead of the surrounding UI so the HUD stays crisp while the canvas
+  reacts. The canvas stretches to fill the viewport, centres itself
+  automatically, and honours device orientation changes without losing your
+  place.
 - **Edge-to-edge stage.** A fullscreen toggle, rotation-aware sizing, and
   dynamic viewport padding ensure the command rail and palette scale cleanly on
   phones, tablets, or desktops while the artwork stays centred.
@@ -246,8 +251,9 @@ before retrying.
 - **Fullscreen preview overlay** – Triggered by the Preview button. The preview
   canvas stretches to fit the viewport so contributors can inspect the clustered
   output in detail before painting.
-- **Progress indicator** – A numeric tally in the palette dock that tracks
-  completed versus total regions and announces updates politely via `aria-live`.
+- **Progress indicator** – A friendly status message in the palette dock that
+  announces progress changes (Ready to colour, Keep colouring, All done!) via
+  `aria-live` rather than exposing raw region counts.
 - **Settings sheet** – A modal sheet that hides the generation sliders by
   default. Controls include colours, minimum region size, resize detail, sample
   rate, k-means iterations, smoothing passes, a background colour picker, and
@@ -275,7 +281,7 @@ before retrying.
 
 - The hint overlay is focusable and reacts to Enter/Space to trigger the file
   picker, keeping the first interaction accessible.
-- The progress tally uses `aria-live="polite"` announcements so assistive tech
+- The progress status uses `aria-live="polite"` announcements so assistive tech
   hears every completion update, and the help sheet’s debug log mirrors the same
   polite live region for gameplay telemetry.
 - Command rail buttons expose descriptive `aria-label` and `title` attributes
@@ -298,7 +304,7 @@ before retrying.
 The Playwright suite exercises the core flows:
 
 - **renders command rail and generator settings on load** – Confirms the hint
-  overlay, iconized command rail, compact progress tally, and generator controls
+  overlay, iconized command rail, compact progress status, and generator controls
   render on first boot.
  - **auto loads the capybara sample scene** – Verifies the bundled illustration is
     ready as soon as the app boots, that the sample button still reloads it on
