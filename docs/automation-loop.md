@@ -12,6 +12,10 @@ merging, and feedback collection so that single-file updates stay trustworthy.
    the fast-forward merge policy intact.
 3. **Advertise intent.** Open a draft PR immediately so CI history and reviewer
    notes accumulate in a single thread.
+4. **Preview deployments.** Every push to any branch automatically deploys to
+   GitHub Pages under a subfolder named after the branch (e.g.,
+   `automation/feature` → `/automation-feature/`), letting reviewers test the live
+   app without cloning the repository.
 
 ## Testing cadence
 
@@ -36,13 +40,14 @@ merging, and feedback collection so that single-file updates stay trustworthy.
 
 ## Feedback loop
 
-1. **Record outcomes.** Append the CI job result, Playwright summary, and any
-   manual verification notes to the PR description before requesting review.
+1. **Record outcomes.** Append the CI job result, Playwright summary, live preview
+   URL, and any manual verification notes to the PR description before requesting
+   review.
 2. **Triage weekly.** File an "Automation Sync" issue every Friday summarising
    failures, flakes, and backlog items harvested from TODO checklists.
 3. **Close the loop.** After merging, add a comment to the originating issue or
-   task noting the automation branch, test run link, and tag so the knowledge
-   base stays searchable.
+   task noting the automation branch, test run link, preview URL, and tag so the
+   knowledge base stays searchable.
 
 Following this playbook keeps the single-page app nimble while guaranteeing that
 UI regressions and workflow changes surface quickly to both maintainers and
