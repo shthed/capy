@@ -36,12 +36,14 @@ merging, and feedback collection so that single-file updates stay trustworthy.
 
 ### Conflict handling
 
-1. **Stop at the first marker.** When `git rebase` or `git merge` halts, open each conflicted file (notably `AGENTS.md`,
-   `README.md`, and this document) and decide how to combine the competing edits into a cohesive instruction set.
+1. **Stop at the first marker.** When `git rebase` or `git merge` halts, run `git status` to list every conflicted file, then
+   open each one (especially `AGENTS.md`, `README.md`, and this blueprint) before making any unrelated edits.
 2. **Preserve both intents.** Instead of discarding one side, fold any unique guidance—such as new automation steps or
    documentation links—into the final copy so downstream contributors do not lose context.
-3. **Re-run validation.** After clearing the conflicts and staging the fixes, execute `npm test --silent` before continuing the
-   rebase so CI and reviewers see the reconciled behaviour.
+3. **Synchronise the docs.** After editing one document, skim the other workflow guides and align terminology, numbering,
+   and cross-links so contributors get identical instructions regardless of which file they read.
+4. **Re-run validation.** Stage the resolved files, execute `npm test --silent`, and only continue the rebase once the suite
+   passes on the reconciled state.
 
 ## Feedback loop
 

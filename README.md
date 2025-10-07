@@ -31,8 +31,12 @@ tools, a save manager, and a configurable generator all live inside a single
   resulting `artifacts/ui-review/` bundle for asynchronous review and attach key screenshots when UI changes land.
 - **Fast-forward merges.** Rebase onto `main`, rerun the Playwright suite, and merge with `--ff-only` to preserve a linear
   history that keeps bisects practical for the single-file runtime.
-- **Resolve conflicts deliberately.** When rebases surface conflict markers, reconcile the competing edits in `README.md`,
-  `AGENTS.md`, and `docs/automation-loop.md` so the public workflow guidance stays aligned before you resume review.
+- **Resolve conflicts deliberately.** When rebases surface conflict markers, pause immediately, run `git status` to list the
+  affected files, and reconcile the competing edits in `README.md`, `AGENTS.md`, and `docs/automation-loop.md` so the public
+  workflow guidance stays aligned before you resume review. Use the following checklist whenever a conflict appears:
+  1. Open each conflicted file and merge the instructions so both sides' intent survives, updating headings or links if they shifted.
+  2. Compare the language across all three workflow docs and update phrasing or numbering until they match.
+  3. Stage the fixes, rerun `npm test --silent`, and only then continue the rebase or merge.
 - **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up work in a standing Friday issue so the team has
   a shared backlog of automation improvements.
 - **Close the loop.** Update PR descriptions and linked issues with branch names, CI run URLs, and artifact locations so the
