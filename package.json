@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "capy",
   "version": "1.0.0",
   "description": "Color-by-number demo (single-file React + Playwright smoke tests)",

@@ -55,25 +55,18 @@ Playwright test runner and a lightweight `http-server` for local previews.
   `togglePreview`, etc.) for ad-hoc scripting in DevTools; note any new helpers
   in the README and tests.
 
-## Code & Content Style
-- Preserve two-space indentation across HTML, CSS, and JavaScript blocks.
-- When introducing sizeable groups of inline styles, bracket them with section
-  comments to maintain navigability.
-- Keep iconography, labels, and shortcut glyphs synchronized between the UI,
-  README screenshots/illustrations, and Playwright assertions.
-- Document responsive or accessibility changes directly in `README.md` so future
-  contributors understand the intended UX.
+## Tooling
+- Use the repository ripgrep defaults (`.ripgreprc` and `.rgignore`) so large fixture dumps do not overflow the terminal. Pass `--no-ignore` or `--max-columns` overrides explicitly if you need raw output.
 
-## Workflow & Automation
-- Create short-lived branches named `automation/<feature>` so CI history and
-  GitHub Pages previews remain searchable.
-- Every branch push deploys to GitHub Pages under a path matching the branch name
-  and triggers CI (`npm test --silent`). Share the live preview URL in PRs when
-  available.
-- Merge via `--ff-only` after rebasing onto `main` and rerunning tests to keep
-  history linear and bisectable.
-- Maintain a weekly "Automation Sync" issue summarizing flaky runs and follow-up
-  actions; link to it from related PRs.
+## Documentation & Notes
+- Update `SEGMENTATION_GUIDE.md`, `ui-review.md`, or other relevant docs whenever the workflow or UI meaningfully changes.
+- When adjusting the UI review harness, also refresh README/test docs to mention new metadata captured (e.g., header button ARIA labels or library controls).
+- Note responsive header or palette adjustments in `README.md` and `docs/gameplay-session.md` so contributors understand current UX expectations.
+
+## Automation Workflow
+- Sync with the latest `main` (fetch + merge or rebase) before starting work so local changes incorporate upstream automation updates.
+- Capture any conflict resolutions in commit messages and PR summaries, especially when guidance files such as `AGENTS.md` or `README.md` change.
+- Run `npm test --silent` after resolving conflicts to confirm the workflow still passes the automation checks before pushing.
 
 ## Git Preferences
 - Configure git before committing: `git config user.name "Codex"` and
