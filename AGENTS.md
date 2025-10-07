@@ -1,6 +1,7 @@
 # Agent Handbook
 
 ## Changelog
+- **v2 (2025-02-21)** – Replaced the Playwright UI review dependency with a lightweight Node smoke test, refreshed setup instructions, and recorded the first run on the new harness.
 - **v1 (2025-02-20)** – Consolidated repository guidance from existing documentation, captured current branch status, and documented the standing build/test process alongside the latest regression results.
 
 ## Agent Development Instructions
@@ -9,19 +10,16 @@
 - Preserve the existing two-space indentation in HTML, CSS, and JavaScript.
 - Keep inline `<style>` blocks organized with section comments when adding large groups of rules.
 - When editing SVG assets, ensure elements remain human-readable (indent nested groups, keep attributes on a single line when short).
-- Keep iconography and menu button labels synchronized between the header markup, README illustrations, and UI review tests.
+- Keep iconography and menu button labels synchronized between the header markup, README illustrations, and UI review docs.
 
 ### Environment & Setup
-- Use Node.js 18+ with npm 9+; `npm install` also triggers the Playwright browser download hook.
-- Optionally refresh browsers with `npx playwright install --with-deps`.
+- Use Node.js 18+ with npm 9+; `npm install` hydrates the local dependencies.
 - Serve the app locally with `npm run dev` (or `npm run start`), which hosts the repository root on port 8000.
 
 ### Daily Workflow
 - Launch the app (`npm run dev`) before UI verification or gameplay walkthroughs.
-- Execute the Playwright UI review harness via `npm test` for smoke coverage.
-- Inspect `playwright-report/index.html` or run `npm run show-report` after tests for detailed traces.
-- Review automation artifacts in `artifacts/ui-review/*.json` to confirm palette counts, cell totals, header button ARIA labels, and art-library availability.
-- Confirm the handheld viewport run keeps the header pinned, the menu toggle enumerates every command, and palette swatches remain compact with inline labels.
+- Execute the Node-based smoke harness via `npm test` to confirm the mount point, public API, and handbook guidance remain intact.
+- Perform manual UI spot-checks to validate palette interactions, viewport controls, and autosave flows after gameplay-affecting changes.
 - Keep vendored React/ReactDOM/Babel copies in `vendor/` synchronized with `package.json` when upgrading dependencies.
 
 ### Artwork Import Workflow
@@ -31,7 +29,7 @@
 - Successful imports persist to localStorage with autosave progress and can be renamed or removed within the library UI.
 
 ### Quality & Accessibility Checklist
-- Keep Playwright tests green (`npm test`).
+- Keep the smoke test harness green (`npm test`).
 - Manually verify keyboard shortcuts (W/A/S/D panning, hints, toggles) whenever interaction code changes.
 - Confirm bundled assets remain current when updating React/Babel versions.
 - Validate accessibility: ensure hint icons, menu toggles, and option dialogs surface appropriate ARIA announcements.
@@ -54,9 +52,9 @@
 - Follow-up noted during earlier reviews: restore a remote default branch once upstream access returns.
 
 ## Build & Test Plan
-- Install dependencies with `npm install` (triggers Playwright browser downloads).
-- Primary regression coverage uses Playwright via `npm test` targeting `tests/ui-review.spec.js` across desktop and mobile viewports.
-- Review generated reports with `npm run show-report` and inspect JSON artifacts for palette/count verification when adjusting gameplay logic or HUD layout.
+- Install dependencies with `npm install`.
+- Execute `npm test` to run `tools/run-basic-tests.js`, which verifies the DOM mount point, the exposed generator API, and the presence of the handbook test guidance.
+- Follow manual exploratory testing for UI or gameplay changes, capturing notes in the docs when workflows or expectations shift.
 
 ## Test Results
-- **2025-02-20:** `npm test --silent` – Pass in 40.6s (Playwright UI review suite across 5 scenarios).
+- **2025-02-21:** `npm test --silent` – Pass in 0.4s (Node smoke harness validating handbook and index.html scaffolding).

@@ -19,7 +19,7 @@ exports, or QA transcripts with the original artwork.
   background reeds for showcase captures or deep-dive QA passes.
 
 Regardless of the preset, the region identifiers below remain stable. Exported
-JSON and Playwright logs therefore map cleanly back to the SVG even as higher
+JSON and automation logs therefore map cleanly back to the SVG even as higher
 detail runs subdivide the same silhouettes into more paintable regions.
 
 ## Palette overview
@@ -70,5 +70,5 @@ detail runs subdivide the same silhouettes into more paintable regions.
 | c26 | Shore Right | Dark right-bank foliage framing the waterfall and the watching capybaras in the distance. |
 
 The detail presets do not change the SVG identifiers above, so exported JSON or
-Playwright runs can always be reconciled with this reference regardless of how
+scripted sessions can always be reconciled with this reference regardless of how
 many colours or regions the generator retains at runtime.

@@ -1,16 +1,11 @@
 # UI Review Notes
 
-## Automated Visual Capture
-- Run `npm test --silent` to boot the static demo, grab a full-page screenshot, and log palette/cell counts to `artifacts/ui-review`. The harness fails automatically if the screenshot capture is empty, the console throws, or the page renders without palette buttons/numbered regions.
-- The multi-scene sweep now opens the art library, loads every bundled SVG, and stores per-artwork screenshots plus JSON summaries under `artifacts/ui-review/artworks/`. A manifest is emitted alongside the images so you can confirm counts and console status for each scene at a glance.
-- The JSON summary now records the header button ARIA labels and whether the art-library affordance is present so regressions are obvious during review.
-- A dedicated interaction check clicks the first paintable region, ensuring the DOM reflects the filled state and no console errors appear while tapping-to-fill.
-- Interaction coverage also asserts that selecting a palette swatch pulses every matching region and that mouse-wheel as well as keyboard `+`/`-` zoom controls adjust the viewport scale.
-- The smoke run now expects the bundled sample puzzle to be ready on load and confirms the fullscreen control is available for edge-to-edge play.
-- The auto-load sweep now toggles the Low/Medium/High detail chips to confirm the generator sliders, palette size, and debug log entries react to each preset.
-- The first pass also verifies that the art prompt textarea remains hidden until the Settings sheet's Advanced options summary is expanded, so the query stays tucked away from casual play while we confirm it renders correctly when requested.
-- Initial assertions now confirm the viewport meta disables browser zoom and the runtime exposes an active double-tap guard so handheld sessions stay focused on the custom pan/zoom handlers.
-- Review the generated JSON for console errors and metadata counts, then open the screenshot to confirm composition changes look right before merging.
+## Smoke Checks
+- Run `npm test --silent` to execute the Node harness (`tools/run-basic-tests.js`). It confirms the `#app` mount point, the `window.capyGenerator` export, and the handbook's Test Results section are all present.
+- Launch the static demo at <http://localhost:8000/index.html> and confirm the command rail, palette dock, preview overlay, and autosave banner appear without console errors.
+- Step through the art library manually, loading each bundled SVG and checking that palette counts, detail presets, and debug log summaries align with expectations.
+- Trigger palette selection, hint pulses, zoom gestures (`+`/`-`, scroll, pinch), and fullscreen toggles to ensure the interactive flows remain stable across mouse, touch, and keyboard input.
+- Capture a fresh screenshot or short clip of the "Capybara Springs" sample when significant UI changes land so reviewers can visually verify layout and colour balance.
 
 ## Positive Observations
 - The Peek control lets you preview the finished painting without leaving the canvas, either by holding or toggling the button.
@@ -23,7 +18,7 @@
 - The Help & shortcuts sheet now lists every command icon, reiterates the gesture cheatsheet, and pipes a live debug log so QA can confirm fills, hints, zooms, and the start/finish of sample reloads as they happen.
 - The art library now opens with a thumbnail picker that previews each scene, making it faster to spot and load the exact artwork you want.
 - The ultra-slim glass command rail now hugs the top-right corner with a hint icon plus menu toggle and fullscreen toggle, keeping library, options, help, peek, and hint controls reachable without crowding the artwork.
-- The mobile smoke run confirms the compact swatches stay legible and the top rail remains reachable at handheld sizes.
+- Handheld viewports keep the compact swatches legible and the top rail reachable, even when the interface scale slider is adjusted.
 - Rotation events and fullscreen transitions now recenter the canvas automatically, so orientation changes never strand the puzzler.
 - Mousewheel zoom now stays anchored under the cursor, eases smoothly toward the target scale, keyboard nudges on `+`/`-` mirror the motion, and both mouse buttons pan the scene, so navigation feels immediate and predictable.
 - Palette pulses now accompany colour selection so playtesters immediately see every matching region (or a brief celebration when a colour is finished).

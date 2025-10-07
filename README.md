@@ -99,8 +99,8 @@ numbered cell in the segmented source, see
   developer map comment at the top of the file.
 - **Public testing surface.** `window.capyGenerator` exposes harness-friendly
   helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so the
-  Playwright suite and manual experiments can orchestrate the app without
-  relying on internal selectors.
+  smoke script and manual experiments can orchestrate the app without relying on
+  internal selectors.
 - **Pan/zoom subsystem.** `viewState` tracks the transform for `#canvasStage`
   and `#canvasTransform`; helpers like `applyZoom`, `resetView`, and
   `applyViewTransform` keep navigation smooth across wheel, keyboard, and drag
@@ -171,8 +171,8 @@ numbered cell in the segmented source, see
 
 ## Puzzle JSON format
 
-Autosaves, manual exports, and the Playwright fixtures all share a
-`capy-puzzle@2` payload. Key fields include:
+Autosaves, manual exports, and any custom fixtures all share a `capy-puzzle@2`
+payload. Key fields include:
 
 - `format` – Indicates the schema version (`capy-puzzle@2`).
 - `width`/`height` – Pixel dimensions of the clustered canvas.
@@ -261,30 +261,22 @@ before retrying.
 
 ## Testing
 
-The Playwright suite exercises the core flows:
+The lightweight Node smoke harness validates the repository scaffolding:
 
-- **renders command rail and generator settings on load** – Confirms the hint
-  overlay, iconized command rail, compact progress tally, and generator controls
-  render on first boot.
- - **auto loads the capybara sample scene** – Verifies the bundled illustration is
-    ready as soon as the app boots, that the sample button still reloads it on
-    demand, and that the Low/Medium/High detail chips update generator sliders,
-    debug logging, and palette/region counts as expected.
-- **allows adjusting the canvas background colour** – Uses the fixture loader to
-  set a new background via the exposed harness helper, verifies pixel data,
-  and confirms the debug log records the change.
-- **fills the basic test pattern to completion** – Loads a tiny fixture via
-  `window.capyGenerator.loadPuzzleFixture`, walks through selecting palette
-  swatches, fills each region, observes the completion copy, and resets the
-  board.
+- **`index.html` exposes the `#root` mount point** – Ensures the React app can
+  boot after refactors.
+- **`window.capyGenerator` stays exported** – Confirms the documented public API
+  remains wired for manual experimentation and scripted flows.
+- **`AGENTS.md` retains its Test Results section** – Keeps the handbook guidance
+  current for future contributors.
 
-Run them locally with:
+Run it locally with:
 
 ```bash
 npm install
 npm test --silent
 ```
 
-The suite writes artifacts (screenshots + JSON summaries) into
-`artifacts/ui-review/` if you need to inspect the DOM snapshots.
+Pair the smoke harness with manual spot checks (palette interaction, viewport
+controls, autosave/export flows) whenever gameplay logic changes.
 

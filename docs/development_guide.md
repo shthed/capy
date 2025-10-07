@@ -1,21 +1,15 @@
 # Development Guide
 
 ## Prerequisites
-- Node.js 18 or newer (Playwright currently targets Node 18 in CI).
+- Node.js 18 or newer.
 - npm 9+ (ships with recent Node releases).
-- The bundled Playwright browsers (run `npm install` once to trigger `playwright install`).
 
 ## Initial Setup
 1. Install dependencies:
    ```bash
    npm install
    ```
-   The `postinstall` hook will fetch Playwright browsers.
-2. (Optional) Install browsers manually:
-   ```bash
-   npx playwright install --with-deps
-   ```
-3. Launch a local dev server:
+2. Launch a local dev server:
    ```bash
    npm run dev
    ```
@@ -23,18 +17,15 @@
 
 ## Daily Workflow
 - **Start the app:** `npm run dev` (or `npm run start`).
-- **Run smoke tests:** `npm test` executes the Playwright UI review harness in `tests/ui-review.spec.js`.
-- **Inspect reports:** After a test run, open `playwright-report/index.html` or run `npm run show-report`.
-- **Review UI artifacts:** Check `artifacts/ui-review/*.json` for palette counts, cell totals, header button ARIA labels, and art-library presence alongside the captured screenshot.
-- **Mobile HUD check:** The UI review suite now boots a handheld viewport to ensure the header hugs the top-right edge, the menu toggle exposes every command, and the palette swatches stay compact with their inline labels/badges.
-- **Static assets:** React, ReactDOM, and Babel live under `vendor/`. Update them with `npx playwright` or direct downloads and keep versions in sync with `package.json`.
+- **Run smoke tests:** `npm test` executes the Node-based harness at `tools/run-basic-tests.js`.
+- **Manual verification:** Walk through palette interactions, viewport controls, and autosave/export flows after gameplay changes.
+- **Static assets:** React, ReactDOM, and Babel live under `vendor/`. Update them via direct downloads and keep versions in sync with `package.json`.
 - **Editor tasks:** VS Code tasks (`.vscode/tasks.json`) expose a "Start http-server" background task that mirrors `npm run dev`.
 
 ## Project Structure
 - `index.html` - single-file React application plus inline logic.
 - `vendor/` - vendored runtime dependencies required for offline execution.
-- `tests/` - Playwright UI review harness (`ui-review.spec.js`).
-- `.github/workflows/ci.yml` - Windows CI pipeline running Playwright.
+- `tools/run-basic-tests.js` - Node smoke harness covering core scaffolding.
 - `docs/` - Project documentation (this guide, requirements, etc.).
 
 ## Importing Artwork
@@ -44,7 +35,7 @@
 - Successful imports are saved to localStorage alongside autosave progress and can be removed or renamed from the library UI.
 
 ## Quality Checklist
-- Keep Playwright tests green (`npm test`).
+- Keep the smoke harness green (`npm test`).
 - Manually verify keyboard shortcuts (W/A/S/D panning, hints, toggles) when touching interaction code.
 - Confirm bundled assets remain up to date if upgrading React/Babel.
 - Review accessibility: confirm the hint icon and menu toggle announce their actions and the Options button exposes dialog affordances.
