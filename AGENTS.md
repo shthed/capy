@@ -1,5 +1,8 @@
 # Agent Instructions
 
+game: https://shthed.github.io/capy/
+repo: https://github.com/shthed/capy
+
 ## Project Overview
 Capybooper is a static, browser-based color-by-number playground. Everything —
 markup, styles, generator logic, fixtures, and onboarding copy — lives inside
