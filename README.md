@@ -288,3 +288,11 @@ npm test --silent
 The suite writes artifacts (screenshots + JSON summaries) into
 `artifacts/ui-review/` if you need to inspect the DOM snapshots.
 
+### Safe repository searches
+
+Ripgrep is configured via [`.ripgreprc`](.ripgreprc) to clamp printed line
+widths and avoid flooding the terminal with megabyte-long rows. The matching
+ignore file [`.rgignore`](.rgignore) skips generated assets and Playwright
+artifacts so ad-hoc searches stay fast even on large fixtures. If you need to
+inspect those folders, pass `--no-ignore` explicitly.
+
