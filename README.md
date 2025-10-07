@@ -74,6 +74,9 @@ tools, a save manager, and a configurable generator all live inside a single
   trigger browser-level zoom; a global guard redirects them to the custom
   canvas handlers so the HUD stays stable while pan/zoom gestures still feel
   natural on touchscreens.
+- **Responsive command rail.** Header icons now clamp to the viewport, wrap when
+  space runs short, and respect safe-area insets so controls stay reachable on
+  phones, tablets, and desktop window resizes.
 - **Colour cues and feedback.** Choosing a swatch briefly pulses every matching
   region (falling back to a celebratory flash when a colour is finished) so
   it's obvious where to paint next, and correctly filled regions immediately
@@ -84,9 +87,11 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Precision view controls.** Pan the puzzle by click-dragging with the
   primary mouse button (spacebar, middle, and right buttons still work), use
   pinch gestures or the mouse wheel to zoom in and out, or tap `+`/`-` on the
-  keyboard for incremental adjustments. The canvas now stretches to fill the
-  viewport, centres itself automatically, and honours device orientation
-  changes without losing your place.
+  keyboard for incremental adjustments. Ctrl/Cmd zoom shortcuts now target the
+  puzzle instead of the surrounding UI so the HUD stays crisp while the canvas
+  reacts. The canvas stretches to fill the viewport, centres itself
+  automatically, and honours device orientation changes without losing your
+  place.
 - **Edge-to-edge stage.** A fullscreen toggle, rotation-aware sizing, and
   dynamic viewport padding ensure the command rail and palette scale cleanly on
   phones, tablets, or desktops while the artwork stays centred.
