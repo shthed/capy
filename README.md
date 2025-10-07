@@ -74,13 +74,18 @@ tools, a save manager, and a configurable generator all live inside a single
   trigger browser-level zoom; a global guard redirects them to the custom
   canvas handlers so the HUD stays stable while pan/zoom gestures still feel
   natural on touchscreens.
-- **Responsive command rail.** Header icons now clamp to the viewport, wrap when
-  space runs short, and respect safe-area insets so controls stay reachable on
-  phones, tablets, and desktop window resizes.
+- **Responsive command rail.** Controls are grouped into gameplay, view, and system clusters
+  so they rebalance gracefully across screen sizes. Wide layouts reveal button labels while
+  smaller devices collapse the rail into centred stacks. A dedicated detail button cycles the
+  Capybara sample presets without diving back into Settings.
 - **Colour cues and feedback.** Choosing a swatch briefly pulses every matching
   region (falling back to a celebratory flash when a colour is finished) so
   it's obvious where to paint next, and correctly filled regions immediately
   display the underlying illustration.
+- **Palette focus tools.** The dock now highlights the active colour with a live badge showing
+  its name, identifier, and remaining region count. A hide-finished toggle (also configurable in
+  Settings) collapses completed swatches so you can concentrate on unfinished colours while keeping
+  the current choice visible.
 - **Customisable background.** Pick a backdrop colour for unfinished regions in
   the Settings sheet; outlines and numbers automatically switch contrast so dark
   or light themes stay legible while you paint.
@@ -113,7 +118,9 @@ tools, a save manager, and a configurable generator all live inside a single
 ### Capybara Springs detail presets
 
 The Low/Medium/High detail chips on the onboarding hint and Settings sheet
-toggle tuned generator options for the built-in capybara vignette:
+toggle tuned generator options for the built-in capybara vignette, and the
+command rail includes a shortcut button that cycles through the presets in
+play:
 
 | Preset | Colours | Approx. regions | Min region | Resize edge | Sample rate | Iterations | Smoothing | Use it when… |
 | ------ | ------- | --------------- | ---------- | ----------- | ----------- | ---------- | --------- | ------------ |
