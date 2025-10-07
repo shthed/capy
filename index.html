@@ -594,6 +594,8 @@
         text-align: center;
         cursor: pointer;
         transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+        --flash-color: rgba(59, 130, 246, 0.65);
+        --flash-border: rgba(96, 165, 250, 0.9);
       }
 
       .swatch::before {
@@ -619,6 +621,25 @@
 
       .swatch.done {
         opacity: 0.55;
+      }
+
+      .swatch.flash {
+        animation: swatchHintPulse 0.48s ease;
+      }
+
+      @keyframes swatchHintPulse {
+        0% {
+          box-shadow: 0 0 0 0 var(--flash-color, rgba(59, 130, 246, 0.65));
+          border-color: var(--flash-border, rgba(96, 165, 250, 0.9));
+        }
+        60% {
+          box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+          border-color: rgba(148, 163, 184, 0.25);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+          border-color: rgba(148, 163, 184, 0.25);
+        }
       }
 
       .swatch .label {
@@ -1905,9 +1926,12 @@
           return;
         }
         if (region.colorId !== state.activeColor) {
+          const paletteColor = getPaletteEntry(region.colorId);
           if (state.settings.animateHints) {
-            flashRegion(regionId, "rgba(250, 204, 21, 0.55)");
+            const tint = paletteColor ? rgbaFromHex(paletteColor.hex, 0.5) : "rgba(250, 204, 21, 0.55)";
+            flashRegion(regionId, tint);
           }
+          flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
           logDebug(
             `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
           );
@@ -2756,16 +2780,227 @@
 
       function drawNumbers() {
         if (!state.puzzle) return;
-        const { regions, width } = state.puzzle;
-        const fontSize = Math.max(10, Math.round(width / 45));
-        puzzleCtx.font = `${fontSize}px "Inter", "Segoe UI", sans-serif`;
+        puzzleCtx.save();
         puzzleCtx.fillStyle = backgroundInk.number;
         puzzleCtx.textAlign = "center";
         puzzleCtx.textBaseline = "middle";
-        for (const region of regions) {
+        puzzleCtx.strokeStyle = backgroundInk.outline;
+        puzzleCtx.lineJoin = "round";
+        puzzleCtx.lineCap = "round";
+        for (const region of state.puzzle.regions) {
           if (state.filled.has(region.id)) continue;
-          puzzleCtx.fillText(String(region.colorId), region.cx, region.cy);
+          const layout = getRegionLabelLayout(region);
+          if (!layout) continue;
+          puzzleCtx.font = layout.font;
+          if (layout.strokeWidth) {
+            puzzleCtx.lineWidth = layout.strokeWidth;
+            puzzleCtx.strokeText(layout.text, layout.x, layout.y);
+          }
+          puzzleCtx.fillText(layout.text, layout.x, layout.y);
         }
+        puzzleCtx.restore();
+      }
+
+      function getRegionLabelLayout(region) {
+        if (!region || !state.puzzle) return null;
+        if (!region.labelLayout) {
+          region.labelLayout = computeRegionLabelLayout(region);
+        }
+        return region.labelLayout;
+      }
+
+      function computeRegionLabelLayout(region) {
+        if (!state.puzzle) return null;
+        if (!Array.isArray(region.pixels) || region.pixels.length === 0) return null;
+        const { width, height, regionMap } = state.puzzle;
+        const bounds = ensureRegionBounds(region, width);
+        if (!bounds) return null;
+        const text = String(region.colorId);
+        const area = Math.max(1, region.pixelCount || region.pixels.length);
+        const MIN_LABEL_SIZE = 5;
+        const MAX_LABEL_SIZE = 96;
+        const safeWidth = Math.max(1, bounds.width - 2);
+        const safeHeight = Math.max(1, bounds.height - 2);
+        if (safeWidth <= 0 || safeHeight <= 0) return null;
+        const approxCharacters = Math.max(1, text.length * 0.72);
+        const widthLimit = safeWidth / approxCharacters;
+        const heightLimit = safeHeight * 0.92;
+        const areaLimit = Math.sqrt(area) * 0.8;
+        const initialSize = clamp(
+          Math.min(widthLimit, heightLimit, areaLimit, MAX_LABEL_SIZE),
+          MIN_LABEL_SIZE,
+          MAX_LABEL_SIZE
+        );
+        const attempts = [];
+        let nextSize = initialSize;
+        while (nextSize >= MIN_LABEL_SIZE && attempts.length < 8) {
+          attempts.push(nextSize);
+          nextSize *= 0.88;
+        }
+        if (attempts.length === 0) {
+          attempts.push(MIN_LABEL_SIZE);
+        } else {
+          const last = attempts[attempts.length - 1];
+          if (last > MIN_LABEL_SIZE) {
+            attempts.push(MIN_LABEL_SIZE);
+          }
+        }
+        for (const size of attempts) {
+          const metrics = measureLabelMetrics(text, size);
+          if (!metrics) continue;
+          if (metrics.paddedWidth > safeWidth + 2 || metrics.paddedHeight > safeHeight + 2) {
+            continue;
+          }
+          const anchor = findRegionLabelAnchor(
+            region,
+            metrics.halfWidth,
+            metrics.halfHeight,
+            bounds,
+            width,
+            height,
+            regionMap
+          );
+          if (anchor) {
+            return {
+              text,
+              fontSize: size,
+              font: metrics.font,
+              x: anchor.x,
+              y: anchor.y,
+              strokeWidth: metrics.strokeWidth,
+            };
+          }
+        }
+        return null;
+      }
+
+      function ensureRegionBounds(region, width) {
+        if (region.bounds && Number.isFinite(region.bounds.minX)) {
+          return region.bounds;
+        }
+        const bounds = calculateRegionBounds(region.pixels, width);
+        region.bounds = bounds;
+        return bounds;
+      }
+
+      function calculateRegionBounds(pixels, width) {
+        if (!Array.isArray(pixels) || pixels.length === 0) {
+          return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0 };
+        }
+        let minX = width;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxX = 0;
+        let maxY = 0;
+        for (const idx of pixels) {
+          const x = idx % width;
+          const y = (idx / width) | 0;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+        if (!Number.isFinite(minY)) {
+          return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0 };
+        }
+        return {
+          minX,
+          maxX,
+          minY,
+          maxY,
+          width: maxX - minX + 1,
+          height: maxY - minY + 1,
+        };
+      }
+
+      function measureLabelMetrics(text, size) {
+        if (!text || size <= 0) return null;
+        const font = `${size}px "Inter", "Segoe UI", sans-serif`;
+        puzzleCtx.font = font;
+        const metrics = puzzleCtx.measureText(text);
+        const textWidth = metrics.width || size;
+        const ascent = metrics.actualBoundingBoxAscent || size * 0.78;
+        const descent = metrics.actualBoundingBoxDescent || size * 0.22;
+        const textHeight = ascent + descent;
+        const strokeWidth = Math.max(0.8, size * 0.12);
+        const paddingX = Math.max(2, size * 0.35);
+        const paddingY = Math.max(2, size * 0.28);
+        const paddedWidth = textWidth + paddingX * 2 + strokeWidth;
+        const paddedHeight = textHeight + paddingY * 2 + strokeWidth;
+        return {
+          font,
+          paddedWidth,
+          paddedHeight,
+          halfWidth: paddedWidth / 2,
+          halfHeight: paddedHeight / 2,
+          strokeWidth,
+        };
+      }
+
+      function findRegionLabelAnchor(region, halfWidth, halfHeight, bounds, width, height, regionMap) {
+        const marginX = Math.ceil(halfWidth);
+        const marginY = Math.ceil(halfHeight);
+        const minX = Math.max(bounds.minX + marginX, 0);
+        const maxX = Math.min(bounds.maxX - marginX, width - 1);
+        const minY = Math.max(bounds.minY + marginY, 0);
+        const maxY = Math.min(bounds.maxY - marginY, height - 1);
+        if (minX > maxX || minY > maxY) return null;
+        const centroidX = Number.isFinite(region.cx)
+          ? region.cx
+          : (bounds.minX + bounds.maxX) / 2;
+        const centroidY = Number.isFinite(region.cy)
+          ? region.cy
+          : (bounds.minY + bounds.maxY) / 2;
+        let best = null;
+        let bestScore = Number.POSITIVE_INFINITY;
+        for (let y = minY; y <= maxY; y++) {
+          const rowOffset = y * width;
+          for (let x = minX; x <= maxX; x++) {
+            if (regionMap[rowOffset + x] !== region.id) continue;
+            const centerX = x + 0.5;
+            const centerY = y + 0.5;
+            if (
+              !rectangleFitsRegion(
+                region.id,
+                centerX,
+                centerY,
+                halfWidth,
+                halfHeight,
+                width,
+                height,
+                regionMap
+              )
+            ) {
+              continue;
+            }
+            const dx = centerX - centroidX;
+            const dy = centerY - centroidY;
+            const score = dx * dx + dy * dy;
+            if (score < bestScore) {
+              bestScore = score;
+              best = { x: centerX, y: centerY };
+              if (score <= 0.25) {
+                return best;
+              }
+            }
+          }
+        }
+        return best;
+      }
+
+      function rectangleFitsRegion(regionId, centerX, centerY, halfWidth, halfHeight, width, height, regionMap) {
+        const minX = Math.max(0, Math.floor(centerX - halfWidth));
+        const maxX = Math.min(width - 1, Math.ceil(centerX + halfWidth));
+        const minY = Math.max(0, Math.floor(centerY - halfHeight));
+        const maxY = Math.min(height - 1, Math.ceil(centerY + halfHeight));
+        for (let y = minY; y <= maxY; y++) {
+          const rowOffset = y * width;
+          for (let x = minX; x <= maxX; x++) {
+            if (regionMap[rowOffset + x] !== regionId) {
+              return false;
+            }
+          }
+        }
+        return true;
       }
 
       function drawOutlines() {
@@ -3238,7 +3473,18 @@
       function flashColorRegions(colorId, options = {}) {
         if (!state.puzzle) return;
         if (colorId == null) return;
-        const { tint = "rgba(96, 165, 250, 0.32)", duration = 280 } = options;
+        const paletteColor = getPaletteEntry(colorId);
+        const duration =
+          typeof options.duration === "number" && Number.isFinite(options.duration)
+            ? options.duration
+            : 280;
+        const alpha =
+          typeof options.alpha === "number" && Number.isFinite(options.alpha)
+            ? clamp(options.alpha, 0.05, 1)
+            : 0.45;
+        const tint =
+          options.tint ||
+          (paletteColor ? rgbaFromHex(paletteColor.hex, alpha) : "rgba(96, 165, 250, 0.32)");
         const unfinished = getRegionsByColor(colorId, { includeFilled: false });
         const targets = unfinished.length > 0 ? unfinished : getRegionsByColor(colorId, { includeFilled: true });
         if (targets.length === 0) {
@@ -3292,6 +3538,11 @@
         });
       }
 
+      function getPaletteEntry(colorId) {
+        if (!state.puzzle) return null;
+        return state.puzzle.palette.find((entry) => entry.id === colorId) || null;
+      }
+
       // Shared renderer for flashing overlays (hints + colour selection pulses).
       function paintRegions(regions, fillStyle) {
         if (!state.puzzle || regions.length === 0) return;
@@ -3305,6 +3556,30 @@
           }
         }
         puzzleCtx.restore();
+      }
+
+      function flashPaletteSwatch(colorId, options = {}) {
+        if (!paletteEl) return;
+        const swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
+        if (!swatch) return;
+        const hex = typeof options.hex === "string" && options.hex ? options.hex : null;
+        if (hex) {
+          swatch.style.setProperty("--flash-color", rgbaFromHex(hex, 0.6));
+          swatch.style.setProperty("--flash-border", rgbaFromHex(hex, 0.95));
+        } else {
+          swatch.style.removeProperty("--flash-color");
+          swatch.style.removeProperty("--flash-border");
+        }
+        swatch.classList.remove("flash");
+        void swatch.offsetWidth;
+        swatch.classList.add("flash");
+        window.setTimeout(() => {
+          swatch.classList.remove("flash");
+          if (hex) {
+            swatch.style.removeProperty("--flash-color");
+            swatch.style.removeProperty("--flash-border");
+          }
+        }, 480);
       }
 
       function serializeCurrentPuzzle() {
@@ -4057,6 +4332,12 @@
         const g = parseInt(normalized.slice(2, 4), 16);
         const b = parseInt(normalized.slice(4, 6), 16);
         return [r, g, b];
+      }
+
+      function rgbaFromHex(hex, alpha = 1) {
+        const [r, g, b] = hexToRgb(hex);
+        const normalized = clamp(alpha, 0, 1);
+        return `rgba(${r}, ${g}, ${b}, ${normalized})`;
       }
 
       function clamp(value, min, max) {
