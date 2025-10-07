@@ -75,12 +75,20 @@ test.describe('Capy image generator', () => {
       );
       const hasSettings = Boolean(document.querySelector('#settingsSheet'));
       const hasSampleButton = Boolean(document.querySelector('[data-testid="sample-art-button"]'));
+      const viewportMeta = document
+        .querySelector('meta[name="viewport"]')
+        ?.getAttribute('content');
+      const zoomGuardActive =
+        typeof window.capyGenerator?.isBrowserZoomSuppressed === 'function' &&
+        window.capyGenerator.isBrowserZoomSuppressed();
       return {
         progress: (progress?.textContent || '').trim(),
         commandButtons,
         hasSettings,
         hasSampleButton,
         orientation: document.body?.dataset.orientation || null,
+        viewportMeta,
+        zoomGuardActive,
       };
     });
 
@@ -88,12 +96,14 @@ test.describe('Capy image generator', () => {
     expect(layout.progress).toMatch(/^0\/\d+/);
     expect(layout.hasSampleButton).toBe(true);
     expect(layout.orientation).toMatch(/landscape|portrait/);
+    expect(layout.viewportMeta || '').toMatch(/user-scalable=no/);
+    expect(layout.zoomGuardActive).toBe(true);
     expect(layout.commandButtons).toEqual(
       expect.arrayContaining([
         'Hint',
         'Reset puzzle',
         'Show preview',
-        'Reload sample puzzle',
+        expect.stringContaining('Reload Capybara Springs'),
         'Enter fullscreen',
         'Import',
         'Save manager',
@@ -109,7 +119,7 @@ test.describe('Capy image generator', () => {
       nodes.map((node) => (node.textContent || '').trim())
     );
     expect(helpLegend).toEqual(
-      expect.arrayContaining(['? Hint', '🖼 Preview', '🐹 Sample', '⛶ Fullscreen', 'ℹ Help', '⚙ Settings'])
+      expect.arrayContaining(['? Hint', '🖼 Preview', '🐹 Sample', '🎚 Detail', '⛶ Fullscreen', 'ℹ Help', '⚙ Settings'])
     );
 
     const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
@@ -128,6 +138,14 @@ test.describe('Capy image generator', () => {
     expect(generatorLabels.some((label) => label.includes('Colours'))).toBe(true);
     expect(generatorLabels.some((label) => label.includes('Sample rate'))).toBe(true);
     expect(generatorLabels.some((label) => label.includes('Background colour'))).toBe(true);
+    expect(generatorLabels.some((label) => label.includes('Interface scale'))).toBe(true);
+
+    const artPrompt = page.locator('#artPrompt');
+    await expect(artPrompt).toBeHidden();
+    await page.click('#generatorAdvanced summary');
+    await expect(artPrompt).toBeVisible();
+    await page.click('#generatorAdvanced summary');
+    await expect(artPrompt).toBeHidden();
     await page.click('[data-sheet-close="settings"]');
   });
 
@@ -136,27 +154,185 @@ test.describe('Capy image generator', () => {
     await page.waitForSelector('[data-testid="palette-swatch"]');
     await expect(page.locator('[data-testid="start-hint"]')).toHaveClass(/hidden/);
 
+    const detailButtons = page.locator('[data-detail-level]');
+    await expect(detailButtons).toHaveCount(6);
+    await expect(page.locator('#startHint [data-detail-level]')).toHaveCount(3);
+    await expect(page.locator('#settingsSheet [data-detail-level]')).toHaveCount(3);
+    await expect(page.locator('#startHint [data-detail-level="high"]')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await expect(page.locator('#settingsSheet [data-detail-level="high"]')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    const detailCaption = page.locator('[data-detail-caption]').first();
+    await expect(detailCaption).toHaveText(/High detail/i);
     const progress = page.locator('[data-testid="progress-message"]');
     await expect(progress).toHaveText(/0\/\d+/);
 
     const state = await page.evaluate(() => {
-      const { puzzle, sourceUrl } = window.capyGenerator.getState();
+      const { puzzle, sourceUrl, sampleDetailLevel, lastOptions } = window.capyGenerator.getState();
       return {
         hasPuzzle: Boolean(puzzle),
         regionCount: puzzle?.regions?.length || 0,
         paletteCount: puzzle?.palette?.length || 0,
         sourceUrl,
+        detailLevel: sampleDetailLevel,
+        targetColors: lastOptions?.targetColors || null,
       };
     });
 
     expect(state.hasPuzzle).toBe(true);
-    expect(state.paletteCount).toBeGreaterThan(3);
-    expect(state.regionCount).toBeGreaterThan(4);
+    expect(state.paletteCount).toBe(32);
+    expect(state.regionCount).toBeGreaterThanOrEqual(120);
+    expect(state.regionCount).toBeLessThanOrEqual(190);
     expect(state.sourceUrl).toContain('data:image/svg+xml;base64,');
+    expect(state.detailLevel).toBe('high');
+    expect(state.targetColors).toBe(32);
 
     await page.click('[data-testid="sample-art-button"]');
-    const logHead = page.locator('#debugLog .log-entry span').first();
-    await expect(logHead).toHaveText(/Loading sample puzzle/);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Loading high detail sample puzzle/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /High detail sample puzzle ready/.test(message));
+      })
+      .toBe(true);
+
+    await page.click('#settingsButton');
+    await expect(page.locator('#settingsSheet')).toBeVisible();
+
+    await page.click('#settingsSheet [data-detail-level="medium"]');
+    await expect.poll(() =>
+      page.evaluate(() => window.capyGenerator.getState().sampleDetailLevel)
+    ).toBe('medium');
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Loading medium detail sample puzzle/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Medium detail sample puzzle ready/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0)
+      )
+      .toBeGreaterThan(0);
+    const mediumState = await page.evaluate(() => {
+      const { puzzle, sampleDetailLevel, lastOptions } = window.capyGenerator.getState();
+      return {
+        detailLevel: sampleDetailLevel,
+        paletteCount: puzzle?.palette?.length || 0,
+        regionCount: puzzle?.regions?.length || 0,
+        targetColors: lastOptions?.targetColors || null,
+      };
+    });
+    expect(mediumState.detailLevel).toBe('medium');
+    expect(mediumState.paletteCount).toBe(26);
+    expect(mediumState.targetColors).toBe(26);
+    expect(mediumState.regionCount).toBeGreaterThanOrEqual(38);
+    expect(mediumState.regionCount).toBeLessThanOrEqual(60);
+
+    await page.click('#settingsSheet [data-detail-level="high"]');
+    await expect.poll(() =>
+      page.evaluate(() => window.capyGenerator.getState().sampleDetailLevel)
+    ).toBe('high');
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Loading high detail sample puzzle/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /High detail sample puzzle ready/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0)
+      )
+      .toBeGreaterThan(0);
+    const highState = await page.evaluate(() => {
+      const { puzzle, sampleDetailLevel, lastOptions } = window.capyGenerator.getState();
+      return {
+        detailLevel: sampleDetailLevel,
+        paletteCount: puzzle?.palette?.length || 0,
+        regionCount: puzzle?.regions?.length || 0,
+        targetColors: lastOptions?.targetColors || null,
+      };
+    });
+    expect(highState.detailLevel).toBe('high');
+    expect(highState.paletteCount).toBe(32);
+    expect(highState.targetColors).toBe(32);
+    expect(highState.regionCount).toBeGreaterThanOrEqual(120);
+    expect(highState.regionCount).toBeLessThanOrEqual(190);
+
+    await page.click('#settingsSheet [data-detail-level="low"]');
+    await expect.poll(() =>
+      page.evaluate(() => window.capyGenerator.getState().sampleDetailLevel)
+    ).toBe('low');
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Loading low detail sample puzzle/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const messages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
+          nodes.map((el) => (el.textContent || '').trim())
+        );
+        return messages.some((message) => /Low detail sample puzzle ready/.test(message));
+      })
+      .toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.capyGenerator.getState().puzzle?.palette?.length || 0)
+      )
+      .toBeGreaterThan(0);
+    const lowState = await page.evaluate(() => {
+      const { puzzle, sampleDetailLevel, lastOptions } = window.capyGenerator.getState();
+      return {
+        detailLevel: sampleDetailLevel,
+        paletteCount: puzzle?.palette?.length || 0,
+        regionCount: puzzle?.regions?.length || 0,
+        targetColors: lastOptions?.targetColors || null,
+      };
+    });
+    expect(lowState.detailLevel).toBe('low');
+    expect(lowState.paletteCount).toBe(18);
+    expect(lowState.targetColors).toBe(18);
+    expect(lowState.regionCount).toBeGreaterThanOrEqual(20);
+    expect(lowState.regionCount).toBeLessThanOrEqual(40);
+
+    await page.click('[data-sheet-close="settings"]');
   });
 
   test('flashes matching regions and supports zoom controls', async ({ page }) => {
@@ -217,10 +393,14 @@ test.describe('Capy image generator', () => {
 
     await page.evaluate(() => {
       window.capyGenerator.setBackgroundColor('#1e293b');
+      window.capyGenerator.setUiScale(1.2);
+      window.capyGenerator.setArtPrompt('Capybara springs remake');
     });
 
     const state = await page.evaluate(() => window.capyGenerator.getState());
     expect(state.settings.backgroundColor).toBe('#1e293b');
+    expect(state.settings.uiScale).toBeCloseTo(1.2, 2);
+    expect(state.settings.artPrompt).toBe('Capybara springs remake');
 
     const pixel = await page.evaluate(() => {
       const canvas = document.querySelector('[data-testid="puzzle-canvas"]');
@@ -243,7 +423,9 @@ test.describe('Capy image generator', () => {
     const logMessages = await page.$$eval('#debugLog .log-entry span', (nodes) =>
       nodes.map((el) => (el.textContent || '').trim())
     );
-    expect(logMessages[0]).toMatch(/Background colour set to #1E293B/);
+    expect(logMessages.some((message) => /Background colour set to #1E293B/.test(message))).toBe(true);
+    expect(logMessages.some((message) => /Interface scale set to 120%/.test(message))).toBe(true);
+    expect(logMessages.some((message) => /Art prompt updated \(\d+ characters\)/.test(message))).toBe(true);
     await page.click('[data-sheet-close="help"]');
   });
 
