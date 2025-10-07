@@ -1,43 +1,88 @@
 # Agent Instructions
 
-## Project Summary
-Capybooper is a browser-based color-by-number experience. The `index.html` document carries the entire application,
-including the built-in sample artwork, responsive command rail, palette controls, and the Playwright-driven UI review harness.
-The repository has been trimmed to the core runtime, Playwright tests, and supporting configuration files, and now expects
-contributors to follow a lightweight but automated feedback loop when shipping changes.
+## Project Overview
+Capybooper is a static, browser-based color-by-number playground. Everything —
+markup, styles, generator logic, fixtures, and onboarding copy — lives inside
+`index.html`. Users can drop images (or load the bundled Capybara Springs
+sample), let the k-means pipeline quantize colours, and immediately paint. The
+repository intentionally avoids build tooling: npm is only used to install the
+Playwright test runner and a lightweight `http-server` for local previews.
 
-## Scope
-These instructions apply to the entire repository unless a nested `AGENTS.md` overrides them.
+## Repository Map
+- `index.html` – Single-page application containing DOM structure, inline styles,
+  generator code, autosave helpers, and developer-map comments segmenting the
+  script.
+- `README.md` – Contributor handbook that documents UX features, presets, and
+  architecture details; keep it synchronized with meaningful UI or workflow
+  changes.
+- `tests/ui-review.spec.js` – Playwright smoke test that boots the app, exercises
+  onboarding, palette interactions, and sample reload flows across desktop &
+  mobile viewports.
+- `playwright.config.js` – Spins up `http-server` on port 8000 for tests and
+  reuses any running instance to speed up local iterations.
+- `docs/automation-loop.md` & `docs/branch-deployments.md` – Deep dives on the
+  CI/deployment expectations referenced below.
+- `package.json` – npm scripts for local preview (`npm run dev`), Playwright test
+  variants, and automatic dependency provisioning via `postinstall`.
+- `artifacts/ui-review/` – Expected location for Playwright reports and
+  screenshots when you capture them locally; include relevant artifacts with major
+  UI updates.
+
+## Environment Setup
+1. Install Node.js 18 LTS or newer.
+2. Run `npm install` once; this triggers Playwright's `postinstall` hook to fetch
+   browsers and dependencies.
+3. Launch a local preview with `npm run dev` (serves the repo root at
+   http://localhost:8000 via `http-server`).
+4. Tests and docs assume the app is reachable at port 8000; update
+   `playwright.config.js` if you change this, and reflect the change in the
+   README plus this guide.
+
+## Development & Testing
+- Primary test command: `npm test --silent` (Playwright suite across desktop &
+  mobile viewports). Mention in the final response if you cannot run it.
+- Targeted smoke run: `npm run test:smoke` for quick iterations on
+  `tests/ui-review.spec.js`.
+- UI verification: Keep the Playwright expectations aligned with UI markup,
+  palette labels, and README imagery when making visual changes.
+- Artifacts: When validating significant UI updates, capture the generated
+  Playwright report under `artifacts/ui-review/` and surface the location or
+  attach files for reviewers.
+- Manual QA: The app exposes `window.capyGenerator` helpers (`loadPuzzleFixture`,
+  `togglePreview`, etc.) for ad-hoc scripting in DevTools; note any new helpers
+  in the README and tests.
 
 ## Code & Content Style
-- Preserve the existing two-space indentation in HTML, CSS, and JavaScript.
-- Keep inline `<style>` blocks organized with section comments when adding large groups of rules.
-- Keep iconography and menu button labels synchronized between the header markup, README illustrations, and UI review tests.
+- Preserve two-space indentation across HTML, CSS, and JavaScript blocks.
+- When introducing sizeable groups of inline styles, bracket them with section
+  comments to maintain navigability.
+- Keep iconography, labels, and shortcut glyphs synchronized between the UI,
+  README screenshots/illustrations, and Playwright assertions.
+- Document responsive or accessibility changes directly in `README.md` so future
+  contributors understand the intended UX.
 
-## Testing
-- Run `npm test --silent` after making changes that can affect functionality. If the command cannot be executed, explain the limitation in the final response.
-- The UI review spec (`tests/ui-review.spec.js`) is expected to pass on both desktop and mobile viewports; update the assertions if the UI flow changes.
-- Capture the Playwright report artifacts (`artifacts/ui-review/`) as attachments when validating major UI updates so asynchronous reviewers can audit diffs.
-
-## Automation loop
-- Open a short-lived branch per change and name it `automation/<feature>` so the continuous Playwright run history stays searchable.
-- Every branch push automatically deploys to GitHub Pages under a subfolder matching the branch name, providing live preview URLs for reviewers.
-- For every branch push, trigger the CI pipeline that runs `npm test --silent`, publishes Playwright artifacts, and records the outcome in the team dashboard.
-- After review, merge via a fast-forward with `--ff-only` so the automation history remains linear; if conflicts occur, rebase the branch and rerun the tests before retrying.
-- Schedule a weekly "Automation Sync" issue summarising failing runs, flake investigations, and TODO updates; link to the issue from the PR body when the work is related.
-
-## Documentation & Notes
-- Update the repository report and TODO sections in `README.md` when the workflow or UI meaningfully changes.
-- When adjusting the UI review harness, refresh README/test docs to mention new metadata captured (e.g., header button ARIA labels or library controls).
-- Note responsive header or palette adjustments directly in `README.md` so contributors understand current UX expectations.
+## Workflow & Automation
+- Create short-lived branches named `automation/<feature>` so CI history and
+  GitHub Pages previews remain searchable.
+- Every branch push deploys to GitHub Pages under a path matching the branch name
+  and triggers CI (`npm test --silent`). Share the live preview URL in PRs when
+  available.
+- Merge via `--ff-only` after rebasing onto `main` and rerunning tests to keep
+  history linear and bisectable.
+- Maintain a weekly "Automation Sync" issue summarizing flaky runs and follow-up
+  actions; link to it from related PRs.
 
 ## Git Preferences
-- Configure git with `git config user.name "Codex"` and `git config user.email "codex@openai.com"` before committing.
-- Keep `core.pager` set to `cat` so command output remains deterministic in logs.
-- Run `git fetch --all --prune` at the start of a task to ensure local refs match the remote state before making changes.
-- After committing, always push the working branch and update the corresponding PR so remote history stays in sync.
+- Configure git before committing: `git config user.name "Codex"` and
+  `git config user.email "codex@openai.com"`.
+- Keep `core.pager` set to `cat` for consistent command output.
+- Start work with `git fetch --all --prune` to align local refs with remote.
+- After each commit, push the branch so remote history mirrors local progress.
 
-## PR / Final Response
-- Summaries should call out both UI and workflow changes when present.
-- Include the live preview URL from GitHub Pages deployment when available.
-- Reference the tests that were run (or why they were skipped) in the final response.
+## Final Response & PR Expectations
+- Summaries should highlight UI and workflow changes, noting live preview URLs if
+  applicable.
+- Explicitly state which tests were run (or why they were skipped) in the final
+  message.
+- Capture and link Playwright artifacts for major UI adjustments.
+- Follow repository-wide and nested `AGENTS.md` guidance for any files you touch.
