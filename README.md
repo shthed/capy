@@ -288,6 +288,19 @@ npm test --silent
 The suite writes artifacts (screenshots + JSON summaries) into
 `artifacts/ui-review/` if you need to inspect the DOM snapshots.
 
+### Automation-first workflow
+
+Keep the repository automation-friendly by following this loop:
+
+1. `git fetch --all --prune` and merge or rebase `main` so local work starts
+   from the freshest automation expectations.
+2. Implement the change behind a focused branch, updating docs like
+   `AGENTS.md` when workflow guidance shifts.
+3. Run `npm test --silent` (or targeted subsets when iterating) to exercise the
+   UI review harness before committing.
+4. Commit with descriptive summaries, push the branch, and open a PR that calls
+   out any workflow impacts for reviewers.
+
 ### Safe repository searches
 
 Ripgrep is configured via [`.ripgreprc`](.ripgreprc) to clamp printed line

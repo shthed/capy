@@ -27,6 +27,11 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 - When adjusting the UI review harness, also refresh README/test docs to mention new metadata captured (e.g., header button ARIA labels or library controls).
 - Note responsive header or palette adjustments in `README.md` and `docs/gameplay-session.md` so contributors understand current UX expectations.
 
+## Automation Workflow
+- Sync with the latest `main` (fetch + merge or rebase) before starting work so local changes incorporate upstream automation updates.
+- Capture any conflict resolutions in commit messages and PR summaries, especially when guidance files such as `AGENTS.md` or `README.md` change.
+- Run `npm test --silent` after resolving conflicts to confirm the workflow still passes the automation checks before pushing.
+
 ## Git Preferences
 - Configure git with `git config user.name "Codex"` and `git config user.email "codex@openai.com"` before committing.
 - Keep `core.pager` set to `cat` so command output remains deterministic in logs.
