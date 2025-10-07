@@ -171,6 +171,137 @@
         cursor: grab;
       }
 
+      body.custom-cursor:not(.panning) #canvasStage {
+        cursor: none;
+      }
+
+      #pointerOverlay {
+        --cursor-x: -9999px;
+        --cursor-y: -9999px;
+        --cursor-ring: rgba(226, 232, 240, 0.95);
+        --cursor-fill: rgba(15, 23, 42, 0.55);
+        --cursor-swatch: transparent;
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 6;
+        pointer-events: none;
+        transform: translate3d(var(--cursor-x), var(--cursor-y), 0);
+        opacity: 0;
+        transition: opacity 0.12s ease;
+      }
+
+      #pointerOverlay.active {
+        opacity: 1;
+      }
+
+      body:not(.custom-cursor) #pointerOverlay {
+        opacity: 0;
+      }
+
+      body.panning #pointerOverlay,
+      body.sheet-open #pointerOverlay,
+      body.dragging #pointerOverlay {
+        opacity: 0;
+      }
+
+      #pointerOverlay .pointer-indicator {
+        width: calc(26px * var(--ui-scale));
+        height: calc(26px * var(--ui-scale));
+        border-radius: 50%;
+        border: 2px solid var(--cursor-ring);
+        background: var(--cursor-fill);
+        box-shadow: 0 8px 18px rgba(2, 6, 23, 0.45), 0 0 0 1px rgba(15, 23, 42, 0.6);
+        transform: translate(-50%, -50%);
+        backdrop-filter: blur(6px);
+      }
+
+      #pointerOverlay.matching .pointer-indicator {
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.42), 0 8px 18px rgba(2, 6, 23, 0.4);
+      }
+
+      #pointerOverlay.mismatch .pointer-indicator {
+        box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.45), 0 8px 18px rgba(2, 6, 23, 0.4);
+      }
+
+      #pointerOverlay.filled .pointer-indicator {
+        box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.35), 0 8px 18px rgba(2, 6, 23, 0.4);
+      }
+
+      #pointerOverlay .pointer-tooltip {
+        display: grid;
+        gap: 6px;
+        min-width: calc(160px * var(--ui-scale));
+        padding: calc(10px * var(--ui-scale)) calc(12px * var(--ui-scale));
+        border-radius: calc(12px * var(--ui-scale));
+        background: rgba(2, 6, 23, 0.85);
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        box-shadow: 0 16px 34px rgba(2, 6, 23, 0.45);
+        transform: translate(calc(-50% + 18px), calc(-50% + 26px));
+      }
+
+      #pointerOverlay.matching .pointer-tooltip {
+        border-color: rgba(34, 197, 94, 0.55);
+      }
+
+      #pointerOverlay.mismatch .pointer-tooltip {
+        border-color: rgba(248, 113, 113, 0.55);
+      }
+
+      #pointerOverlay.filled .pointer-tooltip {
+        border-color: rgba(148, 163, 184, 0.5);
+      }
+
+      #pointerOverlay .pointer-status {
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(148, 163, 184, 0.7);
+      }
+
+      #pointerOverlay .pointer-status:empty {
+        display: none;
+      }
+
+      #pointerOverlay.matching .pointer-status {
+        color: rgba(134, 239, 172, 0.95);
+      }
+
+      #pointerOverlay.mismatch .pointer-status {
+        color: rgba(248, 113, 113, 0.95);
+      }
+
+      #pointerOverlay.filled .pointer-status {
+        color: rgba(125, 211, 252, 0.95);
+      }
+
+      #pointerOverlay .pointer-number {
+        font-size: 0.95rem;
+        letter-spacing: 0.04em;
+        color: rgba(226, 232, 240, 0.95);
+      }
+
+      #pointerOverlay .pointer-color {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.8rem;
+        color: rgba(203, 213, 225, 0.92);
+      }
+
+      #pointerOverlay .pointer-swatch {
+        width: calc(18px * var(--ui-scale));
+        height: calc(18px * var(--ui-scale));
+        border-radius: calc(6px * var(--ui-scale));
+        border: 1px solid rgba(148, 163, 184, 0.7);
+        background: var(--cursor-swatch);
+        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.4);
+      }
+
+      #pointerOverlay .pointer-color-label {
+        white-space: nowrap;
+      }
+
       #canvasTransform {
         transform-origin: center;
         --zoom: 1;
@@ -1021,6 +1152,17 @@
             ></canvas>
           </div>
         </div>
+        <div id="pointerOverlay" aria-hidden="true">
+          <div class="pointer-indicator"></div>
+          <div class="pointer-tooltip">
+            <span class="pointer-status" data-pointer-status></span>
+            <strong class="pointer-number" data-pointer-number></strong>
+            <span class="pointer-color">
+              <span class="pointer-swatch" data-pointer-color-swatch aria-hidden="true"></span>
+              <span class="pointer-color-label" data-pointer-color></span>
+            </span>
+          </div>
+        </div>
         <div id="previewOverlay" class="hidden" aria-hidden="true">
           <div>
             <canvas
@@ -1279,8 +1421,8 @@
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
       const sampleButtons = Array.from(document.querySelectorAll('[data-action="load-sample"]'));
-        const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
-        const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
+      const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
+      const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
       const samplePreview = document.getElementById("sampleArtPreview");
       const startHint = document.getElementById("startHint");
       const hintButton = document.getElementById("hintButton");
@@ -1302,6 +1444,10 @@
       const viewportEl = document.getElementById("viewport");
       const canvasStage = document.getElementById("canvasStage");
       const canvasTransform = document.getElementById("canvasTransform");
+      const cursorOverlay = document.getElementById("pointerOverlay");
+      const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
+      const cursorColorLabelEl = cursorOverlay?.querySelector("[data-pointer-color]") || null;
+      const cursorStatusEl = cursorOverlay?.querySelector("[data-pointer-status]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
       const backgroundColorInput = document.getElementById("backgroundColor");
@@ -1482,6 +1628,9 @@
       const activeTouches = new Map();
       let pinchSession = null;
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
+      let cursorHoverRegionId = null;
+      let cursorLastClientX = null;
+      let cursorLastClientY = null;
 
       // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
@@ -1726,6 +1875,7 @@
           flashColorRegions(state.activeColor);
         }
         updateProgress();
+        refreshCustomCursorHighlight();
         scheduleAutosave("reset-progress");
         logDebug("Reset puzzle progress");
       });
@@ -1867,6 +2017,21 @@
         pointerSurface.addEventListener("wheel", handleWheel, { passive: false });
         pointerSurface.addEventListener("contextmenu", (event) => event.preventDefault());
       }
+      if (cursorOverlay && puzzleCanvas) {
+        const handleCursorHover = (event) => updateCustomCursor(event);
+        puzzleCanvas.addEventListener("pointermove", handleCursorHover);
+        puzzleCanvas.addEventListener("pointerdown", handleCursorHover);
+        puzzleCanvas.addEventListener("pointerenter", handleCursorHover);
+        puzzleCanvas.addEventListener("pointerleave", hideCustomCursor);
+        if (canvasStage) {
+          canvasStage.addEventListener("pointerleave", hideCustomCursor);
+        }
+        if (viewportEl) {
+          viewportEl.addEventListener("pointerleave", hideCustomCursor);
+        }
+        window.addEventListener("scroll", hideCustomCursor, { passive: true });
+      }
+      setupCustomCursorPreference();
       window.addEventListener("keydown", handleKeyDown, true);
       window.addEventListener("keyup", handleKeyUp, true);
       window.addEventListener("resize", () => handleViewportChange({ log: true }));
@@ -1883,6 +2048,7 @@
           document.body.classList.remove("panning");
           isPanning = false;
         }
+        hideCustomCursor();
       });
 
       if (window.screen?.orientation && typeof window.screen.orientation.addEventListener === "function") {
@@ -1952,6 +2118,7 @@
         if (state.settings.autoAdvance) {
           autoAdvanceColor(region.colorId);
         }
+        refreshCustomCursorHighlight();
       });
 
       function openSheet(sheet) {
@@ -1989,6 +2156,7 @@
           previewToggle.setAttribute("aria-label", "Hide preview");
           previewToggle.title = "Hide preview";
           previewToggle.classList.add("active");
+          hideCustomCursor();
         } else {
           previewOverlay.classList.add("hidden");
           previewOverlay.setAttribute("aria-hidden", "true");
@@ -1996,6 +2164,7 @@
           previewToggle.setAttribute("aria-label", "Show preview");
           previewToggle.title = "Show preview";
           previewToggle.classList.remove("active");
+          refreshCustomCursorHighlight();
         }
       }
 
@@ -2065,6 +2234,7 @@
         if (state.puzzle) {
           resetView({ preserveZoom: true, recenter: recenter || orientationChanged });
         }
+        hideCustomCursor();
       }
 
       function applySampleDetailLevel(level, options = {}) {
@@ -2463,6 +2633,7 @@
         isPanning = false;
         document.body.classList.remove("panning");
         resetView({ recenter: true });
+        hideCustomCursor();
       }
 
       async function createPuzzleData(image, options) {
@@ -3146,6 +3317,7 @@
           scheduleAutosave("color-select");
         }
         logDebug(`${changed ? "Selected" : "Re-selected"} colour #${colorId} (${suffix})`);
+        refreshCustomCursorHighlight();
         return changed;
       }
 
@@ -3261,6 +3433,7 @@
         isPanning = true;
         document.body.classList.add("panning");
         logDebug("Began panning view");
+        hideCustomCursor();
         try {
           canvasStage.setPointerCapture(pointerId);
         } catch (error) {}
@@ -3272,6 +3445,7 @@
         const isTouch = event.pointerType === "touch";
         if (isTouch) {
           event.preventDefault();
+          hideCustomCursor();
           activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
           if (!pinchSession && activeTouches.size >= 2) {
             const entries = Array.from(activeTouches.entries()).slice(0, 2);
@@ -3437,6 +3611,178 @@
         try {
           canvasStage.releasePointerCapture(event.pointerId);
         } catch (error) {}
+        if (event.pointerType === "touch") {
+          hideCustomCursor();
+        } else {
+          updateCustomCursor(event);
+        }
+      }
+
+      function hideCustomCursor() {
+        if (!cursorOverlay) return;
+        cursorOverlay.classList.remove("active", "matching", "mismatch", "filled");
+        cursorOverlay.style.setProperty("--cursor-x", "-9999px");
+        cursorOverlay.style.setProperty("--cursor-y", "-9999px");
+        cursorOverlay.style.removeProperty("--cursor-ring");
+        cursorOverlay.style.removeProperty("--cursor-fill");
+        cursorOverlay.style.removeProperty("--cursor-swatch");
+        if (cursorNumberEl) {
+          cursorNumberEl.textContent = "";
+        }
+        if (cursorColorLabelEl) {
+          cursorColorLabelEl.textContent = "";
+        }
+        if (cursorStatusEl) {
+          cursorStatusEl.textContent = "";
+        }
+        cursorHoverRegionId = null;
+        cursorLastClientX = null;
+        cursorLastClientY = null;
+      }
+
+      function applyCustomCursor(region, paletteColor, clientX, clientY) {
+        if (!cursorOverlay) return;
+        const hasPoint = typeof clientX === "number" && typeof clientY === "number";
+        if (hasPoint) {
+          cursorLastClientX = clientX;
+          cursorLastClientY = clientY;
+        }
+        cursorHoverRegionId = region.id;
+        if (!document.body.classList.contains("custom-cursor")) {
+          return;
+        }
+        if (cursorLastClientX == null || cursorLastClientY == null) {
+          return;
+        }
+        cursorOverlay.style.setProperty("--cursor-x", `${cursorLastClientX}px`);
+        cursorOverlay.style.setProperty("--cursor-y", `${cursorLastClientY}px`);
+        const colorId = paletteColor?.id ?? region.colorId;
+        const providedName =
+          typeof paletteColor?.name === "string" && paletteColor.name.trim()
+            ? paletteColor.name.trim()
+            : null;
+        const fallbackHex =
+          !providedName && typeof paletteColor?.hex === "string"
+            ? paletteColor.hex.trim().toUpperCase()
+            : null;
+        const colorName = providedName || fallbackHex;
+        const colorLabel = colorName ? `Colour ${colorId} · ${colorName}` : `Colour ${colorId}`;
+        if (cursorNumberEl) {
+          cursorNumberEl.textContent = `Region ${region.id}`;
+        }
+        if (cursorColorLabelEl) {
+          cursorColorLabelEl.textContent = colorLabel;
+        }
+        const fillTint = paletteColor?.hex ? rgbaFromHex(paletteColor.hex, 0.3) : "rgba(148, 163, 184, 0.3)";
+        const ringTint = paletteColor?.hex ? rgbaFromHex(paletteColor.hex, 0.85) : "rgba(226, 232, 240, 0.95)";
+        cursorOverlay.style.setProperty("--cursor-fill", fillTint);
+        cursorOverlay.style.setProperty("--cursor-ring", ringTint);
+        cursorOverlay.style.setProperty("--cursor-swatch", paletteColor?.hex || "transparent");
+        const isFilled = state.filled.has(region.id);
+        const matchesActive =
+          !isFilled && state.activeColor != null && state.activeColor === region.colorId;
+        const mismatchActive =
+          !isFilled && state.activeColor != null && state.activeColor !== region.colorId;
+        cursorOverlay.classList.toggle("filled", isFilled);
+        cursorOverlay.classList.toggle("matching", matchesActive);
+        cursorOverlay.classList.toggle("mismatch", mismatchActive);
+        if (cursorStatusEl) {
+          let status = "";
+          if (isFilled) {
+            status = "Filled";
+          } else if (matchesActive) {
+            status = "Active colour selected";
+          } else if (mismatchActive) {
+            status = `Select colour ${colorId}`;
+          }
+          cursorStatusEl.textContent = status;
+        }
+        cursorOverlay.classList.add("active");
+      }
+
+      function updateCustomCursor(event) {
+        if (!cursorOverlay || !puzzleCanvas) return;
+        if (!state.puzzle || state.previewVisible) {
+          hideCustomCursor();
+          return;
+        }
+        if (event && event.pointerType === "touch") {
+          hideCustomCursor();
+          return;
+        }
+        if (isPanning) {
+          return;
+        }
+        const rect = puzzleCanvas.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) {
+          hideCustomCursor();
+          return;
+        }
+        const withinX = event.clientX >= rect.left && event.clientX <= rect.right;
+        const withinY = event.clientY >= rect.top && event.clientY <= rect.bottom;
+        if (!withinX || !withinY) {
+          hideCustomCursor();
+          return;
+        }
+        const scaleX = puzzleCanvas.width / rect.width;
+        const scaleY = puzzleCanvas.height / rect.height;
+        const x = Math.floor((event.clientX - rect.left) * scaleX);
+        const y = Math.floor((event.clientY - rect.top) * scaleY);
+        if (x < 0 || y < 0 || x >= puzzleCanvas.width || y >= puzzleCanvas.height) {
+          hideCustomCursor();
+          return;
+        }
+        const idx = y * puzzleCanvas.width + x;
+        const regionId = state.puzzle.regionMap[idx];
+        const region = state.puzzle.regions[regionId];
+        if (!region) {
+          hideCustomCursor();
+          return;
+        }
+        const paletteColor = getPaletteEntry(region.colorId);
+        applyCustomCursor(region, paletteColor, event.clientX, event.clientY);
+      }
+
+      function refreshCustomCursorHighlight() {
+        if (!cursorOverlay) return;
+        if (cursorHoverRegionId == null) return;
+        if (!state.puzzle) {
+          hideCustomCursor();
+          return;
+        }
+        const region = state.puzzle.regions[cursorHoverRegionId];
+        if (!region) {
+          hideCustomCursor();
+          return;
+        }
+        const paletteColor = getPaletteEntry(region.colorId);
+        applyCustomCursor(region, paletteColor);
+      }
+
+      function setupCustomCursorPreference() {
+        if (!cursorOverlay) return;
+        if (typeof window === "undefined") return;
+        const applyPreference = (matches) => {
+          if (matches) {
+            document.body.classList.add("custom-cursor");
+            refreshCustomCursorHighlight();
+          } else {
+            document.body.classList.remove("custom-cursor");
+            hideCustomCursor();
+          }
+        };
+        if (!window.matchMedia) {
+          applyPreference(true);
+          return;
+        }
+        const pointerQuery = window.matchMedia("(pointer: fine)");
+        applyPreference(pointerQuery.matches);
+        const listener = (event) => applyPreference(event.matches);
+        if (typeof pointerQuery.addEventListener === "function") {
+          pointerQuery.addEventListener("change", listener);
+        } else if (typeof pointerQuery.addListener === "function") {
+          pointerQuery.addListener(listener);
+        }
       }
 
       function applyZoom(multiplier, clientX, clientY, options = {}) {
