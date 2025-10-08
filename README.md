@@ -96,11 +96,11 @@ tools, a save manager, and a configurable generator all live inside a single
   the app surface the smallest unfinished region when you need a nudge.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
   artwork at its final resolution without leaving the play surface.
-- **Palette manager.** Swipe through compact, tinted swatches that promote the
-  colour number while tooltips, titles, and ARIA copy preserve human-readable
-  names and remaining region counts. The dock scrolls horizontally when palettes
-  stretch beyond the screen so every colour stays accessible without vertical
-  overflow.
+- **Palette manager.** Swipe through edge-to-edge swatches that keep gutters
+  minimal so the dock stays packed with colour. Tooltips, titles, and ARIA copy
+  preserve human-readable names and remaining region counts, and the dock
+  scrolls horizontally whenever palettes stretch beyond the screen so every
+  colour stays accessible without vertical overflow.
 - **Progress persistence & recovery.** Every stroke updates a rolling autosave
   using a compact payload so the latest session is restored automatically on
   launch. Manual snapshots still land in the save manager where you can rename,
@@ -269,9 +269,9 @@ before retrying.
   surfaces a live debug log so contributors can confirm state changes while
   testing.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
-  Each roomy swatch stretches taller so the colour sample fills the dock, while
-  the numbered badge keeps a crisp one-pixel border and adaptive contrast so the
-  digits stay readable no matter the paint tone. Tooltips and `data-color-id`
+  Each swatch now sits with barely-there gutters so the colour sample fills the
+  dock, and the numbered badge leans on a thin adaptive border plus a subtle
+  tint to stay readable without extra glow effects. Tooltips and `data-color-id`
   attributes still expose the colour name plus remaining counts for automation
   hooks.
 
@@ -286,8 +286,9 @@ before retrying.
   even though the visual controls are icon-only, and they stay reachable via
   keyboard focus.
 - Palette buttons toggle the active colour and expose `data-color-id` so tests
-  and tooling can reason about selections. Each swatch dynamically flips its
-  label foreground/border pairing to maintain WCAG-friendly contrast, and
+  and tooling can reason about selections. Each swatch dynamically adjusts its
+  label colour, border, and pill tint to maintain WCAG-friendly contrast without
+  drop shadows, and
   auto-advance can be disabled from the Settings sheet for full manual control.
 - Palette selection briefly flashes every matching region (and completed
   colours) so it's immediately clear where the next strokes belong.
