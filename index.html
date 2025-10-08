@@ -68,6 +68,7 @@
       body {
         margin: 0;
         min-height: 100vh;
+        min-height: 100dvh;
         background: radial-gradient(circle at top, rgba(59, 130, 246, 0.22), transparent),
           #020617;
         color: inherit;
@@ -91,15 +92,24 @@
 
       #app {
         position: relative;
-        width: var(--app-width, 100vw);
-        height: var(--app-height, 100vh);
+        width: min(var(--app-width, 100vw), 100vw);
+        height: min(var(--app-height, 100vh), 100vh);
         overflow: hidden;
         display: grid;
         grid-template-rows: auto 1fr auto;
       }
 
+      @supports (height: 100dvh) {
+        #app {
+          height: min(var(--app-height, 100dvh), 100dvh);
+        }
+      }
+
       #commandRail {
-        position: relative;
+        position: sticky;
+        top: 0;
+        left: 0;
+        right: 0;
         display: flex;
         justify-content: flex-end;
         align-items: center;
@@ -114,6 +124,7 @@
           calc(var(--rail-padding-inline) + env(safe-area-inset-left, 0px));
         padding-inline-end:
           calc(var(--rail-padding-inline) + env(safe-area-inset-right, 0px));
+        background: linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(2, 6, 23, 0.82));
         z-index: 3;
         touch-action: manipulation;
         width: 100%;
@@ -513,7 +524,8 @@
       }
 
       #paletteDock {
-        position: relative;
+        position: sticky;
+        bottom: 0;
         display: flex;
         align-items: center;
         justify-content: flex-start;
@@ -524,8 +536,22 @@
         background: linear-gradient(182deg, rgba(2, 6, 23, 0.05) 0%, rgba(2, 6, 23, 0.9) 55%, rgba(2, 6, 23, 0.96) 100%);
         border-top: 1px solid rgba(30, 41, 59, 0.58);
         box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
-        touch-action: manipulation;
         flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x;
+        z-index: 3;
+      }
+
+      #paletteDock::-webkit-scrollbar {
+        height: calc(6px * var(--ui-scale));
+      }
+
+      #paletteDock::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.4);
+        border-radius: 999px;
       }
 
       #palette {
@@ -533,21 +559,7 @@
         min-width: 0;
         display: flex;
         gap: calc(8px * var(--ui-scale));
-        overflow-x: auto;
-        overflow-y: hidden;
         padding: calc(2px * var(--ui-scale)) 0;
-        scrollbar-width: thin;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-x;
-      }
-
-      #palette::-webkit-scrollbar {
-        height: calc(6px * var(--ui-scale));
-      }
-
-      #palette::-webkit-scrollbar-thumb {
-        background: rgba(148, 163, 184, 0.4);
-        border-radius: 999px;
       }
 
       .control {
@@ -2323,6 +2335,10 @@
         const orientation = visualWidth >= visualHeight ? "landscape" : "portrait";
         document.documentElement.style.setProperty("--app-width", `${visualWidth}px`);
         document.documentElement.style.setProperty("--app-height", `${visualHeight}px`);
+        if (appEl) {
+          appEl.style.width = `${visualWidth}px`;
+          appEl.style.height = `${visualHeight}px`;
+        }
         const minSide = Math.max(1, Math.min(visualWidth, visualHeight));
         const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
         document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
