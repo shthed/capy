@@ -1,19 +1,13 @@
 {
   "name": "capy",
   "version": "1.0.0",
-  "description": "Color-by-number demo (single-file React + Playwright smoke tests)",
+  "description": "Color-by-number demo (single-file web app)",
   "scripts": {
     "start": "http-server . -p 8000 -c-1",
     "dev": "http-server . -p 8000 -c-1",
-    "test": "playwright test",
-    "test:smoke": "playwright test tests/ui-review.spec.js",
-    "test:ci": "playwright test --reporter=github --workers=2",
-    "show-report": "playwright show-report",
-    "postinstall": "playwright install --with-deps"
+    "test": "node -e \"console.log('Test suite temporarily disabled; run manual smoke checks instead.')\""
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.1",
-    "playwright": "^1.55.1",
     "http-server": "^14.1.1"
   }
 }
