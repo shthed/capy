@@ -3,11 +3,15 @@
 This blueprint describes how the Capybooper team can automate branching, testing,
 merging, and feedback collection so that single-file updates stay trustworthy.
 
+> **Note:** The Playwright workflow outlined below is currently paused while the
+> colour palette UI stabilises. Lean on manual smoke checks until the suite is
+> rebuilt.
+
 ## Branching strategy
 
 1. **Create automation branches.** Every change starts on a branch named
-   `automation/<descriptor>` so logs, dashboards, and Playwright artifacts link
-   back to the exact experiment.
+   `automation/<descriptor>` so logs, dashboards, and automation artifacts link
+   back to the exact experiment once the suite returns.
 2. **Sync before work.** Fetch and rebase against `main` before pushing to keep
    the fast-forward merge policy intact.
 3. **Advertise intent.** Open a draft PR immediately so CI history and reviewer
@@ -20,12 +24,14 @@ merging, and feedback collection so that single-file updates stay trustworthy.
 ## Testing cadence
 
 1. **Install dependencies.** Run `npm install` in a fresh workspace or CI job.
-2. **Execute UI smoke tests.** Invoke `npm test --silent` to drive the
-   Playwright review spec on both desktop and mobile breakpoints.
-3. **Collect artifacts.** Publish the `artifacts/ui-review/` directory as a CI
-   artifact so reviewers can inspect DOM snapshots without rerunning the suite.
-4. **Gate merges.** Block the PR until the Playwright job succeeds on the latest
-   commit; flaky runs should be investigated and retried rather than ignored.
+2. **Execute UI smoke tests.** Until automation returns, lean on the manual
+   checklist in the README to cover palette selection, painting, and
+   save/load flows across desktop and mobile browsers.
+3. **Collect artifacts.** Once the Playwright review spec is reinstated, publish
+   the `artifacts/ui-review/` directory as a CI artifact so reviewers can
+   inspect DOM snapshots without rerunning the suite.
+4. **Gate merges.** Block the PR on the automated job once it comes back online;
+   in the interim, require a recorded manual run before merging.
 
 ## Merge policy
 
@@ -40,9 +46,9 @@ merging, and feedback collection so that single-file updates stay trustworthy.
 
 ## Feedback loop
 
-1. **Record outcomes.** Append the CI job result, Playwright summary, live preview
-   URL, and any manual verification notes to the PR description before requesting
-   review.
+1. **Record outcomes.** Append the CI job result, manual verification notes, and
+   live preview URL to the PR description before requesting review. Once
+   Playwright returns, include the suite summary as well.
 2. **Triage weekly.** File an "Automation Sync" issue every Friday summarising
    failures, flakes, and backlog items harvested from TODO checklists.
 3. **Close the loop.** After merging, add a comment to the originating issue or
