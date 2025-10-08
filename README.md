@@ -98,7 +98,8 @@ tools, a save manager, and a configurable generator all live inside a single
   artwork at its final resolution without leaving the play surface.
 - **Palette manager.** Swipe through edge-to-edge swatches rendered as simple,
   gutterless colour blocks so the dock stays packed. Tooltips, titles, and ARIA
-  copy preserve human-readable names and remaining region counts, and the dock
+  copy preserve human-readable names and remaining region counts, the digits
+  gain a subtle contrast halo to stay legible on any swatch, and the dock
   scrolls horizontally whenever palettes stretch beyond the screen so every
   colour stays accessible without vertical overflow.
 - **Progress persistence & recovery.** Every stroke updates a rolling autosave

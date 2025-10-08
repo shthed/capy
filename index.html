@@ -788,6 +788,7 @@
         font-size: 1.15rem;
         letter-spacing: 0.01em;
         color: currentColor;
+        text-shadow: var(--swatch-label-shadow, none);
       }
 
       .sheet {
@@ -3543,6 +3544,7 @@
           const labelStyles = computeSwatchLabelStyles(color.hex);
           swatch.style.setProperty("--swatch-label-color", labelStyles.color);
           swatch.style.setProperty("--swatch-outline", labelStyles.outline);
+          swatch.style.setProperty("--swatch-label-shadow", labelStyles.shadow);
           swatch.innerHTML = `
             <span class="label">
               <strong>${color.id}</strong>
@@ -5003,10 +5005,20 @@
         const lightLabel = {
           color: "rgba(15, 23, 42, 0.92)",
           outline: "rgba(15, 23, 42, 0.55)",
+          shadow: [
+            "0 0 1px rgba(248, 250, 252, 0.85)",
+            "0 0 3px rgba(248, 250, 252, 0.6)",
+            "0 0 6px rgba(248, 250, 252, 0.5)",
+          ].join(", "),
         };
         const darkLabel = {
           color: "rgba(248, 250, 252, 0.98)",
           outline: "rgba(248, 250, 252, 0.55)",
+          shadow: [
+            "0 0 1px rgba(15, 23, 42, 0.82)",
+            "0 0 3px rgba(15, 23, 42, 0.65)",
+            "0 0 6px rgba(15, 23, 42, 0.5)",
+          ].join(", "),
         };
         const sanitizedHex = sanitizeHexColor(hex, DEFAULT_BACKGROUND_HEX);
         const [r, g, b] = hexToRgb(sanitizedHex);
