@@ -18,8 +18,17 @@ jobs:
       - name: Checkout current branch
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.ref }}
           path: source
+          fetch-depth: 0
+
+      - name: Configure git credentials for authenticated operations
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global credential.helper store
+          echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
 
       - name: Setup gh-pages branch
         run: |
@@ -106,7 +115,7 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Deploy branch: ${{ github.ref_name }} (commit: ${{ github.sha }})"
-            git push origin gh-pages --force
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages --force
             echo "Published branch to: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/$BRANCH_FOLDER/"
             echo "Branch index available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/branchindex.html"
           fi
@@ -122,6 +131,7 @@ jobs:
       - name: Checkout gh-pages
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           ref: gh-pages
 
       - name: Setup Pages
