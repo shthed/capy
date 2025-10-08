@@ -5026,17 +5026,17 @@
         const lightBackgroundLuminance = relativeLuminance([248, 250, 252]);
         const darkBackgroundLuminance = relativeLuminance([15, 23, 42]);
         if (!Number.isFinite(luminance)) {
-          return darkLabel;
-        }
-        if (luminance <= 0.35) {
           return lightLabel;
         }
-        if (luminance >= 0.6) {
+        if (luminance <= 0.35) {
           return darkLabel;
+        }
+        if (luminance >= 0.6) {
+          return lightLabel;
         }
         const contrastWithDark = contrastRatio(luminance, darkBackgroundLuminance);
         const contrastWithLight = contrastRatio(luminance, lightBackgroundLuminance);
-        return contrastWithDark >= contrastWithLight ? darkLabel : lightLabel;
+        return contrastWithDark >= contrastWithLight ? lightLabel : darkLabel;
       }
 
       function relativeLuminance([r, g, b]) {
