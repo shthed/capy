@@ -18,7 +18,7 @@
       call applyPuzzleResult to hydrate UI.
     - Persistence + exports: local storage helpers (persistSaves/loadSavedEntries) back the save
       sheet. serializeCurrentPuzzle produces an export-safe object.
-    - External API: window.capyGenerator exposes entry points that Playwright and manual testing
+    - External API: window.capyGenerator exposes entry points that manual test harnesses
       rely on. Keep it stable whenever you shuffle internal wiring.
   -->
   <head>
@@ -68,6 +68,7 @@
       body {
         margin: 0;
         min-height: 100vh;
+        min-height: 100dvh;
         background: radial-gradient(circle at top, rgba(59, 130, 246, 0.22), transparent),
           #020617;
         color: inherit;
@@ -91,15 +92,24 @@
 
       #app {
         position: relative;
-        width: var(--app-width, 100vw);
-        height: var(--app-height, 100vh);
+        width: min(var(--app-width, 100vw), 100vw);
+        height: min(var(--app-height, 100vh), 100vh);
         overflow: hidden;
         display: grid;
         grid-template-rows: auto 1fr auto;
       }
 
+      @supports (height: 100dvh) {
+        #app {
+          height: min(var(--app-height, 100dvh), 100dvh);
+        }
+      }
+
       #commandRail {
-        position: relative;
+        position: sticky;
+        top: 0;
+        left: 0;
+        right: 0;
         display: flex;
         justify-content: flex-end;
         align-items: center;
@@ -114,6 +124,7 @@
           calc(var(--rail-padding-inline) + env(safe-area-inset-left, 0px));
         padding-inline-end:
           calc(var(--rail-padding-inline) + env(safe-area-inset-right, 0px));
+        background: linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(2, 6, 23, 0.82));
         z-index: 3;
         touch-action: manipulation;
         width: 100%;
@@ -513,48 +524,42 @@
       }
 
       #paletteDock {
-        position: relative;
+        position: sticky;
+        bottom: 0;
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: calc(16px * var(--ui-scale));
+        justify-content: flex-start;
         padding:
-          calc(16px * var(--ui-scale))
-          calc(28px * var(--ui-scale))
-          calc(24px * var(--ui-scale));
-        background: linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.85) 40%, rgba(2, 6, 23, 0.95) 100%);
-        border-top: 1px solid rgba(30, 41, 59, 0.7);
+          calc(12px * var(--ui-scale))
+          calc(20px * var(--ui-scale))
+          calc(16px * var(--ui-scale));
+        background: linear-gradient(182deg, rgba(2, 6, 23, 0.05) 0%, rgba(2, 6, 23, 0.9) 55%, rgba(2, 6, 23, 0.96) 100%);
+        border-top: 1px solid rgba(30, 41, 59, 0.58);
         box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
-        touch-action: manipulation;
-      }
-
-      #progress {
-        min-width: 120px;
-        font-size: 1.05rem;
-        font-variant-numeric: tabular-nums;
-        text-align: left;
-        color: rgba(226, 232, 240, 0.82);
-      }
-
-      #palette {
-        flex: 1;
-        display: flex;
-        gap: calc(6px * var(--ui-scale));
+        flex-wrap: nowrap;
         overflow-x: auto;
         overflow-y: hidden;
-        padding: 2px 0 calc(6px * var(--ui-scale));
         scrollbar-width: thin;
         -webkit-overflow-scrolling: touch;
         touch-action: pan-x;
+        z-index: 3;
       }
 
-      #palette::-webkit-scrollbar {
+      #paletteDock::-webkit-scrollbar {
         height: calc(6px * var(--ui-scale));
       }
 
-      #palette::-webkit-scrollbar-thumb {
+      #paletteDock::-webkit-scrollbar-thumb {
         background: rgba(148, 163, 184, 0.4);
         border-radius: 999px;
+      }
+
+      #palette {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        gap: calc(4px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) 0;
       }
 
       .control {
@@ -716,31 +721,31 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 2px;
-        padding: calc(6px * var(--ui-scale));
-        min-width: calc(44px * var(--ui-scale));
-        min-height: calc(52px * var(--ui-scale));
-        border-radius: calc(12px * var(--ui-scale));
-        border: 1px solid rgba(148, 163, 184, 0.25);
+        gap: calc(4px * var(--ui-scale));
+        padding: calc(6px * var(--ui-scale)) calc(8px * var(--ui-scale));
+        min-width: calc(60px * var(--ui-scale));
+        min-height: calc(64px * var(--ui-scale));
+        border-radius: calc(16px * var(--ui-scale));
+        border: 1px solid rgba(148, 163, 184, 0.12);
         background:
-          linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.82));
-        color: inherit;
+          linear-gradient(176deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.64));
+        color: var(--swatch-label-color, rgba(248, 250, 252, 0.98));
         text-align: center;
         cursor: pointer;
         transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
         --flash-color: rgba(59, 130, 246, 0.65);
         --flash-border: rgba(96, 165, 250, 0.9);
+        --swatch-label-border: rgba(30, 41, 59, 0.7);
+        --swatch-label-background: rgba(2, 6, 23, 0.7);
       }
 
       .swatch::before {
         content: "";
         position: absolute;
-        inset: calc(4px * var(--ui-scale));
-        border-radius: calc(10px * var(--ui-scale));
-        background:
-          linear-gradient(140deg, rgba(15, 23, 42, 0.06), rgba(15, 23, 42, 0.28)),
-          var(--swatch-color, transparent);
-        opacity: 0.9;
+        inset: calc(2px * var(--ui-scale));
+        border-radius: calc(14px * var(--ui-scale));
+        background: var(--swatch-color, transparent);
+        opacity: 0.96;
         pointer-events: none;
       }
 
@@ -778,18 +783,30 @@
 
       .swatch .label {
         position: relative;
-        display: flex;
-        flex-direction: column;
+        display: inline-flex;
         align-items: center;
-        font-size: 0.8rem;
+        justify-content: center;
+        font-size: 0.85rem;
         line-height: 1.2;
         max-width: 100%;
         z-index: 1;
+        padding: 0;
+        color: inherit;
       }
 
       .swatch .label > strong {
-        font-size: 1.05rem;
-        letter-spacing: 0.02em;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: calc(32px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) calc(6px * var(--ui-scale));
+        border-radius: calc(8px * var(--ui-scale));
+        border: 1px solid var(--swatch-label-border, rgba(30, 41, 59, 0.7));
+        background: var(--swatch-label-background, rgba(2, 6, 23, 0.7));
+        font-size: 1.08rem;
+        letter-spacing: 0.01em;
+        color: var(--swatch-label-color, rgba(248, 250, 252, 0.98));
+        box-shadow: none;
       }
 
       .sheet {
@@ -1047,10 +1064,6 @@
           align-items: stretch;
           gap: 12px;
         }
-
-        #progress {
-          min-width: 0;
-        }
       }
     </style>
   </head>
@@ -1211,14 +1224,6 @@
         </div>
       </div>
       <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div
-          id="progress"
-          aria-live="polite"
-          data-testid="progress-message"
-          data-status="idle"
-        >
-          Choose an artwork to start
-        </div>
         <div id="palette" role="list"></div>
       </footer>
     </div>
@@ -1468,11 +1473,11 @@
       const saveSnapshotBtn = document.getElementById("saveSnapshot");
       const saveList = document.getElementById("saveList");
       const paletteEl = document.getElementById("palette");
+      const paletteSortEl = document.getElementById("paletteSort");
       const progressEl = document.getElementById("progress");
       const PROGRESS_MESSAGES = {
         idle: "Choose an artwork to start",
         loading: "Loading puzzle…",
-        ready: "Ready to colour",
         active: "Keep colouring",
         complete: "All done!",
       };
@@ -1710,6 +1715,7 @@
         sourceTitle: null,
         lastOptions: null,
         sampleDetailLevel: DEFAULT_SAMPLE_DETAIL,
+        paletteSort: "region",
         settings: {
           autoAdvance: true,
           animateHints: true,
@@ -1807,6 +1813,15 @@
       logDebug("Session started");
       handleViewportChange({ log: true, recenter: true });
       resetView({ recenter: true });
+
+      if (paletteSortEl) {
+        paletteSortEl.value = state.paletteSort;
+        paletteSortEl.disabled = true;
+        paletteSortEl.addEventListener("change", (event) => {
+          const target = event.currentTarget?.value;
+          applyPaletteSort(target);
+        });
+      }
 
       for (const button of sampleButtons) {
         if (!button) continue;
@@ -2317,6 +2332,10 @@
         const orientation = visualWidth >= visualHeight ? "landscape" : "portrait";
         document.documentElement.style.setProperty("--app-width", `${visualWidth}px`);
         document.documentElement.style.setProperty("--app-height", `${visualHeight}px`);
+        if (appEl) {
+          appEl.style.width = `${visualWidth}px`;
+          appEl.style.height = `${visualHeight}px`;
+        }
         const minSide = Math.max(1, Math.min(visualWidth, visualHeight));
         const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
         document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
@@ -2744,7 +2763,12 @@
         state.filled = new Set();
         state.sourceUrl = null;
         state.sourceTitle = null;
-        paletteEl.innerHTML = "";
+        if (paletteEl) {
+          paletteEl.innerHTML = "";
+        }
+        if (paletteSortEl) {
+          paletteSortEl.disabled = true;
+        }
         setProgressMessage("loading");
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
@@ -3459,8 +3483,17 @@
       }
 
       function renderPalette() {
+        if (!paletteEl) return;
         paletteEl.innerHTML = "";
-        if (!state.puzzle) return;
+        if (!state.puzzle) {
+          if (paletteSortEl) {
+            paletteSortEl.disabled = true;
+          }
+          return;
+        }
+        if (paletteSortEl) {
+          paletteSortEl.disabled = false;
+        }
         const totalByColor = new Map();
         const remainingByColor = new Map();
         for (const region of state.puzzle.regions) {
@@ -3471,7 +3504,42 @@
             remainingByColor.set(region.colorId, remaining + 1);
           }
         }
-        for (const color of state.puzzle.palette) {
+        const paletteEntries = [...state.puzzle.palette];
+        const sortMode = state.paletteSort || "region";
+        const hueCache = new Map();
+        const getHue = (color) => {
+          if (!color) return 0;
+          if (hueCache.has(color.id)) {
+            return hueCache.get(color.id);
+          }
+          const value = hueFromHex(color.hex);
+          hueCache.set(color.id, value);
+          return value;
+        };
+        paletteEntries.sort((a, b) => {
+          if (sortMode === "hue") {
+            const hueDelta = getHue(a) - getHue(b);
+            if (Math.abs(hueDelta) > 0.0001) {
+              return hueDelta;
+            }
+            return a.id - b.id;
+          }
+          if (sortMode === "remaining") {
+            const remainingDelta =
+              (remainingByColor.get(b.id) || 0) - (remainingByColor.get(a.id) || 0);
+            if (remainingDelta !== 0) {
+              return remainingDelta;
+            }
+            const totalDelta = (totalByColor.get(b.id) || 0) - (totalByColor.get(a.id) || 0);
+            if (totalDelta !== 0) {
+              return totalDelta;
+            }
+            return a.id - b.id;
+          }
+          return a.id - b.id;
+        });
+
+        for (const color of paletteEntries) {
           const remaining = remainingByColor.get(color.id) || 0;
           const total = totalByColor.get(color.id) || 0;
           const labelText =
@@ -3491,6 +3559,10 @@
           if (state.activeColor === color.id) swatch.classList.add("active");
           if (remaining === 0) swatch.classList.add("done");
           swatch.style.setProperty("--swatch-color", color.hex || "transparent");
+          const labelStyles = computeSwatchLabelStyles(color.hex);
+          swatch.style.setProperty("--swatch-label-color", labelStyles.color);
+          swatch.style.setProperty("--swatch-label-border", labelStyles.border);
+          swatch.style.setProperty("--swatch-label-background", labelStyles.background);
           swatch.innerHTML = `
             <span class="label">
               <strong>${color.id}</strong>
@@ -3525,8 +3597,11 @@
         paletteEl.scrollLeft += delta;
       }
 
-      function setProgressMessage(status) {
-        const message = PROGRESS_MESSAGES[status] || PROGRESS_MESSAGES.idle;
+      function setProgressMessage(status, customMessage) {
+        const message =
+          typeof customMessage === "string" && customMessage.length > 0
+            ? customMessage
+            : PROGRESS_MESSAGES[status] || PROGRESS_MESSAGES.idle;
         if (!progressEl) return;
         progressEl.textContent = message;
         progressEl.setAttribute("data-status", status || "idle");
@@ -3535,20 +3610,48 @@
       function updateProgress() {
         if (!state.puzzle) {
           setProgressMessage("idle");
+          if (paletteSortEl) {
+            paletteSortEl.disabled = true;
+          }
           return;
         }
         const total = state.puzzle.regions.length;
         const done = state.filled.size;
-        if (!total || total <= 0) {
-          setProgressMessage("ready");
+        if (!Number.isFinite(total) || total <= 0) {
+          setProgressMessage("idle");
           return;
         }
+        const remaining = Math.max(0, total - done);
         if (done >= total) {
           setProgressMessage("complete");
-        } else if (done === 0) {
-          setProgressMessage("ready");
         } else {
-          setProgressMessage("active");
+          const summary = `${done} / ${total} filled · ${remaining} remaining`;
+          setProgressMessage("active", summary);
+        }
+      }
+
+      function applyPaletteSort(sort, { skipLog } = {}) {
+        const allowed = new Set(["region", "hue", "remaining"]);
+        const next = allowed.has(sort) ? sort : "region";
+        if (state.paletteSort === next) {
+          if (paletteSortEl && paletteSortEl.value !== next) {
+            paletteSortEl.value = next;
+          }
+          return;
+        }
+        state.paletteSort = next;
+        if (paletteSortEl && paletteSortEl.value !== next) {
+          paletteSortEl.value = next;
+        }
+        renderPalette();
+        if (!skipLog) {
+          const label =
+            next === "hue"
+              ? "colour hue"
+              : next === "remaining"
+              ? "remaining regions"
+              : "region number";
+          logDebug(`Palette sorted by ${label}`);
         }
       }
 
@@ -4916,6 +5019,36 @@
         };
       }
 
+      function computeSwatchLabelStyles(hex) {
+        const lightLabel = {
+          color: "rgba(15, 23, 42, 0.92)",
+          border: "rgba(15, 23, 42, 0.35)",
+          background: "rgba(248, 250, 252, 0.92)",
+        };
+        const darkLabel = {
+          color: "rgba(248, 250, 252, 0.98)",
+          border: "rgba(248, 250, 252, 0.45)",
+          background: "rgba(2, 6, 23, 0.7)",
+        };
+        const sanitizedHex = sanitizeHexColor(hex, DEFAULT_BACKGROUND_HEX);
+        const [r, g, b] = hexToRgb(sanitizedHex);
+        const luminance = relativeLuminance([r, g, b]);
+        const lightBackgroundLuminance = relativeLuminance([248, 250, 252]);
+        const darkBackgroundLuminance = relativeLuminance([15, 23, 42]);
+        if (!Number.isFinite(luminance)) {
+          return darkLabel;
+        }
+        if (luminance <= 0.35) {
+          return lightLabel;
+        }
+        if (luminance >= 0.6) {
+          return darkLabel;
+        }
+        const contrastWithDark = contrastRatio(luminance, darkBackgroundLuminance);
+        const contrastWithLight = contrastRatio(luminance, lightBackgroundLuminance);
+        return contrastWithDark >= contrastWithLight ? darkLabel : lightLabel;
+      }
+
       function relativeLuminance([r, g, b]) {
         const toLinear = (channel) => {
           const value = channel / 255;
@@ -4925,6 +5058,35 @@
         const linearG = toLinear(g);
         const linearB = toLinear(b);
         return 0.2126 * linearR + 0.7152 * linearG + 0.0722 * linearB;
+      }
+
+      function contrastRatio(l1, l2) {
+        const lighter = Math.max(l1, l2);
+        const darker = Math.min(l1, l2);
+        return (lighter + 0.05) / (darker + 0.05);
+      }
+
+      function hueFromHex(hex) {
+        const [r, g, b] = hexToRgb(hex);
+        const rn = r / 255;
+        const gn = g / 255;
+        const bn = b / 255;
+        const max = Math.max(rn, gn, bn);
+        const min = Math.min(rn, gn, bn);
+        const delta = max - min;
+        if (delta === 0) {
+          return 0;
+        }
+        let hue;
+        if (max === rn) {
+          hue = (gn - bn) / delta + (gn < bn ? 6 : 0);
+        } else if (max === gn) {
+          hue = (bn - rn) / delta + 2;
+        } else {
+          hue = (rn - gn) / delta + 4;
+        }
+        hue *= 60;
+        return Number.isFinite(hue) ? hue : 0;
       }
 
       function hexToRgb(hex) {

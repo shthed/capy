@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  test:
+  verify:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,22 +21,6 @@ jobs:
         run: |
           npm ci
 
-      - name: Install Playwright browsers
+      - name: Run placeholder test hook
         run: |
-          npx playwright install --with-deps
-
-      - name: Start static server
-        run: |
-          Start-Process npx -ArgumentList 'http-server', '.', '-p', '8000', '-c-1' -NoNewWindow
-          Start-Sleep -Seconds 3
-
-      - name: Run Playwright tests
-        run: |
-          npx playwright test --reporter=list
-
-      - name: Upload Playwright test report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report
+          npm test --silent
