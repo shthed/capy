@@ -266,10 +266,11 @@ before retrying.
   surfaces a live debug log so contributors can confirm state changes while
   testing.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
-  Each compact swatch keeps the colour number front-and-center with an adaptive
-  border and text pairing so the digits stay readable no matter the paint tone,
-  while tooltips and `data-color-id` attributes expose the colour name plus
-  remaining counts for automation hooks.
+  Each roomy swatch stretches taller so the colour sample fills the dock, while
+  the numbered badge keeps a crisp one-pixel border and adaptive contrast so the
+  digits stay readable no matter the paint tone. Tooltips and `data-color-id`
+  attributes still expose the colour name plus remaining counts for automation
+  hooks.
 
 ## Keyboard and accessibility notes
 

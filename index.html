@@ -518,11 +518,11 @@
         align-items: center;
         justify-content: flex-start;
         padding:
-          calc(16px * var(--ui-scale))
-          calc(28px * var(--ui-scale))
-          calc(24px * var(--ui-scale));
-        background: linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.85) 40%, rgba(2, 6, 23, 0.95) 100%);
-        border-top: 1px solid rgba(30, 41, 59, 0.7);
+          calc(12px * var(--ui-scale))
+          calc(20px * var(--ui-scale))
+          calc(16px * var(--ui-scale));
+        background: linear-gradient(182deg, rgba(2, 6, 23, 0.05) 0%, rgba(2, 6, 23, 0.9) 55%, rgba(2, 6, 23, 0.96) 100%);
+        border-top: 1px solid rgba(30, 41, 59, 0.58);
         box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
         touch-action: manipulation;
         flex-wrap: nowrap;
@@ -532,10 +532,10 @@
         flex: 1 1 auto;
         min-width: 0;
         display: flex;
-        gap: calc(6px * var(--ui-scale));
+        gap: calc(8px * var(--ui-scale));
         overflow-x: auto;
         overflow-y: hidden;
-        padding: 2px 0 calc(6px * var(--ui-scale));
+        padding: calc(2px * var(--ui-scale)) 0;
         scrollbar-width: thin;
         -webkit-overflow-scrolling: touch;
         touch-action: pan-x;
@@ -709,34 +709,34 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 2px;
-        padding: calc(6px * var(--ui-scale));
-        min-width: calc(44px * var(--ui-scale));
-        min-height: calc(52px * var(--ui-scale));
-        border-radius: calc(12px * var(--ui-scale));
-        border: 1px solid rgba(148, 163, 184, 0.25);
+        gap: calc(4px * var(--ui-scale));
+        padding: calc(8px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        min-width: calc(60px * var(--ui-scale));
+        min-height: calc(64px * var(--ui-scale));
+        border-radius: calc(16px * var(--ui-scale));
+        border: 1px solid rgba(148, 163, 184, 0.16);
         background:
-          linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.82));
+          linear-gradient(176deg, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0.7));
         color: var(--swatch-label-color, rgba(248, 250, 252, 0.98));
         text-align: center;
         cursor: pointer;
         transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
         --flash-color: rgba(59, 130, 246, 0.65);
         --flash-border: rgba(96, 165, 250, 0.9);
-        --swatch-label-border: rgba(30, 41, 59, 0.85);
-        --swatch-label-shadow: 0 1px 1px rgba(2, 6, 23, 0.9);
-        --swatch-label-text-shadow: 0 1px 1px rgba(2, 6, 23, 0.7);
+        --swatch-label-border: rgba(30, 41, 59, 0.75);
+        --swatch-label-shadow: 0 1px 1px rgba(2, 6, 23, 0.76);
+        --swatch-label-text-shadow: 0 1px 1px rgba(2, 6, 23, 0.68);
       }
 
       .swatch::before {
         content: "";
         position: absolute;
-        inset: calc(4px * var(--ui-scale));
-        border-radius: calc(10px * var(--ui-scale));
+        inset: calc(3px * var(--ui-scale));
+        border-radius: calc(14px * var(--ui-scale));
         background:
-          linear-gradient(140deg, rgba(15, 23, 42, 0.06), rgba(15, 23, 42, 0.28)),
+          linear-gradient(140deg, rgba(15, 23, 42, 0.04), rgba(15, 23, 42, 0.22)),
           var(--swatch-color, transparent);
-        opacity: 0.9;
+        opacity: 0.95;
         pointer-events: none;
       }
 
@@ -777,7 +777,7 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         line-height: 1.2;
         max-width: 100%;
         z-index: 1;
@@ -790,14 +790,14 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: calc(28px * var(--ui-scale));
+        min-width: calc(32px * var(--ui-scale));
         padding: calc(1px * var(--ui-scale)) calc(8px * var(--ui-scale));
-        border-radius: calc(8px * var(--ui-scale));
-        border: 1px solid var(--swatch-label-border, rgba(30, 41, 59, 0.85));
-        box-shadow: var(--swatch-label-shadow, 0 1px 1px rgba(2, 6, 23, 0.9));
-        font-size: 1.05rem;
-        letter-spacing: 0.02em;
-        background: transparent;
+        border-radius: calc(9px * var(--ui-scale));
+        border: 1px solid var(--swatch-label-border, rgba(30, 41, 59, 0.75));
+        box-shadow: var(--swatch-label-shadow, 0 1px 1px rgba(2, 6, 23, 0.76));
+        font-size: 1.12rem;
+        letter-spacing: 0.015em;
+        background: rgba(15, 23, 42, 0.08);
       }
 
       .sheet {
@@ -5009,16 +5009,16 @@
 
       function computeSwatchLabelStyles(hex) {
         const lightLabel = {
-          color: "rgba(15, 23, 42, 0.92)",
-          border: "rgba(15, 23, 42, 0.45)",
-          shadow: "0 1px 1px rgba(248, 250, 252, 0.55)",
-          textShadow: "0 1px 0 rgba(255, 255, 255, 0.7)",
+          color: "rgba(15, 23, 42, 0.9)",
+          border: "rgba(15, 23, 42, 0.38)",
+          shadow: "0 1px 0 rgba(248, 250, 252, 0.55)",
+          textShadow: "0 1px 0 rgba(255, 255, 255, 0.65)",
         };
         const darkLabel = {
           color: "rgba(248, 250, 252, 0.98)",
-          border: "rgba(248, 250, 252, 0.65)",
-          shadow: "0 1px 1px rgba(2, 6, 23, 0.75)",
-          textShadow: "0 1px 1px rgba(2, 6, 23, 0.8)",
+          border: "rgba(248, 250, 252, 0.55)",
+          shadow: "0 1px 0 rgba(2, 6, 23, 0.7)",
+          textShadow: "0 1px 1px rgba(2, 6, 23, 0.76)",
         };
         const sanitizedHex = sanitizeHexColor(hex, DEFAULT_BACKGROUND_HEX);
         const [r, g, b] = hexToRgb(sanitizedHex);
