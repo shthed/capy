@@ -251,9 +251,6 @@ before retrying.
 - **Fullscreen preview overlay** – Triggered by the Preview button. The preview
   canvas stretches to fit the viewport so contributors can inspect the clustered
   output in detail before painting.
-- **Progress indicator** – A friendly status message in the palette dock that
-  announces progress changes (Ready to colour, Keep colouring, All done!) via
-  `aria-live` rather than exposing raw region counts.
 - **Settings sheet** – A modal sheet that hides the generation sliders by
   default. Controls include colours, minimum region size, resize detail, sample
   rate, k-means iterations, smoothing passes, a background colour picker, and
@@ -281,9 +278,9 @@ before retrying.
 
 - The hint overlay is focusable and reacts to Enter/Space to trigger the file
   picker, keeping the first interaction accessible.
-- The progress status uses `aria-live="polite"` announcements so assistive tech
-  hears every completion update, and the help sheet’s debug log mirrors the same
-  polite live region for gameplay telemetry.
+- The help sheet’s debug log uses an `aria-live="polite"` region for gameplay
+  telemetry so assistive tech announces save loads, resets, and palette
+  activity.
 - Command rail buttons expose descriptive `aria-label` and `title` attributes
   even though the visual controls are icon-only, and they stay reachable via
   keyboard focus.
@@ -304,8 +301,8 @@ before retrying.
 The Playwright suite exercises the core flows:
 
 - **renders command rail and generator settings on load** – Confirms the hint
-  overlay, iconized command rail, compact progress status, and generator controls
-  render on first boot.
+  overlay, iconized command rail, palette dock, and generator controls render on
+  first boot.
  - **auto loads the capybara sample scene** – Verifies the bundled illustration is
     ready as soon as the app boots, that the sample button still reloads it on
     demand, and that the Low/Medium/High detail chips update generator sliders,

@@ -69,7 +69,6 @@ test.describe('Capy image generator', () => {
     await expect(page.locator('[data-testid="start-hint"]')).toHaveClass(/hidden/);
 
     const layout = await page.evaluate(() => {
-      const progress = document.querySelector('[data-testid="progress-message"]');
       const commandButtons = Array.from(document.querySelectorAll('#commandRail button')).map(
         (el) => el.getAttribute('aria-label') || el.getAttribute('title') || (el.textContent || '').trim()
       );
@@ -82,7 +81,6 @@ test.describe('Capy image generator', () => {
         typeof window.capyGenerator?.isBrowserZoomSuppressed === 'function' &&
         window.capyGenerator.isBrowserZoomSuppressed();
       return {
-        progress: (progress?.textContent || '').trim(),
         commandButtons,
         hasSettings,
         hasSampleButton,
@@ -93,7 +91,6 @@ test.describe('Capy image generator', () => {
     });
 
     expect(layout.hasSettings).toBe(true);
-    expect(layout.progress).toBe('Ready to colour');
     expect(layout.hasSampleButton).toBe(true);
     expect(layout.orientation).toMatch(/landscape|portrait/);
     expect(layout.viewportMeta || '').toMatch(/user-scalable=no/);
@@ -168,9 +165,6 @@ test.describe('Capy image generator', () => {
     );
     const detailCaption = page.locator('[data-detail-caption]').first();
     await expect(detailCaption).toHaveText(/High detail/i);
-    const progress = page.locator('[data-testid="progress-message"]');
-    await expect(progress).toHaveText('Ready to colour');
-
     const state = await page.evaluate(() => {
       const { puzzle, sourceUrl, sampleDetailLevel, lastOptions } = window.capyGenerator.getState();
       return {
@@ -440,8 +434,11 @@ test.describe('Capy image generator', () => {
     await page.click('[data-sheet-close="settings"]');
     await expect(page.locator('#resetButton')).toBeEnabled();
 
-    const progress = page.locator('[data-testid="progress-message"]');
-    await expect(progress).toHaveText('Ready to colour');
+    const totalByColor = BASIC_TEST_PATTERN.regions.reduce((acc, region) => {
+      acc.set(region.colorId, (acc.get(region.colorId) || 0) + 1);
+      return acc;
+    }, new Map());
+    const fillCounts = new Map();
 
     for (let index = 0; index < BASIC_TEST_PATTERN.regions.length; index += 1) {
       const region = BASIC_TEST_PATTERN.regions[index];
@@ -454,13 +451,25 @@ test.describe('Capy image generator', () => {
         )
         .toBe(index + 1);
 
-      const isLastFill = index + 1 === BASIC_TEST_PATTERN.regions.length;
-      const expectedStatus = isLastFill ? 'All done!' : 'Keep colouring';
-      await expect(progress).toHaveText(expectedStatus);
+      const filledForColor = (fillCounts.get(region.colorId) || 0) + 1;
+      fillCounts.set(region.colorId, filledForColor);
+      const targetForColor = totalByColor.get(region.colorId) || 0;
+      const swatch = page.locator(`[data-testid="palette-swatch"][data-color-id="${region.colorId}"]`);
+      if (filledForColor >= targetForColor) {
+        await expect(swatch).toHaveClass(/done/);
+      } else {
+        await expect(swatch).not.toHaveClass(/done/);
+      }
     }
 
+    await expect(page.locator('[data-testid="palette-swatch"].done')).toHaveCount(
+      BASIC_TEST_PATTERN.palette.length
+    );
+
     await page.click('#resetButton');
-    await expect(progress).toHaveText('Ready to colour');
+    await expect(
+      page.locator('[data-testid="palette-swatch"].done')
+    ).toHaveCount(0);
 
     await page.click('#helpButton');
     await expect(page.locator('#debugLog .log-entry span').first()).toHaveText(/Reset puzzle progress/);
