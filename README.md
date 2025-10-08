@@ -71,8 +71,8 @@ tools, a save manager, and a configurable generator all live inside a single
   canvas handlers so the HUD stays stable while pan/zoom gestures still feel
   natural on touchscreens.
 - **Responsive command rail.** Header icons now clamp to the viewport, wrap when
-  space runs short, and respect safe-area insets so controls stay reachable on
-  phones, tablets, and desktop window resizes.
+  space runs short, respect safe-area insets, and stay pinned to the top edge so
+  controls remain reachable on phones, tablets, and desktop window resizes.
 - **Colour cues and feedback.** Choosing a swatch briefly pulses every matching
   region (falling back to a celebratory flash when a colour is finished) so
   it's obvious where to paint next, and correctly filled regions immediately
@@ -89,15 +89,18 @@ tools, a save manager, and a configurable generator all live inside a single
   automatically, and honours device orientation changes without losing your
   place.
 - **Edge-to-edge stage.** A fullscreen toggle, rotation-aware sizing, and
-  dynamic viewport padding ensure the command rail and palette scale cleanly on
-  phones, tablets, or desktops while the artwork stays centred.
+  dynamic viewport padding lock the play surface to the visible viewport so the
+  command rail and palette scale cleanly on phones, tablets, or desktops while
+  the artwork stays centred.
 - **Contextual hinting.** Trigger highlight pulses for the current colour or let
   the app surface the smallest unfinished region when you need a nudge.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
   artwork at its final resolution without leaving the play surface.
 - **Palette manager.** Swipe through compact, tinted swatches that promote the
   colour number while tooltips, titles, and ARIA copy preserve human-readable
-  names and remaining region counts.
+  names and remaining region counts. The dock scrolls horizontally when palettes
+  stretch beyond the screen so every colour stays accessible without vertical
+  overflow.
 - **Progress persistence & recovery.** Every stroke updates a rolling autosave
   using a compact payload so the latest session is restored automatically on
   launch. Manual snapshots still land in the save manager where you can rename,
