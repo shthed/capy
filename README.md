@@ -270,9 +270,10 @@ before retrying.
   surfaces a live debug log so contributors can confirm state changes while
   testing.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
-  Each compact swatch keeps the colour number front-and-center while tooltips
-  and `data-color-id` attributes expose the colour name plus remaining counts
-  for automation hooks.
+  Each compact swatch keeps the colour number front-and-center with an adaptive
+  high-contrast pill so the digits stay readable no matter the paint tone,
+  while tooltips and `data-color-id` attributes expose the colour name plus
+  remaining counts for automation hooks.
 
 ## Keyboard and accessibility notes
 
@@ -285,8 +286,9 @@ before retrying.
   even though the visual controls are icon-only, and they stay reachable via
   keyboard focus.
 - Palette buttons toggle the active colour and expose `data-color-id` so tests
-  and tooling can reason about selections. Auto-advance can be disabled from the
-  Settings sheet for full manual control.
+  and tooling can reason about selections. Each swatch dynamically flips its
+  label foreground/background pairing to maintain WCAG-friendly contrast, and
+  auto-advance can be disabled from the Settings sheet for full manual control.
 - Palette selection briefly flashes every matching region (and completed
   colours) so it's immediately clear where the next strokes belong.
 - Hold Space to temporarily switch the primary mouse button into a dedicated
