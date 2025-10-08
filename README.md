@@ -13,14 +13,13 @@ tools, a save manager, and a configurable generator all live inside a single
   - `index.html` – Single-file UI, styles, and generator logic powering the coloring experience.
   - `README.md` – Usage guide and architecture reference for contributors.
 - **Testing & QA**
-  - `tests/ui-review.spec.js` – Playwright smoke test that exercises onboarding, palette, and sample reload flows.
-  - `playwright.config.js` – Playwright runner configuration bound to the static http-server.
+  - Automated Playwright smoke tests have been retired for now. Run quick manual passes in desktop and mobile browsers before pushing.
 - **Tooling & metadata**
-  - `package.json` – npm scripts plus the http-server and Playwright dependencies required to run the app and tests.
+  - `package.json` – npm scripts plus the http-server dependency required to run the app locally.
   - `package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
-  - `.gitignore` – Ignores dependency installs, Playwright artifacts, and transient reports.
+  - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
 - **CI & Deployment**
-  - `.github/workflows/ci.yml` – Runs Playwright tests on Windows for every push and PR.
+  - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys every branch to GitHub Pages under a subfolder matching the branch name.
 - **Process notes**
   - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
@@ -29,15 +28,12 @@ tools, a save manager, and a configurable generator all live inside a single
 
 ## Development workflow
 
-- **Automation branches.** Create short-lived branches named `automation/<change>` so CI reports and Playwright artifacts map
-  directly to the experiment under review.
+- **Automation branches.** Create short-lived branches named `automation/<change>` so QA notes and preview URLs map directly to the experiment under review.
 - **Branch deployments.** Every push to any branch automatically deploys to GitHub Pages under a subfolder named after the branch
   (e.g., `automation/feature` deploys to `/automation-feature/`). This lets reviewers preview changes in a live environment
   without local setup. The main branch deploys to the root path.
-- **Continuous smoke tests.** Let every push trigger `npm test --silent` across desktop and mobile viewports; publish the
-  resulting `artifacts/ui-review/` bundle for asynchronous review and attach key screenshots when UI changes land.
-- **Fast-forward merges.** Rebase onto `main`, rerun the Playwright suite, and merge with `--ff-only` to preserve a linear
-  history that keeps bisects practical for the single-file runtime.
+- **Manual smoke tests.** Exercise the puzzle load, palette selection, painting, and save/load flows in at least one desktop and one mobile browser before requesting review.
+- **Fast-forward merges.** Rebase onto `main`, repeat the quick manual checks, and merge with `--ff-only` to preserve a linear history that keeps bisects practical for the single-file runtime.
 - **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up work in a standing Friday issue so the team has
   a shared backlog of automation improvements.
 - **Close the loop.** Update PR descriptions and linked issues with branch names, CI run URLs, artifact locations, and live
@@ -137,8 +133,8 @@ every preset playable—from the breezy ≈26-region low detail board to the
   rendering, generation helpers, and persistence utilities—each called out in a
   developer map comment at the top of the file.
 - **Public testing surface.** `window.capyGenerator` exposes harness-friendly
-  helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so the
-  Playwright suite and manual experiments can orchestrate the app without
+  helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so
+  automation tooling and manual experiments can orchestrate the app without
   relying on internal selectors.
 - **Pan/zoom subsystem.** `viewState` tracks the transform for `#canvasStage`
   and `#canvasTransform`; helpers like `applyZoom`, `resetView`, and
@@ -210,8 +206,8 @@ every preset playable—from the breezy ≈26-region low detail board to the
 
 ## Puzzle JSON format
 
-Autosaves, manual exports, and the Playwright fixtures all share a
-`capy-puzzle@2` payload. Key fields include:
+Autosaves and manual exports all share a `capy-puzzle@2` payload. Key fields
+include:
 
 - `format` – Indicates the schema version (`capy-puzzle@2`).
 - `width`/`height` – Pixel dimensions of the clustered canvas.
@@ -271,7 +267,7 @@ before retrying.
   testing.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
   Each compact swatch keeps the colour number front-and-center with an adaptive
-  high-contrast pill so the digits stay readable no matter the paint tone,
+  border and text pairing so the digits stay readable no matter the paint tone,
   while tooltips and `data-color-id` attributes expose the colour name plus
   remaining counts for automation hooks.
 
@@ -287,7 +283,7 @@ before retrying.
   keyboard focus.
 - Palette buttons toggle the active colour and expose `data-color-id` so tests
   and tooling can reason about selections. Each swatch dynamically flips its
-  label foreground/background pairing to maintain WCAG-friendly contrast, and
+  label foreground/border pairing to maintain WCAG-friendly contrast, and
   auto-advance can be disabled from the Settings sheet for full manual control.
 - Palette selection briefly flashes every matching region (and completed
   colours) so it's immediately clear where the next strokes belong.
@@ -300,37 +296,25 @@ before retrying.
 
 ## Testing
 
-The Playwright suite exercises the core flows:
+With Playwright on pause, lean on the following manual smoke checks before
+pushing changes or requesting review:
 
-- **renders command rail and generator settings on load** – Confirms the hint
-  overlay, iconized command rail, palette dock, and generator controls render on
-  first boot.
- - **auto loads the capybara sample scene** – Verifies the bundled illustration is
-    ready as soon as the app boots, that the sample button still reloads it on
-    demand, and that the Low/Medium/High detail chips update generator sliders,
-    debug logging, and palette/region counts as expected.
-- **allows adjusting the canvas background colour** – Uses the fixture loader to
-  set a new background via the exposed harness helper, verifies pixel data,
-  and confirms the debug log records the change.
-- **fills the basic test pattern to completion** – Loads a tiny fixture via
-  `window.capyGenerator.loadPuzzleFixture`, walks through selecting palette
-  swatches, fills each region, observes the completion copy, and resets the
-  board.
-
-Run them locally with:
+- **Boot and sample load.** Refresh the app to confirm the onboarding hint, command rail, palette dock, and Capybara Springs sample all appear without errors.
+- **Palette readability.** Scrub through the swatches to confirm the bordered numbers stay legible against bright and dark paints in both desktop and mobile viewports.
+- **Painting loop.** Select a handful of swatches and fill matching regions to verify flashes, completion states, and autosaves still respond as expected.
+- **Save/load recovery.** Create a manual save, reload the page, and ensure the entry restores correctly.
 
 ```bash
 npm install
-npm test --silent
+npm run dev
 ```
 
-The suite writes artifacts (screenshots + JSON summaries) into
-`artifacts/ui-review/` if you need to inspect the DOM snapshots.
+Use the local preview to exercise the manual checks above across multiple
+viewports.
 
 ## TODO
 
 - [ ] Restore artwork documentation once a new segmentation pipeline is ready for publication.
-- [ ] Add automated visual regression coverage beyond the current smoke test to guard the trimmed UI.
-- [ ] Wire the Playwright CI job to automatically upload `artifacts/ui-review/` bundles to the Automation Sync dashboard.
+- [ ] Rebuild an automated smoke test suite once the palette refactor settles.
 - [ ] Draft a GitHub issue template for the weekly Automation Sync summary and link it from the contributor guide.
 
