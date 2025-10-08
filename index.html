@@ -558,8 +558,8 @@
         flex: 1 1 auto;
         min-width: 0;
         display: flex;
-        gap: calc(8px * var(--ui-scale));
-        padding: calc(2px * var(--ui-scale)) 0;
+        gap: calc(4px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) 0;
       }
 
       .control {
@@ -722,33 +722,30 @@
         align-items: center;
         justify-content: center;
         gap: calc(4px * var(--ui-scale));
-        padding: calc(8px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        padding: calc(6px * var(--ui-scale)) calc(8px * var(--ui-scale));
         min-width: calc(60px * var(--ui-scale));
         min-height: calc(64px * var(--ui-scale));
         border-radius: calc(16px * var(--ui-scale));
-        border: 1px solid rgba(148, 163, 184, 0.16);
+        border: 1px solid rgba(148, 163, 184, 0.12);
         background:
-          linear-gradient(176deg, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0.7));
+          linear-gradient(176deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.64));
         color: var(--swatch-label-color, rgba(248, 250, 252, 0.98));
         text-align: center;
         cursor: pointer;
         transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
         --flash-color: rgba(59, 130, 246, 0.65);
         --flash-border: rgba(96, 165, 250, 0.9);
-        --swatch-label-border: rgba(30, 41, 59, 0.75);
-        --swatch-label-shadow: 0 1px 1px rgba(2, 6, 23, 0.76);
-        --swatch-label-text-shadow: 0 1px 1px rgba(2, 6, 23, 0.68);
+        --swatch-label-border: rgba(30, 41, 59, 0.7);
+        --swatch-label-background: rgba(2, 6, 23, 0.7);
       }
 
       .swatch::before {
         content: "";
         position: absolute;
-        inset: calc(3px * var(--ui-scale));
+        inset: calc(2px * var(--ui-scale));
         border-radius: calc(14px * var(--ui-scale));
-        background:
-          linear-gradient(140deg, rgba(15, 23, 42, 0.04), rgba(15, 23, 42, 0.22)),
-          var(--swatch-color, transparent);
-        opacity: 0.95;
+        background: var(--swatch-color, transparent);
+        opacity: 0.96;
         pointer-events: none;
       }
 
@@ -795,7 +792,6 @@
         z-index: 1;
         padding: 0;
         color: inherit;
-        text-shadow: var(--swatch-label-text-shadow, 0 1px 1px rgba(2, 6, 23, 0.7));
       }
 
       .swatch .label > strong {
@@ -803,13 +799,14 @@
         align-items: center;
         justify-content: center;
         min-width: calc(32px * var(--ui-scale));
-        padding: calc(1px * var(--ui-scale)) calc(8px * var(--ui-scale));
-        border-radius: calc(9px * var(--ui-scale));
-        border: 1px solid var(--swatch-label-border, rgba(30, 41, 59, 0.75));
-        box-shadow: var(--swatch-label-shadow, 0 1px 1px rgba(2, 6, 23, 0.76));
-        font-size: 1.12rem;
-        letter-spacing: 0.015em;
-        background: rgba(15, 23, 42, 0.08);
+        padding: calc(1px * var(--ui-scale)) calc(6px * var(--ui-scale));
+        border-radius: calc(8px * var(--ui-scale));
+        border: 1px solid var(--swatch-label-border, rgba(30, 41, 59, 0.7));
+        background: var(--swatch-label-background, rgba(2, 6, 23, 0.7));
+        font-size: 1.08rem;
+        letter-spacing: 0.01em;
+        color: var(--swatch-label-color, rgba(248, 250, 252, 0.98));
+        box-shadow: none;
       }
 
       .sheet {
@@ -3565,8 +3562,7 @@
           const labelStyles = computeSwatchLabelStyles(color.hex);
           swatch.style.setProperty("--swatch-label-color", labelStyles.color);
           swatch.style.setProperty("--swatch-label-border", labelStyles.border);
-          swatch.style.setProperty("--swatch-label-shadow", labelStyles.shadow);
-          swatch.style.setProperty("--swatch-label-text-shadow", labelStyles.textShadow);
+          swatch.style.setProperty("--swatch-label-background", labelStyles.background);
           swatch.innerHTML = `
             <span class="label">
               <strong>${color.id}</strong>
@@ -5025,16 +5021,14 @@
 
       function computeSwatchLabelStyles(hex) {
         const lightLabel = {
-          color: "rgba(15, 23, 42, 0.9)",
-          border: "rgba(15, 23, 42, 0.38)",
-          shadow: "0 1px 0 rgba(248, 250, 252, 0.55)",
-          textShadow: "0 1px 0 rgba(255, 255, 255, 0.65)",
+          color: "rgba(15, 23, 42, 0.92)",
+          border: "rgba(15, 23, 42, 0.35)",
+          background: "rgba(248, 250, 252, 0.92)",
         };
         const darkLabel = {
           color: "rgba(248, 250, 252, 0.98)",
-          border: "rgba(248, 250, 252, 0.55)",
-          shadow: "0 1px 0 rgba(2, 6, 23, 0.7)",
-          textShadow: "0 1px 1px rgba(2, 6, 23, 0.76)",
+          border: "rgba(248, 250, 252, 0.45)",
+          background: "rgba(2, 6, 23, 0.7)",
         };
         const sanitizedHex = sanitizeHexColor(hex, DEFAULT_BACKGROUND_HEX);
         const [r, g, b] = hexToRgb(sanitizedHex);
