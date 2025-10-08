@@ -18,7 +18,7 @@
       call applyPuzzleResult to hydrate UI.
     - Persistence + exports: local storage helpers (persistSaves/loadSavedEntries) back the save
       sheet. serializeCurrentPuzzle produces an export-safe object.
-    - External API: window.capyGenerator exposes entry points that Playwright and manual testing
+    - External API: window.capyGenerator exposes entry points that manual test harnesses
       rely on. Keep it stable whenever you shuffle internal wiring.
   -->
   <head>
@@ -723,7 +723,6 @@
         transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
         --flash-color: rgba(59, 130, 246, 0.65);
         --flash-border: rgba(96, 165, 250, 0.9);
-        --swatch-label-background: rgba(15, 23, 42, 0.92);
         --swatch-label-border: rgba(30, 41, 59, 0.85);
         --swatch-label-shadow: 0 1px 1px rgba(2, 6, 23, 0.9);
         --swatch-label-text-shadow: 0 1px 1px rgba(2, 6, 23, 0.7);
@@ -776,25 +775,29 @@
       .swatch .label {
         position: relative;
         display: inline-flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
         font-size: 0.8rem;
         line-height: 1.2;
         max-width: 100%;
         z-index: 1;
-        padding: calc(2px * var(--ui-scale)) calc(10px * var(--ui-scale));
-        border-radius: 999px;
-        background: var(--swatch-label-background, rgba(15, 23, 42, 0.92));
-        border: 1px solid var(--swatch-label-border, rgba(30, 41, 59, 0.85));
-        box-shadow: var(--swatch-label-shadow, 0 1px 1px rgba(2, 6, 23, 0.9));
+        padding: 0;
         color: inherit;
         text-shadow: var(--swatch-label-text-shadow, 0 1px 1px rgba(2, 6, 23, 0.7));
       }
 
       .swatch .label > strong {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: calc(28px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) calc(8px * var(--ui-scale));
+        border-radius: calc(8px * var(--ui-scale));
+        border: 1px solid var(--swatch-label-border, rgba(30, 41, 59, 0.85));
+        box-shadow: var(--swatch-label-shadow, 0 1px 1px rgba(2, 6, 23, 0.9));
         font-size: 1.05rem;
         letter-spacing: 0.02em;
+        background: transparent;
       }
 
       .sheet {
@@ -3545,7 +3548,6 @@
           swatch.style.setProperty("--swatch-color", color.hex || "transparent");
           const labelStyles = computeSwatchLabelStyles(color.hex);
           swatch.style.setProperty("--swatch-label-color", labelStyles.color);
-          swatch.style.setProperty("--swatch-label-background", labelStyles.background);
           swatch.style.setProperty("--swatch-label-border", labelStyles.border);
           swatch.style.setProperty("--swatch-label-shadow", labelStyles.shadow);
           swatch.style.setProperty("--swatch-label-text-shadow", labelStyles.textShadow);
@@ -5008,17 +5010,15 @@
       function computeSwatchLabelStyles(hex) {
         const lightLabel = {
           color: "rgba(15, 23, 42, 0.92)",
-          background: "rgba(248, 250, 252, 0.96)",
-          border: "rgba(148, 163, 184, 0.55)",
-          shadow: "0 1px 1px rgba(15, 23, 42, 0.18)",
-          textShadow: "0 1px 0 rgba(255, 255, 255, 0.6)",
+          border: "rgba(15, 23, 42, 0.45)",
+          shadow: "0 1px 1px rgba(248, 250, 252, 0.55)",
+          textShadow: "0 1px 0 rgba(255, 255, 255, 0.7)",
         };
         const darkLabel = {
           color: "rgba(248, 250, 252, 0.98)",
-          background: "rgba(15, 23, 42, 0.94)",
-          border: "rgba(30, 41, 59, 0.75)",
-          shadow: "0 1px 2px rgba(2, 6, 23, 0.8)",
-          textShadow: "0 1px 1px rgba(2, 6, 23, 0.72)",
+          border: "rgba(248, 250, 252, 0.65)",
+          shadow: "0 1px 1px rgba(2, 6, 23, 0.75)",
+          textShadow: "0 1px 1px rgba(2, 6, 23, 0.8)",
         };
         const sanitizedHex = sanitizeHexColor(hex, DEFAULT_BACKGROUND_HEX);
         const [r, g, b] = hexToRgb(sanitizedHex);
