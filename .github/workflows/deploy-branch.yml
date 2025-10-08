@@ -35,7 +35,7 @@ jobs:
           # Check if gh-pages branch exists remotely
           if git ls-remote --exit-code --heads https://github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
             echo "gh-pages branch exists, cloning it"
-            git clone --branch gh-pages --single-branch https://github.com/${{ github.repository }}.git gh-pages
+            git clone --branch gh-pages --single-branch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
           else
             echo "gh-pages branch doesn't exist, initializing it"
             mkdir -p gh-pages
