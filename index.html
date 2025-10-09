@@ -45,6 +45,7 @@
         --rail-gap-portrait: calc(6px * var(--ui-scale));
         --rail-padding-block: calc(12px * var(--ui-scale));
         --rail-padding-inline: calc(24px * var(--ui-scale));
+        --floating-rail-offset: calc(72px * var(--ui-scale));
         --command-button-size: clamp(
           calc(32px * var(--ui-scale)),
           calc(40px * var(--ui-scale)),
@@ -106,80 +107,154 @@
       }
 
       #commandRail {
-        position: sticky;
-        top: 0;
-        left: 0;
-        right: 0;
+        position: fixed;
+        inset-block-start: calc(env(safe-area-inset-top, 0px) + clamp(12px, 4vw, 24px));
+        inset-inline-start: 50%;
+        transform: translateX(-50%);
         display: flex;
-        justify-content: flex-end;
-        align-items: center;
+        justify-content: center;
+        align-items: stretch;
         flex-wrap: wrap;
         gap: var(--rail-gap);
-        padding: var(--rail-padding-block) var(--rail-padding-inline);
-        padding-block-start:
-          calc(var(--rail-padding-block) + env(safe-area-inset-top, 0px));
-        padding-block-end:
-          calc(var(--rail-padding-block) + env(safe-area-inset-bottom, 0px));
-        padding-inline-start:
-          calc(var(--rail-padding-inline) + env(safe-area-inset-left, 0px));
-        padding-inline-end:
-          calc(var(--rail-padding-inline) + env(safe-area-inset-right, 0px));
-        background: linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(2, 6, 23, 0.82));
-        z-index: 3;
+        width: min(
+          720px,
+          max(
+            0px,
+            calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 32px)
+          )
+        );
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        z-index: 5;
         touch-action: manipulation;
-        width: 100%;
+        pointer-events: none;
       }
 
       #commandRail button {
-        border-radius: 12px;
-        padding: 0;
-        width: var(--command-button-size);
-        height: var(--command-button-size);
-        display: grid;
-        place-items: center;
-        background: rgba(15, 23, 42, 0.82);
-        color: rgba(226, 232, 240, 0.92);
-        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 18px;
+        padding: calc(8px * var(--ui-scale)) calc(12px * var(--ui-scale));
+        min-width: clamp(44px, 4.6vw, 72px);
+        min-height: clamp(44px, 4.6vw, 72px);
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: calc(4px * var(--ui-scale));
+        background: rgba(15, 23, 42, 0.72);
+        color: rgba(226, 232, 240, 0.96);
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        box-shadow: 0 18px 36px rgba(2, 6, 23, 0.45);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        pointer-events: auto;
+        transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease,
+          border-color 150ms ease, color 150ms ease;
+      }
+
+      #commandRail button .icon {
+        width: clamp(20px, 2.4vw, 26px);
+        height: clamp(20px, 2.4vw, 26px);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      #commandRail button .icon svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      #commandRail button .icon svg * {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      #commandRail button .label {
+        font-size: clamp(0.6rem, 0.54rem + 0.18vw, 0.75rem);
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: rgba(226, 232, 240, 0.85);
+        line-height: 1;
+        white-space: nowrap;
       }
 
       #commandRail button.active {
         background: rgba(37, 99, 235, 0.28);
-        border-color: rgba(96, 165, 250, 0.55);
+        border-color: rgba(96, 165, 250, 0.75);
+        box-shadow: 0 24px 44px rgba(37, 99, 235, 0.35);
         color: rgba(226, 232, 240, 1);
       }
 
-      #commandRail button .icon {
-        font-size: 1.1rem;
-        line-height: 1;
+      #commandRail button:not(:disabled):hover,
+      #commandRail button:not(:disabled):focus-visible {
+        transform: translateY(-2px);
+        box-shadow: 0 20px 40px rgba(59, 130, 246, 0.35);
+        border-color: rgba(96, 165, 250, 0.6);
+      }
+
+      #commandRail button:focus-visible {
+        outline: 2px solid rgba(148, 197, 255, 0.9);
+        outline-offset: 2px;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #commandRail button {
+          transition: none;
+        }
+
+        #commandRail button:not(:disabled):hover,
+        #commandRail button:not(:disabled):focus-visible {
+          transform: none;
+        }
       }
 
       #commandRail button:disabled {
-        background: rgba(15, 23, 42, 0.55);
+        background: rgba(15, 23, 42, 0.45);
+        color: rgba(148, 163, 184, 0.65);
+        border-color: rgba(71, 85, 105, 0.4);
+        box-shadow: none;
+        filter: saturate(0.8);
+      }
+
+      #commandRail button:disabled .label {
         color: rgba(148, 163, 184, 0.6);
-        border-color: rgba(71, 85, 105, 0.35);
       }
 
-      body[data-orientation="portrait"] #commandRail {
-        gap: var(--rail-gap-portrait);
-        padding: var(--rail-padding-block) calc(16px * var(--ui-scale));
-        justify-content: center;
-        width: 100%;
+      body[data-orientation="portrait"] {
+        --floating-rail-offset: calc(64px * var(--ui-scale));
       }
 
-      body[data-orientation="portrait"] #commandRail button {
-        width: var(--command-button-size-portrait);
-        height: var(--command-button-size-portrait);
+      body.compact-commands {
+        --floating-rail-offset: calc(64px * var(--ui-scale));
       }
 
+      body[data-orientation="portrait"] #commandRail,
       body.compact-commands #commandRail {
-        justify-content: center;
         gap: var(--rail-gap-portrait);
-        padding-inline: calc(16px * var(--ui-scale));
+        width: min(
+          640px,
+          max(
+            0px,
+            calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px)
+          )
+        );
       }
 
+      body[data-orientation="portrait"] #commandRail button,
       body.compact-commands #commandRail button {
-        width: min(var(--command-button-size), calc(14vw));
-        height: min(var(--command-button-size), calc(14vw));
+        padding: calc(8px * var(--ui-scale));
+        min-width: calc(40px * var(--ui-scale));
+      }
+
+      body[data-orientation="portrait"] #commandRail button .label,
+      body.compact-commands #commandRail button .label {
+        display: none;
       }
 
       body[data-orientation="portrait"] #paletteDock {
@@ -195,6 +270,9 @@
         display: grid;
         place-items: center;
         padding: var(--viewport-padding, 32px);
+        padding-block-start: calc(
+          var(--viewport-padding, 32px) + var(--floating-rail-offset, 0px)
+        );
         overflow: hidden;
       }
 
@@ -1085,6 +1163,87 @@
     </style>
   </head>
   <body>
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      style="position: absolute; width: 0; height: 0; overflow: hidden"
+    >
+      <defs>
+        <symbol id="icon-hint" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 18v-5.25m0 0a6.01 6.01 0 0 0 1.5-.189m-1.5.189a6.01 6.01 0 0 1-1.5-.189m3.75 7.478a12.06 12.06 0 0 1-4.5 0m3.75 2.383a14.406 14.406 0 0 1-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 1 0-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"
+          />
+        </symbol>
+        <symbol id="icon-reset" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+          />
+        </symbol>
+        <symbol id="icon-preview" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
+          />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+          />
+        </symbol>
+        <symbol id="icon-sample" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"
+          />
+        </symbol>
+        <symbol id="icon-fullscreen" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
+          />
+        </symbol>
+        <symbol id="icon-import" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+          />
+        </symbol>
+        <symbol id="icon-saves" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z"
+          />
+        </symbol>
+        <symbol id="icon-help" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z"
+          />
+        </symbol>
+        <symbol id="icon-settings" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+          />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+          />
+        </symbol>
+      </defs>
+    </svg>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
         <button
@@ -1095,7 +1254,12 @@
           title="Hint"
           disabled
         >
-          <span class="icon" aria-hidden="true">?</span>
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <use href="#icon-hint" />
+            </svg>
+          </span>
+          <span class="label">Hint</span>
         </button>
         <button
           id="resetButton"
@@ -1105,7 +1269,12 @@
           title="Reset puzzle"
           disabled
         >
-          <span class="icon" aria-hidden="true">↺</span>
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <use href="#icon-reset" />
+            </svg>
+          </span>
+          <span class="label">Reset</span>
         </button>
         <button
           id="previewToggle"
@@ -1115,7 +1284,12 @@
           title="Show preview"
           disabled
         >
-          <span class="icon" aria-hidden="true">🖼</span>
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <use href="#icon-preview" />
+            </svg>
+          </span>
+          <span class="label">Preview</span>
         </button>
         <button
           id="sampleCommand"
@@ -1125,7 +1299,12 @@
           aria-label="Reload sample puzzle"
           title="Reload sample puzzle"
         >
-          <span class="icon" aria-hidden="true">🐹</span>
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <use href="#icon-sample" />
+            </svg>
+          </span>
+          <span class="label">Sample</span>
         </button>
         <button
           id="fullscreenButton"
@@ -1134,7 +1313,12 @@
           aria-label="Enter fullscreen"
           title="Enter fullscreen"
         >
-          <span class="icon" aria-hidden="true">⛶</span>
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <use href="#icon-fullscreen" />
+            </svg>
+          </span>
+          <span class="label">Fullscreen</span>
         </button>
         <button
           id="importButton"
@@ -1143,7 +1327,12 @@
           aria-label="Import"
           title="Import"
         >
-          <span class="icon" aria-hidden="true">⬆</span>
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <use href="#icon-import" />
+            </svg>
+          </span>
+          <span class="label">Import</span>
         </button>
         <button
           id="saveManagerButton"
@@ -1153,7 +1342,12 @@
           title="Save manager"
           disabled
         >
-          <span class="icon" aria-hidden="true">💾</span>
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <use href="#icon-saves" />
+            </svg>
+          </span>
+          <span class="label">Saves</span>
         </button>
         <button
           id="helpButton"
@@ -1162,7 +1356,12 @@
           aria-label="Help &amp; shortcuts"
           title="Help &amp; shortcuts"
         >
-          <span class="icon" aria-hidden="true">ℹ</span>
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <use href="#icon-help" />
+            </svg>
+          </span>
+          <span class="label">Help</span>
         </button>
         <button
           id="settingsButton"
@@ -1171,7 +1370,12 @@
           aria-label="Settings"
           title="Settings"
         >
-          <span class="icon" aria-hidden="true">⚙</span>
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <use href="#icon-settings" />
+            </svg>
+          </span>
+          <span class="label">Settings</span>
         </button>
       </header>
       <div id="viewport">
