@@ -87,7 +87,7 @@ jobs:
 
           # Generate branch index page listing all branches dynamically
           BRANCHES=$(ls -d */ | grep -v '^index.html$' | sed 's#/##')
-          cat > branchindex.html <<'EOF'
+          cat > index.html <<'EOF'
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -99,9 +99,9 @@ jobs:
             <ul>
           EOF
           for branch in $BRANCHES; do
-            echo "    <li><a href='${branch}/'>${branch}</a></li>" >> branchindex.html
+            echo "    <li><a href='${branch}/'>${branch}</a></li>" >> index.html
           done
-          cat >> branchindex.html <<'EOF'
+          cat >> index.html <<'EOF'
             </ul>
           </body>
           </html>
@@ -118,7 +118,7 @@ jobs:
             git commit -m "Deploy branch: ${{ github.ref_name }} (commit: ${{ github.sha }})"
             git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages --force
             echo "Published branch to: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/$BRANCH_FOLDER/"
-            echo "Branch index available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/branchindex.html"
+            echo "Branch index available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
           fi
 
   # Deploy to GitHub Pages from gh-pages branch
