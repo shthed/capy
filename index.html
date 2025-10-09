@@ -1350,6 +1350,10 @@
             <input id="hintFlashToggle" type="checkbox" checked />
             <span>Animate hint highlights</span>
           </label>
+          <label class="toggle">
+            <input id="showRegionLabelsToggle" type="checkbox" checked />
+            <span>Show region numbers</span>
+          </label>
         </section>
         <section class="sheet-section" aria-labelledby="appearanceHeading">
           <h3 id="appearanceHeading">Appearance</h3>
@@ -1485,6 +1489,7 @@
       const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
+      const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
       const backgroundColorInput = document.getElementById("backgroundColor");
       const uiScaleInput = document.getElementById("uiScale");
       const colorCountEl = document.getElementById("colorCount");
@@ -1758,6 +1763,7 @@
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: 1,
           artPrompt: "",
+          showRegionLabels: true,
         },
         previewVisible: false,
         saves: loadSavedEntries(),
@@ -1778,6 +1784,19 @@
           if (hintFlashToggle) {
             hintFlashToggle.checked = settings.animateHints;
           }
+        }
+        if (typeof settings.showRegionLabels === "boolean") {
+          applyRegionLabelVisibility(settings.showRegionLabels, {
+            skipLog: true,
+            skipAutosave: true,
+            skipRender: true,
+          });
+        } else {
+          applyRegionLabelVisibility(state.settings.showRegionLabels !== false, {
+            skipLog: true,
+            skipAutosave: true,
+            skipRender: true,
+          });
         }
         if (typeof settings.uiScale === "number") {
           applyUiScale(settings.uiScale, { skipLog: true, skipAutosave: true });
@@ -1825,6 +1844,13 @@
           },
           setArtPrompt(promptText) {
             applyArtPrompt(promptText);
+          },
+          setRegionLabelsVisible(visible) {
+            if (typeof visible === "boolean") {
+              applyRegionLabelVisibility(visible);
+            } else {
+              applyRegionLabelVisibility(state.settings.showRegionLabels === false);
+            }
           },
           isBrowserZoomSuppressed() {
             return preventingBrowserZoom;
@@ -1953,6 +1979,12 @@
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
         scheduleAutosave("settings-hint-animations");
       });
+
+      if (showRegionLabelsToggle) {
+        showRegionLabelsToggle.addEventListener("change", () => {
+          applyRegionLabelVisibility(showRegionLabelsToggle.checked);
+        });
+      }
 
       if (backgroundColorInput) {
         backgroundColorInput.addEventListener("input", (event) => {
@@ -2648,6 +2680,33 @@
         return normalized;
       }
 
+      function applyRegionLabelVisibility(visible, options = {}) {
+        const {
+          skipLog = false,
+          skipAutosave = false,
+          forceRender = false,
+          skipRender = false,
+        } = options;
+        const resolved = visible === false ? false : true;
+        const previous = state.settings.showRegionLabels !== false;
+        state.settings.showRegionLabels = resolved;
+        if (showRegionLabelsToggle && showRegionLabelsToggle.checked !== resolved) {
+          showRegionLabelsToggle.checked = resolved;
+        }
+        if (!skipRender && (forceRender || previous !== resolved)) {
+          renderPuzzle();
+        }
+        if (previous !== resolved) {
+          if (!skipLog) {
+            logDebug(`Region numbers ${resolved ? "shown" : "hidden"}`);
+          }
+          if (!skipAutosave) {
+            scheduleAutosave("settings-region-labels");
+          }
+        }
+        return resolved;
+      }
+
       function applyBackgroundColor(hex, options = {}) {
         const { skipRender = false, skipLog = false, force = false } = options;
         const current = state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX;
@@ -3216,6 +3275,7 @@
 
       function drawNumbers() {
         if (!state.puzzle) return;
+        if (state.settings.showRegionLabels === false) return;
         puzzleCtx.save();
         const fallbackNumberInk = backgroundInk.number;
         const fallbackOutlineInk = backgroundInk.outline;
@@ -4539,6 +4599,7 @@
             animateHints: Boolean(state.settings.animateHints),
             uiScale: Number(state.settings.uiScale) || 1,
             artPrompt: state.settings.artPrompt || "",
+            showRegionLabels: state.settings.showRegionLabels !== false,
           },
         };
         if (regionMapPacked) {
