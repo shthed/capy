@@ -80,6 +80,9 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Customisable background.** Pick a backdrop colour for unfinished regions in
   the Settings sheet; outlines and numbers automatically switch contrast so dark
   or light themes stay legible while you paint.
+- **Region number toggle.** Flip a Gameplay setting to hide or restore the
+  region numbers once you're familiar with the artwork for an unobstructed
+  canvas while you fill in the illustration.
 - **Precision view controls.** Pan the puzzle by click-dragging with the
   primary mouse button (spacebar, middle, and right buttons still work), use
   pinch gestures or the mouse wheel to zoom in and out, or tap `+`/`-` on the
