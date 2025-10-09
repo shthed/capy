@@ -5002,54 +5002,46 @@
       }
 
       function computeSwatchLabelStyles(hex) {
-        const labelCandidates = [
-          {
-            styles: {
-              color: "rgba(15, 23, 42, 0.92)",
-              outline: "rgba(15, 23, 42, 0.55)",
-              shadow: [
-                "0 0 1px rgba(248, 250, 252, 0.85)",
-                "0 0 3px rgba(248, 250, 252, 0.6)",
-                "0 0 6px rgba(248, 250, 252, 0.5)",
-              ].join(", "),
-            },
-            luminance: relativeLuminance([15, 23, 42]),
+        const darkLabel = {
+          styles: {
+            color: "rgba(15, 23, 42, 0.92)",
+            outline: "rgba(15, 23, 42, 0.55)",
+            shadow: [
+              "0 0 1px rgba(248, 250, 252, 0.85)",
+              "0 0 3px rgba(248, 250, 252, 0.6)",
+              "0 0 6px rgba(248, 250, 252, 0.5)",
+            ].join(", "),
           },
-          {
-            styles: {
-              color: "rgba(248, 250, 252, 0.98)",
-              outline: "rgba(248, 250, 252, 0.55)",
-              shadow: [
-                "0 0 1px rgba(15, 23, 42, 0.82)",
-                "0 0 3px rgba(15, 23, 42, 0.65)",
-                "0 0 6px rgba(15, 23, 42, 0.5)",
-              ].join(", "),
-            },
-            luminance: relativeLuminance([248, 250, 252]),
+          luminance: relativeLuminance([15, 23, 42]),
+        };
+        const lightLabel = {
+          styles: {
+            color: "rgba(248, 250, 252, 0.98)",
+            outline: "rgba(248, 250, 252, 0.55)",
+            shadow: [
+              "0 0 1px rgba(15, 23, 42, 0.82)",
+              "0 0 3px rgba(15, 23, 42, 0.65)",
+              "0 0 6px rgba(15, 23, 42, 0.5)",
+            ].join(", "),
           },
-        ];
+          luminance: relativeLuminance([248, 250, 252]),
+        };
 
         const sanitizedHex = sanitizeHexColor(hex, DEFAULT_BACKGROUND_HEX);
         const [r, g, b] = hexToRgb(sanitizedHex);
         const backgroundLuminance = relativeLuminance([r, g, b]);
         if (!Number.isFinite(backgroundLuminance)) {
-          return labelCandidates[0].styles;
+          return darkLabel.styles;
         }
 
-        let bestCandidate = labelCandidates[0];
-        let bestContrast = contrastRatio(backgroundLuminance, bestCandidate.luminance);
+        const darkLabelContrast = contrastRatio(backgroundLuminance, darkLabel.luminance);
+        const lightLabelContrast = contrastRatio(backgroundLuminance, lightLabel.luminance);
 
-        const EPSILON = 1e-4;
-        for (let index = 1; index < labelCandidates.length; index += 1) {
-          const candidate = labelCandidates[index];
-          const contrast = contrastRatio(backgroundLuminance, candidate.luminance);
-          if (contrast > bestContrast + EPSILON) {
-            bestCandidate = candidate;
-            bestContrast = contrast;
-          }
+        if (lightLabelContrast > darkLabelContrast) {
+          return lightLabel.styles;
         }
 
-        return bestCandidate.styles;
+        return darkLabel.styles;
       }
 
       function relativeLuminance([r, g, b]) {
