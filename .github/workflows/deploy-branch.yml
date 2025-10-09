@@ -14,8 +14,33 @@ permissions:
 jobs:
   deploy-branch:
     runs-on: ubuntu-latest
+    outputs:
+      has-pr: ${{ steps.check-pr.outputs.result }}
     steps:
+      - name: Check if branch has an open PR
+        id: check-pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pulls } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: `${context.repo.owner}:${context.payload.ref.replace('refs/heads/', '')}`
+            });
+
+            const hasPR = pulls.length > 0;
+            console.log(`Branch ${context.ref} has open PR: ${hasPR}`);
+            return hasPR;
+
+      - name: Skip deployment if no open PR
+        if: steps.check-pr.outputs.result == 'false'
+        run: |
+          echo "Skipping deployment: Branch does not have an open PR"
+          exit 0
+
       - name: Checkout current branch
+        if: steps.check-pr.outputs.result == 'true'
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -24,6 +49,7 @@ jobs:
           fetch-depth: 0
 
       - name: Configure git credentials for authenticated operations
+        if: steps.check-pr.outputs.result == 'true'
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
@@ -31,6 +57,7 @@ jobs:
           echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
 
       - name: Setup gh-pages branch
+        if: steps.check-pr.outputs.result == 'true'
         run: |
           # Check if gh-pages branch exists remotely
           if git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
@@ -53,6 +80,7 @@ jobs:
           fi
 
       - name: Prepare branch name for folder
+        if: steps.check-pr.outputs.result == 'true'
         id: branch-name
         run: |
           # Convert branch name to safe folder name
@@ -61,7 +89,38 @@ jobs:
           echo "safe_name=$SAFE_BRANCH_NAME" >> $GITHUB_OUTPUT
           echo "Branch: $BRANCH_NAME -> Folder: $SAFE_BRANCH_NAME"
 
+      - name: Fetch open PRs with branches
+        if: steps.check-pr.outputs.result == 'true'
+        id: fetch-prs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pulls } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 100
+            });
+
+            const branches = pulls.map(pr => ({
+              branch: pr.head.ref,
+              safeName: pr.head.ref.replace(/[^a-zA-Z0-9._-]/g, '-'),
+              title: pr.title,
+              number: pr.number,
+              updated: pr.updated_at,
+              url: pr.html_url
+            }));
+
+            // Write to file for shell script to read
+            const fs = require('fs');
+            fs.writeFileSync('pr-branches.json', JSON.stringify(branches, null, 2));
+
+            return branches;
+
       - name: Deploy branch content
+        if: steps.check-pr.outputs.result == 'true'
         run: |
           cd gh-pages
           BRANCH_FOLDER="${{ steps.branch-name.outputs.safe_name }}"
@@ -85,22 +144,116 @@ jobs:
                     --exclude='artifacts' \
                     ../source/ "$BRANCH_FOLDER/"
 
-          # Generate branch index page listing all branches dynamically
-          BRANCHES=$(ls -d */ | grep -v '^index.html$' | sed 's#/##')
+          # Clean up old branches that no longer have open PRs
+          echo "Cleaning up branches without open PRs..."
+          if [ -f ../pr-branches.json ]; then
+            # Get list of branches with open PRs
+            ACTIVE_BRANCHES=$(cat ../pr-branches.json | grep -o '"safeName": "[^"]*"' | cut -d'"' -f4)
+
+            # Check each folder and remove if not in active list
+            for dir in */; do
+              folder_name="${dir%/}"
+              # Skip index.html and README.md
+              if [ "$folder_name" != "index.html" ] && [ "$folder_name" != "README.md" ]; then
+                if ! echo "$ACTIVE_BRANCHES" | grep -q "^${folder_name}$"; then
+                  echo "Removing stale deployment: $folder_name"
+                  rm -rf "$folder_name"
+                fi
+              fi
+            done
+          fi
+
+          # Generate branch index page with sorted branches from open PRs
           cat > index.html <<'EOF'
           <!DOCTYPE html>
           <html lang="en">
           <head>
             <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Capy Branch Deployments</title>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                max-width: 900px;
+                margin: 40px auto;
+                padding: 0 20px;
+                line-height: 1.6;
+              }
+              h1 {
+                color: #333;
+                border-bottom: 2px solid #e1e4e8;
+                padding-bottom: 10px;
+              }
+              .info {
+                background: #f6f8fa;
+                border: 1px solid #e1e4e8;
+                border-radius: 6px;
+                padding: 15px;
+                margin: 20px 0;
+              }
+              ul {
+                list-style: none;
+                padding: 0;
+              }
+              li {
+                margin: 15px 0;
+                padding: 15px;
+                background: #fff;
+                border: 1px solid #e1e4e8;
+                border-radius: 6px;
+                transition: box-shadow 0.2s;
+              }
+              li:hover {
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+              }
+              .branch-link {
+                font-size: 1.1em;
+                font-weight: 600;
+                color: #0366d6;
+                text-decoration: none;
+              }
+              .branch-link:hover {
+                text-decoration: underline;
+              }
+              .pr-info {
+                margin-top: 5px;
+                font-size: 0.9em;
+                color: #586069;
+              }
+              .pr-link {
+                color: #0366d6;
+                text-decoration: none;
+              }
+              .pr-link:hover {
+                text-decoration: underline;
+              }
+              .timestamp {
+                font-size: 0.85em;
+                color: #6a737d;
+                margin-top: 5px;
+              }
+            </style>
           </head>
           <body>
             <h1>Capy Image Generator - Branch Deployments</h1>
+            <div class="info">
+              <strong>Note:</strong> Only branches with open pull requests are deployed.
+              Branches are sorted by most recently updated first.
+            </div>
             <ul>
           EOF
-          for branch in $BRANCHES; do
-            echo "    <li><a href='${branch}/'>${branch}</a></li>" >> index.html
-          done
+
+          # Add branches from PR data (already sorted by updated date)
+          if [ -f ../pr-branches.json ]; then
+            cat ../pr-branches.json | jq -r '.[] |
+              "<li>" +
+              "<a class=\"branch-link\" href=\"" + .safeName + "/\">" + .branch + "</a>" +
+              "<div class=\"pr-info\">PR #" + (.number|tostring) + ": " + .title + " - <a class=\"pr-link\" href=\"" + .url + "\">View PR</a></div>" +
+              "<div class=\"timestamp\">Last updated: " + .updated + "</div>" +
+              "</li>"
+            ' >> index.html
+          fi
+
           cat >> index.html <<'EOF'
             </ul>
           </body>
@@ -124,6 +277,7 @@ jobs:
   # Deploy to GitHub Pages from gh-pages branch
   deploy-pages:
     needs: deploy-branch
+    if: needs.deploy-branch.outputs.has-pr == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
