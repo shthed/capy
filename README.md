@@ -99,9 +99,10 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Palette manager.** Swipe through edge-to-edge swatches rendered as simple,
   gutterless colour blocks so the dock stays packed. Tooltips, titles, and ARIA
   copy preserve human-readable names and remaining region counts, the digits
-  gain a subtle contrast halo to stay legible on any swatch, and the dock
-  scrolls horizontally whenever palettes stretch beyond the screen so every
-  colour stays accessible without vertical overflow.
+  automatically flip between dark and light treatments (with a subtle halo) to
+  stay legible on any swatch, and the dock scrolls horizontally whenever
+  palettes stretch beyond the screen so every colour stays accessible without
+  vertical overflow.
 - **Progress persistence & recovery.** Every stroke updates a rolling autosave
   using a compact payload so the latest session is restored automatically on
   launch. Manual snapshots still land in the save manager where you can rename,
