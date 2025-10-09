@@ -96,11 +96,13 @@ tools, a save manager, and a configurable generator all live inside a single
   the app surface the smallest unfinished region when you need a nudge.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
   artwork at its final resolution without leaving the play surface.
-- **Palette manager.** Swipe through edge-to-edge swatches that keep gutters
-  minimal so the dock stays packed with colour. Tooltips, titles, and ARIA copy
-  preserve human-readable names and remaining region counts, and the dock
-  scrolls horizontally whenever palettes stretch beyond the screen so every
-  colour stays accessible without vertical overflow.
+- **Palette manager.** Swipe through edge-to-edge swatches rendered as simple,
+  gutterless colour blocks so the dock stays packed. Tooltips, titles, and ARIA
+  copy preserve human-readable names and remaining region counts, the digits
+  automatically flip between dark and light treatments (with a subtle halo) to
+  stay legible on any swatch, and the dock scrolls horizontally whenever
+  palettes stretch beyond the screen so every colour stays accessible without
+  vertical overflow.
 - **Progress persistence & recovery.** Every stroke updates a rolling autosave
   using a compact payload so the latest session is restored automatically on
   launch. Manual snapshots still land in the save manager where you can rename,
@@ -269,11 +271,10 @@ before retrying.
   surfaces a live debug log so contributors can confirm state changes while
   testing.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
-  Each swatch now sits with barely-there gutters so the colour sample fills the
-  dock, and the numbered badge leans on a thin adaptive border plus a subtle
-  tint to stay readable without extra glow effects. Tooltips and `data-color-id`
-  attributes still expose the colour name plus remaining counts for automation
-  hooks.
+  Each swatch now stretches into a flat colour tile with no gutters, and the
+  number rides directly on the paint with a contrast-aware outline so it stays
+  readable without extra chrome. Tooltips and `data-color-id` attributes still
+  expose the colour name plus remaining counts for automation hooks.
 
 ## Keyboard and accessibility notes
 
@@ -287,8 +288,8 @@ before retrying.
   keyboard focus.
 - Palette buttons toggle the active colour and expose `data-color-id` so tests
   and tooling can reason about selections. Each swatch dynamically adjusts its
-  label colour, border, and pill tint to maintain WCAG-friendly contrast without
-  drop shadows, and
+  label colour and outline to maintain WCAG-friendly contrast without extra
+  chrome, and
   auto-advance can be disabled from the Settings sheet for full manual control.
 - Palette selection briefly flashes every matching region (and completed
   colours) so it's immediately clear where the next strokes belong.
@@ -305,7 +306,7 @@ With Playwright on pause, lean on the following manual smoke checks before
 pushing changes or requesting review:
 
 - **Boot and sample load.** Refresh the app to confirm the onboarding hint, command rail, palette dock, and Capybara Springs sample all appear without errors.
-- **Palette readability.** Scrub through the swatches to confirm the bordered numbers stay legible against bright and dark paints in both desktop and mobile viewports.
+- **Palette readability.** Scrub through the swatches to confirm the flat numbers stay legible against bright and dark paints in both desktop and mobile viewports.
 - **Painting loop.** Select a handful of swatches and fill matching regions to verify flashes, completion states, and autosaves still respond as expected.
 - **Save/load recovery.** Create a manual save, reload the page, and ensure the entry restores correctly.
 
