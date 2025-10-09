@@ -2,30 +2,81 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Capy Branch Deployments</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #333;
+      border-bottom: 2px solid #e1e4e8;
+      padding-bottom: 10px;
+    }
+    .info {
+      background: #f6f8fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      margin: 15px 0;
+      padding: 15px;
+      background: #fff;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      transition: box-shadow 0.2s;
+    }
+    li:hover {
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .branch-link {
+      font-size: 1.1em;
+      font-weight: 600;
+      color: #0366d6;
+      text-decoration: none;
+    }
+    .branch-link:hover {
+      text-decoration: underline;
+    }
+    .pr-info {
+      margin-top: 5px;
+      font-size: 0.9em;
+      color: #586069;
+    }
+    .pr-link {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    .pr-link:hover {
+      text-decoration: underline;
+    }
+    .timestamp {
+      font-size: 0.85em;
+      color: #6a737d;
+      margin-top: 5px;
+    }
+  </style>
 </head>
 <body>
   <h1>Capy Image Generator - Branch Deployments</h1>
+  <div class="info">
+    <strong>Note:</strong> Only branches with open pull requests are deployed.
+    Branches are sorted by most recently updated first.
+  </div>
   <ul>
-    <li><a href='codex-add-color-selection-on-double-tap/'>codex-add-color-selection-on-double-tap</a></li>
-    <li><a href='codex-fix-game-saving-and-restore-save-manager/'>codex-fix-game-saving-and-restore-save-manager</a></li>
-    <li><a href='codex-fix-header-icons-and-styling/'>codex-fix-header-icons-and-styling</a></li>
-    <li><a href='codex-fix-screen-size-and-zoom-issues-8qpebx/'>codex-fix-screen-size-and-zoom-issues-8qpebx</a></li>
-    <li><a href='codex-implement-color-selection-and-hiding-regions/'>codex-implement-color-selection-and-hiding-regions</a></li>
-    <li><a href='codex-resolve-merge-conflicts-from-codex-branch/'>codex-resolve-merge-conflicts-from-codex-branch</a></li>
-    <li><a href='codex-resolve-merge-conflicts-in-files/'>codex-resolve-merge-conflicts-in-files</a></li>
-    <li><a href='codex-resolve-merge-conflicts/'>codex-resolve-merge-conflicts</a></li>
-    <li><a href='codex-review-and-update-colour-picker-ui-b4ozk2/'>codex-review-and-update-colour-picker-ui-b4ozk2</a></li>
-    <li><a href='codex-review-new-features-in-index.html/'>codex-review-new-features-in-index.html</a></li>
-    <li><a href='copilot-authenticate-git-commands/'>copilot-authenticate-git-commands</a></li>
-    <li><a href='copilot-fix-gh-pages-authentication/'>copilot-fix-gh-pages-authentication</a></li>
-    <li><a href='copilot-fix-merge-conflicts/'>copilot-fix-merge-conflicts</a></li>
-    <li><a href='copilot-setup-copilot-instructions/'>copilot-setup-copilot-instructions</a></li>
-    <li><a href='copilot-setup-git-credentials/'>copilot-setup-git-credentials</a></li>
-    <li><a href='copilot-update-deploy-branch-workflow/'>copilot-update-deploy-branch-workflow</a></li>
-    <li><a href='copilot-update-deploy-branch/'>copilot-update-deploy-branch</a></li>
-    <li><a href='copilot-update-github-actions-token/'>copilot-update-github-actions-token</a></li>
-    <li><a href='main/'>main</a></li>
+<li><a class="branch-link" href="copilot-fix-deploy-yml-performance/">copilot/fix-deploy-yml-performance</a><div class="pr-info">PR #79: [WIP] Fix deploy-branch.yml to improve performance - <a class="pr-link" href="https://github.com/shthed/capy/pull/79">View PR</a></div><div class="timestamp">Last updated: 2025-10-09T14:13:02Z</div></li>
+<li><a class="branch-link" href="codex-fix-header-icons-and-styling/">codex/fix-header-icons-and-styling</a><div class="pr-info">PR #73: fix-header-icons-and-styling - <a class="pr-link" href="https://github.com/shthed/capy/pull/73">View PR</a></div><div class="timestamp">Last updated: 2025-10-09T12:49:34Z</div></li>
+<li><a class="branch-link" href="codex-review-and-update-colour-picker-ui-j9vy15/">codex/review-and-update-colour-picker-ui-j9vy15</a><div class="pr-info">PR #64: review-and-update-colour-picker-ui-j9vy15 - <a class="pr-link" href="https://github.com/shthed/capy/pull/64">View PR</a></div><div class="timestamp">Last updated: 2025-10-09T12:44:21Z</div></li>
   </ul>
 </body>
 </html>
