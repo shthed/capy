@@ -106,10 +106,9 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Progress persistence & recovery.** Every stroke updates a rolling autosave
   using a compact payload so the latest session is restored automatically on
   launch. Manual snapshots still land in the save manager where you can rename,
-  export, or delete entries at will.
-- **Cloud-ready sync.** A lightweight broadcast channel mirrors autosaves
-  across browser tabs and exposes a `window.capyCloudSync` adapter hook so
-  teams can plug in remote storage when available.
+  export, or delete entries at will. A storage summary in Help surfaces how
+  much browser space saves occupy and includes a one-click delete button for
+  clearing local data.
 
 ### Capybara Springs detail presets
 
