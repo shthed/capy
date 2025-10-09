@@ -1692,6 +1692,12 @@
       let cursorHoverRegionId = null;
       let cursorLastClientX = null;
       let cursorLastClientY = null;
+      let lastTouchTapTime = 0;
+      let lastTouchTapRegionId = null;
+      let lastTouchSelectionTime = 0;
+      const prefersReducedMotionQuery = window.matchMedia
+        ? window.matchMedia("(prefers-reduced-motion: reduce)")
+        : null;
 
       // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
@@ -2133,6 +2139,41 @@
         }
         window.addEventListener("scroll", hideCustomCursor, { passive: true });
       }
+
+      const DOUBLE_TAP_WINDOW_MS = 320;
+
+      function getRegionAtPoint(clientX, clientY) {
+        if (!state.puzzle || !puzzleCanvas) {
+          return null;
+        }
+        if (typeof clientX !== "number" || typeof clientY !== "number") {
+          return null;
+        }
+        const rect = puzzleCanvas.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) {
+          return null;
+        }
+        const scaleX = puzzleCanvas.width / rect.width;
+        const scaleY = puzzleCanvas.height / rect.height;
+        const x = Math.floor((clientX - rect.left) * scaleX);
+        const y = Math.floor((clientY - rect.top) * scaleY);
+        if (x < 0 || y < 0 || x >= puzzleCanvas.width || y >= puzzleCanvas.height) {
+          return null;
+        }
+        const idx = y * puzzleCanvas.width + x;
+        const regionId = state.puzzle.regionMap[idx];
+        const region = state.puzzle.regions[regionId];
+        if (!region) {
+          return null;
+        }
+        return { regionId, region };
+      }
+
+      function getRegionFromEvent(event) {
+        if (!event) return null;
+        return getRegionAtPoint(event.clientX, event.clientY);
+      }
+
       setupCustomCursorPreference();
       window.addEventListener("keydown", handleKeyDown, true);
       window.addEventListener("keyup", handleKeyUp, true);
@@ -2181,18 +2222,12 @@
           logDebug("Ignoring canvas click: no active colour selected");
           return;
         }
-        const rect = puzzleCanvas.getBoundingClientRect();
-        const scaleX = puzzleCanvas.width / rect.width;
-        const scaleY = puzzleCanvas.height / rect.height;
-        const x = Math.floor((event.clientX - rect.left) * scaleX);
-        const y = Math.floor((event.clientY - rect.top) * scaleY);
-        const idx = y * puzzleCanvas.width + x;
-        const regionId = state.puzzle.regionMap[idx];
-        const region = state.puzzle.regions[regionId];
-        if (!region) {
+        const hit = getRegionFromEvent(event);
+        if (!hit) {
           logDebug("Ignoring canvas click: no region mapped under pointer");
           return;
         }
+        const { region, regionId } = hit;
         if (state.filled.has(regionId)) {
           logDebug(`Region ${region.id} already filled; ignoring click`);
           return;
@@ -2226,6 +2261,59 @@
         }
         refreshCustomCursorHighlight();
       });
+
+      puzzleCanvas.addEventListener("dblclick", (event) => {
+        if (!state.puzzle) {
+          logDebug("Ignoring canvas double click: no puzzle loaded yet");
+          return;
+        }
+        if (state.previewVisible) {
+          logDebug("Ignoring canvas double click: preview mode active");
+          return;
+        }
+        const now = Date.now();
+        if (now - lastTouchSelectionTime <= 120) {
+          event.preventDefault();
+          return;
+        }
+        const hit = getRegionFromEvent(event);
+        if (!hit) {
+          logDebug("Ignoring canvas double click: no region mapped under pointer");
+          return;
+        }
+        event.preventDefault();
+        lastTouchSelectionTime = now;
+        activateColor(hit.region.colorId);
+      });
+
+      puzzleCanvas.addEventListener(
+        "pointerup",
+        (event) => {
+          if (event.pointerType !== "touch") return;
+          if (!event.isPrimary) return;
+          if (!state.puzzle) return;
+          if (state.previewVisible) return;
+          if (isPanning) return;
+          if (pinchSession) return;
+          const hit = getRegionFromEvent(event);
+          if (!hit) {
+            lastTouchTapRegionId = null;
+            return;
+          }
+          const now = Date.now();
+          if (lastTouchTapRegionId === hit.regionId && now - lastTouchTapTime <= DOUBLE_TAP_WINDOW_MS) {
+            event.preventDefault();
+            lastTouchTapTime = 0;
+            lastTouchTapRegionId = null;
+            lastTouchSelectionTime = now;
+            activateColor(hit.region.colorId);
+            return;
+          }
+          lastTouchTapTime = now;
+          lastTouchTapRegionId = hit.regionId;
+        },
+        { passive: false }
+      );
 
       function openSheet(sheet) {
         sheet.classList.remove("hidden");
@@ -3500,6 +3588,24 @@
         }
       }
 
+      function scrollPaletteToColor(colorId) {
+        if (!paletteEl) return;
+        if (colorId == null) return;
+        const swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
+        if (!swatch) return;
+        const scrollBehavior =
+          prefersReducedMotionQuery && prefersReducedMotionQuery.matches ? "auto" : "smooth";
+        try {
+          swatch.scrollIntoView({
+            block: "nearest",
+            inline: "nearest",
+            behavior: scrollBehavior,
+          });
+        } catch (error) {
+          swatch.scrollIntoView();
+        }
+      }
+
       function activateColor(colorId, options = {}) {
         if (!state.puzzle) return false;
         if (colorId == null) return false;
@@ -3511,6 +3617,7 @@
         if (redraw) {
           renderPalette();
         }
+        scrollPaletteToColor(colorId);
         if (flash) {
           flashColorRegions(colorId);
         }
