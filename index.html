@@ -5034,14 +5034,25 @@
           return darkLabel.styles;
         }
 
-        const darkLabelContrast = contrastRatio(backgroundLuminance, darkLabel.luminance);
-        const lightLabelContrast = contrastRatio(backgroundLuminance, lightLabel.luminance);
+        const isBackgroundDark = backgroundLuminance <= 0.45;
+        const [preferredLabel, alternateLabel] = isBackgroundDark
+          ? [lightLabel, darkLabel]
+          : [darkLabel, lightLabel];
 
-        if (lightLabelContrast > darkLabelContrast) {
-          return lightLabel.styles;
+        const preferredContrast = contrastRatio(
+          backgroundLuminance,
+          preferredLabel.luminance
+        );
+        const alternateContrast = contrastRatio(
+          backgroundLuminance,
+          alternateLabel.luminance
+        );
+
+        if (alternateContrast > preferredContrast) {
+          return alternateLabel.styles;
         }
 
-        return darkLabel.styles;
+        return preferredLabel.styles;
       }
 
       function relativeLuminance([r, g, b]) {
