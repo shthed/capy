@@ -33,7 +33,7 @@
         color-scheme: light dark;
         font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui,
           sans-serif;
-        background: #020617;
+        background: #010819;
         color: #e2e8f0;
         --ui-scale-user: 1;
         --ui-scale-auto: 1;
@@ -45,7 +45,7 @@
         --rail-gap-portrait: calc(4px * var(--ui-scale));
         --rail-padding-block: calc(10px * var(--ui-scale));
         --rail-padding-inline: calc(18px * var(--ui-scale));
-        --floating-rail-offset: calc(66px * var(--ui-scale));
+        --floating-rail-offset: calc(62px * var(--ui-scale));
         --command-button-size: clamp(
           calc(32px * var(--ui-scale)),
           calc(40px * var(--ui-scale)),
@@ -56,6 +56,13 @@
           calc(36px * var(--ui-scale)),
           calc(44px * var(--ui-scale))
         );
+        --surface-veil: rgba(7, 16, 40, 0.62);
+        --surface-veil-strong: rgba(7, 16, 40, 0.82);
+        --surface-border: rgba(148, 163, 184, 0.2);
+        --surface-border-strong: rgba(148, 163, 184, 0.3);
+        --shadow-floating: 0 18px 44px rgba(3, 10, 30, 0.46);
+        --shadow-floating-soft: 0 14px 32px rgba(3, 10, 30, 0.38);
+        --shadow-press: 0 8px 22px rgba(3, 10, 30, 0.32);
       }
 
       * {
@@ -70,8 +77,10 @@
         margin: 0;
         min-height: 100vh;
         min-height: 100dvh;
-        background: radial-gradient(circle at top, rgba(59, 130, 246, 0.22), transparent),
-          #020617;
+        background:
+          radial-gradient(120% 120% at 50% -10%, rgba(59, 130, 246, 0.16), transparent 60%),
+          radial-gradient(120% 120% at 50% 120%, rgba(15, 118, 110, 0.08), transparent 70%),
+          #010819;
         color: inherit;
         overflow: hidden;
         font-size: calc(16px * var(--ui-scale));
@@ -108,55 +117,69 @@
 
       #commandRail {
         position: fixed;
-        inset-block-start: calc(env(safe-area-inset-top, 0px) + clamp(12px, 4vw, 24px));
+        inset-block-start: calc(env(safe-area-inset-top, 0px) + clamp(14px, 4vw, 26px));
         inset-inline-start: 50%;
         transform: translateX(-50%);
-        display: flex;
-        justify-content: center;
+        display: inline-flex;
         align-items: center;
+        justify-content: center;
         flex-wrap: nowrap;
-        gap: var(--rail-gap);
-        inline-size: max-content;
-        width: max-content;
+        gap: clamp(4px, 1vw, 12px);
+        padding: clamp(6px, 1vw, 10px);
+        margin: 0;
+        border-radius: 999px;
+        inline-size: auto;
+        width: auto;
         max-inline-size: calc(
           100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px
         );
         max-width: calc(
           100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px
         );
-        margin: 0;
-        padding: 0;
         background: transparent;
+        box-shadow: var(--shadow-floating);
+        isolation: isolate;
         z-index: 5;
         touch-action: manipulation;
         pointer-events: none;
       }
 
+      #commandRail::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: var(--surface-veil);
+        border: 1px solid var(--surface-border);
+        backdrop-filter: blur(18px) saturate(140%);
+        -webkit-backdrop-filter: blur(18px) saturate(140%);
+        pointer-events: none;
+        opacity: 0.96;
+      }
+
       #commandRail button {
-        border-radius: 14px;
-        padding: calc(6px * var(--ui-scale)) calc(12px * var(--ui-scale));
-        min-width: clamp(38px, 4vw, 64px);
-        min-height: clamp(38px, 4vw, 56px);
+        border-radius: 999px;
+        padding: clamp(6px, 1vw, 9px) clamp(10px, 1.8vw, 14px);
+        min-width: clamp(38px, 4vw, 60px);
+        min-height: clamp(36px, 3.8vw, 54px);
         display: inline-flex;
         flex-direction: row;
         align-items: center;
         justify-content: center;
-        gap: calc(4px * var(--ui-scale));
+        gap: clamp(4px, 0.8vw, 8px);
         flex-shrink: 0;
-        background: rgba(15, 23, 42, 0.6);
-        color: rgba(226, 232, 240, 0.95);
-        border: 1px solid rgba(148, 163, 184, 0.3);
-        box-shadow: 0 14px 28px rgba(2, 6, 23, 0.35);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+        background: transparent;
+        color: rgba(226, 232, 240, 0.82);
+        border: 1px solid transparent;
+        box-shadow: none;
         pointer-events: auto;
-        transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease,
-          border-color 150ms ease, color 150ms ease;
+        transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease,
+          color 160ms ease, box-shadow 160ms ease;
       }
 
       #commandRail button .icon {
-        width: clamp(20px, 2.2vw, 24px);
-        height: clamp(20px, 2.2vw, 24px);
+        width: clamp(18px, 2vw, 22px);
+        height: clamp(18px, 2vw, 22px);
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -177,31 +200,34 @@
       }
 
       #commandRail button .label {
-        font-size: clamp(0.6rem, 0.52rem + 0.14vw, 0.74rem);
+        font-size: clamp(0.62rem, 0.56rem + 0.12vw, 0.74rem);
         font-weight: 500;
         letter-spacing: 0.01em;
         text-transform: none;
-        color: rgba(226, 232, 240, 0.82);
-        line-height: 1.1;
+        color: rgba(226, 232, 240, 0.78);
+        line-height: 1.05;
         white-space: nowrap;
       }
 
       #commandRail button.active {
-        background: rgba(37, 99, 235, 0.22);
-        border-color: rgba(96, 165, 250, 0.65);
-        box-shadow: 0 18px 36px rgba(37, 99, 235, 0.3);
-        color: rgba(226, 232, 240, 1);
+        background: rgba(37, 99, 235, 0.25);
+        border-color: rgba(147, 197, 253, 0.55);
+        color: rgba(241, 245, 249, 0.98);
+        box-shadow: var(--shadow-floating-soft);
+        transform: translateY(-1px);
       }
 
       #commandRail button:not(:disabled):hover,
       #commandRail button:not(:disabled):focus-visible {
-        transform: translateY(-2px);
-        box-shadow: 0 16px 32px rgba(59, 130, 246, 0.32);
-        border-color: rgba(96, 165, 250, 0.5);
+        background: rgba(148, 163, 184, 0.18);
+        border-color: rgba(148, 163, 184, 0.32);
+        color: rgba(241, 245, 249, 0.95);
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-floating-soft);
       }
 
       #commandRail button:focus-visible {
-        outline: 2px solid rgba(148, 197, 255, 0.9);
+        outline: 2px solid rgba(147, 197, 253, 0.75);
         outline-offset: 2px;
       }
 
@@ -217,28 +243,28 @@
       }
 
       #commandRail button:disabled {
-        background: rgba(15, 23, 42, 0.45);
-        color: rgba(148, 163, 184, 0.65);
-        border-color: rgba(71, 85, 105, 0.4);
+        color: rgba(148, 163, 184, 0.6);
+        border-color: transparent;
         box-shadow: none;
-        filter: saturate(0.8);
+        filter: saturate(0.85);
       }
 
       #commandRail button:disabled .label {
-        color: rgba(148, 163, 184, 0.6);
+        color: rgba(148, 163, 184, 0.55);
       }
 
       body[data-orientation="portrait"] {
-        --floating-rail-offset: calc(64px * var(--ui-scale));
+        --floating-rail-offset: calc(60px * var(--ui-scale));
       }
 
       body.compact-commands {
-        --floating-rail-offset: calc(64px * var(--ui-scale));
+        --floating-rail-offset: calc(60px * var(--ui-scale));
       }
 
       body[data-orientation="portrait"] #commandRail,
       body.compact-commands #commandRail {
         gap: var(--rail-gap-portrait);
+        padding: clamp(4px, 0.9vw, 8px);
         max-inline-size: calc(
           100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 12px
         );
@@ -249,8 +275,8 @@
 
       body[data-orientation="portrait"] #commandRail button,
       body.compact-commands #commandRail button {
-        padding: calc(6px * var(--ui-scale));
-        min-width: calc(36px * var(--ui-scale));
+        padding: clamp(4px, 1vw, 6px) clamp(8px, 1.4vw, 10px);
+        min-width: calc(34px * var(--ui-scale));
       }
 
       body[data-orientation="portrait"] #commandRail button .label,
@@ -609,32 +635,36 @@
       button {
         font: inherit;
         border-radius: 999px;
-        border: none;
+        border: 1px solid rgba(147, 197, 253, 0.6);
         padding: calc(10px * var(--ui-scale)) calc(22px * var(--ui-scale));
-        background: rgba(96, 165, 250, 0.92);
-        color: #021027;
+        background: linear-gradient(135deg, rgba(37, 99, 235, 0.92), rgba(56, 189, 248, 0.78));
+        color: #031126;
         font-weight: 600;
         cursor: pointer;
-        transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        box-shadow: var(--shadow-press);
+        transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease,
+          border-color 0.18s ease;
       }
 
       button:hover:not(:disabled) {
         transform: translateY(-1px);
-        box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
-        background: rgba(147, 197, 253, 0.96);
+        box-shadow: var(--shadow-floating-soft);
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(103, 232, 249, 0.8));
+        border-color: rgba(147, 197, 253, 0.8);
       }
 
       button:disabled {
-        background: rgba(148, 163, 184, 0.35);
-        color: rgba(226, 232, 240, 0.7);
+        background: rgba(148, 163, 184, 0.26);
+        color: rgba(226, 232, 240, 0.65);
         cursor: not-allowed;
+        border-color: rgba(148, 163, 184, 0.3);
         box-shadow: none;
       }
 
       #paletteDock {
         position: fixed;
         inset-inline-start: 50%;
-        inset-block-end: calc(env(safe-area-inset-bottom, 0px) + clamp(10px, 4vw, 22px));
+        inset-block-end: calc(env(safe-area-inset-bottom, 0px) + clamp(12px, 4vw, 26px));
         transform: translateX(-50%);
         display: flex;
         justify-content: center;
@@ -648,22 +678,43 @@
         background: transparent;
         pointer-events: none;
         z-index: 6;
+        isolation: isolate;
       }
 
       #palette {
-        display: flex;
+        position: relative;
+        display: inline-flex;
         align-items: center;
-        gap: calc(6px * var(--ui-scale));
-        padding: calc(4px * var(--ui-scale));
+        gap: clamp(6px, 1vw, 12px);
+        padding: clamp(6px, 1vw, 10px);
         overflow-x: auto;
         overflow-y: hidden;
         max-inline-size: 100%;
         scrollbar-width: thin;
         -webkit-overflow-scrolling: touch;
         touch-action: pan-x;
-        border-radius: calc(18px * var(--ui-scale));
+        border-radius: calc(20px * var(--ui-scale));
         background: transparent;
         pointer-events: auto;
+        box-shadow: var(--shadow-floating);
+      }
+
+      #palette::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: var(--surface-veil);
+        border: 1px solid var(--surface-border);
+        backdrop-filter: blur(18px) saturate(140%);
+        -webkit-backdrop-filter: blur(18px) saturate(140%);
+        pointer-events: none;
+        opacity: 0.96;
+      }
+
+      #palette > * {
+        position: relative;
+        z-index: 1;
       }
 
       #palette::-webkit-scrollbar {
@@ -831,8 +882,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        min-width: clamp(44px, 12vw, 60px);
-        min-height: clamp(44px, 12vw, 60px);
+        min-width: clamp(42px, 11vw, 58px);
+        min-height: clamp(42px, 11vw, 58px);
         padding: 0;
         border: 0;
         border-radius: calc(16px * var(--ui-scale));
@@ -840,30 +891,26 @@
         color: var(--swatch-label-color, rgba(248, 250, 252, 0.98));
         text-align: center;
         cursor: pointer;
-        box-shadow:
-          inset 0 0 0 1px var(--swatch-outline, rgba(248, 250, 252, 0.18)),
-          0 12px 28px rgba(2, 6, 23, 0.45);
-        transition: box-shadow 0.18s ease, transform 0.18s ease;
+        box-shadow: var(--shadow-floating-soft);
+        transition: box-shadow 0.2s ease, transform 0.2s ease;
       }
 
       .swatch:hover {
         transform: translateY(-2px);
-        box-shadow:
-          inset 0 0 0 1px var(--swatch-outline, rgba(248, 250, 252, 0.28)),
-          0 18px 36px rgba(2, 6, 23, 0.45);
+        box-shadow: var(--shadow-floating);
       }
 
       .swatch:focus-visible {
-        outline: none;
-        box-shadow:
-          inset 0 0 0 2px rgba(148, 163, 184, 0.85),
-          0 18px 36px rgba(37, 99, 235, 0.5);
+        outline: 2px solid rgba(147, 197, 253, 0.7);
+        outline-offset: 2px;
+        box-shadow: var(--shadow-floating);
       }
 
       .swatch.active {
-        box-shadow:
-          inset 0 0 0 3px rgba(96, 165, 250, 0.9),
-          0 18px 36px rgba(37, 99, 235, 0.4);
+        transform: translateY(-2px);
+        box-shadow: 0 20px 44px rgba(37, 99, 235, 0.36);
+        outline: 2px solid rgba(96, 165, 250, 0.8);
+        outline-offset: 2px;
       }
 
       .swatch.done {
@@ -876,19 +923,13 @@
 
       @keyframes swatchHintPulse {
         0% {
-          box-shadow:
-            inset 0 0 0 4px rgba(96, 165, 250, 0.85),
-            0 18px 36px rgba(37, 99, 235, 0.35);
+          box-shadow: 0 20px 44px rgba(37, 99, 235, 0.38);
         }
         60% {
-          box-shadow:
-            inset 0 0 0 1px rgba(148, 163, 184, 0.3),
-            0 12px 28px rgba(2, 6, 23, 0.45);
+          box-shadow: var(--shadow-floating-soft);
         }
         100% {
-          box-shadow:
-            inset 0 0 0 1px var(--swatch-outline, rgba(248, 250, 252, 0.18)),
-            0 12px 28px rgba(2, 6, 23, 0.45);
+          box-shadow: var(--shadow-floating-soft);
         }
       }
 
@@ -898,10 +939,10 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: calc(2px * var(--ui-scale));
-        font-size: clamp(0.7rem, 0.64rem + 0.18vw, 0.82rem);
-        font-weight: 600;
-        line-height: 1.2;
+        gap: clamp(1px, 0.4vw, 3px);
+        font-size: clamp(0.66rem, 0.62rem + 0.16vw, 0.8rem);
+        font-weight: 500;
+        line-height: 1.15;
         max-width: 100%;
         z-index: 1;
         padding: 0;
@@ -914,11 +955,11 @@
         align-items: center;
         justify-content: center;
         min-width: calc(24px * var(--ui-scale));
-        padding: 0;
-        border-radius: calc(8px * var(--ui-scale));
+        padding: 2px 6px;
+        border-radius: calc(999px * var(--ui-scale));
         border: 0;
-        background: rgba(15, 23, 42, 0.32);
-        font-size: clamp(0.78rem, 0.7rem + 0.22vw, 0.92rem);
+        background: rgba(1, 8, 22, 0.3);
+        font-size: clamp(0.74rem, 0.68rem + 0.18vw, 0.88rem);
         letter-spacing: 0.01em;
         color: currentColor;
       }
@@ -935,10 +976,11 @@
         flex-direction: column;
         gap: 18px;
         border-radius: 22px;
-        background: rgba(2, 6, 23, 0.95);
-        border: 1px solid rgba(59, 130, 246, 0.4);
-        box-shadow: 0 32px 80px rgba(8, 47, 73, 0.55);
-        backdrop-filter: blur(26px);
+        background: var(--surface-veil-strong);
+        border: 1px solid var(--surface-border-strong);
+        box-shadow: var(--shadow-floating);
+        backdrop-filter: blur(26px) saturate(140%);
+        -webkit-backdrop-filter: blur(26px) saturate(140%);
         z-index: 6;
         opacity: 1;
         transition: opacity 0.2s ease;
@@ -963,10 +1005,16 @@
 
       .close-button {
         padding: 6px 14px;
-        border-radius: 12px;
-        background: rgba(148, 163, 184, 0.15);
-        color: rgba(226, 232, 240, 0.8);
-        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.16);
+        color: rgba(226, 232, 240, 0.82);
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        transition: background 0.18s ease, border-color 0.18s ease;
+      }
+
+      .close-button:hover {
+        background: rgba(148, 163, 184, 0.24);
+        border-color: rgba(148, 163, 184, 0.4);
       }
 
       .sheet-body {
