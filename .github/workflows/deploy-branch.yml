@@ -49,6 +49,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git commit -m "Initialize gh-pages branch"
+            git push origin gh-pages
           fi
 
       - name: Prepare branch name for folder
