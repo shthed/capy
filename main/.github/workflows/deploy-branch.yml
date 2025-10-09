@@ -33,16 +33,16 @@ jobs:
       - name: Setup gh-pages branch
         run: |
           # Check if gh-pages branch exists remotely
-          if git ls-remote --exit-code --heads https://github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
+          if git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
             echo "gh-pages branch exists, cloning it"
-            git clone --branch gh-pages --single-branch https://github.com/${{ github.repository }}.git gh-pages
+            git clone --branch gh-pages --single-branch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
           else
             echo "gh-pages branch doesn't exist, initializing it"
             mkdir -p gh-pages
             cd gh-pages
             git init
             git checkout -b gh-pages
-            git remote add origin https://github.com/${{ github.repository }}.git
+            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
             echo "# GitHub Pages" > README.md
             echo "This branch contains deployed content from all branches." >> README.md
             git add README.md
