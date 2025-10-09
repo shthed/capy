@@ -18,7 +18,7 @@
       call applyPuzzleResult to hydrate UI.
     - Persistence + exports: local storage helpers (persistSaves/loadSavedEntries) back the save
       sheet. serializeCurrentPuzzle produces an export-safe object.
-    - External API: window.capyGenerator exposes entry points that Playwright and manual testing
+    - External API: window.capyGenerator exposes entry points that manual test harnesses
       rely on. Keep it stable whenever you shuffle internal wiring.
   -->
   <head>
@@ -35,6 +35,45 @@
           sans-serif;
         background: #020617;
         color: #e2e8f0;
+        --app-foreground: #e2e8f0;
+        --app-background: radial-gradient(circle at top, rgba(59, 130, 246, 0.22), transparent),
+          #020617;
+        --command-rail-background: linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(2, 6, 23, 0.82));
+        --command-button-bg: rgba(15, 23, 42, 0.82);
+        --command-button-border: rgba(148, 163, 184, 0.28);
+        --command-button-color: rgba(226, 232, 240, 0.92);
+        --command-button-active-bg: rgba(37, 99, 235, 0.28);
+        --command-button-active-border: rgba(96, 165, 250, 0.55);
+        --command-button-active-color: rgba(226, 232, 240, 1);
+        --command-button-disabled-bg: rgba(15, 23, 42, 0.55);
+        --command-button-disabled-color: rgba(148, 163, 184, 0.6);
+        --command-button-disabled-border: rgba(71, 85, 105, 0.35);
+        --palette-dock-background: rgba(2, 6, 23, 0.94);
+        --palette-dock-border: rgba(15, 23, 42, 0.85);
+        --primary-button-bg: rgba(96, 165, 250, 0.92);
+        --primary-button-color: #021027;
+        --primary-button-hover-bg: rgba(147, 197, 253, 0.96);
+        --primary-button-hover-shadow: rgba(37, 99, 235, 0.35);
+        --primary-button-disabled-bg: rgba(148, 163, 184, 0.35);
+        --primary-button-disabled-color: rgba(226, 232, 240, 0.7);
+        --sheet-background: rgba(2, 6, 23, 0.95);
+        --sheet-border: rgba(59, 130, 246, 0.4);
+        --control-focus: rgba(96, 165, 250, 0.6);
+        --control-surface: rgba(15, 23, 42, 0.75);
+        --control-border: rgba(148, 163, 184, 0.35);
+        --accent-chip-hover: rgba(37, 99, 235, 0.25);
+        --accent-chip-active: rgba(59, 130, 246, 0.35);
+        --accent-chip-border: rgba(148, 163, 184, 0.35);
+        --accent-chip-active-border: rgba(147, 197, 253, 0.6);
+        --accent-glow: rgba(59, 130, 246, 0.22);
+        --detail-chip-background: rgba(15, 23, 42, 0.65);
+        --swatch-outline-fallback: rgba(15, 23, 42, 0.6);
+        --swatch-outline-hover: rgba(15, 23, 42, 0.75);
+        --swatch-hint-ring: rgba(96, 165, 250, 0.85);
+        --swatch-active-ring: rgba(96, 165, 250, 0.9);
+        --palette-swatch-width: calc(72px * var(--ui-scale));
+        --palette-swatch-min-width: calc(64px * var(--ui-scale));
+        --palette-swatch-height: calc(72px * var(--ui-scale));
         --ui-scale-user: 1;
         --ui-scale-auto: 1;
         --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
@@ -68,9 +107,9 @@
       body {
         margin: 0;
         min-height: 100vh;
-        background: radial-gradient(circle at top, rgba(59, 130, 246, 0.22), transparent),
-          #020617;
-        color: inherit;
+        min-height: 100dvh;
+        background: var(--app-background);
+        color: var(--app-foreground);
         overflow: hidden;
         font-size: calc(16px * var(--ui-scale));
         touch-action: manipulation;
@@ -91,15 +130,24 @@
 
       #app {
         position: relative;
-        width: var(--app-width, 100vw);
-        height: var(--app-height, 100vh);
+        width: min(var(--app-width, 100vw), 100vw);
+        height: min(var(--app-height, 100vh), 100vh);
         overflow: hidden;
         display: grid;
         grid-template-rows: auto 1fr auto;
       }
 
+      @supports (height: 100dvh) {
+        #app {
+          height: min(var(--app-height, 100dvh), 100dvh);
+        }
+      }
+
       #commandRail {
-        position: relative;
+        position: sticky;
+        top: 0;
+        left: 0;
+        right: 0;
         display: flex;
         justify-content: flex-end;
         align-items: center;
@@ -114,6 +162,7 @@
           calc(var(--rail-padding-inline) + env(safe-area-inset-left, 0px));
         padding-inline-end:
           calc(var(--rail-padding-inline) + env(safe-area-inset-right, 0px));
+        background: var(--command-rail-background);
         z-index: 3;
         touch-action: manipulation;
         width: 100%;
@@ -126,15 +175,15 @@
         height: var(--command-button-size);
         display: grid;
         place-items: center;
-        background: rgba(15, 23, 42, 0.82);
-        color: rgba(226, 232, 240, 0.92);
-        border: 1px solid rgba(148, 163, 184, 0.28);
+        background: var(--command-button-bg);
+        color: var(--command-button-color);
+        border: 1px solid var(--command-button-border);
       }
 
       #commandRail button.active {
-        background: rgba(37, 99, 235, 0.28);
-        border-color: rgba(96, 165, 250, 0.55);
-        color: rgba(226, 232, 240, 1);
+        background: var(--command-button-active-bg);
+        border-color: var(--command-button-active-border);
+        color: var(--command-button-active-color);
       }
 
       #commandRail button .icon {
@@ -143,9 +192,9 @@
       }
 
       #commandRail button:disabled {
-        background: rgba(15, 23, 42, 0.55);
-        color: rgba(148, 163, 184, 0.6);
-        border-color: rgba(71, 85, 105, 0.35);
+        background: var(--command-button-disabled-bg);
+        color: var(--command-button-disabled-color);
+        border-color: var(--command-button-disabled-border);
       }
 
       body[data-orientation="portrait"] #commandRail {
@@ -397,7 +446,7 @@
         padding: calc(32px * var(--ui-scale));
         border-radius: calc(20px * var(--ui-scale));
         background: rgba(2, 6, 23, 0.78);
-        border: 1px solid rgba(59, 130, 246, 0.35);
+        border: 1px solid var(--sheet-border);
         box-shadow: 0 20px 60px rgba(15, 23, 42, 0.6);
         display: grid;
         gap: calc(20px * var(--ui-scale));
@@ -452,8 +501,8 @@
         button.detail-chip {
           padding: 6px 16px;
           border-radius: 999px;
-          border: 1px solid rgba(148, 163, 184, 0.35);
-          background: rgba(15, 23, 42, 0.65);
+          border: 1px solid var(--accent-chip-border);
+          background: var(--detail-chip-background);
           color: rgba(226, 232, 240, 0.85);
           font-weight: 600;
           font-size: 0.85rem;
@@ -464,13 +513,13 @@
         button.detail-chip:hover:not(:disabled) {
           transform: none;
           box-shadow: none;
-          background: rgba(37, 99, 235, 0.25);
+          background: var(--accent-chip-hover);
           color: rgba(226, 232, 240, 0.95);
         }
 
         button.detail-chip[aria-pressed="true"] {
-          background: rgba(59, 130, 246, 0.35);
-          border-color: rgba(147, 197, 253, 0.6);
+          background: var(--accent-chip-active);
+          border-color: var(--accent-chip-active-border);
           color: rgba(226, 232, 240, 0.98);
         }
 
@@ -492,8 +541,8 @@
         border-radius: 999px;
         border: none;
         padding: calc(10px * var(--ui-scale)) calc(22px * var(--ui-scale));
-        background: rgba(96, 165, 250, 0.92);
-        color: #021027;
+        background: var(--primary-button-bg);
+        color: var(--primary-button-color);
         font-weight: 600;
         cursor: pointer;
         transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
@@ -501,60 +550,51 @@
 
       button:hover:not(:disabled) {
         transform: translateY(-1px);
-        box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
-        background: rgba(147, 197, 253, 0.96);
+        box-shadow: 0 12px 24px var(--primary-button-hover-shadow);
+        background: var(--primary-button-hover-bg);
       }
 
       button:disabled {
-        background: rgba(148, 163, 184, 0.35);
-        color: rgba(226, 232, 240, 0.7);
+        background: var(--primary-button-disabled-bg);
+        color: var(--primary-button-disabled-color);
         cursor: not-allowed;
         box-shadow: none;
       }
 
       #paletteDock {
-        position: relative;
+        position: sticky;
+        bottom: 0;
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: calc(16px * var(--ui-scale));
-        padding:
-          calc(16px * var(--ui-scale))
-          calc(28px * var(--ui-scale))
-          calc(24px * var(--ui-scale));
-        background: linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.85) 40%, rgba(2, 6, 23, 0.95) 100%);
-        border-top: 1px solid rgba(30, 41, 59, 0.7);
-        box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
-        touch-action: manipulation;
-      }
-
-      #progress {
-        min-width: 120px;
-        font-size: 1.05rem;
-        font-variant-numeric: tabular-nums;
-        text-align: left;
-        color: rgba(226, 232, 240, 0.82);
-      }
-
-      #palette {
-        flex: 1;
-        display: flex;
-        gap: calc(6px * var(--ui-scale));
+        align-items: stretch;
+        justify-content: flex-start;
+        padding: 0;
+        padding-inline-start: env(safe-area-inset-left, 0px);
+        padding-inline-end: env(safe-area-inset-right, 0px);
+        padding-block-end: env(safe-area-inset-bottom, 0px);
+        background: var(--palette-dock-background);
+        border-top: 1px solid var(--palette-dock-border);
+        flex-wrap: nowrap;
         overflow-x: auto;
         overflow-y: hidden;
-        padding: 2px 0 calc(6px * var(--ui-scale));
         scrollbar-width: thin;
         -webkit-overflow-scrolling: touch;
         touch-action: pan-x;
+        z-index: 3;
       }
 
-      #palette::-webkit-scrollbar {
+      #paletteDock::-webkit-scrollbar {
         height: calc(6px * var(--ui-scale));
       }
 
-      #palette::-webkit-scrollbar-thumb {
-        background: rgba(148, 163, 184, 0.4);
-        border-radius: 999px;
+      #paletteDock::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.45);
+      }
+
+      #palette {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        gap: 0;
       }
 
       .control {
@@ -574,6 +614,164 @@
       .control output {
         font-size: 0.85rem;
         color: rgba(148, 163, 184, 0.9);
+      }
+
+      .control select {
+        font: inherit;
+        padding: calc(10px * var(--ui-scale)) calc(12px * var(--ui-scale));
+        border-radius: calc(12px * var(--ui-scale));
+        border: 1px solid var(--control-border);
+        background: var(--control-surface);
+        color: rgba(226, 232, 240, 0.95);
+      }
+
+      .control select:focus-visible {
+        outline: 2px solid var(--control-focus);
+        outline-offset: 2px;
+      }
+
+      body[data-ui-theme="lagoon"] {
+        --app-background: radial-gradient(circle at top, rgba(45, 212, 191, 0.18), transparent),
+          #022c22;
+        --command-rail-background: linear-gradient(
+          180deg,
+          rgba(2, 20, 16, 0.96),
+          rgba(2, 24, 19, 0.82)
+        );
+        --command-button-bg: rgba(4, 51, 39, 0.82);
+        --command-button-border: rgba(45, 212, 191, 0.28);
+        --command-button-color: rgba(209, 250, 229, 0.92);
+        --command-button-active-bg: rgba(16, 185, 129, 0.3);
+        --command-button-active-border: rgba(52, 211, 153, 0.6);
+        --command-button-active-color: rgba(236, 253, 245, 0.96);
+        --command-button-disabled-bg: rgba(4, 51, 39, 0.55);
+        --command-button-disabled-color: rgba(153, 246, 228, 0.6);
+        --command-button-disabled-border: rgba(15, 118, 110, 0.35);
+        --palette-dock-background: rgba(2, 20, 16, 0.94);
+        --palette-dock-border: rgba(6, 78, 59, 0.75);
+        --primary-button-bg: rgba(16, 185, 129, 0.92);
+        --primary-button-color: #022c22;
+        --primary-button-hover-bg: rgba(52, 211, 153, 0.96);
+        --primary-button-hover-shadow: rgba(13, 148, 136, 0.35);
+        --primary-button-disabled-bg: rgba(52, 211, 153, 0.35);
+        --primary-button-disabled-color: rgba(236, 253, 245, 0.7);
+        --sheet-background: rgba(4, 24, 20, 0.95);
+        --sheet-border: rgba(16, 185, 129, 0.4);
+        --control-focus: rgba(45, 212, 191, 0.55);
+        --control-surface: rgba(4, 47, 39, 0.8);
+        --control-border: rgba(45, 212, 191, 0.3);
+        --accent-chip-hover: rgba(13, 148, 136, 0.3);
+        --accent-chip-active: rgba(16, 185, 129, 0.38);
+        --accent-chip-border: rgba(13, 148, 136, 0.4);
+        --accent-chip-active-border: rgba(52, 211, 153, 0.6);
+        --detail-chip-background: rgba(4, 47, 39, 0.7);
+        --accent-glow: rgba(45, 212, 191, 0.2);
+        --swatch-outline-fallback: rgba(0, 67, 62, 0.65);
+        --swatch-outline-hover: rgba(4, 120, 87, 0.75);
+        --swatch-hint-ring: rgba(45, 212, 191, 0.7);
+        --swatch-active-ring: rgba(45, 212, 191, 0.88);
+      }
+
+      body[data-ui-theme="sunset"] {
+        --app-background: radial-gradient(circle at top, rgba(251, 113, 133, 0.18), transparent),
+          #3b0a1a;
+        --command-rail-background: linear-gradient(
+          180deg,
+          rgba(59, 10, 26, 0.96),
+          rgba(76, 5, 25, 0.82)
+        );
+        --command-button-bg: rgba(80, 7, 28, 0.85);
+        --command-button-border: rgba(252, 165, 165, 0.28);
+        --command-button-color: rgba(255, 241, 242, 0.9);
+        --command-button-active-bg: rgba(244, 63, 94, 0.28);
+        --command-button-active-border: rgba(251, 146, 60, 0.55);
+        --command-button-active-color: rgba(255, 241, 242, 0.98);
+        --command-button-disabled-bg: rgba(76, 5, 25, 0.55);
+        --command-button-disabled-color: rgba(254, 205, 211, 0.6);
+        --command-button-disabled-border: rgba(127, 29, 29, 0.35);
+        --palette-dock-background: rgba(59, 8, 23, 0.94);
+        --palette-dock-border: rgba(107, 33, 47, 0.75);
+        --primary-button-bg: rgba(251, 146, 60, 0.92);
+        --primary-button-color: #3b0a1a;
+        --primary-button-hover-bg: rgba(253, 186, 116, 0.96);
+        --primary-button-hover-shadow: rgba(249, 115, 22, 0.35);
+        --primary-button-disabled-bg: rgba(251, 146, 60, 0.35);
+        --primary-button-disabled-color: rgba(255, 237, 213, 0.7);
+        --sheet-background: rgba(59, 10, 26, 0.95);
+        --sheet-border: rgba(244, 63, 94, 0.45);
+        --control-focus: rgba(251, 113, 133, 0.55);
+        --control-surface: rgba(76, 5, 25, 0.82);
+        --control-border: rgba(244, 114, 182, 0.35);
+        --accent-chip-hover: rgba(244, 63, 94, 0.3);
+        --accent-chip-active: rgba(244, 114, 182, 0.35);
+        --accent-chip-border: rgba(251, 146, 60, 0.4);
+        --accent-chip-active-border: rgba(244, 114, 182, 0.55);
+        --detail-chip-background: rgba(76, 5, 25, 0.74);
+        --accent-glow: rgba(251, 113, 133, 0.22);
+        --swatch-outline-fallback: rgba(80, 7, 28, 0.65);
+        --swatch-outline-hover: rgba(127, 29, 29, 0.78);
+        --swatch-hint-ring: rgba(251, 113, 133, 0.7);
+        --swatch-active-ring: rgba(249, 115, 22, 0.85);
+      }
+
+      body[data-ui-theme="lilac"] {
+        --app-background: radial-gradient(circle at top, rgba(167, 139, 250, 0.18), transparent),
+          #22103a;
+        --command-rail-background: linear-gradient(
+          180deg,
+          rgba(34, 16, 58, 0.96),
+          rgba(40, 14, 58, 0.82)
+        );
+        --command-button-bg: rgba(46, 16, 71, 0.82);
+        --command-button-border: rgba(167, 139, 250, 0.3);
+        --command-button-color: rgba(237, 233, 254, 0.92);
+        --command-button-active-bg: rgba(129, 140, 248, 0.3);
+        --command-button-active-border: rgba(196, 181, 253, 0.55);
+        --command-button-active-color: rgba(237, 233, 254, 0.98);
+        --command-button-disabled-bg: rgba(46, 16, 71, 0.55);
+        --command-button-disabled-color: rgba(196, 181, 253, 0.65);
+        --command-button-disabled-border: rgba(91, 33, 182, 0.35);
+        --palette-dock-background: rgba(34, 16, 58, 0.94);
+        --palette-dock-border: rgba(91, 33, 182, 0.7);
+        --primary-button-bg: rgba(129, 140, 248, 0.92);
+        --primary-button-color: #1e0d33;
+        --primary-button-hover-bg: rgba(165, 180, 252, 0.96);
+        --primary-button-hover-shadow: rgba(129, 140, 248, 0.35);
+        --primary-button-disabled-bg: rgba(165, 180, 252, 0.35);
+        --primary-button-disabled-color: rgba(237, 233, 254, 0.72);
+        --sheet-background: rgba(34, 16, 58, 0.95);
+        --sheet-border: rgba(167, 139, 250, 0.45);
+        --control-focus: rgba(129, 140, 248, 0.6);
+        --control-surface: rgba(46, 16, 71, 0.82);
+        --control-border: rgba(167, 139, 250, 0.35);
+        --accent-chip-hover: rgba(129, 140, 248, 0.3);
+        --accent-chip-active: rgba(167, 139, 250, 0.4);
+        --accent-chip-border: rgba(129, 140, 248, 0.45);
+        --accent-chip-active-border: rgba(196, 181, 253, 0.55);
+        --detail-chip-background: rgba(46, 16, 71, 0.78);
+        --accent-glow: rgba(167, 139, 250, 0.22);
+        --swatch-outline-fallback: rgba(49, 46, 129, 0.6);
+        --swatch-outline-hover: rgba(76, 29, 149, 0.75);
+        --swatch-hint-ring: rgba(167, 139, 250, 0.7);
+        --swatch-active-ring: rgba(129, 140, 248, 0.85);
+      }
+
+      body[data-ui-density="compact"] {
+        --palette-swatch-width: calc(60px * var(--ui-scale));
+        --palette-swatch-min-width: calc(52px * var(--ui-scale));
+        --palette-swatch-height: calc(60px * var(--ui-scale));
+        --rail-gap: calc(6px * var(--ui-scale));
+        --rail-gap-portrait: calc(5px * var(--ui-scale));
+        --rail-padding-inline: calc(20px * var(--ui-scale));
+      }
+
+      body[data-ui-density="cozy"] {
+        --palette-swatch-width: calc(84px * var(--ui-scale));
+        --palette-swatch-min-width: calc(76px * var(--ui-scale));
+        --palette-swatch-height: calc(82px * var(--ui-scale));
+        --rail-gap: calc(10px * var(--ui-scale));
+        --rail-gap-portrait: calc(8px * var(--ui-scale));
+        --rail-padding-inline: calc(28px * var(--ui-scale));
       }
 
       details.advanced-options {
@@ -710,47 +908,35 @@
       }
 
       .swatch {
-        flex: 0 0 auto;
-        position: relative;
+        flex: 0 0 var(--palette-swatch-width);
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 2px;
-        padding: calc(6px * var(--ui-scale));
-        min-width: calc(44px * var(--ui-scale));
-        min-height: calc(52px * var(--ui-scale));
-        border-radius: calc(12px * var(--ui-scale));
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        background:
-          linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.82));
-        color: inherit;
+        min-width: var(--palette-swatch-min-width);
+        min-height: var(--palette-swatch-height);
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: var(--swatch-color, rgba(15, 23, 42, 0.85));
+        color: var(--swatch-label-color, rgba(255, 255, 255, 0.95));
         text-align: center;
         cursor: pointer;
-        transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-        --flash-color: rgba(59, 130, 246, 0.65);
-        --flash-border: rgba(96, 165, 250, 0.9);
-      }
-
-      .swatch::before {
-        content: "";
-        position: absolute;
-        inset: calc(4px * var(--ui-scale));
-        border-radius: calc(10px * var(--ui-scale));
-        background:
-          linear-gradient(140deg, rgba(15, 23, 42, 0.06), rgba(15, 23, 42, 0.28)),
-          var(--swatch-color, transparent);
-        opacity: 0.9;
-        pointer-events: none;
+        box-shadow: inset 0 0 0 1px var(--swatch-outline, var(--swatch-outline-fallback));
+        transition: box-shadow 0.18s ease;
       }
 
       .swatch:hover {
-        transform: translateY(-1px);
+        box-shadow: inset 0 0 0 2px
+          var(--swatch-outline, var(--swatch-outline-hover, var(--swatch-outline-fallback)));
+      }
+
+      .swatch:focus-visible {
+        outline: 2px solid rgba(148, 163, 184, 0.85);
+        outline-offset: -2px;
       }
 
       .swatch.active {
-        border-color: rgba(96, 165, 250, 0.85);
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+        box-shadow: inset 0 0 0 3px var(--swatch-active-ring);
       }
 
       .swatch.done {
@@ -763,33 +949,43 @@
 
       @keyframes swatchHintPulse {
         0% {
-          box-shadow: 0 0 0 0 var(--flash-color, rgba(59, 130, 246, 0.65));
-          border-color: var(--flash-border, rgba(96, 165, 250, 0.9));
+          box-shadow: inset 0 0 0 4px var(--swatch-hint-ring);
         }
         60% {
-          box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
-          border-color: rgba(148, 163, 184, 0.25);
+          box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.4);
         }
         100% {
-          box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
-          border-color: rgba(148, 163, 184, 0.25);
+          box-shadow: inset 0 0 0 1px var(--swatch-outline, var(--swatch-outline-fallback));
         }
       }
 
       .swatch .label {
         position: relative;
-        display: flex;
-        flex-direction: column;
+        display: inline-flex;
         align-items: center;
-        font-size: 0.8rem;
+        justify-content: center;
+        font-size: 1.05rem;
+        font-weight: 600;
         line-height: 1.2;
         max-width: 100%;
         z-index: 1;
+        padding: 0;
+        color: inherit;
       }
 
       .swatch .label > strong {
-        font-size: 1.05rem;
-        letter-spacing: 0.02em;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: calc(28px * var(--ui-scale));
+        padding: 0;
+        border-radius: 0;
+        border: 0;
+        background: transparent;
+        font-size: 1.15rem;
+        letter-spacing: 0.01em;
+        color: currentColor;
+        text-shadow: var(--swatch-label-shadow, none);
       }
 
       .sheet {
@@ -804,8 +1000,8 @@
         flex-direction: column;
         gap: 18px;
         border-radius: 22px;
-        background: rgba(2, 6, 23, 0.95);
-        border: 1px solid rgba(59, 130, 246, 0.4);
+        background: var(--sheet-background);
+        border: 1px solid var(--sheet-border);
         box-shadow: 0 32px 80px rgba(8, 47, 73, 0.55);
         backdrop-filter: blur(26px);
         z-index: 6;
@@ -1047,14 +1243,10 @@
           align-items: stretch;
           gap: 12px;
         }
-
-        #progress {
-          min-width: 0;
-        }
       }
     </style>
   </head>
-  <body>
+  <body data-ui-theme="twilight" data-ui-density="standard">
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
         <button
@@ -1211,14 +1403,6 @@
         </div>
       </div>
       <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div
-          id="progress"
-          aria-live="polite"
-          data-testid="progress-message"
-          data-status="idle"
-        >
-          Choose an artwork to start
-        </div>
         <div id="palette" role="list"></div>
       </footer>
     </div>
@@ -1342,6 +1526,25 @@
             />
           </label>
           <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
+          <label class="control">
+            <span>Interface theme</span>
+            <select id="uiTheme">
+              <option value="twilight">Twilight (default)</option>
+              <option value="lagoon">Lagoon</option>
+              <option value="sunset">Sunset</option>
+              <option value="lilac">Lilac</option>
+            </select>
+          </label>
+          <p class="control-note">Swap toolbar and sheet accents to suit your mood.</p>
+          <label class="control">
+            <span>Palette layout</span>
+            <select id="uiDensity">
+              <option value="compact">Compact</option>
+              <option value="standard" selected>Standard</option>
+              <option value="cozy">Cozy</option>
+            </select>
+          </label>
+          <p class="control-note">Adjust swatch sizing so the palette fits your display.</p>
         </section>
         <section class="sheet-section" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Generator</h3>
@@ -1456,6 +1659,8 @@
       const hintFlashToggle = document.getElementById("hintFlashToggle");
       const backgroundColorInput = document.getElementById("backgroundColor");
       const uiScaleInput = document.getElementById("uiScale");
+      const uiThemeSelect = document.getElementById("uiTheme");
+      const uiDensitySelect = document.getElementById("uiDensity");
       const colorCountEl = document.getElementById("colorCount");
       const minRegionEl = document.getElementById("minRegion");
       const detailEl = document.getElementById("detailLevel");
@@ -1468,14 +1673,27 @@
       const saveSnapshotBtn = document.getElementById("saveSnapshot");
       const saveList = document.getElementById("saveList");
       const paletteEl = document.getElementById("palette");
+      const paletteSortEl = document.getElementById("paletteSort");
       const progressEl = document.getElementById("progress");
       const PROGRESS_MESSAGES = {
         idle: "Choose an artwork to start",
         loading: "Loading puzzle…",
-        ready: "Ready to colour",
         active: "Keep colouring",
         complete: "All done!",
       };
+      const THEME_LABELS = {
+        twilight: "Twilight",
+        lagoon: "Lagoon",
+        sunset: "Sunset",
+        lilac: "Lilac",
+      };
+      const DENSITY_LABELS = {
+        compact: "Compact",
+        standard: "Standard",
+        cozy: "Cozy",
+      };
+      const SUPPORTED_THEMES = new Set(Object.keys(THEME_LABELS));
+      const SUPPORTED_DENSITIES = new Set(Object.keys(DENSITY_LABELS));
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.getElementById("previewCanvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
@@ -1710,12 +1928,15 @@
         sourceTitle: null,
         lastOptions: null,
         sampleDetailLevel: DEFAULT_SAMPLE_DETAIL,
+        paletteSort: "region",
         settings: {
           autoAdvance: true,
           animateHints: true,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: 1,
           artPrompt: "",
+          uiTheme: "twilight",
+          uiDensity: "standard",
         },
         previewVisible: false,
         saves: loadSavedEntries(),
@@ -1739,6 +1960,12 @@
         }
         if (typeof settings.uiScale === "number") {
           applyUiScale(settings.uiScale, { skipLog: true, skipAutosave: true });
+        }
+        if (typeof settings.uiTheme === "string") {
+          applyUiTheme(settings.uiTheme, { skipLog: true, skipAutosave: true });
+        }
+        if (typeof settings.uiDensity === "string") {
+          applyUiDensity(settings.uiDensity, { skipLog: true, skipAutosave: true });
         }
         if (typeof settings.artPrompt === "string") {
           applyArtPrompt(settings.artPrompt, { skipLog: true, skipAutosave: true });
@@ -1807,6 +2034,15 @@
       logDebug("Session started");
       handleViewportChange({ log: true, recenter: true });
       resetView({ recenter: true });
+
+      if (paletteSortEl) {
+        paletteSortEl.value = state.paletteSort;
+        paletteSortEl.disabled = true;
+        paletteSortEl.addEventListener("change", (event) => {
+          const target = event.currentTarget?.value;
+          applyPaletteSort(target);
+        });
+      }
 
       for (const button of sampleButtons) {
         if (!button) continue;
@@ -1918,6 +2154,18 @@
         });
         uiScaleInput.addEventListener("change", (event) => {
           applyUiScale(event.target.value);
+        });
+      }
+
+      if (uiThemeSelect) {
+        uiThemeSelect.addEventListener("change", (event) => {
+          applyUiTheme(event.target.value);
+        });
+      }
+
+      if (uiDensitySelect) {
+        uiDensitySelect.addEventListener("change", (event) => {
+          applyUiDensity(event.target.value);
         });
       }
 
@@ -2317,6 +2565,10 @@
         const orientation = visualWidth >= visualHeight ? "landscape" : "portrait";
         document.documentElement.style.setProperty("--app-width", `${visualWidth}px`);
         document.documentElement.style.setProperty("--app-height", `${visualHeight}px`);
+        if (appEl) {
+          appEl.style.width = `${visualWidth}px`;
+          appEl.style.height = `${visualHeight}px`;
+        }
         const minSide = Math.max(1, Math.min(visualWidth, visualHeight));
         const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
         document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
@@ -2591,6 +2843,53 @@
         return normalized;
       }
 
+      function applyUiTheme(theme, options = {}) {
+        const { skipLog = false, skipAutosave = false, force = false } = options;
+        const normalized = typeof theme === "string" ? theme.trim().toLowerCase() : "";
+        const resolved = SUPPORTED_THEMES.has(normalized) ? normalized : "twilight";
+        const previous = state.settings.uiTheme || "twilight";
+        const changed = force || resolved !== previous;
+        state.settings.uiTheme = resolved;
+        if (document.body) {
+          document.body.dataset.uiTheme = resolved;
+        }
+        if (uiThemeSelect && uiThemeSelect.value !== resolved) {
+          uiThemeSelect.value = resolved;
+        }
+        if (changed && !skipLog) {
+          logDebug(`Interface theme set to ${THEME_LABELS[resolved] || resolved}`);
+        }
+        if (changed && !skipAutosave) {
+          scheduleAutosave("settings-ui-theme");
+        }
+        return resolved;
+      }
+
+      function applyUiDensity(density, options = {}) {
+        const { skipLog = false, skipAutosave = false, force = false } = options;
+        const normalized = typeof density === "string" ? density.trim().toLowerCase() : "";
+        const resolved = SUPPORTED_DENSITIES.has(normalized) ? normalized : "standard";
+        const previous = state.settings.uiDensity || "standard";
+        const changed = force || resolved !== previous;
+        state.settings.uiDensity = resolved;
+        if (document.body) {
+          document.body.dataset.uiDensity = resolved;
+        }
+        if (uiDensitySelect && uiDensitySelect.value !== resolved) {
+          uiDensitySelect.value = resolved;
+        }
+        if (changed && !skipLog) {
+          logDebug(`Palette layout set to ${DENSITY_LABELS[resolved] || resolved}`);
+        }
+        if (changed && !skipAutosave) {
+          scheduleAutosave("settings-ui-density");
+        }
+        return resolved;
+      }
+
+      applyUiTheme(state.settings.uiTheme, { skipLog: true, skipAutosave: true, force: true });
+      applyUiDensity(state.settings.uiDensity, { skipLog: true, skipAutosave: true, force: true });
+
       function updateOptionOutputs() {
         if (optionOutputs.colorCount) optionOutputs.colorCount.textContent = String(colorCountEl.value);
         if (optionOutputs.minRegion) optionOutputs.minRegion.textContent = `${minRegionEl.value} px²`;
@@ -2744,7 +3043,12 @@
         state.filled = new Set();
         state.sourceUrl = null;
         state.sourceTitle = null;
-        paletteEl.innerHTML = "";
+        if (paletteEl) {
+          paletteEl.innerHTML = "";
+        }
+        if (paletteSortEl) {
+          paletteSortEl.disabled = true;
+        }
         setProgressMessage("loading");
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
@@ -3459,8 +3763,17 @@
       }
 
       function renderPalette() {
+        if (!paletteEl) return;
         paletteEl.innerHTML = "";
-        if (!state.puzzle) return;
+        if (!state.puzzle) {
+          if (paletteSortEl) {
+            paletteSortEl.disabled = true;
+          }
+          return;
+        }
+        if (paletteSortEl) {
+          paletteSortEl.disabled = false;
+        }
         const totalByColor = new Map();
         const remainingByColor = new Map();
         for (const region of state.puzzle.regions) {
@@ -3471,7 +3784,42 @@
             remainingByColor.set(region.colorId, remaining + 1);
           }
         }
-        for (const color of state.puzzle.palette) {
+        const paletteEntries = [...state.puzzle.palette];
+        const sortMode = state.paletteSort || "region";
+        const hueCache = new Map();
+        const getHue = (color) => {
+          if (!color) return 0;
+          if (hueCache.has(color.id)) {
+            return hueCache.get(color.id);
+          }
+          const value = hueFromHex(color.hex);
+          hueCache.set(color.id, value);
+          return value;
+        };
+        paletteEntries.sort((a, b) => {
+          if (sortMode === "hue") {
+            const hueDelta = getHue(a) - getHue(b);
+            if (Math.abs(hueDelta) > 0.0001) {
+              return hueDelta;
+            }
+            return a.id - b.id;
+          }
+          if (sortMode === "remaining") {
+            const remainingDelta =
+              (remainingByColor.get(b.id) || 0) - (remainingByColor.get(a.id) || 0);
+            if (remainingDelta !== 0) {
+              return remainingDelta;
+            }
+            const totalDelta = (totalByColor.get(b.id) || 0) - (totalByColor.get(a.id) || 0);
+            if (totalDelta !== 0) {
+              return totalDelta;
+            }
+            return a.id - b.id;
+          }
+          return a.id - b.id;
+        });
+
+        for (const color of paletteEntries) {
           const remaining = remainingByColor.get(color.id) || 0;
           const total = totalByColor.get(color.id) || 0;
           const labelText =
@@ -3491,6 +3839,10 @@
           if (state.activeColor === color.id) swatch.classList.add("active");
           if (remaining === 0) swatch.classList.add("done");
           swatch.style.setProperty("--swatch-color", color.hex || "transparent");
+          const labelStyles = computeSwatchLabelStyles(color.hex);
+          swatch.style.setProperty("--swatch-label-color", labelStyles.color);
+          swatch.style.setProperty("--swatch-outline", labelStyles.outline);
+          swatch.style.setProperty("--swatch-label-shadow", labelStyles.shadow);
           swatch.innerHTML = `
             <span class="label">
               <strong>${color.id}</strong>
@@ -3525,8 +3877,11 @@
         paletteEl.scrollLeft += delta;
       }
 
-      function setProgressMessage(status) {
-        const message = PROGRESS_MESSAGES[status] || PROGRESS_MESSAGES.idle;
+      function setProgressMessage(status, customMessage) {
+        const message =
+          typeof customMessage === "string" && customMessage.length > 0
+            ? customMessage
+            : PROGRESS_MESSAGES[status] || PROGRESS_MESSAGES.idle;
         if (!progressEl) return;
         progressEl.textContent = message;
         progressEl.setAttribute("data-status", status || "idle");
@@ -3535,20 +3890,48 @@
       function updateProgress() {
         if (!state.puzzle) {
           setProgressMessage("idle");
+          if (paletteSortEl) {
+            paletteSortEl.disabled = true;
+          }
           return;
         }
         const total = state.puzzle.regions.length;
         const done = state.filled.size;
-        if (!total || total <= 0) {
-          setProgressMessage("ready");
+        if (!Number.isFinite(total) || total <= 0) {
+          setProgressMessage("idle");
           return;
         }
+        const remaining = Math.max(0, total - done);
         if (done >= total) {
           setProgressMessage("complete");
-        } else if (done === 0) {
-          setProgressMessage("ready");
         } else {
-          setProgressMessage("active");
+          const summary = `${done} / ${total} filled · ${remaining} remaining`;
+          setProgressMessage("active", summary);
+        }
+      }
+
+      function applyPaletteSort(sort, { skipLog } = {}) {
+        const allowed = new Set(["region", "hue", "remaining"]);
+        const next = allowed.has(sort) ? sort : "region";
+        if (state.paletteSort === next) {
+          if (paletteSortEl && paletteSortEl.value !== next) {
+            paletteSortEl.value = next;
+          }
+          return;
+        }
+        state.paletteSort = next;
+        if (paletteSortEl && paletteSortEl.value !== next) {
+          paletteSortEl.value = next;
+        }
+        renderPalette();
+        if (!skipLog) {
+          const label =
+            next === "hue"
+              ? "colour hue"
+              : next === "remaining"
+              ? "remaining regions"
+              : "region number";
+          logDebug(`Palette sorted by ${label}`);
         }
       }
 
@@ -4224,6 +4607,8 @@
             animateHints: Boolean(state.settings.animateHints),
             uiScale: Number(state.settings.uiScale) || 1,
             artPrompt: state.settings.artPrompt || "",
+            uiTheme: state.settings.uiTheme || "twilight",
+            uiDensity: state.settings.uiDensity || "standard",
           },
         };
         if (regionMapPacked) {
@@ -4916,6 +5301,44 @@
         };
       }
 
+      function computeSwatchLabelStyles(hex) {
+        const baseColor = "rgba(255, 255, 255, 0.98)";
+        const darkOutline = "rgba(15, 23, 42, 0.6)";
+        const lightOutline = "rgba(248, 250, 252, 0.45)";
+        const strongShadow = [
+          "0 0 2px rgba(15, 23, 42, 0.85)",
+          "0 0 8px rgba(15, 23, 42, 0.5)",
+        ].join(", ");
+        const balancedShadow = [
+          "0 0 1px rgba(15, 23, 42, 0.7)",
+          "0 0 5px rgba(15, 23, 42, 0.45)",
+        ].join(", ");
+        const lightShadow = [
+          "0 0 1px rgba(248, 250, 252, 0.55)",
+          "0 0 5px rgba(15, 23, 42, 0.4)",
+        ].join(", ");
+        const sanitizedHex = sanitizeHexColor(hex, DEFAULT_BACKGROUND_HEX);
+        const [r, g, b] = hexToRgb(sanitizedHex);
+        const luminance = relativeLuminance([r, g, b]);
+        const lightBackgroundLuminance = relativeLuminance([248, 250, 252]);
+        const darkBackgroundLuminance = relativeLuminance([15, 23, 42]);
+        if (!Number.isFinite(luminance)) {
+          return { color: baseColor, outline: darkOutline, shadow: strongShadow };
+        }
+        if (luminance >= 0.62) {
+          return { color: baseColor, outline: darkOutline, shadow: strongShadow };
+        }
+        if (luminance <= 0.18) {
+          return { color: baseColor, outline: lightOutline, shadow: lightShadow };
+        }
+        const contrastWithDark = contrastRatio(luminance, darkBackgroundLuminance);
+        const contrastWithLight = contrastRatio(luminance, lightBackgroundLuminance);
+        if (contrastWithLight < contrastWithDark) {
+          return { color: baseColor, outline: darkOutline, shadow: strongShadow };
+        }
+        return { color: baseColor, outline: lightOutline, shadow: balancedShadow };
+      }
+
       function relativeLuminance([r, g, b]) {
         const toLinear = (channel) => {
           const value = channel / 255;
@@ -4925,6 +5348,35 @@
         const linearG = toLinear(g);
         const linearB = toLinear(b);
         return 0.2126 * linearR + 0.7152 * linearG + 0.0722 * linearB;
+      }
+
+      function contrastRatio(l1, l2) {
+        const lighter = Math.max(l1, l2);
+        const darker = Math.min(l1, l2);
+        return (lighter + 0.05) / (darker + 0.05);
+      }
+
+      function hueFromHex(hex) {
+        const [r, g, b] = hexToRgb(hex);
+        const rn = r / 255;
+        const gn = g / 255;
+        const bn = b / 255;
+        const max = Math.max(rn, gn, bn);
+        const min = Math.min(rn, gn, bn);
+        const delta = max - min;
+        if (delta === 0) {
+          return 0;
+        }
+        let hue;
+        if (max === rn) {
+          hue = (gn - bn) / delta + (gn < bn ? 6 : 0);
+        } else if (max === gn) {
+          hue = (bn - rn) / delta + 2;
+        } else {
+          hue = (rn - gn) / delta + 4;
+        }
+        hue *= 60;
+        return Number.isFinite(hue) ? hue : 0;
       }
 
       function hexToRgb(hex) {
