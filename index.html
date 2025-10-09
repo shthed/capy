@@ -35,7 +35,7 @@
           sans-serif;
         background: #020617;
         color: #e2e8f0;
-        --ui-scale-user: 1;
+        --ui-scale-user: 0.9;
         --ui-scale-auto: 1;
         --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
         --app-width: 100vw;
@@ -537,7 +537,7 @@
         border-top: 1px solid rgba(15, 23, 42, 0.85);
         flex-wrap: nowrap;
         overflow-x: auto;
-        overflow-y: hidden;
+        overflow-y: visible;
         scrollbar-width: thin;
         -webkit-overflow-scrolling: touch;
         touch-action: pan-x;
@@ -727,6 +727,8 @@
         cursor: pointer;
         box-shadow: inset 0 0 0 1px var(--swatch-outline, rgba(15, 23, 42, 0.6));
         transition: box-shadow 0.18s ease;
+        position: relative;
+        overflow: visible;
       }
 
       .swatch:hover {
@@ -774,6 +776,42 @@
         z-index: 1;
         padding: 0;
         color: inherit;
+      }
+
+      .swatch .swatch-tooltip {
+        position: absolute;
+        inset-inline: 50%;
+        bottom: calc(100% + 8px);
+        transform: translate(-50%, 4px) scale(0.98);
+        padding: calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        border-radius: calc(8px * var(--ui-scale));
+        background: rgba(15, 23, 42, 0.9);
+        color: rgba(248, 250, 252, 0.95);
+        font-size: 0.75rem;
+        font-weight: 500;
+        white-space: nowrap;
+        box-shadow: 0 6px 20px rgba(2, 6, 23, 0.45);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.16s ease, transform 0.16s ease;
+        z-index: 10;
+      }
+
+      .swatch .swatch-tooltip::after {
+        content: "";
+        position: absolute;
+        inset-inline-start: 50%;
+        top: 100%;
+        transform: translateX(-50%);
+        border-width: 6px 6px 0 6px;
+        border-style: solid;
+        border-color: rgba(15, 23, 42, 0.9) transparent transparent transparent;
+      }
+
+      .swatch:hover .swatch-tooltip,
+      .swatch:focus-visible .swatch-tooltip {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
       }
 
       .swatch .label > strong {
@@ -1329,14 +1367,14 @@
             Applies to unfinished regions and adjusts outline contrast automatically.
           </p>
           <label class="control">
-            <span>Interface scale <output data-for="uiScale">100%</output></span>
+            <span>Interface scale <output data-for="uiScale">90%</output></span>
             <input
               id="uiScale"
               type="range"
-              min="0.85"
+              min="0.6"
               max="1.35"
               step="0.05"
-              value="1"
+              value="0.9"
             />
           </label>
           <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
@@ -1496,6 +1534,7 @@
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
+      const DEFAULT_UI_SCALE = 0.9;
       let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
       const gameSaveManager = createGameSaveManager();
@@ -1723,7 +1762,7 @@
           autoAdvance: true,
           animateHints: true,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
-          uiScale: 1,
+          uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
           showRegionLabels: true,
         },
@@ -2430,7 +2469,9 @@
       function syncComputedUiScale() {
         const root = document.documentElement;
         const userValue =
-          typeof state?.settings?.uiScale === "number" ? state.settings.uiScale : 1;
+          typeof state?.settings?.uiScale === "number"
+            ? state.settings.uiScale
+            : DEFAULT_UI_SCALE;
         if (!root) {
           return userValue;
         }
@@ -2470,7 +2511,7 @@
         const minSide = Math.max(1, Math.min(visualWidth, visualHeight));
         const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
         document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
-        const autoScale = clamp(minSide / 880, 0.8, 1.1);
+        const autoScale = clamp(minSide / 880, 0.7, 1.1);
         document.documentElement.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
         if (document.body) {
           document.body.dataset.orientation = orientation;
@@ -2668,8 +2709,16 @@
       function applyUiScale(scale, options = {}) {
         const { skipLog = false, skipAutosave = false, force = false } = options;
         const numeric = Number(scale);
-        const resolved = clamp(Number.isFinite(numeric) ? numeric : state.settings.uiScale || 1, 0.8, 1.35);
-        const current = state.settings.uiScale ?? 1;
+        const fallbackScale =
+          Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
+            ? state.settings.uiScale
+            : DEFAULT_UI_SCALE;
+        const resolved = clamp(
+          Number.isFinite(numeric) && numeric > 0 ? numeric : fallbackScale,
+          0.6,
+          1.35
+        );
+        const current = fallbackScale;
         const changed = force || Math.abs(resolved - current) > 0.001;
         state.settings.uiScale = resolved;
         document.documentElement.style.setProperty("--ui-scale-user", String(resolved));
@@ -2777,7 +2826,11 @@
         if (optionOutputs.smoothing) optionOutputs.smoothing.textContent = String(smoothingEl.value);
         if (optionOutputs.uiScale) {
           const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
-          const value = Number.isFinite(source) ? source : state.settings.uiScale || 1;
+          const value = Number.isFinite(source) && source > 0
+            ? source
+            : (Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
+                ? state.settings.uiScale
+                : DEFAULT_UI_SCALE);
           optionOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
         }
       }
@@ -3682,7 +3735,9 @@
             remainingByColor.set(region.colorId, remaining + 1);
           }
         }
-        const paletteEntries = [...state.puzzle.palette];
+        const paletteEntries = state.puzzle.palette
+          .filter((color) => (remainingByColor.get(color.id) || 0) > 0)
+          .slice();
         const sortMode = state.paletteSort || "region";
         const hueCache = new Map();
         const getHue = (color) => {
@@ -3719,33 +3774,49 @@
 
         for (const color of paletteEntries) {
           const remaining = remainingByColor.get(color.id) || 0;
+          if (remaining <= 0) {
+            continue;
+          }
           const total = totalByColor.get(color.id) || 0;
           const labelText =
             (typeof color.name === "string" && color.name.trim()) ||
             (typeof color.hex === "string" ? color.hex.toUpperCase() : `Colour ${color.id}`);
+          const regionWord = remaining === 1 ? "region" : "regions";
+          const totalWord = total === 1 ? "region" : "regions";
+          const tooltipText = `${remaining} ${regionWord} left`;
+          const ariaSummary = `${remaining} of ${total} ${totalWord} remaining.`;
           const swatch = document.createElement("button");
           swatch.type = "button";
           swatch.className = "swatch";
           swatch.dataset.testid = "palette-swatch";
           swatch.dataset.colorId = String(color.id);
+          swatch.dataset.remaining = String(remaining);
+          swatch.dataset.total = String(total);
           swatch.setAttribute("role", "listitem");
           swatch.setAttribute(
             "aria-label",
-            `Colour ${color.id}: ${labelText}. ${remaining} of ${total} regions remaining.`
+            `Colour ${color.id}: ${labelText}. ${ariaSummary}`
           );
-          swatch.title = `${labelText} · ${remaining} of ${total} remaining`;
+          swatch.title = `${labelText} · ${tooltipText} (${total} total)`;
           if (state.activeColor === color.id) swatch.classList.add("active");
-          if (remaining === 0) swatch.classList.add("done");
           swatch.style.setProperty("--swatch-color", color.hex || "transparent");
           const labelStyles = computeSwatchLabelStyles(color.hex);
           swatch.style.setProperty("--swatch-label-color", labelStyles.color);
           swatch.style.setProperty("--swatch-outline", labelStyles.outline);
           swatch.style.setProperty("--swatch-label-shadow", labelStyles.shadow);
-          swatch.innerHTML = `
-            <span class="label">
-              <strong>${color.id}</strong>
-            </span>
-          `;
+          const label = document.createElement("span");
+          label.className = "label";
+          const number = document.createElement("strong");
+          number.textContent = String(color.id);
+          label.appendChild(number);
+          swatch.appendChild(label);
+          const tooltipId = `swatchTooltip-${color.id}`;
+          const tooltip = document.createElement("span");
+          tooltip.id = tooltipId;
+          tooltip.className = "swatch-tooltip";
+          tooltip.textContent = tooltipText;
+          swatch.appendChild(tooltip);
+          swatch.setAttribute("aria-describedby", tooltipId);
           swatch.addEventListener("click", () => {
             activateColor(color.id);
           });
@@ -4594,7 +4665,10 @@
         payload.settings = {
           autoAdvance: Boolean(settingsSource.autoAdvance),
           animateHints: Boolean(settingsSource.animateHints),
-          uiScale: Number.isFinite(settingsSource.uiScale) ? settingsSource.uiScale : 1,
+          uiScale:
+            Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
+              ? clamp(settingsSource.uiScale, 0.6, 1.35)
+              : DEFAULT_UI_SCALE,
           artPrompt:
             typeof settingsSource.artPrompt === "string" ? settingsSource.artPrompt : "",
         };
@@ -4695,7 +4769,10 @@
           settings: {
             autoAdvance: Boolean(state.settings.autoAdvance),
             animateHints: Boolean(state.settings.animateHints),
-            uiScale: Number(state.settings.uiScale) || 1,
+            uiScale:
+              Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
+                ? clamp(state.settings.uiScale, 0.6, 1.35)
+                : DEFAULT_UI_SCALE,
             artPrompt: state.settings.artPrompt || "",
             showRegionLabels: state.settings.showRegionLabels !== false,
           },
