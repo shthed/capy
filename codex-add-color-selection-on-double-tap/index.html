@@ -1695,6 +1695,9 @@
       let lastTouchTapTime = 0;
       let lastTouchTapRegionId = null;
       let lastTouchSelectionTime = 0;
+      const prefersReducedMotionQuery = window.matchMedia
+        ? window.matchMedia("(prefers-reduced-motion: reduce)")
+        : null;
 
       // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
@@ -3585,6 +3588,24 @@
         }
       }
 
+      function scrollPaletteToColor(colorId) {
+        if (!paletteEl) return;
+        if (colorId == null) return;
+        const swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
+        if (!swatch) return;
+        const scrollBehavior =
+          prefersReducedMotionQuery && prefersReducedMotionQuery.matches ? "auto" : "smooth";
+        try {
+          swatch.scrollIntoView({
+            block: "nearest",
+            inline: "nearest",
+            behavior: scrollBehavior,
+          });
+        } catch (error) {
+          swatch.scrollIntoView();
+        }
+      }
+
       function activateColor(colorId, options = {}) {
         if (!state.puzzle) return false;
         if (colorId == null) return false;
@@ -3596,6 +3617,7 @@
         if (redraw) {
           renderPalette();
         }
+        scrollPaletteToColor(colorId);
         if (flash) {
           flashColorRegions(colorId);
         }
