@@ -104,11 +104,12 @@ tools, a save manager, and a configurable generator all live inside a single
   palettes stretch beyond the screen so every colour stays accessible without
   vertical overflow.
 - **Progress persistence & recovery.** Every stroke updates a rolling autosave
-  using a compact payload so the latest session is restored automatically on
+  using a compressed snapshot so the latest session is restored automatically on
   launch. Manual snapshots still land in the save manager where you can rename,
-  export, or delete entries at will. A storage summary in Help surfaces how
-  much browser space saves occupy and includes a one-click delete button for
-  clearing local data.
+  export, or delete entries at will. The Help sheet now surfaces estimated
+  browser quota usage alongside save totals, offers a one-click delete button
+  for clearing local data, and logs payload sizes plus storage consumption when
+  the browser reports quota errors.
 
 ### Capybara Springs detail presets
 

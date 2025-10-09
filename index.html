@@ -1542,6 +1542,7 @@
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
       let pendingAutosaveReason = null;
+      let storageSummaryUpdateToken = 0;
       let preventingBrowserZoom = false;
       const DOUBLE_TAP_GUARD_MS = 350;
       const HINT_REVEAL_DURATION_MS = 1600;
@@ -4805,12 +4806,28 @@
           data: snapshot,
         });
         if (!record) return null;
+        const storageRecord = encodeAutosaveStorageRecord(record);
+        if (!storageRecord) {
+          updateStorageUsageSummary();
+          return record;
+        }
+        let serialized = null;
+        let attemptedBytes = 0;
         try {
-          localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(record));
+          serialized = JSON.stringify(storageRecord);
+          attemptedBytes = getStoredStringSize(serialized);
         } catch (error) {
-          console.error("Failed to persist autosave", error);
-          if (error && error.name === "QuotaExceededError") {
-            logDebug("Storage full: unable to write autosave. Delete old saves or exports and retry.");
+          console.error("Failed to prepare autosave for storage", error);
+        }
+        if (serialized) {
+          try {
+            localStorage.setItem(AUTOSAVE_STORAGE_KEY, serialized);
+          } catch (error) {
+            console.error("Failed to persist autosave", error);
+            if (error && error.name === "QuotaExceededError") {
+              logDebug("Storage full: unable to write autosave. Delete old saves or exports and retry.");
+              logStorageFailureDetails("autosave", attemptedBytes);
+            }
           }
         }
         updateStorageUsageSummary();
@@ -4822,19 +4839,24 @@
           const raw = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
           if (!raw) return null;
           const parsed = JSON.parse(raw);
-          const normalized = normalizeAutosaveRecord(parsed);
+          const decoded = decodeAutosaveStorageRecord(parsed) || parsed;
+          const normalized = normalizeAutosaveRecord(decoded);
           if (normalized) {
-            const needsRewrite =
-              !parsed ||
-              parsed.data !== normalized.data ||
-              (parsed.title !== normalized.title && typeof normalized.title === "string") ||
-              (parsed && parsed.data && Array.isArray(parsed.data.regions)
-                ? parsed.data.regions.some((region) => Array.isArray(region?.pixels) && region.pixels.length > 0)
-                : false) ||
-              Boolean(parsed?.data?.regionMap);
-            if (needsRewrite) {
+            let rewritePayload = null;
+            try {
+              const encoded = encodeAutosaveStorageRecord(normalized);
+              if (encoded) {
+                const serialized = JSON.stringify(encoded);
+                if (serialized !== raw) {
+                  rewritePayload = serialized;
+                }
+              }
+            } catch (prepareError) {
+              console.error("Failed to prepare autosave for rewrite", prepareError);
+            }
+            if (rewritePayload) {
               try {
-                localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(normalized));
+                localStorage.setItem(AUTOSAVE_STORAGE_KEY, rewritePayload);
               } catch (persistError) {
                 console.error("Failed to compact autosave", persistError);
               }
@@ -4937,33 +4959,99 @@
         return `${rounded} ${units[unitIndex]}`;
       }
 
+      function logStorageFailureDetails(kind, attemptedBytes) {
+        if (Number.isFinite(attemptedBytes) && attemptedBytes > 0) {
+          const label = formatBytes(attemptedBytes);
+          const prefix = kind === "autosave" ? "Autosave" : "Save snapshot";
+          logDebug(`${prefix} payload ≈${label}.`);
+        }
+        if (navigator.storage && typeof navigator.storage.estimate === "function") {
+          navigator.storage
+            .estimate()
+            .then((estimate) => {
+              if (!estimate) return;
+              const usage = Number(estimate.usage);
+              const quota = Number(estimate.quota);
+              if (Number.isFinite(usage) && Number.isFinite(quota) && quota > 0) {
+                const percent = Math.min(100, Math.round((usage / quota) * 1000) / 10);
+                const percentSuffix = Number.isFinite(percent) ? ` (${percent}% used)` : "";
+                logDebug(`Storage usage ${formatBytes(usage)} of ${formatBytes(quota)} quota${percentSuffix}.`);
+              } else if (Number.isFinite(usage)) {
+                logDebug(`Storage usage ${formatBytes(usage)} (quota unavailable).`);
+              } else if (Number.isFinite(quota)) {
+                logDebug(`Storage quota ${formatBytes(quota)} (usage unavailable).`);
+              }
+            })
+            .catch((error) => {
+              console.error("Failed to estimate storage quota", error);
+            });
+        } else {
+          logDebug("Storage usage estimate unavailable in this browser.");
+        }
+      }
+
       function updateStorageUsageSummary() {
         if (!saveStorageSummary) return;
+        const token = ++storageSummaryUpdateToken;
+        let stats = { manualBytes: 0, manualCount: 0, autosaveBytes: 0, totalBytes: 0 };
+        try {
+          stats = collectSaveStorageStats();
+        } catch (error) {
+          console.error("Failed to update save storage summary", error);
+        }
         let summaryText =
           "Save data lives entirely in this browser. Autosaves run while you play, and manual saves appear in the save manager.";
         let disableClearButton = true;
-        try {
-          const stats = collectSaveStorageStats();
-          const hasAutosave = stats.autosaveBytes > 0;
-          const hasManual = stats.manualCount > 0;
-          if (hasAutosave || hasManual) {
-            const autosaveLabel = hasAutosave
-              ? `Autosave ${formatBytes(stats.autosaveBytes)}`
-              : "No autosave stored";
-            const manualLabel = hasManual
-              ? `${stats.manualCount} manual ${stats.manualCount === 1 ? "save" : "saves"} using ${formatBytes(
-                  stats.manualBytes
-                )}`
-              : "No manual saves";
-            summaryText = `${autosaveLabel} · ${manualLabel} · Total ${formatBytes(stats.totalBytes)} stored locally.`;
-            disableClearButton = !(hasAutosave || hasManual);
-          }
-        } catch (error) {
-          console.error("Failed to update save storage summary", error);
+        const hasAutosave = stats.autosaveBytes > 0;
+        const hasManual = stats.manualCount > 0;
+        if (hasAutosave || hasManual) {
+          const autosaveLabel = hasAutosave ? `Autosave ${formatBytes(stats.autosaveBytes)}` : "No autosave stored";
+          const manualLabel = hasManual
+            ? `${stats.manualCount} manual ${stats.manualCount === 1 ? "save" : "saves"} using ${formatBytes(
+                stats.manualBytes
+              )}`
+            : "No manual saves";
+          summaryText = `${autosaveLabel} · ${manualLabel} · Total ${formatBytes(stats.totalBytes)} stored locally.`;
+          disableClearButton = !(hasAutosave || hasManual);
         }
         saveStorageSummary.textContent = summaryText;
         if (deleteAllSavesButton) {
           deleteAllSavesButton.disabled = disableClearButton;
+        }
+        if (navigator.storage && typeof navigator.storage.estimate === "function") {
+          const baseSummary = summaryText;
+          const statsSnapshot = { ...stats };
+          navigator.storage
+            .estimate()
+            .then((estimate) => {
+              if (token !== storageSummaryUpdateToken) return;
+              if (!estimate) return;
+              const quota = Number(estimate.quota);
+              const usage = Number(estimate.usage);
+              if (!Number.isFinite(quota) || quota <= 0) {
+                if (Number.isFinite(usage) && usage > 0) {
+                  const usageText = `Storage usage: ${formatBytes(usage)}.`;
+                  saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${usageText}`;
+                }
+                return;
+              }
+              const usedBytes = Number.isFinite(usage) && usage >= 0 ? usage : statsSnapshot.totalBytes;
+              const usageLabel = formatBytes(usedBytes);
+              const quotaLabel = formatBytes(quota);
+              let percentText = "";
+              if (quota > 0 && Number.isFinite(usedBytes)) {
+                const percent = Math.min(100, Math.round((usedBytes / quota) * 1000) / 10);
+                if (Number.isFinite(percent)) {
+                  percentText = ` (${percent}% used)`;
+                }
+              }
+              const quotaText = `Storage quota: ${usageLabel} of ${quotaLabel}${percentText}.`;
+              saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${quotaText}`;
+            })
+            .catch((error) => {
+              if (token !== storageSummaryUpdateToken) return;
+              console.error("Failed to estimate storage quota", error);
+            });
         }
       }
 
@@ -5060,6 +5148,275 @@
         return null;
       }
 
+      function tryCompressString(input) {
+        if (typeof input !== "string" || input.length === 0) {
+          return {
+            payload: "",
+            compressed: false,
+            encoding: "identity",
+            originalBytes: 0,
+            compressedBytes: 0,
+          };
+        }
+        let originalBytes = 0;
+        try {
+          originalBytes = getStoredStringSize(input);
+        } catch (error) {
+          console.error("Failed to inspect string size before compression", error);
+        }
+        try {
+          const codes = lzwCompress(input);
+          if (!codes || codes.length === 0) {
+            return {
+              payload: input,
+              compressed: false,
+              encoding: "identity",
+              originalBytes,
+              compressedBytes: originalBytes,
+            };
+          }
+          const bytes = new Uint8Array(codes.buffer);
+          const payload = encodeBytesToBase64(bytes);
+          const compressedBytes = getStoredStringSize(payload);
+          if (compressedBytes >= originalBytes || !payload) {
+            return {
+              payload: input,
+              compressed: false,
+              encoding: "identity",
+              originalBytes,
+              compressedBytes: originalBytes,
+            };
+          }
+          return {
+            payload,
+            compressed: true,
+            encoding: "lzw16",
+            originalBytes,
+            compressedBytes,
+          };
+        } catch (error) {
+          console.error("Failed to compress save payload", error);
+        }
+        return {
+          payload: input,
+          compressed: false,
+          encoding: "identity",
+          originalBytes,
+          compressedBytes: originalBytes,
+        };
+      }
+
+      function encodeBytesToBase64(bytes) {
+        if (!bytes || typeof bytes.length !== "number" || bytes.length === 0) {
+          return "";
+        }
+        let binary = "";
+        for (let index = 0; index < bytes.length; index += 1) {
+          binary += String.fromCharCode(bytes[index]);
+        }
+        return btoa(binary);
+      }
+
+      function decodeBase64ToBytes(base64) {
+        if (typeof base64 !== "string" || base64.length === 0) {
+          return new Uint8Array(0);
+        }
+        const binary = atob(base64);
+        const buffer = new ArrayBuffer(binary.length);
+        const bytes = new Uint8Array(buffer);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        return bytes;
+      }
+
+      function lzwCompress(input) {
+        if (typeof input !== "string" || input.length === 0) {
+          return new Uint16Array(0);
+        }
+        const dictionary = new Map();
+        for (let index = 0; index < 256; index += 1) {
+          dictionary.set(String.fromCharCode(index), index);
+        }
+        let dictSize = 256;
+        let current = "";
+        const codes = [];
+        for (let index = 0; index < input.length; index += 1) {
+          const char = input.charAt(index);
+          const candidate = current + char;
+          if (dictionary.has(candidate)) {
+            current = candidate;
+          } else {
+            if (current) {
+              const code = dictionary.get(current);
+              if (typeof code === "number") {
+                codes.push(code);
+              }
+            }
+            if (dictSize < 65535) {
+              dictionary.set(candidate, dictSize);
+              dictSize += 1;
+            }
+            current = char;
+          }
+        }
+        if (current) {
+          const code = dictionary.get(current);
+          if (typeof code === "number") {
+            codes.push(code);
+          }
+        }
+        return new Uint16Array(codes);
+      }
+
+      function lzwDecompress(codes) {
+        if (!codes || codes.length === 0) {
+          return "";
+        }
+        const dictionary = [];
+        for (let index = 0; index < 256; index += 1) {
+          dictionary[index] = String.fromCharCode(index);
+        }
+        let dictSize = 256;
+        let previous = String.fromCharCode(codes[0]);
+        let output = previous;
+        for (let index = 1; index < codes.length; index += 1) {
+          const code = codes[index];
+          let entry = "";
+          if (dictionary[code] != null) {
+            entry = dictionary[code];
+          } else if (code === dictSize) {
+            entry = previous + previous.charAt(0);
+          } else {
+            return null;
+          }
+          output += entry;
+          if (dictSize < 65535) {
+            dictionary[dictSize] = previous + entry.charAt(0);
+            dictSize += 1;
+          }
+          previous = entry;
+        }
+        return output;
+      }
+
+      function encodeStoredSnapshot(snapshot) {
+        const data = compactPuzzleSnapshot(snapshot);
+        if (!data) return null;
+        try {
+          const json = JSON.stringify(data);
+          const compressed = tryCompressString(json);
+          if (compressed.compressed) {
+            return {
+              __compressed: true,
+              encoding: compressed.encoding,
+              payload: compressed.payload,
+            };
+          }
+        } catch (error) {
+          console.error("Failed to prepare snapshot for storage", error);
+        }
+        return data;
+      }
+
+      function decodeStoredSnapshot(source) {
+        if (!source) return null;
+        let data = null;
+        if (typeof source === "string") {
+          try {
+            data = JSON.parse(source);
+          } catch (error) {
+            console.error("Failed to parse snapshot string", error);
+            return null;
+          }
+        } else if (typeof source === "object" && source.__compressed === true && typeof source.payload === "string") {
+          try {
+            const bytes = decodeBase64ToBytes(source.payload);
+            const codes = new Uint16Array(bytes.buffer);
+            const text = lzwDecompress(codes);
+            if (typeof text !== "string") {
+              return null;
+            }
+            data = JSON.parse(text);
+          } catch (error) {
+            console.error("Failed to decompress snapshot", error);
+            return null;
+          }
+        } else if (typeof source === "object") {
+          data = source;
+        }
+        if (!data || typeof data !== "object") {
+          return null;
+        }
+        return compactPuzzleSnapshot(data);
+      }
+
+      function encodeAutosaveStorageRecord(record) {
+        if (!record || typeof record !== "object") return null;
+        const data = encodeStoredSnapshot(record.data);
+        if (!data) return null;
+        const storageRecord = {
+          version: record.version,
+          timestamp: record.timestamp,
+          reason: record.reason,
+          data,
+        };
+        if (typeof record.title === "string" && record.title.trim()) {
+          storageRecord.title = record.title.trim();
+        }
+        return storageRecord;
+      }
+
+      function decodeAutosaveStorageRecord(record) {
+        if (!record || typeof record !== "object") return null;
+        const data = decodeStoredSnapshot(record.data ?? record.payload ?? null);
+        if (!data) return null;
+        const normalized = {
+          version:
+            typeof record.version === "number" && Number.isFinite(record.version) ? record.version : 1,
+          timestamp:
+            typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
+              ? record.timestamp
+              : Date.now(),
+          reason: typeof record.reason === "string" && record.reason ? record.reason : "update",
+          data,
+        };
+        if (typeof record.title === "string" && record.title.trim()) {
+          normalized.title = record.title.trim();
+        }
+        return normalized;
+      }
+
+      function encodeSaveStorageEntry(entry) {
+        if (!entry || typeof entry !== "object") return null;
+        const data = encodeStoredSnapshot(entry.data);
+        if (!data) return null;
+        const storageEntry = {
+          id: entry.id,
+          timestamp: entry.timestamp,
+          data,
+        };
+        if (typeof entry.title === "string" && entry.title.trim()) {
+          storageEntry.title = entry.title.trim();
+        }
+        return storageEntry;
+      }
+
+      function decodeSaveStorageEntry(entry) {
+        if (!entry || typeof entry !== "object") return null;
+        const data = decodeStoredSnapshot(entry.data ?? null);
+        if (!data) return null;
+        const decoded = {
+          id: entry.id,
+          timestamp: entry.timestamp,
+          data,
+        };
+        if (typeof entry.title === "string" && entry.title.trim()) {
+          decoded.title = entry.title.trim();
+        }
+        return decoded;
+      }
+
       function createGameSaveManager() {
         const key = SAVE_STORAGE_KEY;
         const subscribers = new Set();
@@ -5078,21 +5435,22 @@
 
         function normalizeEntry(entry) {
           if (!entry || typeof entry !== "object") return null;
-          const idRaw = entry.id != null ? String(entry.id) : "";
+          const decoded = decodeSaveStorageEntry(entry) || entry;
+          const idRaw = decoded.id != null ? String(decoded.id) : "";
           const id = idRaw.trim();
           if (!id) return null;
-          const data = compactPuzzleSnapshot(entry.data);
+          const data = compactPuzzleSnapshot(decoded.data);
           if (!data) return null;
           const normalized = {
             id,
             timestamp:
-              typeof entry.timestamp === "number" && Number.isFinite(entry.timestamp)
-                ? entry.timestamp
+              typeof decoded.timestamp === "number" && Number.isFinite(decoded.timestamp)
+                ? decoded.timestamp
                 : Date.now(),
             data,
           };
-          if (typeof entry.title === "string" && entry.title.trim()) {
-            normalized.title = entry.title.trim();
+          if (typeof decoded.title === "string" && decoded.title.trim()) {
+            normalized.title = decoded.title.trim();
           } else if (typeof data.title === "string" && data.title) {
             normalized.title = data.title;
           }
@@ -5120,12 +5478,26 @@
         }
 
         function writeToStorage(entries) {
+          let serialized = "[]";
+          let attemptedBytes = 0;
           try {
-            localStorage.setItem(key, JSON.stringify(entries));
+            const prepared = Array.isArray(entries)
+              ? entries
+                  .map((entry) => encodeSaveStorageEntry(entry))
+                  .filter((entry) => entry && typeof entry === "object")
+              : [];
+            serialized = JSON.stringify(prepared);
+            attemptedBytes = getStoredStringSize(serialized);
+          } catch (error) {
+            console.error("Failed to prepare saves for storage", error);
+          }
+          try {
+            localStorage.setItem(key, serialized);
           } catch (error) {
             console.error("Failed to persist saves", error);
             if (error && error.name === "QuotaExceededError") {
               logDebug("Storage full: unable to write save snapshot. Delete old saves or exports and retry.");
+              logStorageFailureDetails("manual", attemptedBytes);
             }
           }
         }
