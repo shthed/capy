@@ -339,17 +339,52 @@
         opacity: 1;
       }
 
-      #puzzleCanvas {
-        max-width: calc(100vw - 160px);
-        max-height: calc(100vh - 220px);
-        width: auto;
-        height: auto;
+      #canvasStack {
+        position: relative;
+        display: inline-block;
+        --puzzle-width: 640px;
+        --puzzle-height: 480px;
+        --puzzle-max-width: calc(100vw - 160px);
+        --puzzle-max-height: calc(100vh - 220px);
+        width: min(var(--puzzle-width), var(--puzzle-max-width));
+        max-width: var(--puzzle-max-width);
+        max-height: var(--puzzle-max-height);
         border-radius: 20px;
         background: #0f172a;
         border: 1px solid rgba(148, 163, 184, 0.45);
         box-shadow: 0 30px 60px rgba(15, 23, 42, 0.45);
+        overflow: hidden;
+      }
+
+      #canvasStack canvas {
+        display: block;
+        width: 100%;
+        height: auto;
         image-rendering: pixelated;
+        border-radius: inherit;
+      }
+
+      #originalCanvas {
+        pointer-events: none;
+      }
+
+      #puzzleCanvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
         touch-action: none;
+        transition: opacity 0.2s ease;
+      }
+
+      #viewport.reveal-original #puzzleCanvas {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #viewport.reveal-original #pointerOverlay {
+        opacity: 0 !important;
       }
 
       #previewOverlay {
@@ -1022,8 +1057,8 @@
       }
 
       @media (max-width: 1024px) {
-        #puzzleCanvas {
-          max-width: calc(100vw - 60px);
+        #canvasStack {
+          --puzzle-max-width: calc(100vw - 60px);
         }
 
         #commandRail {
@@ -1037,8 +1072,8 @@
           padding: 20px;
         }
 
-        #puzzleCanvas {
-          max-height: calc(100vh - 240px);
+        #canvasStack {
+          --puzzle-max-height: calc(100vh - 240px);
         }
 
         #paletteDock {
@@ -1142,12 +1177,20 @@
       <div id="viewport">
         <div id="canvasStage">
           <div id="canvasTransform">
-            <canvas
-              id="puzzleCanvas"
-              data-testid="puzzle-canvas"
-              width="640"
-              height="480"
-            ></canvas>
+            <div id="canvasStack">
+              <canvas
+                id="originalCanvas"
+                aria-hidden="true"
+                width="640"
+                height="480"
+              ></canvas>
+              <canvas
+                id="puzzleCanvas"
+                data-testid="puzzle-canvas"
+                width="640"
+                height="480"
+              ></canvas>
+            </div>
           </div>
         </div>
         <div id="pointerOverlay" aria-hidden="true">
@@ -1437,6 +1480,7 @@
       const viewportEl = document.getElementById("viewport");
       const canvasStage = document.getElementById("canvasStage");
       const canvasTransform = document.getElementById("canvasTransform");
+      const canvasStack = document.getElementById("canvasStack");
       const cursorOverlay = document.getElementById("pointerOverlay");
       const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
@@ -1463,8 +1507,10 @@
         active: "Keep colouring",
         complete: "All done!",
       };
+      const originalCanvas = document.getElementById("originalCanvas");
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.getElementById("previewCanvas");
+      const originalCtx = originalCanvas ? originalCanvas.getContext("2d") : null;
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
 
@@ -1481,6 +1527,7 @@
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const CLOUD_STORAGE_KEY = "capy.cloud.backup.v1";
+      const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
@@ -1489,6 +1536,7 @@
       let pendingAutosaveReason = null;
       let preventingBrowserZoom = false;
       const DOUBLE_TAP_GUARD_MS = 350;
+      const HINT_REVEAL_DURATION_MS = 1600;
 
       function isInteractiveElementForZoomGuard(node) {
         return (
@@ -1687,12 +1735,18 @@
       let cursorHoverRegionId = null;
       let cursorLastClientX = null;
       let cursorLastClientY = null;
+      let hintRevealTimer = null;
+      let lastTouchSelection = { time: 0, regionId: null };
+      let suppressNextCanvasClick = false;
 
       // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
         puzzle: null,
         activeColor: null,
         filled: new Set(),
+        completedColors: new Set(),
+        remainingByColor: new Map(),
+        totalByColor: new Map(),
         sourceUrl: null,
         sourceTitle: null,
         lastOptions: null,
@@ -1934,6 +1988,7 @@
       resetButton.addEventListener("click", () => {
         if (!state.puzzle) return;
         state.filled = new Set();
+        updateCompletedColors({ skipLog: true });
         initializePuzzleImage();
         renderPuzzle();
         renderPalette();
@@ -2141,6 +2196,10 @@
 
       // Puzzle fill interaction: click to paint if the region matches the active colour.
       puzzleCanvas.addEventListener("click", (event) => {
+        if (suppressNextCanvasClick) {
+          suppressNextCanvasClick = false;
+          return;
+        }
         if (!state.puzzle) {
           logDebug("Ignoring canvas click: no puzzle loaded yet");
           return;
@@ -2149,14 +2208,12 @@
           logDebug("Ignoring canvas click: no active colour selected");
           return;
         }
-        const rect = puzzleCanvas.getBoundingClientRect();
-        const scaleX = puzzleCanvas.width / rect.width;
-        const scaleY = puzzleCanvas.height / rect.height;
-        const x = Math.floor((event.clientX - rect.left) * scaleX);
-        const y = Math.floor((event.clientY - rect.top) * scaleY);
-        const idx = y * puzzleCanvas.width + x;
-        const regionId = state.puzzle.regionMap[idx];
-        const region = state.puzzle.regions[regionId];
+        const resolved = getRegionAtCanvasPoint(event.clientX, event.clientY);
+        if (!resolved) {
+          logDebug("Ignoring canvas click: no region mapped under pointer");
+          return;
+        }
+        const { region, regionId } = resolved;
         if (!region) {
           logDebug("Ignoring canvas click: no region mapped under pointer");
           return;
@@ -2179,6 +2236,7 @@
         }
         state.filled.add(regionId);
         applyRegionToImage(regionId);
+        updateCompletedColors();
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
@@ -2193,6 +2251,38 @@
           autoAdvanceColor(region.colorId);
         }
         refreshCustomCursorHighlight();
+      });
+
+      puzzleCanvas.addEventListener("contextmenu", (event) => {
+        if (!state.puzzle) return;
+        const resolved = getRegionAtCanvasPoint(event.clientX, event.clientY);
+        if (!resolved) return;
+        event.preventDefault();
+        selectRegionColor(resolved.region);
+      });
+
+      puzzleCanvas.addEventListener("pointerdown", (event) => {
+        if (!state.puzzle) return;
+        if (event.pointerType === "touch" || event.pointerType === "pen") {
+          const resolved = getRegionAtCanvasPoint(event.clientX, event.clientY);
+          if (!resolved) {
+            lastTouchSelection = { time: 0, regionId: null };
+            return;
+          }
+          const now = Date.now();
+          if (
+            lastTouchSelection.regionId === resolved.region.id &&
+            now - lastTouchSelection.time <= DOUBLE_TAP_GUARD_MS
+          ) {
+            suppressNextCanvasClick = true;
+            selectRegionColor(resolved.region);
+            lastTouchSelection = { time: 0, regionId: null };
+            return;
+          }
+          lastTouchSelection = { time: now, regionId: resolved.region.id };
+        } else {
+          lastTouchSelection = { time: 0, regionId: null };
+        }
       });
 
       function openSheet(sheet) {
@@ -2687,6 +2777,11 @@
             state.sourceTitle = file.name || "Imported image";
             startHint.classList.add("hidden");
             logDebug(`Generating puzzle from image: ${state.sourceTitle}`);
+            try {
+              localStorage.setItem(LAST_IMAGE_STORAGE_KEY, result);
+            } catch (error) {
+              console.warn("Unable to store uploaded image in local storage", error);
+            }
             loadImage(result);
           } else {
             console.error("Unsupported file format");
@@ -2743,6 +2838,9 @@
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
+        state.completedColors = new Set();
+        state.remainingByColor = new Map();
+        state.totalByColor = new Map();
         state.sourceUrl = null;
         state.sourceTitle = null;
         if (paletteEl) {
@@ -2754,9 +2852,23 @@
         setProgressMessage("loading");
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        if (originalCtx && originalCanvas) {
+          originalCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
+        }
+        if (canvasStack) {
+          canvasStack.style.removeProperty("--puzzle-width");
+          canvasStack.style.removeProperty("--puzzle-height");
+        }
         state.previewImageData = null;
         state.puzzleImageData = null;
         state.previewVisible = false;
+        if (hintRevealTimer) {
+          clearTimeout(hintRevealTimer);
+          hintRevealTimer = null;
+        }
+        if (viewportEl) {
+          viewportEl.classList.remove("reveal-original");
+        }
         updatePreviewState();
         updateCommandStates();
         activeTouches.clear();
@@ -2936,6 +3048,11 @@
           regionMap,
         };
         state.puzzle.backgroundColor = backgroundHex;
+        const totalByColor = new Map();
+        for (const region of regions) {
+          totalByColor.set(region.colorId, (totalByColor.get(region.colorId) || 0) + 1);
+        }
+        state.totalByColor = totalByColor;
         state.activeColor =
           requestedColor != null && paletteIds.has(requestedColor)
             ? requestedColor
@@ -2949,10 +3066,19 @@
         applyBackgroundColor(backgroundHex, { skipRender: true, skipLog: true });
         puzzleCanvas.width = data.width;
         puzzleCanvas.height = data.height;
+        if (originalCanvas) {
+          originalCanvas.width = data.width;
+          originalCanvas.height = data.height;
+        }
         previewCanvas.width = data.width;
         previewCanvas.height = data.height;
+        if (canvasStack) {
+          canvasStack.style.setProperty("--puzzle-width", `${data.width}px`);
+          canvasStack.style.setProperty("--puzzle-height", `${data.height}px`);
+        }
         renderPreview();
         initializePuzzleImage();
+        updateCompletedColors({ skipLog: true });
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
@@ -3024,6 +3150,9 @@
         }
         previewCtx.putImageData(imageData, 0, 0);
         state.previewImageData = imageData;
+        if (originalCtx) {
+          originalCtx.putImageData(imageData, 0, 0);
+        }
       }
 
       function initializePuzzleImage() {
@@ -3032,10 +3161,10 @@
         const imageData = new ImageData(width, height);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
-          data[i] = backgroundPixel[0];
-          data[i + 1] = backgroundPixel[1];
-          data[i + 2] = backgroundPixel[2];
-          data[i + 3] = backgroundPixel[3];
+          data[i] = 0;
+          data[i + 1] = 0;
+          data[i + 2] = 0;
+          data[i + 3] = 0;
         }
         state.puzzleImageData = imageData;
         if (state.filled.size > 0) {
@@ -3113,6 +3242,63 @@
           puzzleCtx.fillText(layout.text, layout.x, layout.y);
         }
         puzzleCtx.restore();
+      }
+
+      function updateCompletedColors(options = {}) {
+        const { skipLog = false } = options;
+        if (!state.puzzle) {
+          state.completedColors = new Set();
+          state.remainingByColor = new Map();
+          return { completed: state.completedColors, activeChanged: false };
+        }
+        const previousCompleted = state.completedColors || new Set();
+        const remainingByColor = new Map();
+        for (const region of state.puzzle.regions) {
+          if (!state.filled.has(region.id)) {
+            remainingByColor.set(region.colorId, (remainingByColor.get(region.colorId) || 0) + 1);
+          }
+        }
+        state.remainingByColor = remainingByColor;
+        const completed = new Set();
+        for (const color of state.puzzle.palette) {
+          if ((remainingByColor.get(color.id) || 0) === 0) {
+            completed.add(color.id);
+            if (!skipLog && !previousCompleted.has(color.id)) {
+              logDebug(`Colour #${color.id} complete`);
+            }
+          }
+        }
+        state.completedColors = completed;
+        let activeChanged = false;
+        if (state.activeColor != null && completed.has(state.activeColor)) {
+          const nextColour = state.puzzle.palette.find((entry) => !completed.has(entry.id));
+          const previousActive = state.activeColor;
+          state.activeColor = nextColour ? nextColour.id : null;
+          activeChanged = state.activeColor !== previousActive;
+        }
+        return { completed, activeChanged };
+      }
+
+      function getRegionAtCanvasPoint(clientX, clientY) {
+        if (!state.puzzle || !puzzleCanvas) return null;
+        const rect = puzzleCanvas.getBoundingClientRect();
+        if (!rect || rect.width === 0 || rect.height === 0) return null;
+        const scaleX = puzzleCanvas.width / rect.width;
+        const scaleY = puzzleCanvas.height / rect.height;
+        const x = Math.floor((clientX - rect.left) * scaleX);
+        const y = Math.floor((clientY - rect.top) * scaleY);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        if (x < 0 || y < 0 || x >= puzzleCanvas.width || y >= puzzleCanvas.height) return null;
+        const idx = y * puzzleCanvas.width + x;
+        const regionId = state.puzzle.regionMap[idx];
+        const region = state.puzzle.regions[regionId];
+        if (!region) return null;
+        return { region, regionId };
+      }
+
+      function selectRegionColor(region) {
+        if (!region) return false;
+        return activateColor(region.colorId);
       }
 
       function getRegionLabelLayout(region) {
@@ -3423,17 +3609,38 @@
 
       function drawOutlines() {
         if (!state.puzzle) return;
-        const { width, height, regionMap } = state.puzzle;
+        const { width, height, regionMap, regions } = state.puzzle;
+        const completedColours = state.completedColors || new Set();
         puzzleCtx.fillStyle = backgroundInk.outline;
         for (let y = 0; y < height; y++) {
           for (let x = 0; x < width; x++) {
             const idx = y * width + x;
             const id = regionMap[idx];
+            if (id == null || id < 0) continue;
+            const region = regions[id];
+            if (!region) continue;
+            const currentComplete = completedColours.has(region.colorId);
+            if (currentComplete) {
+              continue;
+            }
             const left = x > 0 ? regionMap[idx - 1] : id;
             const right = x < width - 1 ? regionMap[idx + 1] : id;
             const up = y > 0 ? regionMap[idx - width] : id;
             const down = y < height - 1 ? regionMap[idx + width] : id;
-            if (left !== id || right !== id || up !== id || down !== id) {
+            const neighbours = [left, right, up, down];
+            let shouldDraw = false;
+            for (const neighbourId of neighbours) {
+              if (neighbourId === id) continue;
+              const neighbourRegion = neighbourId != null && neighbourId >= 0 ? regions[neighbourId] : null;
+              const neighbourComplete = neighbourRegion
+                ? completedColours.has(neighbourRegion.colorId)
+                : false;
+              if (!neighbourComplete) {
+                shouldDraw = true;
+                break;
+              }
+            }
+            if (shouldDraw) {
               puzzleCtx.fillRect(x, y, 1, 1);
             }
           }
@@ -3444,6 +3651,9 @@
         if (!state.puzzle) return false;
         if (colorId == null) return false;
         const { flash = true, redraw = true } = options;
+        if (state.completedColors && state.completedColors.has(colorId)) {
+          return false;
+        }
         const hasColour = state.puzzle.palette.some((entry) => entry.id === colorId);
         if (!hasColour) return false;
         const changed = state.activeColor !== colorId;
@@ -3454,7 +3664,7 @@
         if (flash) {
           flashColorRegions(colorId);
         }
-        const remaining = getRegionsByColor(colorId, { includeFilled: false }).length;
+        const remaining = state.remainingByColor?.get(colorId) || 0;
         const suffix = remaining > 0 ? `${remaining} regions remaining` : "complete";
         if (changed) {
           scheduleAutosave("color-select");
@@ -3474,19 +3684,13 @@
           return;
         }
         if (paletteSortEl) {
-          paletteSortEl.disabled = false;
+          paletteSortEl.disabled = paletteEntries.length === 0;
         }
-        const totalByColor = new Map();
-        const remainingByColor = new Map();
-        for (const region of state.puzzle.regions) {
-          const total = totalByColor.get(region.colorId) || 0;
-          totalByColor.set(region.colorId, total + 1);
-          if (!state.filled.has(region.id)) {
-            const remaining = remainingByColor.get(region.colorId) || 0;
-            remainingByColor.set(region.colorId, remaining + 1);
-          }
-        }
-        const paletteEntries = [...state.puzzle.palette];
+        const totalByColor = state.totalByColor || new Map();
+        const remainingByColor = state.remainingByColor || new Map();
+        const paletteEntries = state.puzzle.palette.filter(
+          (entry) => (remainingByColor.get(entry.id) || 0) > 0
+        );
         const sortMode = state.paletteSort || "region";
         const hueCache = new Map();
         const getHue = (color) => {
@@ -4140,6 +4344,24 @@
         return true;
       }
 
+      function revealOriginalArtwork(duration = HINT_REVEAL_DURATION_MS) {
+        if (!viewportEl) return 0;
+        const ms =
+          typeof duration === "number" && Number.isFinite(duration) && duration > 0
+            ? duration
+            : HINT_REVEAL_DURATION_MS;
+        if (hintRevealTimer) {
+          clearTimeout(hintRevealTimer);
+          hintRevealTimer = null;
+        }
+        viewportEl.classList.add("reveal-original");
+        hintRevealTimer = window.setTimeout(() => {
+          viewportEl.classList.remove("reveal-original");
+          hintRevealTimer = null;
+        }, ms);
+        return ms;
+      }
+
       function useHint() {
         if (!state.puzzle) return;
         const candidates = state.puzzle.regions.filter((region) => !state.filled.has(region.id));
@@ -4154,8 +4376,15 @@
           target = candidates.sort((a, b) => a.pixelCount - b.pixelCount)[0];
           activateColor(target.colorId, { flash: false });
         }
+        const revealDuration = revealOriginalArtwork(HINT_REVEAL_DURATION_MS);
         if (state.settings.animateHints) {
-          flashRegion(target.id, "rgba(59, 130, 246, 0.45)");
+          const delay = Math.max(0, (revealDuration || 0) + 50);
+          const regionId = target.id;
+          window.setTimeout(() => {
+            if (!state.filled.has(regionId)) {
+              flashRegion(regionId, "rgba(59, 130, 246, 0.45)");
+            }
+          }, delay);
         }
         logDebug(`Hint spotlighted region ${target.id} (colour #${target.colorId})`);
       }
@@ -4163,6 +4392,7 @@
       function flashColorRegions(colorId, options = {}) {
         if (!state.puzzle) return;
         if (colorId == null) return;
+        if (state.completedColors && state.completedColors.has(colorId)) return;
         const paletteColor = getPaletteEntry(colorId);
         const duration =
           typeof options.duration === "number" && Number.isFinite(options.duration)
@@ -4207,10 +4437,10 @@
 
       function autoAdvanceColor(currentColorId) {
         if (!state.puzzle) return;
-        const remainingForColor = getRegionsByColor(currentColorId, { includeFilled: false });
-        if (remainingForColor.length > 0) return;
-        const nextColour = state.puzzle.palette.find((color) =>
-          getRegionsByColor(color.id, { includeFilled: false }).length > 0
+        const remainingForColor = state.remainingByColor?.get(currentColorId) || 0;
+        if (remainingForColor > 0) return;
+        const nextColour = state.puzzle.palette.find(
+          (color) => (state.remainingByColor?.get(color.id) || 0) > 0
         );
         if (nextColour) {
           activateColor(nextColour.id);
