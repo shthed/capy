@@ -41,11 +41,11 @@
         --app-width: 100vw;
         --app-height: 100vh;
         --viewport-padding: calc(32px * var(--ui-scale));
-        --rail-gap: calc(8px * var(--ui-scale));
-        --rail-gap-portrait: calc(6px * var(--ui-scale));
-        --rail-padding-block: calc(12px * var(--ui-scale));
-        --rail-padding-inline: calc(24px * var(--ui-scale));
-        --floating-rail-offset: calc(72px * var(--ui-scale));
+        --rail-gap: calc(6px * var(--ui-scale));
+        --rail-gap-portrait: calc(4px * var(--ui-scale));
+        --rail-padding-block: calc(10px * var(--ui-scale));
+        --rail-padding-inline: calc(18px * var(--ui-scale));
+        --floating-rail-offset: calc(66px * var(--ui-scale));
         --command-button-size: clamp(
           calc(32px * var(--ui-scale)),
           calc(40px * var(--ui-scale)),
@@ -113,15 +113,16 @@
         transform: translateX(-50%);
         display: flex;
         justify-content: center;
-        align-items: stretch;
-        flex-wrap: wrap;
+        align-items: center;
+        flex-wrap: nowrap;
         gap: var(--rail-gap);
-        width: min(
-          720px,
-          max(
-            0px,
-            calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 32px)
-          )
+        inline-size: max-content;
+        width: max-content;
+        max-inline-size: calc(
+          100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px
+        );
+        max-width: calc(
+          100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px
         );
         margin: 0;
         padding: 0;
@@ -132,29 +133,30 @@
       }
 
       #commandRail button {
-        border-radius: 18px;
-        padding: calc(8px * var(--ui-scale)) calc(16px * var(--ui-scale));
-        min-width: clamp(44px, 4.6vw, 72px);
-        min-height: clamp(44px, 4.6vw, 72px);
+        border-radius: 14px;
+        padding: calc(6px * var(--ui-scale)) calc(12px * var(--ui-scale));
+        min-width: clamp(38px, 4vw, 64px);
+        min-height: clamp(38px, 4vw, 56px);
         display: inline-flex;
         flex-direction: row;
         align-items: center;
         justify-content: center;
-        gap: calc(6px * var(--ui-scale));
-        background: rgba(15, 23, 42, 0.72);
-        color: rgba(226, 232, 240, 0.96);
-        border: 1px solid rgba(148, 163, 184, 0.45);
-        box-shadow: 0 18px 36px rgba(2, 6, 23, 0.45);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        gap: calc(4px * var(--ui-scale));
+        flex-shrink: 0;
+        background: rgba(15, 23, 42, 0.6);
+        color: rgba(226, 232, 240, 0.95);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        box-shadow: 0 14px 28px rgba(2, 6, 23, 0.35);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
         pointer-events: auto;
         transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease,
           border-color 150ms ease, color 150ms ease;
       }
 
       #commandRail button .icon {
-        width: clamp(20px, 2.4vw, 26px);
-        height: clamp(20px, 2.4vw, 26px);
+        width: clamp(20px, 2.2vw, 24px);
+        height: clamp(20px, 2.2vw, 24px);
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -175,27 +177,27 @@
       }
 
       #commandRail button .label {
-        font-size: clamp(0.55rem, 0.5rem + 0.16vw, 0.68rem);
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: rgba(226, 232, 240, 0.78);
-        line-height: 1;
+        font-size: clamp(0.6rem, 0.52rem + 0.14vw, 0.74rem);
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        text-transform: none;
+        color: rgba(226, 232, 240, 0.82);
+        line-height: 1.1;
         white-space: nowrap;
       }
 
       #commandRail button.active {
-        background: rgba(37, 99, 235, 0.28);
-        border-color: rgba(96, 165, 250, 0.75);
-        box-shadow: 0 24px 44px rgba(37, 99, 235, 0.35);
+        background: rgba(37, 99, 235, 0.22);
+        border-color: rgba(96, 165, 250, 0.65);
+        box-shadow: 0 18px 36px rgba(37, 99, 235, 0.3);
         color: rgba(226, 232, 240, 1);
       }
 
       #commandRail button:not(:disabled):hover,
       #commandRail button:not(:disabled):focus-visible {
         transform: translateY(-2px);
-        box-shadow: 0 20px 40px rgba(59, 130, 246, 0.35);
-        border-color: rgba(96, 165, 250, 0.6);
+        box-shadow: 0 16px 32px rgba(59, 130, 246, 0.32);
+        border-color: rgba(96, 165, 250, 0.5);
       }
 
       #commandRail button:focus-visible {
@@ -237,30 +239,23 @@
       body[data-orientation="portrait"] #commandRail,
       body.compact-commands #commandRail {
         gap: var(--rail-gap-portrait);
-        width: min(
-          640px,
-          max(
-            0px,
-            calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px)
-          )
+        max-inline-size: calc(
+          100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 12px
+        );
+        max-width: calc(
+          100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 12px
         );
       }
 
       body[data-orientation="portrait"] #commandRail button,
       body.compact-commands #commandRail button {
-        padding: calc(8px * var(--ui-scale));
-        min-width: calc(40px * var(--ui-scale));
+        padding: calc(6px * var(--ui-scale));
+        min-width: calc(36px * var(--ui-scale));
       }
 
       body[data-orientation="portrait"] #commandRail button .label,
       body.compact-commands #commandRail button .label {
         display: none;
-      }
-
-      body[data-orientation="portrait"] #paletteDock {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 12px;
       }
 
       #viewport {
@@ -640,12 +635,13 @@
         position: sticky;
         bottom: 0;
         display: flex;
-        align-items: stretch;
+        align-items: center;
         justify-content: flex-start;
         padding: 0;
+        padding-block-start: calc(4px * var(--ui-scale));
         padding-inline-start: env(safe-area-inset-left, 0px);
         padding-inline-end: env(safe-area-inset-right, 0px);
-        padding-block-end: env(safe-area-inset-bottom, 0px);
+        padding-block-end: calc(4px * var(--ui-scale) + env(safe-area-inset-bottom, 0px));
         background: rgba(2, 6, 23, 0.94);
         border-top: 1px solid rgba(15, 23, 42, 0.85);
         flex-wrap: nowrap;
@@ -669,6 +665,7 @@
         flex: 1 1 auto;
         min-width: 0;
         display: flex;
+        align-items: center;
         gap: 0;
       }
 
