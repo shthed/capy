@@ -288,8 +288,8 @@ before retrying.
   keyboard focus.
 - Palette buttons toggle the active colour and expose `data-color-id` so tests
   and tooling can reason about selections. Each swatch dynamically adjusts its
-  label colour and outline to maintain WCAG-friendly contrast without extra
-  chrome, and
+  label colour, outline, and halo to maintain WCAG-friendly contrast without
+  extra chrome, and
   auto-advance can be disabled from the Settings sheet for full manual control.
 - Palette selection briefly flashes every matching region (and completed
   colours) so it's immediately clear where the next strokes belong.
