@@ -1267,6 +1267,13 @@
             <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
           </ul>
         </section>
+        <section class="sheet-section" aria-labelledby="storageHeading">
+          <h3 id="storageHeading">Save storage</h3>
+          <p id="saveStorageSummary" class="control-note"></p>
+          <div class="log-actions">
+            <button id="deleteAllSaves" type="button">Delete all saves</button>
+          </div>
+        </section>
         <section class="sheet-section" aria-labelledby="debugHeading">
           <h3 id="debugHeading">Debug log</h3>
           <p class="control-note">
@@ -1438,6 +1445,8 @@
       const helpSheet = document.getElementById("helpSheet");
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
+      const saveStorageSummary = document.getElementById("saveStorageSummary");
+      const deleteAllSavesButton = document.getElementById("deleteAllSaves");
       const viewportEl = document.getElementById("viewport");
       const canvasStage = document.getElementById("canvasStage");
       const canvasTransform = document.getElementById("canvasTransform");
@@ -1485,13 +1494,14 @@
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
-      const CLOUD_STORAGE_KEY = "capy.cloud.backup.v1";
+      const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
-      const cloudSync = createCloudSync();
+      const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
       let pendingAutosaveReason = null;
+      let storageSummaryUpdateToken = 0;
       let preventingBrowserZoom = false;
       const DOUBLE_TAP_GUARD_MS = 350;
 
@@ -1718,10 +1728,16 @@
           showRegionLabels: true,
         },
         previewVisible: false,
-        saves: loadSavedEntries(),
+        saves: gameSaveManager.hydrate(),
         previewImageData: null,
         puzzleImageData: null,
       };
+
+      gameSaveManager.subscribe((entries) => {
+        state.saves = entries;
+        refreshSaveList();
+        updateStorageUsageSummary();
+      });
 
       function applyGameplaySettings(settings = {}) {
         if (!settings || typeof settings !== "object") return;
@@ -1822,6 +1838,7 @@
       applyGameplaySettings(state.settings);
       updateOptionOutputs();
       refreshSaveList();
+      updateStorageUsageSummary();
       updateCommandStates();
       renderDebugLog();
       logDebug("Session started");
@@ -1887,6 +1904,18 @@
           debugLogEntries.splice(0, debugLogEntries.length);
           renderDebugLog();
           logDebug("Debug log cleared");
+        });
+      }
+
+      if (deleteAllSavesButton) {
+        deleteAllSavesButton.addEventListener("click", () => {
+          const confirmed = window.confirm(
+            "Delete all manual saves and the current autosave? This can't be undone."
+          );
+          if (!confirmed) {
+            return;
+          }
+          clearAllSaveData();
         });
       }
 
@@ -4439,27 +4468,219 @@
         }, 480);
       }
 
+      function compactPuzzleSnapshot(snapshot) {
+        if (!snapshot || typeof snapshot !== "object") return null;
+        const width = Number(snapshot.width);
+        const height = Number(snapshot.height);
+        if (!Number.isFinite(width) || !Number.isFinite(height)) {
+          return null;
+        }
+        const payload = {
+          format:
+            typeof snapshot.format === "string" && snapshot.format
+              ? snapshot.format
+              : "capy-puzzle@2",
+          width,
+          height,
+        };
+        if (typeof snapshot.title === "string" && snapshot.title.trim()) {
+          payload.title = snapshot.title.trim();
+        }
+        const paletteSource = Array.isArray(snapshot.palette)
+          ? snapshot.palette
+          : Array.isArray(snapshot.colors)
+          ? snapshot.colors
+          : [];
+        payload.palette = paletteSource.map((entry, index) => {
+          const id =
+            entry && typeof entry.id === "number" && Number.isFinite(entry.id)
+              ? entry.id
+              : index + 1;
+          const paletteEntry = { id };
+          const hex = entry && typeof entry.hex === "string" && entry.hex ? entry.hex : null;
+          if (hex) {
+            paletteEntry.hex = hex;
+          }
+          if (entry && Array.isArray(entry.rgba)) {
+            paletteEntry.rgba = entry.rgba.slice(0, 3).map((value) => Number(value) || 0);
+          }
+          const label =
+            entry && typeof entry.name === "string" && entry.name.trim()
+              ? entry.name.trim()
+              : entry && typeof entry.label === "string" && entry.label.trim()
+              ? entry.label.trim()
+              : entry && typeof entry.title === "string" && entry.title.trim()
+              ? entry.title.trim()
+              : null;
+          if (label) {
+            paletteEntry.name = label;
+          }
+          return paletteEntry;
+        });
+        const regionSource = Array.isArray(snapshot.regions) ? snapshot.regions : [];
+        payload.regions = regionSource.map((region, index) => {
+          const resolvedId =
+            region && typeof region.id === "number" && Number.isFinite(region.id)
+              ? region.id
+              : index;
+          let pixelCount =
+            region && typeof region.pixelCount === "number" && Number.isFinite(region.pixelCount)
+              ? region.pixelCount
+              : 0;
+          if (pixelCount === 0 && Array.isArray(region?.pixels)) {
+            pixelCount = region.pixels.length;
+          }
+          const entry = {
+            id: resolvedId,
+            colorId:
+              region && typeof region.colorId === "number" && Number.isFinite(region.colorId)
+                ? region.colorId
+                : 1,
+            pixelCount,
+          };
+          if (region && typeof region.cx === "number" && Number.isFinite(region.cx)) {
+            entry.cx = Math.round(region.cx * 1000) / 1000;
+          }
+          if (region && typeof region.cy === "number" && Number.isFinite(region.cy)) {
+            entry.cy = Math.round(region.cy * 1000) / 1000;
+          }
+          return entry;
+        });
+        let packed = null;
+        if (typeof snapshot.regionMapPacked === "string" && snapshot.regionMapPacked) {
+          packed = snapshot.regionMapPacked;
+        } else {
+          packed = packRegionMap(snapshot.regionMap);
+        }
+        if (packed) {
+          payload.regionMapPacked = packed;
+        }
+        if (snapshot.filled instanceof Set) {
+          payload.filled = Array.from(snapshot.filled);
+        } else if (Array.isArray(snapshot.filled)) {
+          payload.filled = snapshot.filled.slice();
+        } else if (
+          snapshot.filled &&
+          typeof snapshot.filled.length === "number" &&
+          typeof snapshot.filled !== "string"
+        ) {
+          payload.filled = Array.from(snapshot.filled);
+        } else {
+          payload.filled = [];
+        }
+        if (snapshot.options && typeof snapshot.options === "object") {
+          payload.options = { ...snapshot.options };
+        }
+        if (typeof snapshot.sourceUrl === "string" && snapshot.sourceUrl) {
+          payload.sourceUrl = snapshot.sourceUrl;
+        }
+        if (typeof snapshot.activeColor === "number" && Number.isFinite(snapshot.activeColor)) {
+          payload.activeColor = snapshot.activeColor;
+        }
+        if (typeof snapshot.backgroundColor === "string" && snapshot.backgroundColor) {
+          payload.backgroundColor = snapshot.backgroundColor;
+        }
+        if (snapshot.viewport && typeof snapshot.viewport === "object") {
+          const { panX, panY, zoom, baseScale } = snapshot.viewport;
+          payload.viewport = {
+            panX: Number.isFinite(panX) ? panX : 0,
+            panY: Number.isFinite(panY) ? panY : 0,
+            zoom: Number.isFinite(zoom) ? zoom : 1,
+            baseScale: Number.isFinite(baseScale) ? baseScale : 1,
+          };
+        }
+        const settingsSource =
+          snapshot.settings && typeof snapshot.settings === "object" ? snapshot.settings : {};
+        payload.settings = {
+          autoAdvance: Boolean(settingsSource.autoAdvance),
+          animateHints: Boolean(settingsSource.animateHints),
+          uiScale: Number.isFinite(settingsSource.uiScale) ? settingsSource.uiScale : 1,
+          artPrompt:
+            typeof settingsSource.artPrompt === "string" ? settingsSource.artPrompt : "",
+        };
+        return payload;
+      }
+
+      function normalizeAutosaveRecord(record) {
+        if (!record || typeof record !== "object") return null;
+        const data = compactPuzzleSnapshot(record.data);
+        if (!data) return null;
+        const normalized = {
+          version:
+            typeof record.version === "number" && Number.isFinite(record.version)
+              ? record.version
+              : 1,
+          timestamp:
+            typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
+              ? record.timestamp
+              : Date.now(),
+          reason:
+            typeof record.reason === "string" && record.reason ? record.reason : "update",
+          data,
+        };
+        if (typeof record.title === "string" && record.title.trim()) {
+          normalized.title = record.title.trim();
+        } else if (typeof data.title === "string" && data.title) {
+          normalized.title = data.title;
+        }
+        return normalized;
+      }
+
       function serializeCurrentPuzzle() {
         if (!state.puzzle) return {};
-        const regionMapPacked = packRegionMap(state.puzzle.regionMap);
-        const payload = {
+        const { puzzle } = state;
+        const regionMapPacked = packRegionMap(puzzle.regionMap);
+        const palette = puzzle.palette.map((entry, index) => {
+          const resolved = {
+            id:
+              typeof entry.id === "number" && Number.isFinite(entry.id)
+                ? entry.id
+                : index + 1,
+          };
+          if (typeof entry.hex === "string" && entry.hex) {
+            resolved.hex = entry.hex;
+          }
+          if (Array.isArray(entry.rgba)) {
+            resolved.rgba = entry.rgba.slice(0, 3);
+          }
+          if (typeof entry.name === "string" && entry.name.trim()) {
+            resolved.name = entry.name.trim();
+          }
+          return resolved;
+        });
+        const regions = puzzle.regions.map((region, index) => {
+          const resolvedId =
+            typeof region.id === "number" && Number.isFinite(region.id)
+              ? region.id
+              : index;
+          const payload = {
+            id: resolvedId,
+            colorId:
+              typeof region.colorId === "number" && Number.isFinite(region.colorId)
+                ? region.colorId
+                : 1,
+            pixelCount:
+              typeof region.pixelCount === "number" && Number.isFinite(region.pixelCount)
+                ? region.pixelCount
+                : Array.isArray(region.pixels)
+                ? region.pixels.length
+                : 0,
+          };
+          if (typeof region.cx === "number" && Number.isFinite(region.cx)) {
+            payload.cx = Math.round(region.cx * 1000) / 1000;
+          }
+          if (typeof region.cy === "number" && Number.isFinite(region.cy)) {
+            payload.cy = Math.round(region.cy * 1000) / 1000;
+          }
+          return payload;
+        });
+        const snapshot = {
           format: "capy-puzzle@2",
           title: state.sourceTitle || "capy-puzzle",
-          width: state.puzzle.width,
-          height: state.puzzle.height,
-          palette: state.puzzle.palette.map((p) => ({
-            id: p.id,
-            hex: p.hex,
-            rgba: p.rgba,
-            name: p.name,
-          })),
-          regions: state.puzzle.regions.map((region) => ({
-            id: region.id,
-            colorId: region.colorId,
-            pixelCount: region.pixelCount,
-            cx: region.cx,
-            cy: region.cy,
-          })),
+          width: puzzle.width,
+          height: puzzle.height,
+          palette,
+          regions,
           filled: Array.from(state.filled),
           options: state.lastOptions,
           sourceUrl: state.sourceUrl,
@@ -4480,11 +4701,11 @@
           },
         };
         if (regionMapPacked) {
-          payload.regionMapPacked = regionMapPacked;
-        } else if (state.puzzle.regionMap) {
-          payload.regionMap = Array.from(state.puzzle.regionMap);
+          snapshot.regionMapPacked = regionMapPacked;
+        } else if (puzzle.regionMap) {
+          snapshot.regionMap = Array.from(puzzle.regionMap);
         }
-        return payload;
+        return compactPuzzleSnapshot(snapshot) || snapshot;
       }
 
       function scheduleAutosave(reason, options = {}) {
@@ -4516,24 +4737,39 @@
       function persistAutosave(reason = "update") {
         if (!state.puzzle) return null;
         const snapshot = serializeCurrentPuzzle();
-        const record = {
+        const record = normalizeAutosaveRecord({
           version: 1,
           timestamp: Date.now(),
           reason,
           title: snapshot.title || state.sourceTitle || "capy-puzzle",
           data: snapshot,
-        };
+        });
+        if (!record) return null;
+        const storageRecord = encodeAutosaveStorageRecord(record);
+        if (!storageRecord) {
+          updateStorageUsageSummary();
+          return record;
+        }
+        let serialized = null;
+        let attemptedBytes = 0;
         try {
-          localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(record));
+          serialized = JSON.stringify(storageRecord);
+          attemptedBytes = getStoredStringSize(serialized);
         } catch (error) {
-          console.error("Failed to persist autosave", error);
-          if (error && error.name === "QuotaExceededError") {
-            logDebug("Storage full: unable to write autosave. Delete old saves or exports and retry.");
+          console.error("Failed to prepare autosave for storage", error);
+        }
+        if (serialized) {
+          try {
+            localStorage.setItem(AUTOSAVE_STORAGE_KEY, serialized);
+          } catch (error) {
+            console.error("Failed to persist autosave", error);
+            if (error && error.name === "QuotaExceededError") {
+              logDebug("Storage full: unable to write autosave. Delete old saves or exports and retry.");
+              logStorageFailureDetails("autosave", attemptedBytes);
+            }
           }
         }
-        if (cloudSync && typeof cloudSync.persist === "function") {
-          cloudSync.persist(record);
-        }
+        updateStorageUsageSummary();
         return record;
       }
 
@@ -4542,8 +4778,30 @@
           const raw = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
           if (!raw) return null;
           const parsed = JSON.parse(raw);
-          if (parsed && parsed.data) {
-            return parsed;
+          const decoded = decodeAutosaveStorageRecord(parsed) || parsed;
+          const normalized = normalizeAutosaveRecord(decoded);
+          if (normalized) {
+            let rewritePayload = null;
+            try {
+              const encoded = encodeAutosaveStorageRecord(normalized);
+              if (encoded) {
+                const serialized = JSON.stringify(encoded);
+                if (serialized !== raw) {
+                  rewritePayload = serialized;
+                }
+              }
+            } catch (prepareError) {
+              console.error("Failed to prepare autosave for rewrite", prepareError);
+            }
+            if (rewritePayload) {
+              try {
+                localStorage.setItem(AUTOSAVE_STORAGE_KEY, rewritePayload);
+              } catch (persistError) {
+                console.error("Failed to compact autosave", persistError);
+              }
+              updateStorageUsageSummary();
+            }
+            return normalized;
           }
         } catch (error) {
           console.error("Failed to load autosave", error);
@@ -4556,12 +4814,6 @@
         const autosave = loadAutosave();
         if (autosave && autosave.data) {
           candidates.push({ ...autosave, origin: "local autosave" });
-        }
-        const cloudRecord = cloudSync && typeof cloudSync.getSnapshot === "function"
-          ? cloudSync.getSnapshot()
-          : null;
-        if (cloudRecord && cloudRecord.data) {
-          candidates.push({ ...cloudRecord, origin: "cloud backup" });
         }
         if (Array.isArray(state.saves) && state.saves.length > 0) {
           const [latestManual] = [...state.saves].sort(
@@ -4579,6 +4831,167 @@
         if (candidates.length === 0) return null;
         candidates.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         return candidates[0];
+      }
+
+      function getStoredStringSize(raw) {
+        if (!raw) return 0;
+        try {
+          if (typeof Blob !== "undefined") {
+            return new Blob([raw]).size;
+          }
+          if (typeof TextEncoder !== "undefined") {
+            return new TextEncoder().encode(raw).length;
+          }
+        } catch (error) {
+          console.error("Failed to inspect storage size", error);
+        }
+        return raw.length * 2;
+      }
+
+      function collectSaveStorageStats() {
+        let manualBytes = 0;
+        let manualCount = Array.isArray(state.saves) ? state.saves.length : 0;
+        try {
+          const raw = localStorage.getItem(SAVE_STORAGE_KEY);
+          manualBytes = getStoredStringSize(raw);
+          if (!Number.isFinite(manualCount)) {
+            manualCount = 0;
+          }
+          if (manualCount === 0 && raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              manualCount = Array.isArray(parsed) ? parsed.length : 0;
+            } catch (error) {
+              console.error("Failed to parse save records for stats", error);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to read save storage size", error);
+        }
+        let autosaveBytes = 0;
+        try {
+          autosaveBytes = getStoredStringSize(localStorage.getItem(AUTOSAVE_STORAGE_KEY));
+        } catch (error) {
+          console.error("Failed to read autosave size", error);
+        }
+        const totalBytes = manualBytes + autosaveBytes;
+        return {
+          manualBytes,
+          manualCount,
+          autosaveBytes,
+          totalBytes,
+        };
+      }
+
+      function formatBytes(bytes) {
+        if (!Number.isFinite(bytes) || bytes <= 0) {
+          return "0 B";
+        }
+        const units = ["B", "KB", "MB", "GB"];
+        let value = bytes;
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+          value /= 1024;
+          unitIndex += 1;
+        }
+        const rounded = unitIndex === 0 || value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
+        return `${rounded} ${units[unitIndex]}`;
+      }
+
+      function logStorageFailureDetails(kind, attemptedBytes) {
+        if (Number.isFinite(attemptedBytes) && attemptedBytes > 0) {
+          const label = formatBytes(attemptedBytes);
+          const prefix = kind === "autosave" ? "Autosave" : "Save snapshot";
+          logDebug(`${prefix} payload ≈${label}.`);
+        }
+        if (navigator.storage && typeof navigator.storage.estimate === "function") {
+          navigator.storage
+            .estimate()
+            .then((estimate) => {
+              if (!estimate) return;
+              const usage = Number(estimate.usage);
+              const quota = Number(estimate.quota);
+              if (Number.isFinite(usage) && Number.isFinite(quota) && quota > 0) {
+                const percent = Math.min(100, Math.round((usage / quota) * 1000) / 10);
+                const percentSuffix = Number.isFinite(percent) ? ` (${percent}% used)` : "";
+                logDebug(`Storage usage ${formatBytes(usage)} of ${formatBytes(quota)} quota${percentSuffix}.`);
+              } else if (Number.isFinite(usage)) {
+                logDebug(`Storage usage ${formatBytes(usage)} (quota unavailable).`);
+              } else if (Number.isFinite(quota)) {
+                logDebug(`Storage quota ${formatBytes(quota)} (usage unavailable).`);
+              }
+            })
+            .catch((error) => {
+              console.error("Failed to estimate storage quota", error);
+            });
+        } else {
+          logDebug("Storage usage estimate unavailable in this browser.");
+        }
+      }
+
+      function updateStorageUsageSummary() {
+        if (!saveStorageSummary) return;
+        const token = ++storageSummaryUpdateToken;
+        let stats = { manualBytes: 0, manualCount: 0, autosaveBytes: 0, totalBytes: 0 };
+        try {
+          stats = collectSaveStorageStats();
+        } catch (error) {
+          console.error("Failed to update save storage summary", error);
+        }
+        let summaryText =
+          "Save data lives entirely in this browser. Autosaves run while you play, and manual saves appear in the save manager.";
+        let disableClearButton = true;
+        const hasAutosave = stats.autosaveBytes > 0;
+        const hasManual = stats.manualCount > 0;
+        if (hasAutosave || hasManual) {
+          const autosaveLabel = hasAutosave ? `Autosave ${formatBytes(stats.autosaveBytes)}` : "No autosave stored";
+          const manualLabel = hasManual
+            ? `${stats.manualCount} manual ${stats.manualCount === 1 ? "save" : "saves"} using ${formatBytes(
+                stats.manualBytes
+              )}`
+            : "No manual saves";
+          summaryText = `${autosaveLabel} · ${manualLabel} · Total ${formatBytes(stats.totalBytes)} stored locally.`;
+          disableClearButton = !(hasAutosave || hasManual);
+        }
+        saveStorageSummary.textContent = summaryText;
+        if (deleteAllSavesButton) {
+          deleteAllSavesButton.disabled = disableClearButton;
+        }
+        if (navigator.storage && typeof navigator.storage.estimate === "function") {
+          const baseSummary = summaryText;
+          const statsSnapshot = { ...stats };
+          navigator.storage
+            .estimate()
+            .then((estimate) => {
+              if (token !== storageSummaryUpdateToken) return;
+              if (!estimate) return;
+              const quota = Number(estimate.quota);
+              const usage = Number(estimate.usage);
+              if (!Number.isFinite(quota) || quota <= 0) {
+                if (Number.isFinite(usage) && usage > 0) {
+                  const usageText = `Storage usage: ${formatBytes(usage)}.`;
+                  saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${usageText}`;
+                }
+                return;
+              }
+              const usedBytes = Number.isFinite(usage) && usage >= 0 ? usage : statsSnapshot.totalBytes;
+              const usageLabel = formatBytes(usedBytes);
+              const quotaLabel = formatBytes(quota);
+              let percentText = "";
+              if (quota > 0 && Number.isFinite(usedBytes)) {
+                const percent = Math.min(100, Math.round((usedBytes / quota) * 1000) / 10);
+                if (Number.isFinite(percent)) {
+                  percentText = ` (${percent}% used)`;
+                }
+              }
+              const quotaText = `Storage quota: ${usageLabel} of ${quotaLabel}${percentText}.`;
+              saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${quotaText}`;
+            })
+            .catch((error) => {
+              if (token !== storageSummaryUpdateToken) return;
+              console.error("Failed to estimate storage quota", error);
+            });
+        }
       }
 
       function loadInitialSession() {
@@ -4674,129 +5087,439 @@
         return null;
       }
 
-      function createCloudSync() {
+      function tryCompressString(input) {
+        if (typeof input !== "string" || input.length === 0) {
+          return {
+            payload: "",
+            compressed: false,
+            encoding: "identity",
+            originalBytes: 0,
+            compressedBytes: 0,
+          };
+        }
+        let originalBytes = 0;
+        try {
+          originalBytes = getStoredStringSize(input);
+        } catch (error) {
+          console.error("Failed to inspect string size before compression", error);
+        }
+        try {
+          const codes = lzwCompress(input);
+          if (!codes || codes.length === 0) {
+            return {
+              payload: input,
+              compressed: false,
+              encoding: "identity",
+              originalBytes,
+              compressedBytes: originalBytes,
+            };
+          }
+          const bytes = new Uint8Array(codes.buffer);
+          const payload = encodeBytesToBase64(bytes);
+          const compressedBytes = getStoredStringSize(payload);
+          if (compressedBytes >= originalBytes || !payload) {
+            return {
+              payload: input,
+              compressed: false,
+              encoding: "identity",
+              originalBytes,
+              compressedBytes: originalBytes,
+            };
+          }
+          return {
+            payload,
+            compressed: true,
+            encoding: "lzw16",
+            originalBytes,
+            compressedBytes,
+          };
+        } catch (error) {
+          console.error("Failed to compress save payload", error);
+        }
+        return {
+          payload: input,
+          compressed: false,
+          encoding: "identity",
+          originalBytes,
+          compressedBytes: originalBytes,
+        };
+      }
+
+      function encodeBytesToBase64(bytes) {
+        if (!bytes || typeof bytes.length !== "number" || bytes.length === 0) {
+          return "";
+        }
+        let binary = "";
+        for (let index = 0; index < bytes.length; index += 1) {
+          binary += String.fromCharCode(bytes[index]);
+        }
+        return btoa(binary);
+      }
+
+      function decodeBase64ToBytes(base64) {
+        if (typeof base64 !== "string" || base64.length === 0) {
+          return new Uint8Array(0);
+        }
+        const binary = atob(base64);
+        const buffer = new ArrayBuffer(binary.length);
+        const bytes = new Uint8Array(buffer);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        return bytes;
+      }
+
+      function lzwCompress(input) {
+        if (typeof input !== "string" || input.length === 0) {
+          return new Uint16Array(0);
+        }
+        const dictionary = new Map();
+        for (let index = 0; index < 256; index += 1) {
+          dictionary.set(String.fromCharCode(index), index);
+        }
+        let dictSize = 256;
+        let current = "";
+        const codes = [];
+        for (let index = 0; index < input.length; index += 1) {
+          const char = input.charAt(index);
+          const candidate = current + char;
+          if (dictionary.has(candidate)) {
+            current = candidate;
+          } else {
+            if (current) {
+              const code = dictionary.get(current);
+              if (typeof code === "number") {
+                codes.push(code);
+              }
+            }
+            if (dictSize < 65535) {
+              dictionary.set(candidate, dictSize);
+              dictSize += 1;
+            }
+            current = char;
+          }
+        }
+        if (current) {
+          const code = dictionary.get(current);
+          if (typeof code === "number") {
+            codes.push(code);
+          }
+        }
+        return new Uint16Array(codes);
+      }
+
+      function lzwDecompress(codes) {
+        if (!codes || codes.length === 0) {
+          return "";
+        }
+        const dictionary = [];
+        for (let index = 0; index < 256; index += 1) {
+          dictionary[index] = String.fromCharCode(index);
+        }
+        let dictSize = 256;
+        let previous = String.fromCharCode(codes[0]);
+        let output = previous;
+        for (let index = 1; index < codes.length; index += 1) {
+          const code = codes[index];
+          let entry = "";
+          if (dictionary[code] != null) {
+            entry = dictionary[code];
+          } else if (code === dictSize) {
+            entry = previous + previous.charAt(0);
+          } else {
+            return null;
+          }
+          output += entry;
+          if (dictSize < 65535) {
+            dictionary[dictSize] = previous + entry.charAt(0);
+            dictSize += 1;
+          }
+          previous = entry;
+        }
+        return output;
+      }
+
+      function encodeStoredSnapshot(snapshot) {
+        const data = compactPuzzleSnapshot(snapshot);
+        if (!data) return null;
+        try {
+          const json = JSON.stringify(data);
+          const compressed = tryCompressString(json);
+          if (compressed.compressed) {
+            return {
+              __compressed: true,
+              encoding: compressed.encoding,
+              payload: compressed.payload,
+            };
+          }
+        } catch (error) {
+          console.error("Failed to prepare snapshot for storage", error);
+        }
+        return data;
+      }
+
+      function decodeStoredSnapshot(source) {
+        if (!source) return null;
+        let data = null;
+        if (typeof source === "string") {
+          try {
+            data = JSON.parse(source);
+          } catch (error) {
+            console.error("Failed to parse snapshot string", error);
+            return null;
+          }
+        } else if (typeof source === "object" && source.__compressed === true && typeof source.payload === "string") {
+          try {
+            const bytes = decodeBase64ToBytes(source.payload);
+            const codes = new Uint16Array(bytes.buffer);
+            const text = lzwDecompress(codes);
+            if (typeof text !== "string") {
+              return null;
+            }
+            data = JSON.parse(text);
+          } catch (error) {
+            console.error("Failed to decompress snapshot", error);
+            return null;
+          }
+        } else if (typeof source === "object") {
+          data = source;
+        }
+        if (!data || typeof data !== "object") {
+          return null;
+        }
+        return compactPuzzleSnapshot(data);
+      }
+
+      function encodeAutosaveStorageRecord(record) {
+        if (!record || typeof record !== "object") return null;
+        const data = encodeStoredSnapshot(record.data);
+        if (!data) return null;
+        const storageRecord = {
+          version: record.version,
+          timestamp: record.timestamp,
+          reason: record.reason,
+          data,
+        };
+        if (typeof record.title === "string" && record.title.trim()) {
+          storageRecord.title = record.title.trim();
+        }
+        return storageRecord;
+      }
+
+      function decodeAutosaveStorageRecord(record) {
+        if (!record || typeof record !== "object") return null;
+        const data = decodeStoredSnapshot(record.data ?? record.payload ?? null);
+        if (!data) return null;
+        const normalized = {
+          version:
+            typeof record.version === "number" && Number.isFinite(record.version) ? record.version : 1,
+          timestamp:
+            typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
+              ? record.timestamp
+              : Date.now(),
+          reason: typeof record.reason === "string" && record.reason ? record.reason : "update",
+          data,
+        };
+        if (typeof record.title === "string" && record.title.trim()) {
+          normalized.title = record.title.trim();
+        }
+        return normalized;
+      }
+
+      function encodeSaveStorageEntry(entry) {
+        if (!entry || typeof entry !== "object") return null;
+        const data = encodeStoredSnapshot(entry.data);
+        if (!data) return null;
+        const storageEntry = {
+          id: entry.id,
+          timestamp: entry.timestamp,
+          data,
+        };
+        if (typeof entry.title === "string" && entry.title.trim()) {
+          storageEntry.title = entry.title.trim();
+        }
+        return storageEntry;
+      }
+
+      function decodeSaveStorageEntry(entry) {
+        if (!entry || typeof entry !== "object") return null;
+        const data = decodeStoredSnapshot(entry.data ?? null);
+        if (!data) return null;
+        const decoded = {
+          id: entry.id,
+          timestamp: entry.timestamp,
+          data,
+        };
+        if (typeof entry.title === "string" && entry.title.trim()) {
+          decoded.title = entry.title.trim();
+        }
+        return decoded;
+      }
+
+      function createGameSaveManager() {
+        const key = SAVE_STORAGE_KEY;
         const subscribers = new Set();
-        const key = CLOUD_STORAGE_KEY;
-        let lastRecord = null;
-        const hasBroadcast = typeof BroadcastChannel !== "undefined";
-        const channel = hasBroadcast ? new BroadcastChannel("capy-cloud-sync") : null;
+        let cache = [];
+
+        function notify(entries) {
+          cache = entries;
+          subscribers.forEach((listener) => {
+            try {
+              listener(cache.slice());
+            } catch (error) {
+              console.error("Save manager listener failed", error);
+            }
+          });
+        }
+
+        function normalizeEntry(entry) {
+          if (!entry || typeof entry !== "object") return null;
+          const decoded = decodeSaveStorageEntry(entry) || entry;
+          const idRaw = decoded.id != null ? String(decoded.id) : "";
+          const id = idRaw.trim();
+          if (!id) return null;
+          const data = compactPuzzleSnapshot(decoded.data);
+          if (!data) return null;
+          const normalized = {
+            id,
+            timestamp:
+              typeof decoded.timestamp === "number" && Number.isFinite(decoded.timestamp)
+                ? decoded.timestamp
+                : Date.now(),
+            data,
+          };
+          if (typeof decoded.title === "string" && decoded.title.trim()) {
+            normalized.title = decoded.title.trim();
+          } else if (typeof data.title === "string" && data.title) {
+            normalized.title = data.title;
+          }
+          return normalized;
+        }
 
         function readFromStorage() {
           try {
             const raw = localStorage.getItem(key);
-            if (!raw) return null;
+            if (!raw) return [];
             const parsed = JSON.parse(raw);
-            if (!parsed || typeof parsed !== "object") return null;
-            return parsed;
+            if (!Array.isArray(parsed)) return [];
+            const normalized = [];
+            for (const entry of parsed) {
+              const result = normalizeEntry(entry);
+              if (result) {
+                normalized.push(result);
+              }
+            }
+            return normalized;
           } catch (error) {
-            console.error("Failed to read cloud backup", error);
-            return null;
+            console.error("Failed to load saves", error);
+            return [];
           }
         }
 
-        function notify(record) {
-          lastRecord = record || null;
-          subscribers.forEach((listener) => {
-            try {
-              listener(lastRecord);
-            } catch (error) {
-              console.error("Cloud sync listener failed", error);
-            }
-          });
-        }
-
-        function writeRecord(record) {
-          if (record == null) {
-            try {
-              localStorage.removeItem(key);
-            } catch (error) {
-              console.error("Failed to clear cloud backup", error);
-            }
-            notify(null);
-            if (channel) {
-              channel.postMessage({ type: "cloud-sync", record: null });
-            }
-            return null;
+        function writeToStorage(entries) {
+          let serialized = "[]";
+          let attemptedBytes = 0;
+          try {
+            const prepared = Array.isArray(entries)
+              ? entries
+                  .map((entry) => encodeSaveStorageEntry(entry))
+                  .filter((entry) => entry && typeof entry === "object")
+              : [];
+            serialized = JSON.stringify(prepared);
+            attemptedBytes = getStoredStringSize(serialized);
+          } catch (error) {
+            console.error("Failed to prepare saves for storage", error);
           }
           try {
-            localStorage.setItem(key, JSON.stringify(record));
+            localStorage.setItem(key, serialized);
           } catch (error) {
-            console.error("Failed to persist cloud backup", error);
+            console.error("Failed to persist saves", error);
+            if (error && error.name === "QuotaExceededError") {
+              logDebug("Storage full: unable to write save snapshot. Delete old saves or exports and retry.");
+              logStorageFailureDetails("manual", attemptedBytes);
+            }
           }
-          notify(record);
-          if (channel) {
-            channel.postMessage({ type: "cloud-sync", record });
-          }
-          return record;
         }
 
-        if (channel) {
-          channel.addEventListener("message", (event) => {
-            if (!event || typeof event.data !== "object") return;
-            if ("record" in event.data) {
-              notify(event.data.record);
+        function hydrate() {
+          const entries = readFromStorage();
+          writeToStorage(entries);
+          notify(entries);
+          return cache.slice();
+        }
+
+        function persist(entries) {
+          if (!Array.isArray(entries)) {
+            writeToStorage([]);
+            notify([]);
+            return [];
+          }
+          const normalized = [];
+          for (const entry of entries) {
+            const result = normalizeEntry(entry);
+            if (result) {
+              normalized.push(result);
             }
-          });
+          }
+          writeToStorage(normalized);
+          notify(normalized);
+          return cache.slice();
+        }
+
+        function list() {
+          return cache.slice();
+        }
+
+        function clear() {
+          try {
+            localStorage.removeItem(key);
+          } catch (error) {
+            console.error("Failed to clear saves", error);
+          }
+          notify([]);
+          return [];
+        }
+
+        function subscribe(listener) {
+          if (typeof listener !== "function") return () => {};
+          subscribers.add(listener);
+          if (cache.length) {
+            try {
+              listener(cache.slice());
+            } catch (error) {
+              console.error("Save manager listener failed", error);
+            }
+          }
+          return () => subscribers.delete(listener);
         }
 
         if (typeof window !== "undefined") {
           window.addEventListener("storage", (event) => {
             if (event.key === key) {
-              if (event.newValue) {
-                try {
-                  notify(JSON.parse(event.newValue));
-                } catch (error) {
-                  console.error("Failed to parse cloud backup update", error);
-                }
-              } else {
-                notify(null);
-              }
+              const entries = readFromStorage();
+              notify(entries);
             }
           });
         }
 
         const api = {
-          persist(record) {
-            return writeRecord(record);
-          },
-          getSnapshot() {
-            return lastRecord;
-          },
-          subscribe(listener) {
-            if (typeof listener !== "function") return () => {};
-            subscribers.add(listener);
-            if (lastRecord) {
-              try {
-                listener(lastRecord);
-              } catch (error) {
-                console.error("Cloud sync listener failed", error);
-              }
-            }
-            return () => subscribers.delete(listener);
-          },
-          clear() {
-            writeRecord(null);
-          },
-          hydrate() {
-            const record = readFromStorage();
-            if (record) {
-              notify(record);
-            }
-            return record;
-          },
+          hydrate,
+          persist,
+          list,
+          clear,
+          subscribe,
         };
 
         if (typeof window !== "undefined") {
-          window.capyCloudSync = {
-            persist: api.persist,
-            getSnapshot: api.getSnapshot,
-            subscribe: api.subscribe,
-            clear: api.clear,
+          window.capyGameSaveManager = {
             hydrate: api.hydrate,
+            persist: api.persist,
+            list: api.list,
+            clear: api.clear,
+            subscribe: api.subscribe,
           };
         }
 
-        api.hydrate();
         return api;
       }
 
@@ -4844,27 +5567,11 @@
       }
 
       function persistSaves() {
-        try {
-          localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(state.saves));
-        } catch (error) {
-          console.error("Failed to persist saves", error);
-          if (error && error.name === "QuotaExceededError") {
-            logDebug("Storage full: unable to write save snapshot. Delete old saves or exports and retry.");
-          }
-        }
+        state.saves = gameSaveManager.persist(state.saves);
       }
 
       function loadSavedEntries() {
-        try {
-          const raw = localStorage.getItem(SAVE_STORAGE_KEY);
-          if (!raw) return [];
-          const parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) return [];
-          return parsed.filter((entry) => entry && entry.data);
-        } catch (error) {
-          console.error("Failed to load saves", error);
-          return [];
-        }
+        return gameSaveManager.list();
       }
 
       function loadSaveEntry(id) {
@@ -4894,6 +5601,19 @@
         persistSaves();
         refreshSaveList();
         logDebug(`Deleted save: ${(entry && entry.title) || id}`);
+      }
+
+      function clearAllSaveData() {
+        gameSaveManager.clear();
+        state.saves = [];
+        refreshSaveList();
+        try {
+          localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
+        } catch (error) {
+          console.error("Failed to clear autosave", error);
+        }
+        updateStorageUsageSummary();
+        logDebug("Cleared autosave and manual saves");
       }
 
       function renameSaveEntry(id) {
