@@ -1,59 +1,24 @@
 # Merge Conflict Report: Zoom Guard Branch vs Main
 
 ## Overview
-Merging the `Resolve zoom guard merge conflict logic` changeset into `main` tripped
-a conflict in `index.html`. Both branches touched the zoom suppression logic inside
-`installBrowserZoomGuards`, so Git could not automatically reconcile the differing
-control flow.
+Merging the zoom guard updates into `main` previously raised a conflict in `index.html`.
+Both branches adjusted the keyboard and wheel shortcut suppression inside
+`installBrowserZoomGuards`, so Git could not reconcile the ordering differences on its
+own.
 
 ## Conflict Location
-The conflict centered on the wheel shortcut handler where the branch cached the
-interactive and stage checks before cancelling the event, while `main` kept the
-checks inline. GitHub showed the following opposing hunks:
-
-```diff
--            if (isInteractiveElementForZoomGuard(event.target)) return;
--            if (isGameSurface(event.target)) return;
--            event.preventDefault();
-+            const isInteractive = isInteractiveElementForZoomGuard(event.target);
-+            const isStageTarget = isGameSurface(event.target);
-+            if (isInteractive || isStageTarget) {
-+              return;
-+            }
-+            event.preventDefault();
-```
-
-A similar disagreement appeared in the keyboard shortcut guard: the branch reused
-the cached `isInteractive` check, whereas `main` repeated the inline helper.
-
-## Branch Behaviour
-In the branch, both wheel and keyboard handlers compute the interactive status
-once and bail out early when the target is part of the canvas or other interactive
-chrome. This ensures the browser never receives a preventDefault from palette
-controls while still allowing the stage to zoom.
-
-```js
-const isInteractive = isInteractiveElementForZoomGuard(event.target);
-const isStageTarget = isGameSurface(event.target);
-if (isInteractive || isStageTarget) {
-  return;
-}
-event.preventDefault();
-```
-
-```js
-const isInteractive = isInteractiveElementForZoomGuard(event.target);
-if (isInteractive) return;
-```
-
-## Mainline Behaviour
-`main` preferred the inline helper checks, preserving its existing execution order.
-It prevented the default action only when neither helper returned true and left
-the keyboard handler with duplicate lookups.
+The disagreement lived in the wheel shortcut handler. One side cached the interactive and
+stage checks before calling `preventDefault`, while the other invoked the helpers inline.
+A matching pattern appeared in the keyboard handler, where one side reused the cached
+boolean and the other re-ran the helper check.
 
 ## Resolution
-We adopted the branch behaviour for both handlers so their control flow now
-matches, caching the helper result once and exiting early for interactive targets.
-This keeps palette inputs responsive while avoiding accidental browser zooming on
-the stage. With the handlers sharing the same structure, the merge conflict is
-resolved.
+We now settle on a shared structure for both handlers:
+
+- Cache `isInteractiveElementForZoomGuard(event.target)` once at the top.
+- Return early for interactive UI controls.
+- Let canvas targets fall through so the stage-specific handlers own zooming.
+- Call `event.preventDefault()` only when the browser shortcut should be cancelled.
+
+With both handlers following the same control flow, the merge conflict is resolved and the
+browser zoom guards behave consistently across keyboard and wheel shortcuts.
