@@ -55,7 +55,7 @@ tools, a save manager, and a configurable generator all live inside a single
   resize targets, k-means iterations, and smoothing passes so QA can cycle
   between breezy ≈26-region boards, balanced ≈42-region sessions, or
   high-fidelity ≈140-region showpieces.
-- **Detailed debug logging.** The Help sheet's live log now announces when the
+- **Detailed debug logging.** The Help panel's live log now announces when the
   sample puzzle begins loading and when it completes, alongside fills, hints,
   zooms, background tweaks, fullscreen toggles, and ignored clicks, so QA can
   confirm the entire flow without cracking open DevTools.
@@ -78,7 +78,7 @@ tools, a save manager, and a configurable generator all live inside a single
   it's obvious where to paint next, and correctly filled regions immediately
   display the underlying illustration.
 - **Customisable background.** Pick a backdrop colour for unfinished regions in
-  the Settings sheet; outlines and numbers automatically switch contrast so dark
+  the Settings panel; outlines and numbers automatically switch contrast so dark
   or light themes stay legible while you paint.
 - **Region number toggle.** Flip a Gameplay setting to hide or restore the
   region numbers once you're familiar with the artwork for an unobstructed
@@ -99,25 +99,29 @@ tools, a save manager, and a configurable generator all live inside a single
   the app surface the smallest unfinished region when you need a nudge.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
   artwork at its final resolution without leaving the play surface.
+- **Sidecar panels.** Settings, Help, and the Save manager now dock to the
+  right as floating panels instead of modal overlays, so you can keep painting
+  while tweaking generator sliders or reviewing shortcuts. Each panel remembers
+  its scroll position and stays interactive alongside the canvas.
 - **Palette manager.** Swipe through edge-to-edge swatches rendered as simple,
   gutterless colour blocks so the dock stays packed. Completed colours collapse
   out of view once every region is filled, tooltips call out how many areas are
-  left, and the new sort control lets you reorder swatches by number, remaining
-  regions, colour name, hue, or brightness. The digits automatically flip
+  left, and the Settings → Palette control lets you reorder swatches by number,
+  remaining regions, colour name, hue, or brightness. The digits automatically flip
   between dark and light treatments (with a subtle halo) to stay legible on any
   swatch, and the dock scrolls horizontally whenever palettes stretch beyond the
   screen so every colour stays accessible without vertical overflow.
 - **Progress persistence & recovery.** Every stroke updates a rolling autosave
   using a compressed snapshot so the latest session is restored automatically on
   launch. Manual snapshots still land in the save manager where you can rename,
-  export, or delete entries at will. The Help sheet now surfaces estimated
+  export, or delete entries at will. The Help panel now surfaces estimated
   browser quota usage alongside save totals, offers a one-click delete button
   for clearing local data, and logs payload sizes plus storage consumption when
   the browser reports quota errors.
 
 ### Capybara Springs detail presets
 
-The Low/Medium/High detail chips on the onboarding hint and Settings sheet
+  The Low/Medium/High detail chips on the onboarding hint and Settings panel
 toggle tuned generator options for the built-in capybara vignette:
 
 | Preset | Colours | Approx. regions | Min region | Resize edge | Sample rate | Iterations | Smoothing | Use it when… |
@@ -157,7 +161,7 @@ every preset playable—from the breezy ≈26-region low detail board to the
   before feeding `applyPuzzleResult`. Regeneration and fixtures reuse the same
   entry point so gameplay and export code paths stay in sync.
 - **Persistence helpers.** `persistSaves`, `loadSavedEntries`, and
-  `serializeCurrentPuzzle` manage the save sheet while JSON exports lean on the
+  `serializeCurrentPuzzle` manage the save panel while JSON exports lean on the
   same serialization path for predictable data output.
 
 ## Pointer interaction flow
@@ -196,13 +200,14 @@ every preset playable—from the breezy ≈26-region low detail board to the
    overlay disappears once a new source is selected, and the Low/Medium/High
    detail chips can pre-seed the capybara sample with relaxed or high-fidelity
    settings before you reload it.
-2. **Tune generation & appearance.** Open **Settings** to tweak palette size,
-   minimum region area, resize detail, sample rate (for faster clustering),
-   iteration count, smoothing passes, auto-advance, hint animations, the canvas
-   background colour, and the new interface scale slider. Apply changes
-   instantly when working from an image source, then expand the **Advanced
-   options** accordion to edit the optional art prompt metadata before exporting
-   or regenerating a scene.
+2. **Tune generation & appearance.** Open **Settings** to slide out the
+   sidecar and tweak palette size, minimum region area, resize detail, sample
+   rate (for faster clustering), iteration count, smoothing passes,
+   auto-advance, hint animations, the canvas background colour, the new
+   interface scale slider, and the Palette sort menu. Apply changes instantly
+   when working from an image source, then expand the **Advanced options**
+   accordion to edit the optional art prompt metadata before exporting or
+   regenerating a scene.
 3. **Explore the puzzle.** The game canvas shows outlines and number badges,
    while the **Preview** button floods the entire viewport with a fullscreen
    comparison of the clustered artwork.
@@ -256,22 +261,23 @@ before retrying.
 - **Fullscreen preview overlay** – Triggered by the Preview button. The preview
   canvas stretches to fit the viewport so contributors can inspect the clustered
   output in detail before painting.
-- **Settings sheet** – A modal sheet that hides the generation sliders by
-  default. Controls include colours, minimum region size, resize detail, sample
-  rate, k-means iterations, smoothing passes, a background colour picker, and
-  an interface scale slider, plus toggles for auto-advance and hint animations.
-  The sheet also houses the JSON export action, mirrors the Low/Medium/High
-  detail chips so you can reload the sample with tuned parameters without
-  leaving the modal, and tucks the art prompt query inside an **Advanced
-  options** accordion so casual play stays focused on painting.
-- **Detail presets** – The onboarding hint and Settings sheet both surface the
+- **Settings panel** – Slides in beside the playfield instead of taking over the
+  window so you can keep painting while adjusting sliders. Controls include
+  colours, minimum region size, resize detail, sample rate, k-means iterations,
+  smoothing passes, a background colour picker, the interface scale slider,
+  toggles for auto-advance and hint animations, and the Palette sort menu. The
+  panel also houses the JSON export action, mirrors the Low/Medium/High detail
+  chips so you can reload the sample with tuned parameters without leaving the
+  sidecar, and tucks the art prompt query inside an **Advanced options**
+  accordion so casual play stays focused on painting.
+- **Detail presets** – The onboarding hint and Settings panel both surface the
   Low/Medium/High chips with a live caption describing the active preset so you
   know how many colours, what minimum region size, and which resize edge (and
   approximate region count) the next sample reload will use.
-- **Save manager** – A companion sheet listing every stored snapshot. Each entry
-  shows completion progress with quick actions to load, rename, export, or
-  delete the save.
-- **Help sheet** – Lists every command button, summarizes canvas gestures, and
+- **Save manager panel** – Lists every stored snapshot without blocking the
+  canvas. Each entry shows completion progress with quick actions to load,
+  rename, export, or delete the save.
+- **Help panel** – Lists every command button, summarizes canvas gestures, and
   surfaces a live debug log so contributors can confirm state changes while
   testing.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
@@ -284,7 +290,7 @@ before retrying.
 
 - The hint overlay is focusable and reacts to Enter/Space to trigger the file
   picker, keeping the first interaction accessible.
-- The help sheet’s debug log uses an `aria-live="polite"` region for gameplay
+- The Help panel’s debug log uses an `aria-live="polite"` region for gameplay
   telemetry so assistive tech announces save loads, resets, and palette
   activity.
 - Command rail buttons expose descriptive `aria-label` and `title` attributes
@@ -293,16 +299,16 @@ before retrying.
 - Palette buttons toggle the active colour and expose `data-color-id` so tests
   and tooling can reason about selections. Each swatch dynamically adjusts its
   label colour and outline to maintain WCAG-friendly contrast without extra
-  chrome, and
-  auto-advance can be disabled from the Settings sheet for full manual control.
+  chrome, and auto-advance can be disabled from the Settings panel for full
+  manual control.
 - Palette selection briefly flashes every matching region (and completed
   colours) so it's immediately clear where the next strokes belong.
 - Hold Space to temporarily switch the primary mouse button into a dedicated
   pan gesture; direct click-dragging also works for quick viewport adjustments.
 - Use `+`/`-` (or `Shift+=`/`-`) to zoom without leaving the keyboard; mouse and
   trackpad scrolling continue to work for analog control.
-- Both the settings and save sheets trap focus while open and close via their
-  dedicated Close buttons or the shared backdrop.
+- Close buttons sit at the top of each floating panel so keyboard users can exit
+  quickly without relying on a backdrop.
 
 ## Testing
 
