@@ -33,14 +33,14 @@ jobs:
             console.log(`Branch ${context.ref} has open PR: ${hasPR}`);
             return hasPR;
 
-      - name: Skip deployment if no open PR
-        if: steps.check-pr.outputs.result == 'false'
+      - name: Skip deployment if no open PR (except main)
+        if: steps.check-pr.outputs.result == 'false' && github.ref != 'refs/heads/main'
         run: |
           echo "Skipping deployment: Branch does not have an open PR"
           exit 0
 
       - name: Checkout current branch
-        if: steps.check-pr.outputs.result == 'true'
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -49,7 +49,7 @@ jobs:
           fetch-depth: 0
 
       - name: Configure git credentials for authenticated operations
-        if: steps.check-pr.outputs.result == 'true'
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
@@ -57,7 +57,7 @@ jobs:
           echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
 
       - name: Setup gh-pages branch
-        if: steps.check-pr.outputs.result == 'true'
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
           # Check if gh-pages branch exists remotely
           if git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
@@ -80,17 +80,22 @@ jobs:
           fi
 
       - name: Prepare branch name for folder
-        if: steps.check-pr.outputs.result == 'true'
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         id: branch-name
         run: |
           # Convert branch name to safe folder name
           BRANCH_NAME="${{ github.ref_name }}"
-          SAFE_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          # Main branch deploys to root (empty folder name), others to subfolders
+          if [ "$BRANCH_NAME" = "main" ]; then
+            SAFE_BRANCH_NAME=""
+          else
+            SAFE_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          fi
           echo "safe_name=$SAFE_BRANCH_NAME" >> $GITHUB_OUTPUT
           echo "Branch: $BRANCH_NAME -> Folder: $SAFE_BRANCH_NAME"
 
       - name: Fetch open PRs with branches
-        if: steps.check-pr.outputs.result == 'true'
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         id: fetch-prs
         uses: actions/github-script@v7
         with:
@@ -120,29 +125,45 @@ jobs:
             return branches;
 
       - name: Deploy branch content
-        if: steps.check-pr.outputs.result == 'true'
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
           cd gh-pages
           BRANCH_FOLDER="${{ steps.branch-name.outputs.safe_name }}"
 
-          # Remove old content for this branch if it exists
-          if [ -d "$BRANCH_FOLDER" ]; then
-            echo "Removing old content for branch: $BRANCH_FOLDER"
-            rm -rf "$BRANCH_FOLDER"
+          # Handle main branch differently (deploys to root)
+          if [ -z "$BRANCH_FOLDER" ]; then
+            echo "Deploying main branch to root"
+            # For main branch, copy files directly to root (excluding index.html which we generate)
+            rsync -av --exclude='.git' \
+                      --exclude='node_modules' \
+                      --exclude='test-results' \
+                      --exclude='playwright-report' \
+                      --exclude='blob-report' \
+                      --exclude='artifacts' \
+                      --exclude='index.html' \
+                      --exclude='README.md' \
+                      ../source/ ./
+          else
+            # For other branches, deploy to subfolder
+            # Remove old content for this branch if it exists
+            if [ -d "$BRANCH_FOLDER" ]; then
+              echo "Removing old content for branch: $BRANCH_FOLDER"
+              rm -rf "$BRANCH_FOLDER"
+            fi
+
+            # Create branch folder
+            mkdir -p "$BRANCH_FOLDER"
+
+            # Copy content from source (excluding .git, node_modules, etc)
+            echo "Copying content to: $BRANCH_FOLDER"
+            rsync -av --exclude='.git' \
+                      --exclude='node_modules' \
+                      --exclude='test-results' \
+                      --exclude='playwright-report' \
+                      --exclude='blob-report' \
+                      --exclude='artifacts' \
+                      ../source/ "$BRANCH_FOLDER/"
           fi
-
-          # Create branch folder
-          mkdir -p "$BRANCH_FOLDER"
-
-          # Copy content from source (excluding .git, node_modules, etc)
-          echo "Copying content to: $BRANCH_FOLDER"
-          rsync -av --exclude='.git' \
-                    --exclude='node_modules' \
-                    --exclude='test-results' \
-                    --exclude='playwright-report' \
-                    --exclude='blob-report' \
-                    --exclude='artifacts' \
-                    ../source/ "$BRANCH_FOLDER/"
 
           # Clean up old branches that no longer have open PRs
           echo "Cleaning up branches without open PRs..."
@@ -163,7 +184,7 @@ jobs:
             done
           fi
 
-          # Generate branch index page with sorted branches from open PRs
+          # Generate branch index page with main first, then sorted branches from open PRs
           cat > index.html <<'EOF'
           <!DOCTYPE html>
           <html lang="en">
@@ -206,6 +227,10 @@ jobs:
               li:hover {
                 box-shadow: 0 2px 8px rgba(0,0,0,0.1);
               }
+              li.main-branch {
+                background: #e6f7ff;
+                border-color: #91d5ff;
+              }
               .branch-link {
                 font-size: 1.1em;
                 font-weight: 600;
@@ -232,15 +257,34 @@ jobs:
                 color: #6a737d;
                 margin-top: 5px;
               }
+              .badge {
+                display: inline-block;
+                padding: 2px 8px;
+                font-size: 0.75em;
+                font-weight: 600;
+                border-radius: 12px;
+                background: #28a745;
+                color: white;
+                margin-left: 8px;
+              }
             </style>
           </head>
           <body>
             <h1>Capy Image Generator - Branch Deployments</h1>
             <div class="info">
-              <strong>Note:</strong> Only branches with open pull requests are deployed.
+              <strong>Note:</strong> The main branch is always deployed to the root.
+              Other branches with open pull requests are deployed to subfolders.
               Branches are sorted by most recently updated first.
             </div>
             <ul>
+          EOF
+
+          # Add main branch first (always at root)
+          cat >> index.html <<'EOF'
+              <li class="main-branch">
+                <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>
+                <div class="pr-info">The main production branch - always deployed to root</div>
+              </li>
           EOF
 
           # Add branches from PR data (already sorted by updated date)
@@ -270,7 +314,11 @@ jobs:
           else
             git commit -m "Deploy branch: ${{ github.ref_name }} (commit: ${{ github.sha }})"
             git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages --force
-            echo "Published branch to: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/$BRANCH_FOLDER/"
+            if [ -z "$BRANCH_FOLDER" ]; then
+              echo "Published main branch to root: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+            else
+              echo "Published branch to: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/$BRANCH_FOLDER/"
+            fi
             echo "Branch index available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
           fi
 
