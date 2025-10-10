@@ -2,9 +2,9 @@
 
 ## Overview
 
-Every push to a branch with an open pull request automatically deploys to GitHub Pages under a subfolder named after the branch. This allows reviewers and collaborators to preview changes in a live environment without needing to clone and run the project locally.
+The `main` branch is always deployed to the root of GitHub Pages. Every push to other branches with an open pull request automatically deploys to GitHub Pages under a subfolder named after the branch. This allows reviewers and collaborators to preview changes in a live environment without needing to clone and run the project locally.
 
-**Note:** Only branches with open PRs are deployed. Once a PR is closed or merged, the branch deployment will be automatically cleaned up on the next workflow run.
+**Note:** The `main` branch always deploys to the root. Other branches are only deployed if they have open PRs. Once a PR is closed or merged, the branch deployment will be automatically cleaned up on the next workflow run.
 
 ## How It Works
 
@@ -14,25 +14,30 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 - Every push to any branch (`branches: ['**']`)
 - Manual workflow dispatch
 
-**Performance optimization:** The workflow checks if the branch has an open PR before proceeding. If no PR exists, it exits early without deploying, saving CI/CD resources.
+**Performance optimization:** The workflow checks if the branch has an open PR before proceeding. If no PR exists, it exits early without deploying, saving CI/CD resources. The `main` branch is an exception - it always deploys to the root regardless of PR status.
 
 ### Deployment Process
 
-1. **PR Check**: The workflow verifies that the branch has an open pull request. If not, deployment is skipped entirely.
+1. **PR Check**: The workflow verifies that the branch has an open pull request. If not, deployment is skipped entirely. **Exception:** The `main` branch always deploys regardless of PR status.
 
 2. **Checkout**: The workflow checks out both the current branch (source code) and the `gh-pages` branch (deployment target)
 
 3. **Branch Name Sanitization**: The branch name is converted to a safe folder name by replacing special characters with hyphens
    - Example: `automation/feature` → `automation-feature`
+   - **Exception:** The `main` branch deploys to the root (no subfolder)
 
 4. **Content Deployment**: The workflow:
-   - Creates a folder in `gh-pages` branch matching the sanitized branch name
+   - For `main` branch: Copies content directly to the root of `gh-pages` (excluding index.html which is generated)
+   - For other branches: Creates a folder in `gh-pages` matching the sanitized branch name and copies content there
    - Copies all content except `.git`, `node_modules`, test results, and artifacts
    - Updates the deployment with the latest content from the branch
 
 5. **Cleanup**: The workflow removes deployments for branches that no longer have open PRs
 
-6. **Index Generation**: A sorted index page is generated showing all active deployments, sorted by most recently updated PR first
+6. **Index Generation**: A sorted index page is generated showing:
+   - The `main` branch first (always at root) with a production badge
+   - All branches with open PRs, sorted by most recently updated PR first
+   - Each branch listing includes: branch name, PR number, title, link, and last update date
 
 7. **GitHub Pages Publish**: The updated `gh-pages` branch is deployed to GitHub Pages
 
@@ -48,11 +53,12 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 ## Benefits
 
 1. **Live Previews**: Reviewers can test the actual application without local setup
-2. **Parallel Testing**: Multiple branches can be previewed simultaneously
-3. **Automatic Cleanup**: Old branches are automatically removed when PRs are closed
-4. **CI/CD Integration**: Deployment happens automatically on every push to branches with open PRs
-5. **Resource Efficiency**: Branches without PRs are not deployed, saving CI/CD minutes
-6. **Sorted Navigation**: The index page shows the most recently updated PRs first for easy access
+2. **Production Always Available**: The main branch is always deployed to the root, ensuring the production site is accessible
+3. **Parallel Testing**: Multiple branches can be previewed simultaneously
+4. **Automatic Cleanup**: Old branches are automatically removed when PRs are closed
+5. **CI/CD Integration**: Deployment happens automatically on every push to main or branches with open PRs
+6. **Resource Efficiency**: Branches without PRs are not deployed, saving CI/CD minutes
+7. **Sorted Navigation**: The index page shows main first, then the most recently updated PRs for easy access
 
 ## Cleanup
 
