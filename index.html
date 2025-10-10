@@ -35,7 +35,7 @@
           sans-serif;
         background: #020617;
         color: #e2e8f0;
-        --ui-scale-user: 1;
+        --ui-scale-user: 0.9;
         --ui-scale-auto: 1;
         --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
         --app-width: 100vw;
@@ -76,10 +76,6 @@
         font-size: calc(16px * var(--ui-scale));
         touch-action: manipulation;
         overscroll-behavior: none;
-      }
-
-      body.sheet-open {
-        overflow: hidden;
       }
 
       body.dragging {
@@ -183,9 +179,7 @@
       }
 
       body[data-orientation="portrait"] #paletteDock {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 12px;
+        gap: calc(10px * var(--ui-scale));
       }
 
       #viewport {
@@ -243,7 +237,6 @@
       }
 
       body.panning #pointerOverlay,
-      body.sheet-open #pointerOverlay,
       body.dragging #pointerOverlay {
         opacity: 0;
       }
@@ -527,29 +520,18 @@
         position: sticky;
         bottom: 0;
         display: flex;
+        flex-direction: column;
+        gap: calc(6px * var(--ui-scale));
         align-items: stretch;
         justify-content: flex-start;
-        padding: 0;
-        padding-inline-start: env(safe-area-inset-left, 0px);
-        padding-inline-end: env(safe-area-inset-right, 0px);
-        padding-block-end: env(safe-area-inset-bottom, 0px);
+        padding-block-start: calc(6px * var(--ui-scale));
+        padding-block-end: calc(6px * var(--ui-scale) + env(safe-area-inset-bottom, 0px));
+        padding-inline-start: calc(12px * var(--ui-scale) + env(safe-area-inset-left, 0px));
+        padding-inline-end: calc(12px * var(--ui-scale) + env(safe-area-inset-right, 0px));
         background: rgba(2, 6, 23, 0.94);
         border-top: 1px solid rgba(15, 23, 42, 0.85);
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        overflow-y: hidden;
-        scrollbar-width: thin;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-x;
+        overflow: visible;
         z-index: 3;
-      }
-
-      #paletteDock::-webkit-scrollbar {
-        height: calc(6px * var(--ui-scale));
-      }
-
-      #paletteDock::-webkit-scrollbar-thumb {
-        background: rgba(148, 163, 184, 0.45);
       }
 
       #palette {
@@ -557,6 +539,53 @@
         min-width: 0;
         display: flex;
         gap: 0;
+        overflow-x: auto;
+        overflow-y: visible;
+        touch-action: pan-x;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        padding-block-end: calc(2px * var(--ui-scale));
+      }
+
+      #palette::-webkit-scrollbar {
+        height: calc(6px * var(--ui-scale));
+      }
+
+      #palette::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.45);
+      }
+
+      .control select {
+        appearance: none;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: calc(10px * var(--ui-scale));
+        background: rgba(15, 23, 42, 0.82);
+        color: inherit;
+        font: inherit;
+        padding: calc(6px * var(--ui-scale)) calc(28px * var(--ui-scale))
+          calc(6px * var(--ui-scale)) calc(12px * var(--ui-scale));
+        line-height: 1.2;
+        cursor: pointer;
+        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.35);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        background-image: linear-gradient(45deg, transparent 50%, rgba(148, 163, 184, 0.75) 50%),
+          linear-gradient(135deg, rgba(148, 163, 184, 0.75) 50%, transparent 50%);
+        background-position: calc(100% - 18px) center, calc(100% - 12px) center;
+        background-size: calc(6px * var(--ui-scale)) calc(6px * var(--ui-scale));
+        background-repeat: no-repeat;
+        min-width: min(calc(220px * var(--ui-scale)), 100%);
+      }
+
+      .control select:focus {
+        outline: none;
+        border-color: rgba(96, 165, 250, 0.55);
+        box-shadow: 0 0 0 calc(2px * var(--ui-scale)) rgba(37, 99, 235, 0.25);
+      }
+
+      .control select:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        background-image: none;
       }
 
       .control {
@@ -727,6 +756,8 @@
         cursor: pointer;
         box-shadow: inset 0 0 0 1px var(--swatch-outline, rgba(15, 23, 42, 0.6));
         transition: box-shadow 0.18s ease;
+        position: relative;
+        overflow: visible;
       }
 
       .swatch:hover {
@@ -776,6 +807,42 @@
         color: inherit;
       }
 
+      .swatch .swatch-tooltip {
+        position: absolute;
+        inset-inline: 50%;
+        bottom: calc(100% + 8px);
+        transform: translate(-50%, 4px) scale(0.98);
+        padding: calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        border-radius: calc(8px * var(--ui-scale));
+        background: rgba(15, 23, 42, 0.9);
+        color: rgba(248, 250, 252, 0.95);
+        font-size: 0.75rem;
+        font-weight: 500;
+        white-space: nowrap;
+        box-shadow: 0 6px 20px rgba(2, 6, 23, 0.45);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.16s ease, transform 0.16s ease;
+        z-index: 10;
+      }
+
+      .swatch .swatch-tooltip::after {
+        content: "";
+        position: absolute;
+        inset-inline-start: 50%;
+        top: 100%;
+        transform: translateX(-50%);
+        border-width: 6px 6px 0 6px;
+        border-style: solid;
+        border-color: rgba(15, 23, 42, 0.9) transparent transparent transparent;
+      }
+
+      .swatch:hover .swatch-tooltip,
+      .swatch:focus-visible .swatch-tooltip {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+      }
+
       .swatch .label > strong {
         display: inline-flex;
         align-items: center;
@@ -793,11 +860,15 @@
 
       .sheet {
         position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: min(420px, calc(100vw - 48px));
-        max-height: calc(100vh - 96px);
+        top: calc(
+          env(safe-area-inset-top, 0px) +
+            var(--rail-padding-block) +
+            var(--command-button-size) +
+            calc(16px * var(--ui-scale))
+        );
+        right: calc(env(safe-area-inset-right, 0px) + 24px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+        width: min(380px, calc(100vw - 48px));
         padding: 24px;
         display: flex;
         flex-direction: column;
@@ -805,8 +876,8 @@
         border-radius: 22px;
         background: rgba(2, 6, 23, 0.95);
         border: 1px solid rgba(59, 130, 246, 0.4);
-        box-shadow: 0 32px 80px rgba(8, 47, 73, 0.55);
-        backdrop-filter: blur(26px);
+        box-shadow: 0 32px 80px rgba(8, 47, 73, 0.45);
+        backdrop-filter: blur(22px);
         z-index: 6;
         opacity: 1;
         transition: opacity 0.2s ease;
@@ -815,6 +886,7 @@
       .sheet.hidden {
         opacity: 0;
         pointer-events: none;
+        visibility: hidden;
       }
 
       .sheet-header {
@@ -962,21 +1034,6 @@
       .toggle input {
         width: 18px;
         height: 18px;
-      }
-
-      .backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(2, 6, 23, 0.65);
-        backdrop-filter: blur(10px);
-        z-index: 5;
-        opacity: 1;
-        transition: opacity 0.2s ease;
-      }
-
-      .backdrop.hidden {
-        opacity: 0;
-        pointer-events: none;
       }
 
       #saveList {
@@ -1210,13 +1267,12 @@
       </footer>
     </div>
     <input id="fileInput" type="file" accept=".json,image/*" hidden />
-    <div id="sheetBackdrop" class="backdrop hidden" tabindex="-1"></div>
     <div
       id="helpSheet"
       class="sheet hidden"
       role="dialog"
-      aria-modal="true"
       aria-labelledby="helpTitle"
+      aria-hidden="true"
     >
       <div class="sheet-header">
         <h2 id="helpTitle">Help &amp; shortcuts</h2>
@@ -1296,8 +1352,8 @@
       id="settingsSheet"
       class="sheet hidden"
       role="dialog"
-      aria-modal="true"
       aria-labelledby="settingsTitle"
+      aria-hidden="true"
     >
       <div class="sheet-header">
         <h2 id="settingsTitle">Settings</h2>
@@ -1319,6 +1375,20 @@
             <span>Show region numbers</span>
           </label>
         </section>
+        <section class="sheet-section" aria-labelledby="paletteHeading">
+          <h3 id="paletteHeading">Palette</h3>
+          <label class="control">
+            <span>Sort swatches</span>
+            <select id="paletteSort" data-testid="palette-sort" disabled>
+              <option value="region">Number</option>
+              <option value="remaining">Remaining regions</option>
+              <option value="name">Colour name</option>
+              <option value="hue">Hue</option>
+              <option value="brightness">Brightness</option>
+            </select>
+          </label>
+          <p class="control-note">Choose how unfinished colours appear in the dock.</p>
+        </section>
         <section class="sheet-section" aria-labelledby="appearanceHeading">
           <h3 id="appearanceHeading">Appearance</h3>
           <label class="control">
@@ -1329,14 +1399,14 @@
             Applies to unfinished regions and adjusts outline contrast automatically.
           </p>
           <label class="control">
-            <span>Interface scale <output data-for="uiScale">100%</output></span>
+            <span>Interface scale <output data-for="uiScale">90%</output></span>
             <input
               id="uiScale"
               type="range"
-              min="0.85"
+              min="0.6"
               max="1.35"
               step="0.05"
-              value="1"
+              value="0.9"
             />
           </label>
           <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
@@ -1407,8 +1477,8 @@
       id="saveSheet"
       class="sheet hidden"
       role="dialog"
-      aria-modal="true"
       aria-labelledby="saveTitle"
+      aria-hidden="true"
     >
       <div class="sheet-header">
         <h2 id="saveTitle">Save manager</h2>
@@ -1439,7 +1509,6 @@
       const helpButton = document.getElementById("helpButton");
       const closePreviewButton = document.getElementById("closePreview");
       const previewOverlay = document.getElementById("previewOverlay");
-      const sheetBackdrop = document.getElementById("sheetBackdrop");
       const settingsSheet = document.getElementById("settingsSheet");
       const saveSheet = document.getElementById("saveSheet");
       const helpSheet = document.getElementById("helpSheet");
@@ -1496,6 +1565,7 @@
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
+      const DEFAULT_UI_SCALE = 0.9;
       let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
       const gameSaveManager = createGameSaveManager();
@@ -1723,7 +1793,7 @@
           autoAdvance: true,
           animateHints: true,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
-          uiScale: 1,
+          uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
           showRegionLabels: true,
         },
@@ -1931,8 +2001,6 @@
           }
         });
       }
-
-      sheetBackdrop.addEventListener("click", () => closeAllSheets());
 
       startHint.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -2345,30 +2413,15 @@
       );
 
       function openSheet(sheet) {
+        if (!sheet) return;
         sheet.classList.remove("hidden");
-        sheetBackdrop.classList.remove("hidden");
-        document.body.classList.add("sheet-open");
+        sheet.setAttribute("aria-hidden", "false");
       }
 
       function closeSheet(sheet) {
+        if (!sheet) return;
         sheet.classList.add("hidden");
-        const sheets = [settingsSheet, saveSheet, helpSheet];
-        const anyOpen = sheets.some((panel) => panel && !panel.classList.contains("hidden"));
-        if (!anyOpen) {
-          sheetBackdrop.classList.add("hidden");
-          document.body.classList.remove("sheet-open");
-        }
-      }
-
-      function closeAllSheets() {
-        const sheets = [settingsSheet, saveSheet, helpSheet];
-        for (const panel of sheets) {
-          if (panel) {
-            panel.classList.add("hidden");
-          }
-        }
-        sheetBackdrop.classList.add("hidden");
-        document.body.classList.remove("sheet-open");
+        sheet.setAttribute("aria-hidden", "true");
       }
 
       function updatePreviewState() {
@@ -2430,7 +2483,9 @@
       function syncComputedUiScale() {
         const root = document.documentElement;
         const userValue =
-          typeof state?.settings?.uiScale === "number" ? state.settings.uiScale : 1;
+          typeof state?.settings?.uiScale === "number"
+            ? state.settings.uiScale
+            : DEFAULT_UI_SCALE;
         if (!root) {
           return userValue;
         }
@@ -2470,7 +2525,7 @@
         const minSide = Math.max(1, Math.min(visualWidth, visualHeight));
         const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
         document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
-        const autoScale = clamp(minSide / 880, 0.8, 1.1);
+        const autoScale = clamp(minSide / 880, 0.7, 1.1);
         document.documentElement.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
         if (document.body) {
           document.body.dataset.orientation = orientation;
@@ -2668,8 +2723,16 @@
       function applyUiScale(scale, options = {}) {
         const { skipLog = false, skipAutosave = false, force = false } = options;
         const numeric = Number(scale);
-        const resolved = clamp(Number.isFinite(numeric) ? numeric : state.settings.uiScale || 1, 0.8, 1.35);
-        const current = state.settings.uiScale ?? 1;
+        const fallbackScale =
+          Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
+            ? state.settings.uiScale
+            : DEFAULT_UI_SCALE;
+        const resolved = clamp(
+          Number.isFinite(numeric) && numeric > 0 ? numeric : fallbackScale,
+          0.6,
+          1.35
+        );
+        const current = fallbackScale;
         const changed = force || Math.abs(resolved - current) > 0.001;
         state.settings.uiScale = resolved;
         document.documentElement.style.setProperty("--ui-scale-user", String(resolved));
@@ -2777,7 +2840,11 @@
         if (optionOutputs.smoothing) optionOutputs.smoothing.textContent = String(smoothingEl.value);
         if (optionOutputs.uiScale) {
           const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
-          const value = Number.isFinite(source) ? source : state.settings.uiScale || 1;
+          const value = Number.isFinite(source) && source > 0
+            ? source
+            : (Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
+                ? state.settings.uiScale
+                : DEFAULT_UI_SCALE);
           optionOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
         }
       }
@@ -2926,6 +2993,10 @@
         }
         if (paletteSortEl) {
           paletteSortEl.disabled = true;
+          const target = state.paletteSort || "region";
+          if (paletteSortEl.value !== target) {
+            paletteSortEl.value = target;
+          }
         }
         setProgressMessage("loading");
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
@@ -3666,11 +3737,12 @@
         if (!state.puzzle) {
           if (paletteSortEl) {
             paletteSortEl.disabled = true;
+            const target = state.paletteSort || "region";
+            if (paletteSortEl.value !== target) {
+              paletteSortEl.value = target;
+            }
           }
           return;
-        }
-        if (paletteSortEl) {
-          paletteSortEl.disabled = false;
         }
         const totalByColor = new Map();
         const remainingByColor = new Map();
@@ -3682,9 +3754,29 @@
             remainingByColor.set(region.colorId, remaining + 1);
           }
         }
-        const paletteEntries = [...state.puzzle.palette];
-        const sortMode = state.paletteSort || "region";
+        const paletteEntries = state.puzzle.palette
+          .filter((color) => (remainingByColor.get(color.id) || 0) > 0)
+          .slice();
+        if (paletteEntries.length === 0) {
+          if (paletteSortEl) {
+            paletteSortEl.disabled = true;
+          }
+          return;
+        }
+        const allowedSortModes = new Set(["region", "remaining", "hue", "name", "brightness"]);
+        const sortMode = allowedSortModes.has(state.paletteSort) ? state.paletteSort : "region";
+        if (!allowedSortModes.has(state.paletteSort)) {
+          state.paletteSort = sortMode;
+        }
+        if (paletteSortEl) {
+          paletteSortEl.disabled = false;
+          if (paletteSortEl.value !== sortMode) {
+            paletteSortEl.value = sortMode;
+          }
+        }
         const hueCache = new Map();
+        const luminanceCache = new Map();
+        const nameCache = new Map();
         const getHue = (color) => {
           if (!color) return 0;
           if (hueCache.has(color.id)) {
@@ -3693,6 +3785,29 @@
           const value = hueFromHex(color.hex);
           hueCache.set(color.id, value);
           return value;
+        };
+        const getLuminance = (color) => {
+          if (!color) return 0;
+          if (luminanceCache.has(color.id)) {
+            return luminanceCache.get(color.id);
+          }
+          const value = relativeLuminance(hexToRgb(color.hex));
+          luminanceCache.set(color.id, value);
+          return value;
+        };
+        const getNameData = (color) => {
+          if (!color) {
+            return { text: "", sortKey: "" };
+          }
+          if (nameCache.has(color.id)) {
+            return nameCache.get(color.id);
+          }
+          const text =
+            (typeof color.name === "string" && color.name.trim()) ||
+            (typeof color.hex === "string" ? color.hex.toUpperCase() : `Colour ${color.id}`);
+          const entry = { text, sortKey: text.toLocaleLowerCase() };
+          nameCache.set(color.id, entry);
+          return entry;
         };
         paletteEntries.sort((a, b) => {
           if (sortMode === "hue") {
@@ -3714,38 +3829,76 @@
             }
             return a.id - b.id;
           }
+          if (sortMode === "name") {
+            const aName = getNameData(a);
+            const bName = getNameData(b);
+            const nameDelta = aName.sortKey.localeCompare(bName.sortKey, undefined, {
+              sensitivity: "base",
+              numeric: true,
+            });
+            if (nameDelta !== 0) {
+              return nameDelta;
+            }
+            return a.id - b.id;
+          }
+          if (sortMode === "brightness") {
+            const luminanceDelta = getLuminance(b) - getLuminance(a);
+            if (Math.abs(luminanceDelta) > 0.0001) {
+              return luminanceDelta;
+            }
+            const hueDelta = getHue(a) - getHue(b);
+            if (Math.abs(hueDelta) > 0.0001) {
+              return hueDelta;
+            }
+            return a.id - b.id;
+          }
           return a.id - b.id;
         });
 
         for (const color of paletteEntries) {
           const remaining = remainingByColor.get(color.id) || 0;
+          if (remaining <= 0) {
+            continue;
+          }
           const total = totalByColor.get(color.id) || 0;
-          const labelText =
-            (typeof color.name === "string" && color.name.trim()) ||
-            (typeof color.hex === "string" ? color.hex.toUpperCase() : `Colour ${color.id}`);
+          const { text: labelText } = getNameData(color);
+          const regionWord = remaining === 1 ? "region" : "regions";
+          const totalWord = total === 1 ? "region" : "regions";
+          const tooltipText = `${remaining} ${regionWord} left`;
+          const ariaSummary = `${remaining} of ${total} ${totalWord} remaining.`;
           const swatch = document.createElement("button");
           swatch.type = "button";
           swatch.className = "swatch";
           swatch.dataset.testid = "palette-swatch";
           swatch.dataset.colorId = String(color.id);
+          swatch.dataset.remaining = String(remaining);
+          swatch.dataset.total = String(total);
+          swatch.dataset.name = labelText;
           swatch.setAttribute("role", "listitem");
           swatch.setAttribute(
             "aria-label",
-            `Colour ${color.id}: ${labelText}. ${remaining} of ${total} regions remaining.`
+            `Colour ${color.id}: ${labelText}. ${ariaSummary}`
           );
-          swatch.title = `${labelText} · ${remaining} of ${total} remaining`;
+          swatch.title = `${labelText} · ${tooltipText} (${total} total)`;
           if (state.activeColor === color.id) swatch.classList.add("active");
-          if (remaining === 0) swatch.classList.add("done");
           swatch.style.setProperty("--swatch-color", color.hex || "transparent");
           const labelStyles = computeSwatchLabelStyles(color.hex);
           swatch.style.setProperty("--swatch-label-color", labelStyles.color);
           swatch.style.setProperty("--swatch-outline", labelStyles.outline);
           swatch.style.setProperty("--swatch-label-shadow", labelStyles.shadow);
-          swatch.innerHTML = `
-            <span class="label">
-              <strong>${color.id}</strong>
-            </span>
-          `;
+          const label = document.createElement("span");
+          label.className = "label";
+          const number = document.createElement("strong");
+          number.textContent = String(color.id);
+          label.appendChild(number);
+          swatch.appendChild(label);
+          const tooltipId = `swatchTooltip-${color.id}`;
+          const tooltip = document.createElement("span");
+          tooltip.id = tooltipId;
+          tooltip.className = "swatch-tooltip";
+          tooltip.textContent = tooltipText;
+          swatch.appendChild(tooltip);
+          swatch.setAttribute("aria-describedby", tooltipId);
           swatch.addEventListener("click", () => {
             activateColor(color.id);
           });
@@ -3790,6 +3943,10 @@
           setProgressMessage("idle");
           if (paletteSortEl) {
             paletteSortEl.disabled = true;
+            const target = state.paletteSort || "region";
+            if (paletteSortEl.value !== target) {
+              paletteSortEl.value = target;
+            }
           }
           return;
         }
@@ -3809,7 +3966,7 @@
       }
 
       function applyPaletteSort(sort, { skipLog } = {}) {
-        const allowed = new Set(["region", "hue", "remaining"]);
+        const allowed = new Set(["region", "hue", "remaining", "name", "brightness"]);
         const next = allowed.has(sort) ? sort : "region";
         if (state.paletteSort === next) {
           if (paletteSortEl && paletteSortEl.value !== next) {
@@ -3828,6 +3985,10 @@
               ? "colour hue"
               : next === "remaining"
               ? "remaining regions"
+              : next === "name"
+              ? "colour name"
+              : next === "brightness"
+              ? "brightness (light to dark)"
               : "region number";
           logDebug(`Palette sorted by ${label}`);
         }
@@ -4594,7 +4755,10 @@
         payload.settings = {
           autoAdvance: Boolean(settingsSource.autoAdvance),
           animateHints: Boolean(settingsSource.animateHints),
-          uiScale: Number.isFinite(settingsSource.uiScale) ? settingsSource.uiScale : 1,
+          uiScale:
+            Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
+              ? clamp(settingsSource.uiScale, 0.6, 1.35)
+              : DEFAULT_UI_SCALE,
           artPrompt:
             typeof settingsSource.artPrompt === "string" ? settingsSource.artPrompt : "",
         };
@@ -4695,7 +4859,10 @@
           settings: {
             autoAdvance: Boolean(state.settings.autoAdvance),
             animateHints: Boolean(state.settings.animateHints),
-            uiScale: Number(state.settings.uiScale) || 1,
+            uiScale:
+              Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
+                ? clamp(state.settings.uiScale, 0.6, 1.35)
+                : DEFAULT_UI_SCALE,
             artPrompt: state.settings.artPrompt || "",
             showRegionLabels: state.settings.showRegionLabels !== false,
           },
