@@ -27,14 +27,14 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
    - **Exception:** The `main` branch deploys to the root (no subfolder)
 
 4. **Content Deployment**: The workflow:
-   - For `main` branch: Copies content directly to the root of `gh-pages` (excluding index.html which is generated)
+   - For `main` branch: Copies content directly to the root of `gh-pages` (including the application's index.html)
    - For other branches: Creates a folder in `gh-pages` matching the sanitized branch name and copies content there
    - Copies all content except `.git`, `node_modules`, test results, and artifacts
    - Updates the deployment with the latest content from the branch
 
 5. **Cleanup**: The workflow removes deployments for branches that no longer have open PRs
 
-6. **Index Generation**: A sorted index page is generated showing:
+6. **Index Generation**: A sorted branch index page (`branch.html`) is generated showing:
    - The `main` branch first (always at root) with a production badge
    - All branches with open PRs, sorted by most recently updated PR first
    - Each branch listing includes: branch name, PR number, title, link, and last update date
@@ -50,6 +50,9 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
   - `https://<owner>.github.io/<repo>/<branch-name>/`
   - Example: `automation/feature` → `https://<owner>.github.io/<repo>/automation-feature/`
 
+- **Branch index**: Accessible at
+  - `https://<owner>.github.io/<repo>/branch.html`
+
 ## Benefits
 
 1. **Live Previews**: Reviewers can test the actual application without local setup
@@ -58,7 +61,7 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 4. **Automatic Cleanup**: Old branches are automatically removed when PRs are closed
 5. **CI/CD Integration**: Deployment happens automatically on every push to main or branches with open PRs
 6. **Resource Efficiency**: Branches without PRs are not deployed, saving CI/CD minutes
-7. **Sorted Navigation**: The index page shows main first, then the most recently updated PRs for easy access
+7. **Sorted Navigation**: The branch index page (`branch.html`) shows main first, then the most recently updated PRs for easy access
 
 ## Cleanup
 
