@@ -183,9 +183,7 @@
       }
 
       body[data-orientation="portrait"] #paletteDock {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 12px;
+        gap: calc(10px * var(--ui-scale));
       }
 
       #viewport {
@@ -527,29 +525,18 @@
         position: sticky;
         bottom: 0;
         display: flex;
+        flex-direction: column;
+        gap: calc(6px * var(--ui-scale));
         align-items: stretch;
         justify-content: flex-start;
-        padding: 0;
-        padding-inline-start: env(safe-area-inset-left, 0px);
-        padding-inline-end: env(safe-area-inset-right, 0px);
-        padding-block-end: env(safe-area-inset-bottom, 0px);
+        padding-block-start: calc(6px * var(--ui-scale));
+        padding-block-end: calc(6px * var(--ui-scale) + env(safe-area-inset-bottom, 0px));
+        padding-inline-start: calc(12px * var(--ui-scale) + env(safe-area-inset-left, 0px));
+        padding-inline-end: calc(12px * var(--ui-scale) + env(safe-area-inset-right, 0px));
         background: rgba(2, 6, 23, 0.94);
         border-top: 1px solid rgba(15, 23, 42, 0.85);
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        overflow-y: visible;
-        scrollbar-width: thin;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-x;
+        overflow: visible;
         z-index: 3;
-      }
-
-      #paletteDock::-webkit-scrollbar {
-        height: calc(6px * var(--ui-scale));
-      }
-
-      #paletteDock::-webkit-scrollbar-thumb {
-        background: rgba(148, 163, 184, 0.45);
       }
 
       #palette {
@@ -557,6 +544,73 @@
         min-width: 0;
         display: flex;
         gap: 0;
+        overflow-x: auto;
+        overflow-y: visible;
+        touch-action: pan-x;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        padding-block-end: calc(2px * var(--ui-scale));
+      }
+
+      #palette::-webkit-scrollbar {
+        height: calc(6px * var(--ui-scale));
+      }
+
+      #palette::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.45);
+      }
+
+      .palette-controls {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: calc(8px * var(--ui-scale));
+      }
+
+      .palette-sort {
+        display: flex;
+        align-items: center;
+        gap: calc(8px * var(--ui-scale));
+        font-size: 0.85rem;
+        color: rgba(226, 232, 240, 0.85);
+      }
+
+      .palette-sort span {
+        font-weight: 600;
+      }
+
+      .palette-sort select {
+        appearance: none;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: calc(10px * var(--ui-scale));
+        background: rgba(15, 23, 42, 0.82);
+        color: inherit;
+        font: inherit;
+        padding: calc(6px * var(--ui-scale)) calc(28px * var(--ui-scale))
+          calc(6px * var(--ui-scale)) calc(12px * var(--ui-scale));
+        line-height: 1.2;
+        cursor: pointer;
+        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.35);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        background-image: linear-gradient(45deg, transparent 50%, rgba(148, 163, 184, 0.75) 50%),
+          linear-gradient(135deg, rgba(148, 163, 184, 0.75) 50%, transparent 50%);
+        background-position: calc(100% - 18px) center, calc(100% - 12px) center;
+        background-size: calc(6px * var(--ui-scale)) calc(6px * var(--ui-scale));
+        background-repeat: no-repeat;
+        min-width: min(calc(220px * var(--ui-scale)), 100%);
+      }
+
+      .palette-sort select:focus {
+        outline: none;
+        border-color: rgba(96, 165, 250, 0.55);
+        box-shadow: 0 0 0 calc(2px * var(--ui-scale)) rgba(37, 99, 235, 0.25);
+      }
+
+      .palette-sort select:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        background-image: none;
       }
 
       .control {
@@ -1244,6 +1298,18 @@
         </div>
       </div>
       <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
+        <div class="palette-controls" role="group" aria-label="Palette controls">
+          <label class="palette-sort" for="paletteSort">
+            <span>Sort colours</span>
+            <select id="paletteSort" data-testid="palette-sort" disabled>
+              <option value="region">Number</option>
+              <option value="remaining">Remaining regions</option>
+              <option value="name">Colour name</option>
+              <option value="hue">Hue</option>
+              <option value="brightness">Brightness</option>
+            </select>
+          </label>
+        </div>
         <div id="palette" role="list"></div>
       </footer>
     </div>
@@ -2979,6 +3045,10 @@
         }
         if (paletteSortEl) {
           paletteSortEl.disabled = true;
+          const target = state.paletteSort || "region";
+          if (paletteSortEl.value !== target) {
+            paletteSortEl.value = target;
+          }
         }
         setProgressMessage("loading");
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
@@ -3719,11 +3789,12 @@
         if (!state.puzzle) {
           if (paletteSortEl) {
             paletteSortEl.disabled = true;
+            const target = state.paletteSort || "region";
+            if (paletteSortEl.value !== target) {
+              paletteSortEl.value = target;
+            }
           }
           return;
-        }
-        if (paletteSortEl) {
-          paletteSortEl.disabled = false;
         }
         const totalByColor = new Map();
         const remainingByColor = new Map();
@@ -3738,8 +3809,26 @@
         const paletteEntries = state.puzzle.palette
           .filter((color) => (remainingByColor.get(color.id) || 0) > 0)
           .slice();
-        const sortMode = state.paletteSort || "region";
+        if (paletteEntries.length === 0) {
+          if (paletteSortEl) {
+            paletteSortEl.disabled = true;
+          }
+          return;
+        }
+        const allowedSortModes = new Set(["region", "remaining", "hue", "name", "brightness"]);
+        const sortMode = allowedSortModes.has(state.paletteSort) ? state.paletteSort : "region";
+        if (!allowedSortModes.has(state.paletteSort)) {
+          state.paletteSort = sortMode;
+        }
+        if (paletteSortEl) {
+          paletteSortEl.disabled = false;
+          if (paletteSortEl.value !== sortMode) {
+            paletteSortEl.value = sortMode;
+          }
+        }
         const hueCache = new Map();
+        const luminanceCache = new Map();
+        const nameCache = new Map();
         const getHue = (color) => {
           if (!color) return 0;
           if (hueCache.has(color.id)) {
@@ -3748,6 +3837,29 @@
           const value = hueFromHex(color.hex);
           hueCache.set(color.id, value);
           return value;
+        };
+        const getLuminance = (color) => {
+          if (!color) return 0;
+          if (luminanceCache.has(color.id)) {
+            return luminanceCache.get(color.id);
+          }
+          const value = relativeLuminance(hexToRgb(color.hex));
+          luminanceCache.set(color.id, value);
+          return value;
+        };
+        const getNameData = (color) => {
+          if (!color) {
+            return { text: "", sortKey: "" };
+          }
+          if (nameCache.has(color.id)) {
+            return nameCache.get(color.id);
+          }
+          const text =
+            (typeof color.name === "string" && color.name.trim()) ||
+            (typeof color.hex === "string" ? color.hex.toUpperCase() : `Colour ${color.id}`);
+          const entry = { text, sortKey: text.toLocaleLowerCase() };
+          nameCache.set(color.id, entry);
+          return entry;
         };
         paletteEntries.sort((a, b) => {
           if (sortMode === "hue") {
@@ -3769,6 +3881,29 @@
             }
             return a.id - b.id;
           }
+          if (sortMode === "name") {
+            const aName = getNameData(a);
+            const bName = getNameData(b);
+            const nameDelta = aName.sortKey.localeCompare(bName.sortKey, undefined, {
+              sensitivity: "base",
+              numeric: true,
+            });
+            if (nameDelta !== 0) {
+              return nameDelta;
+            }
+            return a.id - b.id;
+          }
+          if (sortMode === "brightness") {
+            const luminanceDelta = getLuminance(b) - getLuminance(a);
+            if (Math.abs(luminanceDelta) > 0.0001) {
+              return luminanceDelta;
+            }
+            const hueDelta = getHue(a) - getHue(b);
+            if (Math.abs(hueDelta) > 0.0001) {
+              return hueDelta;
+            }
+            return a.id - b.id;
+          }
           return a.id - b.id;
         });
 
@@ -3778,9 +3913,7 @@
             continue;
           }
           const total = totalByColor.get(color.id) || 0;
-          const labelText =
-            (typeof color.name === "string" && color.name.trim()) ||
-            (typeof color.hex === "string" ? color.hex.toUpperCase() : `Colour ${color.id}`);
+          const { text: labelText } = getNameData(color);
           const regionWord = remaining === 1 ? "region" : "regions";
           const totalWord = total === 1 ? "region" : "regions";
           const tooltipText = `${remaining} ${regionWord} left`;
@@ -3792,6 +3925,7 @@
           swatch.dataset.colorId = String(color.id);
           swatch.dataset.remaining = String(remaining);
           swatch.dataset.total = String(total);
+          swatch.dataset.name = labelText;
           swatch.setAttribute("role", "listitem");
           swatch.setAttribute(
             "aria-label",
@@ -3861,6 +3995,10 @@
           setProgressMessage("idle");
           if (paletteSortEl) {
             paletteSortEl.disabled = true;
+            const target = state.paletteSort || "region";
+            if (paletteSortEl.value !== target) {
+              paletteSortEl.value = target;
+            }
           }
           return;
         }
@@ -3880,7 +4018,7 @@
       }
 
       function applyPaletteSort(sort, { skipLog } = {}) {
-        const allowed = new Set(["region", "hue", "remaining"]);
+        const allowed = new Set(["region", "hue", "remaining", "name", "brightness"]);
         const next = allowed.has(sort) ? sort : "region";
         if (state.paletteSort === next) {
           if (paletteSortEl && paletteSortEl.value !== next) {
@@ -3899,6 +4037,10 @@
               ? "colour hue"
               : next === "remaining"
               ? "remaining regions"
+              : next === "name"
+              ? "colour name"
+              : next === "brightness"
+              ? "brightness (light to dark)"
               : "region number";
           logDebug(`Palette sorted by ${label}`);
         }
