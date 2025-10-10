@@ -100,12 +100,13 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
   artwork at its final resolution without leaving the play surface.
 - **Palette manager.** Swipe through edge-to-edge swatches rendered as simple,
-  gutterless colour blocks so the dock stays packed. Tooltips, titles, and ARIA
-  copy preserve human-readable names and remaining region counts, the digits
-  automatically flip between dark and light treatments (with a subtle halo) to
-  stay legible on any swatch, and the dock scrolls horizontally whenever
-  palettes stretch beyond the screen so every colour stays accessible without
-  vertical overflow.
+  gutterless colour blocks so the dock stays packed. Completed colours collapse
+  out of view once every region is filled, tooltips call out how many areas are
+  left, and the new sort control lets you reorder swatches by number, remaining
+  regions, colour name, hue, or brightness. The digits automatically flip
+  between dark and light treatments (with a subtle halo) to stay legible on any
+  swatch, and the dock scrolls horizontally whenever palettes stretch beyond the
+  screen so every colour stays accessible without vertical overflow.
 - **Progress persistence & recovery.** Every stroke updates a rolling autosave
   using a compressed snapshot so the latest session is restored automatically on
   launch. Manual snapshots still land in the save manager where you can rename,
