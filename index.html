@@ -78,10 +78,6 @@
         overscroll-behavior: none;
       }
 
-      body.sheet-open {
-        overflow: hidden;
-      }
-
       body.dragging {
         cursor: copy;
       }
@@ -241,7 +237,6 @@
       }
 
       body.panning #pointerOverlay,
-      body.sheet-open #pointerOverlay,
       body.dragging #pointerOverlay {
         opacity: 0;
       }
@@ -560,27 +555,7 @@
         background: rgba(148, 163, 184, 0.45);
       }
 
-      .palette-controls {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: calc(8px * var(--ui-scale));
-      }
-
-      .palette-sort {
-        display: flex;
-        align-items: center;
-        gap: calc(8px * var(--ui-scale));
-        font-size: 0.85rem;
-        color: rgba(226, 232, 240, 0.85);
-      }
-
-      .palette-sort span {
-        font-weight: 600;
-      }
-
-      .palette-sort select {
+      .control select {
         appearance: none;
         border: 1px solid rgba(148, 163, 184, 0.35);
         border-radius: calc(10px * var(--ui-scale));
@@ -601,13 +576,13 @@
         min-width: min(calc(220px * var(--ui-scale)), 100%);
       }
 
-      .palette-sort select:focus {
+      .control select:focus {
         outline: none;
         border-color: rgba(96, 165, 250, 0.55);
         box-shadow: 0 0 0 calc(2px * var(--ui-scale)) rgba(37, 99, 235, 0.25);
       }
 
-      .palette-sort select:disabled {
+      .control select:disabled {
         opacity: 0.55;
         cursor: not-allowed;
         background-image: none;
@@ -885,11 +860,15 @@
 
       .sheet {
         position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: min(420px, calc(100vw - 48px));
-        max-height: calc(100vh - 96px);
+        top: calc(
+          env(safe-area-inset-top, 0px) +
+            var(--rail-padding-block) +
+            var(--command-button-size) +
+            calc(16px * var(--ui-scale))
+        );
+        right: calc(env(safe-area-inset-right, 0px) + 24px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+        width: min(380px, calc(100vw - 48px));
         padding: 24px;
         display: flex;
         flex-direction: column;
@@ -897,8 +876,8 @@
         border-radius: 22px;
         background: rgba(2, 6, 23, 0.95);
         border: 1px solid rgba(59, 130, 246, 0.4);
-        box-shadow: 0 32px 80px rgba(8, 47, 73, 0.55);
-        backdrop-filter: blur(26px);
+        box-shadow: 0 32px 80px rgba(8, 47, 73, 0.45);
+        backdrop-filter: blur(22px);
         z-index: 6;
         opacity: 1;
         transition: opacity 0.2s ease;
@@ -907,6 +886,7 @@
       .sheet.hidden {
         opacity: 0;
         pointer-events: none;
+        visibility: hidden;
       }
 
       .sheet-header {
@@ -1054,21 +1034,6 @@
       .toggle input {
         width: 18px;
         height: 18px;
-      }
-
-      .backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(2, 6, 23, 0.65);
-        backdrop-filter: blur(10px);
-        z-index: 5;
-        opacity: 1;
-        transition: opacity 0.2s ease;
-      }
-
-      .backdrop.hidden {
-        opacity: 0;
-        pointer-events: none;
       }
 
       #saveList {
@@ -1298,29 +1263,16 @@
         </div>
       </div>
       <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div class="palette-controls" role="group" aria-label="Palette controls">
-          <label class="palette-sort" for="paletteSort">
-            <span>Sort colours</span>
-            <select id="paletteSort" data-testid="palette-sort" disabled>
-              <option value="region">Number</option>
-              <option value="remaining">Remaining regions</option>
-              <option value="name">Colour name</option>
-              <option value="hue">Hue</option>
-              <option value="brightness">Brightness</option>
-            </select>
-          </label>
-        </div>
         <div id="palette" role="list"></div>
       </footer>
     </div>
     <input id="fileInput" type="file" accept=".json,image/*" hidden />
-    <div id="sheetBackdrop" class="backdrop hidden" tabindex="-1"></div>
     <div
       id="helpSheet"
       class="sheet hidden"
       role="dialog"
-      aria-modal="true"
       aria-labelledby="helpTitle"
+      aria-hidden="true"
     >
       <div class="sheet-header">
         <h2 id="helpTitle">Help &amp; shortcuts</h2>
@@ -1400,8 +1352,8 @@
       id="settingsSheet"
       class="sheet hidden"
       role="dialog"
-      aria-modal="true"
       aria-labelledby="settingsTitle"
+      aria-hidden="true"
     >
       <div class="sheet-header">
         <h2 id="settingsTitle">Settings</h2>
@@ -1422,6 +1374,20 @@
             <input id="showRegionLabelsToggle" type="checkbox" checked />
             <span>Show region numbers</span>
           </label>
+        </section>
+        <section class="sheet-section" aria-labelledby="paletteHeading">
+          <h3 id="paletteHeading">Palette</h3>
+          <label class="control">
+            <span>Sort swatches</span>
+            <select id="paletteSort" data-testid="palette-sort" disabled>
+              <option value="region">Number</option>
+              <option value="remaining">Remaining regions</option>
+              <option value="name">Colour name</option>
+              <option value="hue">Hue</option>
+              <option value="brightness">Brightness</option>
+            </select>
+          </label>
+          <p class="control-note">Choose how unfinished colours appear in the dock.</p>
         </section>
         <section class="sheet-section" aria-labelledby="appearanceHeading">
           <h3 id="appearanceHeading">Appearance</h3>
@@ -1511,8 +1477,8 @@
       id="saveSheet"
       class="sheet hidden"
       role="dialog"
-      aria-modal="true"
       aria-labelledby="saveTitle"
+      aria-hidden="true"
     >
       <div class="sheet-header">
         <h2 id="saveTitle">Save manager</h2>
@@ -1543,7 +1509,6 @@
       const helpButton = document.getElementById("helpButton");
       const closePreviewButton = document.getElementById("closePreview");
       const previewOverlay = document.getElementById("previewOverlay");
-      const sheetBackdrop = document.getElementById("sheetBackdrop");
       const settingsSheet = document.getElementById("settingsSheet");
       const saveSheet = document.getElementById("saveSheet");
       const helpSheet = document.getElementById("helpSheet");
@@ -2037,8 +2002,6 @@
         });
       }
 
-      sheetBackdrop.addEventListener("click", () => closeAllSheets());
-
       startHint.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
@@ -2450,30 +2413,15 @@
       );
 
       function openSheet(sheet) {
+        if (!sheet) return;
         sheet.classList.remove("hidden");
-        sheetBackdrop.classList.remove("hidden");
-        document.body.classList.add("sheet-open");
+        sheet.setAttribute("aria-hidden", "false");
       }
 
       function closeSheet(sheet) {
+        if (!sheet) return;
         sheet.classList.add("hidden");
-        const sheets = [settingsSheet, saveSheet, helpSheet];
-        const anyOpen = sheets.some((panel) => panel && !panel.classList.contains("hidden"));
-        if (!anyOpen) {
-          sheetBackdrop.classList.add("hidden");
-          document.body.classList.remove("sheet-open");
-        }
-      }
-
-      function closeAllSheets() {
-        const sheets = [settingsSheet, saveSheet, helpSheet];
-        for (const panel of sheets) {
-          if (panel) {
-            panel.classList.add("hidden");
-          }
-        }
-        sheetBackdrop.classList.add("hidden");
-        document.body.classList.remove("sheet-open");
+        sheet.setAttribute("aria-hidden", "true");
       }
 
       function updatePreviewState() {
