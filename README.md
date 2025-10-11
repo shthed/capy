@@ -216,7 +216,8 @@ every preset playable—from the breezy ≈26-region low detail board to the
    once you finish the current hue.
 5. **Save or export.** The save manager captures snapshots (including progress,
    generator options, and source metadata) in localStorage using a compact
-   schema. Export the active puzzle as JSON at any time.
+   schema. Export the active puzzle as a compressed `.capy.json` file at any
+   time.
 
 ## Puzzle JSON format
 
@@ -227,11 +228,17 @@ include:
 - `width`/`height` – Pixel dimensions of the clustered canvas.
 - `palette` – Colour entries with `id`, `hex`, and display `name`.
 - `regions` – Region metadata (`id`, `colorId`, centroid, and `pixelCount`).
-- `regionMapPacked` – Base64-encoded little-endian `Int32Array` describing
-  which region id occupies each pixel. Legacy imports can still provide a plain
-  `regionMap` array; the loader hydrates whichever is available and rebuilds the
-  per-region pixel lists on the fly.
-- `filled` – Region ids that the player has already painted.
+- `regionMapPacked` – Base64 payload prefixed with `r`/`R` that stores the
+  region ownership map in a little-endian `Uint16Array` (when every id fits
+  under 65,535) or a `Uint32Array` fallback. Legacy imports can still provide a
+  plain `regionMap` array without the prefix; the loader hydrates whichever is
+  available and rebuilds the per-region pixel lists on the fly.
+- `filledPacked` – Base64 string prefixed with `u`/`U` that encodes the painted
+  region ids in a compact `Uint16Array`/`Uint32Array`. Manual exports omit the
+  verbose `filled` array and rely on this packed string to shrink payloads.
+- `filled` – Optional array of region ids that the player has already painted.
+  When present it mirrors `filledPacked`; loaders fall back to the packed form
+  when the array is missing.
 - `backgroundColor`, `options`, `activeColor`, `viewport`, `settings`, and
   `sourceUrl` – The appearance and generator state needed to restore the session.
 
@@ -241,6 +248,29 @@ messages browsers emitted when large puzzles overflowed localStorage. If storage
 does fill up, the app now logs a debug reminder prompting you to clear old saves
 before retrying.
 
+### Persistence internals
+
+- **In-memory state.** Gameplay progress lives in a `Set` of region ids so
+  fills, palette flashes, and undo-free painting stay O(1). Whenever the UI
+  needs sorted progress (storage summaries, exports, or progress tooltips),
+  `resolveFilledProgress` normalises the set into a deduplicated, ascending
+  array.
+- **Save packing.** `packFilledProgress` inspects the highest painted id to
+  decide whether a 16-bit (`u` prefix) or 32-bit (`U` prefix) payload is needed
+  before base64-encoding it. `packRegionMap` follows the same strategy with `r`
+  / `R` prefixes so large canvases still serialise efficiently without
+  sacrificing fidelity.
+- **LocalStorage writes.** Autosaves and manual saves flow through
+  `prepareSnapshotForExport` → `encodeStoredSnapshot`. The helper strips verbose
+  arrays, keeps only the packed strings, then opportunistically LZW-compresses
+  the JSON. When compression wins, the snapshot stores `{ __compressed: true,
+  encoding: "lzw16", payload }` so the loader can verify the codec before
+  inflating it back into JSON.
+- **Hydration.** Importing puzzles or restoring saves runs through
+  `normalizeImportedSnapshot` and `decodeStoredSnapshot`. Both helpers understand
+  the new prefixes while remaining backwards-compatible with older exports, and
+  they rebuild typed arrays as `Int32Array` instances for the painting runtime.
+
 ## UI guide
 
 - **Command rail** – A slim, right-aligned header exposing Hint, Reset, Preview,
@@ -248,7 +278,7 @@ before retrying.
   icon-only controls. Hint flashes tiny regions, Reset clears progress, Preview
   reveals the clustered artwork, Sample reloads the bundled capybara puzzle,
   Fullscreen pushes the stage edge-to-edge (and exits back to windowed mode),
-  Import accepts images or JSON puzzles, Save manager opens the local snapshot
+  Import accepts images, JSON puzzles, or `.capy` exports, Save manager opens the local snapshot
   vault, Help opens an in-app manual plus live
   debug log, and Settings reveals generator/gameplay options.
 - **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`).

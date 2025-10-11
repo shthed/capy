@@ -2884,27 +2884,42 @@
       }
 
       function handleFile(file) {
-        if (file.type === "application/json" || file.name.toLowerCase().endsWith(".json")) {
+        const name = typeof file.name === "string" ? file.name.toLowerCase() : "";
+        const isPuzzleJson =
+          file.type === "application/json" || name.endsWith(".json") || name.endsWith(".capy");
+        if (isPuzzleJson) {
           resetPuzzleUI();
           const reader = new FileReader();
           reader.onload = () => {
             try {
               const payload = JSON.parse(reader.result);
+              const normalized = normalizeImportedSnapshot(payload);
+              if (!normalized) {
+                console.error("Unrecognized puzzle format");
+                setProgressMessage("idle");
+                return;
+              }
               const providedTitle =
-                typeof payload.title === "string" && payload.title.trim() ? payload.title.trim() : null;
+                typeof normalized.title === "string" && normalized.title.trim()
+                  ? normalized.title.trim()
+                  : null;
               const fallbackTitle = file.name || "Imported puzzle";
               const resolvedTitle = providedTitle || fallbackTitle;
               state.sourceTitle = resolvedTitle;
-              const applied = applyPuzzleResult(payload, {
-                options: payload.options || getCurrentOptions(),
-                filled: payload.filled,
-                activeColor: payload.activeColor,
-                backgroundColor: payload.backgroundColor,
+              const filledProgress = resolveFilledProgress(normalized);
+              const applied = applyPuzzleResult(normalized, {
+                options: normalized.options || getCurrentOptions(),
+                filled: filledProgress,
+                filledPacked: normalized.filledPacked,
+                activeColor: normalized.activeColor,
+                backgroundColor: normalized.backgroundColor,
+                viewport: normalized.viewport,
+                settings: normalized.settings,
                 title: resolvedTitle,
               });
               if (applied) {
                 startHint.classList.add("hidden");
-                state.sourceUrl = payload.sourceUrl || null;
+                state.sourceUrl = normalized.sourceUrl || null;
                 logDebug(`Imported puzzle from JSON: ${resolvedTitle}`);
               } else {
                 setProgressMessage("idle");
@@ -3187,7 +3202,11 @@
           requestedColor != null && paletteIds.has(requestedColor)
             ? requestedColor
             : palette[0]?.id ?? null;
-        state.filled = new Set(metadata.filled ?? []);
+        const filledProgress = resolveFilledProgress({
+          filled: metadata.filled ?? data.filled,
+          filledPacked: metadata.filledPacked ?? data.filledPacked,
+        });
+        state.filled = new Set(filledProgress);
         state.lastOptions = metadata.options ?? getCurrentOptions();
         const resolvedSettings = metadata.settings ?? data.settings;
         if (resolvedSettings) {
@@ -3239,9 +3258,11 @@
           (typeof puzzle.title === "string" && puzzle.title.trim()) ||
           "Fixture puzzle";
         state.sourceTitle = resolvedTitle;
+        const filledProgress = resolveFilledProgress(puzzle);
         const applied = applyPuzzleResult(puzzle, {
           options: getCurrentOptions(),
-          filled: puzzle.filled,
+          filled: filledProgress,
+          filledPacked: puzzle.filledPacked,
           activeColor: puzzle.activeColor,
           backgroundColor: puzzle.backgroundColor,
           title: resolvedTitle,
@@ -4716,18 +4737,14 @@
         if (packed) {
           payload.regionMapPacked = packed;
         }
-        if (snapshot.filled instanceof Set) {
-          payload.filled = Array.from(snapshot.filled);
-        } else if (Array.isArray(snapshot.filled)) {
-          payload.filled = snapshot.filled.slice();
-        } else if (
-          snapshot.filled &&
-          typeof snapshot.filled.length === "number" &&
-          typeof snapshot.filled !== "string"
-        ) {
-          payload.filled = Array.from(snapshot.filled);
-        } else {
-          payload.filled = [];
+        const filledProgress = resolveFilledProgress(snapshot);
+        payload.filled = filledProgress;
+        const packedFilled =
+          typeof snapshot.filledPacked === "string" && snapshot.filledPacked
+            ? snapshot.filledPacked
+            : packFilledProgress(filledProgress);
+        if (packedFilled) {
+          payload.filledPacked = packedFilled;
         }
         if (snapshot.options && typeof snapshot.options === "object") {
           payload.options = { ...snapshot.options };
@@ -4867,6 +4884,10 @@
             showRegionLabels: state.settings.showRegionLabels !== false,
           },
         };
+        const packedFilled = packFilledProgress(state.filled);
+        if (packedFilled) {
+          snapshot.filledPacked = packedFilled;
+        }
         if (regionMapPacked) {
           snapshot.regionMapPacked = regionMapPacked;
         } else if (puzzle.regionMap) {
@@ -5169,9 +5190,11 @@
             latest.data.title ||
             state.sourceTitle ||
             "Puzzle";
+          const filledProgress = resolveFilledProgress(latest.data);
           const applied = applyPuzzleResult(latest.data, {
             options: latest.data.options,
-            filled: latest.data.filled,
+            filled: filledProgress,
+            filledPacked: latest.data.filledPacked,
             activeColor: latest.data.activeColor,
             backgroundColor: latest.data.backgroundColor,
             viewport: latest.data.viewport,
@@ -5192,20 +5215,39 @@
       }
 
       function packRegionMap(map) {
-        if (!map || typeof map.length !== "number") return null;
+        if (!map || typeof map.length !== "number" || map.length === 0) return null;
         try {
-          const typed =
-            map instanceof Int32Array
-              ? new Int32Array(map)
-              : map instanceof Uint32Array
-              ? new Int32Array(map)
-              : new Int32Array(Array.from(map));
-          const bytes = new Uint8Array(typed.buffer);
-          let binary = "";
-          for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
+          const length = map.length >>> 0;
+          if (length === 0) return null;
+          const normalized = new Uint32Array(length);
+          let highest = 0;
+          for (let index = 0; index < length; index += 1) {
+            const value = Number(map[index]);
+            const clamped = Number.isFinite(value)
+              ? Math.min(0x7fffffff, Math.max(0, Math.floor(value)))
+              : 0;
+            normalized[index] = clamped;
+            if (clamped > highest) {
+              highest = clamped;
+            }
           }
-          return btoa(binary);
+          const use16Bit = highest <= 0xffff;
+          let bytes = null;
+          let prefix = "R";
+          if (use16Bit) {
+            const packed16 = new Uint16Array(normalized);
+            bytes = new Uint8Array(
+              packed16.buffer.slice(packed16.byteOffset, packed16.byteOffset + packed16.byteLength)
+            );
+            prefix = "r";
+          } else {
+            bytes = new Uint8Array(
+              normalized.buffer.slice(normalized.byteOffset, normalized.byteOffset + normalized.byteLength)
+            );
+            prefix = "R";
+          }
+          if (!bytes.length) return null;
+          return `${prefix}${encodeBytesToBase64(bytes)}`;
         } catch (error) {
           console.error("Failed to pack region map", error);
           return null;
@@ -5214,44 +5256,179 @@
 
       function unpackRegionMap(source, expectedLength) {
         if (!source) return null;
+        const expected = Number.isFinite(expectedLength) ? expectedLength : null;
         try {
           if (typeof source === "string") {
-            const binary = atob(source);
-            const buffer = new ArrayBuffer(binary.length);
-            const bytes = new Uint8Array(buffer);
-            for (let i = 0; i < binary.length; i++) {
-              bytes[i] = binary.charCodeAt(i);
+            let prefix = source.charAt(0);
+            let payload = source;
+            if (prefix === "r" || prefix === "R") {
+              payload = source.slice(1);
+            } else {
+              prefix = "";
             }
-            if (typeof expectedLength === "number" && buffer.byteLength / 4 !== expectedLength) {
+            const bytes = decodeBase64ToBytes(payload);
+            if (!bytes || bytes.length === 0) {
+              return null;
+            }
+            const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+            if (prefix === "r") {
+              if (expected != null && buffer.byteLength !== expected * 2) {
+                return null;
+              }
+              const view = new Uint16Array(buffer);
+              const result = new Int32Array(view.length);
+              result.set(view);
+              return result;
+            }
+            if (prefix === "R") {
+              if (expected != null && buffer.byteLength !== expected * 4) {
+                return null;
+              }
+              return new Int32Array(buffer);
+            }
+            if (expected != null) {
+              if (buffer.byteLength === expected * 4) {
+                return new Int32Array(buffer);
+              }
+              if (buffer.byteLength === expected * 2) {
+                const view = new Uint16Array(buffer);
+                const result = new Int32Array(view.length);
+                result.set(view);
+                return result;
+              }
               return null;
             }
             return new Int32Array(buffer);
           }
           if (source instanceof Int32Array) {
-            if (typeof expectedLength === "number" && source.length !== expectedLength) {
+            if (expected != null && source.length !== expected) {
               return null;
             }
             return new Int32Array(source);
           }
           if (source instanceof Uint32Array) {
-            const copy = new Int32Array(source);
-            if (typeof expectedLength === "number" && copy.length !== expectedLength) {
+            const copy = new Int32Array(source.length);
+            copy.set(source);
+            if (expected != null && copy.length !== expected) {
+              return null;
+            }
+            return copy;
+          }
+          if (source instanceof Uint16Array) {
+            const copy = new Int32Array(source.length);
+            copy.set(source);
+            if (expected != null && copy.length !== expected) {
               return null;
             }
             return copy;
           }
           if (Array.isArray(source) || ArrayBuffer.isView(source)) {
             const array = Array.isArray(source) ? source : Array.from(source);
-            if (typeof expectedLength === "number" && array.length !== expectedLength) {
+            if (expected != null && array.length !== expected) {
               return null;
             }
-            return new Int32Array(array);
+            const copy = new Int32Array(array.length);
+            for (let index = 0; index < array.length; index += 1) {
+              const value = Number(array[index]);
+              copy[index] = Number.isFinite(value) ? Math.min(0x7fffffff, Math.max(0, Math.floor(value))) : 0;
+            }
+            return copy;
           }
         } catch (error) {
           console.error("Failed to unpack region map", error);
           return null;
         }
         return null;
+      }
+
+      function resolveFilledProgress(source) {
+        if (!source) return [];
+        if (source instanceof Set) {
+          return resolveFilledProgress({ filled: Array.from(source) });
+        }
+        if (Array.isArray(source)) {
+          return resolveFilledProgress({ filled: source });
+        }
+        if (typeof source === "number") {
+          return resolveFilledProgress({ filled: [source] });
+        }
+        if (typeof source !== "object" || source === null) {
+          return [];
+        }
+        if (typeof source.data === "object" && source.data && !Array.isArray(source.data)) {
+          return resolveFilledProgress(source.data);
+        }
+        let raw = [];
+        if (Array.isArray(source.filled)) {
+          raw = source.filled;
+        } else if (source.filled instanceof Set) {
+          raw = Array.from(source.filled);
+        }
+        if (raw.length === 0 && typeof source.filledPacked === "string") {
+          raw = unpackFilledProgress(source.filledPacked);
+        }
+        const seen = new Set();
+        const normalized = [];
+        for (const value of raw) {
+          const num = Number(value);
+          if (!Number.isFinite(num)) continue;
+          const clamped = Math.max(0, Math.floor(num));
+          if (seen.has(clamped)) continue;
+          seen.add(clamped);
+          normalized.push(clamped);
+        }
+        normalized.sort((a, b) => a - b);
+        return normalized;
+      }
+
+      function packFilledProgress(source) {
+        const values = resolveFilledProgress(source);
+        if (values.length === 0) {
+          return null;
+        }
+        const highest = values[values.length - 1];
+        const use16Bit = highest <= 0xffff;
+        const typed = use16Bit ? new Uint16Array(values) : new Uint32Array(values);
+        const bytes = new Uint8Array(typed.buffer.slice(0, typed.byteLength));
+        const prefix = use16Bit ? "u" : "U";
+        return `${prefix}${encodeBytesToBase64(bytes)}`;
+      }
+
+      function unpackFilledProgress(packed) {
+        if (typeof packed !== "string" || packed.length === 0) {
+          return [];
+        }
+        let prefix = packed.charAt(0);
+        let payload = packed;
+        if (prefix === "u" || prefix === "U") {
+          payload = packed.slice(1);
+        } else {
+          prefix = "";
+        }
+        const bytes = decodeBase64ToBytes(payload);
+        if (!bytes || bytes.length === 0) {
+          return [];
+        }
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        if (prefix === "u") {
+          if (buffer.byteLength % 2 !== 0) {
+            return [];
+          }
+          return Array.from(new Uint16Array(buffer));
+        }
+        if (prefix === "U") {
+          if (buffer.byteLength % 4 !== 0) {
+            return [];
+          }
+          return Array.from(new Uint32Array(buffer));
+        }
+        if (buffer.byteLength % 4 === 0) {
+          return Array.from(new Uint32Array(buffer));
+        }
+        if (buffer.byteLength % 2 === 0) {
+          return Array.from(new Uint16Array(buffer));
+        }
+        return [];
       }
 
       function tryCompressString(input) {
@@ -5406,11 +5583,44 @@
         return output;
       }
 
-      function encodeStoredSnapshot(snapshot) {
+      function normalizeImportedSnapshot(payload) {
+        if (!payload || typeof payload !== "object") {
+          return null;
+        }
+        if (payload.version && payload.data) {
+          const record = decodeAutosaveStorageRecord(payload);
+          if (record && record.data) {
+            return record.data;
+          }
+        }
+        if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) {
+          const decoded = decodeStoredSnapshot(payload.data);
+          if (decoded) {
+            return decoded;
+          }
+        }
+        return decodeStoredSnapshot(payload);
+      }
+
+      function prepareSnapshotForExport(snapshot) {
         const data = compactPuzzleSnapshot(snapshot);
         if (!data) return null;
+        const payload = { ...data };
+        if (Array.isArray(payload.filled) && payload.filled.length > 0) {
+          const packed = payload.filledPacked || packFilledProgress(payload.filled);
+          if (packed) {
+            payload.filledPacked = packed;
+            delete payload.filled;
+          }
+        }
+        return payload;
+      }
+
+      function encodeStoredSnapshot(snapshot) {
+        const storageReady = prepareSnapshotForExport(snapshot);
+        if (!storageReady) return null;
         try {
-          const json = JSON.stringify(data);
+          const json = JSON.stringify(storageReady);
           const compressed = tryCompressString(json);
           if (compressed.compressed) {
             return {
@@ -5422,7 +5632,7 @@
         } catch (error) {
           console.error("Failed to prepare snapshot for storage", error);
         }
-        return data;
+        return storageReady;
       }
 
       function decodeStoredSnapshot(source) {
@@ -5437,8 +5647,16 @@
           }
         } else if (typeof source === "object" && source.__compressed === true && typeof source.payload === "string") {
           try {
+            if (source.encoding && source.encoding !== "lzw16") {
+              console.error("Unsupported snapshot encoding", source.encoding);
+              return null;
+            }
             const bytes = decodeBase64ToBytes(source.payload);
-            const codes = new Uint16Array(bytes.buffer);
+            const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+            if (buffer.byteLength % 2 !== 0) {
+              return null;
+            }
+            const codes = new Uint16Array(buffer);
             const text = lzwDecompress(codes);
             if (typeof text !== "string") {
               return null;
@@ -5713,7 +5931,7 @@
           item.className = "save-entry";
           item.dataset.saveId = entry.id;
           const date = new Date(entry.timestamp);
-          const doneCount = entry.data?.filled?.length ?? 0;
+          const doneCount = resolveFilledProgress(entry.data).length;
           const total = entry.data?.regions?.length ?? 0;
           item.innerHTML = `
             <header>
@@ -5744,10 +5962,12 @@
       function loadSaveEntry(id) {
         const entry = state.saves.find((item) => item.id === id);
         if (!entry) return;
+        const filledProgress = resolveFilledProgress(entry.data);
         if (
           applyPuzzleResult(entry.data, {
             options: entry.data.options,
-            filled: entry.data.filled,
+            filled: filledProgress,
+            filledPacked: entry.data.filledPacked,
             activeColor: entry.data.activeColor,
             backgroundColor: entry.data.backgroundColor,
             viewport: entry.data.viewport,
@@ -5799,13 +6019,15 @@
       function exportSaveEntry(id) {
         const entry = state.saves.find((item) => item.id === id);
         if (!entry) return;
-        const blob = new Blob([JSON.stringify(entry.data, null, 2)], {
+        const exportPayload = prepareSnapshotForExport(entry.data);
+        if (!exportPayload) return;
+        const blob = new Blob([JSON.stringify(exportPayload)], {
           type: "application/json",
         });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `${entry.title || "capy-save"}.json`;
+        link.download = `${entry.title || "capy-save"}.capy.json`;
         document.body.appendChild(link);
         link.click();
         requestAnimationFrame(() => {
