@@ -88,9 +88,10 @@ tools, a save manager, and a configurable generator all live inside a single
   pinch gestures or the mouse wheel to zoom in and out, or tap `+`/`-` on the
   keyboard for incremental adjustments. Ctrl/Cmd zoom shortcuts now target the
   puzzle instead of the surrounding UI so the HUD stays crisp while the canvas
-  reacts. The canvas stretches to fill the viewport, centres itself
-  automatically, and honours device orientation changes without losing your
-  place.
+  reacts. Zooming is now unbounded, letting you dive down to single-pixel
+  accuracy or orbit far above the artwork without hitting a ceiling. The canvas
+  stretches to fill the viewport, centres itself automatically, and honours
+  device orientation changes without losing your place.
 - **Edge-to-edge stage.** A fullscreen toggle, rotation-aware sizing, and
   dynamic viewport padding lock the play surface to the visible viewport so the
   command rail and palette scale cleanly on phones, tablets, or desktops while

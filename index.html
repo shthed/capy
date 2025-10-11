@@ -1934,6 +1934,8 @@
 
       // View state drives pan/zoom transforms. baseScale keeps the puzzle fit-to-screen while
       // zoom holds user-controlled scaling.
+      const MIN_VIEWPORT_ZOOM = 0.000001;
+      const MIN_RENDER_SCALE = 0.000001;
       const viewState = {
         panX: 0,
         panY: 0,
@@ -2021,6 +2023,7 @@
         saves: gameSaveManager.hydrate(),
         previewImageData: null,
         puzzleImageData: null,
+        outlineCache: createOutlineCache(),
       };
 
       gameSaveManager.subscribe((entries) => {
@@ -3068,6 +3071,7 @@
         state.settings.backgroundColor = normalized;
         backgroundPixel = [...hexToRgb(normalized), 255];
         backgroundInk = computeInkStyles(normalized);
+        markOutlineColorDirty();
         if (backgroundColorInput && backgroundColorInput.value !== normalized) {
           backgroundColorInput.value = normalized;
         }
@@ -3266,6 +3270,7 @@
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         state.previewImageData = null;
         state.puzzleImageData = null;
+        state.outlineCache = createOutlineCache();
         state.previewVisible = false;
         updatePreviewState();
         updateCommandStates();
@@ -3445,6 +3450,7 @@
           regions,
           regionMap,
         };
+        state.outlineCache = createOutlineCache();
         state.puzzle.backgroundColor = backgroundHex;
         state.activeColor =
           requestedColor != null && paletteIds.has(requestedColor)
@@ -3934,21 +3940,192 @@
 
       function drawOutlines() {
         if (!state.puzzle) return;
-        const { width, height, regionMap } = state.puzzle;
+        const cache = ensureOutlineVisual();
+        if (!cache) return;
+        const source = cache.bitmap || cache.canvas;
+        if (source) {
+          puzzleCtx.drawImage(source, 0, 0);
+          return;
+        }
+        const mask = cache.mask;
+        if (!mask) return;
+        const { width } = state.puzzle;
+        puzzleCtx.save();
         puzzleCtx.fillStyle = backgroundInk.outline;
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const idx = y * width + x;
-            const id = regionMap[idx];
-            const left = x > 0 ? regionMap[idx - 1] : id;
-            const right = x < width - 1 ? regionMap[idx + 1] : id;
-            const up = y > 0 ? regionMap[idx - width] : id;
-            const down = y < height - 1 ? regionMap[idx + width] : id;
-            if (left !== id || right !== id || up !== id || down !== id) {
-              puzzleCtx.fillRect(x, y, 1, 1);
-            }
+        for (let idx = 0; idx < mask.length; idx++) {
+          if (!mask[idx]) continue;
+          const x = idx % width;
+          const y = (idx / width) | 0;
+          puzzleCtx.fillRect(x, y, 1, 1);
+        }
+        puzzleCtx.restore();
+      }
+
+      function ensureOutlineVisual() {
+        if (!state.puzzle) return null;
+        const mask = ensureOutlineMask();
+        if (!mask) return null;
+        const cache = state.outlineCache || createOutlineCache();
+        state.outlineCache = cache;
+        const colorKey = backgroundInk.outline;
+        if (cache.colorKey !== colorKey || (!cache.bitmap && !cache.canvas)) {
+          cache.colorKey = colorKey;
+          const rgba = rgbaStringToBytes(colorKey);
+          const imageData = outlineMaskToImageData(mask, cache.width, cache.height, rgba);
+          if (imageData) {
+            const visual = createOutlineVisual(imageData);
+            cache.bitmap = visual?.bitmap || null;
+            cache.canvas = visual?.canvas || null;
+          } else {
+            cache.bitmap = null;
+            cache.canvas = null;
           }
         }
+        return cache;
+      }
+
+      function ensureOutlineMask() {
+        if (!state.puzzle) return null;
+        const cache = state.outlineCache || createOutlineCache();
+        state.outlineCache = cache;
+        const { width, height, regionMap } = state.puzzle;
+        if (!cache.mask || cache.width !== width || cache.height !== height) {
+          const total = width * height;
+          const mask = cache.mask instanceof Uint8Array && cache.mask.length === total
+            ? cache.mask
+            : new Uint8Array(total);
+          mask.fill(0);
+          for (let y = 0; y < height; y++) {
+            const rowOffset = y * width;
+            const upOffset = rowOffset - width;
+            const downOffset = rowOffset + width;
+            for (let x = 0; x < width; x++) {
+              const idx = rowOffset + x;
+              const id = regionMap[idx];
+              const left = x > 0 ? regionMap[idx - 1] : id;
+              const right = x < width - 1 ? regionMap[idx + 1] : id;
+              const up = y > 0 ? regionMap[upOffset + x] : id;
+              const down = y < height - 1 ? regionMap[downOffset + x] : id;
+              if (left !== id || right !== id || up !== id || down !== id) {
+                mask[idx] = 1;
+              }
+            }
+          }
+          cache.mask = mask;
+          cache.width = width;
+          cache.height = height;
+          cache.bitmap = null;
+          cache.canvas = null;
+          cache.colorKey = null;
+        }
+        return cache.mask;
+      }
+
+      function createOutlineCache() {
+        return {
+          width: 0,
+          height: 0,
+          mask: null,
+          bitmap: null,
+          canvas: null,
+          colorKey: null,
+        };
+      }
+
+      function markOutlineColorDirty() {
+        if (!state.outlineCache) return;
+        state.outlineCache.bitmap = null;
+        state.outlineCache.canvas = null;
+        state.outlineCache.colorKey = null;
+      }
+
+      function outlineMaskToImageData(mask, width, height, rgba) {
+        let imageData = null;
+        if (typeof ImageData === "function") {
+          imageData = new ImageData(width, height);
+        } else if (typeof document !== "undefined" && typeof document.createElement === "function") {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx && typeof ctx.createImageData === "function") {
+            imageData = ctx.createImageData(width, height);
+          }
+        }
+        if (!imageData) {
+          return null;
+        }
+        const data = imageData.data;
+        const [r, g, b, a] = rgba;
+        for (let idx = 0; idx < mask.length; idx++) {
+          if (!mask[idx]) continue;
+          const base = idx * 4;
+          data[base] = r;
+          data[base + 1] = g;
+          data[base + 2] = b;
+          data[base + 3] = a;
+        }
+        return imageData;
+      }
+
+      function rgbaStringToBytes(value) {
+        if (typeof value !== "string") {
+          return [0, 0, 0, 255];
+        }
+        const match = value.match(/rgba?\(([^)]+)\)/i);
+        if (!match) {
+          return [0, 0, 0, 255];
+        }
+        const parts = match[1].split(/\s*,\s*/).map((part) => part.trim());
+        const r = clampByte(parseFloat(parts[0]));
+        const g = clampByte(parseFloat(parts[1]));
+        const b = clampByte(parseFloat(parts[2]));
+        if (parts.length < 4) {
+          return [r, g, b, 255];
+        }
+        const rawAlpha = parseFloat(parts[3]);
+        if (Number.isNaN(rawAlpha)) {
+          return [r, g, b, 255];
+        }
+        const alpha = rawAlpha > 1 ? rawAlpha : rawAlpha * 255;
+        return [r, g, b, clampByte(alpha)];
+      }
+
+      function clampByte(value) {
+        if (!Number.isFinite(value)) {
+          return 0;
+        }
+        if (value <= 0) return 0;
+        if (value >= 255) return 255;
+        return Math.round(value);
+      }
+
+      function createOutlineVisual(imageData) {
+        const width = imageData.width;
+        const height = imageData.height;
+        if (typeof OffscreenCanvas === "function") {
+          try {
+            const canvas = new OffscreenCanvas(width, height);
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.putImageData(imageData, 0, 0);
+              return { bitmap: canvas.transferToImageBitmap() };
+            }
+          } catch (error) {
+            /* OffscreenCanvas unavailable; fall back to DOM canvas. */
+          }
+        }
+        if (typeof document !== "undefined" && typeof document.createElement === "function") {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.putImageData(imageData, 0, 0);
+            return { canvas };
+          }
+        }
+        return null;
       }
 
       function scrollPaletteToColor(colorId) {
@@ -4408,7 +4585,10 @@
               const distance = Math.max(10, Math.hypot(second.x - first.x, second.y - first.y));
               const ratio = distance / pinchSession.initialDistance;
               const currentZoom = viewState.zoom;
-              const targetZoom = clamp(pinchSession.initialZoom * ratio, 0.2, 6);
+              const targetZoom = normalizeZoomValue(
+                pinchSession.initialZoom * ratio,
+                pinchSession.initialZoom
+              );
               if (Math.abs(targetZoom - currentZoom) > 0.0001) {
                 pinchSession.hasChanged = true;
                 const multiplier = targetZoom / currentZoom;
@@ -4645,13 +4825,20 @@
         }
       }
 
+      function normalizeZoomValue(value, fallback = MIN_VIEWPORT_ZOOM) {
+        if (!Number.isFinite(value) || value <= 0) {
+          return Math.max(MIN_VIEWPORT_ZOOM, fallback);
+        }
+        return Math.max(MIN_VIEWPORT_ZOOM, value);
+      }
+
       function applyZoom(multiplier, clientX, clientY, options = {}) {
         if (!state.puzzle) return;
-        const previousZoom = viewState.zoom;
-        const nextZoom = clamp(previousZoom * multiplier, 0.2, 6);
+        const previousZoom = viewState.zoom > 0 ? viewState.zoom : MIN_VIEWPORT_ZOOM;
+        const nextZoom = normalizeZoomValue(previousZoom * multiplier, previousZoom);
         const change = nextZoom / previousZoom;
-        if (!Number.isFinite(change) || change === 1) return;
-        const significant = Math.abs(nextZoom - previousZoom) >= 0.01;
+        if (!Number.isFinite(change) || Math.abs(change - 1) < 0.00001) return;
+        const significant = Math.abs(nextZoom - previousZoom) >= Math.max(0.01, previousZoom * 0.001);
         const viewportRect = viewportEl.getBoundingClientRect();
         const centerX = viewportRect.left + viewportRect.width / 2;
         const centerY = viewportRect.top + viewportRect.height / 2;
@@ -4676,7 +4863,7 @@
       }
 
       function applyViewTransform() {
-        const zoomValue = Math.max(0.05, viewState.baseScale * viewState.zoom);
+        const zoomValue = Math.max(MIN_RENDER_SCALE, viewState.baseScale * viewState.zoom);
         canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
         canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
         canvasTransform.style.setProperty("--zoom", zoomValue.toFixed(4));
@@ -4753,7 +4940,7 @@
           : 1;
         const targetZoom = Number.isFinite(scaleRatio) && scaleRatio > 0 ? savedZoom * scaleRatio : savedZoom;
         viewState.baseScale = nextBase;
-        viewState.zoom = clamp(targetZoom, 0.2, 6);
+        viewState.zoom = normalizeZoomValue(targetZoom, savedZoom);
         viewState.panX = hasPanX && Number.isFinite(viewport.panX) ? viewport.panX * scaleRatio : 0;
         viewState.panY = hasPanY && Number.isFinite(viewport.panY) ? viewport.panY * scaleRatio : 0;
         applyViewTransform();
