@@ -133,14 +133,13 @@ jobs:
           # Handle main branch differently (deploys to root)
           if [ -z "$BRANCH_FOLDER" ]; then
             echo "Deploying main branch to root"
-            # For main branch, copy files directly to root (excluding index.html which we generate)
+            # For main branch, copy files directly to root (including index.html)
             rsync -av --exclude='.git' \
                       --exclude='node_modules' \
                       --exclude='test-results' \
                       --exclude='playwright-report' \
                       --exclude='blob-report' \
                       --exclude='artifacts' \
-                      --exclude='index.html' \
                       --exclude='README.md' \
                       ../source/ ./
           else
@@ -174,8 +173,8 @@ jobs:
             # Check each folder and remove if not in active list
             for dir in */; do
               folder_name="${dir%/}"
-              # Skip index.html and README.md
-              if [ "$folder_name" != "index.html" ] && [ "$folder_name" != "README.md" ]; then
+              # Skip branch.html and README.md
+              if [ "$folder_name" != "branch.html" ] && [ "$folder_name" != "README.md" ]; then
                 if ! echo "$ACTIVE_BRANCHES" | grep -q "^${folder_name}$"; then
                   echo "Removing stale deployment: $folder_name"
                   rm -rf "$folder_name"
@@ -185,7 +184,7 @@ jobs:
           fi
 
           # Generate branch index page with main first, then sorted branches from open PRs
-          cat > index.html <<'EOF'
+          cat > branch.html <<'EOF'
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -280,7 +279,7 @@ jobs:
           EOF
 
           # Add main branch first (always at root)
-          cat >> index.html <<'EOF'
+          cat >> branch.html <<'EOF'
               <li class="main-branch">
                 <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>
                 <div class="pr-info">The main production branch - always deployed to root</div>
@@ -295,10 +294,10 @@ jobs:
               "<div class=\"pr-info\">PR #" + (.number|tostring) + ": " + .title + " - <a class=\"pr-link\" href=\"" + .url + "\">View PR</a></div>" +
               "<div class=\"timestamp\">Last updated: " + .updated + "</div>" +
               "</li>"
-            ' >> index.html
+            ' >> branch.html
           fi
 
-          cat >> index.html <<'EOF'
+          cat >> branch.html <<'EOF'
             </ul>
           </body>
           </html>
@@ -319,7 +318,7 @@ jobs:
             else
               echo "Published branch to: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/$BRANCH_FOLDER/"
             fi
-            echo "Branch index available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+            echo "Branch index available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/branch.html"
           fi
 
   # Deploy to GitHub Pages from gh-pages branch
