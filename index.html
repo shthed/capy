@@ -1727,6 +1727,38 @@
           return false;
         };
 
+        const isWithinGameSurface = (node) => {
+          if (!(node instanceof Node)) return false;
+          let current = node;
+          while (current) {
+            if (isGameSurface(current)) {
+              return true;
+            }
+            if (typeof ShadowRoot !== "undefined" && current instanceof ShadowRoot) {
+              current = current.host;
+            } else {
+              current = current.parentNode || null;
+            }
+          }
+          return false;
+        };
+
+        const preventUiPinchZoom = (event) => {
+          if (!event) return;
+          const touches = event.touches;
+          if (!touches || touches.length < 2) return;
+          const path = typeof event.composedPath === "function" ? event.composedPath() : null;
+          if (Array.isArray(path) && path.some((node) => isWithinGameSurface(node))) {
+            return;
+          }
+          if (isWithinGameSurface(event.target)) {
+            return;
+          }
+          if (event.cancelable) {
+            event.preventDefault();
+          }
+        };
+
         window.addEventListener(
           "touchend",
           (event) => {
@@ -1741,6 +1773,16 @@
           },
           { passive: false }
         );
+
+        window.addEventListener("touchstart", preventUiPinchZoom, {
+          passive: false,
+          capture: true,
+        });
+
+        window.addEventListener("touchmove", preventUiPinchZoom, {
+          passive: false,
+          capture: true,
+        });
 
         ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
           window.addEventListener(
