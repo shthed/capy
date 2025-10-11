@@ -33,19 +33,16 @@
         color-scheme: light dark;
         font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui,
           sans-serif;
-        background: #010819;
-        color: #e2e8f0;
-        --ui-scale-user: 1;
+        --ui-scale-user: 0.9;
         --ui-scale-auto: 1;
         --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
         --app-width: 100vw;
         --app-height: 100vh;
         --viewport-padding: calc(32px * var(--ui-scale));
-        --rail-gap: calc(6px * var(--ui-scale));
-        --rail-gap-portrait: calc(4px * var(--ui-scale));
-        --rail-padding-block: calc(10px * var(--ui-scale));
-        --rail-padding-inline: calc(18px * var(--ui-scale));
-        --floating-rail-offset: calc(62px * var(--ui-scale));
+        --rail-gap: calc(8px * var(--ui-scale));
+        --rail-gap-portrait: calc(6px * var(--ui-scale));
+        --rail-padding-block: calc(12px * var(--ui-scale));
+        --rail-padding-inline: calc(24px * var(--ui-scale));
         --command-button-size: clamp(
           calc(32px * var(--ui-scale)),
           calc(40px * var(--ui-scale)),
@@ -56,13 +53,161 @@
           calc(36px * var(--ui-scale)),
           calc(44px * var(--ui-scale))
         );
-        --surface-veil: rgba(7, 16, 40, 0.62);
-        --surface-veil-strong: rgba(7, 16, 40, 0.82);
-        --surface-border: rgba(148, 163, 184, 0.2);
-        --surface-border-strong: rgba(148, 163, 184, 0.3);
-        --shadow-floating: 0 18px 44px rgba(3, 10, 30, 0.46);
-        --shadow-floating-soft: 0 14px 32px rgba(3, 10, 30, 0.38);
-        --shadow-press: 0 8px 22px rgba(3, 10, 30, 0.32);
+        --theme-body-bg: #000000;
+        --theme-body-color: #e2e8f0;
+        --theme-command-bg: rgba(15, 23, 42, 0.82);
+        --theme-command-border: rgba(148, 163, 184, 0.28);
+        --theme-command-text: rgba(226, 232, 240, 0.92);
+        --theme-command-active-bg: rgba(37, 99, 235, 0.28);
+        --theme-command-active-border: rgba(96, 165, 250, 0.55);
+        --theme-command-active-text: rgba(226, 232, 240, 1);
+        --theme-command-disabled-bg: rgba(15, 23, 42, 0.55);
+        --theme-command-disabled-border: rgba(71, 85, 105, 0.35);
+        --theme-command-disabled-text: rgba(148, 163, 184, 0.6);
+        --theme-sheet-bg: rgba(2, 6, 23, 0.95);
+        --theme-sheet-border: rgba(59, 130, 246, 0.4);
+        --theme-sheet-shadow: 0 32px 80px rgba(8, 47, 73, 0.45);
+        --theme-sheet-button-bg: rgba(148, 163, 184, 0.15);
+        --theme-sheet-button-text: rgba(226, 232, 240, 0.8);
+        --theme-sheet-button-border: rgba(148, 163, 184, 0.25);
+        --theme-debug-border: rgba(59, 130, 246, 0.35);
+        --theme-debug-bg: rgba(15, 23, 42, 0.85);
+        --theme-hint-overlay: rgba(15, 23, 42, 0.82);
+        --theme-hint-body-bg: rgba(2, 6, 23, 0.78);
+        --theme-hint-body-border: rgba(59, 130, 246, 0.35);
+        --theme-hint-body-text: rgba(226, 232, 240, 0.8);
+        --theme-preview-overlay: rgba(2, 6, 23, 0.9);
+        --theme-tooltip-bg: rgba(15, 23, 42, 0.9);
+        --theme-tooltip-border: rgba(15, 23, 42, 0.9);
+        --theme-keycap-bg: rgba(15, 23, 42, 0.65);
+        --theme-keycap-border: rgba(148, 163, 184, 0.35);
+        --theme-keycap-text: rgba(226, 232, 240, 0.9);
+        --theme-muted-strong: rgba(148, 163, 184, 0.9);
+        --theme-muted-text: rgba(226, 232, 240, 0.82);
+        --theme-caption-text: rgba(148, 163, 184, 0.85);
+        --theme-note-text: rgba(148, 163, 184, 0.8);
+        --theme-input-bg: rgba(15, 23, 42, 0.85);
+        --theme-input-border: rgba(148, 163, 184, 0.35);
+        --theme-preview-canvas-bg: rgba(15, 23, 42, 0.8);
+        --theme-preview-canvas-border: rgba(148, 163, 184, 0.3);
+        --theme-chip-bg: rgba(15, 23, 42, 0.65);
+        --theme-chip-border: rgba(148, 163, 184, 0.35);
+        --theme-chip-text: rgba(226, 232, 240, 0.85);
+        --theme-chip-hover-bg: rgba(37, 99, 235, 0.25);
+        --theme-chip-hover-text: rgba(226, 232, 240, 0.95);
+        --theme-chip-active-bg: rgba(59, 130, 246, 0.35);
+        --theme-chip-active-border: rgba(147, 197, 253, 0.6);
+        --theme-chip-active-text: rgba(226, 232, 240, 0.98);
+        --theme-palette-dock-bg: rgba(2, 6, 23, 0.94);
+        --theme-palette-dock-border: rgba(15, 23, 42, 0.85);
+        --command-rail-top: calc(env(safe-area-inset-top, 0px) + 16px);
+        --command-rail-height: var(--command-button-size);
+      }
+
+      body[data-theme="dark"] {
+        color-scheme: dark;
+      }
+
+      body[data-theme="light"] {
+        color-scheme: light;
+        --theme-body-bg: #f8fafc;
+        --theme-body-color: #0f172a;
+        --theme-command-bg: rgba(248, 250, 252, 0.9);
+        --theme-command-border: rgba(15, 23, 42, 0.18);
+        --theme-command-text: rgba(15, 23, 42, 0.86);
+        --theme-command-active-bg: rgba(59, 130, 246, 0.16);
+        --theme-command-active-border: rgba(37, 99, 235, 0.4);
+        --theme-command-active-text: rgba(15, 23, 42, 0.92);
+        --theme-command-disabled-bg: rgba(226, 232, 240, 0.75);
+        --theme-command-disabled-border: rgba(148, 163, 184, 0.32);
+        --theme-command-disabled-text: rgba(100, 116, 139, 0.7);
+        --theme-sheet-bg: rgba(255, 255, 255, 0.9);
+        --theme-sheet-border: rgba(15, 23, 42, 0.1);
+        --theme-sheet-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+        --theme-sheet-button-bg: rgba(226, 232, 240, 0.85);
+        --theme-sheet-button-text: rgba(15, 23, 42, 0.75);
+        --theme-sheet-button-border: rgba(148, 163, 184, 0.35);
+        --theme-debug-border: rgba(96, 165, 250, 0.35);
+        --theme-debug-bg: rgba(226, 232, 240, 0.85);
+        --theme-hint-overlay: rgba(248, 250, 252, 0.9);
+        --theme-hint-body-bg: rgba(255, 255, 255, 0.95);
+        --theme-hint-body-border: rgba(96, 165, 250, 0.35);
+        --theme-hint-body-text: rgba(15, 23, 42, 0.78);
+        --theme-preview-overlay: rgba(15, 23, 42, 0.75);
+        --theme-tooltip-bg: rgba(15, 23, 42, 0.85);
+        --theme-tooltip-border: rgba(15, 23, 42, 0.85);
+        --theme-keycap-bg: rgba(226, 232, 240, 0.85);
+        --theme-keycap-border: rgba(148, 163, 184, 0.45);
+        --theme-keycap-text: rgba(15, 23, 42, 0.82);
+        --theme-muted-strong: rgba(71, 85, 105, 0.95);
+        --theme-muted-text: rgba(51, 65, 85, 0.85);
+        --theme-caption-text: rgba(100, 116, 139, 0.85);
+        --theme-note-text: rgba(100, 116, 139, 0.9);
+        --theme-input-bg: rgba(255, 255, 255, 0.95);
+        --theme-input-border: rgba(148, 163, 184, 0.35);
+        --theme-preview-canvas-bg: rgba(248, 250, 252, 0.95);
+        --theme-preview-canvas-border: rgba(148, 163, 184, 0.35);
+        --theme-chip-bg: rgba(226, 232, 240, 0.9);
+        --theme-chip-border: rgba(148, 163, 184, 0.35);
+        --theme-chip-text: rgba(30, 41, 59, 0.85);
+        --theme-chip-hover-bg: rgba(59, 130, 246, 0.25);
+        --theme-chip-hover-text: rgba(15, 23, 42, 0.85);
+        --theme-chip-active-bg: rgba(59, 130, 246, 0.35);
+        --theme-chip-active-border: rgba(37, 99, 235, 0.5);
+        --theme-chip-active-text: rgba(15, 23, 42, 0.85);
+        --theme-palette-dock-bg: rgba(255, 255, 255, 0.9);
+        --theme-palette-dock-border: rgba(148, 163, 184, 0.4);
+      }
+
+      body[data-theme="colorful"] {
+        color-scheme: dark;
+        --theme-body-bg: linear-gradient(145deg, #111827 0%, #1d1b52 40%, #6d1c8c 65%, #b91c1c 100%);
+        --theme-body-color: #f8fafc;
+        --theme-command-bg: rgba(30, 41, 59, 0.85);
+        --theme-command-border: rgba(244, 114, 182, 0.45);
+        --theme-command-text: rgba(248, 250, 252, 0.92);
+        --theme-command-active-bg: rgba(244, 114, 182, 0.28);
+        --theme-command-active-border: rgba(253, 186, 116, 0.75);
+        --theme-command-active-text: rgba(15, 23, 42, 0.95);
+        --theme-command-disabled-bg: rgba(30, 41, 59, 0.6);
+        --theme-command-disabled-border: rgba(148, 163, 184, 0.4);
+        --theme-command-disabled-text: rgba(226, 232, 240, 0.65);
+        --theme-sheet-bg: rgba(17, 24, 39, 0.92);
+        --theme-sheet-border: rgba(147, 51, 234, 0.45);
+        --theme-sheet-shadow: 0 38px 90px rgba(17, 24, 39, 0.6);
+        --theme-sheet-button-bg: rgba(244, 114, 182, 0.25);
+        --theme-sheet-button-text: rgba(248, 250, 252, 0.9);
+        --theme-sheet-button-border: rgba(253, 186, 116, 0.5);
+        --theme-debug-border: rgba(244, 114, 182, 0.35);
+        --theme-debug-bg: rgba(30, 41, 59, 0.82);
+        --theme-hint-overlay: rgba(17, 24, 39, 0.82);
+        --theme-hint-body-bg: rgba(30, 41, 59, 0.85);
+        --theme-hint-body-border: rgba(253, 186, 116, 0.5);
+        --theme-hint-body-text: rgba(248, 250, 252, 0.86);
+        --theme-preview-overlay: rgba(17, 24, 39, 0.88);
+        --theme-tooltip-bg: rgba(30, 41, 59, 0.92);
+        --theme-tooltip-border: rgba(147, 51, 234, 0.6);
+        --theme-keycap-bg: rgba(30, 41, 59, 0.7);
+        --theme-keycap-border: rgba(244, 114, 182, 0.45);
+        --theme-keycap-text: rgba(248, 250, 252, 0.9);
+        --theme-muted-strong: rgba(244, 114, 182, 0.85);
+        --theme-muted-text: rgba(253, 186, 116, 0.9);
+        --theme-caption-text: rgba(244, 114, 182, 0.85);
+        --theme-note-text: rgba(244, 114, 182, 0.82);
+        --theme-input-bg: rgba(30, 41, 59, 0.8);
+        --theme-input-border: rgba(244, 114, 182, 0.45);
+        --theme-preview-canvas-bg: rgba(30, 41, 59, 0.78);
+        --theme-preview-canvas-border: rgba(244, 114, 182, 0.45);
+        --theme-chip-bg: rgba(30, 41, 59, 0.78);
+        --theme-chip-border: rgba(244, 114, 182, 0.5);
+        --theme-chip-text: rgba(248, 250, 252, 0.9);
+        --theme-chip-hover-bg: rgba(244, 114, 182, 0.32);
+        --theme-chip-hover-text: rgba(15, 23, 42, 0.95);
+        --theme-chip-active-bg: rgba(253, 186, 116, 0.45);
+        --theme-chip-active-border: rgba(244, 114, 182, 0.65);
+        --theme-chip-active-text: rgba(15, 23, 42, 0.95);
+        --theme-palette-dock-bg: rgba(17, 24, 39, 0.88);
+        --theme-palette-dock-border: rgba(244, 114, 182, 0.4);
       }
 
       * {
@@ -77,19 +222,12 @@
         margin: 0;
         min-height: 100vh;
         min-height: 100dvh;
-        background:
-          radial-gradient(120% 120% at 50% -10%, rgba(59, 130, 246, 0.16), transparent 60%),
-          radial-gradient(120% 120% at 50% 120%, rgba(15, 118, 110, 0.08), transparent 70%),
-          #010819;
-        color: inherit;
+        background: var(--theme-body-bg);
+        color: var(--theme-body-color);
         overflow: hidden;
         font-size: calc(16px * var(--ui-scale));
         touch-action: manipulation;
         overscroll-behavior: none;
-      }
-
-      body.sheet-open {
-        overflow: hidden;
       }
 
       body.dragging {
@@ -106,7 +244,8 @@
         height: min(var(--app-height, 100vh), 100vh);
         overflow: hidden;
         display: grid;
-        grid-template-rows: auto 1fr auto;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: 1fr auto;
       }
 
       @supports (height: 100dvh) {
@@ -116,172 +255,73 @@
       }
 
       #commandRail {
-        position: fixed;
-        inset-block-start: calc(env(safe-area-inset-top, 0px) + clamp(14px, 4vw, 26px));
-        inset-inline-start: 50%;
-        transform: translateX(-50%);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex-wrap: nowrap;
-        gap: clamp(4px, 1vw, 12px);
-        padding: clamp(6px, 1vw, 10px);
-        margin: 0;
-        border-radius: 999px;
-        inline-size: auto;
-        width: auto;
-        max-inline-size: calc(
-          100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px
-        );
-        max-width: calc(
-          100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px
-        );
-        background: transparent;
-        box-shadow: var(--shadow-floating);
-        isolation: isolate;
-        z-index: 5;
-        touch-action: manipulation;
-        pointer-events: none;
-      }
-
-      #commandRail::before {
-        content: "";
         position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        background: var(--surface-veil);
-        border: 1px solid var(--surface-border);
-        backdrop-filter: blur(18px) saturate(140%);
-        -webkit-backdrop-filter: blur(18px) saturate(140%);
-        pointer-events: none;
-        opacity: 0.96;
+        top: var(--command-rail-top);
+        left: calc(env(safe-area-inset-left, 0px) + 16px);
+        right: calc(env(safe-area-inset-right, 0px) + 16px);
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: calc(10px * var(--ui-scale));
+        padding: 0;
+        margin: 0;
+        background: none;
+        z-index: 3;
+        touch-action: manipulation;
       }
 
       #commandRail button {
-        border-radius: 999px;
-        padding: clamp(6px, 1vw, 9px) clamp(10px, 1.8vw, 14px);
-        min-width: clamp(38px, 4vw, 60px);
-        min-height: clamp(36px, 3.8vw, 54px);
-        display: inline-flex;
-        flex-direction: row;
-        align-items: center;
-        justify-content: center;
-        gap: clamp(4px, 0.8vw, 8px);
-        flex-shrink: 0;
-        background: transparent;
-        color: rgba(226, 232, 240, 0.82);
-        border: 1px solid transparent;
-        box-shadow: none;
-        pointer-events: auto;
-        transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease,
-          color 160ms ease, box-shadow 160ms ease;
-      }
-
-      #commandRail button .icon {
-        width: clamp(18px, 2vw, 22px);
-        height: clamp(18px, 2vw, 22px);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      #commandRail button .icon svg {
-        width: 100%;
-        height: 100%;
-        display: block;
-      }
-
-      #commandRail button .icon svg * {
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.5;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-
-      #commandRail button .label {
-        font-size: clamp(0.62rem, 0.56rem + 0.12vw, 0.74rem);
-        font-weight: 500;
-        letter-spacing: 0.01em;
-        text-transform: none;
-        color: rgba(226, 232, 240, 0.78);
-        line-height: 1.05;
-        white-space: nowrap;
+        border-radius: 12px;
+        padding: 0;
+        width: var(--command-button-size);
+        height: var(--command-button-size);
+        display: grid;
+        place-items: center;
+        background: var(--theme-command-bg);
+        color: var(--theme-command-text);
+        border: 1px solid var(--theme-command-border);
       }
 
       #commandRail button.active {
-        background: rgba(37, 99, 235, 0.25);
-        border-color: rgba(147, 197, 253, 0.55);
-        color: rgba(241, 245, 249, 0.98);
-        box-shadow: var(--shadow-floating-soft);
-        transform: translateY(-1px);
+        background: var(--theme-command-active-bg);
+        border-color: var(--theme-command-active-border);
+        color: var(--theme-command-active-text);
       }
 
-      #commandRail button:not(:disabled):hover,
-      #commandRail button:not(:disabled):focus-visible {
-        background: rgba(148, 163, 184, 0.18);
-        border-color: rgba(148, 163, 184, 0.32);
-        color: rgba(241, 245, 249, 0.95);
-        transform: translateY(-1px);
-        box-shadow: var(--shadow-floating-soft);
-      }
-
-      #commandRail button:focus-visible {
-        outline: 2px solid rgba(147, 197, 253, 0.75);
-        outline-offset: 2px;
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        #commandRail button {
-          transition: none;
-        }
-
-        #commandRail button:not(:disabled):hover,
-        #commandRail button:not(:disabled):focus-visible {
-          transform: none;
-        }
+      #commandRail button .icon {
+        font-size: 1.1rem;
+        line-height: 1;
       }
 
       #commandRail button:disabled {
-        color: rgba(148, 163, 184, 0.6);
-        border-color: transparent;
-        box-shadow: none;
-        filter: saturate(0.85);
+        background: var(--theme-command-disabled-bg);
+        color: var(--theme-command-disabled-text);
+        border-color: var(--theme-command-disabled-border);
       }
 
-      #commandRail button:disabled .label {
-        color: rgba(148, 163, 184, 0.55);
-      }
-
-      body[data-orientation="portrait"] {
-        --floating-rail-offset: calc(60px * var(--ui-scale));
-      }
-
-      body.compact-commands {
-        --floating-rail-offset: calc(60px * var(--ui-scale));
-      }
-
-      body[data-orientation="portrait"] #commandRail,
-      body.compact-commands #commandRail {
+      body[data-orientation="portrait"] #commandRail {
         gap: var(--rail-gap-portrait);
-        padding: clamp(4px, 0.9vw, 8px);
-        max-inline-size: calc(
-          100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 12px
-        );
-        max-width: calc(
-          100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 12px
-        );
+        justify-content: flex-start;
       }
 
-      body[data-orientation="portrait"] #commandRail button,
+      body[data-orientation="portrait"] #commandRail button {
+        width: var(--command-button-size-portrait);
+        height: var(--command-button-size-portrait);
+      }
+
+      body.compact-commands #commandRail {
+        justify-content: flex-start;
+        gap: var(--rail-gap-portrait);
+      }
+
       body.compact-commands #commandRail button {
-        padding: clamp(4px, 1vw, 6px) clamp(8px, 1.4vw, 10px);
-        min-width: calc(34px * var(--ui-scale));
+        width: min(var(--command-button-size), calc(14vw));
+        height: min(var(--command-button-size), calc(14vw));
       }
 
-      body[data-orientation="portrait"] #commandRail button .label,
-      body.compact-commands #commandRail button .label {
-        display: none;
+      body[data-orientation="portrait"] #paletteDock {
+        gap: calc(10px * var(--ui-scale));
       }
 
       #viewport {
@@ -290,11 +330,14 @@
         height: 100%;
         display: grid;
         place-items: center;
-        padding: var(--viewport-padding, 32px);
-        padding-block-start: calc(
-          var(--viewport-padding, 32px) + var(--floating-rail-offset, 0px)
-        );
+        padding: calc(16px * var(--ui-scale));
+        padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
         overflow: hidden;
+        background: none;
+      }
+
+      body[data-orientation="portrait"] #viewport {
+        padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
       }
 
       #canvasStage {
@@ -342,7 +385,6 @@
       }
 
       body.panning #pointerOverlay,
-      body.sheet-open #pointerOverlay,
       body.dragging #pointerOverlay {
         opacity: 0;
       }
@@ -423,67 +465,20 @@
       }
 
       #viewport::before {
-        content: "";
-        position: absolute;
-        inset: 24px;
-        border-radius: 24px;
-        border: 2px dashed rgba(148, 163, 184, 0.35);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.18s ease;
-      }
-
-      body.dragging #viewport::before,
-      body.panning #viewport::before {
-        opacity: 1;
-      }
-
-      #canvasStack {
-        position: relative;
-        display: inline-block;
-        --puzzle-width: 640px;
-        --puzzle-height: 480px;
-        --puzzle-max-width: calc(100vw - 160px);
-        --puzzle-max-height: calc(100vh - 220px);
-        width: min(var(--puzzle-width), var(--puzzle-max-width));
-        max-width: var(--puzzle-max-width);
-        max-height: var(--puzzle-max-height);
-        border-radius: 20px;
-        background: #0f172a;
-        border: 1px solid rgba(148, 163, 184, 0.45);
-        box-shadow: 0 30px 60px rgba(15, 23, 42, 0.45);
-        overflow: hidden;
-      }
-
-      #canvasStack canvas {
-        display: block;
-        width: 100%;
-        height: auto;
-        image-rendering: pixelated;
-        border-radius: inherit;
-      }
-
-      #originalCanvas {
-        pointer-events: none;
+        content: none;
       }
 
       #puzzleCanvas {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        background: transparent;
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        border-radius: 0;
+        background: none;
+        border: none;
+        box-shadow: none;
+        image-rendering: pixelated;
         touch-action: none;
-        transition: opacity 0.2s ease;
-      }
-
-      #viewport.reveal-original #puzzleCanvas {
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      #viewport.reveal-original #pointerOverlay {
-        opacity: 0 !important;
       }
 
       #previewOverlay {
@@ -491,7 +486,7 @@
         inset: 0;
         display: grid;
         place-items: center;
-        background: rgba(2, 6, 23, 0.9);
+        background: var(--theme-preview-overlay);
         backdrop-filter: blur(16px);
         z-index: 4;
         transition: opacity 0.24s ease;
@@ -520,7 +515,7 @@
         inset: 0;
         display: grid;
         place-items: center;
-        background: rgba(15, 23, 42, 0.82);
+        background: var(--theme-hint-overlay);
         backdrop-filter: blur(18px);
         transition: opacity 0.24s ease;
         z-index: 2;
@@ -537,16 +532,16 @@
 
       #startHint .hint-body {
         pointer-events: auto;
-        text-align: center;
+        text-align: left;
         max-width: 360px;
         padding: calc(32px * var(--ui-scale));
         border-radius: calc(20px * var(--ui-scale));
-        background: rgba(2, 6, 23, 0.78);
-        border: 1px solid rgba(59, 130, 246, 0.35);
+        background: var(--theme-hint-body-bg);
+        border: 1px solid var(--theme-hint-body-border);
         box-shadow: 0 20px 60px rgba(15, 23, 42, 0.6);
         display: grid;
         gap: calc(20px * var(--ui-scale));
-        justify-items: center;
+        justify-items: stretch;
       }
 
       #startHint h1 {
@@ -556,16 +551,8 @@
 
       #startHint p {
         margin: 0 0 20px;
-        color: rgba(226, 232, 240, 0.8);
+        color: var(--theme-hint-body-text);
         font-size: 1rem;
-      }
-
-      #startHint .sample-art {
-        width: min(calc(240px * var(--ui-scale)), 70vw);
-        max-width: 100%;
-        border-radius: calc(16px * var(--ui-scale));
-        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.55);
-        border: 1px solid rgba(148, 163, 184, 0.25);
       }
 
       #startHint .hint-actions {
@@ -578,18 +565,18 @@
           display: grid;
           gap: calc(12px * var(--ui-scale));
           width: 100%;
-          text-align: center;
+          text-align: left;
         }
 
         .detail-intro {
           margin: 0;
           font-size: 0.95rem;
-          color: rgba(226, 232, 240, 0.82);
+          color: var(--theme-muted-text);
         }
 
         .detail-picker {
           display: flex;
-          justify-content: center;
+          justify-content: flex-start;
           gap: calc(8px * var(--ui-scale));
           flex-wrap: wrap;
         }
@@ -597,9 +584,9 @@
         button.detail-chip {
           padding: 6px 16px;
           border-radius: 999px;
-          border: 1px solid rgba(148, 163, 184, 0.35);
-          background: rgba(15, 23, 42, 0.65);
-          color: rgba(226, 232, 240, 0.85);
+          border: 1px solid var(--theme-chip-border);
+          background: var(--theme-chip-bg);
+          color: var(--theme-chip-text);
           font-weight: 600;
           font-size: 0.85rem;
           letter-spacing: 0.01em;
@@ -609,20 +596,20 @@
         button.detail-chip:hover:not(:disabled) {
           transform: none;
           box-shadow: none;
-          background: rgba(37, 99, 235, 0.25);
-          color: rgba(226, 232, 240, 0.95);
+          background: var(--theme-chip-hover-bg);
+          color: var(--theme-chip-hover-text);
         }
 
         button.detail-chip[aria-pressed="true"] {
-          background: rgba(59, 130, 246, 0.35);
-          border-color: rgba(147, 197, 253, 0.6);
-          color: rgba(226, 232, 240, 0.98);
+          background: var(--theme-chip-active-bg);
+          border-color: var(--theme-chip-active-border);
+          color: var(--theme-chip-active-text);
         }
 
         .detail-caption {
           margin: 0;
           font-size: 0.85rem;
-          color: rgba(148, 163, 184, 0.85);
+          color: var(--theme-caption-text);
         }
 
         #settingsSheet .detail-callout {
@@ -635,86 +622,63 @@
       button {
         font: inherit;
         border-radius: 999px;
-        border: 1px solid rgba(147, 197, 253, 0.6);
+        border: none;
         padding: calc(10px * var(--ui-scale)) calc(22px * var(--ui-scale));
-        background: linear-gradient(135deg, rgba(37, 99, 235, 0.92), rgba(56, 189, 248, 0.78));
-        color: #031126;
+        background: rgba(96, 165, 250, 0.92);
+        color: #021027;
         font-weight: 600;
         cursor: pointer;
-        box-shadow: var(--shadow-press);
-        transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease,
-          border-color 0.18s ease;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
       }
 
       button:hover:not(:disabled) {
         transform: translateY(-1px);
-        box-shadow: var(--shadow-floating-soft);
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(103, 232, 249, 0.8));
-        border-color: rgba(147, 197, 253, 0.8);
+        box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
+        background: rgba(147, 197, 253, 0.96);
       }
 
       button:disabled {
-        background: rgba(148, 163, 184, 0.26);
-        color: rgba(226, 232, 240, 0.65);
+        background: rgba(148, 163, 184, 0.35);
+        color: rgba(226, 232, 240, 0.7);
         cursor: not-allowed;
-        border-color: rgba(148, 163, 184, 0.3);
         box-shadow: none;
       }
 
       #paletteDock {
-        position: fixed;
-        inset-inline-start: 50%;
-        inset-block-end: calc(env(safe-area-inset-bottom, 0px) + clamp(12px, 4vw, 26px));
-        transform: translateX(-50%);
+        position: sticky;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        max-width: 100%;
         display: flex;
-        justify-content: center;
-        width: max-content;
-        max-inline-size: calc(
-          100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px
-        );
-        padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
-        padding-block: 0;
-        margin: 0;
-        background: transparent;
-        pointer-events: none;
-        z-index: 6;
-        isolation: isolate;
+        flex-direction: column;
+        gap: calc(6px * var(--ui-scale));
+        align-items: stretch;
+        justify-content: flex-start;
+        padding-block-start: calc(6px * var(--ui-scale));
+        padding-block-end: calc(6px * var(--ui-scale) + env(safe-area-inset-bottom, 0px));
+        padding-inline-start: calc(12px * var(--ui-scale) + env(safe-area-inset-left, 0px));
+        padding-inline-end: calc(12px * var(--ui-scale) + env(safe-area-inset-right, 0px));
+        background: var(--theme-palette-dock-bg);
+        border-top: 1px solid var(--theme-palette-dock-border);
+        overflow: visible;
+        z-index: 3;
       }
 
       #palette {
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-        gap: clamp(6px, 1vw, 12px);
-        padding: clamp(6px, 1vw, 10px);
+        flex: 1 1 auto;
+        min-width: 0;
+        width: 100%;
+        max-width: 100%;
+        display: flex;
+        gap: 0;
         overflow-x: auto;
-        overflow-y: hidden;
-        max-inline-size: 100%;
-        scrollbar-width: thin;
-        -webkit-overflow-scrolling: touch;
+        overflow-y: visible;
         touch-action: pan-x;
-        border-radius: calc(20px * var(--ui-scale));
-        background: transparent;
-        pointer-events: auto;
-        box-shadow: var(--shadow-floating);
-      }
-
-      #palette::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        background: var(--surface-veil);
-        border: 1px solid var(--surface-border);
-        backdrop-filter: blur(18px) saturate(140%);
-        -webkit-backdrop-filter: blur(18px) saturate(140%);
-        pointer-events: none;
-        opacity: 0.96;
-      }
-
-      #palette > * {
-        position: relative;
-        z-index: 1;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        padding-block-end: calc(2px * var(--ui-scale));
       }
 
       #palette::-webkit-scrollbar {
@@ -722,7 +686,40 @@
       }
 
       #palette::-webkit-scrollbar-thumb {
-        background: rgba(148, 163, 184, 0.35);
+        background: rgba(148, 163, 184, 0.45);
+      }
+
+      .control select {
+        appearance: none;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: calc(10px * var(--ui-scale));
+        background: rgba(15, 23, 42, 0.82);
+        color: inherit;
+        font: inherit;
+        padding: calc(6px * var(--ui-scale)) calc(28px * var(--ui-scale))
+          calc(6px * var(--ui-scale)) calc(12px * var(--ui-scale));
+        line-height: 1.2;
+        cursor: pointer;
+        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.35);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        background-image: linear-gradient(45deg, transparent 50%, rgba(148, 163, 184, 0.75) 50%),
+          linear-gradient(135deg, rgba(148, 163, 184, 0.75) 50%, transparent 50%);
+        background-position: calc(100% - 18px) center, calc(100% - 12px) center;
+        background-size: calc(6px * var(--ui-scale)) calc(6px * var(--ui-scale));
+        background-repeat: no-repeat;
+        min-width: min(calc(220px * var(--ui-scale)), 100%);
+      }
+
+      .control select:focus {
+        outline: none;
+        border-color: rgba(96, 165, 250, 0.55);
+        box-shadow: 0 0 0 calc(2px * var(--ui-scale)) rgba(37, 99, 235, 0.25);
+      }
+
+      .control select:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        background-image: none;
       }
 
       .control {
@@ -834,8 +831,8 @@
         width: 100%;
         height: 38px;
         border-radius: 12px;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        background: rgba(15, 23, 42, 0.85);
+        border: 1px solid var(--theme-input-border);
+        background: var(--theme-input-bg);
         padding: 0;
         cursor: pointer;
       }
@@ -849,7 +846,7 @@
       .control-note {
         margin-top: -8px;
         font-size: 0.8rem;
-        color: rgba(148, 163, 184, 0.8);
+        color: var(--theme-note-text);
       }
 
       .panel-actions {
@@ -872,45 +869,42 @@
         width: 100%;
         height: auto;
         border-radius: 12px;
-        border: 1px solid rgba(148, 163, 184, 0.3);
-        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid var(--theme-preview-canvas-border);
+        background: var(--theme-preview-canvas-bg);
         image-rendering: pixelated;
       }
 
       .swatch {
-        flex: 0 0 auto;
+        flex: 0 0 calc(72px * var(--ui-scale));
         display: flex;
         align-items: center;
         justify-content: center;
-        min-width: clamp(42px, 11vw, 58px);
-        min-height: clamp(42px, 11vw, 58px);
+        min-width: calc(64px * var(--ui-scale));
+        min-height: calc(72px * var(--ui-scale));
         padding: 0;
         border: 0;
-        border-radius: calc(16px * var(--ui-scale));
-        background: var(--swatch-color, rgba(15, 23, 42, 0.82));
+        border-radius: 0;
+        background: var(--swatch-color, rgba(15, 23, 42, 0.85));
         color: var(--swatch-label-color, rgba(248, 250, 252, 0.98));
         text-align: center;
         cursor: pointer;
-        box-shadow: var(--shadow-floating-soft);
-        transition: box-shadow 0.2s ease, transform 0.2s ease;
+        box-shadow: inset 0 0 0 1px var(--swatch-outline, rgba(15, 23, 42, 0.6));
+        transition: box-shadow 0.18s ease;
+        position: relative;
+        overflow: visible;
       }
 
       .swatch:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-floating);
+        box-shadow: inset 0 0 0 2px var(--swatch-outline, rgba(15, 23, 42, 0.75));
       }
 
       .swatch:focus-visible {
-        outline: 2px solid rgba(147, 197, 253, 0.7);
-        outline-offset: 2px;
-        box-shadow: var(--shadow-floating);
+        outline: 2px solid rgba(148, 163, 184, 0.85);
+        outline-offset: -2px;
       }
 
       .swatch.active {
-        transform: translateY(-2px);
-        box-shadow: 0 20px 44px rgba(37, 99, 235, 0.36);
-        outline: 2px solid rgba(96, 165, 250, 0.8);
-        outline-offset: 2px;
+        box-shadow: inset 0 0 0 3px rgba(96, 165, 250, 0.9);
       }
 
       .swatch.done {
@@ -923,64 +917,101 @@
 
       @keyframes swatchHintPulse {
         0% {
-          box-shadow: 0 20px 44px rgba(37, 99, 235, 0.38);
+          box-shadow: inset 0 0 0 4px rgba(96, 165, 250, 0.85);
         }
         60% {
-          box-shadow: var(--shadow-floating-soft);
+          box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.4);
         }
         100% {
-          box-shadow: var(--shadow-floating-soft);
+          box-shadow: inset 0 0 0 1px var(--swatch-outline, rgba(15, 23, 42, 0.6));
         }
       }
 
       .swatch .label {
         position: relative;
         display: inline-flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: clamp(1px, 0.4vw, 3px);
-        font-size: clamp(0.66rem, 0.62rem + 0.16vw, 0.8rem);
-        font-weight: 500;
-        line-height: 1.15;
+        font-size: 1.05rem;
+        font-weight: 600;
+        line-height: 1.2;
         max-width: 100%;
         z-index: 1;
         padding: 0;
         color: inherit;
-        text-shadow: var(--swatch-label-shadow, none);
+      }
+
+      .swatch .swatch-tooltip {
+        position: absolute;
+        inset-inline: 50%;
+        bottom: calc(100% + 8px);
+        transform: translate(-50%, 4px) scale(0.98);
+        padding: calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        border-radius: calc(8px * var(--ui-scale));
+        background: var(--theme-tooltip-bg);
+        color: rgba(248, 250, 252, 0.95);
+        font-size: 0.75rem;
+        font-weight: 500;
+        white-space: nowrap;
+        box-shadow: 0 6px 20px rgba(2, 6, 23, 0.45);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.16s ease, transform 0.16s ease;
+        z-index: 10;
+      }
+
+      .swatch .swatch-tooltip::after {
+        content: "";
+        position: absolute;
+        inset-inline-start: 50%;
+        top: 100%;
+        transform: translateX(-50%);
+        border-width: 6px 6px 0 6px;
+        border-style: solid;
+        border-color: var(--theme-tooltip-border) transparent transparent transparent;
+      }
+
+      .swatch:hover .swatch-tooltip,
+      .swatch:focus-visible .swatch-tooltip {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
       }
 
       .swatch .label > strong {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: calc(24px * var(--ui-scale));
-        padding: 2px 6px;
-        border-radius: calc(999px * var(--ui-scale));
+        min-width: calc(28px * var(--ui-scale));
+        padding: 0;
+        border-radius: 0;
         border: 0;
-        background: rgba(1, 8, 22, 0.3);
-        font-size: clamp(0.74rem, 0.68rem + 0.18vw, 0.88rem);
+        background: transparent;
+        font-size: 1.15rem;
         letter-spacing: 0.01em;
         color: currentColor;
+        text-shadow: var(--swatch-label-shadow, none);
       }
 
       .sheet {
         position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: min(420px, calc(100vw - 48px));
-        max-height: calc(100vh - 96px);
+        top: calc(
+          env(safe-area-inset-top, 0px) +
+            var(--rail-padding-block) +
+            var(--command-button-size) +
+            calc(16px * var(--ui-scale))
+        );
+        right: calc(env(safe-area-inset-right, 0px) + 24px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+        width: min(380px, calc(100vw - 48px));
         padding: 24px;
         display: flex;
         flex-direction: column;
         gap: 18px;
         border-radius: 22px;
-        background: var(--surface-veil-strong);
-        border: 1px solid var(--surface-border-strong);
-        box-shadow: var(--shadow-floating);
-        backdrop-filter: blur(26px) saturate(140%);
-        -webkit-backdrop-filter: blur(26px) saturate(140%);
+        background: var(--theme-sheet-bg);
+        border: 1px solid var(--theme-sheet-border);
+        box-shadow: var(--theme-sheet-shadow);
+        backdrop-filter: blur(22px);
         z-index: 6;
         opacity: 1;
         transition: opacity 0.2s ease;
@@ -989,6 +1020,7 @@
       .sheet.hidden {
         opacity: 0;
         pointer-events: none;
+        visibility: hidden;
       }
 
       .sheet-header {
@@ -1005,16 +1037,10 @@
 
       .close-button {
         padding: 6px 14px;
-        border-radius: 999px;
-        background: rgba(148, 163, 184, 0.16);
-        color: rgba(226, 232, 240, 0.82);
-        border: 1px solid rgba(148, 163, 184, 0.28);
-        transition: background 0.18s ease, border-color 0.18s ease;
-      }
-
-      .close-button:hover {
-        background: rgba(148, 163, 184, 0.24);
-        border-color: rgba(148, 163, 184, 0.4);
+        border-radius: 12px;
+        background: var(--theme-sheet-button-bg);
+        color: var(--theme-sheet-button-text);
+        border: 1px solid var(--theme-sheet-button-border);
       }
 
       .sheet-body {
@@ -1048,7 +1074,7 @@
 
       .command-list dt {
         font-weight: 600;
-        color: rgba(148, 163, 184, 0.9);
+        color: var(--theme-muted-strong);
         font-size: 0.95rem;
       }
 
@@ -1075,18 +1101,18 @@
         padding: 2px 6px;
         margin-right: 6px;
         border-radius: 6px;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        background: rgba(15, 23, 42, 0.65);
+        border: 1px solid var(--theme-keycap-border);
+        background: var(--theme-keycap-bg);
         font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco,
           Consolas, 'Liberation Mono', 'Courier New', monospace;
         font-size: 0.85rem;
-        color: rgba(226, 232, 240, 0.9);
+        color: var(--theme-keycap-text);
       }
 
       .debug-log {
         border-radius: 16px;
-        border: 1px solid rgba(59, 130, 246, 0.35);
-        background: rgba(15, 23, 42, 0.85);
+        border: 1px solid var(--theme-debug-border);
+        background: var(--theme-debug-bg);
         padding: 12px;
         display: flex;
         flex-direction: column;
@@ -1144,21 +1170,6 @@
         height: 18px;
       }
 
-      .backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(2, 6, 23, 0.65);
-        backdrop-filter: blur(10px);
-        z-index: 5;
-        opacity: 1;
-        transition: opacity 0.2s ease;
-      }
-
-      .backdrop.hidden {
-        opacity: 0;
-        pointer-events: none;
-      }
-
       #saveList {
         list-style: none;
         margin: 0;
@@ -1202,23 +1213,20 @@
       }
 
       @media (max-width: 1024px) {
-        #canvasStack {
-          --puzzle-max-width: calc(100vw - 60px);
-        }
-
         #commandRail {
           flex-wrap: wrap;
-          justify-content: flex-end;
+          justify-content: flex-start;
         }
       }
 
       @media (max-width: 720px) {
         #viewport {
-          padding: 20px;
+          padding: calc(12px * var(--ui-scale));
+          padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
         }
 
-        #canvasStack {
-          --puzzle-max-height: calc(100vh - 240px);
+        body[data-orientation="portrait"] #viewport {
+          padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
         }
 
         #paletteDock {
@@ -1229,88 +1237,7 @@
       }
     </style>
   </head>
-  <body>
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      style="position: absolute; width: 0; height: 0; overflow: hidden"
-    >
-      <defs>
-        <symbol id="icon-hint" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M12 18v-5.25m0 0a6.01 6.01 0 0 0 1.5-.189m-1.5.189a6.01 6.01 0 0 1-1.5-.189m3.75 7.478a12.06 12.06 0 0 1-4.5 0m3.75 2.383a14.406 14.406 0 0 1-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 1 0-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"
-          />
-        </symbol>
-        <symbol id="icon-reset" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
-          />
-        </symbol>
-        <symbol id="icon-preview" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
-          />
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
-          />
-        </symbol>
-        <symbol id="icon-sample" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"
-          />
-        </symbol>
-        <symbol id="icon-fullscreen" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
-          />
-        </symbol>
-        <symbol id="icon-import" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
-          />
-        </symbol>
-        <symbol id="icon-saves" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z"
-          />
-        </symbol>
-        <symbol id="icon-help" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z"
-          />
-        </symbol>
-        <symbol id="icon-settings" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
-          />
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
-          />
-        </symbol>
-      </defs>
-    </svg>
+  <body data-theme="dark">
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
         <button
@@ -1321,12 +1248,7 @@
           title="Hint"
           disabled
         >
-          <span class="icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <use href="#icon-hint" />
-            </svg>
-          </span>
-          <span class="label">Hint</span>
+          <span class="icon" aria-hidden="true">?</span>
         </button>
         <button
           id="resetButton"
@@ -1336,12 +1258,7 @@
           title="Reset puzzle"
           disabled
         >
-          <span class="icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <use href="#icon-reset" />
-            </svg>
-          </span>
-          <span class="label">Reset</span>
+          <span class="icon" aria-hidden="true">↺</span>
         </button>
         <button
           id="previewToggle"
@@ -1351,12 +1268,7 @@
           title="Show preview"
           disabled
         >
-          <span class="icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <use href="#icon-preview" />
-            </svg>
-          </span>
-          <span class="label">Preview</span>
+          <span class="icon" aria-hidden="true">🖼</span>
         </button>
         <button
           id="sampleCommand"
@@ -1366,12 +1278,7 @@
           aria-label="Reload sample puzzle"
           title="Reload sample puzzle"
         >
-          <span class="icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <use href="#icon-sample" />
-            </svg>
-          </span>
-          <span class="label">Sample</span>
+          <span class="icon" aria-hidden="true">🐹</span>
         </button>
         <button
           id="fullscreenButton"
@@ -1380,12 +1287,7 @@
           aria-label="Enter fullscreen"
           title="Enter fullscreen"
         >
-          <span class="icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <use href="#icon-fullscreen" />
-            </svg>
-          </span>
-          <span class="label">Fullscreen</span>
+          <span class="icon" aria-hidden="true">⛶</span>
         </button>
         <button
           id="importButton"
@@ -1394,12 +1296,7 @@
           aria-label="Import"
           title="Import"
         >
-          <span class="icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <use href="#icon-import" />
-            </svg>
-          </span>
-          <span class="label">Import</span>
+          <span class="icon" aria-hidden="true">⬆</span>
         </button>
         <button
           id="saveManagerButton"
@@ -1409,12 +1306,7 @@
           title="Save manager"
           disabled
         >
-          <span class="icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <use href="#icon-saves" />
-            </svg>
-          </span>
-          <span class="label">Saves</span>
+          <span class="icon" aria-hidden="true">💾</span>
         </button>
         <button
           id="helpButton"
@@ -1423,12 +1315,7 @@
           aria-label="Help &amp; shortcuts"
           title="Help &amp; shortcuts"
         >
-          <span class="icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <use href="#icon-help" />
-            </svg>
-          </span>
-          <span class="label">Help</span>
+          <span class="icon" aria-hidden="true">ℹ</span>
         </button>
         <button
           id="settingsButton"
@@ -1437,31 +1324,18 @@
           aria-label="Settings"
           title="Settings"
         >
-          <span class="icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <use href="#icon-settings" />
-            </svg>
-          </span>
-          <span class="label">Settings</span>
+          <span class="icon" aria-hidden="true">⚙</span>
         </button>
       </header>
       <div id="viewport">
         <div id="canvasStage">
           <div id="canvasTransform">
-            <div id="canvasStack">
-              <canvas
-                id="originalCanvas"
-                aria-hidden="true"
-                width="640"
-                height="480"
-              ></canvas>
-              <canvas
-                id="puzzleCanvas"
-                data-testid="puzzle-canvas"
-                width="640"
-                height="480"
-              ></canvas>
-            </div>
+            <canvas
+              id="puzzleCanvas"
+              data-testid="puzzle-canvas"
+              width="640"
+              height="480"
+            ></canvas>
           </div>
         </div>
         <div id="pointerOverlay" aria-hidden="true">
@@ -1486,11 +1360,6 @@
         </div>
         <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
-            <img
-              id="sampleArtPreview"
-              class="sample-art"
-              alt="Capybara sample illustration"
-            />
             <h1>Drop an image to start</h1>
             <p>
               Drag a picture anywhere on the screen, choose a file from your device,
@@ -1524,13 +1393,12 @@
       </footer>
     </div>
     <input id="fileInput" type="file" accept=".json,image/*" hidden />
-    <div id="sheetBackdrop" class="backdrop hidden" tabindex="-1"></div>
     <div
       id="helpSheet"
       class="sheet hidden"
       role="dialog"
-      aria-modal="true"
       aria-labelledby="helpTitle"
+      aria-hidden="true"
     >
       <div class="sheet-header">
         <h2 id="helpTitle">Help &amp; shortcuts</h2>
@@ -1581,6 +1449,13 @@
             <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
           </ul>
         </section>
+        <section class="sheet-section" aria-labelledby="storageHeading">
+          <h3 id="storageHeading">Save storage</h3>
+          <p id="saveStorageSummary" class="control-note"></p>
+          <div class="log-actions">
+            <button id="deleteAllSaves" type="button">Delete all saves</button>
+          </div>
+        </section>
         <section class="sheet-section" aria-labelledby="debugHeading">
           <h3 id="debugHeading">Debug log</h3>
           <p class="control-note">
@@ -1603,8 +1478,8 @@
       id="settingsSheet"
       class="sheet hidden"
       role="dialog"
-      aria-modal="true"
       aria-labelledby="settingsTitle"
+      aria-hidden="true"
     >
       <div class="sheet-header">
         <h2 id="settingsTitle">Settings</h2>
@@ -1621,9 +1496,36 @@
             <input id="hintFlashToggle" type="checkbox" checked />
             <span>Animate hint highlights</span>
           </label>
+          <label class="toggle">
+            <input id="showRegionLabelsToggle" type="checkbox" checked />
+            <span>Show region numbers</span>
+          </label>
+        </section>
+        <section class="sheet-section" aria-labelledby="paletteHeading">
+          <h3 id="paletteHeading">Palette</h3>
+          <label class="control">
+            <span>Sort swatches</span>
+            <select id="paletteSort" data-testid="palette-sort" disabled>
+              <option value="region">Number</option>
+              <option value="remaining">Remaining regions</option>
+              <option value="name">Colour name</option>
+              <option value="hue">Hue</option>
+              <option value="brightness">Brightness</option>
+            </select>
+          </label>
+          <p class="control-note">Choose how unfinished colours appear in the dock.</p>
         </section>
         <section class="sheet-section" aria-labelledby="appearanceHeading">
           <h3 id="appearanceHeading">Appearance</h3>
+          <label class="control">
+            <span>Interface theme</span>
+            <select id="uiTheme">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="colorful">Colourful</option>
+            </select>
+          </label>
+          <p class="control-note">Switch between dark, light, or colourful chrome accents.</p>
           <label class="control">
             <span>Background colour</span>
             <input id="backgroundColor" type="color" value="#f8fafc" />
@@ -1632,14 +1534,14 @@
             Applies to unfinished regions and adjusts outline contrast automatically.
           </p>
           <label class="control">
-            <span>Interface scale <output data-for="uiScale">100%</output></span>
+            <span>Interface scale <output data-for="uiScale">90%</output></span>
             <input
               id="uiScale"
               type="range"
-              min="0.85"
+              min="0.6"
               max="1.35"
               step="0.05"
-              value="1"
+              value="0.9"
             />
           </label>
           <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
@@ -1710,8 +1612,8 @@
       id="saveSheet"
       class="sheet hidden"
       role="dialog"
-      aria-modal="true"
       aria-labelledby="saveTitle"
+      aria-hidden="true"
     >
       <div class="sheet-header">
         <h2 id="saveTitle">Save manager</h2>
@@ -1725,6 +1627,7 @@
         <script>
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
+      const commandRail = document.getElementById("commandRail");
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
       const sampleButtons = Array.from(document.querySelectorAll('[data-action="load-sample"]'));
@@ -1742,20 +1645,22 @@
       const helpButton = document.getElementById("helpButton");
       const closePreviewButton = document.getElementById("closePreview");
       const previewOverlay = document.getElementById("previewOverlay");
-      const sheetBackdrop = document.getElementById("sheetBackdrop");
       const settingsSheet = document.getElementById("settingsSheet");
       const saveSheet = document.getElementById("saveSheet");
       const helpSheet = document.getElementById("helpSheet");
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
+      const saveStorageSummary = document.getElementById("saveStorageSummary");
+      const deleteAllSavesButton = document.getElementById("deleteAllSaves");
       const viewportEl = document.getElementById("viewport");
       const canvasStage = document.getElementById("canvasStage");
       const canvasTransform = document.getElementById("canvasTransform");
-      const canvasStack = document.getElementById("canvasStack");
       const cursorOverlay = document.getElementById("pointerOverlay");
       const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
+      const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
+      const uiThemeSelect = document.getElementById("uiTheme");
       const backgroundColorInput = document.getElementById("backgroundColor");
       const uiScaleInput = document.getElementById("uiScale");
       const colorCountEl = document.getElementById("colorCount");
@@ -1778,10 +1683,8 @@
         active: "Keep colouring",
         complete: "All done!",
       };
-      const originalCanvas = document.getElementById("originalCanvas");
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.getElementById("previewCanvas");
-      const originalCtx = originalCanvas ? originalCanvas.getContext("2d") : null;
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
 
@@ -1797,17 +1700,19 @@
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
-      const CLOUD_STORAGE_KEY = "capy.cloud.backup.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
+      const DEFAULT_UI_SCALE = 0.9;
+      const DEFAULT_UI_THEME = "dark";
+      const VALID_UI_THEMES = new Set(["dark", "light", "colorful"]);
       let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
-      const cloudSync = createCloudSync();
+      const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
       let pendingAutosaveReason = null;
+      let storageSummaryUpdateToken = 0;
       let preventingBrowserZoom = false;
       const DOUBLE_TAP_GUARD_MS = 350;
-      const HINT_REVEAL_DURATION_MS = 1600;
 
       function isInteractiveElementForZoomGuard(node) {
         return (
@@ -1833,6 +1738,38 @@
           return false;
         };
 
+        const isWithinGameSurface = (node) => {
+          if (!(node instanceof Node)) return false;
+          let current = node;
+          while (current) {
+            if (isGameSurface(current)) {
+              return true;
+            }
+            if (typeof ShadowRoot !== "undefined" && current instanceof ShadowRoot) {
+              current = current.host;
+            } else {
+              current = current.parentNode || null;
+            }
+          }
+          return false;
+        };
+
+        const preventUiPinchZoom = (event) => {
+          if (!event) return;
+          const touches = event.touches;
+          if (!touches || touches.length < 2) return;
+          const path = typeof event.composedPath === "function" ? event.composedPath() : null;
+          if (Array.isArray(path) && path.some((node) => isWithinGameSurface(node))) {
+            return;
+          }
+          if (isWithinGameSurface(event.target)) {
+            return;
+          }
+          if (event.cancelable) {
+            event.preventDefault();
+          }
+        };
+
         window.addEventListener(
           "touchend",
           (event) => {
@@ -1847,6 +1784,16 @@
           },
           { passive: false }
         );
+
+        window.addEventListener("touchstart", preventUiPinchZoom, {
+          passive: false,
+          capture: true,
+        });
+
+        window.addEventListener("touchmove", preventUiPinchZoom, {
+          passive: false,
+          capture: true,
+        });
 
         ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
           window.addEventListener(
@@ -2003,21 +1950,59 @@
       const activeTouches = new Map();
       let pinchSession = null;
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
+      let lastCommandRailMetrics = { top: 0, height: 0 };
+      let commandRailMeasureFrame = null;
       let cursorHoverRegionId = null;
       let cursorLastClientX = null;
       let cursorLastClientY = null;
-      let hintRevealTimer = null;
-      let lastTouchSelection = { time: 0, regionId: null };
-      let suppressNextCanvasClick = false;
+      let lastTouchTapTime = 0;
+      let lastTouchTapRegionId = null;
+      let lastTouchSelectionTime = 0;
+      const prefersReducedMotionQuery = window.matchMedia
+        ? window.matchMedia("(prefers-reduced-motion: reduce)")
+        : null;
+
+      function syncCommandRailMetrics() {
+        if (!commandRail) {
+          return lastCommandRailMetrics;
+        }
+        const height = Math.max(0, Math.round(commandRail.offsetHeight || 0));
+        const top = Math.max(0, Math.round(commandRail.offsetTop || 0));
+        const rootStyle = document.documentElement?.style;
+        if (rootStyle) {
+          if (height > 0 && height !== lastCommandRailMetrics.height) {
+            rootStyle.setProperty("--command-rail-height", `${height}px`);
+          }
+          if (top !== lastCommandRailMetrics.top) {
+            rootStyle.setProperty("--command-rail-top", `${top}px`);
+          }
+        }
+        lastCommandRailMetrics = { top, height };
+        return lastCommandRailMetrics;
+      }
+
+      function scheduleCommandRailMetricsSync() {
+        if (!commandRail) {
+          return;
+        }
+        if (typeof window?.requestAnimationFrame !== "function") {
+          syncCommandRailMetrics();
+          return;
+        }
+        if (commandRailMeasureFrame != null) {
+          window.cancelAnimationFrame(commandRailMeasureFrame);
+        }
+        commandRailMeasureFrame = window.requestAnimationFrame(() => {
+          commandRailMeasureFrame = null;
+          syncCommandRailMetrics();
+        });
+      }
 
       // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
         puzzle: null,
         activeColor: null,
         filled: new Set(),
-        completedColors: new Set(),
-        remainingByColor: new Map(),
-        totalByColor: new Map(),
         sourceUrl: null,
         sourceTitle: null,
         lastOptions: null,
@@ -2027,17 +2012,30 @@
           autoAdvance: true,
           animateHints: true,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
-          uiScale: 1,
+          uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
+          showRegionLabels: true,
+          theme: DEFAULT_UI_THEME,
         },
         previewVisible: false,
-        saves: loadSavedEntries(),
+        saves: gameSaveManager.hydrate(),
         previewImageData: null,
         puzzleImageData: null,
       };
 
+      gameSaveManager.subscribe((entries) => {
+        state.saves = entries;
+        refreshSaveList();
+        updateStorageUsageSummary();
+      });
+
       function applyGameplaySettings(settings = {}) {
         if (!settings || typeof settings !== "object") return;
+        if (typeof settings.theme === "string") {
+          applyTheme(settings.theme, { skipLog: true, skipAutosave: true });
+        } else if (state.settings.theme) {
+          applyTheme(state.settings.theme, { skipLog: true, skipAutosave: true });
+        }
         if (typeof settings.autoAdvance === "boolean") {
           state.settings.autoAdvance = settings.autoAdvance;
           if (autoAdvanceToggle) {
@@ -2049,6 +2047,19 @@
           if (hintFlashToggle) {
             hintFlashToggle.checked = settings.animateHints;
           }
+        }
+        if (typeof settings.showRegionLabels === "boolean") {
+          applyRegionLabelVisibility(settings.showRegionLabels, {
+            skipLog: true,
+            skipAutosave: true,
+            skipRender: true,
+          });
+        } else {
+          applyRegionLabelVisibility(state.settings.showRegionLabels !== false, {
+            skipLog: true,
+            skipAutosave: true,
+            skipRender: true,
+          });
         }
         if (typeof settings.uiScale === "number") {
           applyUiScale(settings.uiScale, { skipLog: true, skipAutosave: true });
@@ -2094,8 +2105,18 @@
           setUiScale(scale) {
             applyUiScale(scale);
           },
+          setTheme(theme) {
+            applyTheme(theme);
+          },
           setArtPrompt(promptText) {
             applyArtPrompt(promptText);
+          },
+          setRegionLabelsVisible(visible) {
+            if (typeof visible === "boolean") {
+              applyRegionLabelVisibility(visible);
+            } else {
+              applyRegionLabelVisibility(state.settings.showRegionLabels === false);
+            }
           },
           isBrowserZoomSuppressed() {
             return preventingBrowserZoom;
@@ -2115,9 +2136,11 @@
       applyGameplaySettings(state.settings);
       updateOptionOutputs();
       refreshSaveList();
+      updateStorageUsageSummary();
       updateCommandStates();
       renderDebugLog();
       logDebug("Session started");
+      syncCommandRailMetrics();
       handleViewportChange({ log: true, recenter: true });
       resetView({ recenter: true });
 
@@ -2183,6 +2206,18 @@
         });
       }
 
+      if (deleteAllSavesButton) {
+        deleteAllSavesButton.addEventListener("click", () => {
+          const confirmed = window.confirm(
+            "Delete all manual saves and the current autosave? This can't be undone."
+          );
+          if (!confirmed) {
+            return;
+          }
+          clearAllSaveData();
+        });
+      }
+
       for (const button of document.querySelectorAll('[data-sheet-close]')) {
         button.addEventListener("click", (event) => {
           const target = event.currentTarget.getAttribute("data-sheet-close");
@@ -2195,8 +2230,6 @@
           }
         });
       }
-
-      sheetBackdrop.addEventListener("click", () => closeAllSheets());
 
       startHint.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -2224,6 +2257,19 @@
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
         scheduleAutosave("settings-hint-animations");
       });
+
+      if (showRegionLabelsToggle) {
+        showRegionLabelsToggle.addEventListener("change", () => {
+          applyRegionLabelVisibility(showRegionLabelsToggle.checked);
+        });
+      }
+
+      if (uiThemeSelect) {
+        uiThemeSelect.value = state.settings.theme || DEFAULT_UI_THEME;
+        uiThemeSelect.addEventListener("change", (event) => {
+          applyTheme(event.target.value);
+        });
+      }
 
       if (backgroundColorInput) {
         backgroundColorInput.addEventListener("input", (event) => {
@@ -2259,7 +2305,6 @@
       resetButton.addEventListener("click", () => {
         if (!state.puzzle) return;
         state.filled = new Set();
-        updateCompletedColors({ skipLog: true });
         initializePuzzleImage();
         renderPuzzle();
         renderPalette();
@@ -2427,6 +2472,41 @@
         }
         window.addEventListener("scroll", hideCustomCursor, { passive: true });
       }
+
+      const DOUBLE_TAP_WINDOW_MS = 320;
+
+      function getRegionAtPoint(clientX, clientY) {
+        if (!state.puzzle || !puzzleCanvas) {
+          return null;
+        }
+        if (typeof clientX !== "number" || typeof clientY !== "number") {
+          return null;
+        }
+        const rect = puzzleCanvas.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) {
+          return null;
+        }
+        const scaleX = puzzleCanvas.width / rect.width;
+        const scaleY = puzzleCanvas.height / rect.height;
+        const x = Math.floor((clientX - rect.left) * scaleX);
+        const y = Math.floor((clientY - rect.top) * scaleY);
+        if (x < 0 || y < 0 || x >= puzzleCanvas.width || y >= puzzleCanvas.height) {
+          return null;
+        }
+        const idx = y * puzzleCanvas.width + x;
+        const regionId = state.puzzle.regionMap[idx];
+        const region = state.puzzle.regions[regionId];
+        if (!region) {
+          return null;
+        }
+        return { regionId, region };
+      }
+
+      function getRegionFromEvent(event) {
+        if (!event) return null;
+        return getRegionAtPoint(event.clientX, event.clientY);
+      }
+
       setupCustomCursorPreference();
       window.addEventListener("keydown", handleKeyDown, true);
       window.addEventListener("keyup", handleKeyUp, true);
@@ -2467,10 +2547,6 @@
 
       // Puzzle fill interaction: click to paint if the region matches the active colour.
       puzzleCanvas.addEventListener("click", (event) => {
-        if (suppressNextCanvasClick) {
-          suppressNextCanvasClick = false;
-          return;
-        }
         if (!state.puzzle) {
           logDebug("Ignoring canvas click: no puzzle loaded yet");
           return;
@@ -2479,16 +2555,12 @@
           logDebug("Ignoring canvas click: no active colour selected");
           return;
         }
-        const resolved = getRegionAtCanvasPoint(event.clientX, event.clientY);
-        if (!resolved) {
+        const hit = getRegionFromEvent(event);
+        if (!hit) {
           logDebug("Ignoring canvas click: no region mapped under pointer");
           return;
         }
-        const { region, regionId } = resolved;
-        if (!region) {
-          logDebug("Ignoring canvas click: no region mapped under pointer");
-          return;
-        }
+        const { region, regionId } = hit;
         if (state.filled.has(regionId)) {
           logDebug(`Region ${region.id} already filled; ignoring click`);
           return;
@@ -2507,7 +2579,6 @@
         }
         state.filled.add(regionId);
         applyRegionToImage(regionId);
-        updateCompletedColors();
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
@@ -2524,63 +2595,69 @@
         refreshCustomCursorHighlight();
       });
 
-      puzzleCanvas.addEventListener("contextmenu", (event) => {
-        if (!state.puzzle) return;
-        const resolved = getRegionAtCanvasPoint(event.clientX, event.clientY);
-        if (!resolved) return;
+      puzzleCanvas.addEventListener("dblclick", (event) => {
+        if (!state.puzzle) {
+          logDebug("Ignoring canvas double click: no puzzle loaded yet");
+          return;
+        }
+        if (state.previewVisible) {
+          logDebug("Ignoring canvas double click: preview mode active");
+          return;
+        }
+        const now = Date.now();
+        if (now - lastTouchSelectionTime <= 120) {
+          event.preventDefault();
+          return;
+        }
+        const hit = getRegionFromEvent(event);
+        if (!hit) {
+          logDebug("Ignoring canvas double click: no region mapped under pointer");
+          return;
+        }
         event.preventDefault();
-        selectRegionColor(resolved.region);
+        lastTouchSelectionTime = now;
+        activateColor(hit.region.colorId);
       });
 
-      puzzleCanvas.addEventListener("pointerdown", (event) => {
-        if (!state.puzzle) return;
-        if (event.pointerType === "touch" || event.pointerType === "pen") {
-          const resolved = getRegionAtCanvasPoint(event.clientX, event.clientY);
-          if (!resolved) {
-            lastTouchSelection = { time: 0, regionId: null };
+      puzzleCanvas.addEventListener(
+        "pointerup",
+        (event) => {
+          if (event.pointerType !== "touch") return;
+          if (!event.isPrimary) return;
+          if (!state.puzzle) return;
+          if (state.previewVisible) return;
+          if (isPanning) return;
+          if (pinchSession) return;
+          const hit = getRegionFromEvent(event);
+          if (!hit) {
+            lastTouchTapRegionId = null;
             return;
           }
           const now = Date.now();
-          if (
-            lastTouchSelection.regionId === resolved.region.id &&
-            now - lastTouchSelection.time <= DOUBLE_TAP_GUARD_MS
-          ) {
-            suppressNextCanvasClick = true;
-            selectRegionColor(resolved.region);
-            lastTouchSelection = { time: 0, regionId: null };
+          if (lastTouchTapRegionId === hit.regionId && now - lastTouchTapTime <= DOUBLE_TAP_WINDOW_MS) {
+            event.preventDefault();
+            lastTouchTapTime = 0;
+            lastTouchTapRegionId = null;
+            lastTouchSelectionTime = now;
+            activateColor(hit.region.colorId);
             return;
           }
-          lastTouchSelection = { time: now, regionId: resolved.region.id };
-        } else {
-          lastTouchSelection = { time: 0, regionId: null };
-        }
-      });
+          lastTouchTapTime = now;
+          lastTouchTapRegionId = hit.regionId;
+        },
+        { passive: false }
+      );
 
       function openSheet(sheet) {
+        if (!sheet) return;
         sheet.classList.remove("hidden");
-        sheetBackdrop.classList.remove("hidden");
-        document.body.classList.add("sheet-open");
+        sheet.setAttribute("aria-hidden", "false");
       }
 
       function closeSheet(sheet) {
+        if (!sheet) return;
         sheet.classList.add("hidden");
-        const sheets = [settingsSheet, saveSheet, helpSheet];
-        const anyOpen = sheets.some((panel) => panel && !panel.classList.contains("hidden"));
-        if (!anyOpen) {
-          sheetBackdrop.classList.add("hidden");
-          document.body.classList.remove("sheet-open");
-        }
-      }
-
-      function closeAllSheets() {
-        const sheets = [settingsSheet, saveSheet, helpSheet];
-        for (const panel of sheets) {
-          if (panel) {
-            panel.classList.add("hidden");
-          }
-        }
-        sheetBackdrop.classList.add("hidden");
-        document.body.classList.remove("sheet-open");
+        sheet.setAttribute("aria-hidden", "true");
       }
 
       function updatePreviewState() {
@@ -2642,7 +2719,9 @@
       function syncComputedUiScale() {
         const root = document.documentElement;
         const userValue =
-          typeof state?.settings?.uiScale === "number" ? state.settings.uiScale : 1;
+          typeof state?.settings?.uiScale === "number"
+            ? state.settings.uiScale
+            : DEFAULT_UI_SCALE;
         if (!root) {
           return userValue;
         }
@@ -2682,7 +2761,7 @@
         const minSide = Math.max(1, Math.min(visualWidth, visualHeight));
         const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
         document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
-        const autoScale = clamp(minSide / 880, 0.8, 1.1);
+        const autoScale = clamp(minSide / 880, 0.7, 1.1);
         document.documentElement.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
         if (document.body) {
           document.body.dataset.orientation = orientation;
@@ -2690,6 +2769,7 @@
           document.body.classList.toggle("compact-commands", compact);
         }
         syncComputedUiScale();
+        scheduleCommandRailMetricsSync();
         const changed = orientation !== lastViewportMetrics.orientation;
         const sizeChanged =
           visualWidth !== lastViewportMetrics.width || visualHeight !== lastViewportMetrics.height;
@@ -2880,12 +2960,21 @@
       function applyUiScale(scale, options = {}) {
         const { skipLog = false, skipAutosave = false, force = false } = options;
         const numeric = Number(scale);
-        const resolved = clamp(Number.isFinite(numeric) ? numeric : state.settings.uiScale || 1, 0.8, 1.35);
-        const current = state.settings.uiScale ?? 1;
+        const fallbackScale =
+          Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
+            ? state.settings.uiScale
+            : DEFAULT_UI_SCALE;
+        const resolved = clamp(
+          Number.isFinite(numeric) && numeric > 0 ? numeric : fallbackScale,
+          0.6,
+          1.35
+        );
+        const current = fallbackScale;
         const changed = force || Math.abs(resolved - current) > 0.001;
         state.settings.uiScale = resolved;
         document.documentElement.style.setProperty("--ui-scale-user", String(resolved));
         syncComputedUiScale();
+        scheduleCommandRailMetricsSync();
         if (uiScaleInput && Math.abs(Number(uiScaleInput.value) - resolved) > 0.001) {
           uiScaleInput.value = String(resolved);
         }
@@ -2917,6 +3006,58 @@
           }
         }
         return normalized;
+      }
+
+      function applyRegionLabelVisibility(visible, options = {}) {
+        const {
+          skipLog = false,
+          skipAutosave = false,
+          forceRender = false,
+          skipRender = false,
+        } = options;
+        const resolved = visible === false ? false : true;
+        const previous = state.settings.showRegionLabels !== false;
+        state.settings.showRegionLabels = resolved;
+        if (showRegionLabelsToggle && showRegionLabelsToggle.checked !== resolved) {
+          showRegionLabelsToggle.checked = resolved;
+        }
+        if (!skipRender && (forceRender || previous !== resolved)) {
+          renderPuzzle();
+        }
+        if (previous !== resolved) {
+          if (!skipLog) {
+            logDebug(`Region numbers ${resolved ? "shown" : "hidden"}`);
+          }
+          if (!skipAutosave) {
+            scheduleAutosave("settings-region-labels");
+          }
+        }
+        return resolved;
+      }
+
+      function applyTheme(theme, options = {}) {
+        const { skipLog = false, skipAutosave = false, force = false } = options;
+        const requested = typeof theme === "string" ? theme.trim().toLowerCase() : "";
+        const current = state.settings.theme || DEFAULT_UI_THEME;
+        const resolved = VALID_UI_THEMES.has(requested) ? requested : current || DEFAULT_UI_THEME;
+        const changed = force || resolved !== current;
+        state.settings.theme = resolved;
+        if (typeof document !== "undefined" && document.body) {
+          document.body.setAttribute("data-theme", resolved);
+        }
+        if (uiThemeSelect && uiThemeSelect.value !== resolved) {
+          uiThemeSelect.value = resolved;
+        }
+        if (changed && !skipLog) {
+          const label = resolved === "colorful"
+            ? "Colourful"
+            : resolved.charAt(0).toUpperCase() + resolved.slice(1);
+          logDebug(`Interface theme set to ${label}`);
+        }
+        if (changed && !skipAutosave) {
+          scheduleAutosave("settings-theme");
+        }
+        return resolved;
       }
 
       function applyBackgroundColor(hex, options = {}) {
@@ -2962,7 +3103,11 @@
         if (optionOutputs.smoothing) optionOutputs.smoothing.textContent = String(smoothingEl.value);
         if (optionOutputs.uiScale) {
           const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
-          const value = Number.isFinite(source) ? source : state.settings.uiScale || 1;
+          const value = Number.isFinite(source) && source > 0
+            ? source
+            : (Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
+                ? state.settings.uiScale
+                : DEFAULT_UI_SCALE);
           optionOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
         }
       }
@@ -3048,11 +3193,6 @@
             state.sourceTitle = file.name || "Imported image";
             startHint.classList.add("hidden");
             logDebug(`Generating puzzle from image: ${state.sourceTitle}`);
-            try {
-              localStorage.setItem(LAST_IMAGE_STORAGE_KEY, result);
-            } catch (error) {
-              console.warn("Unable to store uploaded image in local storage", error);
-            }
             loadImage(result);
           } else {
             console.error("Unsupported file format");
@@ -3109,9 +3249,6 @@
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
-        state.completedColors = new Set();
-        state.remainingByColor = new Map();
-        state.totalByColor = new Map();
         state.sourceUrl = null;
         state.sourceTitle = null;
         if (paletteEl) {
@@ -3119,27 +3256,17 @@
         }
         if (paletteSortEl) {
           paletteSortEl.disabled = true;
+          const target = state.paletteSort || "region";
+          if (paletteSortEl.value !== target) {
+            paletteSortEl.value = target;
+          }
         }
         setProgressMessage("loading");
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-        if (originalCtx && originalCanvas) {
-          originalCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
-        }
-        if (canvasStack) {
-          canvasStack.style.removeProperty("--puzzle-width");
-          canvasStack.style.removeProperty("--puzzle-height");
-        }
         state.previewImageData = null;
         state.puzzleImageData = null;
         state.previewVisible = false;
-        if (hintRevealTimer) {
-          clearTimeout(hintRevealTimer);
-          hintRevealTimer = null;
-        }
-        if (viewportEl) {
-          viewportEl.classList.remove("reveal-original");
-        }
         updatePreviewState();
         updateCommandStates();
         activeTouches.clear();
@@ -3319,11 +3446,6 @@
           regionMap,
         };
         state.puzzle.backgroundColor = backgroundHex;
-        const totalByColor = new Map();
-        for (const region of regions) {
-          totalByColor.set(region.colorId, (totalByColor.get(region.colorId) || 0) + 1);
-        }
-        state.totalByColor = totalByColor;
         state.activeColor =
           requestedColor != null && paletteIds.has(requestedColor)
             ? requestedColor
@@ -3337,19 +3459,10 @@
         applyBackgroundColor(backgroundHex, { skipRender: true, skipLog: true });
         puzzleCanvas.width = data.width;
         puzzleCanvas.height = data.height;
-        if (originalCanvas) {
-          originalCanvas.width = data.width;
-          originalCanvas.height = data.height;
-        }
         previewCanvas.width = data.width;
         previewCanvas.height = data.height;
-        if (canvasStack) {
-          canvasStack.style.setProperty("--puzzle-width", `${data.width}px`);
-          canvasStack.style.setProperty("--puzzle-height", `${data.height}px`);
-        }
         renderPreview();
         initializePuzzleImage();
-        updateCompletedColors({ skipLog: true });
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
@@ -3421,9 +3534,6 @@
         }
         previewCtx.putImageData(imageData, 0, 0);
         state.previewImageData = imageData;
-        if (originalCtx) {
-          originalCtx.putImageData(imageData, 0, 0);
-        }
       }
 
       function initializePuzzleImage() {
@@ -3432,10 +3542,10 @@
         const imageData = new ImageData(width, height);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
-          data[i] = 0;
-          data[i + 1] = 0;
-          data[i + 2] = 0;
-          data[i + 3] = 0;
+          data[i] = backgroundPixel[0];
+          data[i + 1] = backgroundPixel[1];
+          data[i + 2] = backgroundPixel[2];
+          data[i + 3] = backgroundPixel[3];
         }
         state.puzzleImageData = imageData;
         if (state.filled.size > 0) {
@@ -3487,6 +3597,7 @@
 
       function drawNumbers() {
         if (!state.puzzle) return;
+        if (state.settings.showRegionLabels === false) return;
         puzzleCtx.save();
         const fallbackNumberInk = backgroundInk.number;
         const fallbackOutlineInk = backgroundInk.outline;
@@ -3513,63 +3624,6 @@
           puzzleCtx.fillText(layout.text, layout.x, layout.y);
         }
         puzzleCtx.restore();
-      }
-
-      function updateCompletedColors(options = {}) {
-        const { skipLog = false } = options;
-        if (!state.puzzle) {
-          state.completedColors = new Set();
-          state.remainingByColor = new Map();
-          return { completed: state.completedColors, activeChanged: false };
-        }
-        const previousCompleted = state.completedColors || new Set();
-        const remainingByColor = new Map();
-        for (const region of state.puzzle.regions) {
-          if (!state.filled.has(region.id)) {
-            remainingByColor.set(region.colorId, (remainingByColor.get(region.colorId) || 0) + 1);
-          }
-        }
-        state.remainingByColor = remainingByColor;
-        const completed = new Set();
-        for (const color of state.puzzle.palette) {
-          if ((remainingByColor.get(color.id) || 0) === 0) {
-            completed.add(color.id);
-            if (!skipLog && !previousCompleted.has(color.id)) {
-              logDebug(`Colour #${color.id} complete`);
-            }
-          }
-        }
-        state.completedColors = completed;
-        let activeChanged = false;
-        if (state.activeColor != null && completed.has(state.activeColor)) {
-          const nextColour = state.puzzle.palette.find((entry) => !completed.has(entry.id));
-          const previousActive = state.activeColor;
-          state.activeColor = nextColour ? nextColour.id : null;
-          activeChanged = state.activeColor !== previousActive;
-        }
-        return { completed, activeChanged };
-      }
-
-      function getRegionAtCanvasPoint(clientX, clientY) {
-        if (!state.puzzle || !puzzleCanvas) return null;
-        const rect = puzzleCanvas.getBoundingClientRect();
-        if (!rect || rect.width === 0 || rect.height === 0) return null;
-        const scaleX = puzzleCanvas.width / rect.width;
-        const scaleY = puzzleCanvas.height / rect.height;
-        const x = Math.floor((clientX - rect.left) * scaleX);
-        const y = Math.floor((clientY - rect.top) * scaleY);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-        if (x < 0 || y < 0 || x >= puzzleCanvas.width || y >= puzzleCanvas.height) return null;
-        const idx = y * puzzleCanvas.width + x;
-        const regionId = state.puzzle.regionMap[idx];
-        const region = state.puzzle.regions[regionId];
-        if (!region) return null;
-        return { region, regionId };
-      }
-
-      function selectRegionColor(region) {
-        if (!region) return false;
-        return activateColor(region.colorId);
       }
 
       function getRegionLabelLayout(region) {
@@ -3880,41 +3934,38 @@
 
       function drawOutlines() {
         if (!state.puzzle) return;
-        const { width, height, regionMap, regions } = state.puzzle;
-        const completedColours = state.completedColors || new Set();
+        const { width, height, regionMap } = state.puzzle;
         puzzleCtx.fillStyle = backgroundInk.outline;
         for (let y = 0; y < height; y++) {
           for (let x = 0; x < width; x++) {
             const idx = y * width + x;
             const id = regionMap[idx];
-            if (id == null || id < 0) continue;
-            const region = regions[id];
-            if (!region) continue;
-            const currentComplete = completedColours.has(region.colorId);
-            if (currentComplete) {
-              continue;
-            }
             const left = x > 0 ? regionMap[idx - 1] : id;
             const right = x < width - 1 ? regionMap[idx + 1] : id;
             const up = y > 0 ? regionMap[idx - width] : id;
             const down = y < height - 1 ? regionMap[idx + width] : id;
-            const neighbours = [left, right, up, down];
-            let shouldDraw = false;
-            for (const neighbourId of neighbours) {
-              if (neighbourId === id) continue;
-              const neighbourRegion = neighbourId != null && neighbourId >= 0 ? regions[neighbourId] : null;
-              const neighbourComplete = neighbourRegion
-                ? completedColours.has(neighbourRegion.colorId)
-                : false;
-              if (!neighbourComplete) {
-                shouldDraw = true;
-                break;
-              }
-            }
-            if (shouldDraw) {
+            if (left !== id || right !== id || up !== id || down !== id) {
               puzzleCtx.fillRect(x, y, 1, 1);
             }
           }
+        }
+      }
+
+      function scrollPaletteToColor(colorId) {
+        if (!paletteEl) return;
+        if (colorId == null) return;
+        const swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
+        if (!swatch) return;
+        const scrollBehavior =
+          prefersReducedMotionQuery && prefersReducedMotionQuery.matches ? "auto" : "smooth";
+        try {
+          swatch.scrollIntoView({
+            block: "nearest",
+            inline: "nearest",
+            behavior: scrollBehavior,
+          });
+        } catch (error) {
+          swatch.scrollIntoView();
         }
       }
 
@@ -3922,9 +3973,6 @@
         if (!state.puzzle) return false;
         if (colorId == null) return false;
         const { flash = true, redraw = true } = options;
-        if (state.completedColors && state.completedColors.has(colorId)) {
-          return false;
-        }
         const hasColour = state.puzzle.palette.some((entry) => entry.id === colorId);
         if (!hasColour) return false;
         const changed = state.activeColor !== colorId;
@@ -3932,10 +3980,11 @@
         if (redraw) {
           renderPalette();
         }
+        scrollPaletteToColor(colorId);
         if (flash) {
           flashColorRegions(colorId);
         }
-        const remaining = state.remainingByColor?.get(colorId) || 0;
+        const remaining = getRegionsByColor(colorId, { includeFilled: false }).length;
         const suffix = remaining > 0 ? `${remaining} regions remaining` : "complete";
         if (changed) {
           scheduleAutosave("color-select");
@@ -3951,19 +4000,46 @@
         if (!state.puzzle) {
           if (paletteSortEl) {
             paletteSortEl.disabled = true;
+            const target = state.paletteSort || "region";
+            if (paletteSortEl.value !== target) {
+              paletteSortEl.value = target;
+            }
           }
           return;
         }
-        if (paletteSortEl) {
-          paletteSortEl.disabled = paletteEntries.length === 0;
+        const totalByColor = new Map();
+        const remainingByColor = new Map();
+        for (const region of state.puzzle.regions) {
+          const total = totalByColor.get(region.colorId) || 0;
+          totalByColor.set(region.colorId, total + 1);
+          if (!state.filled.has(region.id)) {
+            const remaining = remainingByColor.get(region.colorId) || 0;
+            remainingByColor.set(region.colorId, remaining + 1);
+          }
         }
-        const totalByColor = state.totalByColor || new Map();
-        const remainingByColor = state.remainingByColor || new Map();
-        const paletteEntries = state.puzzle.palette.filter(
-          (entry) => (remainingByColor.get(entry.id) || 0) > 0
-        );
-        const sortMode = state.paletteSort || "region";
+        const paletteEntries = state.puzzle.palette
+          .filter((color) => (remainingByColor.get(color.id) || 0) > 0)
+          .slice();
+        if (paletteEntries.length === 0) {
+          if (paletteSortEl) {
+            paletteSortEl.disabled = true;
+          }
+          return;
+        }
+        const allowedSortModes = new Set(["region", "remaining", "hue", "name", "brightness"]);
+        const sortMode = allowedSortModes.has(state.paletteSort) ? state.paletteSort : "region";
+        if (!allowedSortModes.has(state.paletteSort)) {
+          state.paletteSort = sortMode;
+        }
+        if (paletteSortEl) {
+          paletteSortEl.disabled = false;
+          if (paletteSortEl.value !== sortMode) {
+            paletteSortEl.value = sortMode;
+          }
+        }
         const hueCache = new Map();
+        const luminanceCache = new Map();
+        const nameCache = new Map();
         const getHue = (color) => {
           if (!color) return 0;
           if (hueCache.has(color.id)) {
@@ -3972,6 +4048,29 @@
           const value = hueFromHex(color.hex);
           hueCache.set(color.id, value);
           return value;
+        };
+        const getLuminance = (color) => {
+          if (!color) return 0;
+          if (luminanceCache.has(color.id)) {
+            return luminanceCache.get(color.id);
+          }
+          const value = relativeLuminance(hexToRgb(color.hex));
+          luminanceCache.set(color.id, value);
+          return value;
+        };
+        const getNameData = (color) => {
+          if (!color) {
+            return { text: "", sortKey: "" };
+          }
+          if (nameCache.has(color.id)) {
+            return nameCache.get(color.id);
+          }
+          const text =
+            (typeof color.name === "string" && color.name.trim()) ||
+            (typeof color.hex === "string" ? color.hex.toUpperCase() : `Colour ${color.id}`);
+          const entry = { text, sortKey: text.toLocaleLowerCase() };
+          nameCache.set(color.id, entry);
+          return entry;
         };
         paletteEntries.sort((a, b) => {
           if (sortMode === "hue") {
@@ -3993,38 +4092,76 @@
             }
             return a.id - b.id;
           }
+          if (sortMode === "name") {
+            const aName = getNameData(a);
+            const bName = getNameData(b);
+            const nameDelta = aName.sortKey.localeCompare(bName.sortKey, undefined, {
+              sensitivity: "base",
+              numeric: true,
+            });
+            if (nameDelta !== 0) {
+              return nameDelta;
+            }
+            return a.id - b.id;
+          }
+          if (sortMode === "brightness") {
+            const luminanceDelta = getLuminance(b) - getLuminance(a);
+            if (Math.abs(luminanceDelta) > 0.0001) {
+              return luminanceDelta;
+            }
+            const hueDelta = getHue(a) - getHue(b);
+            if (Math.abs(hueDelta) > 0.0001) {
+              return hueDelta;
+            }
+            return a.id - b.id;
+          }
           return a.id - b.id;
         });
 
         for (const color of paletteEntries) {
           const remaining = remainingByColor.get(color.id) || 0;
+          if (remaining <= 0) {
+            continue;
+          }
           const total = totalByColor.get(color.id) || 0;
-          const labelText =
-            (typeof color.name === "string" && color.name.trim()) ||
-            (typeof color.hex === "string" ? color.hex.toUpperCase() : `Colour ${color.id}`);
+          const { text: labelText } = getNameData(color);
+          const regionWord = remaining === 1 ? "region" : "regions";
+          const totalWord = total === 1 ? "region" : "regions";
+          const tooltipText = `${remaining} ${regionWord} left`;
+          const ariaSummary = `${remaining} of ${total} ${totalWord} remaining.`;
           const swatch = document.createElement("button");
           swatch.type = "button";
           swatch.className = "swatch";
           swatch.dataset.testid = "palette-swatch";
           swatch.dataset.colorId = String(color.id);
+          swatch.dataset.remaining = String(remaining);
+          swatch.dataset.total = String(total);
+          swatch.dataset.name = labelText;
           swatch.setAttribute("role", "listitem");
           swatch.setAttribute(
             "aria-label",
-            `Colour ${color.id}: ${labelText}. ${remaining} of ${total} regions remaining.`
+            `Colour ${color.id}: ${labelText}. ${ariaSummary}`
           );
-          swatch.title = `${labelText} · ${remaining} of ${total} remaining`;
+          swatch.title = `${labelText} · ${tooltipText} (${total} total)`;
           if (state.activeColor === color.id) swatch.classList.add("active");
-          if (remaining === 0) swatch.classList.add("done");
           swatch.style.setProperty("--swatch-color", color.hex || "transparent");
           const labelStyles = computeSwatchLabelStyles(color.hex);
           swatch.style.setProperty("--swatch-label-color", labelStyles.color);
           swatch.style.setProperty("--swatch-outline", labelStyles.outline);
           swatch.style.setProperty("--swatch-label-shadow", labelStyles.shadow);
-          swatch.innerHTML = `
-            <span class="label">
-              <strong>${color.id}</strong>
-            </span>
-          `;
+          const label = document.createElement("span");
+          label.className = "label";
+          const number = document.createElement("strong");
+          number.textContent = String(color.id);
+          label.appendChild(number);
+          swatch.appendChild(label);
+          const tooltipId = `swatchTooltip-${color.id}`;
+          const tooltip = document.createElement("span");
+          tooltip.id = tooltipId;
+          tooltip.className = "swatch-tooltip";
+          tooltip.textContent = tooltipText;
+          swatch.appendChild(tooltip);
+          swatch.setAttribute("aria-describedby", tooltipId);
           swatch.addEventListener("click", () => {
             activateColor(color.id);
           });
@@ -4069,6 +4206,10 @@
           setProgressMessage("idle");
           if (paletteSortEl) {
             paletteSortEl.disabled = true;
+            const target = state.paletteSort || "region";
+            if (paletteSortEl.value !== target) {
+              paletteSortEl.value = target;
+            }
           }
           return;
         }
@@ -4088,7 +4229,7 @@
       }
 
       function applyPaletteSort(sort, { skipLog } = {}) {
-        const allowed = new Set(["region", "hue", "remaining"]);
+        const allowed = new Set(["region", "hue", "remaining", "name", "brightness"]);
         const next = allowed.has(sort) ? sort : "region";
         if (state.paletteSort === next) {
           if (paletteSortEl && paletteSortEl.value !== next) {
@@ -4107,6 +4248,10 @@
               ? "colour hue"
               : next === "remaining"
               ? "remaining regions"
+              : next === "name"
+              ? "colour name"
+              : next === "brightness"
+              ? "brightness (light to dark)"
               : "region number";
           logDebug(`Palette sorted by ${label}`);
         }
@@ -4615,24 +4760,6 @@
         return true;
       }
 
-      function revealOriginalArtwork(duration = HINT_REVEAL_DURATION_MS) {
-        if (!viewportEl) return 0;
-        const ms =
-          typeof duration === "number" && Number.isFinite(duration) && duration > 0
-            ? duration
-            : HINT_REVEAL_DURATION_MS;
-        if (hintRevealTimer) {
-          clearTimeout(hintRevealTimer);
-          hintRevealTimer = null;
-        }
-        viewportEl.classList.add("reveal-original");
-        hintRevealTimer = window.setTimeout(() => {
-          viewportEl.classList.remove("reveal-original");
-          hintRevealTimer = null;
-        }, ms);
-        return ms;
-      }
-
       function useHint() {
         if (!state.puzzle) return;
         const candidates = state.puzzle.regions.filter((region) => !state.filled.has(region.id));
@@ -4647,15 +4774,8 @@
           target = candidates.sort((a, b) => a.pixelCount - b.pixelCount)[0];
           activateColor(target.colorId, { flash: false });
         }
-        const revealDuration = revealOriginalArtwork(HINT_REVEAL_DURATION_MS);
         if (state.settings.animateHints) {
-          const delay = Math.max(0, (revealDuration || 0) + 50);
-          const regionId = target.id;
-          window.setTimeout(() => {
-            if (!state.filled.has(regionId)) {
-              flashRegion(regionId, "rgba(59, 130, 246, 0.45)");
-            }
-          }, delay);
+          flashRegion(target.id, "rgba(59, 130, 246, 0.45)");
         }
         logDebug(`Hint spotlighted region ${target.id} (colour #${target.colorId})`);
       }
@@ -4663,7 +4783,6 @@
       function flashColorRegions(colorId, options = {}) {
         if (!state.puzzle) return;
         if (colorId == null) return;
-        if (state.completedColors && state.completedColors.has(colorId)) return;
         const paletteColor = getPaletteEntry(colorId);
         const duration =
           typeof options.duration === "number" && Number.isFinite(options.duration)
@@ -4708,10 +4827,10 @@
 
       function autoAdvanceColor(currentColorId) {
         if (!state.puzzle) return;
-        const remainingForColor = state.remainingByColor?.get(currentColorId) || 0;
-        if (remainingForColor > 0) return;
-        const nextColour = state.puzzle.palette.find(
-          (color) => (state.remainingByColor?.get(color.id) || 0) > 0
+        const remainingForColor = getRegionsByColor(currentColorId, { includeFilled: false });
+        if (remainingForColor.length > 0) return;
+        const nextColour = state.puzzle.palette.find((color) =>
+          getRegionsByColor(color.id, { includeFilled: false }).length > 0
         );
         if (nextColour) {
           activateColor(nextColour.id);
@@ -4773,27 +4892,222 @@
         }, 480);
       }
 
+      function compactPuzzleSnapshot(snapshot) {
+        if (!snapshot || typeof snapshot !== "object") return null;
+        const width = Number(snapshot.width);
+        const height = Number(snapshot.height);
+        if (!Number.isFinite(width) || !Number.isFinite(height)) {
+          return null;
+        }
+        const payload = {
+          format:
+            typeof snapshot.format === "string" && snapshot.format
+              ? snapshot.format
+              : "capy-puzzle@2",
+          width,
+          height,
+        };
+        if (typeof snapshot.title === "string" && snapshot.title.trim()) {
+          payload.title = snapshot.title.trim();
+        }
+        const paletteSource = Array.isArray(snapshot.palette)
+          ? snapshot.palette
+          : Array.isArray(snapshot.colors)
+          ? snapshot.colors
+          : [];
+        payload.palette = paletteSource.map((entry, index) => {
+          const id =
+            entry && typeof entry.id === "number" && Number.isFinite(entry.id)
+              ? entry.id
+              : index + 1;
+          const paletteEntry = { id };
+          const hex = entry && typeof entry.hex === "string" && entry.hex ? entry.hex : null;
+          if (hex) {
+            paletteEntry.hex = hex;
+          }
+          if (entry && Array.isArray(entry.rgba)) {
+            paletteEntry.rgba = entry.rgba.slice(0, 3).map((value) => Number(value) || 0);
+          }
+          const label =
+            entry && typeof entry.name === "string" && entry.name.trim()
+              ? entry.name.trim()
+              : entry && typeof entry.label === "string" && entry.label.trim()
+              ? entry.label.trim()
+              : entry && typeof entry.title === "string" && entry.title.trim()
+              ? entry.title.trim()
+              : null;
+          if (label) {
+            paletteEntry.name = label;
+          }
+          return paletteEntry;
+        });
+        const regionSource = Array.isArray(snapshot.regions) ? snapshot.regions : [];
+        payload.regions = regionSource.map((region, index) => {
+          const resolvedId =
+            region && typeof region.id === "number" && Number.isFinite(region.id)
+              ? region.id
+              : index;
+          let pixelCount =
+            region && typeof region.pixelCount === "number" && Number.isFinite(region.pixelCount)
+              ? region.pixelCount
+              : 0;
+          if (pixelCount === 0 && Array.isArray(region?.pixels)) {
+            pixelCount = region.pixels.length;
+          }
+          const entry = {
+            id: resolvedId,
+            colorId:
+              region && typeof region.colorId === "number" && Number.isFinite(region.colorId)
+                ? region.colorId
+                : 1,
+            pixelCount,
+          };
+          if (region && typeof region.cx === "number" && Number.isFinite(region.cx)) {
+            entry.cx = Math.round(region.cx * 1000) / 1000;
+          }
+          if (region && typeof region.cy === "number" && Number.isFinite(region.cy)) {
+            entry.cy = Math.round(region.cy * 1000) / 1000;
+          }
+          return entry;
+        });
+        let packed = null;
+        if (typeof snapshot.regionMapPacked === "string" && snapshot.regionMapPacked) {
+          packed = snapshot.regionMapPacked;
+        } else {
+          packed = packRegionMap(snapshot.regionMap);
+        }
+        if (packed) {
+          payload.regionMapPacked = packed;
+        }
+        if (snapshot.filled instanceof Set) {
+          payload.filled = Array.from(snapshot.filled);
+        } else if (Array.isArray(snapshot.filled)) {
+          payload.filled = snapshot.filled.slice();
+        } else if (
+          snapshot.filled &&
+          typeof snapshot.filled.length === "number" &&
+          typeof snapshot.filled !== "string"
+        ) {
+          payload.filled = Array.from(snapshot.filled);
+        } else {
+          payload.filled = [];
+        }
+        if (snapshot.options && typeof snapshot.options === "object") {
+          payload.options = { ...snapshot.options };
+        }
+        if (typeof snapshot.sourceUrl === "string" && snapshot.sourceUrl) {
+          payload.sourceUrl = snapshot.sourceUrl;
+        }
+        if (typeof snapshot.activeColor === "number" && Number.isFinite(snapshot.activeColor)) {
+          payload.activeColor = snapshot.activeColor;
+        }
+        if (typeof snapshot.backgroundColor === "string" && snapshot.backgroundColor) {
+          payload.backgroundColor = snapshot.backgroundColor;
+        }
+        if (snapshot.viewport && typeof snapshot.viewport === "object") {
+          const { panX, panY, zoom, baseScale } = snapshot.viewport;
+          payload.viewport = {
+            panX: Number.isFinite(panX) ? panX : 0,
+            panY: Number.isFinite(panY) ? panY : 0,
+            zoom: Number.isFinite(zoom) ? zoom : 1,
+            baseScale: Number.isFinite(baseScale) ? baseScale : 1,
+          };
+        }
+        const settingsSource =
+          snapshot.settings && typeof snapshot.settings === "object" ? snapshot.settings : {};
+        payload.settings = {
+          autoAdvance: Boolean(settingsSource.autoAdvance),
+          animateHints: Boolean(settingsSource.animateHints),
+          uiScale:
+            Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
+              ? clamp(settingsSource.uiScale, 0.6, 1.35)
+              : DEFAULT_UI_SCALE,
+          artPrompt:
+            typeof settingsSource.artPrompt === "string" ? settingsSource.artPrompt : "",
+        };
+        return payload;
+      }
+
+      function normalizeAutosaveRecord(record) {
+        if (!record || typeof record !== "object") return null;
+        const data = compactPuzzleSnapshot(record.data);
+        if (!data) return null;
+        const normalized = {
+          version:
+            typeof record.version === "number" && Number.isFinite(record.version)
+              ? record.version
+              : 1,
+          timestamp:
+            typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
+              ? record.timestamp
+              : Date.now(),
+          reason:
+            typeof record.reason === "string" && record.reason ? record.reason : "update",
+          data,
+        };
+        if (typeof record.title === "string" && record.title.trim()) {
+          normalized.title = record.title.trim();
+        } else if (typeof data.title === "string" && data.title) {
+          normalized.title = data.title;
+        }
+        return normalized;
+      }
+
       function serializeCurrentPuzzle() {
         if (!state.puzzle) return {};
-        const regionMapPacked = packRegionMap(state.puzzle.regionMap);
-        const payload = {
+        const { puzzle } = state;
+        const regionMapPacked = packRegionMap(puzzle.regionMap);
+        const palette = puzzle.palette.map((entry, index) => {
+          const resolved = {
+            id:
+              typeof entry.id === "number" && Number.isFinite(entry.id)
+                ? entry.id
+                : index + 1,
+          };
+          if (typeof entry.hex === "string" && entry.hex) {
+            resolved.hex = entry.hex;
+          }
+          if (Array.isArray(entry.rgba)) {
+            resolved.rgba = entry.rgba.slice(0, 3);
+          }
+          if (typeof entry.name === "string" && entry.name.trim()) {
+            resolved.name = entry.name.trim();
+          }
+          return resolved;
+        });
+        const regions = puzzle.regions.map((region, index) => {
+          const resolvedId =
+            typeof region.id === "number" && Number.isFinite(region.id)
+              ? region.id
+              : index;
+          const payload = {
+            id: resolvedId,
+            colorId:
+              typeof region.colorId === "number" && Number.isFinite(region.colorId)
+                ? region.colorId
+                : 1,
+            pixelCount:
+              typeof region.pixelCount === "number" && Number.isFinite(region.pixelCount)
+                ? region.pixelCount
+                : Array.isArray(region.pixels)
+                ? region.pixels.length
+                : 0,
+          };
+          if (typeof region.cx === "number" && Number.isFinite(region.cx)) {
+            payload.cx = Math.round(region.cx * 1000) / 1000;
+          }
+          if (typeof region.cy === "number" && Number.isFinite(region.cy)) {
+            payload.cy = Math.round(region.cy * 1000) / 1000;
+          }
+          return payload;
+        });
+        const snapshot = {
           format: "capy-puzzle@2",
           title: state.sourceTitle || "capy-puzzle",
-          width: state.puzzle.width,
-          height: state.puzzle.height,
-          palette: state.puzzle.palette.map((p) => ({
-            id: p.id,
-            hex: p.hex,
-            rgba: p.rgba,
-            name: p.name,
-          })),
-          regions: state.puzzle.regions.map((region) => ({
-            id: region.id,
-            colorId: region.colorId,
-            pixelCount: region.pixelCount,
-            cx: region.cx,
-            cy: region.cy,
-          })),
+          width: puzzle.width,
+          height: puzzle.height,
+          palette,
+          regions,
           filled: Array.from(state.filled),
           options: state.lastOptions,
           sourceUrl: state.sourceUrl,
@@ -4808,16 +5122,21 @@
           settings: {
             autoAdvance: Boolean(state.settings.autoAdvance),
             animateHints: Boolean(state.settings.animateHints),
-            uiScale: Number(state.settings.uiScale) || 1,
+            uiScale:
+              Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
+                ? clamp(state.settings.uiScale, 0.6, 1.35)
+                : DEFAULT_UI_SCALE,
             artPrompt: state.settings.artPrompt || "",
+            showRegionLabels: state.settings.showRegionLabels !== false,
+            theme: state.settings.theme || DEFAULT_UI_THEME,
           },
         };
         if (regionMapPacked) {
-          payload.regionMapPacked = regionMapPacked;
-        } else if (state.puzzle.regionMap) {
-          payload.regionMap = Array.from(state.puzzle.regionMap);
+          snapshot.regionMapPacked = regionMapPacked;
+        } else if (puzzle.regionMap) {
+          snapshot.regionMap = Array.from(puzzle.regionMap);
         }
-        return payload;
+        return compactPuzzleSnapshot(snapshot) || snapshot;
       }
 
       function scheduleAutosave(reason, options = {}) {
@@ -4849,24 +5168,39 @@
       function persistAutosave(reason = "update") {
         if (!state.puzzle) return null;
         const snapshot = serializeCurrentPuzzle();
-        const record = {
+        const record = normalizeAutosaveRecord({
           version: 1,
           timestamp: Date.now(),
           reason,
           title: snapshot.title || state.sourceTitle || "capy-puzzle",
           data: snapshot,
-        };
+        });
+        if (!record) return null;
+        const storageRecord = encodeAutosaveStorageRecord(record);
+        if (!storageRecord) {
+          updateStorageUsageSummary();
+          return record;
+        }
+        let serialized = null;
+        let attemptedBytes = 0;
         try {
-          localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(record));
+          serialized = JSON.stringify(storageRecord);
+          attemptedBytes = getStoredStringSize(serialized);
         } catch (error) {
-          console.error("Failed to persist autosave", error);
-          if (error && error.name === "QuotaExceededError") {
-            logDebug("Storage full: unable to write autosave. Delete old saves or exports and retry.");
+          console.error("Failed to prepare autosave for storage", error);
+        }
+        if (serialized) {
+          try {
+            localStorage.setItem(AUTOSAVE_STORAGE_KEY, serialized);
+          } catch (error) {
+            console.error("Failed to persist autosave", error);
+            if (error && error.name === "QuotaExceededError") {
+              logDebug("Storage full: unable to write autosave. Delete old saves or exports and retry.");
+              logStorageFailureDetails("autosave", attemptedBytes);
+            }
           }
         }
-        if (cloudSync && typeof cloudSync.persist === "function") {
-          cloudSync.persist(record);
-        }
+        updateStorageUsageSummary();
         return record;
       }
 
@@ -4875,8 +5209,30 @@
           const raw = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
           if (!raw) return null;
           const parsed = JSON.parse(raw);
-          if (parsed && parsed.data) {
-            return parsed;
+          const decoded = decodeAutosaveStorageRecord(parsed) || parsed;
+          const normalized = normalizeAutosaveRecord(decoded);
+          if (normalized) {
+            let rewritePayload = null;
+            try {
+              const encoded = encodeAutosaveStorageRecord(normalized);
+              if (encoded) {
+                const serialized = JSON.stringify(encoded);
+                if (serialized !== raw) {
+                  rewritePayload = serialized;
+                }
+              }
+            } catch (prepareError) {
+              console.error("Failed to prepare autosave for rewrite", prepareError);
+            }
+            if (rewritePayload) {
+              try {
+                localStorage.setItem(AUTOSAVE_STORAGE_KEY, rewritePayload);
+              } catch (persistError) {
+                console.error("Failed to compact autosave", persistError);
+              }
+              updateStorageUsageSummary();
+            }
+            return normalized;
           }
         } catch (error) {
           console.error("Failed to load autosave", error);
@@ -4889,12 +5245,6 @@
         const autosave = loadAutosave();
         if (autosave && autosave.data) {
           candidates.push({ ...autosave, origin: "local autosave" });
-        }
-        const cloudRecord = cloudSync && typeof cloudSync.getSnapshot === "function"
-          ? cloudSync.getSnapshot()
-          : null;
-        if (cloudRecord && cloudRecord.data) {
-          candidates.push({ ...cloudRecord, origin: "cloud backup" });
         }
         if (Array.isArray(state.saves) && state.saves.length > 0) {
           const [latestManual] = [...state.saves].sort(
@@ -4912,6 +5262,167 @@
         if (candidates.length === 0) return null;
         candidates.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         return candidates[0];
+      }
+
+      function getStoredStringSize(raw) {
+        if (!raw) return 0;
+        try {
+          if (typeof Blob !== "undefined") {
+            return new Blob([raw]).size;
+          }
+          if (typeof TextEncoder !== "undefined") {
+            return new TextEncoder().encode(raw).length;
+          }
+        } catch (error) {
+          console.error("Failed to inspect storage size", error);
+        }
+        return raw.length * 2;
+      }
+
+      function collectSaveStorageStats() {
+        let manualBytes = 0;
+        let manualCount = Array.isArray(state.saves) ? state.saves.length : 0;
+        try {
+          const raw = localStorage.getItem(SAVE_STORAGE_KEY);
+          manualBytes = getStoredStringSize(raw);
+          if (!Number.isFinite(manualCount)) {
+            manualCount = 0;
+          }
+          if (manualCount === 0 && raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              manualCount = Array.isArray(parsed) ? parsed.length : 0;
+            } catch (error) {
+              console.error("Failed to parse save records for stats", error);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to read save storage size", error);
+        }
+        let autosaveBytes = 0;
+        try {
+          autosaveBytes = getStoredStringSize(localStorage.getItem(AUTOSAVE_STORAGE_KEY));
+        } catch (error) {
+          console.error("Failed to read autosave size", error);
+        }
+        const totalBytes = manualBytes + autosaveBytes;
+        return {
+          manualBytes,
+          manualCount,
+          autosaveBytes,
+          totalBytes,
+        };
+      }
+
+      function formatBytes(bytes) {
+        if (!Number.isFinite(bytes) || bytes <= 0) {
+          return "0 B";
+        }
+        const units = ["B", "KB", "MB", "GB"];
+        let value = bytes;
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+          value /= 1024;
+          unitIndex += 1;
+        }
+        const rounded = unitIndex === 0 || value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
+        return `${rounded} ${units[unitIndex]}`;
+      }
+
+      function logStorageFailureDetails(kind, attemptedBytes) {
+        if (Number.isFinite(attemptedBytes) && attemptedBytes > 0) {
+          const label = formatBytes(attemptedBytes);
+          const prefix = kind === "autosave" ? "Autosave" : "Save snapshot";
+          logDebug(`${prefix} payload ≈${label}.`);
+        }
+        if (navigator.storage && typeof navigator.storage.estimate === "function") {
+          navigator.storage
+            .estimate()
+            .then((estimate) => {
+              if (!estimate) return;
+              const usage = Number(estimate.usage);
+              const quota = Number(estimate.quota);
+              if (Number.isFinite(usage) && Number.isFinite(quota) && quota > 0) {
+                const percent = Math.min(100, Math.round((usage / quota) * 1000) / 10);
+                const percentSuffix = Number.isFinite(percent) ? ` (${percent}% used)` : "";
+                logDebug(`Storage usage ${formatBytes(usage)} of ${formatBytes(quota)} quota${percentSuffix}.`);
+              } else if (Number.isFinite(usage)) {
+                logDebug(`Storage usage ${formatBytes(usage)} (quota unavailable).`);
+              } else if (Number.isFinite(quota)) {
+                logDebug(`Storage quota ${formatBytes(quota)} (usage unavailable).`);
+              }
+            })
+            .catch((error) => {
+              console.error("Failed to estimate storage quota", error);
+            });
+        } else {
+          logDebug("Storage usage estimate unavailable in this browser.");
+        }
+      }
+
+      function updateStorageUsageSummary() {
+        if (!saveStorageSummary) return;
+        const token = ++storageSummaryUpdateToken;
+        let stats = { manualBytes: 0, manualCount: 0, autosaveBytes: 0, totalBytes: 0 };
+        try {
+          stats = collectSaveStorageStats();
+        } catch (error) {
+          console.error("Failed to update save storage summary", error);
+        }
+        let summaryText =
+          "Save data lives entirely in this browser. Autosaves run while you play, and manual saves appear in the save manager.";
+        let disableClearButton = true;
+        const hasAutosave = stats.autosaveBytes > 0;
+        const hasManual = stats.manualCount > 0;
+        if (hasAutosave || hasManual) {
+          const autosaveLabel = hasAutosave ? `Autosave ${formatBytes(stats.autosaveBytes)}` : "No autosave stored";
+          const manualLabel = hasManual
+            ? `${stats.manualCount} manual ${stats.manualCount === 1 ? "save" : "saves"} using ${formatBytes(
+                stats.manualBytes
+              )}`
+            : "No manual saves";
+          summaryText = `${autosaveLabel} · ${manualLabel} · Total ${formatBytes(stats.totalBytes)} stored locally.`;
+          disableClearButton = !(hasAutosave || hasManual);
+        }
+        saveStorageSummary.textContent = summaryText;
+        if (deleteAllSavesButton) {
+          deleteAllSavesButton.disabled = disableClearButton;
+        }
+        if (navigator.storage && typeof navigator.storage.estimate === "function") {
+          const baseSummary = summaryText;
+          const statsSnapshot = { ...stats };
+          navigator.storage
+            .estimate()
+            .then((estimate) => {
+              if (token !== storageSummaryUpdateToken) return;
+              if (!estimate) return;
+              const quota = Number(estimate.quota);
+              const usage = Number(estimate.usage);
+              if (!Number.isFinite(quota) || quota <= 0) {
+                if (Number.isFinite(usage) && usage > 0) {
+                  const usageText = `Storage usage: ${formatBytes(usage)}.`;
+                  saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${usageText}`;
+                }
+                return;
+              }
+              const usedBytes = Number.isFinite(usage) && usage >= 0 ? usage : statsSnapshot.totalBytes;
+              const usageLabel = formatBytes(usedBytes);
+              const quotaLabel = formatBytes(quota);
+              let percentText = "";
+              if (quota > 0 && Number.isFinite(usedBytes)) {
+                const percent = Math.min(100, Math.round((usedBytes / quota) * 1000) / 10);
+                if (Number.isFinite(percent)) {
+                  percentText = ` (${percent}% used)`;
+                }
+              }
+              const quotaText = `Storage quota: ${usageLabel} of ${quotaLabel}${percentText}.`;
+              saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${quotaText}`;
+            })
+            .catch((error) => {
+              if (token !== storageSummaryUpdateToken) return;
+              console.error("Failed to estimate storage quota", error);
+            });
+        }
       }
 
       function loadInitialSession() {
@@ -5007,129 +5518,439 @@
         return null;
       }
 
-      function createCloudSync() {
+      function tryCompressString(input) {
+        if (typeof input !== "string" || input.length === 0) {
+          return {
+            payload: "",
+            compressed: false,
+            encoding: "identity",
+            originalBytes: 0,
+            compressedBytes: 0,
+          };
+        }
+        let originalBytes = 0;
+        try {
+          originalBytes = getStoredStringSize(input);
+        } catch (error) {
+          console.error("Failed to inspect string size before compression", error);
+        }
+        try {
+          const codes = lzwCompress(input);
+          if (!codes || codes.length === 0) {
+            return {
+              payload: input,
+              compressed: false,
+              encoding: "identity",
+              originalBytes,
+              compressedBytes: originalBytes,
+            };
+          }
+          const bytes = new Uint8Array(codes.buffer);
+          const payload = encodeBytesToBase64(bytes);
+          const compressedBytes = getStoredStringSize(payload);
+          if (compressedBytes >= originalBytes || !payload) {
+            return {
+              payload: input,
+              compressed: false,
+              encoding: "identity",
+              originalBytes,
+              compressedBytes: originalBytes,
+            };
+          }
+          return {
+            payload,
+            compressed: true,
+            encoding: "lzw16",
+            originalBytes,
+            compressedBytes,
+          };
+        } catch (error) {
+          console.error("Failed to compress save payload", error);
+        }
+        return {
+          payload: input,
+          compressed: false,
+          encoding: "identity",
+          originalBytes,
+          compressedBytes: originalBytes,
+        };
+      }
+
+      function encodeBytesToBase64(bytes) {
+        if (!bytes || typeof bytes.length !== "number" || bytes.length === 0) {
+          return "";
+        }
+        let binary = "";
+        for (let index = 0; index < bytes.length; index += 1) {
+          binary += String.fromCharCode(bytes[index]);
+        }
+        return btoa(binary);
+      }
+
+      function decodeBase64ToBytes(base64) {
+        if (typeof base64 !== "string" || base64.length === 0) {
+          return new Uint8Array(0);
+        }
+        const binary = atob(base64);
+        const buffer = new ArrayBuffer(binary.length);
+        const bytes = new Uint8Array(buffer);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        return bytes;
+      }
+
+      function lzwCompress(input) {
+        if (typeof input !== "string" || input.length === 0) {
+          return new Uint16Array(0);
+        }
+        const dictionary = new Map();
+        for (let index = 0; index < 256; index += 1) {
+          dictionary.set(String.fromCharCode(index), index);
+        }
+        let dictSize = 256;
+        let current = "";
+        const codes = [];
+        for (let index = 0; index < input.length; index += 1) {
+          const char = input.charAt(index);
+          const candidate = current + char;
+          if (dictionary.has(candidate)) {
+            current = candidate;
+          } else {
+            if (current) {
+              const code = dictionary.get(current);
+              if (typeof code === "number") {
+                codes.push(code);
+              }
+            }
+            if (dictSize < 65535) {
+              dictionary.set(candidate, dictSize);
+              dictSize += 1;
+            }
+            current = char;
+          }
+        }
+        if (current) {
+          const code = dictionary.get(current);
+          if (typeof code === "number") {
+            codes.push(code);
+          }
+        }
+        return new Uint16Array(codes);
+      }
+
+      function lzwDecompress(codes) {
+        if (!codes || codes.length === 0) {
+          return "";
+        }
+        const dictionary = [];
+        for (let index = 0; index < 256; index += 1) {
+          dictionary[index] = String.fromCharCode(index);
+        }
+        let dictSize = 256;
+        let previous = String.fromCharCode(codes[0]);
+        let output = previous;
+        for (let index = 1; index < codes.length; index += 1) {
+          const code = codes[index];
+          let entry = "";
+          if (dictionary[code] != null) {
+            entry = dictionary[code];
+          } else if (code === dictSize) {
+            entry = previous + previous.charAt(0);
+          } else {
+            return null;
+          }
+          output += entry;
+          if (dictSize < 65535) {
+            dictionary[dictSize] = previous + entry.charAt(0);
+            dictSize += 1;
+          }
+          previous = entry;
+        }
+        return output;
+      }
+
+      function encodeStoredSnapshot(snapshot) {
+        const data = compactPuzzleSnapshot(snapshot);
+        if (!data) return null;
+        try {
+          const json = JSON.stringify(data);
+          const compressed = tryCompressString(json);
+          if (compressed.compressed) {
+            return {
+              __compressed: true,
+              encoding: compressed.encoding,
+              payload: compressed.payload,
+            };
+          }
+        } catch (error) {
+          console.error("Failed to prepare snapshot for storage", error);
+        }
+        return data;
+      }
+
+      function decodeStoredSnapshot(source) {
+        if (!source) return null;
+        let data = null;
+        if (typeof source === "string") {
+          try {
+            data = JSON.parse(source);
+          } catch (error) {
+            console.error("Failed to parse snapshot string", error);
+            return null;
+          }
+        } else if (typeof source === "object" && source.__compressed === true && typeof source.payload === "string") {
+          try {
+            const bytes = decodeBase64ToBytes(source.payload);
+            const codes = new Uint16Array(bytes.buffer);
+            const text = lzwDecompress(codes);
+            if (typeof text !== "string") {
+              return null;
+            }
+            data = JSON.parse(text);
+          } catch (error) {
+            console.error("Failed to decompress snapshot", error);
+            return null;
+          }
+        } else if (typeof source === "object") {
+          data = source;
+        }
+        if (!data || typeof data !== "object") {
+          return null;
+        }
+        return compactPuzzleSnapshot(data);
+      }
+
+      function encodeAutosaveStorageRecord(record) {
+        if (!record || typeof record !== "object") return null;
+        const data = encodeStoredSnapshot(record.data);
+        if (!data) return null;
+        const storageRecord = {
+          version: record.version,
+          timestamp: record.timestamp,
+          reason: record.reason,
+          data,
+        };
+        if (typeof record.title === "string" && record.title.trim()) {
+          storageRecord.title = record.title.trim();
+        }
+        return storageRecord;
+      }
+
+      function decodeAutosaveStorageRecord(record) {
+        if (!record || typeof record !== "object") return null;
+        const data = decodeStoredSnapshot(record.data ?? record.payload ?? null);
+        if (!data) return null;
+        const normalized = {
+          version:
+            typeof record.version === "number" && Number.isFinite(record.version) ? record.version : 1,
+          timestamp:
+            typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
+              ? record.timestamp
+              : Date.now(),
+          reason: typeof record.reason === "string" && record.reason ? record.reason : "update",
+          data,
+        };
+        if (typeof record.title === "string" && record.title.trim()) {
+          normalized.title = record.title.trim();
+        }
+        return normalized;
+      }
+
+      function encodeSaveStorageEntry(entry) {
+        if (!entry || typeof entry !== "object") return null;
+        const data = encodeStoredSnapshot(entry.data);
+        if (!data) return null;
+        const storageEntry = {
+          id: entry.id,
+          timestamp: entry.timestamp,
+          data,
+        };
+        if (typeof entry.title === "string" && entry.title.trim()) {
+          storageEntry.title = entry.title.trim();
+        }
+        return storageEntry;
+      }
+
+      function decodeSaveStorageEntry(entry) {
+        if (!entry || typeof entry !== "object") return null;
+        const data = decodeStoredSnapshot(entry.data ?? null);
+        if (!data) return null;
+        const decoded = {
+          id: entry.id,
+          timestamp: entry.timestamp,
+          data,
+        };
+        if (typeof entry.title === "string" && entry.title.trim()) {
+          decoded.title = entry.title.trim();
+        }
+        return decoded;
+      }
+
+      function createGameSaveManager() {
+        const key = SAVE_STORAGE_KEY;
         const subscribers = new Set();
-        const key = CLOUD_STORAGE_KEY;
-        let lastRecord = null;
-        const hasBroadcast = typeof BroadcastChannel !== "undefined";
-        const channel = hasBroadcast ? new BroadcastChannel("capy-cloud-sync") : null;
+        let cache = [];
+
+        function notify(entries) {
+          cache = entries;
+          subscribers.forEach((listener) => {
+            try {
+              listener(cache.slice());
+            } catch (error) {
+              console.error("Save manager listener failed", error);
+            }
+          });
+        }
+
+        function normalizeEntry(entry) {
+          if (!entry || typeof entry !== "object") return null;
+          const decoded = decodeSaveStorageEntry(entry) || entry;
+          const idRaw = decoded.id != null ? String(decoded.id) : "";
+          const id = idRaw.trim();
+          if (!id) return null;
+          const data = compactPuzzleSnapshot(decoded.data);
+          if (!data) return null;
+          const normalized = {
+            id,
+            timestamp:
+              typeof decoded.timestamp === "number" && Number.isFinite(decoded.timestamp)
+                ? decoded.timestamp
+                : Date.now(),
+            data,
+          };
+          if (typeof decoded.title === "string" && decoded.title.trim()) {
+            normalized.title = decoded.title.trim();
+          } else if (typeof data.title === "string" && data.title) {
+            normalized.title = data.title;
+          }
+          return normalized;
+        }
 
         function readFromStorage() {
           try {
             const raw = localStorage.getItem(key);
-            if (!raw) return null;
+            if (!raw) return [];
             const parsed = JSON.parse(raw);
-            if (!parsed || typeof parsed !== "object") return null;
-            return parsed;
+            if (!Array.isArray(parsed)) return [];
+            const normalized = [];
+            for (const entry of parsed) {
+              const result = normalizeEntry(entry);
+              if (result) {
+                normalized.push(result);
+              }
+            }
+            return normalized;
           } catch (error) {
-            console.error("Failed to read cloud backup", error);
-            return null;
+            console.error("Failed to load saves", error);
+            return [];
           }
         }
 
-        function notify(record) {
-          lastRecord = record || null;
-          subscribers.forEach((listener) => {
-            try {
-              listener(lastRecord);
-            } catch (error) {
-              console.error("Cloud sync listener failed", error);
-            }
-          });
-        }
-
-        function writeRecord(record) {
-          if (record == null) {
-            try {
-              localStorage.removeItem(key);
-            } catch (error) {
-              console.error("Failed to clear cloud backup", error);
-            }
-            notify(null);
-            if (channel) {
-              channel.postMessage({ type: "cloud-sync", record: null });
-            }
-            return null;
+        function writeToStorage(entries) {
+          let serialized = "[]";
+          let attemptedBytes = 0;
+          try {
+            const prepared = Array.isArray(entries)
+              ? entries
+                  .map((entry) => encodeSaveStorageEntry(entry))
+                  .filter((entry) => entry && typeof entry === "object")
+              : [];
+            serialized = JSON.stringify(prepared);
+            attemptedBytes = getStoredStringSize(serialized);
+          } catch (error) {
+            console.error("Failed to prepare saves for storage", error);
           }
           try {
-            localStorage.setItem(key, JSON.stringify(record));
+            localStorage.setItem(key, serialized);
           } catch (error) {
-            console.error("Failed to persist cloud backup", error);
+            console.error("Failed to persist saves", error);
+            if (error && error.name === "QuotaExceededError") {
+              logDebug("Storage full: unable to write save snapshot. Delete old saves or exports and retry.");
+              logStorageFailureDetails("manual", attemptedBytes);
+            }
           }
-          notify(record);
-          if (channel) {
-            channel.postMessage({ type: "cloud-sync", record });
-          }
-          return record;
         }
 
-        if (channel) {
-          channel.addEventListener("message", (event) => {
-            if (!event || typeof event.data !== "object") return;
-            if ("record" in event.data) {
-              notify(event.data.record);
+        function hydrate() {
+          const entries = readFromStorage();
+          writeToStorage(entries);
+          notify(entries);
+          return cache.slice();
+        }
+
+        function persist(entries) {
+          if (!Array.isArray(entries)) {
+            writeToStorage([]);
+            notify([]);
+            return [];
+          }
+          const normalized = [];
+          for (const entry of entries) {
+            const result = normalizeEntry(entry);
+            if (result) {
+              normalized.push(result);
             }
-          });
+          }
+          writeToStorage(normalized);
+          notify(normalized);
+          return cache.slice();
+        }
+
+        function list() {
+          return cache.slice();
+        }
+
+        function clear() {
+          try {
+            localStorage.removeItem(key);
+          } catch (error) {
+            console.error("Failed to clear saves", error);
+          }
+          notify([]);
+          return [];
+        }
+
+        function subscribe(listener) {
+          if (typeof listener !== "function") return () => {};
+          subscribers.add(listener);
+          if (cache.length) {
+            try {
+              listener(cache.slice());
+            } catch (error) {
+              console.error("Save manager listener failed", error);
+            }
+          }
+          return () => subscribers.delete(listener);
         }
 
         if (typeof window !== "undefined") {
           window.addEventListener("storage", (event) => {
             if (event.key === key) {
-              if (event.newValue) {
-                try {
-                  notify(JSON.parse(event.newValue));
-                } catch (error) {
-                  console.error("Failed to parse cloud backup update", error);
-                }
-              } else {
-                notify(null);
-              }
+              const entries = readFromStorage();
+              notify(entries);
             }
           });
         }
 
         const api = {
-          persist(record) {
-            return writeRecord(record);
-          },
-          getSnapshot() {
-            return lastRecord;
-          },
-          subscribe(listener) {
-            if (typeof listener !== "function") return () => {};
-            subscribers.add(listener);
-            if (lastRecord) {
-              try {
-                listener(lastRecord);
-              } catch (error) {
-                console.error("Cloud sync listener failed", error);
-              }
-            }
-            return () => subscribers.delete(listener);
-          },
-          clear() {
-            writeRecord(null);
-          },
-          hydrate() {
-            const record = readFromStorage();
-            if (record) {
-              notify(record);
-            }
-            return record;
-          },
+          hydrate,
+          persist,
+          list,
+          clear,
+          subscribe,
         };
 
         if (typeof window !== "undefined") {
-          window.capyCloudSync = {
-            persist: api.persist,
-            getSnapshot: api.getSnapshot,
-            subscribe: api.subscribe,
-            clear: api.clear,
+          window.capyGameSaveManager = {
             hydrate: api.hydrate,
+            persist: api.persist,
+            list: api.list,
+            clear: api.clear,
+            subscribe: api.subscribe,
           };
         }
 
-        api.hydrate();
         return api;
       }
 
@@ -5177,27 +5998,11 @@
       }
 
       function persistSaves() {
-        try {
-          localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(state.saves));
-        } catch (error) {
-          console.error("Failed to persist saves", error);
-          if (error && error.name === "QuotaExceededError") {
-            logDebug("Storage full: unable to write save snapshot. Delete old saves or exports and retry.");
-          }
-        }
+        state.saves = gameSaveManager.persist(state.saves);
       }
 
       function loadSavedEntries() {
-        try {
-          const raw = localStorage.getItem(SAVE_STORAGE_KEY);
-          if (!raw) return [];
-          const parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) return [];
-          return parsed.filter((entry) => entry && entry.data);
-        } catch (error) {
-          console.error("Failed to load saves", error);
-          return [];
-        }
+        return gameSaveManager.list();
       }
 
       function loadSaveEntry(id) {
@@ -5227,6 +6032,19 @@
         persistSaves();
         refreshSaveList();
         logDebug(`Deleted save: ${(entry && entry.title) || id}`);
+      }
+
+      function clearAllSaveData() {
+        gameSaveManager.clear();
+        state.saves = [];
+        refreshSaveList();
+        try {
+          localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
+        } catch (error) {
+          console.error("Failed to clear autosave", error);
+        }
+        updateStorageUsageSummary();
+        logDebug("Cleared autosave and manual saves");
       }
 
       function renameSaveEntry(id) {
@@ -5506,11 +6324,11 @@
         const darkLabel = {
           styles: {
             color: "rgba(15, 23, 42, 0.92)",
-            outline: "rgba(15, 23, 42, 0.22)",
+            outline: "rgba(15, 23, 42, 0.55)",
             shadow: [
-              "0 0 1px rgba(248, 250, 252, 0.6)",
-              "0 0 3px rgba(248, 250, 252, 0.35)",
-              "0 0 6px rgba(248, 250, 252, 0.28)",
+              "0 0 1px rgba(248, 250, 252, 0.85)",
+              "0 0 3px rgba(248, 250, 252, 0.6)",
+              "0 0 6px rgba(248, 250, 252, 0.5)",
             ].join(", "),
           },
           luminance: relativeLuminance([15, 23, 42]),
@@ -5518,11 +6336,11 @@
         const lightLabel = {
           styles: {
             color: "rgba(248, 250, 252, 0.98)",
-            outline: "rgba(248, 250, 252, 0.22)",
+            outline: "rgba(248, 250, 252, 0.55)",
             shadow: [
-              "0 0 1px rgba(15, 23, 42, 0.55)",
-              "0 0 3px rgba(15, 23, 42, 0.28)",
-              "0 0 6px rgba(15, 23, 42, 0.22)",
+              "0 0 1px rgba(15, 23, 42, 0.82)",
+              "0 0 3px rgba(15, 23, 42, 0.65)",
+              "0 0 6px rgba(15, 23, 42, 0.5)",
             ].join(", "),
           },
           luminance: relativeLuminance([248, 250, 252]),
