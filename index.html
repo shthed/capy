@@ -100,6 +100,8 @@
         --theme-chip-active-text: rgba(226, 232, 240, 0.98);
         --theme-palette-dock-bg: rgba(2, 6, 23, 0.94);
         --theme-palette-dock-border: rgba(15, 23, 42, 0.85);
+        --command-rail-top: calc(env(safe-area-inset-top, 0px) + 16px);
+        --command-rail-height: var(--command-button-size);
       }
 
       body[data-theme="dark"] {
@@ -253,8 +255,9 @@
 
       #commandRail {
         position: absolute;
-        top: calc(env(safe-area-inset-top, 0px) + 16px);
+        top: var(--command-rail-top);
         left: calc(env(safe-area-inset-left, 0px) + 16px);
+        right: calc(env(safe-area-inset-right, 0px) + 16px);
         display: flex;
         justify-content: flex-start;
         align-items: center;
@@ -327,13 +330,13 @@
         display: grid;
         place-items: center;
         padding: calc(16px * var(--ui-scale));
-        padding-top: calc(16px * var(--ui-scale) + var(--command-button-size));
+        padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
         overflow: hidden;
         background: none;
       }
 
       body[data-orientation="portrait"] #viewport {
-        padding-top: calc(16px * var(--ui-scale) + var(--command-button-size-portrait));
+        padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
       }
 
       #canvasStage {
@@ -1212,11 +1215,11 @@
       @media (max-width: 720px) {
         #viewport {
           padding: calc(12px * var(--ui-scale));
-          padding-top: calc(12px * var(--ui-scale) + var(--command-button-size));
+          padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
         }
 
         body[data-orientation="portrait"] #viewport {
-          padding-top: calc(12px * var(--ui-scale) + var(--command-button-size-portrait));
+          padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
         }
 
         #paletteDock {
@@ -1617,6 +1620,7 @@
         <script>
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
+      const commandRail = document.getElementById("commandRail");
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
       const sampleButtons = Array.from(document.querySelectorAll('[data-action="load-sample"]'));
@@ -1939,6 +1943,8 @@
       const activeTouches = new Map();
       let pinchSession = null;
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
+      let lastCommandRailMetrics = { top: 0, height: 0 };
+      let commandRailMeasureFrame = null;
       let cursorHoverRegionId = null;
       let cursorLastClientX = null;
       let cursorLastClientY = null;
@@ -1948,6 +1954,42 @@
       const prefersReducedMotionQuery = window.matchMedia
         ? window.matchMedia("(prefers-reduced-motion: reduce)")
         : null;
+
+      function syncCommandRailMetrics() {
+        if (!commandRail) {
+          return lastCommandRailMetrics;
+        }
+        const height = Math.max(0, Math.round(commandRail.offsetHeight || 0));
+        const top = Math.max(0, Math.round(commandRail.offsetTop || 0));
+        const rootStyle = document.documentElement?.style;
+        if (rootStyle) {
+          if (height > 0 && height !== lastCommandRailMetrics.height) {
+            rootStyle.setProperty("--command-rail-height", `${height}px`);
+          }
+          if (top !== lastCommandRailMetrics.top) {
+            rootStyle.setProperty("--command-rail-top", `${top}px`);
+          }
+        }
+        lastCommandRailMetrics = { top, height };
+        return lastCommandRailMetrics;
+      }
+
+      function scheduleCommandRailMetricsSync() {
+        if (!commandRail) {
+          return;
+        }
+        if (typeof window?.requestAnimationFrame !== "function") {
+          syncCommandRailMetrics();
+          return;
+        }
+        if (commandRailMeasureFrame != null) {
+          window.cancelAnimationFrame(commandRailMeasureFrame);
+        }
+        commandRailMeasureFrame = window.requestAnimationFrame(() => {
+          commandRailMeasureFrame = null;
+          syncCommandRailMetrics();
+        });
+      }
 
       // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
@@ -2091,6 +2133,7 @@
       updateCommandStates();
       renderDebugLog();
       logDebug("Session started");
+      syncCommandRailMetrics();
       handleViewportChange({ log: true, recenter: true });
       resetView({ recenter: true });
 
@@ -2719,6 +2762,7 @@
           document.body.classList.toggle("compact-commands", compact);
         }
         syncComputedUiScale();
+        scheduleCommandRailMetricsSync();
         const changed = orientation !== lastViewportMetrics.orientation;
         const sizeChanged =
           visualWidth !== lastViewportMetrics.width || visualHeight !== lastViewportMetrics.height;
@@ -2923,6 +2967,7 @@
         state.settings.uiScale = resolved;
         document.documentElement.style.setProperty("--ui-scale-user", String(resolved));
         syncComputedUiScale();
+        scheduleCommandRailMetricsSync();
         if (uiScaleInput && Math.abs(Number(uiScaleInput.value) - resolved) > 0.001) {
           uiScaleInput.value = String(resolved);
         }
