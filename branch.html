@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Capy Branch Deployments</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #333;
+      border-bottom: 2px solid #e1e4e8;
+      padding-bottom: 10px;
+    }
+    .info {
+      background: #f6f8fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      margin: 15px 0;
+      padding: 15px;
+      background: #fff;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      transition: box-shadow 0.2s;
+    }
+    li:hover {
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    li.main-branch {
+      background: #e6f7ff;
+      border-color: #91d5ff;
+    }
+    .branch-link {
+      font-size: 1.1em;
+      font-weight: 600;
+      color: #0366d6;
+      text-decoration: none;
+    }
+    .branch-link:hover {
+      text-decoration: underline;
+    }
+    .pr-info {
+      margin-top: 5px;
+      font-size: 0.9em;
+      color: #586069;
+    }
+    .pr-link {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    .pr-link:hover {
+      text-decoration: underline;
+    }
+    .timestamp {
+      font-size: 0.85em;
+      color: #6a737d;
+      margin-top: 5px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      font-size: 0.75em;
+      font-weight: 600;
+      border-radius: 12px;
+      background: #28a745;
+      color: white;
+      margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Capy Image Generator - Branch Deployments</h1>
+  <div class="info">
+    <strong>Note:</strong> The main branch is always deployed to the root.
+    Other branches with open pull requests are deployed to subfolders.
+    Branches are sorted by most recently updated first.
+  </div>
+  <ul>
+    <li class="main-branch">
+      <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>
+      <div class="pr-info">The main production branch - always deployed to root</div>
+    </li>
+<li><a class="branch-link" href="copilot-fix-branch-index-save/">copilot/fix-branch-index-save</a><div class="pr-info">PR #82: Fix branch index to save to branch.html instead of index.html - <a class="pr-link" href="https://github.com/shthed/capy/pull/82">View PR</a></div><div class="timestamp">Last updated: 2025-10-10T23:57:35Z</div></li>
+<li><a class="branch-link" href="codex-fix-header-icons-and-styling/">codex/fix-header-icons-and-styling</a><div class="pr-info">PR #73: fix-header-icons-and-styling - <a class="pr-link" href="https://github.com/shthed/capy/pull/73">View PR</a></div><div class="timestamp">Last updated: 2025-10-09T12:49:34Z</div></li>
+<li><a class="branch-link" href="codex-review-and-update-colour-picker-ui-j9vy15/">codex/review-and-update-colour-picker-ui-j9vy15</a><div class="pr-info">PR #64: review-and-update-colour-picker-ui-j9vy15 - <a class="pr-link" href="https://github.com/shthed/capy/pull/64">View PR</a></div><div class="timestamp">Last updated: 2025-10-09T12:44:21Z</div></li>
+  </ul>
+</body>
+</html>
