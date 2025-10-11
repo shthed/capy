@@ -11,8 +11,8 @@
       the touch/mouse entry points for navigation. Pointerdown/up/move feed handlePan* while
       wheel/key events route through applyZoom.
     - Puzzle state + rendering: the state object captures palette, regions, fill progress, and
-      metadata. Rendering flows through renderPuzzle → drawOutlines/drawNumbers with helpers like
-      applyRegionToImage.
+      metadata. Rendering flows through renderPuzzle → drawOutlines/drawNumbers using the vector
+      cache built by ensureRenderCache.
     - Generation pipeline: loadImage → createPuzzleData orchestrates quantization (kmeansQuantize),
       segmentation (segmentRegions), and palette prep. Regeneration, fixture loading, and saves all
       call applyPuzzleResult to hydrate UI.
@@ -346,7 +346,7 @@
         left: 50%;
         --pan-x: 0px;
         --pan-y: 0px;
-        transform: translate(calc(-50% + var(--pan-x)), calc(-50% + var(--pan-y)));
+        transform: translate3d(calc(-50% + var(--pan-x)), calc(-50% + var(--pan-y)), 0);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -458,10 +458,11 @@
       #canvasTransform {
         transform-origin: center;
         --zoom: 1;
-        transform: scale(var(--zoom));
+        transform: translate3d(0, 0, 0) scale(var(--zoom));
         display: flex;
         align-items: center;
         justify-content: center;
+        will-change: transform;
       }
 
       #viewport::before {
@@ -1705,7 +1706,6 @@
       const DEFAULT_UI_SCALE = 0.9;
       const DEFAULT_UI_THEME = "dark";
       const VALID_UI_THEMES = new Set(["dark", "light", "colorful"]);
-      let backgroundPixel = [...hexToRgb(DEFAULT_BACKGROUND_HEX), 255];
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
@@ -1925,7 +1925,247 @@
       };
       const DEFAULT_SAMPLE_DETAIL = "high";
 
-      
+      function drawOutlines() {
+        if (!state.puzzle) return;
+        const cache = ensureRenderCache();
+        if (!cache.ready) return;
+        puzzleCtx.save();
+        puzzleCtx.strokeStyle = backgroundInk.outline;
+        puzzleCtx.lineWidth = cache.strokeWidth;
+        puzzleCtx.lineJoin = "round";
+        puzzleCtx.lineCap = "round";
+        if (SUPPORTS_PATH2D) {
+          for (const entry of cache.regions) {
+            if (!entry?.path) continue;
+            puzzleCtx.stroke(entry.path);
+          }
+        } else {
+          puzzleCtx.beginPath();
+          for (const entry of cache.regions) {
+            if (!entry?.contours) continue;
+            for (const contour of entry.contours) {
+              if (contour.length === 0) continue;
+              const first = contour[0];
+              puzzleCtx.moveTo(first[0], first[1]);
+              for (let i = 1; i < contour.length; i++) {
+                const point = contour[i];
+                puzzleCtx.lineTo(point[0], point[1]);
+              }
+              puzzleCtx.closePath();
+            }
+          }
+          puzzleCtx.stroke();
+        }
+        puzzleCtx.restore();
+      }
+
+      function createRenderCache() {
+        return {
+          width: 0,
+          height: 0,
+          version: 0,
+          strokeWidth: 1,
+          ready: false,
+          regions: [],
+          regionsById: new Map(),
+        };
+      }
+
+      function ensureRenderCache(options = {}) {
+        if (!state.puzzle) {
+          state.renderCache = createRenderCache();
+          return state.renderCache;
+        }
+        const cache = state.renderCache || createRenderCache();
+        const expectedWidth = state.puzzle.width;
+        const expectedHeight = state.puzzle.height;
+        const expectedVersion = state.puzzle.regions.length;
+        const force = options.force === true;
+        const needsRebuild =
+          force ||
+          !cache.ready ||
+          cache.width !== expectedWidth ||
+          cache.height !== expectedHeight ||
+          cache.version !== expectedVersion;
+        if (needsRebuild) {
+          rebuildRenderCache(cache);
+        }
+        state.renderCache = cache;
+        return cache;
+      }
+
+      function rebuildRenderCache(cache) {
+        if (!state.puzzle) {
+          cache.width = 0;
+          cache.height = 0;
+          cache.version = 0;
+          cache.strokeWidth = 1;
+          cache.regions = [];
+          cache.regionsById = new Map();
+          cache.ready = false;
+          return cache;
+        }
+        cache.width = state.puzzle.width;
+        cache.height = state.puzzle.height;
+        cache.version = state.puzzle.regions.length;
+        cache.strokeWidth = computeOutlineStrokeWidth(cache.width, cache.height);
+        cache.regions = [];
+        cache.regionsById = new Map();
+        for (const region of state.puzzle.regions) {
+          const geometry = buildRegionGeometry(region, cache.width, cache.height);
+          cache.regions.push(geometry);
+          cache.regionsById.set(region.id, geometry);
+        }
+        cache.ready = true;
+        return cache;
+      }
+
+      function buildRegionGeometry(region, width, height) {
+        const geometry = {
+          id: region.id,
+          colorId: region.colorId,
+          bounds: ensureRegionBounds(region, width),
+          pixelCount: region.pixelCount ?? region.pixels.length,
+          contours: [],
+          path: null,
+        };
+        const contours = buildRegionContours(region, width, height);
+        geometry.contours = contours;
+        if (SUPPORTS_PATH2D) {
+          const path = new Path2D();
+          for (const contour of contours) {
+            if (contour.length === 0) continue;
+            const first = contour[0];
+            path.moveTo(first[0], first[1]);
+            for (let i = 1; i < contour.length; i++) {
+              const point = contour[i];
+              path.lineTo(point[0], point[1]);
+            }
+            path.closePath();
+          }
+          geometry.path = path;
+        }
+        return geometry;
+      }
+
+      function buildRegionContours(region, width, height) {
+        const pixels = Array.isArray(region.pixels) ? region.pixels : [];
+        if (pixels.length === 0) {
+          return [];
+        }
+        const membership = new Set(pixels);
+        const edges = [];
+        const outgoing = new Map();
+        const vertexKey = (x, y) => `${x},${y}`;
+        const pushEdge = (ax, ay, bx, by) => {
+          const edge = { ax, ay, bx, by };
+          const index = edges.length;
+          edges.push(edge);
+          const key = vertexKey(ax, ay);
+          if (!outgoing.has(key)) {
+            outgoing.set(key, []);
+          }
+          outgoing.get(key).push(index);
+        };
+        for (const idx of membership) {
+          const x = idx % width;
+          const y = (idx / width) | 0;
+          const up = idx - width;
+          const down = idx + width;
+          const left = idx - 1;
+          const right = idx + 1;
+          if (y === 0 || !membership.has(up)) {
+            pushEdge(x, y, x + 1, y);
+          }
+          if (x === width - 1 || !membership.has(right)) {
+            pushEdge(x + 1, y, x + 1, y + 1);
+          }
+          if (y === height - 1 || !membership.has(down)) {
+            pushEdge(x + 1, y + 1, x, y + 1);
+          }
+          if (x === 0 || !membership.has(left)) {
+            pushEdge(x, y + 1, x, y);
+          }
+        }
+        if (edges.length === 0) {
+          return [];
+        }
+        const unused = new Set(edges.map((_, index) => index));
+        const contours = [];
+        const getVector = (edge) => ({ dx: edge.bx - edge.ax, dy: edge.by - edge.ay });
+        const originKey = (edge) => `${edge.ax},${edge.ay}`;
+        const limit = edges.length * 8;
+        while (unused.size > 0) {
+          const startIndex = unused.values().next().value;
+          let currentIndex = startIndex;
+          const startEdge = edges[startIndex];
+          const startKey = originKey(startEdge);
+          const contour = [];
+          let guard = 0;
+          while (true) {
+            const edge = edges[currentIndex];
+            if (contour.length === 0) {
+              contour.push([edge.ax, edge.ay]);
+            }
+            contour.push([edge.bx, edge.by]);
+            unused.delete(currentIndex);
+            const nextKey = `${edge.bx},${edge.by}`;
+            if (nextKey === startKey) {
+              break;
+            }
+            const candidates = outgoing.get(nextKey) || [];
+            let nextIndex = null;
+            if (candidates.length === 1) {
+              if (unused.has(candidates[0])) {
+                nextIndex = candidates[0];
+              }
+            } else {
+              const prevVector = getVector(edge);
+              let bestAngle = Number.POSITIVE_INFINITY;
+              for (const candidateIndex of candidates) {
+                if (!unused.has(candidateIndex)) continue;
+                const candidate = edges[candidateIndex];
+                const vec = getVector(candidate);
+                const cross = prevVector.dx * vec.dy - prevVector.dy * vec.dx;
+                const dot = prevVector.dx * vec.dx + prevVector.dy * vec.dy;
+                let angle = Math.atan2(cross, dot);
+                if (angle <= 0) {
+                  angle += Math.PI * 2;
+                }
+                if (angle < bestAngle) {
+                  bestAngle = angle;
+                  nextIndex = candidateIndex;
+                }
+              }
+            }
+            if (nextIndex == null) {
+              break;
+            }
+            currentIndex = nextIndex;
+            guard += 1;
+            if (guard > limit) {
+              break;
+            }
+          }
+          if (contour.length > 1) {
+            const first = contour[0];
+            const last = contour[contour.length - 1];
+            if (first[0] === last[0] && first[1] === last[1]) {
+              contour.pop();
+            }
+            contours.push(contour);
+          }
+          if (contours.length > edges.length) {
+            break;
+          }
+        }
+        return contours;
+      }
+
+      function computeOutlineStrokeWidth(width, height) {
+        const base = Math.max(1, Math.min(width, height));
+        return clamp(base * 0.0024, 0.8, 2.8);
+      }
       if (samplePreview) {
         samplePreview.src = SAMPLE_ARTWORK.dataUrl;
         samplePreview.alt = SAMPLE_ARTWORK.description;
@@ -1934,8 +2174,11 @@
 
       // View state drives pan/zoom transforms. baseScale keeps the puzzle fit-to-screen while
       // zoom holds user-controlled scaling.
-      const MIN_VIEWPORT_ZOOM = 0.000001;
-      const MIN_RENDER_SCALE = 0.000001;
+      const MAX_VIEWPORT_ZOOM = 1048576;
+      const MIN_VIEWPORT_ZOOM = 1 / MAX_VIEWPORT_ZOOM;
+      const MIN_RENDER_SCALE = MIN_VIEWPORT_ZOOM;
+      const MAX_RENDER_SCALE = MAX_VIEWPORT_ZOOM;
+      const SUPPORTS_PATH2D = typeof Path2D === "function";
       const viewState = {
         panX: 0,
         panY: 0,
@@ -2022,8 +2265,7 @@
         previewVisible: false,
         saves: gameSaveManager.hydrate(),
         previewImageData: null,
-        puzzleImageData: null,
-        outlineCache: createOutlineCache(),
+        renderCache: createRenderCache(),
       };
 
       gameSaveManager.subscribe((entries) => {
@@ -2308,7 +2550,6 @@
       resetButton.addEventListener("click", () => {
         if (!state.puzzle) return;
         state.filled = new Set();
-        initializePuzzleImage();
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
@@ -2581,7 +2822,6 @@
           return;
         }
         state.filled.add(regionId);
-        applyRegionToImage(regionId);
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
@@ -3069,9 +3309,13 @@
         const normalized = sanitizeHexColor(hex, current);
         const changed = force || normalized !== current;
         state.settings.backgroundColor = normalized;
-        backgroundPixel = [...hexToRgb(normalized), 255];
         backgroundInk = computeInkStyles(normalized);
-        markOutlineColorDirty();
+        if (state.renderCache) {
+          state.renderCache.strokeWidth = computeOutlineStrokeWidth(
+            state.renderCache.width,
+            state.renderCache.height
+          );
+        }
         if (backgroundColorInput && backgroundColorInput.value !== normalized) {
           backgroundColorInput.value = normalized;
         }
@@ -3080,7 +3324,6 @@
         }
         if (!skipRender) {
           if (state.puzzle) {
-            initializePuzzleImage();
             renderPuzzle();
           } else {
             puzzleCtx.save();
@@ -3269,8 +3512,7 @@
         puzzleCtx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         state.previewImageData = null;
-        state.puzzleImageData = null;
-        state.outlineCache = createOutlineCache();
+        state.renderCache = createRenderCache();
         state.previewVisible = false;
         updatePreviewState();
         updateCommandStates();
@@ -3450,7 +3692,7 @@
           regions,
           regionMap,
         };
-        state.outlineCache = createOutlineCache();
+        state.renderCache = createRenderCache();
         state.puzzle.backgroundColor = backgroundHex;
         state.activeColor =
           requestedColor != null && paletteIds.has(requestedColor)
@@ -3467,8 +3709,8 @@
         puzzleCanvas.height = data.height;
         previewCanvas.width = data.width;
         previewCanvas.height = data.height;
+        ensureRenderCache({ force: true });
         renderPreview();
-        initializePuzzleImage();
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
@@ -3542,61 +3784,53 @@
         state.previewImageData = imageData;
       }
 
-      function initializePuzzleImage() {
-        if (!state.puzzle) return;
-        const { width, height } = state.puzzle;
-        const imageData = new ImageData(width, height);
-        const data = imageData.data;
-        for (let i = 0; i < data.length; i += 4) {
-          data[i] = backgroundPixel[0];
-          data[i + 1] = backgroundPixel[1];
-          data[i + 2] = backgroundPixel[2];
-          data[i + 3] = backgroundPixel[3];
-        }
-        state.puzzleImageData = imageData;
-        if (state.filled.size > 0) {
-          applyFilledRegionsToImage();
-        }
-      }
-
-      function applyFilledRegionsToImage() {
-        if (!state.puzzle || !state.puzzleImageData) return;
-        for (const regionId of state.filled) {
-          applyRegionToImage(regionId);
-        }
-      }
-
-      function applyRegionToImage(regionId) {
-        if (!state.puzzle || !state.previewImageData || !state.puzzleImageData) return;
-        const region = state.puzzle.regions[regionId];
-        if (!region) return;
-        const previewData = state.previewImageData.data;
-        const targetData = state.puzzleImageData.data;
-        for (const idx of region.pixels) {
-          const base = idx * 4;
-          targetData[base] = previewData[base];
-          targetData[base + 1] = previewData[base + 1];
-          targetData[base + 2] = previewData[base + 2];
-          targetData[base + 3] = 255;
-        }
-      }
-
       function renderPuzzle() {
         if (!state.puzzle) return;
         const { width, height } = state.puzzle;
-        if (
-          !state.puzzleImageData ||
-          state.puzzleImageData.width !== width ||
-          state.puzzleImageData.height !== height
-        ) {
-          initializePuzzleImage();
+        puzzleCtx.save();
+        puzzleCtx.clearRect(0, 0, width, height);
+        puzzleCtx.fillStyle = state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX;
+        puzzleCtx.fillRect(0, 0, width, height);
+        const cache = ensureRenderCache();
+        if (cache.ready) {
+          const fillsByColor = new Map();
+          for (const regionId of state.filled) {
+            const geometry = cache.regionsById.get(regionId);
+            if (!geometry) continue;
+            const colorEntry = getPaletteEntry(geometry.colorId);
+            if (!colorEntry?.hex) continue;
+            if (!fillsByColor.has(colorEntry.hex)) {
+              fillsByColor.set(colorEntry.hex, []);
+            }
+            fillsByColor.get(colorEntry.hex).push(geometry);
+          }
+          for (const [hex, entries] of fillsByColor) {
+            puzzleCtx.fillStyle = hex;
+            if (SUPPORTS_PATH2D) {
+              for (const entry of entries) {
+                if (!entry?.path) continue;
+                puzzleCtx.fill(entry.path);
+              }
+            } else {
+              for (const entry of entries) {
+                if (!entry?.contours) continue;
+                puzzleCtx.beginPath();
+                for (const contour of entry.contours) {
+                  if (contour.length === 0) continue;
+                  const first = contour[0];
+                  puzzleCtx.moveTo(first[0], first[1]);
+                  for (let i = 1; i < contour.length; i++) {
+                    const point = contour[i];
+                    puzzleCtx.lineTo(point[0], point[1]);
+                  }
+                  puzzleCtx.closePath();
+                }
+                puzzleCtx.fill();
+              }
+            }
+          }
         }
-        if (state.puzzleImageData) {
-          puzzleCtx.putImageData(state.puzzleImageData, 0, 0);
-        } else {
-          puzzleCtx.fillStyle = state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX;
-          puzzleCtx.fillRect(0, 0, width, height);
-        }
+        puzzleCtx.restore();
         drawOutlines();
         drawNumbers();
       }
@@ -3938,196 +4172,7 @@
         return slack;
       }
 
-      function drawOutlines() {
-        if (!state.puzzle) return;
-        const cache = ensureOutlineVisual();
-        if (!cache) return;
-        const source = cache.bitmap || cache.canvas;
-        if (source) {
-          puzzleCtx.drawImage(source, 0, 0);
-          return;
-        }
-        const mask = cache.mask;
-        if (!mask) return;
-        const { width } = state.puzzle;
-        puzzleCtx.save();
-        puzzleCtx.fillStyle = backgroundInk.outline;
-        for (let idx = 0; idx < mask.length; idx++) {
-          if (!mask[idx]) continue;
-          const x = idx % width;
-          const y = (idx / width) | 0;
-          puzzleCtx.fillRect(x, y, 1, 1);
-        }
-        puzzleCtx.restore();
-      }
-
-      function ensureOutlineVisual() {
-        if (!state.puzzle) return null;
-        const mask = ensureOutlineMask();
-        if (!mask) return null;
-        const cache = state.outlineCache || createOutlineCache();
-        state.outlineCache = cache;
-        const colorKey = backgroundInk.outline;
-        if (cache.colorKey !== colorKey || (!cache.bitmap && !cache.canvas)) {
-          cache.colorKey = colorKey;
-          const rgba = rgbaStringToBytes(colorKey);
-          const imageData = outlineMaskToImageData(mask, cache.width, cache.height, rgba);
-          if (imageData) {
-            const visual = createOutlineVisual(imageData);
-            cache.bitmap = visual?.bitmap || null;
-            cache.canvas = visual?.canvas || null;
-          } else {
-            cache.bitmap = null;
-            cache.canvas = null;
-          }
-        }
-        return cache;
-      }
-
-      function ensureOutlineMask() {
-        if (!state.puzzle) return null;
-        const cache = state.outlineCache || createOutlineCache();
-        state.outlineCache = cache;
-        const { width, height, regionMap } = state.puzzle;
-        if (!cache.mask || cache.width !== width || cache.height !== height) {
-          const total = width * height;
-          const mask = cache.mask instanceof Uint8Array && cache.mask.length === total
-            ? cache.mask
-            : new Uint8Array(total);
-          mask.fill(0);
-          for (let y = 0; y < height; y++) {
-            const rowOffset = y * width;
-            const upOffset = rowOffset - width;
-            const downOffset = rowOffset + width;
-            for (let x = 0; x < width; x++) {
-              const idx = rowOffset + x;
-              const id = regionMap[idx];
-              const left = x > 0 ? regionMap[idx - 1] : id;
-              const right = x < width - 1 ? regionMap[idx + 1] : id;
-              const up = y > 0 ? regionMap[upOffset + x] : id;
-              const down = y < height - 1 ? regionMap[downOffset + x] : id;
-              if (left !== id || right !== id || up !== id || down !== id) {
-                mask[idx] = 1;
-              }
-            }
-          }
-          cache.mask = mask;
-          cache.width = width;
-          cache.height = height;
-          cache.bitmap = null;
-          cache.canvas = null;
-          cache.colorKey = null;
-        }
-        return cache.mask;
-      }
-
-      function createOutlineCache() {
-        return {
-          width: 0,
-          height: 0,
-          mask: null,
-          bitmap: null,
-          canvas: null,
-          colorKey: null,
-        };
-      }
-
-      function markOutlineColorDirty() {
-        if (!state.outlineCache) return;
-        state.outlineCache.bitmap = null;
-        state.outlineCache.canvas = null;
-        state.outlineCache.colorKey = null;
-      }
-
-      function outlineMaskToImageData(mask, width, height, rgba) {
-        let imageData = null;
-        if (typeof ImageData === "function") {
-          imageData = new ImageData(width, height);
-        } else if (typeof document !== "undefined" && typeof document.createElement === "function") {
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (ctx && typeof ctx.createImageData === "function") {
-            imageData = ctx.createImageData(width, height);
-          }
-        }
-        if (!imageData) {
-          return null;
-        }
-        const data = imageData.data;
-        const [r, g, b, a] = rgba;
-        for (let idx = 0; idx < mask.length; idx++) {
-          if (!mask[idx]) continue;
-          const base = idx * 4;
-          data[base] = r;
-          data[base + 1] = g;
-          data[base + 2] = b;
-          data[base + 3] = a;
-        }
-        return imageData;
-      }
-
-      function rgbaStringToBytes(value) {
-        if (typeof value !== "string") {
-          return [0, 0, 0, 255];
-        }
-        const match = value.match(/rgba?\(([^)]+)\)/i);
-        if (!match) {
-          return [0, 0, 0, 255];
-        }
-        const parts = match[1].split(/\s*,\s*/).map((part) => part.trim());
-        const r = clampByte(parseFloat(parts[0]));
-        const g = clampByte(parseFloat(parts[1]));
-        const b = clampByte(parseFloat(parts[2]));
-        if (parts.length < 4) {
-          return [r, g, b, 255];
-        }
-        const rawAlpha = parseFloat(parts[3]);
-        if (Number.isNaN(rawAlpha)) {
-          return [r, g, b, 255];
-        }
-        const alpha = rawAlpha > 1 ? rawAlpha : rawAlpha * 255;
-        return [r, g, b, clampByte(alpha)];
-      }
-
-      function clampByte(value) {
-        if (!Number.isFinite(value)) {
-          return 0;
-        }
-        if (value <= 0) return 0;
-        if (value >= 255) return 255;
-        return Math.round(value);
-      }
-
-      function createOutlineVisual(imageData) {
-        const width = imageData.width;
-        const height = imageData.height;
-        if (typeof OffscreenCanvas === "function") {
-          try {
-            const canvas = new OffscreenCanvas(width, height);
-            const ctx = canvas.getContext("2d");
-            if (ctx) {
-              ctx.putImageData(imageData, 0, 0);
-              return { bitmap: canvas.transferToImageBitmap() };
-            }
-          } catch (error) {
-            /* OffscreenCanvas unavailable; fall back to DOM canvas. */
-          }
-        }
-        if (typeof document !== "undefined" && typeof document.createElement === "function") {
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.putImageData(imageData, 0, 0);
-            return { canvas };
-          }
-        }
-        return null;
-      }
-
+      
       function scrollPaletteToColor(colorId) {
         if (!paletteEl) return;
         if (colorId == null) return;
@@ -4827,18 +4872,19 @@
 
       function normalizeZoomValue(value, fallback = MIN_VIEWPORT_ZOOM) {
         if (!Number.isFinite(value) || value <= 0) {
-          return Math.max(MIN_VIEWPORT_ZOOM, fallback);
+          return clamp(fallback, MIN_VIEWPORT_ZOOM, MAX_VIEWPORT_ZOOM);
         }
-        return Math.max(MIN_VIEWPORT_ZOOM, value);
+        return clamp(value, MIN_VIEWPORT_ZOOM, MAX_VIEWPORT_ZOOM);
       }
 
       function applyZoom(multiplier, clientX, clientY, options = {}) {
         if (!state.puzzle) return;
-        const previousZoom = viewState.zoom > 0 ? viewState.zoom : MIN_VIEWPORT_ZOOM;
-        const nextZoom = normalizeZoomValue(previousZoom * multiplier, previousZoom);
-        const change = nextZoom / previousZoom;
+        const baseScale = viewState.baseScale > 0 ? viewState.baseScale : 1;
+        const currentZoom = viewState.zoom > 0 ? viewState.zoom : 1;
+        const currentScale = clamp(baseScale * currentZoom, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+        const targetScale = clamp(currentScale * multiplier, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+        const change = targetScale / currentScale;
         if (!Number.isFinite(change) || Math.abs(change - 1) < 0.00001) return;
-        const significant = Math.abs(nextZoom - previousZoom) >= Math.max(0.01, previousZoom * 0.001);
         const viewportRect = viewportEl.getBoundingClientRect();
         const centerX = viewportRect.left + viewportRect.width / 2;
         const centerY = viewportRect.top + viewportRect.height / 2;
@@ -4848,10 +4894,12 @@
         const offsetY = anchorY - centerY - viewState.panY;
         viewState.panX += offsetX - offsetX * change;
         viewState.panY += offsetY - offsetY * change;
+        const nextZoom = normalizeZoomValue(targetScale / baseScale, currentZoom);
+        const significant = Math.abs(targetScale - currentScale) >= Math.max(0.01, currentScale * 0.001);
         viewState.zoom = nextZoom;
         applyViewTransform();
         if (significant && !options.skipLog) {
-          logDebug(`Zoom set to ${(viewState.zoom * 100).toFixed(0)}%`);
+          logDebug(`Zoom set to ${(targetScale * 100).toFixed(0)}%`);
         }
       }
 
@@ -4863,7 +4911,7 @@
       }
 
       function applyViewTransform() {
-        const zoomValue = Math.max(MIN_RENDER_SCALE, viewState.baseScale * viewState.zoom);
+        const zoomValue = clamp(viewState.baseScale * viewState.zoom, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
         canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
         canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
         canvasTransform.style.setProperty("--zoom", zoomValue.toFixed(4));
@@ -4898,12 +4946,16 @@
           return;
         }
         const nextBase = computeFitScale();
-        if (preserveZoom && viewState.baseScale > 0) {
-          const ratio = nextBase / viewState.baseScale;
+        const previousBase = viewState.baseScale > 0 ? viewState.baseScale : 1;
+        const currentScale = clamp(previousBase * Math.max(viewState.zoom, MIN_VIEWPORT_ZOOM), MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+        if (preserveZoom) {
+          const ratio = Number.isFinite(previousBase) && previousBase > 0 ? nextBase / previousBase : 1;
           if (Number.isFinite(ratio)) {
             viewState.panX *= ratio;
             viewState.panY *= ratio;
           }
+          const targetZoom = nextBase > 0 ? currentScale / nextBase : 1;
+          viewState.zoom = normalizeZoomValue(targetZoom, viewState.zoom);
           if (recenter) {
             viewState.panX = 0;
             viewState.panY = 0;
@@ -4911,11 +4963,7 @@
         } else {
           viewState.panX = 0;
           viewState.panY = 0;
-          viewState.zoom = 1;
-        }
-        if (recenter && !preserveZoom) {
-          viewState.panX = 0;
-          viewState.panY = 0;
+          viewState.zoom = normalizeZoomValue(1);
         }
         viewState.baseScale = nextBase;
         applyViewTransform();
@@ -5043,13 +5091,32 @@
       // Shared renderer for flashing overlays (hints + colour selection pulses).
       function paintRegions(regions, fillStyle) {
         if (!state.puzzle || regions.length === 0) return;
+        const cache = ensureRenderCache();
+        if (!cache.ready) return;
         puzzleCtx.save();
         puzzleCtx.fillStyle = fillStyle;
-        for (const region of regions) {
-          for (const idx of region.pixels) {
-            const x = idx % state.puzzle.width;
-            const y = (idx / state.puzzle.width) | 0;
-            puzzleCtx.fillRect(x, y, 1, 1);
+        if (SUPPORTS_PATH2D) {
+          for (const region of regions) {
+            const geometry = cache.regionsById.get(region.id);
+            if (!geometry?.path) continue;
+            puzzleCtx.fill(geometry.path);
+          }
+        } else {
+          for (const region of regions) {
+            const geometry = cache.regionsById.get(region.id);
+            if (!geometry?.contours) continue;
+            puzzleCtx.beginPath();
+            for (const contour of geometry.contours) {
+              if (contour.length === 0) continue;
+              const first = contour[0];
+              puzzleCtx.moveTo(first[0], first[1]);
+              for (let i = 1; i < contour.length; i++) {
+                const point = contour[i];
+                puzzleCtx.lineTo(point[0], point[1]);
+              }
+              puzzleCtx.closePath();
+            }
+            puzzleCtx.fill();
           }
         }
         puzzleCtx.restore();
