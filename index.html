@@ -92,7 +92,7 @@
         height: min(var(--app-height, 100vh), 100vh);
         overflow: hidden;
         display: grid;
-        grid-template-rows: auto 1fr auto;
+        grid-template-rows: 1fr auto;
       }
 
       @supports (height: 100dvh) {
@@ -102,28 +102,19 @@
       }
 
       #commandRail {
-        position: sticky;
-        top: 0;
-        left: 0;
-        right: 0;
+        position: absolute;
+        top: calc(env(safe-area-inset-top, 0px) + 16px);
+        left: calc(env(safe-area-inset-left, 0px) + 16px);
         display: flex;
-        justify-content: flex-end;
+        justify-content: flex-start;
         align-items: center;
         flex-wrap: wrap;
-        gap: var(--rail-gap);
-        padding: var(--rail-padding-block) var(--rail-padding-inline);
-        padding-block-start:
-          calc(var(--rail-padding-block) + env(safe-area-inset-top, 0px));
-        padding-block-end:
-          calc(var(--rail-padding-block) + env(safe-area-inset-bottom, 0px));
-        padding-inline-start:
-          calc(var(--rail-padding-inline) + env(safe-area-inset-left, 0px));
-        padding-inline-end:
-          calc(var(--rail-padding-inline) + env(safe-area-inset-right, 0px));
-        background: linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(2, 6, 23, 0.82));
+        gap: calc(10px * var(--ui-scale));
+        padding: 0;
+        margin: 0;
+        background: none;
         z-index: 3;
         touch-action: manipulation;
-        width: 100%;
       }
 
       #commandRail button {
@@ -157,9 +148,7 @@
 
       body[data-orientation="portrait"] #commandRail {
         gap: var(--rail-gap-portrait);
-        padding: var(--rail-padding-block) calc(16px * var(--ui-scale));
-        justify-content: center;
-        width: 100%;
+        justify-content: flex-start;
       }
 
       body[data-orientation="portrait"] #commandRail button {
@@ -168,9 +157,8 @@
       }
 
       body.compact-commands #commandRail {
-        justify-content: center;
+        justify-content: flex-start;
         gap: var(--rail-gap-portrait);
-        padding-inline: calc(16px * var(--ui-scale));
       }
 
       body.compact-commands #commandRail button {
@@ -188,8 +176,14 @@
         height: 100%;
         display: grid;
         place-items: center;
-        padding: var(--viewport-padding, 32px);
+        padding: calc(16px * var(--ui-scale));
+        padding-top: calc(16px * var(--ui-scale) + var(--command-button-size));
         overflow: hidden;
+        background: none;
+      }
+
+      body[data-orientation="portrait"] #viewport {
+        padding-top: calc(16px * var(--ui-scale) + var(--command-button-size-portrait));
       }
 
       #canvasStage {
@@ -317,30 +311,18 @@
       }
 
       #viewport::before {
-        content: "";
-        position: absolute;
-        inset: 24px;
-        border-radius: 24px;
-        border: 2px dashed rgba(148, 163, 184, 0.35);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.18s ease;
-      }
-
-      body.dragging #viewport::before,
-      body.panning #viewport::before {
-        opacity: 1;
+        content: none;
       }
 
       #puzzleCanvas {
-        max-width: calc(100vw - 160px);
-        max-height: calc(100vh - 220px);
+        max-width: 100%;
+        max-height: 100%;
         width: auto;
         height: auto;
-        border-radius: 20px;
-        background: #0f172a;
-        border: 1px solid rgba(148, 163, 184, 0.45);
-        box-shadow: 0 30px 60px rgba(15, 23, 42, 0.45);
+        border-radius: 0;
+        background: none;
+        border: none;
+        box-shadow: none;
         image-rendering: pixelated;
         touch-action: none;
       }
@@ -396,7 +378,7 @@
 
       #startHint .hint-body {
         pointer-events: auto;
-        text-align: center;
+        text-align: left;
         max-width: 360px;
         padding: calc(32px * var(--ui-scale));
         border-radius: calc(20px * var(--ui-scale));
@@ -405,7 +387,7 @@
         box-shadow: 0 20px 60px rgba(15, 23, 42, 0.6);
         display: grid;
         gap: calc(20px * var(--ui-scale));
-        justify-items: center;
+        justify-items: stretch;
       }
 
       #startHint h1 {
@@ -419,14 +401,6 @@
         font-size: 1rem;
       }
 
-      #startHint .sample-art {
-        width: min(calc(240px * var(--ui-scale)), 70vw);
-        max-width: 100%;
-        border-radius: calc(16px * var(--ui-scale));
-        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.55);
-        border: 1px solid rgba(148, 163, 184, 0.25);
-      }
-
       #startHint .hint-actions {
         display: grid;
         gap: calc(12px * var(--ui-scale));
@@ -437,7 +411,7 @@
           display: grid;
           gap: calc(12px * var(--ui-scale));
           width: 100%;
-          text-align: center;
+          text-align: left;
         }
 
         .detail-intro {
@@ -448,7 +422,7 @@
 
         .detail-picker {
           display: flex;
-          justify-content: center;
+          justify-content: flex-start;
           gap: calc(8px * var(--ui-scale));
           flex-wrap: wrap;
         }
@@ -1079,23 +1053,20 @@
       }
 
       @media (max-width: 1024px) {
-        #puzzleCanvas {
-          max-width: calc(100vw - 60px);
-        }
-
         #commandRail {
           flex-wrap: wrap;
-          justify-content: flex-end;
+          justify-content: flex-start;
         }
       }
 
       @media (max-width: 720px) {
         #viewport {
-          padding: 20px;
+          padding: calc(12px * var(--ui-scale));
+          padding-top: calc(12px * var(--ui-scale) + var(--command-button-size));
         }
 
-        #puzzleCanvas {
-          max-height: calc(100vh - 240px);
+        body[data-orientation="portrait"] #viewport {
+          padding-top: calc(12px * var(--ui-scale) + var(--command-button-size-portrait));
         }
 
         #paletteDock {
@@ -1229,11 +1200,6 @@
         </div>
         <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
-            <img
-              id="sampleArtPreview"
-              class="sample-art"
-              alt="Capybara sample illustration"
-            />
             <h1>Drop an image to start</h1>
             <p>
               Drag a picture anywhere on the screen, choose a file from your device,
