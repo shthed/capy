@@ -1955,6 +1955,9 @@
           outlineLayer: null,
           outlineLayerCtx: null,
           outlineLayerDirty: true,
+          numbersLayer: null,
+          numbersLayerCtx: null,
+          numbersLayerDirty: true,
         };
       }
 
@@ -2098,6 +2101,9 @@
           cache.outlineLayer = null;
           cache.outlineLayerCtx = null;
           cache.outlineLayerDirty = true;
+          cache.numbersLayer = null;
+          cache.numbersLayerCtx = null;
+          cache.numbersLayerDirty = true;
           cache.ready = false;
           return cache;
         }
@@ -2118,6 +2124,9 @@
         cache.outlineLayer = createLayerCanvas(cache.width, cache.height);
         cache.outlineLayerCtx = getLayerContext(cache.outlineLayer);
         cache.outlineLayerDirty = true;
+        cache.numbersLayer = createLayerCanvas(cache.width, cache.height);
+        cache.numbersLayerCtx = getLayerContext(cache.numbersLayer);
+        cache.numbersLayerDirty = true;
         cache.ready = true;
         return cache;
       }
@@ -2152,6 +2161,22 @@
         return true;
       }
 
+      function rebuildNumbersLayer(cache) {
+        const ctx = cache.numbersLayerCtx;
+        if (!ctx || !cache.numbersLayer) {
+          cache.numbersLayerDirty = true;
+          return false;
+        }
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.clearRect(0, 0, cache.width, cache.height);
+        renderRegionLabelsToContext(ctx);
+        ctx.restore();
+        cache.numbersLayerDirty = false;
+        return true;
+      }
+
       function compositeFilledRegionsDirect(ctx, cache) {
         const fillsByColor = new Map();
         for (const regionId of state.filled) {
@@ -2173,6 +2198,7 @@
       function paintRegionToFilledLayer(regionId) {
         const cache = ensureRenderCache();
         if (!cache.ready) return;
+        markNumbersLayerDirty();
         if (!cache.filledLayer || !cache.filledLayerCtx) {
           cache.filledLayerDirty = true;
           return;
@@ -2195,11 +2221,47 @@
         if (state.renderCache) {
           state.renderCache.filledLayerDirty = true;
         }
+        markNumbersLayerDirty();
       }
 
       function markOutlineLayerDirty() {
         if (state.renderCache) {
           state.renderCache.outlineLayerDirty = true;
+        }
+      }
+
+      function markNumbersLayerDirty() {
+        if (state.renderCache) {
+          state.renderCache.numbersLayerDirty = true;
+        }
+      }
+
+      function renderRegionLabelsToContext(ctx) {
+        if (!state.puzzle) return;
+        if (state.settings.showRegionLabels === false) return;
+        const fallbackNumberInk = backgroundInk.number;
+        const fallbackOutlineInk = backgroundInk.outline;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.strokeStyle = fallbackOutlineInk;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        for (const region of state.puzzle.regions) {
+          if (state.filled.has(region.id)) continue;
+          const layout = getRegionLabelLayout(region);
+          if (!layout) continue;
+          const paletteColor = getPaletteEntry(region.colorId);
+          const regionInk =
+            paletteColor?.hex && typeof paletteColor.hex === "string"
+              ? rgbaFromHex(paletteColor.hex, 1)
+              : fallbackNumberInk;
+          ctx.fillStyle = regionInk;
+          ctx.font = layout.font;
+          if (layout.strokeWidth) {
+            ctx.lineWidth = layout.strokeWidth;
+            ctx.strokeText(layout.text, layout.x, layout.y);
+          }
+          ctx.fillText(layout.text, layout.x, layout.y);
         }
       }
 
@@ -3509,6 +3571,7 @@
           return normalized;
         }
         markOutlineLayerDirty();
+        markNumbersLayerDirty();
         if (!skipRender) {
           if (state.puzzle) {
             renderPuzzle();
@@ -4001,32 +4064,21 @@
       function drawNumbers() {
         if (!state.puzzle) return;
         if (state.settings.showRegionLabels === false) return;
-        puzzleCtx.save();
-        const fallbackNumberInk = backgroundInk.number;
-        const fallbackOutlineInk = backgroundInk.outline;
-        puzzleCtx.textAlign = "center";
-        puzzleCtx.textBaseline = "middle";
-        puzzleCtx.strokeStyle = fallbackOutlineInk;
-        puzzleCtx.lineJoin = "round";
-        puzzleCtx.lineCap = "round";
-        for (const region of state.puzzle.regions) {
-          if (state.filled.has(region.id)) continue;
-          const layout = getRegionLabelLayout(region);
-          if (!layout) continue;
-          const paletteColor = getPaletteEntry(region.colorId);
-          const regionInk =
-            paletteColor?.hex && typeof paletteColor.hex === "string"
-              ? rgbaFromHex(paletteColor.hex, 1)
-              : fallbackNumberInk;
-          puzzleCtx.fillStyle = regionInk;
-          puzzleCtx.font = layout.font;
-          if (layout.strokeWidth) {
-            puzzleCtx.lineWidth = layout.strokeWidth;
-            puzzleCtx.strokeText(layout.text, layout.x, layout.y);
+        const cache = ensureRenderCache();
+        if (cache.ready && cache.numbersLayer && cache.numbersLayerCtx) {
+          const drewFromLayer = cache.numbersLayerDirty ? rebuildNumbersLayer(cache) : true;
+          if (drewFromLayer) {
+            puzzleCtx.drawImage(cache.numbersLayer, 0, 0);
+            return;
           }
-          puzzleCtx.fillText(layout.text, layout.x, layout.y);
         }
-        puzzleCtx.restore();
+        drawNumbersDirect(puzzleCtx);
+      }
+
+      function drawNumbersDirect(ctx) {
+        ctx.save();
+        renderRegionLabelsToContext(ctx);
+        ctx.restore();
       }
 
       function getRegionLabelLayout(region) {
