@@ -645,11 +645,11 @@
         box-shadow: none;
       }
 
-      #paletteDock {
-        position: sticky;
-        bottom: 0;
-        left: 0;
-        right: 0;
+        #paletteDock {
+          position: sticky;
+          bottom: 0;
+          left: 0;
+          right: 0;
         width: 100%;
         max-width: 100%;
         display: flex;
@@ -664,14 +664,57 @@
         background: var(--theme-palette-dock-bg);
         border-top: 1px solid var(--theme-palette-dock-border);
         overflow: visible;
-        z-index: 3;
-      }
+          z-index: 3;
+        }
 
-      #palette {
-        flex: 1 1 auto;
-        min-width: 0;
-        width: 100%;
-        max-width: 100%;
+        .progress-status {
+          display: flex;
+          flex-direction: column;
+          gap: calc(4px * var(--ui-scale));
+          align-items: stretch;
+          font-size: 0.95rem;
+          color: var(--theme-caption-text);
+        }
+
+        .progress-status .progress-message {
+          font-weight: 600;
+          letter-spacing: 0.01em;
+        }
+
+        .progress-meter {
+          position: relative;
+          width: 100%;
+          height: calc(6px * var(--ui-scale));
+          border-radius: 999px;
+          background: rgba(148, 163, 184, 0.25);
+          overflow: hidden;
+          transition: opacity 0.25s ease;
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .progress-status.show-progress .progress-meter {
+          opacity: 1;
+        }
+
+        .progress-meter[aria-hidden="true"] {
+          opacity: 0;
+        }
+
+        .progress-bar {
+          width: 0%;
+          height: 100%;
+          border-radius: inherit;
+          background: rgba(96, 165, 250, 0.92);
+          box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
+          transition: width 0.24s ease;
+        }
+
+        #palette {
+          flex: 1 1 auto;
+          min-width: 0;
+          width: 100%;
+          max-width: 100%;
         display: flex;
         gap: 0;
         overflow-x: auto;
@@ -1389,9 +1432,30 @@
           </div>
         </div>
       </div>
-      <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div id="palette" role="list"></div>
-      </footer>
+        <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
+          <div
+            id="progressStatus"
+            class="progress-status"
+            data-status="idle"
+            role="status"
+            aria-live="polite"
+          >
+            <span id="progress" class="progress-message">Choose an artwork to start</span>
+            <div
+              id="progressMeter"
+              class="progress-meter"
+              role="progressbar"
+              aria-label="Puzzle generation progress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+              aria-hidden="true"
+            >
+              <div id="progressBar" class="progress-bar"></div>
+            </div>
+          </div>
+          <div id="palette" role="list"></div>
+        </footer>
     </div>
     <input id="fileInput" type="file" accept=".json,image/*" hidden />
     <div
@@ -1677,11 +1741,17 @@
       const saveList = document.getElementById("saveList");
       const paletteEl = document.getElementById("palette");
       const paletteSortEl = document.getElementById("paletteSort");
+      const progressStatusEl = document.getElementById("progressStatus");
       const progressEl = document.getElementById("progress");
+      const progressMeterEl = document.getElementById("progressMeter");
+      const progressBarEl = document.getElementById("progressBar");
+      const defaultProgressLabel =
+        progressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
       const PROGRESS_MESSAGES = {
         idle: "Choose an artwork to start",
         loading: "Loading puzzle…",
         active: "Keep colouring",
+        generating: "Processing image…",
         complete: "All done!",
       };
       const puzzleCanvas = document.getElementById("puzzleCanvas");
@@ -2451,6 +2521,10 @@
         previewImageData: null,
         renderCache: createRenderCache(),
       };
+
+      let generationJobCounter = 0;
+      let latestGenerationJobId = 0;
+      let puzzleGenerationModulePromise = null;
 
       gameSaveManager.subscribe((entries) => {
         state.saves = entries;
@@ -3651,6 +3725,9 @@
           try {
             const options = getCurrentOptions();
             const data = await createPuzzleData(img, options);
+            if (!data) {
+              return;
+            }
             const title = state.sourceTitle || "Generated puzzle";
             const applied = applyPuzzleResult(data, {
               options,
@@ -3714,51 +3791,27 @@
         hideCustomCursor();
       }
 
+      function loadPuzzleGenerationModule() {
+        if (!puzzleGenerationModulePromise) {
+          puzzleGenerationModulePromise = import("./puzzle-generation.js").catch((error) => {
+            puzzleGenerationModulePromise = null;
+            throw error;
+          });
+        }
+        return puzzleGenerationModulePromise;
+      }
+
       async function createPuzzleData(image, options) {
-        const { targetColors, minRegion, maxSize, sampleRate, kmeansIters, smoothingPasses } = options;
-        const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
-        const width = Math.max(8, Math.round(image.width * scale));
-        const height = Math.max(8, Math.round(image.height * scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(image, 0, 0, width, height);
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const pixels = imageData.data;
-        const { centroids, assignments } = kmeansQuantize(pixels, width, height, targetColors, kmeansIters, sampleRate);
-        let workingAssignments = assignments;
-        if (smoothingPasses > 0) {
-          workingAssignments = smoothAssignments(assignments, width, height, smoothingPasses);
+        const module = await loadPuzzleGenerationModule();
+        if (!module || typeof module.createPuzzleData !== "function") {
+          throw new Error("Puzzle generation module unavailable");
         }
-        const { regionMap, regions } = segmentRegions(width, height, workingAssignments, minRegion);
-        for (const region of regions) {
-          let sumX = 0;
-          let sumY = 0;
-          for (const idx of region.pixels) {
-            sumX += idx % width;
-            sumY += (idx / width) | 0;
-          }
-          region.cx = sumX / region.pixelCount;
-          region.cy = sumY / region.pixelCount;
-          region.colorId += 1;
-        }
-        const palette = centroids.map((c, idx) => {
-          const hex = `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`;
-          return {
-            id: idx + 1,
-            hex,
-            rgba: c,
-            name: hex.toUpperCase(),
-          };
+        return module.createPuzzleData(image, options, {
+          beginJob: beginGenerationJob,
+          reportStage: reportGenerationStage,
+          isLatestJob: isLatestGenerationJob,
+          logDebug,
         });
-        return {
-          width,
-          height,
-          palette,
-          regions,
-          regionMap,
-        };
       }
 
       function applyPuzzleResult(data, metadata = {}) {
@@ -4576,14 +4629,90 @@
         paletteEl.scrollLeft += delta;
       }
 
+      function updateGenerationProgress(progress, label) {
+        if (!progressMeterEl || !progressBarEl) {
+          return;
+        }
+        const hasProgress = typeof progress === "number" && Number.isFinite(progress);
+        if (!hasProgress) {
+          if (progressStatusEl) {
+            progressStatusEl.classList.remove("show-progress");
+          }
+          progressMeterEl.setAttribute("aria-hidden", "true");
+          progressMeterEl.setAttribute("aria-valuenow", "0");
+          progressMeterEl.setAttribute("aria-label", label || defaultProgressLabel);
+          progressBarEl.style.width = "0%";
+          return;
+        }
+        const clamped = Math.min(1, Math.max(0, progress));
+        if (progressStatusEl) {
+          progressStatusEl.classList.add("show-progress");
+        }
+        progressMeterEl.setAttribute("aria-hidden", "false");
+        progressMeterEl.setAttribute("aria-valuenow", String(Math.round(clamped * 100)));
+        progressMeterEl.setAttribute("aria-label", label || defaultProgressLabel);
+        progressBarEl.style.width = `${(clamped * 100).toFixed(1)}%`;
+      }
+
+      function clearGenerationProgress() {
+        if (!progressMeterEl || !progressBarEl) {
+          return;
+        }
+        if (progressStatusEl) {
+          progressStatusEl.classList.remove("show-progress");
+        }
+        progressMeterEl.setAttribute("aria-hidden", "true");
+        progressMeterEl.setAttribute("aria-valuenow", "0");
+        progressMeterEl.setAttribute("aria-label", defaultProgressLabel);
+        progressBarEl.style.width = "0%";
+      }
+
+      function beginGenerationJob() {
+        generationJobCounter += 1;
+        latestGenerationJobId = generationJobCounter;
+        return generationJobCounter;
+      }
+
+      function isLatestGenerationJob(id) {
+        return id === latestGenerationJobId;
+      }
+
+      function reportGenerationStage(jobId, progress, label) {
+        if (!isLatestGenerationJob(jobId)) {
+          return;
+        }
+        const safeLabel =
+          typeof label === "string" && label.trim().length > 0
+            ? label
+            : PROGRESS_MESSAGES.generating;
+        const hasProgress = typeof progress === "number" && Number.isFinite(progress);
+        const normalized = hasProgress ? Math.min(1, Math.max(0, progress)) : null;
+        const summary =
+          hasProgress && normalized != null
+            ? `${safeLabel} (${Math.round(normalized * 100)}%)`
+            : safeLabel;
+        setProgressMessage("generating", summary);
+        if (hasProgress && normalized != null) {
+          updateGenerationProgress(normalized, safeLabel);
+        }
+      }
+
+
       function setProgressMessage(status, customMessage) {
         const message =
           typeof customMessage === "string" && customMessage.length > 0
             ? customMessage
             : PROGRESS_MESSAGES[status] || PROGRESS_MESSAGES.idle;
-        if (!progressEl) return;
-        progressEl.textContent = message;
-        progressEl.setAttribute("data-status", status || "idle");
+        if (progressEl) {
+          progressEl.textContent = message;
+          progressEl.setAttribute("data-status", status || "idle");
+        }
+        if (progressStatusEl) {
+          progressStatusEl.setAttribute("data-status", status || "idle");
+        }
+        if (status !== "generating") {
+          clearGenerationProgress();
+        }
       }
 
       function updateProgress() {
@@ -6496,220 +6625,6 @@
         logDebug(`Exported save: ${entry.title || "capy-save"}`);
       }
 
-      function serializeAssignments(pixels, centroids) {
-        const assignments = new Uint16Array(pixels.length / 4);
-        for (let i = 0; i < assignments.length; i++) {
-          const base = i * 4;
-          let best = 0;
-          let bestDist = Infinity;
-          for (let c = 0; c < centroids.length; c++) {
-            const centroid = centroids[c];
-            const dr = pixels[base] - centroid[0];
-            const dg = pixels[base + 1] - centroid[1];
-            const db = pixels[base + 2] - centroid[2];
-            const dist = dr * dr + dg * dg + db * db;
-            if (dist < bestDist) {
-              bestDist = dist;
-              best = c;
-            }
-          }
-          assignments[i] = best;
-        }
-        return assignments;
-      }
-
-      function kmeansQuantize(pixels, width, height, targetColors, iterations, sampleRate) {
-        const totalPixels = width * height;
-        const sampleCount = Math.max(targetColors * 4, Math.floor(totalPixels * clamp(sampleRate, 0.05, 1)));
-        const sampleIndexes = new Uint32Array(Math.min(sampleCount, totalPixels));
-        const step = Math.max(1, Math.floor(totalPixels / sampleIndexes.length));
-        let pointer = 0;
-        for (let idx = 0; idx < totalPixels && pointer < sampleIndexes.length; idx += step) {
-          sampleIndexes[pointer++] = idx;
-        }
-        while (pointer < sampleIndexes.length) {
-          sampleIndexes[pointer++] = Math.floor(Math.random() * totalPixels);
-        }
-        const centroids = [];
-        for (let i = 0; i < targetColors; i++) {
-          const sampleIdx = sampleIndexes[i % sampleIndexes.length];
-          const base = sampleIdx * 4;
-          centroids.push([
-            pixels[base],
-            pixels[base + 1],
-            pixels[base + 2],
-          ]);
-        }
-        const sampleAssignments = new Uint16Array(sampleIndexes.length);
-        for (let iter = 0; iter < iterations; iter++) {
-          for (let i = 0; i < sampleIndexes.length; i++) {
-            const base = sampleIndexes[i] * 4;
-            let best = 0;
-            let bestDist = Infinity;
-            for (let c = 0; c < centroids.length; c++) {
-              const centroid = centroids[c];
-              const dr = pixels[base] - centroid[0];
-              const dg = pixels[base + 1] - centroid[1];
-              const db = pixels[base + 2] - centroid[2];
-              const dist = dr * dr + dg * dg + db * db;
-              if (dist < bestDist) {
-                bestDist = dist;
-                best = c;
-              }
-            }
-            sampleAssignments[i] = best;
-          }
-          const sums = Array.from({ length: centroids.length }, () => [0, 0, 0, 0]);
-          for (let i = 0; i < sampleIndexes.length; i++) {
-            const base = sampleIndexes[i] * 4;
-            const target = sampleAssignments[i];
-            const bucket = sums[target];
-            bucket[0] += pixels[base];
-            bucket[1] += pixels[base + 1];
-            bucket[2] += pixels[base + 2];
-            bucket[3] += 1;
-          }
-          for (let c = 0; c < centroids.length; c++) {
-            const bucket = sums[c];
-            if (bucket[3] === 0) continue;
-            centroids[c][0] = bucket[0] / bucket[3];
-            centroids[c][1] = bucket[1] / bucket[3];
-            centroids[c][2] = bucket[2] / bucket[3];
-          }
-        }
-        const rounded = centroids.map((c) => c.map((value) => Math.round(value)));
-        const assignments = serializeAssignments(pixels, rounded);
-        return { centroids: rounded, assignments };
-      }
-
-      function smoothAssignments(assignments, width, height, passes) {
-        let current = new Uint16Array(assignments);
-        for (let pass = 0; pass < passes; pass++) {
-          const next = new Uint16Array(current);
-          for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-              const idx = y * width + x;
-              const histogram = new Map();
-              const baseColor = current[idx];
-              histogram.set(baseColor, (histogram.get(baseColor) || 0) + 2);
-              if (x > 0) accumulate(histogram, current[idx - 1]);
-              if (x < width - 1) accumulate(histogram, current[idx + 1]);
-              if (y > 0) accumulate(histogram, current[idx - width]);
-              if (y < height - 1) accumulate(histogram, current[idx + width]);
-              let bestColor = baseColor;
-              let bestScore = -Infinity;
-              for (const [color, score] of histogram.entries()) {
-                if (score > bestScore) {
-                  bestScore = score;
-                  bestColor = color;
-                }
-              }
-              next[idx] = bestColor;
-            }
-          }
-          current = next;
-        }
-        return current;
-      }
-
-      function accumulate(histogram, color) {
-        histogram.set(color, (histogram.get(color) || 0) + 1);
-      }
-
-      function segmentRegions(width, height, assignments, minRegion) {
-        const indexMap = new Uint16Array(assignments);
-        let attempt = 0;
-        let threshold = Math.max(1, minRegion);
-        while (true) {
-          const { regionMap, regions } = floodFill(width, height, indexMap);
-          const tiny = regions.filter((region) => region.pixelCount < threshold);
-          if (tiny.length === 0 || threshold <= 1) {
-            return { regionMap, regions };
-          }
-          let changed = false;
-          for (const region of tiny) {
-            const colorVotes = new Map();
-            for (const idx of region.pixels) {
-              const x = idx % width;
-              const y = (idx / width) | 0;
-              const neighbors = neighborIndexes(x, y, width, height);
-              for (const n of neighbors) {
-                const color = indexMap[n];
-                if (color === region.colorId) continue;
-                colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
-              }
-            }
-            if (colorVotes.size === 0) continue;
-            let bestColor = region.colorId;
-            let bestVotes = -1;
-            for (const [color, votes] of colorVotes.entries()) {
-              if (votes > bestVotes) {
-                bestVotes = votes;
-                bestColor = color;
-              }
-            }
-            if (bestColor !== region.colorId) {
-              changed = true;
-              for (const idx of region.pixels) {
-                indexMap[idx] = bestColor;
-              }
-            }
-          }
-          attempt += 1;
-          if (!changed || attempt > 6) {
-            threshold = Math.max(1, Math.floor(threshold / 2));
-          }
-        }
-      }
-
-      function floodFill(width, height, indexMap) {
-        const regionMap = new Int32Array(width * height);
-        regionMap.fill(-1);
-        const regions = [];
-        let regionId = 0;
-        const stack = [];
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const startIdx = y * width + x;
-            if (regionMap[startIdx] !== -1) continue;
-            const colorId = indexMap[startIdx];
-            stack.push(startIdx);
-            regionMap[startIdx] = regionId;
-            const pixels = [];
-            while (stack.length) {
-              const idx = stack.pop();
-              pixels.push(idx);
-              const px = idx % width;
-              const py = (idx / width) | 0;
-              const neighbors = neighborIndexes(px, py, width, height);
-              for (const n of neighbors) {
-                if (regionMap[n] !== -1) continue;
-                if (indexMap[n] !== colorId) continue;
-                regionMap[n] = regionId;
-                stack.push(n);
-              }
-            }
-            regions.push({
-              id: regionId,
-              colorId,
-              pixels,
-              pixelCount: pixels.length,
-            });
-            regionId += 1;
-          }
-        }
-        return { regionMap, regions };
-      }
-
-      function neighborIndexes(x, y, width, height) {
-        const neighbors = [];
-        if (x > 0) neighbors.push(y * width + (x - 1));
-        if (x < width - 1) neighbors.push(y * width + (x + 1));
-        if (y > 0) neighbors.push((y - 1) * width + x);
-        if (y < height - 1) neighbors.push((y + 1) * width + x);
-        return neighbors;
-      }
-
       function sanitizeHexColor(value, fallback = DEFAULT_BACKGROUND_HEX) {
         if (typeof value !== "string") return fallback;
         const trimmed = value.trim();
@@ -6856,9 +6771,6 @@
         return value;
       }
 
-      function toHex(value) {
-        return value.toString(16).padStart(2, "0");
-      }
     </script>
   </body>
 </html>
