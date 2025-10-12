@@ -2371,9 +2371,14 @@
       };
 
       let panPointerId = null;
+      let panPointerType = null;
       const panOrigin = { x: 0, y: 0, panX: 0, panY: 0 };
       let panCandidate = null;
       let isPanning = false;
+      let panCaptureTarget = null;
+      let panHasPointerCapture = false;
+      let panGlobalListenersAttached = false;
+      const globalPanListenerOptions = { capture: true };
       let spacePressed = false;
       let colorFlashTimer = null;
       const activeTouches = new Map();
@@ -2883,7 +2888,7 @@
         pointerSurface.addEventListener("pointermove", handlePanMove, pointerOptions);
         pointerSurface.addEventListener("pointerup", handlePanEnd, pointerOptions);
         pointerSurface.addEventListener("pointercancel", handlePanEnd, pointerOptions);
-        pointerSurface.addEventListener("lostpointercapture", handlePanEnd);
+        pointerSurface.addEventListener("lostpointercapture", handlePanCaptureLost);
         pointerSurface.addEventListener("wheel", handleWheel, { passive: false });
         pointerSurface.addEventListener("contextmenu", (event) => event.preventDefault());
       }
@@ -2947,12 +2952,22 @@
       window.addEventListener("blur", () => {
         spacePressed = false;
         if (panPointerId != null) {
-          try {
-            canvasStage.releasePointerCapture(panPointerId);
-          } catch (error) {}
+          if (
+            panCaptureTarget &&
+            panHasPointerCapture &&
+            typeof panCaptureTarget.releasePointerCapture === "function"
+          ) {
+            try {
+              panCaptureTarget.releasePointerCapture(panPointerId);
+            } catch (error) {}
+          }
         }
         panPointerId = null;
+        panPointerType = null;
         panCandidate = null;
+        panCaptureTarget = null;
+        panHasPointerCapture = false;
+        detachGlobalPanListeners();
         if (isPanning) {
           document.body.classList.remove("panning");
           isPanning = false;
@@ -4692,7 +4707,65 @@
         }
       }
 
-      function beginPanSession(pointerId, originX, originY, startPanX, startPanY) {
+      function defaultPanCaptureTarget() {
+        return canvasStage || puzzleCanvas || viewportEl || document.body;
+      }
+
+      function resolvePanCaptureTarget(event, fallback) {
+        if (event) {
+          const current = event.currentTarget;
+          if (current instanceof Element) {
+            return current;
+          }
+          const target = event.target;
+          if (target instanceof Element) {
+            return target;
+          }
+        }
+        return fallback || defaultPanCaptureTarget();
+      }
+
+      function attachGlobalPanListeners() {
+        if (panGlobalListenersAttached) {
+          return;
+        }
+        window.addEventListener("pointermove", handlePanMove, globalPanListenerOptions);
+        window.addEventListener("pointerup", handlePanEnd, globalPanListenerOptions);
+        window.addEventListener("pointercancel", handlePanEnd, globalPanListenerOptions);
+        panGlobalListenersAttached = true;
+      }
+
+      function detachGlobalPanListeners() {
+        if (!panGlobalListenersAttached) {
+          return;
+        }
+        window.removeEventListener("pointermove", handlePanMove, globalPanListenerOptions);
+        window.removeEventListener("pointerup", handlePanEnd, globalPanListenerOptions);
+        window.removeEventListener("pointercancel", handlePanEnd, globalPanListenerOptions);
+        panGlobalListenersAttached = false;
+      }
+
+      function handlePanCaptureLost(event) {
+        if (event.pointerId !== panPointerId) {
+          return;
+        }
+        panHasPointerCapture = false;
+        if (!isPanning) {
+          return;
+        }
+        logDebug("Pointer capture lost; maintaining pan via window listeners");
+        attachGlobalPanListeners();
+      }
+
+      function beginPanSession(
+        pointerId,
+        originX,
+        originY,
+        startPanX,
+        startPanY,
+        captureTarget,
+        pointerType
+      ) {
         panPointerId = pointerId;
         panOrigin.x = originX;
         panOrigin.y = originY;
@@ -4703,14 +4776,35 @@
         document.body.classList.add("panning");
         logDebug("Began panning view");
         hideCustomCursor();
-        try {
-          canvasStage.setPointerCapture(pointerId);
-        } catch (error) {}
+        const fallbackTarget = defaultPanCaptureTarget();
+        panCaptureTarget = captureTarget || fallbackTarget;
+        panPointerType = typeof pointerType === "string" ? pointerType : null;
+        let captured = false;
+        if (panCaptureTarget && typeof panCaptureTarget.setPointerCapture === "function") {
+          try {
+            panCaptureTarget.setPointerCapture(pointerId);
+            captured =
+              typeof panCaptureTarget.hasPointerCapture === "function"
+                ? panCaptureTarget.hasPointerCapture(pointerId)
+                : true;
+          } catch (error) {
+            captured = false;
+          }
+        }
+        panHasPointerCapture = captured;
+        const pointerIsTouchLike = panPointerType === "touch" || panPointerType === "pen";
+        const needsGlobalListeners = !captured || pointerIsTouchLike;
+        if (needsGlobalListeners) {
+          attachGlobalPanListeners();
+        } else {
+          detachGlobalPanListeners();
+        }
       }
 
       function handlePanStart(event) {
         if (!state.puzzle) return;
         panCandidate = null;
+        const captureTarget = resolvePanCaptureTarget(event);
         const isTouch = event.pointerType === "touch";
         if (isTouch) {
           event.preventDefault();
@@ -4732,6 +4826,8 @@
                 initialPanY: viewState.panY,
                 centerX: (a.x + b.x) / 2,
                 centerY: (a.y + b.y) / 2,
+                lastCenterX: (a.x + b.x) / 2,
+                lastCenterY: (a.y + b.y) / 2,
                 hasChanged: false,
               };
               document.body.classList.add("panning");
@@ -4746,6 +4842,7 @@
               panX: viewState.panX,
               panY: viewState.panY,
               pointerType: "touch",
+              captureTarget,
             };
           }
           return;
@@ -4759,7 +4856,9 @@
             event.clientX,
             event.clientY,
             viewState.panX,
-            viewState.panY
+            viewState.panY,
+            captureTarget,
+            event.pointerType
           );
           return;
         }
@@ -4771,6 +4870,7 @@
             panX: viewState.panX,
             panY: viewState.panY,
             pointerType: "mouse",
+            captureTarget,
           };
         }
       }
@@ -4806,9 +4906,24 @@
               }
               const centerX = (first.x + second.x) / 2;
               const centerY = (first.y + second.y) / 2;
-              viewState.panX = pinchSession.initialPanX + (centerX - pinchSession.centerX);
-              viewState.panY = pinchSession.initialPanY + (centerY - pinchSession.centerY);
-              applyViewTransform();
+              const previousCenterX =
+                typeof pinchSession.lastCenterX === "number"
+                  ? pinchSession.lastCenterX
+                  : pinchSession.centerX;
+              const previousCenterY =
+                typeof pinchSession.lastCenterY === "number"
+                  ? pinchSession.lastCenterY
+                  : pinchSession.centerY;
+              const deltaX = centerX - previousCenterX;
+              const deltaY = centerY - previousCenterY;
+              if (Math.abs(deltaX) > 0.0001 || Math.abs(deltaY) > 0.0001) {
+                viewState.panX += deltaX;
+                viewState.panY += deltaY;
+                pinchSession.hasChanged = true;
+                applyViewTransform();
+              }
+              pinchSession.lastCenterX = centerX;
+              pinchSession.lastCenterY = centerY;
             }
             return;
           }
@@ -4834,7 +4949,9 @@
           panCandidate.startX,
           panCandidate.startY,
           panCandidate.panX,
-          panCandidate.panY
+          panCandidate.panY,
+          panCandidate.captureTarget || resolvePanCaptureTarget(event, panCandidate.captureTarget),
+          panCandidate.pointerType || event.pointerType
         );
         panCandidate = null;
         handlePanMove(event);
@@ -4865,6 +4982,7 @@
                   panX: viewState.panX,
                   panY: viewState.panY,
                   pointerType: "touch",
+                  captureTarget: pointerSurface || defaultPanCaptureTarget(),
                 };
               }
             }
@@ -4875,14 +4993,24 @@
         }
         if (event.pointerId !== panPointerId) return;
         panPointerId = null;
+        panPointerType = null;
         if (isPanning) {
           isPanning = false;
           document.body.classList.remove("panning");
           logDebug("Stopped panning view");
         }
-        try {
-          canvasStage.releasePointerCapture(event.pointerId);
-        } catch (error) {}
+        if (
+          panCaptureTarget &&
+          panHasPointerCapture &&
+          typeof panCaptureTarget.releasePointerCapture === "function"
+        ) {
+          try {
+            panCaptureTarget.releasePointerCapture(event.pointerId);
+          } catch (error) {}
+        }
+        panCaptureTarget = null;
+        panHasPointerCapture = false;
+        detachGlobalPanListeners();
         if (event.pointerType === "touch") {
           hideCustomCursor();
         } else {
