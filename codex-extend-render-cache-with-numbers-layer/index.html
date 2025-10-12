@@ -3509,6 +3509,9 @@
         const resolved = visible === false ? false : true;
         const previous = state.settings.showRegionLabels !== false;
         state.settings.showRegionLabels = resolved;
+        if (previous !== resolved) {
+          markNumbersLayerDirty();
+        }
         if (showRegionLabelsToggle && showRegionLabelsToggle.checked !== resolved) {
           showRegionLabelsToggle.checked = resolved;
         }
