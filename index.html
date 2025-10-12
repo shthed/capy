@@ -1929,34 +1929,15 @@
         if (!state.puzzle) return;
         const cache = ensureRenderCache();
         if (!cache.ready) return;
-        puzzleCtx.save();
-        puzzleCtx.strokeStyle = backgroundInk.outline;
-        puzzleCtx.lineWidth = cache.strokeWidth;
-        puzzleCtx.lineJoin = "round";
-        puzzleCtx.lineCap = "round";
-        if (SUPPORTS_PATH2D) {
-          for (const entry of cache.regions) {
-            if (!entry?.path) continue;
-            puzzleCtx.stroke(entry.path);
+        if (cache.outlineLayer && cache.outlineLayerCtx) {
+          if (cache.outlineLayerDirty && !rasterizeOutlineLayer(cache)) {
+            strokeOutlinesDirect(cache);
+            return;
           }
-        } else {
-          puzzleCtx.beginPath();
-          for (const entry of cache.regions) {
-            if (!entry?.contours) continue;
-            for (const contour of entry.contours) {
-              if (contour.length === 0) continue;
-              const first = contour[0];
-              puzzleCtx.moveTo(first[0], first[1]);
-              for (let i = 1; i < contour.length; i++) {
-                const point = contour[i];
-                puzzleCtx.lineTo(point[0], point[1]);
-              }
-              puzzleCtx.closePath();
-            }
-          }
-          puzzleCtx.stroke();
+          puzzleCtx.drawImage(cache.outlineLayer, 0, 0);
+          return;
         }
-        puzzleCtx.restore();
+        strokeOutlinesDirect(cache);
       }
 
       function createRenderCache() {
@@ -1968,7 +1949,116 @@
           ready: false,
           regions: [],
           regionsById: new Map(),
+          filledLayer: null,
+          filledLayerCtx: null,
+          filledLayerDirty: true,
+          outlineLayer: null,
+          outlineLayerCtx: null,
+          outlineLayerDirty: true,
         };
+      }
+
+      function strokeOutlinesDirect(cache) {
+        puzzleCtx.save();
+        puzzleCtx.strokeStyle = backgroundInk.outline;
+        puzzleCtx.lineWidth = cache.strokeWidth;
+        puzzleCtx.lineJoin = "round";
+        puzzleCtx.lineCap = "round";
+        strokeGeometries(puzzleCtx, cache.regions);
+        puzzleCtx.restore();
+      }
+
+      function rasterizeOutlineLayer(cache) {
+        const ctx = cache.outlineLayerCtx;
+        if (!ctx || !cache.outlineLayer) {
+          cache.outlineLayerDirty = true;
+          return false;
+        }
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, cache.width, cache.height);
+        ctx.strokeStyle = backgroundInk.outline;
+        ctx.lineWidth = cache.strokeWidth;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        strokeGeometries(ctx, cache.regions);
+        ctx.restore();
+        cache.outlineLayerDirty = false;
+        return true;
+      }
+
+      function createLayerCanvas(width, height) {
+        if (SUPPORTS_OFFSCREEN_CANVAS) {
+          try {
+            return new OffscreenCanvas(width, height);
+          } catch (error) {}
+        }
+        if (typeof document === "undefined") {
+          return null;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.hidden = true;
+        return canvas;
+      }
+
+      function getLayerContext(layer) {
+        if (!layer) return null;
+        try {
+          const ctx = layer.getContext("2d");
+          if (ctx) {
+            ctx.imageSmoothingEnabled = false;
+          }
+          return ctx;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function appendContoursToPath(ctx, contours) {
+        for (const contour of contours || []) {
+          if (!contour || contour.length === 0) continue;
+          const first = contour[0];
+          ctx.moveTo(first[0], first[1]);
+          for (let i = 1; i < contour.length; i++) {
+            const point = contour[i];
+            ctx.lineTo(point[0], point[1]);
+          }
+          ctx.closePath();
+        }
+      }
+
+      function fillGeometries(ctx, geometries) {
+        if (SUPPORTS_PATH2D) {
+          for (const geometry of geometries) {
+            if (!geometry?.path) continue;
+            ctx.fill(geometry.path);
+          }
+          return;
+        }
+        ctx.beginPath();
+        for (const geometry of geometries) {
+          if (!geometry?.contours) continue;
+          appendContoursToPath(ctx, geometry.contours);
+        }
+        ctx.fill();
+      }
+
+      function strokeGeometries(ctx, geometries) {
+        if (SUPPORTS_PATH2D) {
+          for (const geometry of geometries) {
+            if (!geometry?.path) continue;
+            ctx.stroke(geometry.path);
+          }
+          return;
+        }
+        ctx.beginPath();
+        for (const geometry of geometries) {
+          if (!geometry?.contours) continue;
+          appendContoursToPath(ctx, geometry.contours);
+        }
+        ctx.stroke();
       }
 
       function ensureRenderCache(options = {}) {
@@ -2002,6 +2092,12 @@
           cache.strokeWidth = 1;
           cache.regions = [];
           cache.regionsById = new Map();
+          cache.filledLayer = null;
+          cache.filledLayerCtx = null;
+          cache.filledLayerDirty = true;
+          cache.outlineLayer = null;
+          cache.outlineLayerCtx = null;
+          cache.outlineLayerDirty = true;
           cache.ready = false;
           return cache;
         }
@@ -2016,8 +2112,95 @@
           cache.regions.push(geometry);
           cache.regionsById.set(region.id, geometry);
         }
+        cache.filledLayer = createLayerCanvas(cache.width, cache.height);
+        cache.filledLayerCtx = getLayerContext(cache.filledLayer);
+        cache.filledLayerDirty = true;
+        cache.outlineLayer = createLayerCanvas(cache.width, cache.height);
+        cache.outlineLayerCtx = getLayerContext(cache.outlineLayer);
+        cache.outlineLayerDirty = true;
         cache.ready = true;
         return cache;
+      }
+
+      function rebuildFilledLayer(cache) {
+        const ctx = cache.filledLayerCtx;
+        if (!ctx || !cache.filledLayer) {
+          cache.filledLayerDirty = true;
+          return false;
+        }
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.clearRect(0, 0, cache.width, cache.height);
+        const fillsByColor = new Map();
+        for (const regionId of state.filled) {
+          const geometry = cache.regionsById.get(regionId);
+          if (!geometry) continue;
+          const colorEntry = getPaletteEntry(geometry.colorId);
+          if (!colorEntry?.hex) continue;
+          if (!fillsByColor.has(colorEntry.hex)) {
+            fillsByColor.set(colorEntry.hex, []);
+          }
+          fillsByColor.get(colorEntry.hex).push(geometry);
+        }
+        for (const [hex, entries] of fillsByColor) {
+          ctx.fillStyle = hex;
+          fillGeometries(ctx, entries);
+        }
+        ctx.restore();
+        cache.filledLayerDirty = false;
+        return true;
+      }
+
+      function compositeFilledRegionsDirect(ctx, cache) {
+        const fillsByColor = new Map();
+        for (const regionId of state.filled) {
+          const geometry = cache.regionsById.get(regionId);
+          if (!geometry) continue;
+          const colorEntry = getPaletteEntry(geometry.colorId);
+          if (!colorEntry?.hex) continue;
+          if (!fillsByColor.has(colorEntry.hex)) {
+            fillsByColor.set(colorEntry.hex, []);
+          }
+          fillsByColor.get(colorEntry.hex).push(geometry);
+        }
+        for (const [hex, entries] of fillsByColor) {
+          ctx.fillStyle = hex;
+          fillGeometries(ctx, entries);
+        }
+      }
+
+      function paintRegionToFilledLayer(regionId) {
+        const cache = ensureRenderCache();
+        if (!cache.ready) return;
+        if (!cache.filledLayer || !cache.filledLayerCtx) {
+          cache.filledLayerDirty = true;
+          return;
+        }
+        if (cache.filledLayerDirty) {
+          return;
+        }
+        const geometry = cache.regionsById.get(regionId);
+        if (!geometry) return;
+        const colorEntry = getPaletteEntry(geometry.colorId);
+        if (!colorEntry?.hex) return;
+        const ctx = cache.filledLayerCtx;
+        ctx.save();
+        ctx.fillStyle = colorEntry.hex;
+        fillGeometries(ctx, [geometry]);
+        ctx.restore();
+      }
+
+      function markFilledLayerDirty() {
+        if (state.renderCache) {
+          state.renderCache.filledLayerDirty = true;
+        }
+      }
+
+      function markOutlineLayerDirty() {
+        if (state.renderCache) {
+          state.renderCache.outlineLayerDirty = true;
+        }
       }
 
       function buildRegionGeometry(region, width, height) {
@@ -2179,6 +2362,7 @@
       const MIN_RENDER_SCALE = MIN_VIEWPORT_ZOOM;
       const MAX_RENDER_SCALE = MAX_VIEWPORT_ZOOM;
       const SUPPORTS_PATH2D = typeof Path2D === "function";
+      const SUPPORTS_OFFSCREEN_CANVAS = typeof OffscreenCanvas === "function";
       const viewState = {
         panX: 0,
         panY: 0,
@@ -2550,6 +2734,7 @@
       resetButton.addEventListener("click", () => {
         if (!state.puzzle) return;
         state.filled = new Set();
+        markFilledLayerDirty();
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
@@ -2822,6 +3007,7 @@
           return;
         }
         state.filled.add(regionId);
+        paintRegionToFilledLayer(regionId);
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
@@ -3322,6 +3508,7 @@
         if (!changed) {
           return normalized;
         }
+        markOutlineLayerDirty();
         if (!skipRender) {
           if (state.puzzle) {
             renderPuzzle();
@@ -3496,6 +3683,7 @@
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
+        markFilledLayerDirty();
         state.sourceUrl = null;
         state.sourceTitle = null;
         if (paletteEl) {
@@ -3699,6 +3887,7 @@
             ? requestedColor
             : palette[0]?.id ?? null;
         state.filled = new Set(metadata.filled ?? []);
+        markFilledLayerDirty();
         state.lastOptions = metadata.options ?? getCurrentOptions();
         const resolvedSettings = metadata.settings ?? data.settings;
         if (resolvedSettings) {
@@ -3787,47 +3976,21 @@
       function renderPuzzle() {
         if (!state.puzzle) return;
         const { width, height } = state.puzzle;
+        const cache = ensureRenderCache();
         puzzleCtx.save();
         puzzleCtx.clearRect(0, 0, width, height);
         puzzleCtx.fillStyle = state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX;
         puzzleCtx.fillRect(0, 0, width, height);
-        const cache = ensureRenderCache();
         if (cache.ready) {
-          const fillsByColor = new Map();
-          for (const regionId of state.filled) {
-            const geometry = cache.regionsById.get(regionId);
-            if (!geometry) continue;
-            const colorEntry = getPaletteEntry(geometry.colorId);
-            if (!colorEntry?.hex) continue;
-            if (!fillsByColor.has(colorEntry.hex)) {
-              fillsByColor.set(colorEntry.hex, []);
+          let drewFromLayer = false;
+          if (cache.filledLayer && cache.filledLayerCtx) {
+            drewFromLayer = cache.filledLayerDirty ? rebuildFilledLayer(cache) : true;
+            if (drewFromLayer) {
+              puzzleCtx.drawImage(cache.filledLayer, 0, 0);
             }
-            fillsByColor.get(colorEntry.hex).push(geometry);
           }
-          for (const [hex, entries] of fillsByColor) {
-            puzzleCtx.fillStyle = hex;
-            if (SUPPORTS_PATH2D) {
-              for (const entry of entries) {
-                if (!entry?.path) continue;
-                puzzleCtx.fill(entry.path);
-              }
-            } else {
-              for (const entry of entries) {
-                if (!entry?.contours) continue;
-                puzzleCtx.beginPath();
-                for (const contour of entry.contours) {
-                  if (contour.length === 0) continue;
-                  const first = contour[0];
-                  puzzleCtx.moveTo(first[0], first[1]);
-                  for (let i = 1; i < contour.length; i++) {
-                    const point = contour[i];
-                    puzzleCtx.lineTo(point[0], point[1]);
-                  }
-                  puzzleCtx.closePath();
-                }
-                puzzleCtx.fill();
-              }
-            }
+          if (!drewFromLayer) {
+            compositeFilledRegionsDirect(puzzleCtx, cache);
           }
         }
         puzzleCtx.restore();
