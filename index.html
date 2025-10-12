@@ -2982,6 +2982,7 @@
       }
 
       const DOUBLE_TAP_WINDOW_MS = 320;
+      const POINTER_CLICK_SUPPRESSION_MS = 360;
 
       function getRegionAtPoint(clientX, clientY) {
         if (!state.puzzle || !puzzleCanvas) {
@@ -3063,25 +3064,25 @@
         }
       }
 
-      // Puzzle fill interaction: click to paint if the region matches the active colour.
-      puzzleCanvas.addEventListener("click", (event) => {
+      let suppressNextCanvasClickUntil = 0;
+
+      function attemptFillRegion(hit, { label = "click" } = {}) {
         if (!state.puzzle) {
-          logDebug("Ignoring canvas click: no puzzle loaded yet");
-          return;
+          logDebug(`Ignoring canvas ${label}: no puzzle loaded yet`);
+          return "ignored";
         }
         if (state.activeColor == null) {
-          logDebug("Ignoring canvas click: no active colour selected");
-          return;
+          logDebug(`Ignoring canvas ${label}: no active colour selected`);
+          return "ignored";
         }
-        const hit = getRegionFromEvent(event);
         if (!hit) {
-          logDebug("Ignoring canvas click: no region mapped under pointer");
-          return;
+          logDebug(`Ignoring canvas ${label}: no region mapped under pointer`);
+          return "ignored";
         }
         const { region, regionId } = hit;
         if (state.filled.has(regionId)) {
-          logDebug(`Region ${region.id} already filled; ignoring click`);
-          return;
+          logDebug(`Region ${region.id} already filled; ignoring ${label}`);
+          return "ignored";
         }
         if (region.colorId !== state.activeColor) {
           const paletteColor = getPaletteEntry(region.colorId);
@@ -3093,7 +3094,7 @@
           logDebug(
             `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
           );
-          return;
+          return "mismatch";
         }
         state.filled.add(regionId);
         paintRegionToFilledLayer(regionId);
@@ -3111,6 +3112,17 @@
           autoAdvanceColor(region.colorId);
         }
         refreshCustomCursorHighlight();
+        return "filled";
+      }
+
+      // Puzzle fill interaction: click to paint if the region matches the active colour.
+      puzzleCanvas.addEventListener("click", (event) => {
+        if (suppressNextCanvasClickUntil && Date.now() <= suppressNextCanvasClickUntil) {
+          suppressNextCanvasClickUntil = 0;
+          event.preventDefault?.();
+          return;
+        }
+        attemptFillRegion(getRegionFromEvent(event), { label: "click" });
       });
 
       puzzleCanvas.addEventListener("dblclick", (event) => {
@@ -3154,11 +3166,17 @@
           const now = Date.now();
           if (lastTouchTapRegionId === hit.regionId && now - lastTouchTapTime <= DOUBLE_TAP_WINDOW_MS) {
             event.preventDefault();
+            suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
             lastTouchTapTime = 0;
             lastTouchTapRegionId = null;
             lastTouchSelectionTime = now;
             activateColor(hit.region.colorId);
             return;
+          }
+          const result = attemptFillRegion(hit, { label: "tap" });
+          if (result !== "ignored") {
+            suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+            event.preventDefault();
           }
           lastTouchTapTime = now;
           lastTouchTapRegionId = hit.regionId;
