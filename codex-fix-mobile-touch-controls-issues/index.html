@@ -2374,6 +2374,10 @@
       const panOrigin = { x: 0, y: 0, panX: 0, panY: 0 };
       let panCandidate = null;
       let isPanning = false;
+      let panCaptureTarget = null;
+      let panHasPointerCapture = false;
+      let panGlobalListenersAttached = false;
+      const globalPanListenerOptions = { capture: true };
       let spacePressed = false;
       let colorFlashTimer = null;
       const activeTouches = new Map();
@@ -2947,12 +2951,21 @@
       window.addEventListener("blur", () => {
         spacePressed = false;
         if (panPointerId != null) {
-          try {
-            canvasStage.releasePointerCapture(panPointerId);
-          } catch (error) {}
+          if (
+            panCaptureTarget &&
+            panHasPointerCapture &&
+            typeof panCaptureTarget.releasePointerCapture === "function"
+          ) {
+            try {
+              panCaptureTarget.releasePointerCapture(panPointerId);
+            } catch (error) {}
+          }
         }
         panPointerId = null;
         panCandidate = null;
+        panCaptureTarget = null;
+        panHasPointerCapture = false;
+        detachGlobalPanListeners();
         if (isPanning) {
           document.body.classList.remove("panning");
           isPanning = false;
@@ -4692,7 +4705,45 @@
         }
       }
 
-      function beginPanSession(pointerId, originX, originY, startPanX, startPanY) {
+      function defaultPanCaptureTarget() {
+        return canvasStage || puzzleCanvas || viewportEl || document.body;
+      }
+
+      function resolvePanCaptureTarget(event, fallback) {
+        if (event) {
+          const current = event.currentTarget;
+          if (current instanceof Element) {
+            return current;
+          }
+          const target = event.target;
+          if (target instanceof Element) {
+            return target;
+          }
+        }
+        return fallback || defaultPanCaptureTarget();
+      }
+
+      function attachGlobalPanListeners() {
+        if (panGlobalListenersAttached) {
+          return;
+        }
+        window.addEventListener("pointermove", handlePanMove, globalPanListenerOptions);
+        window.addEventListener("pointerup", handlePanEnd, globalPanListenerOptions);
+        window.addEventListener("pointercancel", handlePanEnd, globalPanListenerOptions);
+        panGlobalListenersAttached = true;
+      }
+
+      function detachGlobalPanListeners() {
+        if (!panGlobalListenersAttached) {
+          return;
+        }
+        window.removeEventListener("pointermove", handlePanMove, globalPanListenerOptions);
+        window.removeEventListener("pointerup", handlePanEnd, globalPanListenerOptions);
+        window.removeEventListener("pointercancel", handlePanEnd, globalPanListenerOptions);
+        panGlobalListenersAttached = false;
+      }
+
+      function beginPanSession(pointerId, originX, originY, startPanX, startPanY, captureTarget) {
         panPointerId = pointerId;
         panOrigin.x = originX;
         panOrigin.y = originY;
@@ -4703,14 +4754,32 @@
         document.body.classList.add("panning");
         logDebug("Began panning view");
         hideCustomCursor();
-        try {
-          canvasStage.setPointerCapture(pointerId);
-        } catch (error) {}
+        const fallbackTarget = defaultPanCaptureTarget();
+        panCaptureTarget = captureTarget || fallbackTarget;
+        let captured = false;
+        if (panCaptureTarget && typeof panCaptureTarget.setPointerCapture === "function") {
+          try {
+            panCaptureTarget.setPointerCapture(pointerId);
+            captured =
+              typeof panCaptureTarget.hasPointerCapture === "function"
+                ? panCaptureTarget.hasPointerCapture(pointerId)
+                : true;
+          } catch (error) {
+            captured = false;
+          }
+        }
+        panHasPointerCapture = captured;
+        if (captured) {
+          detachGlobalPanListeners();
+        } else {
+          attachGlobalPanListeners();
+        }
       }
 
       function handlePanStart(event) {
         if (!state.puzzle) return;
         panCandidate = null;
+        const captureTarget = resolvePanCaptureTarget(event);
         const isTouch = event.pointerType === "touch";
         if (isTouch) {
           event.preventDefault();
@@ -4748,6 +4817,7 @@
               panX: viewState.panX,
               panY: viewState.panY,
               pointerType: "touch",
+              captureTarget,
             };
           }
           return;
@@ -4761,7 +4831,8 @@
             event.clientX,
             event.clientY,
             viewState.panX,
-            viewState.panY
+            viewState.panY,
+            captureTarget
           );
           return;
         }
@@ -4773,6 +4844,7 @@
             panX: viewState.panX,
             panY: viewState.panY,
             pointerType: "mouse",
+            captureTarget,
           };
         }
       }
@@ -4851,7 +4923,8 @@
           panCandidate.startX,
           panCandidate.startY,
           panCandidate.panX,
-          panCandidate.panY
+          panCandidate.panY,
+          panCandidate.captureTarget || resolvePanCaptureTarget(event, panCandidate.captureTarget)
         );
         panCandidate = null;
         handlePanMove(event);
@@ -4882,6 +4955,7 @@
                   panX: viewState.panX,
                   panY: viewState.panY,
                   pointerType: "touch",
+                  captureTarget: pointerSurface || defaultPanCaptureTarget(),
                 };
               }
             }
@@ -4897,9 +4971,18 @@
           document.body.classList.remove("panning");
           logDebug("Stopped panning view");
         }
-        try {
-          canvasStage.releasePointerCapture(event.pointerId);
-        } catch (error) {}
+        if (
+          panCaptureTarget &&
+          panHasPointerCapture &&
+          typeof panCaptureTarget.releasePointerCapture === "function"
+        ) {
+          try {
+            panCaptureTarget.releasePointerCapture(event.pointerId);
+          } catch (error) {}
+        }
+        panCaptureTarget = null;
+        panHasPointerCapture = false;
+        detachGlobalPanListeners();
         if (event.pointerType === "touch") {
           hideCustomCursor();
         } else {
