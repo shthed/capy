@@ -4732,6 +4732,8 @@
                 initialPanY: viewState.panY,
                 centerX: (a.x + b.x) / 2,
                 centerY: (a.y + b.y) / 2,
+                lastCenterX: (a.x + b.x) / 2,
+                lastCenterY: (a.y + b.y) / 2,
                 hasChanged: false,
               };
               document.body.classList.add("panning");
@@ -4806,9 +4808,24 @@
               }
               const centerX = (first.x + second.x) / 2;
               const centerY = (first.y + second.y) / 2;
-              viewState.panX = pinchSession.initialPanX + (centerX - pinchSession.centerX);
-              viewState.panY = pinchSession.initialPanY + (centerY - pinchSession.centerY);
-              applyViewTransform();
+              const previousCenterX =
+                typeof pinchSession.lastCenterX === "number"
+                  ? pinchSession.lastCenterX
+                  : pinchSession.centerX;
+              const previousCenterY =
+                typeof pinchSession.lastCenterY === "number"
+                  ? pinchSession.lastCenterY
+                  : pinchSession.centerY;
+              const deltaX = centerX - previousCenterX;
+              const deltaY = centerY - previousCenterY;
+              if (Math.abs(deltaX) > 0.0001 || Math.abs(deltaY) > 0.0001) {
+                viewState.panX += deltaX;
+                viewState.panY += deltaY;
+                pinchSession.hasChanged = true;
+                applyViewTransform();
+              }
+              pinchSession.lastCenterX = centerX;
+              pinchSession.lastCenterY = centerY;
             }
             return;
           }
