@@ -2888,7 +2888,7 @@
         pointerSurface.addEventListener("pointermove", handlePanMove, pointerOptions);
         pointerSurface.addEventListener("pointerup", handlePanEnd, pointerOptions);
         pointerSurface.addEventListener("pointercancel", handlePanEnd, pointerOptions);
-        pointerSurface.addEventListener("lostpointercapture", handlePanEnd);
+        pointerSurface.addEventListener("lostpointercapture", handlePanCaptureLost);
         pointerSurface.addEventListener("wheel", handleWheel, { passive: false });
         pointerSurface.addEventListener("contextmenu", (event) => event.preventDefault());
       }
@@ -4743,6 +4743,18 @@
         window.removeEventListener("pointerup", handlePanEnd, globalPanListenerOptions);
         window.removeEventListener("pointercancel", handlePanEnd, globalPanListenerOptions);
         panGlobalListenersAttached = false;
+      }
+
+      function handlePanCaptureLost(event) {
+        if (event.pointerId !== panPointerId) {
+          return;
+        }
+        panHasPointerCapture = false;
+        if (!isPanning) {
+          return;
+        }
+        logDebug("Pointer capture lost; maintaining pan via window listeners");
+        attachGlobalPanListeners();
       }
 
       function beginPanSession(
