@@ -2371,6 +2371,7 @@
       };
 
       let panPointerId = null;
+      let panPointerType = null;
       const panOrigin = { x: 0, y: 0, panX: 0, panY: 0 };
       let panCandidate = null;
       let isPanning = false;
@@ -2962,6 +2963,7 @@
           }
         }
         panPointerId = null;
+        panPointerType = null;
         panCandidate = null;
         panCaptureTarget = null;
         panHasPointerCapture = false;
@@ -4743,7 +4745,15 @@
         panGlobalListenersAttached = false;
       }
 
-      function beginPanSession(pointerId, originX, originY, startPanX, startPanY, captureTarget) {
+      function beginPanSession(
+        pointerId,
+        originX,
+        originY,
+        startPanX,
+        startPanY,
+        captureTarget,
+        pointerType
+      ) {
         panPointerId = pointerId;
         panOrigin.x = originX;
         panOrigin.y = originY;
@@ -4756,6 +4766,7 @@
         hideCustomCursor();
         const fallbackTarget = defaultPanCaptureTarget();
         panCaptureTarget = captureTarget || fallbackTarget;
+        panPointerType = typeof pointerType === "string" ? pointerType : null;
         let captured = false;
         if (panCaptureTarget && typeof panCaptureTarget.setPointerCapture === "function") {
           try {
@@ -4769,10 +4780,12 @@
           }
         }
         panHasPointerCapture = captured;
-        if (captured) {
-          detachGlobalPanListeners();
-        } else {
+        const pointerIsTouchLike = panPointerType === "touch" || panPointerType === "pen";
+        const needsGlobalListeners = !captured || pointerIsTouchLike;
+        if (needsGlobalListeners) {
           attachGlobalPanListeners();
+        } else {
+          detachGlobalPanListeners();
         }
       }
 
@@ -4832,7 +4845,8 @@
             event.clientY,
             viewState.panX,
             viewState.panY,
-            captureTarget
+            captureTarget,
+            event.pointerType
           );
           return;
         }
@@ -4924,7 +4938,8 @@
           panCandidate.startY,
           panCandidate.panX,
           panCandidate.panY,
-          panCandidate.captureTarget || resolvePanCaptureTarget(event, panCandidate.captureTarget)
+          panCandidate.captureTarget || resolvePanCaptureTarget(event, panCandidate.captureTarget),
+          panCandidate.pointerType || event.pointerType
         );
         panCandidate = null;
         handlePanMove(event);
@@ -4966,6 +4981,7 @@
         }
         if (event.pointerId !== panPointerId) return;
         panPointerId = null;
+        panPointerType = null;
         if (isPanning) {
           isPanning = false;
           document.body.classList.remove("panning");
