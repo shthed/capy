@@ -36,15 +36,15 @@ jobs:
             
             console.log(`Running in ${dryRun ? 'DRY RUN' : 'DELETE'} mode`);
             
-            // Get all branches
-            const { data: branches } = await github.rest.repos.listBranches({
+            // Get all branches with pagination
+            const branches = await github.paginate(github.rest.repos.listBranches, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               per_page: 100
             });
             
-            // Get all open PRs
-            const { data: openPRs } = await github.rest.pulls.list({
+            // Get all open PRs with pagination
+            const openPRs = await github.paginate(github.rest.pulls.list, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
