@@ -48,13 +48,18 @@ tools, a save manager, and a configurable generator all live inside a single
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
   previously exported JSON puzzles straight into the generator pipeline.
 - **Game selection screen.** The onboarding hint now surfaces a "Start a game"
-  list that features the bundled Capybara Springs puzzle loaded from
-  `capy.json` alongside every manual save stored in this browser. Friendly
-  fallback metadata keeps the landing copy and preview sprite consistent even
-  when the fixture omits extra fields. Pick any entry to jump directly into a
-  fresh board or resume progress without opening the save manager. The vignette
-  still stars an orange-crowned capybara lounging beside a dachshund, and the 🐹
-  command rail button reloads it whenever you want a clean canvas.
+  picker that highlights the bundled Capybara Springs puzzle loaded from
+  `capy.json` alongside every manual save on this browser. The title,
+  description, and preview art fall back to the inline Capybara vignette when
+  the fixture omits optional metadata so the landing copy always has something
+  friendly to show.
+- **Built-in capybara sample.** The "Capybara Springs" illustration now loads
+  automatically on boot in the high detail preset (when no autosave is
+  available) so you can start painting without importing anything. The vignette
+  features an orange-balanced capybara lounging in a lagoon with a curious
+  dachshund, water mushrooms, and a distant waterfall, and the 🐹 command rail
+  button instantly reloads it whenever you want a fresh board while reflecting
+  whichever detail preset you last chose.
 - **Sample detail presets.** Low/Medium/High chips live on the onboarding hint
   and inside Settings, instantly reloading the sample with tuned colour counts,
   resize targets, k-means iterations, and smoothing passes so QA can cycle
@@ -139,14 +144,15 @@ toggle tuned generator options for the built-in capybara vignette:
 
 Each preset reloads the sample puzzle immediately, updates the generator
 sliders to mirror the chosen settings, and stamps the debug log with the
-relevant detail level so QA transcripts record every switch. The sample defaults
-to the high preset the first time you load it, but whichever option you pick
-stays sticky for subsequent reloads. Preview art and copy prefer metadata from
-`capy.json` but fall back to the embedded Capybara Springs descriptors so the
-detail selector, landing screen, and help text stay in sync. The
+relevant detail level so QA transcripts record every switch. The app boots in
+the high preset so playtesters immediately see the full ≈140-region canvas, but
+the remembered preset keeps medium or low runs sticky after you switch. The
 region counts above are based on the bundled Capybara Springs artwork and keep
 every preset playable—from the breezy ≈26-region low detail board to the
-≈140-region high fidelity scene.
+≈140-region high fidelity scene. Preview copy prefers metadata pulled from
+`capy.json`, but the inline Capybara fallback strings and artwork keep the
+detail picker, start screen, and sample preview populated whenever the fixture
+skips optional fields.
 
 ## Code architecture tour
 
@@ -208,14 +214,13 @@ every preset playable—from the breezy ≈26-region low detail board to the
 
 ## How it works
 
-1. **Pick a starting point.** The app restores your most recent autosave on
-   boot. When there’s nothing to recover, the hint overlay’s **Start a game**
-   list highlights the bundled “Capybara Springs” puzzle from `capy.json`
-   alongside every manual save stored locally so you can launch a board with one
-   click. Drag a bitmap into the viewport, activate the “Choose an image”
+1. **Resume or load an image.** The app restores your most recent autosave on
+   boot; if nothing is stored yet the bundled “Capybara Springs” puzzle loads
+   automatically in the high detail preset so you can start painting
+   immediately. Drag a bitmap into the viewport, activate the “Choose an image”
    button, or press the 🐹 command button to reload the bundled scene. The hint
    overlay disappears once a new source is selected, and the Low/Medium/High
-   detail chips still pre-seed the capybara sample with relaxed or high-fidelity
+   detail chips can pre-seed the capybara sample with relaxed or high-fidelity
    settings before you reload it.
 2. **Tune generation & appearance.** Open **Settings** to slide out the
    sidecar and tweak palette size, minimum region area, resize detail, sample
@@ -334,7 +339,7 @@ before retrying.
 With Playwright on pause, lean on the following manual smoke checks before
 pushing changes or requesting review:
 
-- **Boot and game selection.** Refresh the app to confirm the onboarding hint, command rail, palette dock, and **Start a game** list (Capybara Springs from `capy.json` plus any saves) render without errors.
+- **Boot and sample load.** Refresh the app to confirm the onboarding hint, command rail, palette dock, and Capybara Springs sample all appear without errors.
 - **Palette readability.** Scrub through the swatches to confirm the flat numbers stay legible against bright and dark paints in both desktop and mobile viewports.
 - **Painting loop.** Select a handful of swatches and fill matching regions to verify flashes, completion states, and autosaves still respond as expected.
 - **Save/load recovery.** Create a manual save, reload the page, and ensure the entry restores correctly.
