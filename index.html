@@ -2631,6 +2631,7 @@
       const globalPanListenerOptions = { capture: true };
       let spacePressed = false;
       let colorFlashTimer = null;
+      const QUICK_HINT_FLASH_DURATION = 160;
       const activeTouches = new Map();
       let pinchSession = null;
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
@@ -3261,14 +3262,24 @@
         }
         const { region, regionId } = hit;
         if (state.filled.has(regionId)) {
-          logDebug(`Region ${region.id} already filled; ignoring ${label}`);
-          return "ignored";
+          const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
+          if (remaining.length > 0) {
+            flashColorRegions(region.colorId);
+            const regionWord = remaining.length === 1 ? "region" : "regions";
+            logDebug(
+              `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
+            );
+          } else {
+            logDebug(`Region ${region.id} already filled; ignoring ${label}`);
+          }
+          return "already-filled";
         }
         if (region.colorId !== state.activeColor) {
           const paletteColor = getPaletteEntry(region.colorId);
+          const hintTint = paletteColor ? rgbaFromHex(paletteColor.hex, 0.5) : "rgba(250, 204, 21, 0.55)";
           if (state.settings.animateHints) {
-            const tint = paletteColor ? rgbaFromHex(paletteColor.hex, 0.5) : "rgba(250, 204, 21, 0.55)";
-            flashRegion(regionId, tint);
+            flashRegion(regionId, hintTint);
+            flashColorRegions(region.colorId, { tint: hintTint, duration: QUICK_HINT_FLASH_DURATION });
           }
           flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
           logDebug(
@@ -5658,7 +5669,7 @@
         const duration =
           typeof options.duration === "number" && Number.isFinite(options.duration)
             ? options.duration
-            : 280;
+            : QUICK_HINT_FLASH_DURATION;
         const alpha =
           typeof options.alpha === "number" && Number.isFinite(options.alpha)
             ? clamp(options.alpha, 0.05, 1)
@@ -5693,7 +5704,7 @@
         paintRegions([region], color);
         window.setTimeout(() => {
           renderPuzzle();
-        }, 220);
+        }, QUICK_HINT_FLASH_DURATION);
       }
 
       function autoAdvanceColor(currentColorId) {
