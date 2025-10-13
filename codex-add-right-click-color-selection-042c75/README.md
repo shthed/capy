@@ -108,7 +108,8 @@ tools, a save manager, and a configurable generator all live inside a single
   gutterless colour blocks so the dock stays packed. Completed colours collapse
   out of view once every region is filled, tooltips call out how many areas are
   left, and the Settings → Palette control lets you reorder swatches by number,
-  remaining regions, colour name, hue, or brightness. The digits automatically flip
+  remaining regions, colour name, hue, or brightness. Right-clicking a swatch now
+  selects it just like a primary click so alternate buttons stay consistent. The digits automatically flip
   between dark and light treatments (with a subtle halo) to stay legible on any
   swatch, and the dock scrolls horizontally whenever palettes stretch beyond the
   screen so every colour stays accessible without vertical overflow.

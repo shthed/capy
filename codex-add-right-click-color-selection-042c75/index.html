@@ -4447,48 +4447,21 @@
         });
       }
 
-      function getRegionLabelText(region) {
-        if (!region) return "";
-        const normalize = (value) => {
-          if (typeof value === "string") {
-            const trimmed = value.trim();
-            return trimmed ? trimmed : null;
-          }
-          if (typeof value === "number" && Number.isFinite(value)) {
-            return String(value);
-          }
-          return null;
-        };
-        const directLabel =
-          normalize(region.label) ?? normalize(region.title) ?? normalize(region.name);
-        if (directLabel) {
-          return directLabel;
-        }
-        const fallbackId = region.colorId != null ? String(region.colorId) : "";
-        return fallbackId;
-      }
-
       function getRegionLabelLayout(region) {
         if (!region || !state.puzzle) return null;
-        const text = getRegionLabelText(region);
-        if (!text) return null;
-        if (region.labelLayoutText === text) {
-          return region.labelLayout || null;
+        if (!region.labelLayout) {
+          region.labelLayout = computeRegionLabelLayout(region);
         }
-        const layout = computeRegionLabelLayout(region, text);
-        region.labelLayout = layout;
-        region.labelLayoutText = text;
-        return layout;
+        return region.labelLayout;
       }
 
-      function computeRegionLabelLayout(region, rawText) {
+      function computeRegionLabelLayout(region) {
         if (!state.puzzle) return null;
         if (!Array.isArray(region.pixels) || region.pixels.length === 0) return null;
-        const text = typeof rawText === "string" ? rawText.trim() : "";
-        if (!text) return null;
         const { width, height, regionMap } = state.puzzle;
         const bounds = ensureRegionBounds(region, width);
         if (!bounds) return null;
+        const text = String(region.colorId);
         const area = Math.max(1, region.pixelCount || region.pixels.length);
         const MIN_LABEL_SIZE = 1.75;
         const MAX_LABEL_SIZE = 96;
@@ -4993,6 +4966,17 @@
           swatch.appendChild(tooltip);
           swatch.setAttribute("aria-describedby", tooltipId);
           swatch.addEventListener("click", () => {
+            activateColor(color.id);
+          });
+          swatch.addEventListener("pointerdown", (event) => {
+            if (event.button !== 2) {
+              return;
+            }
+            event.preventDefault();
+            activateColor(color.id);
+          });
+          swatch.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
             activateColor(color.id);
           });
           paletteEl.appendChild(swatch);
@@ -5834,12 +5818,7 @@
           activateColor(target.colorId, { flash: false });
         }
         if (state.settings.animateHints) {
-          const paletteColor = getPaletteEntry(target.colorId);
-          const hintTint =
-            paletteColor?.hex && typeof paletteColor.hex === "string"
-              ? rgbaFromHex(paletteColor.hex, 0.45)
-              : "rgba(59, 130, 246, 0.45)";
-          flashRegion(target.id, hintTint, { duration: QUICK_HINT_FLASH_DURATION });
+          flashRegion(target.id, "rgba(59, 130, 246, 0.45)");
         }
         logDebug(`Hint spotlighted region ${target.id} (colour #${target.colorId})`);
       }
