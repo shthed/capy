@@ -3,3 +3,7 @@ test-results/
 playwright-report/
 blob-report/
 artifacts/
+.vscode/
+*.json
+!package.json
+!package-lock.json
