@@ -1562,6 +1562,10 @@
             <input id="showRegionLabelsToggle" type="checkbox" checked />
             <span>Show region numbers</span>
           </label>
+          <label class="toggle">
+            <input id="showStatusToggle" type="checkbox" />
+            <span>Show status bar with filled/remaining counts after imports</span>
+          </label>
         </section>
         <section class="sheet-section" aria-labelledby="paletteHeading">
           <h3 id="paletteHeading">Palette</h3>
@@ -1722,6 +1726,7 @@
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
+      const showStatusToggle = document.getElementById("showStatusToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
       const backgroundColorInput = document.getElementById("backgroundColor");
       const uiScaleInput = document.getElementById("uiScale");
@@ -2700,6 +2705,7 @@
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
           showRegionLabels: true,
+          showStatusBar: false,
           theme: DEFAULT_UI_THEME,
         },
         previewVisible: false,
@@ -2707,6 +2713,8 @@
         previewImageData: null,
         renderCache: createRenderCache(),
       };
+
+      syncStatusBarVisibility();
 
       let generationJobCounter = 0;
       let latestGenerationJobId = 0;
@@ -2748,6 +2756,18 @@
             skipLog: true,
             skipAutosave: true,
             skipRender: true,
+          });
+        }
+        if (typeof settings.showStatusBar === "boolean") {
+          applyStatusBarVisibility(settings.showStatusBar, {
+            skipLog: true,
+            skipAutosave: true,
+          });
+        } else {
+          applyStatusBarVisibility(state.settings.showStatusBar === true, {
+            skipLog: true,
+            skipAutosave: true,
+            force: true,
           });
         }
         if (typeof settings.uiScale === "number") {
@@ -2950,6 +2970,11 @@
       if (showRegionLabelsToggle) {
         showRegionLabelsToggle.addEventListener("change", () => {
           applyRegionLabelVisibility(showRegionLabelsToggle.checked);
+        });
+      }
+      if (showStatusToggle) {
+        showStatusToggle.addEventListener("change", () => {
+          applyStatusBarVisibility(showStatusToggle.checked);
         });
       }
 
@@ -3758,6 +3783,24 @@
           if (!skipAutosave) {
             scheduleAutosave("settings-region-labels");
           }
+        }
+        return resolved;
+      }
+
+      function applyStatusBarVisibility(visible, options = {}) {
+        const { skipLog = false, skipAutosave = false, force = false } = options;
+        const resolved = visible === true;
+        const previous = state.settings.showStatusBar === true;
+        state.settings.showStatusBar = resolved;
+        if (showStatusToggle && showStatusToggle.checked !== resolved) {
+          showStatusToggle.checked = resolved;
+        }
+        syncStatusBarVisibility();
+        if ((force || previous !== resolved) && !skipLog) {
+          logDebug(`Status bar ${resolved ? "shown" : "hidden"}`);
+        }
+        if ((force || previous !== resolved) && !skipAutosave) {
+          scheduleAutosave("settings-status-bar");
         }
         return resolved;
       }
@@ -4933,6 +4976,21 @@
       }
 
 
+      function syncStatusBarVisibility(statusOverride) {
+        if (!progressStatusEl) {
+          return;
+        }
+        const status =
+          typeof statusOverride === "string" && statusOverride
+            ? statusOverride
+            : progressStatusEl.getAttribute("data-status") || "idle";
+        const forcedVisible = status === "generating" || status === "loading";
+        const userEnabled = state.settings.showStatusBar === true;
+        const shouldShow = forcedVisible || userEnabled;
+        progressStatusEl.hidden = !shouldShow;
+        progressStatusEl.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+      }
+
       function setProgressMessage(status, customMessage) {
         const message =
           typeof customMessage === "string" && customMessage.length > 0
@@ -4945,6 +5003,7 @@
         if (progressStatusEl) {
           progressStatusEl.setAttribute("data-status", status || "idle");
         }
+        syncStatusBarVisibility(status);
         if (status !== "generating") {
           clearGenerationProgress();
         }
@@ -6030,6 +6089,7 @@
                 : DEFAULT_UI_SCALE,
             artPrompt: state.settings.artPrompt || "",
             showRegionLabels: state.settings.showRegionLabels !== false,
+            showStatusBar: state.settings.showStatusBar === true,
             theme: state.settings.theme || DEFAULT_UI_THEME,
           },
         };
