@@ -3264,7 +3264,7 @@
         if (state.filled.has(regionId)) {
           const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
           if (remaining.length > 0) {
-            flashColorRegions(region.colorId);
+            flashColorRegions(region.colorId, { onlyUnfilled: true });
             const regionWord = remaining.length === 1 ? "region" : "regions";
             logDebug(
               `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
@@ -5677,8 +5677,8 @@
         const tint =
           options.tint ||
           (paletteColor ? rgbaFromHex(paletteColor.hex, alpha) : "rgba(96, 165, 250, 0.32)");
-        const unfinished = getRegionsByColor(colorId, { includeFilled: false });
-        const targets = unfinished.length > 0 ? unfinished : getRegionsByColor(colorId, { includeFilled: true });
+        const includeFilled = options.onlyUnfilled ? false : true;
+        const targets = getRegionsByColor(colorId, { includeFilled });
         if (targets.length === 0) {
           delete canvasStage.dataset.flashingColor;
           return;
