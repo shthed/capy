@@ -4968,6 +4968,10 @@
           swatch.addEventListener("click", () => {
             activateColor(color.id);
           });
+          swatch.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            activateColor(color.id);
+          });
           paletteEl.appendChild(swatch);
         }
       }
