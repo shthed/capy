@@ -4968,6 +4968,17 @@
           swatch.addEventListener("click", () => {
             activateColor(color.id);
           });
+          swatch.addEventListener("pointerdown", (event) => {
+            if (event.button !== 2) {
+              return;
+            }
+            event.preventDefault();
+            activateColor(color.id);
+          });
+          swatch.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            activateColor(color.id);
+          });
           paletteEl.appendChild(swatch);
         }
       }
