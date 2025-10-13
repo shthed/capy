@@ -1,5 +1,9 @@
 # Capy Image Generator
 
+[https://shthed.github.io/capy/](https://shthed.github.io/capy/)
+[https://shthed.github.io/capy/branch](https://shthed.github.io/capy/branch)
+[https://github.com/shthed/capy](https://github.com/shthed/capy)
+
 Capy turns any bitmap image into a color-by-number puzzle entirely in the
 browser. Drop a file (or load one via the hidden file picker) and the app will
 resize it, run k-means clustering to build a discrete palette, merge tiny
