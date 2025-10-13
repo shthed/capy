@@ -2637,6 +2637,8 @@
       let spacePressed = false;
       let colorFlashTimer = null;
       const QUICK_HINT_FLASH_DURATION = 160;
+      const DEFAULT_COLOR_FLASH_DURATION = 280;
+      const DEFAULT_REGION_FLASH_DURATION = 220;
       const activeTouches = new Map();
       let pinchSession = null;
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
@@ -3189,6 +3191,8 @@
 
       const DOUBLE_TAP_WINDOW_MS = 320;
       const POINTER_CLICK_SUPPRESSION_MS = 360;
+      const REGION_HINT_HOVER_DELAY_MS = 280;
+      const REGION_HINT_PRESS_DELAY_MS = 160;
 
       function getRegionAtPoint(clientX, clientY) {
         if (!state.puzzle || !puzzleCanvas) {
@@ -3271,6 +3275,41 @@
       }
 
       let suppressNextCanvasClickUntil = 0;
+      let lastRegionHintId = null;
+      let lastRegionHintTime = 0;
+
+      function maybeShowRegionHint(region, paletteColor, options = {}) {
+        if (!state.puzzle) return;
+        if (state.previewVisible) return;
+        if (!region) return;
+        const { trigger = "hover", flashSwatch = false } = options;
+        const now = Date.now();
+        const delay = trigger === "press" ? REGION_HINT_PRESS_DELAY_MS : REGION_HINT_HOVER_DELAY_MS;
+        if (lastRegionHintId === region.id && now - lastRegionHintTime < delay) {
+          if (flashSwatch && !state.settings.animateHints) {
+            flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+          }
+          return;
+        }
+        const paletteTint = paletteColor?.hex ? rgbaFromHex(paletteColor.hex, 0.45) : undefined;
+        const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
+        const showOverlay = state.settings.animateHints !== false;
+        if (showOverlay && remaining.length > 0) {
+          flashColorRegions(region.colorId, {
+            tint: paletteTint,
+            duration: QUICK_HINT_FLASH_DURATION,
+            onlyUnfilled: true,
+          });
+          lastRegionHintId = region.id;
+          lastRegionHintTime = now;
+        } else {
+          lastRegionHintId = region.id;
+          lastRegionHintTime = now;
+        }
+        if (flashSwatch) {
+          flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+        }
+      }
 
       function attemptFillRegion(hit, { label = "click" } = {}) {
         if (!state.puzzle) {
@@ -3289,7 +3328,10 @@
         if (state.filled.has(regionId)) {
           const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
           if (remaining.length > 0) {
-            flashColorRegions(region.colorId, { onlyUnfilled: true });
+            flashColorRegions(region.colorId, {
+              onlyUnfilled: true,
+              duration: QUICK_HINT_FLASH_DURATION,
+            });
             const regionWord = remaining.length === 1 ? "region" : "regions";
             logDebug(
               `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
@@ -3303,7 +3345,7 @@
           const paletteColor = getPaletteEntry(region.colorId);
           const hintTint = paletteColor ? rgbaFromHex(paletteColor.hex, 0.5) : "rgba(250, 204, 21, 0.55)";
           if (state.settings.animateHints) {
-            flashRegion(regionId, hintTint);
+            flashRegion(regionId, hintTint, { duration: QUICK_HINT_FLASH_DURATION });
             flashColorRegions(region.colorId, { tint: hintTint, duration: QUICK_HINT_FLASH_DURATION });
           }
           flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
@@ -3363,6 +3405,20 @@
         event.preventDefault();
         lastTouchSelectionTime = now;
         activateColor(hit.region.colorId);
+      });
+
+      puzzleCanvas.addEventListener("pointerdown", (event) => {
+        const pointerType = event.pointerType;
+        if (pointerType !== "touch" && pointerType !== "pen") {
+          return;
+        }
+        if (!event.isPrimary) return;
+        if (!state.puzzle || state.previewVisible) return;
+        if (isPanning || pinchSession) return;
+        const hit = getRegionFromEvent(event);
+        if (!hit) return;
+        const paletteColor = getPaletteEntry(hit.region.colorId);
+        maybeShowRegionHint(hit.region, paletteColor, { trigger: "press", flashSwatch: true });
       });
 
       puzzleCanvas.addEventListener(
@@ -5525,6 +5581,9 @@
         }
         const paletteColor = getPaletteEntry(region.colorId);
         applyCustomCursor(region, paletteColor, event.clientX, event.clientY);
+        maybeShowRegionHint(region, paletteColor, {
+          trigger: event.type === "pointerdown" ? "press" : "hover",
+        });
       }
 
       function refreshCustomCursorHighlight() {
@@ -5728,7 +5787,7 @@
         const duration =
           typeof options.duration === "number" && Number.isFinite(options.duration)
             ? options.duration
-            : QUICK_HINT_FLASH_DURATION;
+            : DEFAULT_COLOR_FLASH_DURATION;
         const alpha =
           typeof options.alpha === "number" && Number.isFinite(options.alpha)
             ? clamp(options.alpha, 0.05, 1)
@@ -5756,14 +5815,18 @@
         }, duration);
       }
 
-      function flashRegion(regionId, color) {
+      function flashRegion(regionId, color, options = {}) {
         if (!state.puzzle) return;
         const region = state.puzzle.regions[regionId];
         if (!region) return;
         paintRegions([region], color);
+        const duration =
+          typeof options.duration === "number" && Number.isFinite(options.duration)
+            ? clamp(options.duration, 32, 1000)
+            : DEFAULT_REGION_FLASH_DURATION;
         window.setTimeout(() => {
           renderPuzzle();
-        }, QUICK_HINT_FLASH_DURATION);
+        }, duration);
       }
 
       function autoAdvanceColor(currentColorId) {
