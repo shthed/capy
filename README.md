@@ -84,7 +84,8 @@ tools, a save manager, and a configurable generator all live inside a single
   region numbers once you're familiar with the artwork for an unobstructed
   canvas while you fill in the illustration.
 - **Precision view controls.** Pan the puzzle by click-dragging with the
-  primary mouse button (spacebar, middle, and right buttons still work), use
+  primary mouse button or middle click, or hold <kbd>Space</kbd> to pan from anywhere. Right-click now
+  selects the colour under the pointer by default (toggleable in Settings if you prefer to pan with it), use
   pinch gestures or the mouse wheel to zoom in and out, or tap `+`/`-` on the
   keyboard for incremental adjustments. Ctrl/Cmd zoom shortcuts now target the
   puzzle instead of the surrounding UI so the HUD stays crisp while the canvas
@@ -97,7 +98,9 @@ tools, a save manager, and a configurable generator all live inside a single
   command rail and palette scale cleanly on phones, tablets, or desktops while
   the artwork stays centred.
 - **Contextual hinting.** Trigger highlight pulses for the current colour or let
-  the app surface the smallest unfinished region when you need a nudge.
+  the app surface the smallest unfinished region when you need a nudge. Hints now
+  flash with the region's true paint colour and ease out slowly, and Settings exposes
+  controls for tuning the fade duration and overlay intensity.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
   artwork at its final resolution without leaving the play surface.
 - **Sidecar panels.** Settings, Help, and the Save manager now dock to the
@@ -211,9 +214,10 @@ every preset playable—from the breezy ≈26-region low detail board to the
    settings before you reload it.
 2. **Tune generation & appearance.** Open **Settings** to slide out the
    sidecar and tweak palette size, minimum region area, resize detail, sample
-   rate (for faster clustering), iteration count, smoothing passes,
-   auto-advance, the status bar toggle, hint animations, the interface theme,
-   the canvas background colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
+  rate (for faster clustering), iteration count, smoothing passes,
+  auto-advance, the status bar toggle, hint animations, fade timing, overlay
+  intensity, the right-click action, the interface theme, the canvas background
+  colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
    when working from an image source, then expand the **Advanced options**
    accordion to edit the optional art prompt metadata before exporting or
    regenerating a scene.
@@ -274,8 +278,9 @@ before retrying.
   window so you can keep painting while adjusting sliders. Controls include
   colours, minimum region size, resize detail, sample rate, k-means iterations,
   smoothing passes, an interface theme switcher, a background colour picker, the
-  interface scale slider, toggles for auto-advance, the status bar, and hint animations, and the Palette sort menu. The
-  panel also houses the JSON export action, mirrors the Low/Medium/High detail
+  interface scale slider, toggles for auto-advance, the status bar, hint animations, and the Palette sort menu. A
+  dedicated Hints & controls section now lets you tune fade duration, overlay intensity, and remap the right-click action.
+  The panel also houses the JSON export action, mirrors the Low/Medium/High detail
   chips so you can reload the sample with tuned parameters without leaving the
   sidecar, and tucks the art prompt query inside an **Advanced options**
   accordion so casual play stays focused on painting.
