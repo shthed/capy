@@ -2475,6 +2475,28 @@
         pixelHeight: 0,
       };
 
+      let cachedCanvasRect = null;
+
+      function invalidateCanvasRect() {
+        cachedCanvasRect = null;
+      }
+
+      function getPuzzleCanvasRect() {
+        if (!puzzleCanvas) {
+          return null;
+        }
+        if (cachedCanvasRect) {
+          return cachedCanvasRect;
+        }
+        const rect = puzzleCanvas.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) {
+          cachedCanvasRect = null;
+          return null;
+        }
+        cachedCanvasRect = rect;
+        return cachedCanvasRect;
+      }
+
       function getDevicePixelRatio() {
         if (typeof window === "undefined") {
           return 1;
@@ -2537,6 +2559,7 @@
         }
         puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
         puzzleCtx.imageSmoothingEnabled = false;
+        invalidateCanvasRect();
         return metricsChanged;
       }
 
@@ -3159,7 +3182,14 @@
         if (viewportEl) {
           viewportEl.addEventListener("pointerleave", hideCustomCursor);
         }
-        window.addEventListener("scroll", hideCustomCursor, { passive: true });
+        window.addEventListener(
+          "scroll",
+          () => {
+            hideCustomCursor();
+            invalidateCanvasRect();
+          },
+          { passive: true }
+        );
       }
 
       const DOUBLE_TAP_WINDOW_MS = 320;
@@ -3172,7 +3202,7 @@
         if (typeof clientX !== "number" || typeof clientY !== "number") {
           return null;
         }
-        const rect = puzzleCanvas.getBoundingClientRect();
+        const rect = getPuzzleCanvasRect();
         if (!rect || rect.width <= 0 || rect.height <= 0) {
           return null;
         }
@@ -3467,6 +3497,7 @@
         }
         const combined = clamp(userValue * autoValue, 0.6, 1.8);
         root.style.setProperty("--ui-scale", combined.toFixed(4));
+        invalidateCanvasRect();
         return combined;
       }
 
@@ -5438,7 +5469,7 @@
         if (isPanning) {
           return;
         }
-        const rect = puzzleCanvas.getBoundingClientRect();
+        const rect = getPuzzleCanvasRect();
         if (!rect || rect.width <= 0 || rect.height <= 0) {
           hideCustomCursor();
           return;
@@ -5554,6 +5585,7 @@
         const { forceRender = false } = options;
         canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
         canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
+        invalidateCanvasRect();
         if (!state.puzzle) {
           return;
         }
