@@ -3082,8 +3082,17 @@
         }
         const { region, regionId } = hit;
         if (state.filled.has(regionId)) {
-          logDebug(`Region ${region.id} already filled; ignoring ${label}`);
-          return "ignored";
+          const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
+          if (remaining.length > 0) {
+            flashColorRegions(region.colorId);
+            const regionWord = remaining.length === 1 ? "region" : "regions";
+            logDebug(
+              `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
+            );
+          } else {
+            logDebug(`Region ${region.id} already filled; ignoring ${label}`);
+          }
+          return "already-filled";
         }
         if (region.colorId !== state.activeColor) {
           const paletteColor = getPaletteEntry(region.colorId);
