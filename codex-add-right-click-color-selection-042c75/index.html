@@ -1505,9 +1505,13 @@
           <h3 id="controlsHeading">Canvas controls</h3>
           <ul class="control-list">
             <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
+            <li><kbd>Right click</kbd> Select the colour under the pointer (configurable in Settings).</li>
             <li>Select a palette swatch to set the active colour and flash every matching region.</li>
             <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
-            <li><kbd>Space</kbd> + drag (or middle/right drag) Pan the canvas.</li>
+            <li>
+              <kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas. Switch the right-click action in Settings if you
+              prefer dragging instead of selecting.
+            </li>
             <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
           </ul>
         </section>
@@ -1566,6 +1570,29 @@
             <input id="showStatusToggle" type="checkbox" />
             <span>Show status bar with filled/remaining counts after imports</span>
           </label>
+        </section>
+        <section class="sheet-section" aria-labelledby="hintsControlsHeading">
+          <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
+          <label class="control">
+            <span>Hint fade duration <output data-for="hintFadeDuration">1.2 s</output></span>
+            <input id="hintFadeDuration" type="range" min="400" max="2400" step="100" value="1200" />
+          </label>
+          <p class="control-note">Set how long hint highlights linger before fading out.</p>
+          <label class="control">
+            <span>Hint intensity <output data-for="hintIntensity">65%</output></span>
+            <input id="hintIntensity" type="range" min="20" max="90" step="5" value="65" />
+          </label>
+          <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
+          <label class="control">
+            <span>Right-click action</span>
+            <select id="rightClickAction">
+              <option value="select">Select colour</option>
+              <option value="pan">Pan the canvas</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Choose whether right-clicking picks colours or starts panning. Middle click and Space + drag always pan.
+          </p>
         </section>
         <section class="sheet-section" aria-labelledby="paletteHeading">
           <h3 id="paletteHeading">Palette</h3>
@@ -1725,6 +1752,9 @@
       const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
+      const hintFadeDurationInput = document.getElementById("hintFadeDuration");
+      const hintIntensityInput = document.getElementById("hintIntensity");
+      const rightClickActionSelect = document.getElementById("rightClickAction");
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
       const showStatusToggle = document.getElementById("showStatusToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
@@ -1770,6 +1800,8 @@
         iterations: settingsSheet.querySelector('output[data-for="kmeansIters"]'),
         smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
         uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
+        hintFadeDuration: settingsSheet.querySelector('output[data-for="hintFadeDuration"]'),
+        hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
@@ -1778,6 +1810,14 @@
       const DEFAULT_UI_SCALE = 0.9;
       const DEFAULT_UI_THEME = "dark";
       const VALID_UI_THEMES = new Set(["dark", "light", "colorful"]);
+      const DEFAULT_HINT_FADE_DURATION = 1200;
+      const MIN_HINT_FADE_DURATION = 400;
+      const MAX_HINT_FADE_DURATION = 2400;
+      const DEFAULT_HINT_INTENSITY = 0.65;
+      const MIN_HINT_INTENSITY = 0.2;
+      const MAX_HINT_INTENSITY = 0.9;
+      const DEFAULT_RIGHT_CLICK_ACTION = "select";
+      const VALID_RIGHT_CLICK_ACTIONS = new Set(["select", "pan"]);
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
@@ -2658,10 +2698,9 @@
       let panGlobalListenersAttached = false;
       const globalPanListenerOptions = { capture: true };
       let spacePressed = false;
-      let colorFlashTimer = null;
-      const QUICK_HINT_FLASH_DURATION = 160;
-      const DEFAULT_COLOR_FLASH_DURATION = 280;
-      const DEFAULT_REGION_FLASH_DURATION = 220;
+      const overlayAnimations = new Map();
+      let overlayAnimationFrame = null;
+      let overlayAnimationTimeout = null;
       const activeTouches = new Map();
       let pinchSession = null;
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
@@ -2726,6 +2765,9 @@
         settings: {
           autoAdvance: true,
           animateHints: true,
+          hintFadeDuration: DEFAULT_HINT_FADE_DURATION,
+          hintIntensity: DEFAULT_HINT_INTENSITY,
+          rightClickAction: DEFAULT_RIGHT_CLICK_ACTION,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
@@ -2770,6 +2812,39 @@
             hintFlashToggle.checked = settings.animateHints;
           }
         }
+        if (settings.hintFadeDuration != null) {
+          const duration = normalizeHintFadeDuration(settings.hintFadeDuration);
+          state.settings.hintFadeDuration = duration;
+          if (hintFadeDurationInput) {
+            hintFadeDurationInput.value = String(duration);
+          }
+        } else if (hintFadeDurationInput && state.settings.hintFadeDuration != null) {
+          const duration = normalizeHintFadeDuration(state.settings.hintFadeDuration);
+          state.settings.hintFadeDuration = duration;
+          hintFadeDurationInput.value = String(duration);
+        }
+        if (settings.hintIntensity != null) {
+          const intensity = normalizeHintIntensity(settings.hintIntensity);
+          state.settings.hintIntensity = intensity;
+          if (hintIntensityInput) {
+            hintIntensityInput.value = String(Math.round(intensity * 100));
+          }
+        } else if (hintIntensityInput && state.settings.hintIntensity != null) {
+          const intensity = normalizeHintIntensity(state.settings.hintIntensity);
+          state.settings.hintIntensity = intensity;
+          hintIntensityInput.value = String(Math.round(intensity * 100));
+        }
+        if (settings.rightClickAction != null) {
+          const action = resolveRightClickAction(settings.rightClickAction);
+          state.settings.rightClickAction = action;
+          if (rightClickActionSelect) {
+            rightClickActionSelect.value = action;
+          }
+        } else if (rightClickActionSelect && state.settings.rightClickAction) {
+          const action = resolveRightClickAction(state.settings.rightClickAction);
+          state.settings.rightClickAction = action;
+          rightClickActionSelect.value = action;
+        }
         if (typeof settings.showRegionLabels === "boolean") {
           applyRegionLabelVisibility(settings.showRegionLabels, {
             skipLog: true,
@@ -2801,6 +2876,7 @@
         if (typeof settings.artPrompt === "string") {
           applyArtPrompt(settings.artPrompt, { skipLog: true, skipAutosave: true });
         }
+        updateOptionOutputs();
       }
 
       const debugLogEntries = [];
@@ -2988,9 +3064,57 @@
 
       hintFlashToggle.addEventListener("change", () => {
         state.settings.animateHints = hintFlashToggle.checked;
+        if (!hintFlashToggle.checked) {
+          clearOverlayAnimations();
+        }
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
         scheduleAutosave("settings-hint-animations");
       });
+
+      if (hintFadeDurationInput) {
+        hintFadeDurationInput.value = String(normalizeHintFadeDuration(hintFadeDurationInput.value));
+        hintFadeDurationInput.addEventListener("input", () => {
+          state.settings.hintFadeDuration = normalizeHintFadeDuration(hintFadeDurationInput.value);
+          updateOptionOutputs();
+        });
+        hintFadeDurationInput.addEventListener("change", () => {
+          const duration = normalizeHintFadeDuration(hintFadeDurationInput.value);
+          state.settings.hintFadeDuration = duration;
+          hintFadeDurationInput.value = String(duration);
+          updateOptionOutputs();
+          logDebug(`Hint fade set to ${(duration / 1000).toFixed(1)}s`);
+          scheduleAutosave("settings-hint-fade");
+        });
+      }
+
+      if (hintIntensityInput) {
+        hintIntensityInput.value = String(Math.round(normalizeHintIntensity(hintIntensityInput.value) * 100));
+        hintIntensityInput.addEventListener("input", () => {
+          state.settings.hintIntensity = normalizeHintIntensity(hintIntensityInput.value);
+          updateOptionOutputs();
+        });
+        hintIntensityInput.addEventListener("change", () => {
+          const intensity = normalizeHintIntensity(hintIntensityInput.value);
+          state.settings.hintIntensity = intensity;
+          hintIntensityInput.value = String(Math.round(intensity * 100));
+          updateOptionOutputs();
+          logDebug(`Hint intensity set to ${Math.round(intensity * 100)}%`);
+          scheduleAutosave("settings-hint-intensity");
+        });
+      }
+
+      if (rightClickActionSelect) {
+        rightClickActionSelect.value = resolveRightClickAction(rightClickActionSelect.value);
+        rightClickActionSelect.addEventListener("change", (event) => {
+          const action = resolveRightClickAction(event.target.value);
+          state.settings.rightClickAction = action;
+          rightClickActionSelect.value = action;
+          logDebug(
+            action === "select" ? "Right-click will select colours" : "Right-click will pan the canvas"
+          );
+          scheduleAutosave("settings-right-click-action");
+        });
+      }
 
       if (showRegionLabelsToggle) {
         showRegionLabelsToggle.addEventListener("change", () => {
@@ -3321,15 +3445,11 @@
           }
           return;
         }
-        const paletteTint = paletteColor?.hex ? rgbaFromHex(paletteColor.hex, 0.45) : undefined;
         const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
         const showOverlay = state.settings.animateHints !== false;
         if (showOverlay && remaining.length > 0) {
-          flashColorRegions(region.colorId, {
-            tint: paletteTint,
-            duration: QUICK_HINT_FLASH_DURATION,
-            onlyUnfilled: true,
-          });
+          flashRegion(region.id, { paletteColor, includeFilled: false });
+          flashColorRegions(region.colorId, { paletteColor, onlyUnfilled: true });
           lastRegionHintId = region.id;
           lastRegionHintTime = now;
         } else {
@@ -3358,10 +3478,7 @@
         if (state.filled.has(regionId)) {
           const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
           if (remaining.length > 0) {
-            flashColorRegions(region.colorId, {
-              onlyUnfilled: true,
-              duration: QUICK_HINT_FLASH_DURATION,
-            });
+            flashColorRegions(region.colorId, { paletteColor: getPaletteEntry(region.colorId), onlyUnfilled: true });
             const regionWord = remaining.length === 1 ? "region" : "regions";
             logDebug(
               `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
@@ -3373,10 +3490,14 @@
         }
         if (region.colorId !== state.activeColor) {
           const paletteColor = getPaletteEntry(region.colorId);
-          const hintTint = paletteColor ? rgbaFromHex(paletteColor.hex, 0.5) : "rgba(250, 204, 21, 0.55)";
+          const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
           if (state.settings.animateHints) {
-            flashRegion(regionId, hintTint, { duration: QUICK_HINT_FLASH_DURATION });
-            flashColorRegions(region.colorId, { tint: hintTint, duration: QUICK_HINT_FLASH_DURATION });
+            flashRegion(regionId, { paletteColor, tint: fallbackTint, includeFilled: false });
+            flashColorRegions(region.colorId, {
+              paletteColor,
+              tint: fallbackTint,
+              onlyUnfilled: true,
+            });
           }
           flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
           logDebug(
@@ -3980,6 +4101,16 @@
                 : DEFAULT_UI_SCALE);
           optionOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
         }
+        if (optionOutputs.hintFadeDuration) {
+          const source = hintFadeDurationInput ? Number(hintFadeDurationInput.value) : state.settings.hintFadeDuration;
+          const duration = normalizeHintFadeDuration(source);
+          optionOutputs.hintFadeDuration.textContent = `${(duration / 1000).toFixed(1)} s`;
+        }
+        if (optionOutputs.hintIntensity) {
+          const source = hintIntensityInput ? Number(hintIntensityInput.value) : state.settings.hintIntensity * 100;
+          const intensity = normalizeHintIntensity(source);
+          optionOutputs.hintIntensity.textContent = `${Math.round(intensity * 100)}%`;
+        }
       }
 
       function markOptionsDirty() {
@@ -4114,11 +4245,7 @@
       }
 
       function resetPuzzleUI() {
-        if (colorFlashTimer) {
-          clearTimeout(colorFlashTimer);
-          colorFlashTimer = null;
-        }
-        delete canvasStage.dataset.flashingColor;
+        clearOverlayAnimations();
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
@@ -4317,7 +4444,7 @@
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
-          flashColorRegions(state.activeColor, { duration: 360 });
+          flashColorRegions(state.activeColor);
         }
         updateProgress();
         updateCommandStates();
@@ -5354,6 +5481,20 @@
           return;
         }
         const usesModifier = spacePressed || event.altKey || event.ctrlKey || event.metaKey;
+        const wantsRightClickSelect =
+          event.pointerType === "mouse" &&
+          event.button === 2 &&
+          resolveRightClickAction(state.settings.rightClickAction) === "select" &&
+          !usesModifier &&
+          !state.previewVisible;
+        if (wantsRightClickSelect) {
+          const hit = getRegionFromEvent(event);
+          if (hit && hit.region) {
+            event.preventDefault();
+            activateColor(hit.region.colorId);
+            return;
+          }
+        }
         const auxButton = event.button === 1 || event.button === 2;
         if (auxButton || usesModifier) {
           event.preventDefault();
@@ -5818,7 +5959,9 @@
           activateColor(target.colorId, { flash: false });
         }
         if (state.settings.animateHints) {
-          flashRegion(target.id, "rgba(59, 130, 246, 0.45)");
+          const paletteColor = getPaletteEntry(target.colorId);
+          flashRegion(target.id, { paletteColor });
+          flashColorRegions(target.colorId, { paletteColor, onlyUnfilled: true });
         }
         logDebug(`Hint spotlighted region ${target.id} (colour #${target.colorId})`);
       }
@@ -5826,50 +5969,240 @@
       function flashColorRegions(colorId, options = {}) {
         if (!state.puzzle) return;
         if (colorId == null) return;
-        const paletteColor = getPaletteEntry(colorId);
-        const duration =
-          typeof options.duration === "number" && Number.isFinite(options.duration)
-            ? options.duration
-            : DEFAULT_COLOR_FLASH_DURATION;
-        const alpha =
-          typeof options.alpha === "number" && Number.isFinite(options.alpha)
-            ? clamp(options.alpha, 0.05, 1)
-            : 0.45;
-        const tint =
-          options.tint ||
-          (paletteColor ? rgbaFromHex(paletteColor.hex, alpha) : "rgba(96, 165, 250, 0.32)");
         const includeFilled = options.onlyUnfilled ? false : true;
         const targets = getRegionsByColor(colorId, { includeFilled });
         if (targets.length === 0) {
-          delete canvasStage.dataset.flashingColor;
+          overlayAnimations.delete(`color:${colorId}:${includeFilled ? "all" : "remaining"}`);
+          if (overlayAnimations.size === 0) {
+            renderPuzzle();
+          }
           return;
         }
-        if (colorFlashTimer) {
-          clearTimeout(colorFlashTimer);
-          colorFlashTimer = null;
-        }
-        renderPuzzle();
-        canvasStage.dataset.flashingColor = String(colorId);
-        paintRegions(targets, tint);
-        colorFlashTimer = window.setTimeout(() => {
-          colorFlashTimer = null;
-          delete canvasStage.dataset.flashingColor;
-          renderPuzzle();
-        }, duration);
+        const paletteColor = options.paletteColor || getPaletteEntry(colorId);
+        const duration = normalizeHintFadeDuration(
+          typeof options.duration === "number" ? options.duration : state.settings.hintFadeDuration
+        );
+        const alpha = normalizeHintIntensity(
+          typeof options.alpha === "number" ? options.alpha : state.settings.hintIntensity
+        );
+        const fallbackRgb = options.tint ? parseTintToRgb(options.tint) : null;
+        queueOverlayAnimation(
+          `color:${colorId}:${includeFilled ? "all" : "remaining"}`,
+          targets.map((region) => region.id),
+          {
+            paletteColor,
+            fallbackRgb,
+            baseAlpha: alpha,
+            duration,
+            includeFilled,
+          }
+        );
       }
 
-      function flashRegion(regionId, color, options = {}) {
+      function flashRegion(regionId, options = {}) {
         if (!state.puzzle) return;
         const region = state.puzzle.regions[regionId];
         if (!region) return;
-        paintRegions([region], color);
-        const duration =
-          typeof options.duration === "number" && Number.isFinite(options.duration)
-            ? clamp(options.duration, 32, 1000)
-            : DEFAULT_REGION_FLASH_DURATION;
-        window.setTimeout(() => {
+        const paletteColor = options.paletteColor || getPaletteEntry(region.colorId);
+        const duration = normalizeHintFadeDuration(
+          typeof options.duration === "number" ? options.duration : state.settings.hintFadeDuration
+        );
+        const alpha = normalizeHintIntensity(
+          typeof options.alpha === "number" ? options.alpha : state.settings.hintIntensity
+        );
+        const fallbackRgb = options.tint ? parseTintToRgb(options.tint) : null;
+        queueOverlayAnimation(`region:${regionId}`, [regionId], {
+          paletteColor,
+          fallbackRgb,
+          baseAlpha: alpha,
+          duration,
+          includeFilled: options.includeFilled !== false,
+        });
+      }
+
+      function queueOverlayAnimation(key, regionIds, options = {}) {
+        if (!state.puzzle) return;
+        if (!Array.isArray(regionIds) || regionIds.length === 0) return;
+        const ids = regionIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id >= 0);
+        if (ids.length === 0) return;
+        const includeFilled = options.includeFilled !== false;
+        const baseAlpha = clamp(
+          typeof options.baseAlpha === "number" ? options.baseAlpha : state.settings.hintIntensity ?? DEFAULT_HINT_INTENSITY,
+          MIN_HINT_INTENSITY,
+          MAX_HINT_INTENSITY
+        );
+        const duration = normalizeHintFadeDuration(options.duration);
+        overlayAnimations.set(key, {
+          regionIds: ids,
+          includeFilled,
+          paletteColor: options.paletteColor || null,
+          fallbackRgb: Array.isArray(options.fallbackRgb) ? options.fallbackRgb : null,
+          baseAlpha,
+          duration,
+          start: getNow(),
+          power: typeof options.power === "number" && options.power > 0 ? options.power : 2,
+        });
+        scheduleOverlayFrame();
+      }
+
+      function scheduleOverlayFrame() {
+        if (overlayAnimations.size === 0) {
+          return;
+        }
+        if (overlayAnimationFrame != null || overlayAnimationTimeout != null) {
+          return;
+        }
+        if (typeof window?.requestAnimationFrame === "function") {
+          overlayAnimationFrame = window.requestAnimationFrame(stepOverlayAnimations);
+        } else {
+          overlayAnimationTimeout = window.setTimeout(() => {
+            overlayAnimationTimeout = null;
+            stepOverlayAnimations(getNow());
+          }, 16);
+        }
+      }
+
+      function stepOverlayAnimations(timestamp) {
+        if (overlayAnimationFrame != null && typeof window?.cancelAnimationFrame === "function") {
+          window.cancelAnimationFrame(overlayAnimationFrame);
+        }
+        overlayAnimationFrame = null;
+        if (overlayAnimationTimeout != null) {
+          clearTimeout(overlayAnimationTimeout);
+          overlayAnimationTimeout = null;
+        }
+        if (!state.puzzle || overlayAnimations.size === 0) {
           renderPuzzle();
-        }, duration);
+          return;
+        }
+        const now = typeof timestamp === "number" && Number.isFinite(timestamp) ? timestamp : getNow();
+        const overlaysByTint = new Map();
+        overlayAnimations.forEach((animation, key) => {
+          const duration = animation.duration <= 0 ? MIN_HINT_FADE_DURATION : animation.duration;
+          const elapsed = now - animation.start;
+          const progress = clamp(duration > 0 ? elapsed / duration : 1, 0, 1);
+          if (progress >= 1) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          const strength = Math.pow(1 - progress, animation.power || 2);
+          if (strength <= 0.0001) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          const alpha = clamp(animation.baseAlpha * strength, 0.01, 1);
+          const tint = resolveOverlayTint(animation.paletteColor, animation.fallbackRgb, alpha);
+          if (!tint) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          const regions = [];
+          for (const regionId of animation.regionIds) {
+            const region = state.puzzle.regions[regionId];
+            if (!region) continue;
+            if (!animation.includeFilled && state.filled.has(regionId)) {
+              continue;
+            }
+            regions.push(region);
+          }
+          if (regions.length === 0) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          if (overlaysByTint.has(tint)) {
+            overlaysByTint.get(tint).push(...regions);
+          } else {
+            overlaysByTint.set(tint, regions.slice());
+          }
+        });
+        renderPuzzle();
+        overlaysByTint.forEach((regions, tint) => {
+          paintRegions(regions, tint);
+        });
+        if (overlayAnimations.size > 0) {
+          scheduleOverlayFrame();
+        }
+      }
+
+      function resolveOverlayTint(paletteColor, fallbackRgb, alpha) {
+        const normalizedAlpha = clamp(alpha, 0, 1);
+        if (paletteColor) {
+          if (Array.isArray(paletteColor.rgba) && paletteColor.rgba.length >= 3) {
+            const [r, g, b] = paletteColor.rgba;
+            return `rgba(${clamp(Math.round(r), 0, 255)}, ${clamp(Math.round(g), 0, 255)}, ${clamp(Math.round(b), 0, 255)}, ${normalizedAlpha})`;
+          }
+          if (typeof paletteColor.hex === "string" && paletteColor.hex) {
+            return rgbaFromHex(paletteColor.hex, normalizedAlpha);
+          }
+        }
+        const rgb = Array.isArray(fallbackRgb) && fallbackRgb.length >= 3 ? fallbackRgb : [96, 165, 250];
+        const [r, g, b] = rgb.map((value) => clamp(Math.round(value), 0, 255));
+        return `rgba(${r}, ${g}, ${b}, ${normalizedAlpha})`;
+      }
+
+      function parseTintToRgb(value) {
+        if (typeof value !== "string") return null;
+        const match = value.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+        if (!match) return null;
+        return match.slice(1, 4).map((component) => clamp(Number(component) || 0, 0, 255));
+      }
+
+      function getNow() {
+        if (typeof performance !== "undefined" && typeof performance.now === "function") {
+          return performance.now();
+        }
+        return Date.now();
+      }
+
+      function clearOverlayAnimations() {
+        overlayAnimations.clear();
+        if (overlayAnimationFrame != null && typeof window?.cancelAnimationFrame === "function") {
+          window.cancelAnimationFrame(overlayAnimationFrame);
+        }
+        overlayAnimationFrame = null;
+        if (overlayAnimationTimeout != null) {
+          clearTimeout(overlayAnimationTimeout);
+          overlayAnimationTimeout = null;
+        }
+        if (state.puzzle) {
+          renderPuzzle();
+        }
+      }
+
+      function normalizeHintFadeDuration(value) {
+        let candidate = Number(value);
+        if (!Number.isFinite(candidate) || candidate <= 0) {
+          const stateValue = state?.settings?.hintFadeDuration;
+          candidate = Number.isFinite(stateValue) && stateValue > 0 ? stateValue : DEFAULT_HINT_FADE_DURATION;
+        }
+        return clamp(Math.round(candidate), MIN_HINT_FADE_DURATION, MAX_HINT_FADE_DURATION);
+      }
+
+      function normalizeHintIntensity(value) {
+        let candidate = Number(value);
+        if (!Number.isFinite(candidate)) {
+          const stateValue = state?.settings?.hintIntensity;
+          candidate = Number.isFinite(stateValue) ? stateValue : DEFAULT_HINT_INTENSITY;
+        }
+        if (candidate > 1) {
+          candidate /= 100;
+        }
+        if (!Number.isFinite(candidate) || candidate <= 0) {
+          candidate = DEFAULT_HINT_INTENSITY;
+        }
+        return clamp(candidate, MIN_HINT_INTENSITY, MAX_HINT_INTENSITY);
+      }
+
+      function resolveRightClickAction(value) {
+        if (typeof value === "string") {
+          const normalized = value.trim().toLowerCase();
+          if (VALID_RIGHT_CLICK_ACTIONS.has(normalized)) {
+            return normalized;
+          }
+        }
+        return DEFAULT_RIGHT_CLICK_ACTION;
       }
 
       function autoAdvanceColor(currentColorId) {
@@ -6085,6 +6418,13 @@
         payload.settings = {
           autoAdvance: Boolean(settingsSource.autoAdvance),
           animateHints: Boolean(settingsSource.animateHints),
+          hintFadeDuration: normalizeHintFadeDuration(
+            settingsSource.hintFadeDuration ?? state.settings.hintFadeDuration
+          ),
+          hintIntensity: normalizeHintIntensity(settingsSource.hintIntensity ?? state.settings.hintIntensity),
+          rightClickAction: resolveRightClickAction(
+            settingsSource.rightClickAction ?? state.settings.rightClickAction
+          ),
           uiScale:
             Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
               ? clamp(settingsSource.uiScale, 0.6, 1.35)
@@ -6189,6 +6529,9 @@
           settings: {
             autoAdvance: Boolean(state.settings.autoAdvance),
             animateHints: Boolean(state.settings.animateHints),
+            hintFadeDuration: normalizeHintFadeDuration(state.settings.hintFadeDuration),
+            hintIntensity: normalizeHintIntensity(state.settings.hintIntensity),
+            rightClickAction: resolveRightClickAction(state.settings.rightClickAction),
             uiScale:
               Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
                 ? clamp(state.settings.uiScale, 0.6, 1.35)
