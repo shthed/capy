@@ -479,35 +479,6 @@
         touch-action: none;
       }
 
-      #previewOverlay {
-        position: absolute;
-        inset: 0;
-        display: grid;
-        place-items: center;
-        background: var(--theme-preview-overlay);
-        backdrop-filter: blur(16px);
-        z-index: 4;
-        transition: opacity 0.24s ease;
-      }
-
-      #previewOverlay.hidden {
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      #previewOverlay canvas {
-        width: min(100%, calc(100vh - 140px));
-        height: auto;
-        border-radius: calc(20px * var(--ui-scale));
-        border: 1px solid rgba(148, 163, 184, 0.4);
-        box-shadow: 0 32px 70px rgba(2, 6, 23, 0.65);
-        image-rendering: pixelated;
-      }
-
-      #previewOverlay button {
-        margin-top: calc(24px * var(--ui-scale));
-      }
-
       #startHint {
         position: absolute;
         inset: 0;
@@ -904,15 +875,6 @@
         width: 100%;
         border-radius: 12px;
         padding: 10px 0;
-      }
-
-      #previewCanvas {
-        width: 100%;
-        height: auto;
-        border-radius: 12px;
-        border: 1px solid var(--theme-preview-canvas-border);
-        background: var(--theme-preview-canvas-bg);
-        image-rendering: pixelated;
       }
 
       .swatch {
@@ -1386,19 +1348,6 @@
             <strong class="pointer-number" data-pointer-number></strong>
           </div>
         </div>
-        <div id="previewOverlay" class="hidden" aria-hidden="true">
-          <div>
-            <canvas
-              id="previewCanvas"
-              data-testid="preview-canvas"
-              width="640"
-              height="480"
-            ></canvas>
-            <div style="display: grid; place-items: center; margin-top: 16px;">
-              <button id="closePreview" type="button">Return to puzzle</button>
-            </div>
-          </div>
-        </div>
         <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
             <h1>Drop an image to start</h1>
@@ -1709,8 +1658,6 @@
       const saveManagerButton = document.getElementById("saveManagerButton");
       const settingsButton = document.getElementById("settingsButton");
       const helpButton = document.getElementById("helpButton");
-      const closePreviewButton = document.getElementById("closePreview");
-      const previewOverlay = document.getElementById("previewOverlay");
       const settingsSheet = document.getElementById("settingsSheet");
       const saveSheet = document.getElementById("saveSheet");
       const helpSheet = document.getElementById("helpSheet");
@@ -1757,7 +1704,7 @@
         complete: "All done!",
       };
       const puzzleCanvas = document.getElementById("puzzleCanvas");
-      const previewCanvas = document.getElementById("previewCanvas");
+      const previewCanvas = document.createElement("canvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
 
@@ -3063,13 +3010,7 @@
       previewToggle.addEventListener("click", () => {
         state.previewVisible = !state.previewVisible;
         updatePreviewState();
-        logDebug(state.previewVisible ? "Opened preview overlay" : "Closed preview overlay");
-      });
-
-      closePreviewButton.addEventListener("click", () => {
-        state.previewVisible = false;
-        updatePreviewState();
-        logDebug("Closed preview overlay");
+        logDebug(state.previewVisible ? "Showing preview" : "Hiding preview");
       });
 
       applyBtn.addEventListener("click", () => {
@@ -3499,23 +3440,24 @@
       }
 
       function updatePreviewState() {
+        if (!previewToggle) return;
+        if (!state.puzzle) {
+          state.previewVisible = false;
+        }
         if (state.previewVisible && state.puzzle) {
-          previewOverlay.classList.remove("hidden");
-          previewOverlay.setAttribute("aria-hidden", "false");
           previewToggle.setAttribute("aria-pressed", "true");
           previewToggle.setAttribute("aria-label", "Hide preview");
           previewToggle.title = "Hide preview";
           previewToggle.classList.add("active");
           hideCustomCursor();
         } else {
-          previewOverlay.classList.add("hidden");
-          previewOverlay.setAttribute("aria-hidden", "true");
           previewToggle.setAttribute("aria-pressed", "false");
           previewToggle.setAttribute("aria-label", "Show preview");
           previewToggle.title = "Show preview";
           previewToggle.classList.remove("active");
           refreshCustomCursorHighlight();
         }
+        renderPuzzle();
       }
 
       function updateFullscreenState() {
@@ -4137,7 +4079,11 @@
         }
         setProgressMessage("loading");
         clearContext(puzzleCtx);
-        previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        if (previewCtx) {
+          previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        }
+        previewCanvas.width = 0;
+        previewCanvas.height = 0;
         state.previewImageData = null;
         state.renderCache = createRenderCache();
         state.previewVisible = false;
@@ -4369,7 +4315,20 @@
       function renderPreview() {
         if (!state.puzzle) return;
         const { width, height, regions, palette } = state.puzzle;
-        const imageData = previewCtx.createImageData(width, height);
+        if (previewCanvas) {
+          previewCanvas.width = width;
+          previewCanvas.height = height;
+        }
+        let imageData = null;
+        if (previewCtx && typeof previewCtx.createImageData === "function") {
+          imageData = previewCtx.createImageData(width, height);
+        } else if (typeof ImageData === "function") {
+          imageData = new ImageData(width, height);
+        }
+        if (!imageData) {
+          state.previewImageData = null;
+          return;
+        }
         const data = imageData.data;
         for (const region of regions) {
           const color = palette[region.colorId - 1];
@@ -4383,7 +4342,9 @@
             data[base + 3] = 255;
           }
         }
-        previewCtx.putImageData(imageData, 0, 0);
+        if (previewCtx && typeof previewCtx.putImageData === "function") {
+          previewCtx.putImageData(imageData, 0, 0);
+        }
         state.previewImageData = imageData;
       }
 
@@ -4398,6 +4359,20 @@
         puzzleCtx.clearRect(0, 0, pixelWidth, pixelHeight);
         puzzleCtx.fillStyle = state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX;
         puzzleCtx.fillRect(0, 0, pixelWidth, pixelHeight);
+        if (state.previewVisible) {
+          if (!state.previewImageData) {
+            renderPreview();
+          }
+          if (state.previewImageData) {
+            if (previewCanvas && previewCanvas.width && previewCanvas.height) {
+              puzzleCtx.drawImage(previewCanvas, 0, 0);
+            } else if (typeof puzzleCtx.putImageData === "function") {
+              puzzleCtx.putImageData(state.previewImageData, 0, 0);
+            }
+          }
+          puzzleCtx.restore();
+          return;
+        }
         if (cache.ready) {
           let drewFromLayer = false;
           if (cache.filledLayer && cache.filledLayerCtx) {
