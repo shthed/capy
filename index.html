@@ -575,11 +575,76 @@
           color: var(--theme-chip-active-text);
         }
 
-        .detail-caption {
-          margin: 0;
-          font-size: 0.85rem;
-          color: var(--theme-caption-text);
-        }
+      .detail-caption {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--theme-caption-text);
+      }
+
+      #startHint .game-selection {
+        display: grid;
+        gap: calc(12px * var(--ui-scale));
+        padding: 0;
+      }
+
+      #startHint .game-selection h2 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      #startHint .game-selection-description {
+        margin: 0;
+        color: var(--theme-muted-text);
+        font-size: 0.95rem;
+      }
+
+      #startHint .game-selection-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: calc(10px * var(--ui-scale));
+      }
+
+      #startHint .game-selection-list li {
+        margin: 0;
+      }
+
+      #startHint .game-option-button {
+        width: 100%;
+        text-align: left;
+        display: grid;
+        gap: calc(4px * var(--ui-scale));
+        border-radius: calc(16px * var(--ui-scale));
+        border: 1px solid var(--theme-sheet-button-border);
+        background: var(--theme-sheet-button-bg);
+        color: var(--theme-sheet-button-text);
+        padding: calc(14px * var(--ui-scale)) calc(18px * var(--ui-scale));
+        box-shadow: none;
+      }
+
+      #startHint .game-option-button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
+        background: var(--theme-chip-hover-bg);
+        color: var(--theme-chip-hover-text);
+      }
+
+      #startHint .game-option-title {
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      #startHint .game-option-meta {
+        font-size: 0.85rem;
+        color: var(--theme-caption-text);
+      }
+
+      #startHint .game-selection-empty {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--theme-caption-text);
+      }
 
         #settingsSheet .detail-callout {
           text-align: left;
@@ -1350,20 +1415,28 @@
         </div>
         <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
-            <h1>Drop an image to start</h1>
+            <h1>Choose a game to start</h1>
             <p>
-              Drag a picture anywhere on the screen, choose a file from your device,
-              or jump straight into our capybara sample scene.
+              Resume a saved game, start the bundled Capybara Springs puzzle from <code>capy.json</code>,
+              or import your own image or JSON file.
             </p>
-              <div class="detail-callout">
-                <p class="detail-intro">Pick a detail level for the capybara demo:</p>
-                <div class="detail-picker" role="group" aria-label="Capybara sample detail level">
-                  <button type="button" class="detail-chip" data-detail-level="low">Low</button>
-                  <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
-                  <button type="button" class="detail-chip" data-detail-level="high">High</button>
-                </div>
-                <p class="detail-caption" data-detail-caption></p>
+            <div id="gameSelection" class="game-selection" role="group" aria-labelledby="gameSelectionHeading">
+              <h2 id="gameSelectionHeading">Start a game</h2>
+              <p class="game-selection-description">
+                Select Capybara Springs or pick one of your manual saves stored in this browser.
+              </p>
+              <ul id="gameSelectionList" class="game-selection-list" role="list"></ul>
+              <p id="gameSelectionEmpty" class="game-selection-empty" hidden>No saved games yet.</p>
+            </div>
+            <div class="detail-callout">
+              <p class="detail-intro">Pick a detail level for the capybara demo:</p>
+              <div class="detail-picker" role="group" aria-label="Capybara sample detail level">
+                <button type="button" class="detail-chip" data-detail-level="low">Low</button>
+                <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
+                <button type="button" class="detail-chip" data-detail-level="high">High</button>
               </div>
+              <p class="detail-caption" data-detail-caption></p>
+            </div>
             <div class="hint-actions">
               <button id="selectImage" type="button">Choose an image</button>
               <button
@@ -1386,7 +1459,7 @@
             role="status"
             aria-live="polite"
           >
-            <span id="progress" class="progress-message">Choose an artwork to start</span>
+            <span id="progress" class="progress-message">Choose a game to start</span>
             <div
               id="progressMeter"
               class="progress-meter"
@@ -1454,9 +1527,13 @@
           <h3 id="controlsHeading">Canvas controls</h3>
           <ul class="control-list">
             <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
+            <li><kbd>Right click</kbd> Select the colour under the pointer (configurable in Settings).</li>
             <li>Select a palette swatch to set the active colour and flash every matching region.</li>
             <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
-            <li><kbd>Space</kbd> + drag (or middle/right drag) Pan the canvas.</li>
+            <li>
+              <kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas. Switch the right-click action in Settings if you
+              prefer dragging instead of selecting.
+            </li>
             <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
           </ul>
         </section>
@@ -1515,6 +1592,29 @@
             <input id="showStatusToggle" type="checkbox" />
             <span>Show status bar with filled/remaining counts after imports</span>
           </label>
+        </section>
+        <section class="sheet-section" aria-labelledby="hintsControlsHeading">
+          <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
+          <label class="control">
+            <span>Hint fade duration <output data-for="hintFadeDuration">1.2 s</output></span>
+            <input id="hintFadeDuration" type="range" min="400" max="2400" step="100" value="1200" />
+          </label>
+          <p class="control-note">Set how long hint highlights linger before fading out.</p>
+          <label class="control">
+            <span>Hint intensity <output data-for="hintIntensity">65%</output></span>
+            <input id="hintIntensity" type="range" min="20" max="90" step="5" value="65" />
+          </label>
+          <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
+          <label class="control">
+            <span>Right-click action</span>
+            <select id="rightClickAction">
+              <option value="select">Select colour</option>
+              <option value="pan">Pan the canvas</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Choose whether right-clicking picks colours or starts panning. Middle click and Space + drag always pan.
+          </p>
         </section>
         <section class="sheet-section" aria-labelledby="paletteHeading">
           <h3 id="paletteHeading">Palette</h3>
@@ -1649,6 +1749,8 @@
       const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
       const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
       const samplePreview = document.getElementById("sampleArtPreview");
+      const gameSelectionList = document.getElementById("gameSelectionList");
+      const gameSelectionEmpty = document.getElementById("gameSelectionEmpty");
       const startHint = document.getElementById("startHint");
       const hintButton = document.getElementById("hintButton");
       const resetButton = document.getElementById("resetButton");
@@ -1672,6 +1774,9 @@
       const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
+      const hintFadeDurationInput = document.getElementById("hintFadeDuration");
+      const hintIntensityInput = document.getElementById("hintIntensity");
+      const rightClickActionSelect = document.getElementById("rightClickAction");
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
       const showStatusToggle = document.getElementById("showStatusToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
@@ -1697,7 +1802,7 @@
       const defaultProgressLabel =
         progressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
       const PROGRESS_MESSAGES = {
-        idle: "Choose an artwork to start",
+        idle: "Choose a game to start",
         loading: "Loading puzzle…",
         active: "Keep colouring",
         generating: "Processing image…",
@@ -1717,6 +1822,8 @@
         iterations: settingsSheet.querySelector('output[data-for="kmeansIters"]'),
         smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
         uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
+        hintFadeDuration: settingsSheet.querySelector('output[data-for="hintFadeDuration"]'),
+        hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
       };
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
@@ -1725,6 +1832,14 @@
       const DEFAULT_UI_SCALE = 0.9;
       const DEFAULT_UI_THEME = "dark";
       const VALID_UI_THEMES = new Set(["dark", "light", "colorful"]);
+      const DEFAULT_HINT_FADE_DURATION = 1200;
+      const MIN_HINT_FADE_DURATION = 400;
+      const MAX_HINT_FADE_DURATION = 2400;
+      const DEFAULT_HINT_INTENSITY = 0.65;
+      const MIN_HINT_INTENSITY = 0.2;
+      const MAX_HINT_INTENSITY = 0.9;
+      const DEFAULT_RIGHT_CLICK_ACTION = "select";
+      const VALID_RIGHT_CLICK_ACTIONS = new Set(["select", "pan"]);
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
@@ -1878,13 +1993,19 @@
         preventingBrowserZoom = true;
       }
 
-      // Embedded sample used for onboarding and smoke tests.
-      const SAMPLE_ARTWORK = {
+      // Default puzzle metadata fallback used for onboarding and smoke tests.
+      const DEFAULT_GAME_SOURCE = {
+        id: "capy-default",
+        path: "capy.json",
+      };
+
+      const DEFAULT_GAME_FALLBACK = {
         title: "Capybara Springs",
         description: "A capybara with an orange crown relaxes beside a dachshund in a forest lagoon.",
-        dataUrl:
-          "data:image/svg+xml;base64,PCEtLSBDYXB5YmFyYSBMYWdvb24gU3VucmlzZSAtIFNlZ21lbnRlZCBTVkcgLS0+CjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSIwIDAgOTYwIDYwMCIgd2lkdGg9Ijk2MCIgaGVpZ2h0PSI2MDAiIHJvbGU9ImltZyIgYXJpYS1sYWJlbGxlZGJ5PSJ0aXRsZSBkZXNjIj4KICA8dGl0bGUgaWQ9InRpdGxlIj5DYXB5YmFyYSBMYWdvb24gU3VucmlzZTwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkxheWVyZWQgc3VucmlzZSBiYW5kcyBvdmVyIGEgbGFnb29uIHdpdGggYSBzdHlsaXplZCBjYXB5YmFyYSBvbiB0aGUgc2hvcmUuPC9kZXNjPgogIDxnIGlkPSJyZWdpb24tYzAxIiBkYXRhLWNlbGwtaWQ9ImMxIiBkYXRhLWNvbG9yLWlkPSIxIiBkYXRhLWNvbG9yLW5hbWU9IlN1bnJpc2UgU2t5IiBkYXRhLWNvbG9yLWhleD0iI2Y2YmY2MCIgZmlsbD0iI2Y2YmY2MCI+CiAgICA8dGl0bGU+UmVnaW9uIGMxIOKAkyBDb2xvciAjMSAoU3VucmlzZSBTa3kpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0wIDAgTDk2MCAwIEw5NjAgODAgQyA4MjAgNzAgNjgwIDY4IDU0MCA3MiBDIDM4MCA3OCAyMjAgODYgMCA4MCBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzAyIiBkYXRhLWNlbGwtaWQ9ImMyIiBkYXRhLWNvbG9yLWlkPSIxIiBkYXRhLWNvbG9yLW5hbWU9IlN1bnJpc2UgU2t5IiBkYXRhLWNvbG9yLWhleD0iI2Y2YmY2MCIgZmlsbD0iI2Y2YmY2MCI+CiAgICA8dGl0bGU+UmVnaW9uIGMyIOKAkyBDb2xvciAjMSAoU3VucmlzZSBTa3kpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0wIDgwIEMgMjAwIDkwIDM2MCA4NiA1NDAgODAgQyA3MjAgNzQgODYwIDc2IDk2MCA4MCBMOTYwIDE0OCBDIDgyMCAxNDIgNjgwIDE0OCA1MjAgMTU2IEMgMzYwIDE2NiAyMDAgMTY0IDAgMTQ4IFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMDMiIGRhdGEtY2VsbC1pZD0iYzMiIGRhdGEtY29sb3ItaWQ9IjIiIGRhdGEtY29sb3ItbmFtZT0iQW1iZXIgRHJpZnQiIGRhdGEtY29sb3ItaGV4PSIjZjQ5OTRjIiBmaWxsPSIjZjQ5OTRjIj4KICAgIDx0aXRsZT5SZWdpb24gYzMg4oCTIENvbG9yICMyIChBbWJlciBEcmlmdCk8L3RpdGxlPgogICAgPHBhdGggZD0iTTAgMTQ4IEMgMTYwIDE1NiAzMjAgMTYwIDUyMCAxNTIgQyA1MDAgMTc2IDQ4MCAxOTggNDQwIDIxMiBDIDMyMCAyMjAgMTYwIDIxOCAwIDIxNiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzA0IiBkYXRhLWNlbGwtaWQ9ImM0IiBkYXRhLWNvbG9yLWlkPSIyIiBkYXRhLWNvbG9yLW5hbWU9IkFtYmVyIERyaWZ0IiBkYXRhLWNvbG9yLWhleD0iI2Y0OTk0YyIgZmlsbD0iI2Y0OTk0YyI+CiAgICA8dGl0bGU+UmVnaW9uIGM0IOKAkyBDb2xvciAjMiAoQW1iZXIgRHJpZnQpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik01MjAgMTUyIEMgNzAwIDE1MCA4NDAgMTQ2IDk2MCAxNDggQyA5NDAgMTc2IDkwMCAxOTggODYwIDIxMCBDIDc0MCAyMjAgNjQwIDIyMCA1MjAgMjE0IEMgNTIwIDE5NCA1MjAgMTcyIDUyMCAxNTIgWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMwNSIgZGF0YS1jZWxsLWlkPSJjNSIgZGF0YS1jb2xvci1pZD0iMyIgZGF0YS1jb2xvci1uYW1lPSJWaW9sZXQgUmlkZ2UiIGRhdGEtY29sb3ItaGV4PSIjOWE2YmIzIiBmaWxsPSIjOWE2YmIzIj4KICAgIDx0aXRsZT5SZWdpb24gYzUg4oCTIENvbG9yICMzIChWaW9sZXQgUmlkZ2UpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0wIDIxNiBDIDEyMCAyMjggMjIwIDIzMiAzMjAgMjMwIEMgMzAwIDI0OCAyNjAgMjY4IDIxMCAyNzggQyAxNTAgMjg2IDgwIDI4NCAwIDI4MCBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzA2IiBkYXRhLWNlbGwtaWQ9ImM2IiBkYXRhLWNvbG9yLWlkPSIzIiBkYXRhLWNvbG9yLW5hbWU9IlZpb2xldCBSaWRnZSIgZGF0YS1jb2xvci1oZXg9IiM5YTZiYjMiIGZpbGw9IiM5YTZiYjMiPgogICAgPHRpdGxlPlJlZ2lvbiBjNiDigJMgQ29sb3IgIzMgKFZpb2xldCBSaWRnZSk8L3RpdGxlPgogICAgPHBhdGggZD0iTTMyMCAyMzAgQyA0NDAgMjM2IDUyMCAyMzQgNjQwIDIyNiBDIDYzMCAyNTAgNjAwIDI2OCA1NjAgMjc2IEMgNDgwIDI4NiA0MDAgMjg0IDMyMCAyNzggQyAzMjAgMjU4IDMyMCAyNDQgMzIwIDIzMCBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzA3IiBkYXRhLWNlbGwtaWQ9ImM3IiBkYXRhLWNvbG9yLWlkPSIzIiBkYXRhLWNvbG9yLW5hbWU9IlZpb2xldCBSaWRnZSIgZGF0YS1jb2xvci1oZXg9IiM5YTZiYjMiIGZpbGw9IiM5YTZiYjMiPgogICAgPHRpdGxlPlJlZ2lvbiBjNyDigJMgQ29sb3IgIzMgKFZpb2xldCBSaWRnZSk8L3RpdGxlPgogICAgPHBhdGggZD0iTTY0MCAyMjYgQyA3NjAgMjI0IDg2MCAyMjAgOTYwIDIyMCBDIDk0MCAyNDAgOTAwIDI2MCA4NjAgMjcyIEMgNzgwIDI4NiA3MDAgMjg0IDY0MCAyNzggQyA2NDAgMjU2IDY0MCAyNDAgNjQwIDIyNiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzA4IiBkYXRhLWNlbGwtaWQ9ImM4IiBkYXRhLWNvbG9yLWlkPSI0IiBkYXRhLWNvbG9yLW5hbWU9IkZvcmVzdCBSaWRnZSIgZGF0YS1jb2xvci1oZXg9IiM1ZDdhNzYiIGZpbGw9IiM1ZDdhNzYiPgogICAgPHRpdGxlPlJlZ2lvbiBjOCDigJMgQ29sb3IgIzQgKEZvcmVzdCBSaWRnZSk8L3RpdGxlPgogICAgPHBhdGggZD0iTTAgMjgwIEMgMTAwIDI5MiAyMDAgMzAwIDMyMCAyOTIgQyAzMDAgMzEyIDI2MCAzMjggMjEwIDMzNiBDIDE1MCAzNDQgODAgMzQ0IDAgMzQwIFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMDkiIGRhdGEtY2VsbC1pZD0iYzkiIGRhdGEtY29sb3ItaWQ9IjQiIGRhdGEtY29sb3ItbmFtZT0iRm9yZXN0IFJpZGdlIiBkYXRhLWNvbG9yLWhleD0iIzVkN2E3NiIgZmlsbD0iIzVkN2E3NiI+CiAgICA8dGl0bGU+UmVnaW9uIGM5IOKAkyBDb2xvciAjNCAoRm9yZXN0IFJpZGdlKTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNMzIwIDI5MiBDIDQ0MCAyOTggNTQwIDMwMCA2NDAgMjk4IEMgNjIwIDMxOCA1ODAgMzMyIDU0MCAzNDAgQyA0NjAgMzQ4IDM4MCAzNDYgMzIwIDM0MCBDIDMyMCAzMjAgMzIwIDMwNiAzMjAgMjkyIFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMTAiIGRhdGEtY2VsbC1pZD0iYzEwIiBkYXRhLWNvbG9yLWlkPSI0IiBkYXRhLWNvbG9yLW5hbWU9IkZvcmVzdCBSaWRnZSIgZGF0YS1jb2xvci1oZXg9IiM1ZDdhNzYiIGZpbGw9IiM1ZDdhNzYiPgogICAgPHRpdGxlPlJlZ2lvbiBjMTAg4oCTIENvbG9yICM0IChGb3Jlc3QgUmlkZ2UpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik02NDAgMjk4IEMgNzYwIDMwMCA4NjAgMzAwIDk2MCAzMDAgQyA5NDAgMzIwIDkwMCAzMzIgODYwIDM0MCBDIDc4MCAzNDggNzAwIDM0OCA2NDAgMzQwIEMgNjQwIDMyMCA2NDAgMzA4IDY0MCAyOTggWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMxMSIgZGF0YS1jZWxsLWlkPSJjMTEiIGRhdGEtY29sb3ItaWQ9IjUiIGRhdGEtY29sb3ItbmFtZT0iTGFnb29uIExpZ2h0IiBkYXRhLWNvbG9yLWhleD0iIzc2YzdkNiIgZmlsbD0iIzc2YzdkNiI+CiAgICA8dGl0bGU+UmVnaW9uIGMxMSDigJMgQ29sb3IgIzUgKExhZ29vbiBMaWdodCk8L3RpdGxlPgogICAgPHBhdGggZD0iTTAgMzQwIEMgMTIwIDM0NCAyMjAgMzQ2IDMyMCAzNDQgQyAzMDAgMzUwIDMwMCAzNTIgMzIwIDM1MiBDIDIwMCAzNTYgMTIwIDM1NCAwIDM1MiBDIDAgMzQ4IDAgMzQ0IDAgMzQwIFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMTIiIGRhdGEtY2VsbC1pZD0iYzEyIiBkYXRhLWNvbG9yLWlkPSI1IiBkYXRhLWNvbG9yLW5hbWU9IkxhZ29vbiBMaWdodCIgZGF0YS1jb2xvci1oZXg9IiM3NmM3ZDYiIGZpbGw9IiM3NmM3ZDYiPgogICAgPHRpdGxlPlJlZ2lvbiBjMTIg4oCTIENvbG9yICM1IChMYWdvb24gTGlnaHQpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0zMjAgMzQ0IEMgNDQwIDM0NiA1NDAgMzQ0IDY0MCAzNDIgQyA2NDAgMzQ2IDY0MCAzNTAgNjQwIDM1MiBDIDUyMCAzNTYgNDIwIDM1NiAzMjAgMzUyIEMgMzIwIDM0OCAzMjAgMzQ2IDMyMCAzNDQgWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMxMyIgZGF0YS1jZWxsLWlkPSJjMTMiIGRhdGEtY29sb3ItaWQ9IjUiIGRhdGEtY29sb3ItbmFtZT0iTGFnb29uIExpZ2h0IiBkYXRhLWNvbG9yLWhleD0iIzc2YzdkNiIgZmlsbD0iIzc2YzdkNiI+CiAgICA8dGl0bGU+UmVnaW9uIGMxMyDigJMgQ29sb3IgIzUgKExhZ29vbiBMaWdodCk8L3RpdGxlPgogICAgPHBhdGggZD0iTTY0MCAzNDIgQyA3NjAgMzQwIDg2MCAzMzggOTYwIDM0MCBDIDk2MCAzNDQgOTYwIDM0OCA5NjAgMzUyIEMgODQwIDM1NCA3NDAgMzU0IDY0MCAzNTIgQyA2NDAgMzQ4IDY0MCAzNDQgNjQwIDM0MiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzE0IiBkYXRhLWNlbGwtaWQ9ImMxNCIgZGF0YS1jb2xvci1pZD0iNSIgZGF0YS1jb2xvci1uYW1lPSJMYWdvb24gTGlnaHQiIGRhdGEtY29sb3ItaGV4PSIjNzZjN2Q2IiBmaWxsPSIjNzZjN2Q2Ij4KICAgIDx0aXRsZT5SZWdpb24gYzE0IOKAkyBDb2xvciAjNSAoTGFnb29uIExpZ2h0KTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNMCAzNTIgQyAxMjAgMzU2IDIyMCAzNTYgMzIwIDM1MiBDIDMxMCAzNjQgMzEwIDM3MiAzMjAgMzc2IEMgMjAwIDM4MiAxMjAgMzgwIDAgMzc2IEMgMCAzNjQgMCAzNTggMCAzNTIgWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMxNSIgZGF0YS1jZWxsLWlkPSJjMTUiIGRhdGEtY29sb3ItaWQ9IjUiIGRhdGEtY29sb3ItbmFtZT0iTGFnb29uIExpZ2h0IiBkYXRhLWNvbG9yLWhleD0iIzc2YzdkNiIgZmlsbD0iIzc2YzdkNiI+CiAgICA8dGl0bGU+UmVnaW9uIGMxNSDigJMgQ29sb3IgIzUgKExhZ29vbiBMaWdodCk8L3RpdGxlPgogICAgPHBhdGggZD0iTTMyMCAzNTIgQyA0NDAgMzU0IDU0MCAzNTIgNjQwIDM1MiBDIDY1MCAzNjIgNjUwIDM3MCA2NDAgMzc2IEMgNTIwIDM4MiA0MjAgMzgyIDMyMCAzNzYgQyAzMjAgMzY2IDMyMCAzNjAgMzIwIDM1MiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzE2IiBkYXRhLWNlbGwtaWQ9ImMxNiIgZGF0YS1jb2xvci1pZD0iNSIgZGF0YS1jb2xvci1uYW1lPSJMYWdvb24gTGlnaHQiIGRhdGEtY29sb3ItaGV4PSIjNzZjN2Q2IiBmaWxsPSIjNzZjN2Q2Ij4KICAgIDx0aXRsZT5SZWdpb24gYzE2IOKAkyBDb2xvciAjNSAoTGFnb29uIExpZ2h0KTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNNjQwIDM1MiBDIDc2MCAzNTIgODYwIDM1MCA5NjAgMzUyIEMgOTYwIDM2MiA5NjAgMzcyIDk2MCAzNzYgQyA4NDAgMzgwIDc0MCAzODAgNjQwIDM3NiBDIDY0MCAzNjYgNjQwIDM1OCA2NDAgMzUyIFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMTciIGRhdGEtY2VsbC1pZD0iYzE3IiBkYXRhLWNvbG9yLWlkPSI2IiBkYXRhLWNvbG9yLW5hbWU9IkxhZ29vbiBEZXB0aCIgZGF0YS1jb2xvci1oZXg9IiMxYzZmOGMiIGZpbGw9IiMxYzZmOGMiPgogICAgPHRpdGxlPlJlZ2lvbiBjMTcg4oCTIENvbG9yICM2IChMYWdvb24gRGVwdGgpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0wIDM3NiBDIDE2MCAzODIgMzIwIDM4OCA0ODAgMzg0IEMgNDgwIDM5NCA0ODAgNDAwIDQ4MCA0MDQgQyAzMjAgNDA4IDE2MCA0MDQgMCA0MDQgQyAwIDM5MiAwIDM4NCAwIDM3NiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzE4IiBkYXRhLWNlbGwtaWQ9ImMxOCIgZGF0YS1jb2xvci1pZD0iNiIgZGF0YS1jb2xvci1uYW1lPSJMYWdvb24gRGVwdGgiIGRhdGEtY29sb3ItaGV4PSIjMWM2ZjhjIiBmaWxsPSIjMWM2ZjhjIj4KICAgIDx0aXRsZT5SZWdpb24gYzE4IOKAkyBDb2xvciAjNiAoTGFnb29uIERlcHRoKTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNNDgwIDM3NiBDIDY0MCAzODIgODAwIDM4MCA5NjAgMzc2IEw5NjAgNDA0IEMgODAwIDQxMCA2NDAgNDEyIDQ4MCA0MDQgQyA0ODAgMzk0IDQ4MCAzODYgNDgwIDM3NiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzE5IiBkYXRhLWNlbGwtaWQ9ImMxOSIgZGF0YS1jb2xvci1pZD0iNiIgZGF0YS1jb2xvci1uYW1lPSJMYWdvb24gRGVwdGgiIGRhdGEtY29sb3ItaGV4PSIjMWM2ZjhjIiBmaWxsPSIjMWM2ZjhjIj4KICAgIDx0aXRsZT5SZWdpb24gYzE5IOKAkyBDb2xvciAjNiAoTGFnb29uIERlcHRoKTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNMCA0MDQgQyAxNjAgNDEwIDMyMCA0MTYgNDgwIDQxMiBDIDQ4MCA0MjggNDgwIDQ0MCA0ODAgNDQ4IEMgMzIwIDQ1NiAxNjAgNDUyIDAgNDQ4IEMgMCA0MzAgMCA0MTYgMCA0MDQgWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMyMCIgZGF0YS1jZWxsLWlkPSJjMjAiIGRhdGEtY29sb3ItaWQ9IjYiIGRhdGEtY29sb3ItbmFtZT0iTGFnb29uIERlcHRoIiBkYXRhLWNvbG9yLWhleD0iIzFjNmY4YyIgZmlsbD0iIzFjNmY4YyI+CiAgICA8dGl0bGU+UmVnaW9uIGMyMCDigJMgQ29sb3IgIzYgKExhZ29vbiBEZXB0aCk8L3RpdGxlPgogICAgPHBhdGggZD0iTTQ4MCA0MTIgQyA2NDAgNDE2IDgwMCA0MTAgOTYwIDQwNCBMOTYwIDQ0OCBDIDgyMCA0NTYgNjgwIDQ2MCA1MjAgNDU2IEMgNTAwIDQ1NCA0OTAgNDQ4IDQ4MCA0NDggQyA0ODAgNDMyIDQ4MCA0MjAgNDgwIDQxMiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzIxIiBkYXRhLWNlbGwtaWQ9ImMyMSIgZGF0YS1jb2xvci1pZD0iNyIgZGF0YS1jb2xvci1uYW1lPSJTaG9yZSBMZWZ0IiBkYXRhLWNvbG9yLWhleD0iIzRmN2Q1YyIgZmlsbD0iIzRmN2Q1YyI+CiAgICA8dGl0bGU+UmVnaW9uIGMyMSDigJMgQ29sb3IgIzcgKFNob3JlIExlZnQpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0wIDQ0OCBDIDEyMCA0NTQgMjIwIDQ1OCAzMDAgNDYyIEMgMjgwIDUwMCAyMjAgNTQwIDE0MCA1NjYgQyA4MCA1ODQgMzAgNTkyIDAgNTkyIEMgMCA1NDQgMCA0OTYgMCA0NDggWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMyMiIgZGF0YS1jZWxsLWlkPSJjMjIiIGRhdGEtY29sb3ItaWQ9IjciIGRhdGEtY29sb3ItbmFtZT0iU2hvcmUgTGVmdCIgZGF0YS1jb2xvci1oZXg9IiM0ZjdkNWMiIGZpbGw9IiM0ZjdkNWMiPgogICAgPHRpdGxlPlJlZ2lvbiBjMjIg4oCTIENvbG9yICM3IChTaG9yZSBMZWZ0KTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNMzAwIDQ2MiBDIDM2MCA0NjggNDIwIDQ3MiA1MjAgNDU2IEMgNTEwIDQ4NiA0OTAgNTE0IDQ2MCA1NDAgQyA0MjAgNTY4IDM2MCA1ODAgMzAwIDU3MiBDIDI4MCA1NDAgMjkwIDUwMCAzMDAgNDYyIFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMjMiIGRhdGEtY2VsbC1pZD0iYzIzIiBkYXRhLWNvbG9yLWlkPSI4IiBkYXRhLWNvbG9yLW5hbWU9IlNob3JlIE1pZGRsZSIgZGF0YS1jb2xvci1oZXg9IiM2YjkzNTgiIGZpbGw9IiM2YjkzNTgiPgogICAgPHRpdGxlPlJlZ2lvbiBjMjMg4oCTIENvbG9yICM4IChTaG9yZSBNaWRkbGUpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik01MjAgNDU2IEMgNjQwIDQ2MiA3MjAgNDY0IDc4MCA0NjAgQyA3ODggNDc0IDc5MiA0OTggNzk2IDUyOCBDIDc4NiA1ODAgNzY4IDU4NCA3NTIgNTg4IEMgNzAwIDYwMCA2NTYgNTk4IDYwNCA1ODggQyA1NjYgNTgwIDUzNCA1NjQgNTE4IDU0NiBDIDUwNiA1MzIgNTA2IDUyMCA1MjAgNTEwIEMgNTA4IDQ5NiA1MTIgNDc2IDUyMCA0NTYgWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMyNCIgZGF0YS1jZWxsLWlkPSJjMjQiIGRhdGEtY29sb3ItaWQ9IjkiIGRhdGEtY29sb3ItbmFtZT0iQ2FweSBCb2R5IiBkYXRhLWNvbG9yLWhleD0iIzdkNTczNSIgZmlsbD0iIzdkNTczNSI+CiAgICA8dGl0bGU+UmVnaW9uIGMyNCDigJMgQ29sb3IgIzkgKENhcHkgQm9keSk8L3RpdGxlPgogICAgPHBhdGggZD0iTTUyMCA1MTAgQyA1NDggNDcwIDYxMiA0NDAgNjkyIDQzNCBDIDc0NCA0MzAgNzY4IDQzOCA3ODAgNDU2IEMgNzkwIDQ3NCA3OTQgNDk4IDc5NiA1MjggQyA3OTggNTU2IDc4NiA1ODAgNzUyIDU4OCBDIDcwOCA2MDAgNjU2IDU5OCA2MDQgNTg4IEMgNTY2IDU4MCA1MzQgNTY0IDUxOCA1NDYgQyA1MDggNTMyIDUwNiA1MTggNTIwIDUxMCBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzI1IiBkYXRhLWNlbGwtaWQ9ImMyNSIgZGF0YS1jb2xvci1pZD0iMTAiIGRhdGEtY29sb3ItbmFtZT0iQ2FweSBIZWFkIiBkYXRhLWNvbG9yLWhleD0iIzVlM2IyNCIgZmlsbD0iIzVlM2IyNCI+CiAgICA8dGl0bGU+UmVnaW9uIGMyNSDigJMgQ29sb3IgIzEwIChDYXB5IEhlYWQpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik03ODAgNDU2IEMgODA0IDQzOCA4MzggNDM4IDg2NiA0NjAgQyA4OTQgNDgyIDkwNCA1MjAgODkyIDU1NiBDIDg3OCA1OTQgODQ2IDYwOCA4MTAgNjAwIEMgODAwIDU5OCA3OTYgNTkwIDc5NiA1MjggQyA3OTQgNTAwIDc4OCA0NzQgNzgwIDQ1NiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzI2IiBkYXRhLWNlbGwtaWQ9ImMyNiIgZGF0YS1jb2xvci1pZD0iMTEiIGRhdGEtY29sb3ItbmFtZT0iU2hvcmUgUmlnaHQiIGRhdGEtY29sb3ItaGV4PSIjM2Y1YjNiIiBmaWxsPSIjM2Y1YjNiIj4KICAgIDx0aXRsZT5SZWdpb24gYzI2IOKAkyBDb2xvciAjMTEgKFNob3JlIFJpZ2h0KTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNNzgwIDQ2MCBDIDg0MCA0NTYgOTAwIDQ1NCA5NjAgNDUyIEw5NjAgNjAwIEMgOTEwIDYwMCA4NzAgNTk4IDgxMCA2MDAgQyA4NDYgNjA4IDg3OCA1OTQgODkyIDU1NiBDIDg4NCA1MjAgODYwIDQ4OCA3ODAgNDYwIFoiLz4KICA8L2c+Cjwvc3ZnPgo=",
       };
+
+      let cachedDefaultGame = null;
+      let defaultGameRequest = null;
 
       const SAMPLE_DETAIL_LEVELS = {
         low: {
@@ -2397,9 +2518,16 @@
         return deviceWidth / renderScale;
       }
       if (samplePreview) {
-        samplePreview.src = SAMPLE_ARTWORK.dataUrl;
-        samplePreview.alt = SAMPLE_ARTWORK.description;
-        samplePreview.title = SAMPLE_ARTWORK.title;
+        const dataUrl = getSampleDataUrl();
+        if (dataUrl) {
+          samplePreview.src = dataUrl;
+          samplePreview.alt = getSampleDescription() || getSampleTitle();
+          samplePreview.title = getSampleTitle();
+        } else {
+          samplePreview.removeAttribute("src");
+          samplePreview.alt = "";
+          samplePreview.title = "";
+        }
       }
 
       // View state drives pan/zoom transforms. baseScale keeps the puzzle fit-to-screen while
@@ -2605,10 +2733,9 @@
       let panGlobalListenersAttached = false;
       const globalPanListenerOptions = { capture: true };
       let spacePressed = false;
-      let colorFlashTimer = null;
-      const QUICK_HINT_FLASH_DURATION = 160;
-      const DEFAULT_COLOR_FLASH_DURATION = 280;
-      const DEFAULT_REGION_FLASH_DURATION = 220;
+      const overlayAnimations = new Map();
+      let overlayAnimationFrame = null;
+      let overlayAnimationTimeout = null;
       const activeTouches = new Map();
       let pinchSession = null;
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
@@ -2673,6 +2800,9 @@
         settings: {
           autoAdvance: true,
           animateHints: true,
+          hintFadeDuration: DEFAULT_HINT_FADE_DURATION,
+          hintIntensity: DEFAULT_HINT_INTENSITY,
+          rightClickAction: DEFAULT_RIGHT_CLICK_ACTION,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
@@ -2684,6 +2814,13 @@
         saves: gameSaveManager.hydrate(),
         previewImageData: null,
         renderCache: createRenderCache(),
+        defaultGame: {
+          id: DEFAULT_GAME_SOURCE.id,
+          path: DEFAULT_GAME_SOURCE.path,
+          title: DEFAULT_GAME_FALLBACK.title,
+          description: DEFAULT_GAME_FALLBACK.description,
+        },
+        sampleArtwork: null,
       };
 
       syncStatusBarVisibility();
@@ -2697,6 +2834,186 @@
         refreshSaveList();
         updateStorageUsageSummary();
       });
+
+      function getDefaultGameTitle() {
+        const title = state.defaultGame?.title;
+        if (typeof title === "string" && title.trim()) {
+          return title.trim();
+        }
+        const fallback = DEFAULT_GAME_FALLBACK.title;
+        if (typeof fallback === "string" && fallback.trim()) {
+          return fallback.trim();
+        }
+        return DEFAULT_GAME_SOURCE.path;
+      }
+
+      function getDefaultGameDescription() {
+        const description = state.defaultGame?.description;
+        if (typeof description === "string" && description.trim()) {
+          return description.trim();
+        }
+        const fallback = DEFAULT_GAME_FALLBACK.description;
+        if (typeof fallback === "string" && fallback.trim()) {
+          return fallback.trim();
+        }
+        return "";
+      }
+
+      function getSampleArtwork() {
+        return state.sampleArtwork || null;
+      }
+
+      function getSampleDataUrl() {
+        const artwork = getSampleArtwork();
+        if (!artwork || typeof artwork.dataUrl !== "string") {
+          return null;
+        }
+        const trimmed = artwork.dataUrl.trim();
+        return trimmed ? trimmed : null;
+      }
+
+      function getSampleTitle() {
+        const artwork = getSampleArtwork();
+        if (artwork && typeof artwork.title === "string" && artwork.title.trim()) {
+          return artwork.title.trim();
+        }
+        const fallback = getDefaultGameTitle();
+        return fallback || "Sample puzzle";
+      }
+
+      function getSampleDescription() {
+        const artwork = getSampleArtwork();
+        if (artwork && typeof artwork.description === "string" && artwork.description.trim()) {
+          return artwork.description.trim();
+        }
+        const fallback = getDefaultGameDescription();
+        return fallback || "";
+      }
+
+      function applyDefaultGameMetadata(metadata = {}) {
+        const fallbackTitle = DEFAULT_GAME_FALLBACK.title;
+        const fallbackDescription = DEFAULT_GAME_FALLBACK.description;
+        const titleValue =
+          typeof metadata.title === "string" && metadata.title.trim()
+            ? metadata.title.trim()
+            : typeof fallbackTitle === "string" && fallbackTitle.trim()
+            ? fallbackTitle.trim()
+            : "";
+        const descriptionValue =
+          typeof metadata.description === "string" && metadata.description.trim()
+            ? metadata.description.trim()
+            : typeof fallbackDescription === "string" && fallbackDescription.trim()
+            ? fallbackDescription.trim()
+            : "";
+        state.defaultGame = {
+          id: DEFAULT_GAME_SOURCE.id,
+          path: DEFAULT_GAME_SOURCE.path,
+          title: titleValue,
+          description: descriptionValue,
+        };
+        refreshGameSelection();
+      }
+
+      function applySampleArtwork(artwork) {
+        state.sampleArtwork = artwork || null;
+        applySampleDetailLevel(state.sampleDetailLevel, {
+          skipReload: true,
+          skipLog: true,
+          skipOptions: true,
+        });
+      }
+
+      function normalizeSampleArtwork(source, defaults = {}) {
+        if (!source || typeof source !== "object") return null;
+        const dataUrl = typeof source.dataUrl === "string" ? source.dataUrl.trim() : "";
+        if (!dataUrl) return null;
+        const title =
+          typeof source.title === "string" && source.title.trim()
+            ? source.title.trim()
+            : typeof defaults.title === "string" && defaults.title.trim()
+            ? defaults.title.trim()
+            : "";
+        const description =
+          typeof source.description === "string" && source.description.trim()
+            ? source.description.trim()
+            : typeof defaults.description === "string" && defaults.description.trim()
+            ? defaults.description.trim()
+            : "";
+        return {
+          title,
+          description,
+          dataUrl,
+        };
+      }
+
+      async function fetchDefaultGamePayload(options = {}) {
+        const { forceRefresh = false } = options;
+        if (!forceRefresh && cachedDefaultGame) {
+          return cachedDefaultGame;
+        }
+        if (!forceRefresh && defaultGameRequest) {
+          return defaultGameRequest;
+        }
+        const request = (async () => {
+          const response = await fetch(DEFAULT_GAME_SOURCE.path, { cache: "no-store" });
+          if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+          const payload = await response.json();
+          const requestedTitle =
+            typeof payload.title === "string" && payload.title.trim() ? payload.title.trim() : "";
+          const requestedDescription =
+            typeof payload.description === "string" && payload.description.trim()
+              ? payload.description.trim()
+              : "";
+          applyDefaultGameMetadata({
+            title: requestedTitle,
+            description: requestedDescription,
+          });
+          const resolvedTitle = getDefaultGameTitle();
+          const resolvedDescription = getDefaultGameDescription();
+          const artwork = normalizeSampleArtwork(payload.sampleArtwork, {
+            title: resolvedTitle,
+            description: resolvedDescription,
+          });
+          applySampleArtwork(artwork);
+          return {
+            payload,
+            resolvedTitle,
+            resolvedDescription,
+          };
+        })();
+
+        if (!forceRefresh) {
+          defaultGameRequest = request
+            .then((result) => {
+              cachedDefaultGame = result;
+              return result;
+            })
+            .catch((error) => {
+              if (defaultGameRequest === request) {
+                defaultGameRequest = null;
+              }
+              throw error;
+            })
+            .finally(() => {
+              if (defaultGameRequest === request) {
+                defaultGameRequest = null;
+              }
+            });
+          return defaultGameRequest;
+        }
+
+        try {
+          const result = await request;
+          cachedDefaultGame = result;
+          return result;
+        } finally {
+          if (defaultGameRequest === request) {
+            defaultGameRequest = null;
+          }
+        }
+      }
 
       function applyGameplaySettings(settings = {}) {
         if (!settings || typeof settings !== "object") return;
@@ -2716,6 +3033,39 @@
           if (hintFlashToggle) {
             hintFlashToggle.checked = settings.animateHints;
           }
+        }
+        if (settings.hintFadeDuration != null) {
+          const duration = normalizeHintFadeDuration(settings.hintFadeDuration);
+          state.settings.hintFadeDuration = duration;
+          if (hintFadeDurationInput) {
+            hintFadeDurationInput.value = String(duration);
+          }
+        } else if (hintFadeDurationInput && state.settings.hintFadeDuration != null) {
+          const duration = normalizeHintFadeDuration(state.settings.hintFadeDuration);
+          state.settings.hintFadeDuration = duration;
+          hintFadeDurationInput.value = String(duration);
+        }
+        if (settings.hintIntensity != null) {
+          const intensity = normalizeHintIntensity(settings.hintIntensity);
+          state.settings.hintIntensity = intensity;
+          if (hintIntensityInput) {
+            hintIntensityInput.value = String(Math.round(intensity * 100));
+          }
+        } else if (hintIntensityInput && state.settings.hintIntensity != null) {
+          const intensity = normalizeHintIntensity(state.settings.hintIntensity);
+          state.settings.hintIntensity = intensity;
+          hintIntensityInput.value = String(Math.round(intensity * 100));
+        }
+        if (settings.rightClickAction != null) {
+          const action = resolveRightClickAction(settings.rightClickAction);
+          state.settings.rightClickAction = action;
+          if (rightClickActionSelect) {
+            rightClickActionSelect.value = action;
+          }
+        } else if (rightClickActionSelect && state.settings.rightClickAction) {
+          const action = resolveRightClickAction(state.settings.rightClickAction);
+          state.settings.rightClickAction = action;
+          rightClickActionSelect.value = action;
         }
         if (typeof settings.showRegionLabels === "boolean") {
           applyRegionLabelVisibility(settings.showRegionLabels, {
@@ -2748,6 +3098,7 @@
         if (typeof settings.artPrompt === "string") {
           applyArtPrompt(settings.artPrompt, { skipLog: true, skipAutosave: true });
         }
+        updateOptionOutputs();
       }
 
       const debugLogEntries = [];
@@ -2837,9 +3188,25 @@
       for (const button of sampleButtons) {
         if (!button) continue;
         button.setAttribute("type", "button");
-        button.title = `Play ${SAMPLE_ARTWORK.title}`;
         button.addEventListener("click", () => {
+          if (!getSampleDataUrl()) {
+            return;
+          }
           loadSamplePuzzle({ detailLevel: state.sampleDetailLevel });
+        });
+      }
+
+      if (gameSelectionList) {
+        gameSelectionList.addEventListener("click", (event) => {
+          const target = event.target.closest("[data-game-id]");
+          if (!target) return;
+          const gameId = target.getAttribute("data-game-id");
+          if (!gameId) return;
+          if (gameId === DEFAULT_GAME_SOURCE.id) {
+            loadDefaultPuzzle({ announce: true });
+          } else {
+            loadSaveEntry(gameId);
+          }
         });
       }
 
@@ -2854,9 +3221,13 @@
 
       applySampleDetailLevel(DEFAULT_SAMPLE_DETAIL, { skipReload: true, skipLog: true });
 
+      fetchDefaultGamePayload().catch((error) => {
+        console.error("Failed to preload default puzzle metadata", error);
+      });
+
       const restoredSession = loadInitialSession();
-      if (!restoredSession && SAMPLE_ARTWORK?.dataUrl) {
-        loadSamplePuzzle({ detailLevel: state.sampleDetailLevel, skipDetailUpdate: true });
+      if (!restoredSession && getSampleDataUrl()) {
+        loadSamplePuzzle({ detailLevel: state.sampleDetailLevel, skipDetailUpdate: true, announce: false });
       }
 
       selectButton.addEventListener("click", () => fileInput.click());
@@ -2935,9 +3306,57 @@
 
       hintFlashToggle.addEventListener("change", () => {
         state.settings.animateHints = hintFlashToggle.checked;
+        if (!hintFlashToggle.checked) {
+          clearOverlayAnimations();
+        }
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
         scheduleAutosave("settings-hint-animations");
       });
+
+      if (hintFadeDurationInput) {
+        hintFadeDurationInput.value = String(normalizeHintFadeDuration(hintFadeDurationInput.value));
+        hintFadeDurationInput.addEventListener("input", () => {
+          state.settings.hintFadeDuration = normalizeHintFadeDuration(hintFadeDurationInput.value);
+          updateOptionOutputs();
+        });
+        hintFadeDurationInput.addEventListener("change", () => {
+          const duration = normalizeHintFadeDuration(hintFadeDurationInput.value);
+          state.settings.hintFadeDuration = duration;
+          hintFadeDurationInput.value = String(duration);
+          updateOptionOutputs();
+          logDebug(`Hint fade set to ${(duration / 1000).toFixed(1)}s`);
+          scheduleAutosave("settings-hint-fade");
+        });
+      }
+
+      if (hintIntensityInput) {
+        hintIntensityInput.value = String(Math.round(normalizeHintIntensity(hintIntensityInput.value) * 100));
+        hintIntensityInput.addEventListener("input", () => {
+          state.settings.hintIntensity = normalizeHintIntensity(hintIntensityInput.value);
+          updateOptionOutputs();
+        });
+        hintIntensityInput.addEventListener("change", () => {
+          const intensity = normalizeHintIntensity(hintIntensityInput.value);
+          state.settings.hintIntensity = intensity;
+          hintIntensityInput.value = String(Math.round(intensity * 100));
+          updateOptionOutputs();
+          logDebug(`Hint intensity set to ${Math.round(intensity * 100)}%`);
+          scheduleAutosave("settings-hint-intensity");
+        });
+      }
+
+      if (rightClickActionSelect) {
+        rightClickActionSelect.value = resolveRightClickAction(rightClickActionSelect.value);
+        rightClickActionSelect.addEventListener("change", (event) => {
+          const action = resolveRightClickAction(event.target.value);
+          state.settings.rightClickAction = action;
+          rightClickActionSelect.value = action;
+          logDebug(
+            action === "select" ? "Right-click will select colours" : "Right-click will pan the canvas"
+          );
+          scheduleAutosave("settings-right-click-action");
+        });
+      }
 
       if (showRegionLabelsToggle) {
         showRegionLabelsToggle.addEventListener("change", () => {
@@ -3262,15 +3681,11 @@
           }
           return;
         }
-        const paletteTint = paletteColor?.hex ? rgbaFromHex(paletteColor.hex, 0.45) : undefined;
         const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
         const showOverlay = state.settings.animateHints !== false;
         if (showOverlay && remaining.length > 0) {
-          flashColorRegions(region.colorId, {
-            tint: paletteTint,
-            duration: QUICK_HINT_FLASH_DURATION,
-            onlyUnfilled: true,
-          });
+          flashRegion(region.id, { paletteColor, includeFilled: false });
+          flashColorRegions(region.colorId, { paletteColor, onlyUnfilled: true });
           lastRegionHintId = region.id;
           lastRegionHintTime = now;
         } else {
@@ -3299,10 +3714,7 @@
         if (state.filled.has(regionId)) {
           const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
           if (remaining.length > 0) {
-            flashColorRegions(region.colorId, {
-              onlyUnfilled: true,
-              duration: QUICK_HINT_FLASH_DURATION,
-            });
+            flashColorRegions(region.colorId, { paletteColor: getPaletteEntry(region.colorId), onlyUnfilled: true });
             const regionWord = remaining.length === 1 ? "region" : "regions";
             logDebug(
               `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
@@ -3314,10 +3726,14 @@
         }
         if (region.colorId !== state.activeColor) {
           const paletteColor = getPaletteEntry(region.colorId);
-          const hintTint = paletteColor ? rgbaFromHex(paletteColor.hex, 0.5) : "rgba(250, 204, 21, 0.55)";
+          const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
           if (state.settings.animateHints) {
-            flashRegion(regionId, hintTint, { duration: QUICK_HINT_FLASH_DURATION });
-            flashColorRegions(region.colorId, { tint: hintTint, duration: QUICK_HINT_FLASH_DURATION });
+            flashRegion(regionId, { paletteColor, tint: fallbackTint, includeFilled: false });
+            flashColorRegions(region.colorId, {
+              paletteColor,
+              tint: fallbackTint,
+              onlyUnfilled: true,
+            });
           }
           flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
           logDebug(
@@ -3580,6 +3996,12 @@
         if (!config) return null;
         const previousLevel = state.sampleDetailLevel;
         state.sampleDetailLevel = config.id;
+        const sampleTitle = getSampleTitle();
+        const sampleDescription = getSampleDescription();
+        const sampleDataUrl = getSampleDataUrl();
+        const sampleAvailable = Boolean(sampleDataUrl);
+        const reloadLabel = sampleTitle ? `Reload ${sampleTitle}` : "Reload sample puzzle";
+
         for (const button of sampleDetailButtons) {
           if (!button) continue;
           const targetLevel = button.dataset.detailLevel;
@@ -3599,23 +4021,38 @@
         }
         for (const button of sampleButtons) {
           if (!button) continue;
-          const labelBase = `Reload ${SAMPLE_ARTWORK.title}`;
           const detailSummary = config.summary || config.label;
-          const titleText = detailSummary ? `${labelBase} – ${detailSummary}` : `${labelBase} – ${config.label}`;
-          const ariaText = detailSummary ? `${labelBase} (${detailSummary})` : `${labelBase} (${config.label})`;
+          const defaultLabel = `${reloadLabel} – ${config.label}`;
+          const titleText = detailSummary ? `${reloadLabel} – ${detailSummary}` : defaultLabel;
+          const ariaText = detailSummary
+            ? `${reloadLabel} (${detailSummary})`
+            : `${reloadLabel} (${config.label})`;
           button.title = titleText;
           button.setAttribute("aria-label", ariaText);
+          button.disabled = !sampleAvailable;
           if (config.approxRegions != null) {
             button.dataset.detailRegions = String(config.approxRegions);
+          } else {
+            delete button.dataset.detailRegions;
           }
         }
         if (samplePreview) {
           const previewSummary = config.summary || config.label;
+          const previewTitle = sampleTitle || "Sample puzzle";
+          if (sampleAvailable) {
+            samplePreview.src = sampleDataUrl;
+            samplePreview.alt = sampleDescription || previewTitle;
+          } else {
+            samplePreview.removeAttribute("src");
+            samplePreview.alt = "";
+          }
           samplePreview.title = previewSummary
-            ? `${SAMPLE_ARTWORK.title} – ${previewSummary}`
-            : `${SAMPLE_ARTWORK.title} – ${config.label}`;
+            ? `${previewTitle} – ${previewSummary}`
+            : `${previewTitle} – ${config.label}`;
           if (config.approxRegions != null) {
             samplePreview.dataset.detailRegions = String(config.approxRegions);
+          } else {
+            delete samplePreview.dataset.detailRegions;
           }
         }
         if (!skipOptions) {
@@ -3644,7 +4081,7 @@
         if (!skipLog && previousLevel !== config.id) {
           logDebug(`Sample detail set to ${config.label} – ${config.summary}`);
         }
-        if (!skipReload && state.sourceUrl === SAMPLE_ARTWORK.dataUrl) {
+        if (!skipReload && sampleAvailable && state.sourceUrl === sampleDataUrl) {
           loadSamplePuzzle({ detailLevel: config.id, skipDetailUpdate: true });
         }
         return config;
@@ -3652,8 +4089,9 @@
 
       function loadSamplePuzzle(options = {}) {
         const { announce = true, detailLevel, skipDetailUpdate = false } = options;
-        const { dataUrl } = SAMPLE_ARTWORK;
+        const dataUrl = getSampleDataUrl();
         if (!dataUrl) return;
+        const sampleTitle = getSampleTitle();
         const targetLevel = detailLevel || state.sampleDetailLevel || DEFAULT_SAMPLE_DETAIL;
         const detailConfig = skipDetailUpdate
           ? SAMPLE_DETAIL_LEVELS[targetLevel] || SAMPLE_DETAIL_LEVELS[DEFAULT_SAMPLE_DETAIL]
@@ -3662,7 +4100,7 @@
             SAMPLE_DETAIL_LEVELS[DEFAULT_SAMPLE_DETAIL];
         resetPuzzleUI();
         state.sourceUrl = dataUrl;
-        state.sourceTitle = SAMPLE_ARTWORK.title || "Sample puzzle";
+        state.sourceTitle = sampleTitle || "Sample puzzle";
         startHint.classList.add("hidden");
         const label = detailConfig ? detailConfig.label : null;
         const logDescriptor = detailConfig?.logDescriptor || (label ? label.toLowerCase() : null);
@@ -3678,6 +4116,48 @@
             }
           : undefined;
         loadImage(dataUrl, loadOptions);
+      }
+
+      async function loadDefaultPuzzle(options = {}) {
+        const { announce = true, forceRefresh = false } = options;
+        resetPuzzleUI();
+        try {
+          const { payload, resolvedTitle, resolvedDescription } = await fetchDefaultGamePayload({
+            forceRefresh,
+          });
+          const descriptorTitle = resolvedTitle || getDefaultGameTitle();
+          const descriptor = resolvedDescription
+            ? `${descriptorTitle} – ${resolvedDescription}`
+            : descriptorTitle;
+          if (announce) {
+            logDebug(`Loading ${descriptor}`);
+          }
+          const applied = applyPuzzleResult(payload, {
+            options: payload.options || getCurrentOptions(),
+            filled: payload.filled,
+            activeColor: payload.activeColor,
+            backgroundColor: payload.backgroundColor,
+            viewport: payload.viewport,
+            settings: payload.settings,
+            title: descriptorTitle || DEFAULT_GAME_SOURCE.path || "Puzzle",
+            skipDefaultLog: !announce,
+          });
+          if (applied) {
+            state.sourceUrl = DEFAULT_GAME_SOURCE.path;
+            state.sourceTitle = descriptorTitle || DEFAULT_GAME_SOURCE.path || "Puzzle";
+            startHint.classList.add("hidden");
+            setProgressMessage("active");
+            if (!announce) {
+              logDebug(`Loaded ${state.sourceTitle} from ${DEFAULT_GAME_SOURCE.path}`);
+            }
+            return true;
+          }
+        } catch (error) {
+          console.error("Failed to load default puzzle", error);
+          logDebug(`Unable to load ${DEFAULT_GAME_SOURCE.path}. Check the console for details.`);
+        }
+        setProgressMessage("idle");
+        return false;
       }
 
       function updateCommandStates() {
@@ -3922,6 +4402,16 @@
                 : DEFAULT_UI_SCALE);
           optionOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
         }
+        if (optionOutputs.hintFadeDuration) {
+          const source = hintFadeDurationInput ? Number(hintFadeDurationInput.value) : state.settings.hintFadeDuration;
+          const duration = normalizeHintFadeDuration(source);
+          optionOutputs.hintFadeDuration.textContent = `${(duration / 1000).toFixed(1)} s`;
+        }
+        if (optionOutputs.hintIntensity) {
+          const source = hintIntensityInput ? Number(hintIntensityInput.value) : state.settings.hintIntensity * 100;
+          const intensity = normalizeHintIntensity(source);
+          optionOutputs.hintIntensity.textContent = `${Math.round(intensity * 100)}%`;
+        }
       }
 
       function markOptionsDirty() {
@@ -4056,11 +4546,7 @@
       }
 
       function resetPuzzleUI() {
-        if (colorFlashTimer) {
-          clearTimeout(colorFlashTimer);
-          colorFlashTimer = null;
-        }
-        delete canvasStage.dataset.flashingColor;
+        clearOverlayAnimations();
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
@@ -4263,7 +4749,7 @@
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
-          flashColorRegions(state.activeColor, { duration: 360 });
+          flashColorRegions(state.activeColor);
         }
         updateProgress();
         updateCommandStates();
@@ -4985,6 +5471,13 @@
           swatch.addEventListener("click", () => {
             activateColor(color.id);
           });
+          swatch.addEventListener("pointerdown", (event) => {
+            if (event.button !== 2) {
+              return;
+            }
+            event.preventDefault();
+            activateColor(color.id);
+          });
           swatch.addEventListener("contextmenu", (event) => {
             event.preventDefault();
             activateColor(color.id);
@@ -5364,6 +5857,20 @@
           return;
         }
         const usesModifier = spacePressed || event.altKey || event.ctrlKey || event.metaKey;
+        const wantsRightClickSelect =
+          event.pointerType === "mouse" &&
+          event.button === 2 &&
+          resolveRightClickAction(state.settings.rightClickAction) === "select" &&
+          !usesModifier &&
+          !state.previewVisible;
+        if (wantsRightClickSelect) {
+          const hit = getRegionFromEvent(event);
+          if (hit && hit.region) {
+            event.preventDefault();
+            activateColor(hit.region.colorId);
+            return;
+          }
+        }
         const auxButton = event.button === 1 || event.button === 2;
         if (auxButton || usesModifier) {
           event.preventDefault();
@@ -5829,11 +6336,8 @@
         }
         if (state.settings.animateHints) {
           const paletteColor = getPaletteEntry(target.colorId);
-          const hintTint =
-            paletteColor?.hex && typeof paletteColor.hex === "string"
-              ? rgbaFromHex(paletteColor.hex, 0.45)
-              : "rgba(59, 130, 246, 0.45)";
-          flashRegion(target.id, hintTint, { duration: QUICK_HINT_FLASH_DURATION });
+          flashRegion(target.id, { paletteColor });
+          flashColorRegions(target.colorId, { paletteColor, onlyUnfilled: true });
         }
         logDebug(`Hint spotlighted region ${target.id} (colour #${target.colorId})`);
       }
@@ -5841,50 +6345,240 @@
       function flashColorRegions(colorId, options = {}) {
         if (!state.puzzle) return;
         if (colorId == null) return;
-        const paletteColor = getPaletteEntry(colorId);
-        const duration =
-          typeof options.duration === "number" && Number.isFinite(options.duration)
-            ? options.duration
-            : DEFAULT_COLOR_FLASH_DURATION;
-        const alpha =
-          typeof options.alpha === "number" && Number.isFinite(options.alpha)
-            ? clamp(options.alpha, 0.05, 1)
-            : 0.45;
-        const tint =
-          options.tint ||
-          (paletteColor ? rgbaFromHex(paletteColor.hex, alpha) : "rgba(96, 165, 250, 0.32)");
         const includeFilled = options.onlyUnfilled ? false : true;
         const targets = getRegionsByColor(colorId, { includeFilled });
         if (targets.length === 0) {
-          delete canvasStage.dataset.flashingColor;
+          overlayAnimations.delete(`color:${colorId}:${includeFilled ? "all" : "remaining"}`);
+          if (overlayAnimations.size === 0) {
+            renderPuzzle();
+          }
           return;
         }
-        if (colorFlashTimer) {
-          clearTimeout(colorFlashTimer);
-          colorFlashTimer = null;
-        }
-        renderPuzzle();
-        canvasStage.dataset.flashingColor = String(colorId);
-        paintRegions(targets, tint);
-        colorFlashTimer = window.setTimeout(() => {
-          colorFlashTimer = null;
-          delete canvasStage.dataset.flashingColor;
-          renderPuzzle();
-        }, duration);
+        const paletteColor = options.paletteColor || getPaletteEntry(colorId);
+        const duration = normalizeHintFadeDuration(
+          typeof options.duration === "number" ? options.duration : state.settings.hintFadeDuration
+        );
+        const alpha = normalizeHintIntensity(
+          typeof options.alpha === "number" ? options.alpha : state.settings.hintIntensity
+        );
+        const fallbackRgb = options.tint ? parseTintToRgb(options.tint) : null;
+        queueOverlayAnimation(
+          `color:${colorId}:${includeFilled ? "all" : "remaining"}`,
+          targets.map((region) => region.id),
+          {
+            paletteColor,
+            fallbackRgb,
+            baseAlpha: alpha,
+            duration,
+            includeFilled,
+          }
+        );
       }
 
-      function flashRegion(regionId, color, options = {}) {
+      function flashRegion(regionId, options = {}) {
         if (!state.puzzle) return;
         const region = state.puzzle.regions[regionId];
         if (!region) return;
-        paintRegions([region], color);
-        const duration =
-          typeof options.duration === "number" && Number.isFinite(options.duration)
-            ? clamp(options.duration, 32, 1000)
-            : DEFAULT_REGION_FLASH_DURATION;
-        window.setTimeout(() => {
+        const paletteColor = options.paletteColor || getPaletteEntry(region.colorId);
+        const duration = normalizeHintFadeDuration(
+          typeof options.duration === "number" ? options.duration : state.settings.hintFadeDuration
+        );
+        const alpha = normalizeHintIntensity(
+          typeof options.alpha === "number" ? options.alpha : state.settings.hintIntensity
+        );
+        const fallbackRgb = options.tint ? parseTintToRgb(options.tint) : null;
+        queueOverlayAnimation(`region:${regionId}`, [regionId], {
+          paletteColor,
+          fallbackRgb,
+          baseAlpha: alpha,
+          duration,
+          includeFilled: options.includeFilled !== false,
+        });
+      }
+
+      function queueOverlayAnimation(key, regionIds, options = {}) {
+        if (!state.puzzle) return;
+        if (!Array.isArray(regionIds) || regionIds.length === 0) return;
+        const ids = regionIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id >= 0);
+        if (ids.length === 0) return;
+        const includeFilled = options.includeFilled !== false;
+        const baseAlpha = clamp(
+          typeof options.baseAlpha === "number" ? options.baseAlpha : state.settings.hintIntensity ?? DEFAULT_HINT_INTENSITY,
+          MIN_HINT_INTENSITY,
+          MAX_HINT_INTENSITY
+        );
+        const duration = normalizeHintFadeDuration(options.duration);
+        overlayAnimations.set(key, {
+          regionIds: ids,
+          includeFilled,
+          paletteColor: options.paletteColor || null,
+          fallbackRgb: Array.isArray(options.fallbackRgb) ? options.fallbackRgb : null,
+          baseAlpha,
+          duration,
+          start: getNow(),
+          power: typeof options.power === "number" && options.power > 0 ? options.power : 2,
+        });
+        scheduleOverlayFrame();
+      }
+
+      function scheduleOverlayFrame() {
+        if (overlayAnimations.size === 0) {
+          return;
+        }
+        if (overlayAnimationFrame != null || overlayAnimationTimeout != null) {
+          return;
+        }
+        if (typeof window?.requestAnimationFrame === "function") {
+          overlayAnimationFrame = window.requestAnimationFrame(stepOverlayAnimations);
+        } else {
+          overlayAnimationTimeout = window.setTimeout(() => {
+            overlayAnimationTimeout = null;
+            stepOverlayAnimations(getNow());
+          }, 16);
+        }
+      }
+
+      function stepOverlayAnimations(timestamp) {
+        if (overlayAnimationFrame != null && typeof window?.cancelAnimationFrame === "function") {
+          window.cancelAnimationFrame(overlayAnimationFrame);
+        }
+        overlayAnimationFrame = null;
+        if (overlayAnimationTimeout != null) {
+          clearTimeout(overlayAnimationTimeout);
+          overlayAnimationTimeout = null;
+        }
+        if (!state.puzzle || overlayAnimations.size === 0) {
           renderPuzzle();
-        }, duration);
+          return;
+        }
+        const now = typeof timestamp === "number" && Number.isFinite(timestamp) ? timestamp : getNow();
+        const overlaysByTint = new Map();
+        overlayAnimations.forEach((animation, key) => {
+          const duration = animation.duration <= 0 ? MIN_HINT_FADE_DURATION : animation.duration;
+          const elapsed = now - animation.start;
+          const progress = clamp(duration > 0 ? elapsed / duration : 1, 0, 1);
+          if (progress >= 1) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          const strength = Math.pow(1 - progress, animation.power || 2);
+          if (strength <= 0.0001) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          const alpha = clamp(animation.baseAlpha * strength, 0.01, 1);
+          const tint = resolveOverlayTint(animation.paletteColor, animation.fallbackRgb, alpha);
+          if (!tint) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          const regions = [];
+          for (const regionId of animation.regionIds) {
+            const region = state.puzzle.regions[regionId];
+            if (!region) continue;
+            if (!animation.includeFilled && state.filled.has(regionId)) {
+              continue;
+            }
+            regions.push(region);
+          }
+          if (regions.length === 0) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          if (overlaysByTint.has(tint)) {
+            overlaysByTint.get(tint).push(...regions);
+          } else {
+            overlaysByTint.set(tint, regions.slice());
+          }
+        });
+        renderPuzzle();
+        overlaysByTint.forEach((regions, tint) => {
+          paintRegions(regions, tint);
+        });
+        if (overlayAnimations.size > 0) {
+          scheduleOverlayFrame();
+        }
+      }
+
+      function resolveOverlayTint(paletteColor, fallbackRgb, alpha) {
+        const normalizedAlpha = clamp(alpha, 0, 1);
+        if (paletteColor) {
+          if (Array.isArray(paletteColor.rgba) && paletteColor.rgba.length >= 3) {
+            const [r, g, b] = paletteColor.rgba;
+            return `rgba(${clamp(Math.round(r), 0, 255)}, ${clamp(Math.round(g), 0, 255)}, ${clamp(Math.round(b), 0, 255)}, ${normalizedAlpha})`;
+          }
+          if (typeof paletteColor.hex === "string" && paletteColor.hex) {
+            return rgbaFromHex(paletteColor.hex, normalizedAlpha);
+          }
+        }
+        const rgb = Array.isArray(fallbackRgb) && fallbackRgb.length >= 3 ? fallbackRgb : [96, 165, 250];
+        const [r, g, b] = rgb.map((value) => clamp(Math.round(value), 0, 255));
+        return `rgba(${r}, ${g}, ${b}, ${normalizedAlpha})`;
+      }
+
+      function parseTintToRgb(value) {
+        if (typeof value !== "string") return null;
+        const match = value.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+        if (!match) return null;
+        return match.slice(1, 4).map((component) => clamp(Number(component) || 0, 0, 255));
+      }
+
+      function getNow() {
+        if (typeof performance !== "undefined" && typeof performance.now === "function") {
+          return performance.now();
+        }
+        return Date.now();
+      }
+
+      function clearOverlayAnimations() {
+        overlayAnimations.clear();
+        if (overlayAnimationFrame != null && typeof window?.cancelAnimationFrame === "function") {
+          window.cancelAnimationFrame(overlayAnimationFrame);
+        }
+        overlayAnimationFrame = null;
+        if (overlayAnimationTimeout != null) {
+          clearTimeout(overlayAnimationTimeout);
+          overlayAnimationTimeout = null;
+        }
+        if (state.puzzle) {
+          renderPuzzle();
+        }
+      }
+
+      function normalizeHintFadeDuration(value) {
+        let candidate = Number(value);
+        if (!Number.isFinite(candidate) || candidate <= 0) {
+          const stateValue = state?.settings?.hintFadeDuration;
+          candidate = Number.isFinite(stateValue) && stateValue > 0 ? stateValue : DEFAULT_HINT_FADE_DURATION;
+        }
+        return clamp(Math.round(candidate), MIN_HINT_FADE_DURATION, MAX_HINT_FADE_DURATION);
+      }
+
+      function normalizeHintIntensity(value) {
+        let candidate = Number(value);
+        if (!Number.isFinite(candidate)) {
+          const stateValue = state?.settings?.hintIntensity;
+          candidate = Number.isFinite(stateValue) ? stateValue : DEFAULT_HINT_INTENSITY;
+        }
+        if (candidate > 1) {
+          candidate /= 100;
+        }
+        if (!Number.isFinite(candidate) || candidate <= 0) {
+          candidate = DEFAULT_HINT_INTENSITY;
+        }
+        return clamp(candidate, MIN_HINT_INTENSITY, MAX_HINT_INTENSITY);
+      }
+
+      function resolveRightClickAction(value) {
+        if (typeof value === "string") {
+          const normalized = value.trim().toLowerCase();
+          if (VALID_RIGHT_CLICK_ACTIONS.has(normalized)) {
+            return normalized;
+          }
+        }
+        return DEFAULT_RIGHT_CLICK_ACTION;
       }
 
       function autoAdvanceColor(currentColorId) {
@@ -6100,6 +6794,13 @@
         payload.settings = {
           autoAdvance: Boolean(settingsSource.autoAdvance),
           animateHints: Boolean(settingsSource.animateHints),
+          hintFadeDuration: normalizeHintFadeDuration(
+            settingsSource.hintFadeDuration ?? state.settings.hintFadeDuration
+          ),
+          hintIntensity: normalizeHintIntensity(settingsSource.hintIntensity ?? state.settings.hintIntensity),
+          rightClickAction: resolveRightClickAction(
+            settingsSource.rightClickAction ?? state.settings.rightClickAction
+          ),
           uiScale:
             Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
               ? clamp(settingsSource.uiScale, 0.6, 1.35)
@@ -6204,6 +6905,9 @@
           settings: {
             autoAdvance: Boolean(state.settings.autoAdvance),
             animateHints: Boolean(state.settings.animateHints),
+            hintFadeDuration: normalizeHintFadeDuration(state.settings.hintFadeDuration),
+            hintIntensity: normalizeHintIntensity(state.settings.hintIntensity),
+            rightClickAction: resolveRightClickAction(state.settings.rightClickAction),
             uiScale:
               Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
                 ? clamp(state.settings.uiScale, 0.6, 1.35)
@@ -7053,6 +7757,79 @@
         logDebug(`Saved snapshot: ${entry.title}`);
       }
 
+      function refreshGameSelection() {
+        if (!gameSelectionList) return;
+        gameSelectionList.innerHTML = "";
+        const fragment = document.createDocumentFragment();
+
+        const defaultItem = document.createElement("li");
+        defaultItem.className = "game-option";
+        const defaultButton = document.createElement("button");
+        defaultButton.type = "button";
+        defaultButton.className = "game-option-button";
+        const defaultMetadata = state.defaultGame || {};
+        defaultButton.dataset.gameId = defaultMetadata.id || DEFAULT_GAME_SOURCE.id;
+        const defaultTitle = document.createElement("span");
+        defaultTitle.className = "game-option-title";
+        const resolvedTitle = getDefaultGameTitle();
+        defaultTitle.textContent = resolvedTitle;
+        const defaultMeta = document.createElement("span");
+        defaultMeta.className = "game-option-meta";
+        const resolvedDescription = getDefaultGameDescription();
+        const fallbackMeta = DEFAULT_GAME_FALLBACK.description || DEFAULT_GAME_SOURCE.path;
+        const metaText = resolvedDescription || fallbackMeta;
+        defaultMeta.textContent = metaText;
+        const hideMeta = !resolvedDescription && (!metaText || metaText === resolvedTitle);
+        defaultMeta.hidden = hideMeta;
+        const labelParts = [resolvedTitle];
+        if (!hideMeta && metaText && metaText !== resolvedTitle) {
+          labelParts.push(metaText);
+        }
+        defaultButton.setAttribute("aria-label", labelParts.join(" – "));
+        defaultButton.append(defaultTitle, defaultMeta);
+        defaultItem.appendChild(defaultButton);
+        fragment.appendChild(defaultItem);
+
+        const hasSaves = Array.isArray(state.saves) && state.saves.length > 0;
+        if (hasSaves) {
+          for (const entry of state.saves) {
+            const item = document.createElement("li");
+            item.className = "game-option";
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "game-option-button";
+            button.dataset.gameId = entry.id;
+            const title = document.createElement("span");
+            title.className = "game-option-title";
+            title.textContent = entry.title || "Untitled puzzle";
+            const doneCount = entry.data?.filled?.length ?? 0;
+            const totalCount = entry.data?.regions?.length ?? 0;
+            const progressText = totalCount
+              ? `${doneCount} of ${totalCount} regions filled`
+              : `${doneCount} regions filled`;
+            const progress = document.createElement("span");
+            progress.className = "game-option-meta";
+            progress.textContent = progressText;
+            const timestamp = Number(entry.timestamp);
+            if (Number.isFinite(timestamp) && timestamp > 0) {
+              const time = document.createElement("span");
+              time.className = "game-option-meta";
+              time.textContent = `Saved ${new Date(timestamp).toLocaleString()}`;
+              button.append(time);
+            }
+            button.setAttribute("aria-label", `${title.textContent} – ${progressText}`);
+            button.prepend(title, progress);
+            item.appendChild(button);
+            fragment.appendChild(item);
+          }
+        }
+
+        gameSelectionList.appendChild(fragment);
+        if (gameSelectionEmpty) {
+          gameSelectionEmpty.hidden = hasSaves;
+        }
+      }
+
       function refreshSaveList() {
         saveList.innerHTML = "";
         for (const entry of state.saves) {
@@ -7078,6 +7855,7 @@
           saveList.appendChild(item);
         }
         updateCommandStates();
+        refreshGameSelection();
       }
 
       function persistSaves() {
