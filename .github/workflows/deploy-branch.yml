@@ -62,7 +62,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: gh-pages
-          key: gh-pages-${{ github.repository }}-${{ github.sha }}
+          key: gh-pages-${{ github.repository }}-${{ github.run_id }}
           restore-keys: |
             gh-pages-${{ github.repository }}-
 
@@ -73,7 +73,7 @@ jobs:
           if [ -d "gh-pages/.git" ]; then
             echo "gh-pages cache exists, updating it"
             cd gh-pages
-            git fetch --depth=1 origin gh-pages
+            git fetch origin gh-pages
             git reset --hard origin/gh-pages
           elif git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
             echo "gh-pages branch exists, cloning it"
@@ -149,7 +149,8 @@ jobs:
           if [ -z "$BRANCH_FOLDER" ]; then
             echo "Deploying main branch to root"
             # For main branch, copy files directly to root (including index.html)
-            rsync -a --delete --exclude='.git' \
+            # Preserve existing branch folders
+            rsync -a --exclude='.git' \
                       --exclude='node_modules' \
                       --exclude='test-results' \
                       --exclude='playwright-report' \
@@ -157,7 +158,7 @@ jobs:
                       --exclude='artifacts' \
                       --exclude='README.md' \
                       --exclude='branch.html' \
-                      --exclude='*/' \
+                      --delete-excluded \
                       ../source/ ./
           else
             # For other branches, deploy to subfolder
@@ -330,7 +331,7 @@ jobs:
             echo "has_changes=false" >> $GITHUB_ENV
           else
             git commit -m "Deploy branch: ${{ github.ref_name }} (commit: ${{ github.sha }})"
-            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages --force
             echo "has_changes=true" >> $GITHUB_ENV
             if [ -z "$BRANCH_FOLDER" ]; then
               echo "Published main branch to root: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
@@ -345,7 +346,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: gh-pages
-          key: gh-pages-${{ github.repository }}-${{ github.sha }}
+          key: gh-pages-${{ github.repository }}-${{ github.run_id }}
 
       - name: Setup Pages
         if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
