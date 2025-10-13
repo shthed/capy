@@ -2451,6 +2451,9 @@
       const globalPanListenerOptions = { capture: true };
       let spacePressed = false;
       let colorFlashTimer = null;
+      const QUICK_HINT_FLASH_DURATION = 160;
+      const DEFAULT_COLOR_FLASH_DURATION = 280;
+      const DEFAULT_REGION_FLASH_DURATION = 220;
       const activeTouches = new Map();
       let pinchSession = null;
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
@@ -2982,6 +2985,7 @@
       }
 
       const DOUBLE_TAP_WINDOW_MS = 320;
+      const POINTER_CLICK_SUPPRESSION_MS = 360;
 
       function getRegionAtPoint(clientX, clientY) {
         if (!state.puzzle || !puzzleCanvas) {
@@ -3063,37 +3067,50 @@
         }
       }
 
-      // Puzzle fill interaction: click to paint if the region matches the active colour.
-      puzzleCanvas.addEventListener("click", (event) => {
+      let suppressNextCanvasClickUntil = 0;
+
+      function attemptFillRegion(hit, { label = "click" } = {}) {
         if (!state.puzzle) {
-          logDebug("Ignoring canvas click: no puzzle loaded yet");
-          return;
+          logDebug(`Ignoring canvas ${label}: no puzzle loaded yet`);
+          return "ignored";
         }
         if (state.activeColor == null) {
-          logDebug("Ignoring canvas click: no active colour selected");
-          return;
+          logDebug(`Ignoring canvas ${label}: no active colour selected`);
+          return "ignored";
         }
-        const hit = getRegionFromEvent(event);
         if (!hit) {
-          logDebug("Ignoring canvas click: no region mapped under pointer");
-          return;
+          logDebug(`Ignoring canvas ${label}: no region mapped under pointer`);
+          return "ignored";
         }
         const { region, regionId } = hit;
         if (state.filled.has(regionId)) {
-          logDebug(`Region ${region.id} already filled; ignoring click`);
-          return;
+          const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
+          if (remaining.length > 0) {
+            flashColorRegions(region.colorId, {
+              onlyUnfilled: true,
+              duration: QUICK_HINT_FLASH_DURATION,
+            });
+            const regionWord = remaining.length === 1 ? "region" : "regions";
+            logDebug(
+              `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
+            );
+          } else {
+            logDebug(`Region ${region.id} already filled; ignoring ${label}`);
+          }
+          return "already-filled";
         }
         if (region.colorId !== state.activeColor) {
           const paletteColor = getPaletteEntry(region.colorId);
+          const hintTint = paletteColor ? rgbaFromHex(paletteColor.hex, 0.5) : "rgba(250, 204, 21, 0.55)";
           if (state.settings.animateHints) {
-            const tint = paletteColor ? rgbaFromHex(paletteColor.hex, 0.5) : "rgba(250, 204, 21, 0.55)";
-            flashRegion(regionId, tint);
+            flashRegion(regionId, hintTint, { duration: QUICK_HINT_FLASH_DURATION });
+            flashColorRegions(region.colorId, { tint: hintTint, duration: QUICK_HINT_FLASH_DURATION });
           }
           flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
           logDebug(
             `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
           );
-          return;
+          return "mismatch";
         }
         state.filled.add(regionId);
         paintRegionToFilledLayer(regionId);
@@ -3111,6 +3128,17 @@
           autoAdvanceColor(region.colorId);
         }
         refreshCustomCursorHighlight();
+        return "filled";
+      }
+
+      // Puzzle fill interaction: click to paint if the region matches the active colour.
+      puzzleCanvas.addEventListener("click", (event) => {
+        if (suppressNextCanvasClickUntil && Date.now() <= suppressNextCanvasClickUntil) {
+          suppressNextCanvasClickUntil = 0;
+          event.preventDefault?.();
+          return;
+        }
+        attemptFillRegion(getRegionFromEvent(event), { label: "click" });
       });
 
       puzzleCanvas.addEventListener("dblclick", (event) => {
@@ -3154,11 +3182,17 @@
           const now = Date.now();
           if (lastTouchTapRegionId === hit.regionId && now - lastTouchTapTime <= DOUBLE_TAP_WINDOW_MS) {
             event.preventDefault();
+            suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
             lastTouchTapTime = 0;
             lastTouchTapRegionId = null;
             lastTouchSelectionTime = now;
             activateColor(hit.region.colorId);
             return;
+          }
+          const result = attemptFillRegion(hit, { label: "tap" });
+          if (result !== "ignored") {
+            suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+            event.preventDefault();
           }
           lastTouchTapTime = now;
           lastTouchTapRegionId = hit.regionId;
@@ -5442,7 +5476,7 @@
         const duration =
           typeof options.duration === "number" && Number.isFinite(options.duration)
             ? options.duration
-            : 280;
+            : DEFAULT_COLOR_FLASH_DURATION;
         const alpha =
           typeof options.alpha === "number" && Number.isFinite(options.alpha)
             ? clamp(options.alpha, 0.05, 1)
@@ -5450,8 +5484,8 @@
         const tint =
           options.tint ||
           (paletteColor ? rgbaFromHex(paletteColor.hex, alpha) : "rgba(96, 165, 250, 0.32)");
-        const unfinished = getRegionsByColor(colorId, { includeFilled: false });
-        const targets = unfinished.length > 0 ? unfinished : getRegionsByColor(colorId, { includeFilled: true });
+        const includeFilled = options.onlyUnfilled ? false : true;
+        const targets = getRegionsByColor(colorId, { includeFilled });
         if (targets.length === 0) {
           delete canvasStage.dataset.flashingColor;
           return;
@@ -5470,14 +5504,18 @@
         }, duration);
       }
 
-      function flashRegion(regionId, color) {
+      function flashRegion(regionId, color, options = {}) {
         if (!state.puzzle) return;
         const region = state.puzzle.regions[regionId];
         if (!region) return;
         paintRegions([region], color);
+        const duration =
+          typeof options.duration === "number" && Number.isFinite(options.duration)
+            ? clamp(options.duration, 32, 1000)
+            : DEFAULT_REGION_FLASH_DURATION;
         window.setTimeout(() => {
           renderPuzzle();
-        }, 220);
+        }, duration);
       }
 
       function autoAdvanceColor(currentColorId) {
