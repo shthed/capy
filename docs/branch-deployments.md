@@ -65,9 +65,26 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 
 ## Cleanup
 
-Branch folders are automatically cleaned up when their pull requests are closed or merged. The workflow maintains a list of branches with open PRs and removes any deployments that no longer have active PRs.
+### Automatic Deployment Cleanup
 
-**Manual cleanup** is no longer necessary but can still be performed if needed:
+Branch folders in `gh-pages` are automatically cleaned up when their pull requests are closed or merged. The deployment workflow maintains a list of branches with open PRs and removes any deployments that no longer have active PRs.
+
+### Stale Branch Cleanup
+
+The repository includes a workflow (`.github/workflows/cleanup-stale-branches.yml`) that can delete stale branches that no longer have open PRs:
+
+- **Automatic**: Runs weekly on Sundays at 00:00 UTC
+- **Manual**: Can be triggered via GitHub Actions workflow dispatch
+- **Safe**: Always runs in dry-run mode by default to preview changes
+- **Protected**: Never deletes `main`, `master`, or `gh-pages` branches
+
+To manually run the cleanup:
+1. Go to Actions → Cleanup Stale Branches
+2. Click "Run workflow"
+3. Review the dry-run output
+4. Run again with `dry_run=false` to actually delete branches
+
+**Manual deployment cleanup** can still be performed if needed:
 
 1. Checkout the `gh-pages` branch locally
 2. Remove unwanted branch folders

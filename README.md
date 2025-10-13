@@ -25,6 +25,7 @@ tools, a save manager, and a configurable generator all live inside a single
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys every branch to GitHub Pages under a subfolder matching the branch name.
+  - `.github/workflows/cleanup-stale-branches.yml` – Automatically removes stale branches that no longer have open PRs (runs weekly or on-demand).
 - **Process notes**
   - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
   - `docs/automation-loop.md` – Blueprint for the automated branching, testing, merging, and feedback loop.
