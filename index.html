@@ -4851,7 +4851,22 @@
           }
           if (state.previewImageData) {
             if (previewCanvas && previewCanvas.width && previewCanvas.height) {
-              puzzleCtx.drawImage(previewCanvas, 0, 0);
+              const sourceWidth = previewCanvas.width;
+              const sourceHeight = previewCanvas.height;
+              const targetWidth = canvasMetrics.pixelWidth || pixelWidth;
+              const targetHeight = canvasMetrics.pixelHeight || pixelHeight;
+              puzzleCtx.imageSmoothingEnabled = false;
+              puzzleCtx.drawImage(
+                previewCanvas,
+                0,
+                0,
+                sourceWidth,
+                sourceHeight,
+                0,
+                0,
+                targetWidth,
+                targetHeight
+              );
             } else if (typeof puzzleCtx.putImageData === "function") {
               puzzleCtx.putImageData(state.previewImageData, 0, 0);
             }
