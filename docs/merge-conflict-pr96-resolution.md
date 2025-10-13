@@ -1,7 +1,7 @@
 # Merge Conflict Report: PR #96 (Tap Responsiveness) into Main
 
 ## Overview
-Merging PR #96 (`codex/improve-tap-response-performance-ka9nao`) into `main` raised a
+Merging PR #96 (`codex/improve-tap-response-performance-ka9nao`) into `main` resulted in a
 conflict in `index.html`. The PR branch contained enhanced functionality for handling
 already-filled regions, while the main branch had a simpler implementation.
 
@@ -64,3 +64,10 @@ The resolution relies on these existing functions:
 - `logDebug(message)` - Debug logging
 
 All functions were confirmed present in the merged codebase.
+
+## Verification
+The merged code was validated by:
+- Loading the app successfully at http://localhost:8000
+- Generating the Capybara Springs sample puzzle (143 regions)
+- Confirming all palette colors render with correct region counts
+- Verifying no conflict markers remain in the source
