@@ -14,8 +14,9 @@ permissions:
 jobs:
   deploy-branch:
     runs-on: ubuntu-latest
-    outputs:
-      has-pr: ${{ steps.check-pr.outputs.result }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check if branch has an open PR
         id: check-pr
@@ -46,7 +47,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.ref }}
           path: source
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Configure git credentials for authenticated operations
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
@@ -56,13 +57,27 @@ jobs:
           git config --global credential.helper store
           echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
 
+      - name: Restore gh-pages cache
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
+        uses: actions/cache/restore@v4
+        with:
+          path: gh-pages
+          key: gh-pages-${{ github.repository }}-${{ github.sha }}
+          restore-keys: |
+            gh-pages-${{ github.repository }}-
+
       - name: Setup gh-pages branch
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
           # Check if gh-pages branch exists remotely
-          if git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
+          if [ -d "gh-pages/.git" ]; then
+            echo "gh-pages cache exists, updating it"
+            cd gh-pages
+            git fetch --depth=1 origin gh-pages
+            git reset --hard origin/gh-pages
+          elif git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
             echo "gh-pages branch exists, cloning it"
-            git clone --branch gh-pages --single-branch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
+            git clone --depth=1 --branch gh-pages --single-branch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
           else
             echo "gh-pages branch doesn't exist, initializing it"
             mkdir -p gh-pages
@@ -134,13 +149,15 @@ jobs:
           if [ -z "$BRANCH_FOLDER" ]; then
             echo "Deploying main branch to root"
             # For main branch, copy files directly to root (including index.html)
-            rsync -av --exclude='.git' \
+            rsync -a --delete --exclude='.git' \
                       --exclude='node_modules' \
                       --exclude='test-results' \
                       --exclude='playwright-report' \
                       --exclude='blob-report' \
                       --exclude='artifacts' \
                       --exclude='README.md' \
+                      --exclude='branch.html' \
+                      --exclude='*/' \
                       ../source/ ./
           else
             # For other branches, deploy to subfolder
@@ -155,7 +172,7 @@ jobs:
 
             # Copy content from source (excluding .git, node_modules, etc)
             echo "Copying content to: $BRANCH_FOLDER"
-            rsync -av --exclude='.git' \
+            rsync -a --exclude='.git' \
                       --exclude='node_modules' \
                       --exclude='test-results' \
                       --exclude='playwright-report' \
@@ -306,13 +323,15 @@ jobs:
           # Commit and push
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
+          git add -A
 
           if git diff --staged --quiet; then
             echo "No changes to commit"
+            echo "has_changes=false" >> $GITHUB_ENV
           else
             git commit -m "Deploy branch: ${{ github.ref_name }} (commit: ${{ github.sha }})"
-            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages --force
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages
+            echo "has_changes=true" >> $GITHUB_ENV
             if [ -z "$BRANCH_FOLDER" ]; then
               echo "Published main branch to root: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
             else
@@ -321,29 +340,26 @@ jobs:
             echo "Branch index available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/branch.html"
           fi
 
-  # Deploy to GitHub Pages from gh-pages branch
-  deploy-pages:
-    needs: deploy-branch
-    if: needs.deploy-branch.outputs.has-pr == 'true' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Checkout gh-pages
-        uses: actions/checkout@v4
+      - name: Save gh-pages cache
+        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
+        uses: actions/cache/save@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: gh-pages
+          path: gh-pages
+          key: gh-pages-${{ github.repository }}-${{ github.sha }}
 
       - name: Setup Pages
+        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
+        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: 'gh-pages'
 
       - name: Deploy to GitHub Pages
+        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
         id: deployment
         uses: actions/deploy-pages@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
