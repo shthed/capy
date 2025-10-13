@@ -43,6 +43,12 @@ tools, a save manager, and a configurable generator all live inside a single
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
   previously exported JSON puzzles straight into the generator pipeline.
+- **Game selection screen.** The onboarding hint now surfaces a "Start a game"
+  picker that highlights the bundled Capybara Springs puzzle loaded from
+  `capy.json` alongside every manual save on this browser. The title,
+  description, and preview art fall back to the inline Capybara vignette when
+  the fixture omits optional metadata so the landing copy always has something
+  friendly to show.
 - **Built-in capybara sample.** The "Capybara Springs" illustration now loads
   automatically on boot in the high detail preset (when no autosave is
   available) so you can start painting without importing anything. The vignette
@@ -142,7 +148,10 @@ the high preset so playtesters immediately see the full ≈140-region canvas, bu
 the remembered preset keeps medium or low runs sticky after you switch. The
 region counts above are based on the bundled Capybara Springs artwork and keep
 every preset playable—from the breezy ≈26-region low detail board to the
-≈140-region high fidelity scene.
+≈140-region high fidelity scene. Preview copy prefers metadata pulled from
+`capy.json`, but the inline Capybara fallback strings and artwork keep the
+detail picker, start screen, and sample preview populated whenever the fixture
+skips optional fields.
 
 ## Code architecture tour
 
