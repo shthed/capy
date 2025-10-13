@@ -1,9 +1,5 @@
 # Capy Image Generator
 
-[https://shthed.github.io/capy/](https://shthed.github.io/capy/)
-[https://shthed.github.io/capy/branch](https://shthed.github.io/capy/branch)
-[https://github.com/shthed/capy](https://github.com/shthed/capy)
-
 Capy turns any bitmap image into a color-by-number puzzle entirely in the
 browser. Drop a file (or load one via the hidden file picker) and the app will
 resize it, run k-means clustering to build a discrete palette, merge tiny
@@ -47,6 +43,12 @@ single `index.html` document—no build tools or extra runtime required.
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
   previously exported JSON puzzles straight into the generator pipeline.
+- **Game selection screen.** The onboarding hint now surfaces a "Start a game"
+  picker that highlights the bundled Capybara Springs puzzle loaded from
+  `capy.json` alongside every manual save on this browser. The title,
+  description, and preview art fall back to the inline Capybara vignette when
+  the fixture omits optional metadata so the landing copy always has something
+  friendly to show.
 - **Built-in capybara sample.** The "Capybara Springs" illustration now loads
   automatically on boot in the high detail preset (when no autosave is
   available) so you can start painting without importing anything. The vignette
@@ -88,7 +90,8 @@ single `index.html` document—no build tools or extra runtime required.
   region numbers once you're familiar with the artwork for an unobstructed
   canvas while you fill in the illustration.
 - **Precision view controls.** Pan the puzzle by click-dragging with the
-  primary mouse button (spacebar, middle, and right buttons still work), use
+  primary mouse button or middle click, or hold <kbd>Space</kbd> to pan from anywhere. Right-click now
+  selects the colour under the pointer by default (toggleable in Settings if you prefer to pan with it), use
   pinch gestures or the mouse wheel to zoom in and out, or tap `+`/`-` on the
   keyboard for incremental adjustments. Ctrl/Cmd zoom shortcuts now target the
   puzzle instead of the surrounding UI so the HUD stays crisp while the canvas
@@ -143,7 +146,10 @@ the high preset so playtesters immediately see the full ≈140-region canvas, bu
 the remembered preset keeps medium or low runs sticky after you switch. The
 region counts above are based on the bundled Capybara Springs artwork and keep
 every preset playable—from the breezy ≈26-region low detail board to the
-≈140-region high fidelity scene.
+≈140-region high fidelity scene. Preview copy prefers metadata pulled from
+`capy.json`, but the inline Capybara fallback strings and artwork keep the
+detail picker, start screen, and sample preview populated whenever the fixture
+skips optional fields.
 
 ## Code architecture tour
 
@@ -215,9 +221,10 @@ every preset playable—from the breezy ≈26-region low detail board to the
    settings before you reload it.
 2. **Tune generation & appearance.** Open **Settings** to slide out the
    sidecar and tweak palette size, minimum region area, resize detail, sample
-   rate (for faster clustering), iteration count, smoothing passes,
-   auto-advance, the status bar toggle, hint animations, the interface theme,
-   the canvas background colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
+  rate (for faster clustering), iteration count, smoothing passes,
+  auto-advance, the status bar toggle, hint animations, fade timing, overlay
+  intensity, the right-click action, the interface theme, the canvas background
+  colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
    when working from an image source, then expand the **Advanced options**
    accordion to edit the optional art prompt metadata before exporting or
    regenerating a scene.
@@ -278,8 +285,9 @@ before retrying.
   window so you can keep painting while adjusting sliders. Controls include
   colours, minimum region size, resize detail, sample rate, k-means iterations,
   smoothing passes, an interface theme switcher, a background colour picker, the
-  interface scale slider, toggles for auto-advance, the status bar, and hint animations, and the Palette sort menu. The
-  panel also houses the JSON export action, mirrors the Low/Medium/High detail
+  interface scale slider, toggles for auto-advance, the status bar, hint animations, and the Palette sort menu. A
+  dedicated Hints & controls section now lets you tune fade duration, overlay intensity, and remap the right-click action.
+  The panel also houses the JSON export action, mirrors the Low/Medium/High detail
   chips so you can reload the sample with tuned parameters without leaving the
   sidecar, and tucks the art prompt query inside an **Advanced options**
   accordion so casual play stays focused on painting.
