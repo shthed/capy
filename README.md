@@ -1,3 +1,7 @@
+<a href="https://shthed.github.io/capy/">https://shthed.github.io/capy/</a>
+<a href="https://shthed.github.io/capy/branch">https://shthed.github.io/capy/branch</a>
+<a href="https://github.com/shthed/capy">https://github.com/shthed/capy</a>
+
 # Capy Image Generator
 
 Capy turns any bitmap image into a color-by-number puzzle entirely in the
