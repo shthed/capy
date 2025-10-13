@@ -7,9 +7,9 @@
 Capy turns any bitmap image into a color-by-number puzzle entirely in the
 browser. Drop a file (or load one via the hidden file picker) and the app will
 resize it, run k-means clustering to build a discrete palette, merge tiny
-regions, and paint a canvas you can immediately play. A fullscreen preview, hint
-tools, a save manager, and a configurable generator all live inside a single
-`index.html` document—no build tools or extra runtime required.
+regions, and paint a canvas you can immediately play. An instant preview toggle,
+hint tools, a save manager, and a configurable generator all live inside a
+single `index.html` document—no build tools or extra runtime required.
 
 ## Repository report
 
@@ -102,8 +102,8 @@ tools, a save manager, and a configurable generator all live inside a single
   the artwork stays centred.
 - **Contextual hinting.** Trigger highlight pulses for the current colour or let
   the app surface the smallest unfinished region when you need a nudge.
-- **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
-  artwork at its final resolution without leaving the play surface.
+- **Instant preview.** Temporarily flood every region with its final colour on
+  the main canvas so you can compare progress without leaving the play surface.
 - **Sidecar panels.** Settings, Help, and the Save manager now dock to the
   right as floating panels instead of modal overlays, so you can keep painting
   while tweaking generator sliders or reviewing shortcuts. Each panel remembers
@@ -271,9 +271,9 @@ before retrying.
   scene and use the scroll wheel (or trackpad gesture) to zoom — mobile pinch
   gestures now feed directly into the stage, and a double-tap guard keeps the
   browser from scaling the interface accidentally while you navigate.
-- **Fullscreen preview overlay** – Triggered by the Preview button. The preview
-  canvas stretches to fit the viewport so contributors can inspect the clustered
-  output in detail before painting.
+- **Preview mode** – Triggered by the Preview button. The puzzle canvas
+  temporarily renders every region in its target colour so you can inspect the
+  clustered output before painting without leaving the play surface.
 - **Settings panel** – Slides in beside the playfield instead of taking over the
   window so you can keep painting while adjusting sliders. Controls include
   colours, minimum region size, resize detail, sample rate, k-means iterations,
