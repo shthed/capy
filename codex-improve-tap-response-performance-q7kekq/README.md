@@ -211,8 +211,8 @@ every preset playable—from the breezy ≈26-region low detail board to the
 2. **Tune generation & appearance.** Open **Settings** to slide out the
    sidecar and tweak palette size, minimum region area, resize detail, sample
    rate (for faster clustering), iteration count, smoothing passes,
-   auto-advance, hint animations, the interface theme, the canvas background
-   colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
+   auto-advance, the status bar toggle, hint animations, the interface theme,
+   the canvas background colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
    when working from an image source, then expand the **Advanced options**
    accordion to edit the optional art prompt metadata before exporting or
    regenerating a scene.
@@ -273,7 +273,7 @@ before retrying.
   window so you can keep painting while adjusting sliders. Controls include
   colours, minimum region size, resize detail, sample rate, k-means iterations,
   smoothing passes, an interface theme switcher, a background colour picker, the
-  interface scale slider, toggles for auto-advance and hint animations, and the Palette sort menu. The
+  interface scale slider, toggles for auto-advance, the status bar, and hint animations, and the Palette sort menu. The
   panel also houses the JSON export action, mirrors the Low/Medium/High detail
   chips so you can reload the sample with tuned parameters without leaving the
   sidecar, and tucks the art prompt query inside an **Advanced options**
@@ -291,7 +291,9 @@ before retrying.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
   Each swatch now stretches into a flat colour tile with no gutters, and the
   number rides directly on the paint with a contrast-aware outline so it stays
-  readable without extra chrome. Tooltips and `data-color-id` attributes still
+  readable without extra chrome. A collapsible status bar above the dock stays hidden
+  unless an image import is running; enable the Settings toggle to keep its filled/remaining
+  counts visible after generation completes. Tooltips and `data-color-id` attributes still
   expose the colour name plus remaining counts for automation hooks.
 
 ## Keyboard and accessibility notes
