@@ -239,7 +239,7 @@ jobs:
             echo "Deploying main branch to root"
             # For main branch, copy files directly to root (including index.html)
             # Preserve existing branch folders and .git directory
-            # --delete removes files in destination not in source, respecting excludes
+            # --delete removes destination files not in source, EXCEPT excluded paths
             rsync -a --delete \
                       --exclude='.git/' \
                       --exclude='node_modules' \
@@ -284,9 +284,9 @@ jobs:
             # Get list of branches with open PRs
             ACTIVE_BRANCHES=$(cat ../pr-branches.json | grep -o '"safeName": "[^"]*"' | cut -d'"' -f4)
 
-            # Define protected directories that should never be removed
-            # These are common directory names for assets, documentation, and third-party resources
-            # that may exist in gh-pages but not correspond to branch deployments
+            # Define protected directories that should never be removed during cleanup
+            # These are common names for persistent site assets (docs, stylesheets, images, etc.)
+            # that may exist in gh-pages for deployment purposes but not in source branches
             PROTECTED_DIRS=("docs" "assets" "static" "vendor" "lib" "css" "js" "images" "fonts")
 
             # Collect folders to remove first, then remove them
