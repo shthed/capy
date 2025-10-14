@@ -15,8 +15,8 @@ jobs:
   deploy-branch:
     runs-on: ubuntu-latest
     concurrency:
-      group: pages-deploy
-      cancel-in-progress: false
+      group: pages-deploy-${{ github.ref }}
+      cancel-in-progress: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
