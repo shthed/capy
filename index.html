@@ -15,8 +15,10 @@
       hydrated while renderPreview mirrors the cache.
     - Generation pipeline: loadImage → createPuzzleData orchestrates quantization/segmentation and
       palette prep; applyPuzzleResult hydrates state for saves, regenerations, and exports.
-    - Start screen + save manager run on createGameSaveManager; autosave scheduling refreshes
-      command enable states and menus.
+    - Persistence + exports: createGameSaveManager backs start/save flows while serializeCurrentPuzzle
+      powers manual exports.
+    - Start screen + save manager run on createGameSaveManager; autosave scheduling refreshes command
+      enable states, menus, and saves.
     - Theme toggles update CSS custom properties; applyTheme/applyBackgroundColor keep command rail,
       sheets, and dock tokens aligned.
     - window.capyGenerator exposes devtools entry points; keep signatures stable when reorganizing
@@ -24,11 +26,12 @@
 
     Script guide
     1. DOM/cache bootstrapping and default constants.
-    2. View state, pointer gestures, canvas math helpers, and resetView/applyViewTransform glue.
+    2. Canvas metrics, view state, pointer gestures, and resetView/applyViewTransform glue.
     3. Generation + rendering pipeline (loadDefaultPuzzle/loadSamplePuzzle, createPuzzleData,
        renderPuzzle/renderPreview).
     4. Palette/command interactions, keyboard/mouse handlers, hint animation loop, and theming prefs.
-    5. Autosave + storage wiring, save manager refresh, and window.capyGenerator exports.
+    5. Autosave + storage wiring, save manager refresh, and UI update routines.
+    6. window.capyGenerator bindings export last so manual QA scripts stay stable.
 
     Key functions
     - installBrowserZoomGuards(): Block browser zoom from hijacking wheel gestures.
@@ -43,14 +46,14 @@
     - attemptFillRegion(hit, { label }): Paint interaction that triggers autosave scheduling.
     - useHint(): Coordinate palette flashing + overlay animations to guide the next region.
     - updateCommandStates(): Enable/disable command rail buttons based on puzzle state.
+    - applyTheme(theme, options) / applyBackgroundColor(hex, options): Refresh UI theming tokens and
+      persist preferences.
     - scheduleAutosave(reason) / persistAutosave(reason): Manage background save cadence.
     - saveCurrentSnapshot(): Add a manual save entry and refresh the menus.
     - refreshGameSelection() / refreshSaveList(): Render launcher + manager items from shared
       templates.
     - createGameSaveManager(): Wrap persistence with list, subscribe, and persist helpers for UI
       consumers.
-    - applyTheme(theme, options) / applyBackgroundColor(hex, options): Refresh UI theming tokens and
-      persist preferences.
   -->
   <head>
     <meta charset="utf-8" />
