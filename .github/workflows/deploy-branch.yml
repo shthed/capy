@@ -165,14 +165,31 @@ jobs:
               per_page: 3
             });
 
-            const mainBranchData = {
-              commits: commits.map(commit => ({
+            // For each commit, fetch associated pull requests
+            const commitsWithPRs = await Promise.all(commits.map(async (commit) => {
+              // Search for PRs that include this commit
+              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: commit.sha
+              });
+              
+              const firstLine = commit.commit.message.split('\n')[0];
+              
+              return {
                 sha: commit.sha,
-                message: commit.commit.message,
+                shortSha: commit.sha.substring(0, 7),
+                message: firstLine,
                 author: commit.commit.author.name,
                 date: commit.commit.author.date,
-                timestamp: new Date(commit.commit.author.date).getTime()
-              })),
+                timestamp: new Date(commit.commit.author.date).getTime(),
+                htmlUrl: commit.html_url,
+                prNumbers: prs.map(pr => pr.number)
+              };
+            }));
+
+            const mainBranchData = {
+              commits: commitsWithPRs,
               lastCommitDate: commits[0]?.commit.author.date,
               lastCommitTimestamp: commits[0] ? new Date(commits[0].commit.author.date).getTime() : null,
               deploymentTimestamp: Date.now()
@@ -351,6 +368,10 @@ jobs:
                 color: #24292e;
                 font-weight: 500;
               }
+              .commit-message a {
+                font-family: 'Courier New', Courier, monospace;
+                font-weight: 600;
+              }
               .commit-author {
                 color: #586069;
               }
@@ -415,7 +436,13 @@ jobs:
               echo '                  <div class="commit-list">' >> branch.html
               cat ../main-branch-data.json | jq -r '.commits[] |
                 "<div class=\"commit-item\">" +
-                "<div class=\"commit-message\">" + (.message | split("\n")[0]) + "</div>" +
+                "<div class=\"commit-message\">" +
+                  "<a class=\"pr-link\" href=\"" + .htmlUrl + "\">" + .shortSha + "</a> " +
+                  .message +
+                  (if (.prNumbers | length) > 0 then 
+                    " (" + ([.prNumbers[] | "<a class=\"pr-link\" href=\"https://github.com/shthed/capy/pull/" + tostring + "\">#" + tostring + "</a>"] | join(", ")) + ")"
+                  else "" end) +
+                "</div>" +
                 "<div class=\"commit-author\">by " + .author + " · <span data-timestamp=\"" + (.timestamp|tostring) + "\">" + (.timestamp|tostring) + "</span></div>" +
                 "</div>"
               ' >> branch.html
