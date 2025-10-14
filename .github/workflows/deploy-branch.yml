@@ -139,6 +139,39 @@ jobs:
 
             return branches;
 
+      - name: Fetch main branch commits
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
+        id: fetch-main-commits
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Fetch last 3 commits from main branch
+            const { data: commits } = await github.rest.repos.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: 'main',
+              per_page: 3
+            });
+
+            const mainBranchData = {
+              commits: commits.map(commit => ({
+                sha: commit.sha,
+                message: commit.commit.message,
+                author: commit.commit.author.name,
+                date: commit.commit.author.date,
+                timestamp: new Date(commit.commit.author.date).getTime()
+              })),
+              lastCommitDate: commits[0]?.commit.author.date,
+              lastCommitTimestamp: commits[0] ? new Date(commits[0].commit.author.date).getTime() : null,
+              deploymentTimestamp: Date.now()
+            };
+
+            fs.writeFileSync('main-branch-data.json', JSON.stringify(mainBranchData, null, 2));
+            
+            return mainBranchData;
+
       - name: Deploy branch content
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
@@ -284,7 +317,51 @@ jobs:
                 color: white;
                 margin-left: 8px;
               }
+              .main-details {
+                margin-top: 10px;
+                font-size: 0.9em;
+                color: #586069;
+              }
+              .commit-list {
+                margin-top: 8px;
+                padding-left: 15px;
+                border-left: 2px solid #e1e4e8;
+              }
+              .commit-item {
+                margin: 5px 0;
+                font-size: 0.85em;
+              }
+              .commit-message {
+                color: #24292e;
+                font-weight: 500;
+              }
+              .commit-author {
+                color: #586069;
+              }
             </style>
+            <script>
+              // Function to format timestamp to local timezone
+              function formatLocalTime(timestamp) {
+                if (!timestamp) return 'N/A';
+                const date = new Date(timestamp);
+                return date.toLocaleString(undefined, {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  timeZoneName: 'short'
+                });
+              }
+
+              // Convert all timestamps to local timezone after page loads
+              document.addEventListener('DOMContentLoaded', function() {
+                document.querySelectorAll('[data-timestamp]').forEach(function(element) {
+                  const timestamp = parseInt(element.getAttribute('data-timestamp'));
+                  element.textContent = formatLocalTime(timestamp);
+                });
+              });
+            </script>
           </head>
           <body>
             <h1>Capy Image Generator - Branch Deployments</h1>
@@ -292,17 +369,49 @@ jobs:
               <strong>Note:</strong> The main branch is always deployed to the root.
               Other branches with open pull requests are deployed to subfolders.
               Branches are sorted by most recently updated first.
+              All dates and times are shown in your local timezone.
             </div>
             <ul>
           EOF
 
-          # Add main branch first (always at root)
-          cat >> branch.html <<'EOF'
-              <li class="main-branch">
-                <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>
-                <div class="pr-info">The main production branch - always deployed to root</div>
-              </li>
-          EOF
+          # Add main branch first (always at root) with commit and deployment data
+          echo '              <li class="main-branch">' >> branch.html
+          echo '                <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>' >> branch.html
+          echo '                <div class="pr-info">The main production branch - always deployed to root</div>' >> branch.html
+          
+          # Add main branch details if data file exists
+          if [ -f ../main-branch-data.json ]; then
+            LAST_COMMIT_TS=$(cat ../main-branch-data.json | jq -r '.lastCommitTimestamp // empty')
+            DEPLOYMENT_TS=$(cat ../main-branch-data.json | jq -r '.deploymentTimestamp // empty')
+            
+            if [ -n "$LAST_COMMIT_TS" ]; then
+              echo '                <div class="main-details">' >> branch.html
+              echo "                  <div class=\"timestamp\">Last commit: <span data-timestamp=\"$LAST_COMMIT_TS\">$LAST_COMMIT_TS</span></div>" >> branch.html
+            fi
+            
+            if [ -n "$DEPLOYMENT_TS" ]; then
+              echo "                  <div class=\"timestamp\">Last deployment: <span data-timestamp=\"$DEPLOYMENT_TS\">$DEPLOYMENT_TS</span></div>" >> branch.html
+            fi
+            
+            # Add recent commits
+            COMMITS_COUNT=$(cat ../main-branch-data.json | jq '.commits | length')
+            if [ "$COMMITS_COUNT" -gt 0 ]; then
+              echo '                  <div class="commit-list">' >> branch.html
+              cat ../main-branch-data.json | jq -r '.commits[] |
+                "<div class=\"commit-item\">" +
+                "<div class=\"commit-message\">" + (.message | split("\n")[0]) + "</div>" +
+                "<div class=\"commit-author\">by " + .author + " · <span data-timestamp=\"" + (.timestamp|tostring) + "\">" + (.timestamp|tostring) + "</span></div>" +
+                "</div>"
+              ' >> branch.html
+              echo '                  </div>' >> branch.html
+            fi
+            
+            if [ -n "$LAST_COMMIT_TS" ] || [ -n "$DEPLOYMENT_TS" ]; then
+              echo '                </div>' >> branch.html
+            fi
+          fi
+          
+          echo '              </li>' >> branch.html
 
           # Add branches from PR data (already sorted by updated date)
           if [ -f ../pr-branches.json ]; then
@@ -310,7 +419,7 @@ jobs:
               "<li>" +
               "<a class=\"branch-link\" href=\"" + .safeName + "/\">" + .branch + "</a>" +
               "<div class=\"pr-info\">PR #" + (.number|tostring) + ": " + .title + " - <a class=\"pr-link\" href=\"" + .url + "\">View PR</a></div>" +
-              "<div class=\"timestamp\">Last updated: " + .updated + "</div>" +
+              "<div class=\"timestamp\">Last updated: <span data-timestamp=\"" + ((.updated | fromdateiso8601) * 1000 | tostring) + "\">" + .updated + "</span></div>" +
               "</li>"
             ' >> branch.html
           fi
