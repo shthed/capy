@@ -377,6 +377,10 @@ jobs:
                 color: #24292e;
                 font-weight: 500;
               }
+              .commit-message a {
+                font-family: 'Courier New', Courier, monospace;
+                font-weight: 600;
+              }
               .commit-author {
                 color: #586069;
               }
@@ -461,6 +465,7 @@ jobs:
             if [ "$COMMITS_COUNT" -gt 0 ]; then
               echo '                  <div class="commit-list">' >> branch.html
               cat ../main-branch-data.json | jq -r '.commits[] |
+                . as $commit |
                 "<div class=\"commit-item\">" +
                 "<div class=\"commit-message\">" + (.message | split("\n")[0]) + "</div>" +
                 "<div class=\"commit-author\">by " + .author + " · <span data-timestamp=\"" + (.timestamp|tostring) + "\">" + (.timestamp|tostring) + "</span> · <a class=\"commit-sha\" href=\"" + .htmlUrl + "\">" + .shortSha + "</a></div>" +
