@@ -57,11 +57,11 @@ single `index.html` document—no build tools or extra runtime required.
   automatically on boot in the high detail preset (when no autosave is
   available) so you can start painting without importing anything. The vignette
   features an orange-balanced capybara lounging in a lagoon with a curious
-  dachshund, water mushrooms, and a distant waterfall, and the 🐹 command rail
-  button instantly reloads it whenever you want a fresh board while reflecting
-  whichever detail preset you last chose.
+  dachshund, water mushrooms, and a distant waterfall, and the start screen's
+  **Try the capybara sample** action instantly reloads it whenever you want a
+  fresh board while reflecting whichever detail preset you last chose.
 - **Sample detail presets.** Low/Medium/High chips live on the onboarding hint
-  and inside Settings, instantly reloading the sample with tuned colour counts,
+  and inside the Generator sheet, instantly reloading the sample with tuned colour counts,
   resize targets, k-means iterations, and smoothing passes so QA can cycle
   between breezy ≈26-region boards, balanced ≈42-region sessions, or
   high-fidelity ≈140-region showpieces.
@@ -113,11 +113,12 @@ single `index.html` document—no build tools or extra runtime required.
   controls for tuning the fade duration and overlay intensity.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
   artwork at its final resolution without leaving the play surface.
-- **Sidecar panels.** Settings and Help dock to the right as floating panels
-  instead of modal overlays, so you can keep painting while tweaking generator
-  sliders or reviewing shortcuts. Save management now lives inside the start
-  screen so manual snapshots share the same launcher surface. Each panel
-  remembers its scroll position and stays interactive alongside the canvas.
+- **Sidecar panels.** Generator, Settings, and Help dock to the right as floating
+  panels instead of modal overlays, so you can keep painting while tweaking
+  clustering sliders, gameplay preferences, or reviewing shortcuts. Save
+  management now lives inside the start screen so manual snapshots share the
+  same launcher surface. Each panel remembers its scroll position and stays
+  interactive alongside the canvas.
 - **Palette manager.** Swipe through edge-to-edge swatches rendered as simple,
   gutterless colour blocks so the dock stays packed. Completed colours collapse
   out of view once every region is filled, tooltips call out how many areas are
@@ -272,13 +273,13 @@ before retrying.
 ## UI guide
 
 - **Command rail** – A slim, right-aligned header exposing Hint, Reset, Preview,
-  Sample, Fullscreen, Import, Save manager, Help, and Settings buttons through
-  icon-only controls. Hint flashes tiny regions, Reset clears progress, Preview
-  reveals the clustered artwork, Sample reloads the bundled capybara puzzle,
-  Fullscreen pushes the stage edge-to-edge (and exits back to windowed mode),
-  Import accepts images or JSON puzzles, Save manager opens the combined start &
-  save screen, Help opens an in-app manual plus live debug log, and Settings
-  reveals generator/gameplay options.
+  Generator, Fullscreen, Import, Save manager, Help, and Settings buttons
+  through icon-only controls. Hint flashes tiny regions, Reset clears progress,
+  Preview reveals the clustered artwork, Generator opens the dedicated
+  clustering sheet, Fullscreen pushes the stage edge-to-edge (and exits back to
+  windowed mode), Import accepts images or JSON puzzles, Save manager opens the
+  combined start & save screen, Help opens an in-app manual plus live debug log,
+  and Settings reveals gameplay, palette, and accessibility options.
 - **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`).
   The canvas renders outlines, remaining numbers, and filled regions, respects
   auto-advance / hint animation toggles, and supports smooth pan + zoom so you
