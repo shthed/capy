@@ -1,0 +1,16 @@
+{
+  "name": "capy",
+  "version": "1.0.0",
+  "description": "Capy color-by-number puzzle generator",
+  "scripts": {
+    "test": "bash tests/smoke-test.sh",
+    "test:smoke": "bash tests/smoke-test.sh",
+    "dev": "http-server -p 8000"
+  },
+  "keywords": ["color-by-number", "puzzle", "generator"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}
