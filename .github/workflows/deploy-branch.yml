@@ -165,14 +165,25 @@ jobs:
               per_page: 3
             });
 
-            // For each commit, fetch associated pull requests
+            // For each commit, search for associated PRs
             const commitsWithPRs = await Promise.all(commits.map(async (commit) => {
-              // Search for PRs that include this commit
-              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                commit_sha: commit.sha
-              });
+              let prs = [];
+              try {
+                // Search for PRs that include this commit
+                const { data: prData } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  commit_sha: commit.sha
+                });
+                prs = prData.map(pr => ({
+                  number: pr.number,
+                  title: pr.title,
+                  url: pr.html_url
+                }));
+              } catch (error) {
+                console.log(`Warning: Could not fetch PRs for commit ${commit.sha}: ${error.message}`);
+                // Continue with empty prs array
+              }
               
               return {
                 sha: commit.sha,
@@ -182,9 +193,7 @@ jobs:
                 date: commit.commit.author.date,
                 timestamp: new Date(commit.commit.author.date).getTime(),
                 htmlUrl: commit.html_url,
-                prNumbers: prs.map(pr => pr.number),
-                repoOwner: context.repo.owner,
-                repoName: context.repo.repo
+                prs: prs
               };
             }));
 
@@ -375,6 +384,27 @@ jobs:
               .commit-author {
                 color: #586069;
               }
+              .commit-sha {
+                font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 0.9em;
+                color: #0366d6;
+                text-decoration: none;
+              }
+              .commit-sha:hover {
+                text-decoration: underline;
+              }
+              .commit-prs {
+                margin-top: 3px;
+                font-size: 0.8em;
+              }
+              .commit-pr-link {
+                color: #6f42c1;
+                text-decoration: none;
+                margin-right: 8px;
+              }
+              .commit-pr-link:hover {
+                text-decoration: underline;
+              }
             </style>
             <script>
               // Function to format timestamp to local timezone
@@ -437,14 +467,13 @@ jobs:
               cat ../main-branch-data.json | jq -r '.commits[] |
                 . as $commit |
                 "<div class=\"commit-item\">" +
-                "<div class=\"commit-message\">" +
-                  "<a class=\"pr-link\" href=\"" + .htmlUrl + "\">" + .shortSha + "</a> " +
-                  (.message | split("\n")[0]) +
-                  (if (.prNumbers | length) > 0 then 
-                    " (" + ([.prNumbers[] | "<a class=\"pr-link\" href=\"https://github.com/" + $commit.repoOwner + "/" + $commit.repoName + "/pull/" + tostring + "\">#" + tostring + "</a>"] | join(", ")) + ")"
-                  else "" end) +
-                "</div>" +
-                "<div class=\"commit-author\">by " + .author + " · <span data-timestamp=\"" + (.timestamp|tostring) + "\">" + (.timestamp|tostring) + "</span></div>" +
+                "<div class=\"commit-message\">" + (.message | split("\n")[0]) + "</div>" +
+                "<div class=\"commit-author\">by " + .author + " · <span data-timestamp=\"" + (.timestamp|tostring) + "\">" + (.timestamp|tostring) + "</span> · <a class=\"commit-sha\" href=\"" + .htmlUrl + "\">" + .shortSha + "</a></div>" +
+                (if (.prs | length) > 0 then 
+                  "<div class=\"commit-prs\">" + 
+                  (.prs | map("<a class=\"commit-pr-link\" href=\"" + .url + "\">#" + (.number|tostring) + "</a>") | join("")) + 
+                  "</div>" 
+                else "" end) +
                 "</div>"
               ' >> branch.html
               echo '                  </div>' >> branch.html
