@@ -231,7 +231,7 @@ jobs:
             echo "Deploying main branch to root"
             # For main branch, copy files directly to root (including index.html)
             # Preserve existing branch folders
-            rsync -a --exclude='.git' \
+            rsync -a --exclude='.git/' \
                       --exclude='node_modules' \
                       --exclude='test-results' \
                       --exclude='playwright-report' \
@@ -239,7 +239,7 @@ jobs:
                       --exclude='artifacts' \
                       --exclude='README.md' \
                       --exclude='branch.html' \
-                      --delete-excluded \
+                      --delete \
                       ../source/ ./
           else
             # For other branches, deploy to subfolder
