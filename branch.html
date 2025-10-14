@@ -79,72 +79,7 @@
       color: white;
       margin-left: 8px;
     }
-    .main-details {
-      margin-top: 10px;
-      font-size: 0.9em;
-      color: #586069;
-    }
-    .commit-list {
-      margin-top: 8px;
-      padding-left: 15px;
-      border-left: 2px solid #e1e4e8;
-    }
-    .commit-item {
-      margin: 5px 0;
-      font-size: 0.85em;
-    }
-    .commit-message {
-      color: #24292e;
-      font-weight: 500;
-    }
-    .commit-author {
-      color: #586069;
-    }
-    .commit-sha {
-      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-      font-size: 0.9em;
-      color: #0366d6;
-      text-decoration: none;
-    }
-    .commit-sha:hover {
-      text-decoration: underline;
-    }
-    .commit-prs {
-      margin-top: 3px;
-      font-size: 0.8em;
-    }
-    .commit-pr-link {
-      color: #6f42c1;
-      text-decoration: none;
-      margin-right: 8px;
-    }
-    .commit-pr-link:hover {
-      text-decoration: underline;
-    }
   </style>
-  <script>
-    // Function to format timestamp to local timezone
-    function formatLocalTime(timestamp) {
-      if (!timestamp) return 'N/A';
-      const date = new Date(timestamp);
-      return date.toLocaleString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZoneName: 'short'
-      });
-    }
-
-    // Convert all timestamps to local timezone after page loads
-    document.addEventListener('DOMContentLoaded', function() {
-      document.querySelectorAll('[data-timestamp]').forEach(function(element) {
-        const timestamp = parseInt(element.getAttribute('data-timestamp'));
-        element.textContent = formatLocalTime(timestamp);
-      });
-    });
-  </script>
 </head>
 <body>
   <h1>Capy Image Generator - Branch Deployments</h1>
@@ -152,26 +87,16 @@
     <strong>Note:</strong> The main branch is always deployed to the root.
     Other branches with open pull requests are deployed to subfolders.
     Branches are sorted by most recently updated first.
-    All dates and times are shown in your local timezone.
   </div>
   <ul>
-              <li class="main-branch">
-                <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>
-                <div class="pr-info">The main production branch - always deployed to root</div>
-                <div class="main-details">
-                  <div class="timestamp">Last commit: <span data-timestamp="1760451481000">1760451481000</span></div>
-                  <div class="timestamp">Last deployment: <span data-timestamp="1760451483975">1760451483975</span></div>
-                  <div class="commit-list">
-<div class="commit-item"><div class="commit-message">Merge pull request #126 from shthed/codex/remove-samplecommand-button-and-improve-buttons</div><div class="commit-author">by Hairy Dog Trumpet · <span data-timestamp="1760451481000">1760451481000</span> · <a class="commit-sha" href="https://github.com/shthed/capy/commit/8b407923f65b01f24b3b8839449a97dfabf8a9a9">8b40792</a></div></div>
-<div class="commit-item"><div class="commit-message">Merge branch 'main' into codex/remove-samplecommand-button-and-improve-buttons</div><div class="commit-author">by Hairy Dog Trumpet · <span data-timestamp="1760451470000">1760451470000</span> · <a class="commit-sha" href="https://github.com/shthed/capy/commit/c48a1b7f1c18a2774577bf4b7c7ba315b366890e">c48a1b7</a></div><div class="commit-prs"><a class="commit-pr-link" href="https://github.com/shthed/capy/pull/126">#126</a></div></div>
-<div class="commit-item"><div class="commit-message">Merge pull request #121 from shthed/copilot/update-branch-deployments-md</div><div class="commit-author">by Hairy Dog Trumpet · <span data-timestamp="1760451099000">1760451099000</span> · <a class="commit-sha" href="https://github.com/shthed/capy/commit/07fce01796e5539c83f2541750a3fecc1ce25762">07fce01</a></div><div class="commit-prs"><a class="commit-pr-link" href="https://github.com/shthed/capy/pull/121">#121</a></div></div>
-                  </div>
-                </div>
-              </li>
-<li><a class="branch-link" href="copilot-enhance-github-pages-workflow-2/">copilot/enhance-github-pages-workflow-2</a><div class="pr-info">PR #119: Add clickable commit and PR links to branch deployment history - <a class="pr-link" href="https://github.com/shthed/capy/pull/119">View PR</a></div><div class="timestamp">Last updated: <span data-timestamp="1760451413000">2025-10-14T14:16:53Z</span></div></li>
-<li><a class="branch-link" href="copilot-update-automation-loop-md/">copilot/update-automation-loop-md</a><div class="pr-info">PR #120: Update automation-loop.md to reflect manual-only testing workflow - <a class="pr-link" href="https://github.com/shthed/capy/pull/120">View PR</a></div><div class="timestamp">Last updated: <span data-timestamp="1760451105000">2025-10-14T14:11:45Z</span></div></li>
-<li><a class="branch-link" href="codex-review-last-2-days-of-commits/">codex/review-last-2-days-of-commits</a><div class="pr-info">PR #125: Simplify developer map overview - <a class="pr-link" href="https://github.com/shthed/capy/pull/125">View PR</a></div><div class="timestamp">Last updated: <span data-timestamp="1760449018000">2025-10-14T13:36:58Z</span></div></li>
-<li><a class="branch-link" href="codex-introduce-renderer-abstraction-for-webgl/">codex/introduce-renderer-abstraction-for-webgl</a><div class="pr-info">PR #124: Scaffold renderer manager with label overlay canvas - <a class="pr-link" href="https://github.com/shthed/capy/pull/124">View PR</a></div><div class="timestamp">Last updated: <span data-timestamp="1760448133000">2025-10-14T13:22:13Z</span></div></li>
+    <li class="main-branch">
+      <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>
+      <div class="pr-info">The main production branch - always deployed to root</div>
+    </li>
+<li><a class="branch-link" href="codex-review-last-2-days-of-commits/">codex/review-last-2-days-of-commits</a><div class="pr-info">PR #125: Simplify developer map overview - <a class="pr-link" href="https://github.com/shthed/capy/pull/125">View PR</a></div><div class="timestamp">Last updated: 2025-10-14T14:19:44Z</div></li>
+<li><a class="branch-link" href="copilot-enhance-github-pages-workflow-2/">copilot/enhance-github-pages-workflow-2</a><div class="pr-info">PR #119: Add clickable commit and PR links to branch deployment history - <a class="pr-link" href="https://github.com/shthed/capy/pull/119">View PR</a></div><div class="timestamp">Last updated: 2025-10-14T14:18:20Z</div></li>
+<li><a class="branch-link" href="copilot-update-automation-loop-md/">copilot/update-automation-loop-md</a><div class="pr-info">PR #120: Update automation-loop.md to reflect manual-only testing workflow - <a class="pr-link" href="https://github.com/shthed/capy/pull/120">View PR</a></div><div class="timestamp">Last updated: 2025-10-14T14:11:45Z</div></li>
+<li><a class="branch-link" href="codex-introduce-renderer-abstraction-for-webgl/">codex/introduce-renderer-abstraction-for-webgl</a><div class="pr-info">PR #124: Scaffold renderer manager with label overlay canvas - <a class="pr-link" href="https://github.com/shthed/capy/pull/124">View PR</a></div><div class="timestamp">Last updated: 2025-10-14T13:22:13Z</div></li>
   </ul>
 </body>
 </html>
