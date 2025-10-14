@@ -223,15 +223,19 @@ skips optional fields.
    boot; if nothing is stored yet the bundled “Capybara Springs” puzzle loads
    automatically in the high detail preset so you can start painting
    immediately. Drag a bitmap into the viewport, activate the “Choose an image”
-   button, or tap **Try the capybara sample** on the start overlay to reload the
-   bundled scene. The hint overlay disappears once a new source is selected, and
-   the Low/Medium/High detail chips can pre-seed the capybara sample with
-   relaxed or high-fidelity settings before you reload it.
-2. **Tune generation & appearance.** Open the **Generator** sheet to tweak
-   palette size, minimum region area, resize detail, sample rate (for faster
-   clustering), iteration count, smoothing passes, and the optional art prompt
-   metadata, then hop into **Settings** to refine gameplay toggles, palette
-   sorting, themes, background colour, UI scale, or hint behaviour.
+   button, or press the 🐹 command button to reload the bundled scene. The hint
+   overlay disappears once a new source is selected, and the Low/Medium/High
+   detail chips can pre-seed the capybara sample with relaxed or high-fidelity
+   settings before you reload it.
+2. **Tune generation & appearance.** Open **Settings** to slide out the
+   sidecar and tweak palette size, minimum region area, resize detail, sample
+  rate (for faster clustering), iteration count, smoothing passes,
+  auto-advance, the difficulty selector, the status bar toggle, hint animations,
+  fade timing, overlay intensity, the right-click action, the interface theme,
+  the canvas background colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
+   when working from an image source, then expand the **Advanced options**
+   accordion to edit the optional art prompt metadata before exporting or
+   regenerating a scene.
 3. **Explore the puzzle.** The game canvas shows outlines and number badges,
    while the **Preview** button floods the entire viewport with a fullscreen
    comparison of the clustered artwork.
@@ -287,15 +291,17 @@ before retrying.
   temporarily renders every region in its target colour so you can inspect the
   clustered output before painting without leaving the play surface.
 - **Settings panel** – Slides in beside the playfield instead of taking over the
-  window so you can keep painting while adjusting gameplay and accessibility
-  sliders. Controls include auto-advance, hint animations, fade duration,
-  overlay intensity, right-click behaviour, palette sorting, interface theme,
-  background colour, UI scale, and the optional status bar toggle.
-- **Generator sheet** – Collects the palette size, minimum region, resize,
-  sampling, iteration, and smoothing sliders alongside the capybara detail
-  chips, art prompt metadata, JSON export action, and Apply button that
-  regenerates the current source image.
-- **Detail presets** – The onboarding hint and Generator sheet both surface the
+  window so you can keep painting while adjusting sliders. Controls include
+  colours, minimum region size, resize detail, sample rate, k-means iterations,
+  smoothing passes, an interface theme switcher, a background colour picker, the
+  interface scale slider, toggles for auto-advance, Easy/Standard difficulty,
+  the status bar, hint animations, and the Palette sort menu. A
+  dedicated Hints & controls section now lets you tune fade duration, overlay intensity, and remap the right-click action.
+  The panel also houses the JSON export action, mirrors the Low/Medium/High detail
+  chips so you can reload the sample with tuned parameters without leaving the
+  sidecar, and tucks the art prompt query inside an **Advanced options**
+  accordion so casual play stays focused on painting.
+- **Detail presets** – The onboarding hint and Settings panel both surface the
   Low/Medium/High chips with a live caption describing the active preset so you
   know how many colours, what minimum region size, and which resize edge (and
   approximate region count) the next sample reload will use.
