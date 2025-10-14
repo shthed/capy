@@ -3,23 +3,61 @@
   <!--
     Developer Map
     ==========
-    - UI chrome (header/footer modals): command rail + sheets define primary controls and expose
-      buttons that wire into the handler helpers inside the script. Look for "Command button"
-      listeners when adjusting layout interactions.
-    - Viewport + stage: #viewport, #canvasStage, and #canvasTransform cooperate with the
-      viewState structure. applyViewTransform, applyZoom, resetView, and the pointer handlers are
-      the touch/mouse entry points for navigation. Pointerdown/up/move feed handlePan* while
-      wheel/key events route through applyZoom.
-    - Puzzle state + rendering: the state object captures palette, regions, fill progress, and
-      metadata. Rendering flows through renderPuzzle → drawOutlines/drawNumbers using the vector
-      cache built by ensureRenderCache.
-    - Generation pipeline: loadImage → createPuzzleData orchestrates quantization (kmeansQuantize),
-      segmentation (segmentRegions), and palette prep. Regeneration, fixture loading, and saves all
-      call applyPuzzleResult to hydrate UI.
-    - Persistence + exports: local storage helpers (persistSaves/loadSavedEntries) back the save
-      sheet. serializeCurrentPuzzle produces an export-safe object.
-    - External API: window.capyGenerator exposes entry points that manual test harnesses
-      rely on. Keep it stable whenever you shuffle internal wiring.
+    Layout overview
+    --------------
+    - UI chrome (command rail, modal sheets, and the debug console) exposes primary actions wired
+      to script handlers. Scan for "Command button" listeners when adjusting layout interactions.
+    - Viewport + stage: #viewport, #canvasStage, and #canvasTransform cooperate with viewState for
+      pan/zoom. Pointer handlers (handlePanStart/Move/End) and applyZoom feed navigation updates.
+    - Puzzle state & rendering: state holds palette, fills, and metadata. renderPuzzle →
+      drawOutlines/drawNumbers use ensureRenderCache to hydrate canvases and labels.
+    - Generation pipeline: loadImage → createPuzzleData orchestrates quantization, segmentation,
+      and palette prep. Regeneration, fixture loading, and saves all call applyPuzzleResult.
+    - Persistence + exports: createGameSaveManager backs the start screen + manager. Autosave,
+      manual saves, and exports live alongside serializeCurrentPuzzle.
+    - External API: window.capyGenerator exposes devtools entry points; keep signatures stable when
+      reorganizing internal wiring.
+
+    Script organization
+    -------------------
+    1. Cached DOM references, constants, and default settings.
+    2. Canvas metrics, view state, pointer capture, and custom cursor helpers.
+    3. Generation + rendering pipeline (loadDefaultPuzzle, createPuzzleData, renderPuzzle, etc.).
+    4. Palette interactions, keyboard/mouse handlers, and hint overlay animation loop.
+    5. Autosave + storage encoding, save manager wiring, and UI refresh routines.
+    6. window.capyGenerator bindings exported last for manual QA tooling.
+
+    Function highlights
+    -------------------
+    - installBrowserZoomGuards(): Prevents browser zoom from intercepting wheel gestures on the
+      canvas.
+    - applyViewTransform(options): Pushes viewState pan/zoom changes to the stage and pointer
+      overlays.
+    - applyZoom(multiplier, clientX, clientY, options): Normalizes zoom gestures around the pointer
+      focus and updates viewState.
+    - resetView(options): Fits the puzzle to the viewport and recenters the stage.
+    - loadSamplePuzzle(options) / loadDefaultPuzzle(options): Bootstrap the start screen selection
+      or fallback puzzle payload.
+    - createPuzzleData(image, options): Invokes the generation worker to quantize colors and
+      segment regions.
+    - applyPuzzleResult(data, metadata): Hydrates puzzle state, triggers canvas redraw, and updates
+      metadata surfaces.
+    - renderPuzzle() / renderPreview(): Draw the active puzzle and thumbnail preview using the
+      shared render cache.
+    - renderPalette(): Rebuilds the palette dock and accessibility metadata for the active colors.
+    - attemptFillRegion(hit, { label }): Processes paint interactions, updates fills, and schedules
+      autosave.
+    - useHint(): Coordinates palette flashing + overlay animations to guide the next region.
+    - updateCommandStates(): Enables/disables command rail buttons based on current puzzle state.
+    - applyTheme(theme, options) / applyBackgroundColor(hex, options): Refresh UI theming tokens and
+      persist preferences.
+    - scheduleAutosave(reason) / persistAutosave(reason): Manage background save cadence and writes
+      to storage.
+    - saveCurrentSnapshot(): Captures a manual save entry and refreshes start/manager lists.
+    - refreshGameSelection() / refreshSaveList(): Render launcher + manager items from shared
+      templates.
+    - createGameSaveManager(): Wraps persistence with list, subscribe, and persist helpers for UI
+      consumers.
   -->
   <head>
     <meta charset="utf-8" />
@@ -1615,6 +1653,7 @@
             <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
             <li><kbd>Right click</kbd> Select the colour under the pointer (configurable in Settings).</li>
             <li>Select a palette swatch to set the active colour and flash every matching region.</li>
+            <li>Enable Easy difficulty in Settings to let clicks auto-select the tapped region's colour.</li>
             <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
             <li>
               <kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas. Switch the right-click action in Settings if you
@@ -1756,6 +1795,16 @@
             <input id="showStatusToggle" type="checkbox" />
             <span>Show status bar with filled/remaining counts after imports</span>
           </label>
+          <label class="control">
+            <span>Difficulty</span>
+            <select id="difficultySelect">
+              <option value="normal">Standard</option>
+              <option value="easy">Easy</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Easy mode lets you click any region to auto-select its colour before filling it.
+          </p>
         </section>
         <section class="sheet-section" aria-labelledby="hintsControlsHeading">
           <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
@@ -1869,6 +1918,7 @@
       const hintFadeDurationInput = document.getElementById("hintFadeDuration");
       const hintIntensityInput = document.getElementById("hintIntensity");
       const rightClickActionSelect = document.getElementById("rightClickAction");
+      const difficultySelect = document.getElementById("difficultySelect");
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
       const showStatusToggle = document.getElementById("showStatusToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
@@ -1938,6 +1988,8 @@
       const MAX_HINT_INTENSITY = 0.9;
       const DEFAULT_RIGHT_CLICK_ACTION = "select";
       const VALID_RIGHT_CLICK_ACTIONS = new Set(["select", "pan"]);
+      const DEFAULT_DIFFICULTY = "normal";
+      const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
@@ -2167,15 +2219,23 @@
         if (!state.puzzle) return;
         const cache = ensureRenderCache();
         if (!cache.ready) return;
-        if (cache.outlineLayer && cache.outlineLayerCtx) {
+        const completedColors = getCompletedColorIds();
+        const hideCompleted = completedColors.size > 0;
+        const geometries = hideCompleted
+          ? cache.regions.filter((geometry) => !completedColors.has(geometry.colorId))
+          : cache.regions;
+        if (geometries.length === 0) {
+          return;
+        }
+        if (!hideCompleted && cache.outlineLayer && cache.outlineLayerCtx) {
           if (cache.outlineLayerDirty && !rasterizeOutlineLayer(cache)) {
-            strokeOutlinesDirect(cache);
+            strokeOutlinesDirect(cache, geometries);
             return;
           }
           puzzleCtx.drawImage(cache.outlineLayer, 0, 0);
           return;
         }
-        strokeOutlinesDirect(cache);
+        strokeOutlinesDirect(cache, geometries);
       }
 
       function createRenderCache() {
@@ -2199,14 +2259,14 @@
         };
       }
 
-      function strokeOutlinesDirect(cache) {
+      function strokeOutlinesDirect(cache, geometries) {
         const scale = cache.renderScale > 0 ? cache.renderScale : 1;
         withRenderScale(puzzleCtx, scale, () => {
           puzzleCtx.strokeStyle = backgroundInk.outline;
           puzzleCtx.lineWidth = cache.strokeWidth;
           puzzleCtx.lineJoin = "round";
           puzzleCtx.lineCap = "round";
-          strokeGeometries(puzzleCtx, cache.regions);
+          strokeGeometries(puzzleCtx, Array.isArray(geometries) ? geometries : cache.regions);
         });
       }
 
@@ -2901,6 +2961,7 @@
           hintFadeDuration: DEFAULT_HINT_FADE_DURATION,
           hintIntensity: DEFAULT_HINT_INTENSITY,
           rightClickAction: DEFAULT_RIGHT_CLICK_ACTION,
+          difficulty: DEFAULT_DIFFICULTY,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
@@ -3164,6 +3225,17 @@
           const action = resolveRightClickAction(state.settings.rightClickAction);
           state.settings.rightClickAction = action;
           rightClickActionSelect.value = action;
+        }
+        if (settings.difficulty != null) {
+          const difficulty = resolveDifficulty(settings.difficulty);
+          state.settings.difficulty = difficulty;
+          if (difficultySelect) {
+            difficultySelect.value = difficulty;
+          }
+        } else if (difficultySelect) {
+          const difficulty = resolveDifficulty(state.settings.difficulty);
+          state.settings.difficulty = difficulty;
+          difficultySelect.value = difficulty;
         }
         if (typeof settings.showRegionLabels === "boolean") {
           applyRegionLabelVisibility(settings.showRegionLabels, {
@@ -3432,6 +3504,21 @@
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
         scheduleAutosave("settings-hint-animations");
       });
+
+      if (difficultySelect) {
+        difficultySelect.value = resolveDifficulty(difficultySelect.value);
+        difficultySelect.addEventListener("change", () => {
+          const difficulty = resolveDifficulty(difficultySelect.value);
+          state.settings.difficulty = difficulty;
+          difficultySelect.value = difficulty;
+          logDebug(
+            difficulty === "easy"
+              ? "Difficulty set to Easy – clicks auto-select matching colours"
+              : "Difficulty set to Standard – clicks require the active colour"
+          );
+          scheduleAutosave("settings-difficulty");
+        });
+      }
 
       if (hintFadeDurationInput) {
         hintFadeDurationInput.value = String(normalizeHintFadeDuration(hintFadeDurationInput.value));
@@ -3845,17 +3932,28 @@
           return "already-filled";
         }
         if (region.colorId !== state.activeColor) {
-          const paletteColor = getPaletteEntry(region.colorId);
-          const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
-          if (state.settings.animateHints) {
-            flashRegion(regionId, { paletteColor, tint: fallbackTint, includeFilled: false });
-            flashColorRegions(region.colorId, {
-              paletteColor,
-              tint: fallbackTint,
-              onlyUnfilled: true,
-            });
+          const difficulty = resolveDifficulty(state.settings.difficulty);
+          if (difficulty === "easy") {
+            activateColor(region.colorId, { flash: false });
+          } else {
+            const paletteColor = getPaletteEntry(region.colorId);
+            const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
+            if (state.settings.animateHints) {
+              flashRegion(regionId, { paletteColor, tint: fallbackTint, includeFilled: false });
+              flashColorRegions(region.colorId, {
+                paletteColor,
+                tint: fallbackTint,
+                onlyUnfilled: true,
+              });
+            }
+            flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+            logDebug(
+              `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
+            );
+            return "mismatch";
           }
-          flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+        }
+        if (region.colorId !== state.activeColor) {
           logDebug(
             `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
           );
@@ -6026,9 +6124,12 @@
         if (wantsRightClickSelect) {
           const hit = getRegionFromEvent(event);
           if (hit && hit.region) {
-            event.preventDefault();
-            activateColor(hit.region.colorId);
-            return;
+            const remaining = getRegionsByColor(hit.region.colorId, { includeFilled: false });
+            if (remaining.length > 0) {
+              event.preventDefault();
+              activateColor(hit.region.colorId);
+              return;
+            }
           }
         }
         const auxButton = event.button === 1 || event.button === 2;
@@ -6237,8 +6338,10 @@
         const colorId = paletteColor?.id ?? region.colorId;
         if (cursorNumberEl) {
           cursorNumberEl.textContent = String(colorId);
-          if (paletteColor?.hex) {
-            cursorNumberEl.style.color = paletteColor.hex;
+          const pointerNumberColor =
+            paletteColor?.hex != null ? computePointerNumberColor(paletteColor.hex) : null;
+          if (pointerNumberColor) {
+            cursorNumberEl.style.color = pointerNumberColor;
           } else {
             cursorNumberEl.style.removeProperty("color");
           }
@@ -6741,6 +6844,16 @@
         return DEFAULT_RIGHT_CLICK_ACTION;
       }
 
+      function resolveDifficulty(value) {
+        if (typeof value === "string") {
+          const normalized = value.trim().toLowerCase();
+          if (VALID_DIFFICULTY_LEVELS.has(normalized)) {
+            return normalized;
+          }
+        }
+        return DEFAULT_DIFFICULTY;
+      }
+
       function autoAdvanceColor(currentColorId) {
         if (!state.puzzle) return;
         const remainingForColor = getRegionsByColor(currentColorId, { includeFilled: false });
@@ -6764,6 +6877,23 @@
         });
       }
 
+      function getCompletedColorIds() {
+        const completed = new Set();
+        if (!state.puzzle) return completed;
+        const pendingColors = new Set();
+        for (const region of state.puzzle.regions) {
+          if (!state.filled.has(region.id)) {
+            pendingColors.add(region.colorId);
+          }
+        }
+        for (const entry of state.puzzle.palette) {
+          if (!pendingColors.has(entry.id)) {
+            completed.add(entry.id);
+          }
+        }
+        return completed;
+      }
+
       function getPaletteEntry(colorId) {
         if (!state.puzzle) return null;
         return state.puzzle.palette.find((entry) => entry.id === colorId) || null;
@@ -6775,13 +6905,19 @@
         const cache = ensureRenderCache();
         if (!cache.ready) return;
         const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+        const strokeWidth = cache.strokeWidth > 0 ? cache.strokeWidth : 1;
         withRenderScale(puzzleCtx, scale, () => {
           puzzleCtx.fillStyle = fillStyle;
+          puzzleCtx.strokeStyle = fillStyle;
+          puzzleCtx.lineWidth = strokeWidth;
+          puzzleCtx.lineJoin = "round";
+          puzzleCtx.lineCap = "round";
           if (SUPPORTS_PATH2D) {
             for (const region of regions) {
               const geometry = cache.regionsById.get(region.id);
               if (!geometry?.path) continue;
               puzzleCtx.fill(geometry.path);
+              puzzleCtx.stroke(geometry.path);
             }
             return;
           }
@@ -6800,6 +6936,7 @@
               puzzleCtx.closePath();
             }
             puzzleCtx.fill();
+            puzzleCtx.stroke();
           }
         });
       }
@@ -6961,6 +7098,7 @@
           rightClickAction: resolveRightClickAction(
             settingsSource.rightClickAction ?? state.settings.rightClickAction
           ),
+          difficulty: resolveDifficulty(settingsSource.difficulty ?? state.settings.difficulty),
           uiScale:
             Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
               ? clamp(settingsSource.uiScale, 0.6, 1.35)
@@ -7068,6 +7206,7 @@
             hintFadeDuration: normalizeHintFadeDuration(state.settings.hintFadeDuration),
             hintIntensity: normalizeHintIntensity(state.settings.hintIntensity),
             rightClickAction: resolveRightClickAction(state.settings.rightClickAction),
+            difficulty: resolveDifficulty(state.settings.difficulty),
             uiScale:
               Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
                 ? clamp(state.settings.uiScale, 0.6, 1.35)
@@ -7917,6 +8056,97 @@
         logDebug(`Saved snapshot: ${entry.title}`);
       }
 
+      function describeSaveEntry(entry) {
+        const titleSource =
+          (typeof entry?.title === "string" && entry.title.trim()) ||
+          (typeof entry?.data?.title === "string" && entry.data.title);
+        const title = titleSource ? titleSource.trim() : "Untitled puzzle";
+        const doneCount = entry?.data?.filled?.length ?? 0;
+        const totalCount = entry?.data?.regions?.length ?? 0;
+        const progressText = totalCount
+          ? `${doneCount} of ${totalCount} regions filled`
+          : `${doneCount} regions filled`;
+        const timestampValue = Number(entry?.timestamp);
+        const hasTimestamp = Number.isFinite(timestampValue) && timestampValue > 0;
+        const timestamp = hasTimestamp ? new Date(timestampValue) : null;
+        const timestampLabel = timestamp ? `Saved ${timestamp.toLocaleString()}` : "";
+        const ariaLabelParts = [title, progressText];
+        if (timestampLabel) {
+          ariaLabelParts.push(timestampLabel);
+        }
+        return {
+          id: entry?.id,
+          title,
+          progressText,
+          timestamp,
+          timestampLabel,
+          ariaLabel: ariaLabelParts.join(" – "),
+        };
+      }
+
+      function createSaveActionButton(action, label) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.action = action;
+        button.textContent = label;
+        return button;
+      }
+
+      function createSaveSelectionItem(entry) {
+        const metadata = describeSaveEntry(entry);
+        const item = document.createElement("li");
+        item.className = "game-option";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "game-option-button";
+        button.dataset.gameId = metadata.id;
+        const title = document.createElement("span");
+        title.className = "game-option-title";
+        title.textContent = metadata.title;
+        const progress = document.createElement("span");
+        progress.className = "game-option-meta";
+        progress.textContent = metadata.progressText;
+        button.append(title, progress);
+        if (metadata.timestampLabel) {
+          const time = document.createElement("span");
+          time.className = "game-option-meta";
+          time.textContent = metadata.timestampLabel;
+          button.append(time);
+        }
+        button.setAttribute("aria-label", metadata.ariaLabel);
+        item.appendChild(button);
+        return item;
+      }
+
+      function createSaveManagementItem(entry) {
+        const metadata = describeSaveEntry(entry);
+        const item = document.createElement("li");
+        item.className = "save-entry";
+        item.dataset.saveId = metadata.id;
+        const header = document.createElement("header");
+        const title = document.createElement("strong");
+        title.textContent = metadata.title;
+        header.appendChild(title);
+        if (metadata.timestamp) {
+          const time = document.createElement("time");
+          time.dateTime = metadata.timestamp.toISOString();
+          time.textContent = metadata.timestamp.toLocaleString();
+          header.appendChild(time);
+        }
+        const progress = document.createElement("div");
+        progress.textContent = metadata.progressText;
+        const actions = document.createElement("div");
+        actions.className = "save-actions";
+        actions.append(
+          createSaveActionButton("load", "Load"),
+          createSaveActionButton("rename", "Rename"),
+          createSaveActionButton("export", "Export"),
+          createSaveActionButton("delete", "Delete"),
+        );
+        item.append(header, progress, actions);
+        return item;
+      }
+
       function refreshGameSelection() {
         if (!gameSelectionList) return;
         gameSelectionList.innerHTML = "";
@@ -7953,34 +8183,7 @@
         const hasSaves = Array.isArray(state.saves) && state.saves.length > 0;
         if (hasSaves) {
           for (const entry of state.saves) {
-            const item = document.createElement("li");
-            item.className = "game-option";
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = "game-option-button";
-            button.dataset.gameId = entry.id;
-            const title = document.createElement("span");
-            title.className = "game-option-title";
-            title.textContent = entry.title || "Untitled puzzle";
-            const doneCount = entry.data?.filled?.length ?? 0;
-            const totalCount = entry.data?.regions?.length ?? 0;
-            const progressText = totalCount
-              ? `${doneCount} of ${totalCount} regions filled`
-              : `${doneCount} regions filled`;
-            const progress = document.createElement("span");
-            progress.className = "game-option-meta";
-            progress.textContent = progressText;
-            const timestamp = Number(entry.timestamp);
-            if (Number.isFinite(timestamp) && timestamp > 0) {
-              const time = document.createElement("span");
-              time.className = "game-option-meta";
-              time.textContent = `Saved ${new Date(timestamp).toLocaleString()}`;
-              button.append(time);
-            }
-            button.setAttribute("aria-label", `${title.textContent} – ${progressText}`);
-            button.prepend(title, progress);
-            item.appendChild(button);
-            fragment.appendChild(item);
+            fragment.appendChild(createSaveSelectionItem(entry));
           }
         }
 
@@ -7992,29 +8195,14 @@
 
       function refreshSaveList() {
         saveList.innerHTML = "";
+        const fragment = document.createDocumentFragment();
         const hasEntries = Array.isArray(state.saves) && state.saves.length > 0;
-        for (const entry of state.saves) {
-          const item = document.createElement("li");
-          item.className = "save-entry";
-          item.dataset.saveId = entry.id;
-          const date = new Date(entry.timestamp);
-          const doneCount = entry.data?.filled?.length ?? 0;
-          const total = entry.data?.regions?.length ?? 0;
-          item.innerHTML = `
-            <header>
-              <strong>${entry.title || "Untitled puzzle"}</strong>
-              <time>${date.toLocaleString()}</time>
-            </header>
-            <div>${doneCount} of ${total} regions filled</div>
-            <div class="save-actions">
-              <button type="button" data-action="load">Load</button>
-              <button type="button" data-action="rename">Rename</button>
-              <button type="button" data-action="export">Export</button>
-              <button type="button" data-action="delete">Delete</button>
-            </div>
-          `;
-          saveList.appendChild(item);
+        if (hasEntries) {
+          for (const entry of state.saves) {
+            fragment.appendChild(createSaveManagementItem(entry));
+          }
         }
+        saveList.appendChild(fragment);
         if (saveListEmpty) {
           saveListEmpty.hidden = hasEntries;
         }
@@ -8129,6 +8317,22 @@
           outline: "rgba(15, 23, 42, 0.65)",
           number: "rgba(15, 23, 42, 0.95)",
         };
+      }
+
+      function computePointerNumberColor(hex) {
+        if (typeof hex !== "string") {
+          return null;
+        }
+        const sanitizedHex = sanitizeHexColor(hex, DEFAULT_BACKGROUND_HEX);
+        const [r, g, b] = hexToRgb(sanitizedHex);
+        const tooltipBackgroundLuminance = relativeLuminance([248, 250, 252]);
+        const numberLuminance = relativeLuminance([r, g, b]);
+        const contrast = contrastRatio(tooltipBackgroundLuminance, numberLuminance);
+        const MIN_POINTER_TOOLTIP_CONTRAST = 4.5;
+        if (contrast >= MIN_POINTER_TOOLTIP_CONTRAST) {
+          return sanitizedHex;
+        }
+        return null;
       }
 
       function computeSwatchLabelStyles(hex) {
