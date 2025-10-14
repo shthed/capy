@@ -174,17 +174,17 @@ jobs:
                 commit_sha: commit.sha
               });
               
-              const firstLine = commit.commit.message.split('\n')[0];
-              
               return {
                 sha: commit.sha,
                 shortSha: commit.sha.substring(0, 7),
-                message: firstLine,
+                message: commit.commit.message,
                 author: commit.commit.author.name,
                 date: commit.commit.author.date,
                 timestamp: new Date(commit.commit.author.date).getTime(),
                 htmlUrl: commit.html_url,
-                prNumbers: prs.map(pr => pr.number)
+                prNumbers: prs.map(pr => pr.number),
+                repoOwner: context.repo.owner,
+                repoName: context.repo.repo
               };
             }));
 
@@ -435,12 +435,13 @@ jobs:
             if [ "$COMMITS_COUNT" -gt 0 ]; then
               echo '                  <div class="commit-list">' >> branch.html
               cat ../main-branch-data.json | jq -r '.commits[] |
+                . as $commit |
                 "<div class=\"commit-item\">" +
                 "<div class=\"commit-message\">" +
                   "<a class=\"pr-link\" href=\"" + .htmlUrl + "\">" + .shortSha + "</a> " +
-                  .message +
+                  (.message | split("\n")[0]) +
                   (if (.prNumbers | length) > 0 then 
-                    " (" + ([.prNumbers[] | "<a class=\"pr-link\" href=\"https://github.com/shthed/capy/pull/" + tostring + "\">#" + tostring + "</a>"] | join(", ")) + ")"
+                    " (" + ([.prNumbers[] | "<a class=\"pr-link\" href=\"https://github.com/" + $commit.repoOwner + "/" + $commit.repoName + "/pull/" + tostring + "\">#" + tostring + "</a>"] | join(", ")) + ")"
                   else "" end) +
                 "</div>" +
                 "<div class=\"commit-author\">by " + .author + " · <span data-timestamp=\"" + (.timestamp|tostring) + "\">" + (.timestamp|tostring) + "</span></div>" +
