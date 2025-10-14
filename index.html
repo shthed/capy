@@ -502,7 +502,9 @@
       #startHint .hint-body {
         pointer-events: auto;
         text-align: left;
-        max-width: 360px;
+        width: min(420px, calc(100vw - 48px));
+        max-width: 420px;
+        max-height: min(calc(100vh - 96px), 720px);
         padding: calc(32px * var(--ui-scale));
         border-radius: calc(20px * var(--ui-scale));
         background: var(--theme-hint-body-bg);
@@ -511,11 +513,25 @@
         display: grid;
         gap: calc(20px * var(--ui-scale));
         justify-items: stretch;
+        align-content: start;
+        overflow-y: auto;
+      }
+
+      #startHint .hint-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: calc(12px * var(--ui-scale));
       }
 
       #startHint h1 {
-        margin: 0 0 12px;
+        margin: 0;
         font-size: clamp(1.8rem, 3vw + 0.5rem, 2.6rem);
+      }
+
+      #startHint .hint-close-button {
+        align-self: flex-start;
+        padding: calc(6px * var(--ui-scale)) calc(14px * var(--ui-scale));
       }
 
       #startHint p {
@@ -581,7 +597,7 @@
         color: var(--theme-caption-text);
       }
 
-      #startHint .game-selection {
+      #startHint .game-selection { 
         display: grid;
         gap: calc(12px * var(--ui-scale));
         padding: 0;
@@ -596,6 +612,28 @@
         margin: 0;
         color: var(--theme-muted-text);
         font-size: 0.95rem;
+      }
+
+      #startHint .save-manager {
+        display: grid;
+        gap: calc(12px * var(--ui-scale));
+      }
+
+      #startHint .save-manager h2 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      #startHint .save-manager-description {
+        margin: 0;
+        color: var(--theme-muted-text);
+        font-size: 0.95rem;
+      }
+
+      #startHint .save-manager-empty {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--theme-caption-text);
       }
 
       #startHint .game-selection-list {
@@ -1415,7 +1453,17 @@
         </div>
         <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
-            <h1>Choose a game to start</h1>
+            <div class="hint-header">
+              <h1 id="startHintTitle">Start or manage a game</h1>
+              <button
+                id="closeStartHint"
+                type="button"
+                class="close-button hint-close-button"
+                hidden
+              >
+                Close
+              </button>
+            </div>
             <p>
               Resume a saved game, start the bundled Capybara Springs puzzle from <code>capy.json</code>,
               or import your own image or JSON file.
@@ -1423,7 +1471,8 @@
             <div id="gameSelection" class="game-selection" role="group" aria-labelledby="gameSelectionHeading">
               <h2 id="gameSelectionHeading">Start a game</h2>
               <p class="game-selection-description">
-                Select Capybara Springs or pick one of your manual saves stored in this browser.
+                Select Capybara Springs or pick one of your saves stored in this browser. Manage manual snapshots
+                below when you need to rename, export, or delete them.
               </p>
               <ul id="gameSelectionList" class="game-selection-list" role="list"></ul>
               <p id="gameSelectionEmpty" class="game-selection-empty" hidden>No saved games yet.</p>
@@ -1436,6 +1485,23 @@
                 <button type="button" class="detail-chip" data-detail-level="high">High</button>
               </div>
               <p class="detail-caption" data-detail-caption></p>
+            </div>
+            <div
+              id="saveManagerSection"
+              class="save-manager"
+              role="group"
+              aria-labelledby="saveManagerHeading"
+            >
+              <h2 id="saveManagerHeading">Manage saves</h2>
+              <p class="save-manager-description">
+                Manual saves and autosaves live in this browser. Create a snapshot to pin the current puzzle or revisit an
+                earlier run.
+              </p>
+              <button id="saveSnapshot" type="button" disabled>Save current puzzle</button>
+              <ul id="saveList" aria-live="polite" aria-labelledby="saveManagerHeading"></ul>
+              <p id="saveListEmpty" class="save-manager-empty" hidden>
+                No manual saves yet. Create one above or keep playing to autosave progress.
+              </p>
             </div>
             <div class="hint-actions">
               <button id="selectImage" type="button">Choose an image</button>
@@ -1459,7 +1525,7 @@
             role="status"
             aria-live="polite"
           >
-            <span id="progress" class="progress-message">Choose a game to start</span>
+            <span id="progress" class="progress-message">Start or manage a game</span>
             <div
               id="progressMeter"
               class="progress-meter"
@@ -1723,22 +1789,6 @@
         <button id="applyOptions" type="button" disabled>Apply changes</button>
       </div>
     </div>
-    <div
-      id="saveSheet"
-      class="sheet hidden"
-      role="dialog"
-      aria-labelledby="saveTitle"
-      aria-hidden="true"
-    >
-      <div class="sheet-header">
-        <h2 id="saveTitle">Save manager</h2>
-        <button type="button" class="close-button" data-sheet-close="save">Close</button>
-      </div>
-      <div class="sheet-body">
-        <button id="saveSnapshot" type="button" disabled>Save current puzzle</button>
-        <ul id="saveList" aria-live="polite"></ul>
-      </div>
-    </div>
         <script>
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
@@ -1752,6 +1802,9 @@
       const gameSelectionList = document.getElementById("gameSelectionList");
       const gameSelectionEmpty = document.getElementById("gameSelectionEmpty");
       const startHint = document.getElementById("startHint");
+      const startHintCloseButton = document.getElementById("closeStartHint");
+      const saveManagerSection = document.getElementById("saveManagerSection");
+      const saveListEmpty = document.getElementById("saveListEmpty");
       const hintButton = document.getElementById("hintButton");
       const resetButton = document.getElementById("resetButton");
       const previewToggle = document.getElementById("previewToggle");
@@ -1761,7 +1814,6 @@
       const settingsButton = document.getElementById("settingsButton");
       const helpButton = document.getElementById("helpButton");
       const settingsSheet = document.getElementById("settingsSheet");
-      const saveSheet = document.getElementById("saveSheet");
       const helpSheet = document.getElementById("helpSheet");
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
@@ -1802,7 +1854,7 @@
       const defaultProgressLabel =
         progressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
       const PROGRESS_MESSAGES = {
-        idle: "Choose a game to start",
+        idle: "Start or manage a game",
         loading: "Loading puzzle…",
         active: "Keep colouring",
         generating: "Processing image…",
@@ -3124,7 +3176,7 @@
                 ? metadata.trim()
                 : null;
             state.sourceTitle = metadataTitle || "External data";
-            startHint.classList.add("hidden");
+            hideStartScreen();
             logDebug(`Loading external puzzle data: ${state.sourceTitle}`);
             loadImage(dataUrl);
           },
@@ -3233,9 +3285,18 @@
       selectButton.addEventListener("click", () => fileInput.click());
       importButton.addEventListener("click", () => fileInput.click());
       settingsButton.addEventListener("click", () => openSheet(settingsSheet));
-      saveManagerButton.addEventListener("click", () => openSheet(saveSheet));
+      saveManagerButton.addEventListener("click", () => showStartScreen({ scrollTo: "saves" }));
       if (helpButton) {
         helpButton.addEventListener("click", () => openSheet(helpSheet));
+      }
+
+      if (startHintCloseButton) {
+        startHintCloseButton.addEventListener("click", () => {
+          hideStartScreen();
+          if (saveManagerButton && !saveManagerButton.disabled) {
+            saveManagerButton.focus();
+          }
+        });
       }
 
       if (fullscreenButton) {
@@ -3275,8 +3336,6 @@
           const target = event.currentTarget.getAttribute("data-sheet-close");
           if (target === "settings") {
             closeSheet(settingsSheet);
-          } else if (target === "save") {
-            closeSheet(saveSheet);
           } else if (target === "help") {
             closeSheet(helpSheet);
           }
@@ -3284,7 +3343,16 @@
       }
 
       startHint.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.key === "Escape") {
+          if (!startHint.classList.contains("hidden") && (state.puzzle || state.saves.length > 0)) {
+            hideStartScreen();
+            if (saveManagerButton && !saveManagerButton.disabled) {
+              saveManagerButton.focus();
+            }
+          }
+          return;
+        }
+        if ((event.key === "Enter" || event.key === " ") && event.target === startHint) {
           event.preventDefault();
           fileInput.click();
         }
@@ -3855,6 +3923,31 @@
         sheet.setAttribute("aria-hidden", "true");
       }
 
+      function showStartScreen(options = {}) {
+        if (!startHint) return;
+        startHint.classList.remove("hidden");
+        startHint.setAttribute("aria-hidden", "false");
+        const { focus = true, scrollTo } = options;
+        if (focus) {
+          requestAnimationFrame(() => {
+            if (document.activeElement !== startHint) {
+              startHint.focus();
+            }
+          });
+        }
+        if (scrollTo === "saves" && saveManagerSection) {
+          requestAnimationFrame(() => {
+            saveManagerSection.scrollIntoView({ block: "start" });
+          });
+        }
+      }
+
+      function hideStartScreen() {
+        if (!startHint) return;
+        startHint.classList.add("hidden");
+        startHint.setAttribute("aria-hidden", "true");
+      }
+
       function updatePreviewState() {
         if (!previewToggle) return;
         if (!state.puzzle) {
@@ -4101,7 +4194,7 @@
         resetPuzzleUI();
         state.sourceUrl = dataUrl;
         state.sourceTitle = sampleTitle || "Sample puzzle";
-        startHint.classList.add("hidden");
+        hideStartScreen();
         const label = detailConfig ? detailConfig.label : null;
         const logDescriptor = detailConfig?.logDescriptor || (label ? label.toLowerCase() : null);
         const loadOptions = announce
@@ -4145,7 +4238,7 @@
           if (applied) {
             state.sourceUrl = DEFAULT_GAME_SOURCE.path;
             state.sourceTitle = descriptorTitle || DEFAULT_GAME_SOURCE.path || "Puzzle";
-            startHint.classList.add("hidden");
+            hideStartScreen();
             setProgressMessage("active");
             if (!announce) {
               logDebug(`Loaded ${state.sourceTitle} from ${DEFAULT_GAME_SOURCE.path}`);
@@ -4168,6 +4261,9 @@
         downloadBtn.disabled = !hasPuzzle;
         saveSnapshotBtn.disabled = !hasPuzzle;
         saveManagerButton.disabled = !hasPuzzle && state.saves.length === 0;
+        if (startHintCloseButton) {
+          startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
+        }
       }
 
       function renderDebugLog() {
@@ -4468,7 +4564,7 @@
                 title: resolvedTitle,
               });
               if (applied) {
-                startHint.classList.add("hidden");
+                hideStartScreen();
                 state.sourceUrl = payload.sourceUrl || null;
                 logDebug(`Imported puzzle from JSON: ${resolvedTitle}`);
               } else {
@@ -4493,7 +4589,7 @@
           if (typeof result === "string") {
             state.sourceUrl = result;
             state.sourceTitle = file.name || "Imported image";
-            startHint.classList.add("hidden");
+            hideStartScreen();
             logDebug(`Generating puzzle from image: ${state.sourceTitle}`);
             loadImage(result);
           } else {
@@ -4793,7 +4889,7 @@
           title: resolvedTitle,
         });
         if (applied) {
-          startHint.classList.add("hidden");
+          hideStartScreen();
         }
         return applied;
       }
@@ -7234,7 +7330,7 @@
           if (applied) {
             state.sourceUrl = latest.data.sourceUrl ?? null;
             state.sourceTitle = descriptor;
-            startHint.classList.add("hidden");
+            hideStartScreen();
             logDebug(`Restored previous session from ${latest.origin || "backup storage"}`);
             return true;
           }
@@ -7832,6 +7928,7 @@
 
       function refreshSaveList() {
         saveList.innerHTML = "";
+        const hasEntries = Array.isArray(state.saves) && state.saves.length > 0;
         for (const entry of state.saves) {
           const item = document.createElement("li");
           item.className = "save-entry";
@@ -7853,6 +7950,9 @@
             </div>
           `;
           saveList.appendChild(item);
+        }
+        if (saveListEmpty) {
+          saveListEmpty.hidden = hasEntries;
         }
         updateCommandStates();
         refreshGameSelection();
@@ -7882,7 +7982,7 @@
         ) {
           state.sourceUrl = entry.data.sourceUrl ?? null;
           state.sourceTitle = entry.title || state.sourceTitle;
-          startHint.classList.add("hidden");
+          hideStartScreen();
           logDebug(`Loaded save: ${entry.title || "Untitled puzzle"}`);
         }
       }
