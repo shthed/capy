@@ -14,9 +14,13 @@ permissions:
 jobs:
   deploy-branch:
     runs-on: ubuntu-latest
+    # Cancel in-progress deployments to prevent 400 errors from actions/deploy-pages@v4
+    # when multiple runs attempt to create overlapping GitHub Pages deployments.
+    # This ensures the latest commit wins and avoids "deployment request failed due to
+    # in progress deployment" errors.
     concurrency:
       group: pages-deploy
-      cancel-in-progress: false
+      cancel-in-progress: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
