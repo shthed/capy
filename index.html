@@ -1633,6 +1633,7 @@
             <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
             <li><kbd>Right click</kbd> Select the colour under the pointer (configurable in Settings).</li>
             <li>Select a palette swatch to set the active colour and flash every matching region.</li>
+            <li>Enable Easy difficulty in Settings to let clicks auto-select the tapped region's colour.</li>
             <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
             <li>
               <kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas. Switch the right-click action in Settings if you
@@ -1696,6 +1697,16 @@
             <input id="showStatusToggle" type="checkbox" />
             <span>Show status bar with filled/remaining counts after imports</span>
           </label>
+          <label class="control">
+            <span>Difficulty</span>
+            <select id="difficultySelect">
+              <option value="normal">Standard</option>
+              <option value="easy">Easy</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Easy mode lets you click any region to auto-select its colour before filling it.
+          </p>
         </section>
         <section class="sheet-section" aria-labelledby="hintsControlsHeading">
           <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
@@ -1867,6 +1878,7 @@
       const hintFadeDurationInput = document.getElementById("hintFadeDuration");
       const hintIntensityInput = document.getElementById("hintIntensity");
       const rightClickActionSelect = document.getElementById("rightClickAction");
+      const difficultySelect = document.getElementById("difficultySelect");
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
       const showStatusToggle = document.getElementById("showStatusToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
@@ -1930,6 +1942,8 @@
       const MAX_HINT_INTENSITY = 0.9;
       const DEFAULT_RIGHT_CLICK_ACTION = "select";
       const VALID_RIGHT_CLICK_ACTIONS = new Set(["select", "pan"]);
+      const DEFAULT_DIFFICULTY = "normal";
+      const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
@@ -2159,15 +2173,23 @@
         if (!state.puzzle) return;
         const cache = ensureRenderCache();
         if (!cache.ready) return;
-        if (cache.outlineLayer && cache.outlineLayerCtx) {
+        const completedColors = getCompletedColorIds();
+        const hideCompleted = completedColors.size > 0;
+        const geometries = hideCompleted
+          ? cache.regions.filter((geometry) => !completedColors.has(geometry.colorId))
+          : cache.regions;
+        if (geometries.length === 0) {
+          return;
+        }
+        if (!hideCompleted && cache.outlineLayer && cache.outlineLayerCtx) {
           if (cache.outlineLayerDirty && !rasterizeOutlineLayer(cache)) {
-            strokeOutlinesDirect(cache);
+            strokeOutlinesDirect(cache, geometries);
             return;
           }
           puzzleCtx.drawImage(cache.outlineLayer, 0, 0);
           return;
         }
-        strokeOutlinesDirect(cache);
+        strokeOutlinesDirect(cache, geometries);
       }
 
       function createRenderCache() {
@@ -2191,14 +2213,14 @@
         };
       }
 
-      function strokeOutlinesDirect(cache) {
+      function strokeOutlinesDirect(cache, geometries) {
         const scale = cache.renderScale > 0 ? cache.renderScale : 1;
         withRenderScale(puzzleCtx, scale, () => {
           puzzleCtx.strokeStyle = backgroundInk.outline;
           puzzleCtx.lineWidth = cache.strokeWidth;
           puzzleCtx.lineJoin = "round";
           puzzleCtx.lineCap = "round";
-          strokeGeometries(puzzleCtx, cache.regions);
+          strokeGeometries(puzzleCtx, Array.isArray(geometries) ? geometries : cache.regions);
         });
       }
 
@@ -2893,6 +2915,7 @@
           hintFadeDuration: DEFAULT_HINT_FADE_DURATION,
           hintIntensity: DEFAULT_HINT_INTENSITY,
           rightClickAction: DEFAULT_RIGHT_CLICK_ACTION,
+          difficulty: DEFAULT_DIFFICULTY,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
@@ -3157,6 +3180,17 @@
           state.settings.rightClickAction = action;
           rightClickActionSelect.value = action;
         }
+        if (settings.difficulty != null) {
+          const difficulty = resolveDifficulty(settings.difficulty);
+          state.settings.difficulty = difficulty;
+          if (difficultySelect) {
+            difficultySelect.value = difficulty;
+          }
+        } else if (difficultySelect) {
+          const difficulty = resolveDifficulty(state.settings.difficulty);
+          state.settings.difficulty = difficulty;
+          difficultySelect.value = difficulty;
+        }
         if (typeof settings.showRegionLabels === "boolean") {
           applyRegionLabelVisibility(settings.showRegionLabels, {
             skipLog: true,
@@ -3418,6 +3452,21 @@
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
         scheduleAutosave("settings-hint-animations");
       });
+
+      if (difficultySelect) {
+        difficultySelect.value = resolveDifficulty(difficultySelect.value);
+        difficultySelect.addEventListener("change", () => {
+          const difficulty = resolveDifficulty(difficultySelect.value);
+          state.settings.difficulty = difficulty;
+          difficultySelect.value = difficulty;
+          logDebug(
+            difficulty === "easy"
+              ? "Difficulty set to Easy – clicks auto-select matching colours"
+              : "Difficulty set to Standard – clicks require the active colour"
+          );
+          scheduleAutosave("settings-difficulty");
+        });
+      }
 
       if (hintFadeDurationInput) {
         hintFadeDurationInput.value = String(normalizeHintFadeDuration(hintFadeDurationInput.value));
@@ -3831,17 +3880,28 @@
           return "already-filled";
         }
         if (region.colorId !== state.activeColor) {
-          const paletteColor = getPaletteEntry(region.colorId);
-          const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
-          if (state.settings.animateHints) {
-            flashRegion(regionId, { paletteColor, tint: fallbackTint, includeFilled: false });
-            flashColorRegions(region.colorId, {
-              paletteColor,
-              tint: fallbackTint,
-              onlyUnfilled: true,
-            });
+          const difficulty = resolveDifficulty(state.settings.difficulty);
+          if (difficulty === "easy") {
+            activateColor(region.colorId, { flash: false });
+          } else {
+            const paletteColor = getPaletteEntry(region.colorId);
+            const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
+            if (state.settings.animateHints) {
+              flashRegion(regionId, { paletteColor, tint: fallbackTint, includeFilled: false });
+              flashColorRegions(region.colorId, {
+                paletteColor,
+                tint: fallbackTint,
+                onlyUnfilled: true,
+              });
+            }
+            flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+            logDebug(
+              `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
+            );
+            return "mismatch";
           }
-          flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+        }
+        if (region.colorId !== state.activeColor) {
           logDebug(
             `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
           );
@@ -6000,9 +6060,12 @@
         if (wantsRightClickSelect) {
           const hit = getRegionFromEvent(event);
           if (hit && hit.region) {
-            event.preventDefault();
-            activateColor(hit.region.colorId);
-            return;
+            const remaining = getRegionsByColor(hit.region.colorId, { includeFilled: false });
+            if (remaining.length > 0) {
+              event.preventDefault();
+              activateColor(hit.region.colorId);
+              return;
+            }
           }
         }
         const auxButton = event.button === 1 || event.button === 2;
@@ -6715,6 +6778,16 @@
         return DEFAULT_RIGHT_CLICK_ACTION;
       }
 
+      function resolveDifficulty(value) {
+        if (typeof value === "string") {
+          const normalized = value.trim().toLowerCase();
+          if (VALID_DIFFICULTY_LEVELS.has(normalized)) {
+            return normalized;
+          }
+        }
+        return DEFAULT_DIFFICULTY;
+      }
+
       function autoAdvanceColor(currentColorId) {
         if (!state.puzzle) return;
         const remainingForColor = getRegionsByColor(currentColorId, { includeFilled: false });
@@ -6738,6 +6811,23 @@
         });
       }
 
+      function getCompletedColorIds() {
+        const completed = new Set();
+        if (!state.puzzle) return completed;
+        const pendingColors = new Set();
+        for (const region of state.puzzle.regions) {
+          if (!state.filled.has(region.id)) {
+            pendingColors.add(region.colorId);
+          }
+        }
+        for (const entry of state.puzzle.palette) {
+          if (!pendingColors.has(entry.id)) {
+            completed.add(entry.id);
+          }
+        }
+        return completed;
+      }
+
       function getPaletteEntry(colorId) {
         if (!state.puzzle) return null;
         return state.puzzle.palette.find((entry) => entry.id === colorId) || null;
@@ -6749,13 +6839,19 @@
         const cache = ensureRenderCache();
         if (!cache.ready) return;
         const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+        const strokeWidth = cache.strokeWidth > 0 ? cache.strokeWidth : 1;
         withRenderScale(puzzleCtx, scale, () => {
           puzzleCtx.fillStyle = fillStyle;
+          puzzleCtx.strokeStyle = fillStyle;
+          puzzleCtx.lineWidth = strokeWidth;
+          puzzleCtx.lineJoin = "round";
+          puzzleCtx.lineCap = "round";
           if (SUPPORTS_PATH2D) {
             for (const region of regions) {
               const geometry = cache.regionsById.get(region.id);
               if (!geometry?.path) continue;
               puzzleCtx.fill(geometry.path);
+              puzzleCtx.stroke(geometry.path);
             }
             return;
           }
@@ -6774,6 +6870,7 @@
               puzzleCtx.closePath();
             }
             puzzleCtx.fill();
+            puzzleCtx.stroke();
           }
         });
       }
@@ -6935,6 +7032,7 @@
           rightClickAction: resolveRightClickAction(
             settingsSource.rightClickAction ?? state.settings.rightClickAction
           ),
+          difficulty: resolveDifficulty(settingsSource.difficulty ?? state.settings.difficulty),
           uiScale:
             Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
               ? clamp(settingsSource.uiScale, 0.6, 1.35)
@@ -7042,6 +7140,7 @@
             hintFadeDuration: normalizeHintFadeDuration(state.settings.hintFadeDuration),
             hintIntensity: normalizeHintIntensity(state.settings.hintIntensity),
             rightClickAction: resolveRightClickAction(state.settings.rightClickAction),
+            difficulty: resolveDifficulty(state.settings.difficulty),
             uiScale:
               Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
                 ? clamp(state.settings.uiScale, 0.6, 1.35)

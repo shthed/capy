@@ -229,9 +229,9 @@ skips optional fields.
 2. **Tune generation & appearance.** Open **Settings** to slide out the
    sidecar and tweak palette size, minimum region area, resize detail, sample
   rate (for faster clustering), iteration count, smoothing passes,
-  auto-advance, the status bar toggle, hint animations, fade timing, overlay
-  intensity, the right-click action, the interface theme, the canvas background
-  colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
+  auto-advance, the difficulty selector, the status bar toggle, hint animations,
+  fade timing, overlay intensity, the right-click action, the interface theme,
+  the canvas background colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
    when working from an image source, then expand the **Advanced options**
    accordion to edit the optional art prompt metadata before exporting or
    regenerating a scene.
@@ -239,8 +239,9 @@ skips optional fields.
    while the **Preview** button floods the entire viewport with a fullscreen
    comparison of the clustered artwork.
 4. **Fill regions.** Pick a colour from the bottom dock, click any numbered cell,
-   and the region fills in. Auto-advance can hop to the next incomplete colour
-   once you finish the current hue.
+   and the region fills in. Enable Easy difficulty if you'd like clicks to
+   auto-select the tapped region's colour before painting. Auto-advance can hop
+   to the next incomplete colour once you finish the current hue.
 5. **Save or export.** The save manager captures snapshots (including progress,
    generator options, and source metadata) in localStorage using a compact
    schema. Export the active puzzle as JSON at any time.
@@ -292,7 +293,8 @@ before retrying.
   window so you can keep painting while adjusting sliders. Controls include
   colours, minimum region size, resize detail, sample rate, k-means iterations,
   smoothing passes, an interface theme switcher, a background colour picker, the
-  interface scale slider, toggles for auto-advance, the status bar, hint animations, and the Palette sort menu. A
+  interface scale slider, toggles for auto-advance, Easy/Standard difficulty,
+  the status bar, hint animations, and the Palette sort menu. A
   dedicated Hints & controls section now lets you tune fade duration, overlay intensity, and remap the right-click action.
   The panel also houses the JSON export action, mirrors the Low/Medium/High detail
   chips so you can reload the sample with tuned parameters without leaving the
