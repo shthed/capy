@@ -108,13 +108,16 @@ single `index.html` document—no build tools or extra runtime required.
   command rail and palette scale cleanly on phones, tablets, or desktops while
   the artwork stays centred.
 - **Contextual hinting.** Trigger highlight pulses for the current colour or let
-  the app surface the smallest unfinished region when you need a nudge.
-- **Instant preview.** Temporarily flood every region with its final colour on
-  the main canvas so you can compare progress without leaving the play surface.
-- **Sidecar panels.** Settings, Help, and the Save manager now dock to the
-  right as floating panels instead of modal overlays, so you can keep painting
-  while tweaking generator sliders or reviewing shortcuts. Each panel remembers
-  its scroll position and stays interactive alongside the canvas.
+  the app surface the smallest unfinished region when you need a nudge. Hints now
+  flash with the region's true paint colour and ease out slowly, and Settings exposes
+  controls for tuning the fade duration and overlay intensity.
+- **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
+  artwork at its final resolution without leaving the play surface.
+- **Sidecar panels.** Settings and Help dock to the right as floating panels
+  instead of modal overlays, so you can keep painting while tweaking generator
+  sliders or reviewing shortcuts. Save management now lives inside the start
+  screen so manual snapshots share the same launcher surface. Each panel
+  remembers its scroll position and stays interactive alongside the canvas.
 - **Palette manager.** Swipe through edge-to-edge swatches rendered as simple,
   gutterless colour blocks so the dock stays packed. Completed colours collapse
   out of view once every region is filled, tooltips call out how many areas are
@@ -272,9 +275,9 @@ before retrying.
   icon-only controls. Hint flashes tiny regions, Reset clears progress, Preview
   reveals the clustered artwork, Sample reloads the bundled capybara puzzle,
   Fullscreen pushes the stage edge-to-edge (and exits back to windowed mode),
-  Import accepts images or JSON puzzles, Save manager opens the local snapshot
-  vault, Help opens an in-app manual plus live
-  debug log, and Settings reveals generator/gameplay options.
+  Import accepts images or JSON puzzles, Save manager opens the combined start &
+  save screen, Help opens an in-app manual plus live debug log, and Settings
+  reveals generator/gameplay options.
 - **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`).
   The canvas renders outlines, remaining numbers, and filled regions, respects
   auto-advance / hint animation toggles, and supports smooth pan + zoom so you
@@ -299,9 +302,9 @@ before retrying.
   Low/Medium/High chips with a live caption describing the active preset so you
   know how many colours, what minimum region size, and which resize edge (and
   approximate region count) the next sample reload will use.
-- **Save manager panel** – Lists every stored snapshot without blocking the
-  canvas. Each entry shows completion progress with quick actions to load,
-  rename, export, or delete the save.
+- **Start & save screen** – Launch puzzles, reload the capybara sample, and
+  manage manual snapshots from the same dialog. Each entry shows completion
+  progress with quick actions to load, rename, export, or delete the save.
 - **Help panel** – Lists every command button, summarizes canvas gestures, and
   surfaces a live debug log so contributors can confirm state changes while
   testing.
@@ -315,8 +318,9 @@ before retrying.
 
 ## Keyboard and accessibility notes
 
-- The hint overlay is focusable and reacts to Enter/Space to trigger the file
-  picker, keeping the first interaction accessible.
+- The start/saves overlay stays focusable: press Enter/Space while it has
+  focus to trigger the file picker, or hit Escape (once a puzzle or save exists)
+  to close it without leaving the keyboard.
 - The Help panel’s debug log uses an `aria-live="polite"` region for gameplay
   telemetry so assistive tech announces save loads, resets, and palette
   activity.
