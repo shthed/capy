@@ -231,7 +231,12 @@ skips optional fields.
    palette size, minimum region area, resize detail, sample rate (for faster
    clustering), iteration count, smoothing passes, and the optional art prompt
    metadata, then hop into **Settings** to refine gameplay toggles, palette
-   sorting, themes, background colour, UI scale, or hint behaviour.
+   sorting, difficulty, auto-advance, hint behaviour, fade timing, overlay
+   intensity, right-click actions, themes, background colour, interface scale,
+   the status bar toggle, and the palette sort menu. Apply changes instantly
+   when working from an image source, then expand the **Advanced options**
+   accordion in Settings to edit the optional art prompt metadata before
+   exporting or regenerating a scene.
 3. **Explore the puzzle.** The game canvas shows outlines and number badges,
    while the **Preview** button floods the entire viewport with a fullscreen
    comparison of the clustered artwork.
@@ -268,14 +273,16 @@ before retrying.
 
 ## UI guide
 
-- **Command rail** – A slim, right-aligned header exposing Hint, Reset, Preview,
-  Generator, Fullscreen, Import, Save manager, Help, and Settings buttons
-  through icon-only controls. Hint flashes tiny regions, Reset clears progress,
+- **Command rail** – A slim header exposing Hint, Reset, Preview, Generator,
+  Fullscreen, Import, Save manager, Help, and Settings buttons through
+  icon-forward controls. Hint flashes tiny regions, Reset clears progress,
   Preview reveals the clustered artwork, Generator opens the dedicated
   clustering sheet, Fullscreen pushes the stage edge-to-edge (and exits back to
   windowed mode), Import accepts images or JSON puzzles, Save manager opens the
   combined start & save screen, Help opens an in-app manual plus live debug log,
-  and Settings reveals gameplay, palette, and accessibility options.
+  and Settings reveals gameplay, palette, and accessibility options. The rail
+  respects safe-area insets, wraps on narrow layouts, and hides labels when the
+  compact command mode is active.
 - **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`).
   The canvas renders outlines, remaining numbers, and filled regions, respects
   auto-advance / hint animation toggles, and supports smooth pan + zoom so you
@@ -286,16 +293,21 @@ before retrying.
 - **Preview mode** – Triggered by the Preview button. The puzzle canvas
   temporarily renders every region in its target colour so you can inspect the
   clustered output before painting without leaving the play surface.
-- **Settings panel** – Slides in beside the playfield instead of taking over the
-  window so you can keep painting while adjusting gameplay and accessibility
-  sliders. Controls include auto-advance, hint animations, fade duration,
-  overlay intensity, right-click behaviour, palette sorting, interface theme,
-  background colour, UI scale, and the optional status bar toggle.
-- **Generator sheet** – Collects the palette size, minimum region, resize,
-  sampling, iteration, and smoothing sliders alongside the capybara detail
-  chips, art prompt metadata, JSON export action, and Apply button that
-  regenerates the current source image.
-- **Detail presets** – The onboarding hint and Generator sheet both surface the
+- **Settings panel** – Slides in beside the playfield so you can keep painting
+  while adjusting sliders. Controls include palette size, minimum region area,
+  resize detail, sample rate, k-means iterations, smoothing passes, interface
+  theme, background colour, interface scale, palette sorting, auto-advance,
+  difficulty, the status bar toggle, hint animations, fade duration, overlay
+  intensity, right-click behaviour, and the palette sort menu. A dedicated
+  Hints & controls section lets you fine-tune those overlays, and the JSON
+  export action plus capybara detail chips stay within reach. Expand the
+  **Advanced options** accordion to edit the optional art prompt metadata before
+  exporting or regenerating a scene.
+- **Generator sheet** – Collects palette size, minimum region threshold,
+  resize/sampling sliders, iteration count, smoothing passes, the capybara
+  detail chips, art prompt metadata, and the Apply button that regenerates the
+  current source image.
+- **Detail presets** – The onboarding hint and Settings panel both surface the
   Low/Medium/High chips with a live caption describing the active preset so you
   know how many colours, what minimum region size, and which resize edge (and
   approximate region count) the next sample reload will use.

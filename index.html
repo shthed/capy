@@ -13,8 +13,12 @@
       applyViewTransform/applyZoom.
     - Puzzle state feeds renderPuzzle → drawOutlines/drawNumbers; ensureRenderCache keeps canvases
       hydrated while renderPreview mirrors the cache.
+    - Generation pipeline: loadImage → createPuzzleData orchestrates quantization/segmentation and
+      palette prep; applyPuzzleResult hydrates state for saves, regenerations, and exports.
     - Start screen + save manager run on createGameSaveManager; autosave scheduling refreshes
       command enable states and menus.
+    - Theme toggles update CSS custom properties; applyTheme/applyBackgroundColor keep command rail,
+      sheets, and dock tokens aligned.
     - window.capyGenerator exposes devtools entry points; keep signatures stable when reorganizing
       wiring.
 
@@ -23,7 +27,7 @@
     2. View state, pointer gestures, canvas math helpers, and resetView/applyViewTransform glue.
     3. Generation + rendering pipeline (loadDefaultPuzzle/loadSamplePuzzle, createPuzzleData,
        renderPuzzle/renderPreview).
-    4. Palette/command interactions, keyboard handlers, hint animation loop, and theming prefs.
+    4. Palette/command interactions, keyboard/mouse handlers, hint animation loop, and theming prefs.
     5. Autosave + storage wiring, save manager refresh, and window.capyGenerator exports.
 
     Key functions
@@ -37,9 +41,14 @@
     - renderPuzzle() / renderPreview(): Draw the active puzzle and thumbnail preview from the cache.
     - renderPalette(): Rebuild the palette dock + accessibility metadata.
     - attemptFillRegion(hit, { label }): Paint interaction that triggers autosave scheduling.
+    - useHint(): Coordinate palette flashing + overlay animations to guide the next region.
     - updateCommandStates(): Enable/disable command rail buttons based on puzzle state.
     - scheduleAutosave(reason) / persistAutosave(reason): Manage background save cadence.
     - saveCurrentSnapshot(): Add a manual save entry and refresh the menus.
+    - refreshGameSelection() / refreshSaveList(): Render launcher + manager items from shared
+      templates.
+    - createGameSaveManager(): Wrap persistence with list, subscribe, and persist helpers for UI
+      consumers.
     - applyTheme(theme, options) / applyBackgroundColor(hex, options): Refresh UI theming tokens and
       persist preferences.
   -->
@@ -297,8 +306,8 @@
         left: calc(env(safe-area-inset-left, 0px) + 12px);
         right: calc(env(safe-area-inset-right, 0px) + 12px);
         display: flex;
-        justify-content: flex-start;
         align-items: center;
+        justify-content: flex-start;
         flex-wrap: wrap;
         gap: var(--command-rail-gap-current);
         padding: 0;
@@ -376,6 +385,7 @@
 
       body.compact-commands #commandRail {
         gap: calc(4px * var(--ui-scale));
+        flex-wrap: nowrap;
       }
 
       body.compact-commands #commandRail .label {
