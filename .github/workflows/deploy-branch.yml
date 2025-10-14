@@ -14,8 +14,12 @@ permissions:
 jobs:
   deploy-branch:
     runs-on: ubuntu-latest
-    outputs:
-      has-pr: ${{ steps.check-pr.outputs.result }}
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check if branch has an open PR
         id: check-pr
@@ -46,7 +50,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.ref }}
           path: source
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Configure git credentials for authenticated operations
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
@@ -56,13 +60,37 @@ jobs:
           git config --global credential.helper store
           echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
 
+      - name: Restore gh-pages cache
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
+        uses: actions/cache/restore@v4
+        with:
+          path: gh-pages
+          key: gh-pages-${{ github.repository }}-${{ github.run_id }}
+          restore-keys: |
+            gh-pages-${{ github.repository }}-
+
+      - name: Validate gh-pages cache
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
+        run: |
+          # Check if gh-pages exists but is not a valid git repository
+          if [ -d "gh-pages" ] && [ ! -d "gh-pages/.git" ]; then
+            echo "Warning: gh-pages directory exists but is not a valid git repository"
+            echo "Removing invalid gh-pages directory from cache"
+            rm -rf gh-pages
+          fi
+
       - name: Setup gh-pages branch
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
           # Check if gh-pages branch exists remotely
-          if git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
+          if [ -d "gh-pages/.git" ]; then
+            echo "gh-pages cache exists, updating it"
+            cd gh-pages
+            git fetch origin gh-pages
+            git reset --hard origin/gh-pages
+          elif git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
             echo "gh-pages branch exists, cloning it"
-            git clone --branch gh-pages --single-branch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
+            git clone --depth=1 --branch gh-pages --single-branch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
           else
             echo "gh-pages branch doesn't exist, initializing it"
             mkdir -p gh-pages
@@ -124,9 +152,85 @@ jobs:
 
             return branches;
 
+      - name: Fetch main branch commits
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
+        id: fetch-main-commits
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Fetch last 3 commits from main branch
+            const { data: commits } = await github.rest.repos.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: 'main',
+              per_page: 3
+            });
+
+            // For each commit, search for associated PRs
+            const commitsWithPRs = await Promise.all(commits.map(async (commit) => {
+              let prs = [];
+              try {
+                // Search for PRs that include this commit
+                const { data: prData } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  commit_sha: commit.sha
+                });
+                prs = prData.map(pr => ({
+                  number: pr.number,
+                  title: pr.title,
+                  url: pr.html_url
+                }));
+              } catch (error) {
+                console.log(`Warning: Could not fetch PRs for commit ${commit.sha}: ${error.message}`);
+                // Continue with empty prs array
+              }
+
+              return {
+                sha: commit.sha,
+                shortSha: commit.sha.substring(0, 7),
+                message: commit.commit.message,
+                author: commit.commit.author.name,
+                date: commit.commit.author.date,
+                timestamp: new Date(commit.commit.author.date).getTime(),
+                htmlUrl: commit.html_url,
+                prs: prs
+              };
+            }));
+
+            const mainBranchData = {
+              commits: commitsWithPRs,
+              lastCommitDate: commits[0]?.commit.author.date,
+              lastCommitTimestamp: commits[0] ? new Date(commits[0].commit.author.date).getTime() : null,
+              deploymentTimestamp: Date.now()
+            };
+
+            fs.writeFileSync('main-branch-data.json', JSON.stringify(mainBranchData, null, 2));
+
+            return mainBranchData;
+
       - name: Deploy branch content
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
+          set -euo pipefail
+
+          # Initialize has_changes early
+          echo "has_changes=false" >> $GITHUB_ENV
+
+          # Validate gh-pages is a valid git repository before proceeding
+          if [ ! -d "gh-pages/.git" ]; then
+            echo "gh-pages is not a valid git repository, re-cloning..."
+            rm -rf gh-pages
+            if git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
+              git clone --depth=1 --branch gh-pages --single-branch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
+            else
+              echo "Error: gh-pages branch does not exist remotely and should have been created by Setup gh-pages branch step"
+              exit 1
+            fi
+          fi
+
           cd gh-pages
           BRANCH_FOLDER="${{ steps.branch-name.outputs.safe_name }}"
 
@@ -134,13 +238,17 @@ jobs:
           if [ -z "$BRANCH_FOLDER" ]; then
             echo "Deploying main branch to root"
             # For main branch, copy files directly to root (including index.html)
-            rsync -av --exclude='.git' \
+            # Preserve existing branch folders and .git directory
+            # --delete removes destination files not in source, EXCEPT excluded paths
+            rsync -a --delete \
+                      --exclude='.git/' \
                       --exclude='node_modules' \
                       --exclude='test-results' \
                       --exclude='playwright-report' \
                       --exclude='blob-report' \
                       --exclude='artifacts' \
                       --exclude='README.md' \
+                      --exclude='branch.html' \
                       ../source/ ./
           else
             # For other branches, deploy to subfolder
@@ -155,7 +263,7 @@ jobs:
 
             # Copy content from source (excluding .git, node_modules, etc)
             echo "Copying content to: $BRANCH_FOLDER"
-            rsync -av --exclude='.git' \
+            rsync -a --exclude='.git/' \
                       --exclude='node_modules' \
                       --exclude='test-results' \
                       --exclude='playwright-report' \
@@ -164,22 +272,51 @@ jobs:
                       ../source/ "$BRANCH_FOLDER/"
           fi
 
+          # Safety check: Verify .git directory still exists after rsync
+          if [ ! -d ".git" ]; then
+            echo "Error: .git directory is missing after rsync operation"
+            exit 1
+          fi
+
           # Clean up old branches that no longer have open PRs
           echo "Cleaning up branches without open PRs..."
           if [ -f ../pr-branches.json ]; then
             # Get list of branches with open PRs
             ACTIVE_BRANCHES=$(cat ../pr-branches.json | grep -o '"safeName": "[^"]*"' | cut -d'"' -f4)
 
-            # Check each folder and remove if not in active list
+            # Define protected directories that should never be removed during cleanup
+            # These are common names for persistent site assets (docs, stylesheets, images, etc.)
+            # that may exist in gh-pages for deployment purposes but not in source branches
+            PROTECTED_DIRS=("docs" "assets" "static" "vendor" "lib" "css" "js" "images" "fonts")
+
+            # Collect folders to remove first, then remove them
+            # This prevents issues with directory iteration during deletion
+            FOLDERS_TO_REMOVE=()
             for dir in */; do
+              [ -d "$dir" ] || continue
               folder_name="${dir%/}"
-              # Skip branch.html and README.md
-              if [ "$folder_name" != "branch.html" ] && [ "$folder_name" != "README.md" ]; then
+
+              # Skip protected directories and files
+              is_protected=false
+              for protected in "${PROTECTED_DIRS[@]}"; do
+                if [ "$folder_name" = "$protected" ]; then
+                  is_protected=true
+                  break
+                fi
+              done
+
+              # Only consider removing if it's not protected and not in active branches
+              if [ "$is_protected" = false ]; then
                 if ! echo "$ACTIVE_BRANCHES" | grep -q "^${folder_name}$"; then
-                  echo "Removing stale deployment: $folder_name"
-                  rm -rf "$folder_name"
+                  FOLDERS_TO_REMOVE+=("$folder_name")
                 fi
               fi
+            done
+
+            # Remove stale folders
+            for folder_name in "${FOLDERS_TO_REMOVE[@]}"; do
+              echo "Removing stale deployment: $folder_name"
+              rm -rf "$folder_name" || echo "Warning: Could not remove $folder_name"
             done
           fi
 
@@ -266,7 +403,76 @@ jobs:
                 color: white;
                 margin-left: 8px;
               }
+              .main-details {
+                margin-top: 10px;
+                font-size: 0.9em;
+                color: #586069;
+              }
+              .commit-list {
+                margin-top: 8px;
+                padding-left: 15px;
+                border-left: 2px solid #e1e4e8;
+              }
+              .commit-item {
+                margin: 5px 0;
+                font-size: 0.85em;
+              }
+              .commit-message {
+                color: #24292e;
+                font-weight: 500;
+              }
+              .commit-message a {
+                font-family: 'Courier New', Courier, monospace;
+                font-weight: 600;
+              }
+              .commit-author {
+                color: #586069;
+              }
+              .commit-sha {
+                font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 0.9em;
+                color: #0366d6;
+                text-decoration: none;
+              }
+              .commit-sha:hover {
+                text-decoration: underline;
+              }
+              .commit-prs {
+                margin-top: 3px;
+                font-size: 0.8em;
+              }
+              .commit-pr-link {
+                color: #6f42c1;
+                text-decoration: none;
+                margin-right: 8px;
+              }
+              .commit-pr-link:hover {
+                text-decoration: underline;
+              }
             </style>
+            <script>
+              // Function to format timestamp to local timezone
+              function formatLocalTime(timestamp) {
+                if (!timestamp) return 'N/A';
+                const date = new Date(timestamp);
+                return date.toLocaleString(undefined, {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  timeZoneName: 'short'
+                });
+              }
+
+              // Convert all timestamps to local timezone after page loads
+              document.addEventListener('DOMContentLoaded', function() {
+                document.querySelectorAll('[data-timestamp]').forEach(function(element) {
+                  const timestamp = parseInt(element.getAttribute('data-timestamp'));
+                  element.textContent = formatLocalTime(timestamp);
+                });
+              });
+            </script>
           </head>
           <body>
             <h1>Capy Image Generator - Branch Deployments</h1>
@@ -274,17 +480,55 @@ jobs:
               <strong>Note:</strong> The main branch is always deployed to the root.
               Other branches with open pull requests are deployed to subfolders.
               Branches are sorted by most recently updated first.
+              All dates and times are shown in your local timezone.
             </div>
             <ul>
           EOF
 
-          # Add main branch first (always at root)
-          cat >> branch.html <<'EOF'
-              <li class="main-branch">
-                <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>
-                <div class="pr-info">The main production branch - always deployed to root</div>
-              </li>
-          EOF
+          # Add main branch first (always at root) with commit and deployment data
+          echo '              <li class="main-branch">' >> branch.html
+          echo '                <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>' >> branch.html
+          echo '                <div class="pr-info">The main production branch - always deployed to root</div>' >> branch.html
+
+          # Add main branch details if data file exists
+          if [ -f ../main-branch-data.json ]; then
+            LAST_COMMIT_TS=$(cat ../main-branch-data.json | jq -r '.lastCommitTimestamp // empty')
+            DEPLOYMENT_TS=$(cat ../main-branch-data.json | jq -r '.deploymentTimestamp // empty')
+
+            if [ -n "$LAST_COMMIT_TS" ]; then
+              echo '                <div class="main-details">' >> branch.html
+              echo "                  <div class=\"timestamp\">Last commit: <span data-timestamp=\"$LAST_COMMIT_TS\">$LAST_COMMIT_TS</span></div>" >> branch.html
+            fi
+
+            if [ -n "$DEPLOYMENT_TS" ]; then
+              echo "                  <div class=\"timestamp\">Last deployment: <span data-timestamp=\"$DEPLOYMENT_TS\">$DEPLOYMENT_TS</span></div>" >> branch.html
+            fi
+
+            # Add recent commits
+            COMMITS_COUNT=$(cat ../main-branch-data.json | jq '.commits | length')
+            if [ "$COMMITS_COUNT" -gt 0 ]; then
+              echo '                  <div class="commit-list">' >> branch.html
+              cat ../main-branch-data.json | jq -r '.commits[] |
+                . as $commit |
+                "<div class=\"commit-item\">" +
+                "<div class=\"commit-message\">" + (.message | split("\n")[0]) + "</div>" +
+                "<div class=\"commit-author\">by " + .author + " · <span data-timestamp=\"" + (.timestamp|tostring) + "\">" + (.timestamp|tostring) + "</span> · <a class=\"commit-sha\" href=\"" + .htmlUrl + "\">" + .shortSha + "</a></div>" +
+                (if (.prs | length) > 0 then
+                  "<div class=\"commit-prs\">" +
+                  (.prs | map("<a class=\"commit-pr-link\" href=\"" + .url + "\">#" + (.number|tostring) + "</a>") | join("")) +
+                  "</div>"
+                else "" end) +
+                "</div>"
+              ' >> branch.html
+              echo '                  </div>' >> branch.html
+            fi
+
+            if [ -n "$LAST_COMMIT_TS" ] || [ -n "$DEPLOYMENT_TS" ]; then
+              echo '                </div>' >> branch.html
+            fi
+          fi
+
+          echo '              </li>' >> branch.html
 
           # Add branches from PR data (already sorted by updated date)
           if [ -f ../pr-branches.json ]; then
@@ -292,7 +536,7 @@ jobs:
               "<li>" +
               "<a class=\"branch-link\" href=\"" + .safeName + "/\">" + .branch + "</a>" +
               "<div class=\"pr-info\">PR #" + (.number|tostring) + ": " + .title + " - <a class=\"pr-link\" href=\"" + .url + "\">View PR</a></div>" +
-              "<div class=\"timestamp\">Last updated: " + .updated + "</div>" +
+              "<div class=\"timestamp\">Last updated: <span data-timestamp=\"" + ((.updated | fromdateiso8601) * 1000 | tostring) + "\">" + .updated + "</span></div>" +
               "</li>"
             ' >> branch.html
           fi
@@ -306,13 +550,15 @@ jobs:
           # Commit and push
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
+          git add -A
 
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
             git commit -m "Deploy branch: ${{ github.ref_name }} (commit: ${{ github.sha }})"
             git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages --force
+            # Only set has_changes=true after successful commit and push
+            echo "has_changes=true" >> $GITHUB_ENV
             if [ -z "$BRANCH_FOLDER" ]; then
               echo "Published main branch to root: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
             else
@@ -321,29 +567,26 @@ jobs:
             echo "Branch index available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/branch.html"
           fi
 
-  # Deploy to GitHub Pages from gh-pages branch
-  deploy-pages:
-    needs: deploy-branch
-    if: needs.deploy-branch.outputs.has-pr == 'true' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Checkout gh-pages
-        uses: actions/checkout@v4
+      - name: Save gh-pages cache
+        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
+        uses: actions/cache/save@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: gh-pages
+          path: gh-pages
+          key: gh-pages-${{ github.repository }}-${{ github.run_id }}
 
       - name: Setup Pages
+        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
+        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: 'gh-pages'
 
       - name: Deploy to GitHub Pages
+        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
         id: deployment
         uses: actions/deploy-pages@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
