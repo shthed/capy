@@ -6274,8 +6274,10 @@
         const colorId = paletteColor?.id ?? region.colorId;
         if (cursorNumberEl) {
           cursorNumberEl.textContent = String(colorId);
-          if (paletteColor?.hex) {
-            cursorNumberEl.style.color = paletteColor.hex;
+          const pointerNumberColor =
+            paletteColor?.hex != null ? computePointerNumberColor(paletteColor.hex) : null;
+          if (pointerNumberColor) {
+            cursorNumberEl.style.color = pointerNumberColor;
           } else {
             cursorNumberEl.style.removeProperty("color");
           }
@@ -8251,6 +8253,22 @@
           outline: "rgba(15, 23, 42, 0.65)",
           number: "rgba(15, 23, 42, 0.95)",
         };
+      }
+
+      function computePointerNumberColor(hex) {
+        if (typeof hex !== "string") {
+          return null;
+        }
+        const sanitizedHex = sanitizeHexColor(hex, DEFAULT_BACKGROUND_HEX);
+        const [r, g, b] = hexToRgb(sanitizedHex);
+        const tooltipBackgroundLuminance = relativeLuminance([248, 250, 252]);
+        const numberLuminance = relativeLuminance([r, g, b]);
+        const contrast = contrastRatio(tooltipBackgroundLuminance, numberLuminance);
+        const MIN_POINTER_TOOLTIP_CONTRAST = 4.5;
+        if (contrast >= MIN_POINTER_TOOLTIP_CONTRAST) {
+          return sanitizedHex;
+        }
+        return null;
       }
 
       function computeSwatchLabelStyles(hex) {
