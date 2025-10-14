@@ -27,17 +27,22 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
    - **Exception:** The `main` branch deploys to the root (no subfolder)
 
 4. **Content Deployment**: The workflow:
-   - For `main` branch: Copies content directly to the root of `gh-pages` (including the application's main index.html file)
-   - For other branches: Creates a folder in `gh-pages` matching the sanitized branch name and copies content there
-   - Copies all content except `.git`, `node_modules`, test results, and artifacts
+   - For `main` branch: Copies content directly to the root of `gh-pages` (excluding `.git`, `node_modules`, `test-results`, `playwright-report`, `blob-report`, `artifacts`, `README.md`, and `branch.html`)
+   - For other branches: Creates a folder in `gh-pages` matching the sanitized branch name and copies content there (excluding `.git`, `node_modules`, `test-results`, `playwright-report`, `blob-report`, and `artifacts`)
    - Updates the deployment with the latest content from the branch
 
 5. **Cleanup**: The workflow removes deployments for branches that no longer have open PRs
 
 6. **Index Generation**: A sorted branch index page (`branch.html`) is generated showing:
    - The `main` branch first (always at root) with a production badge
+   - For the main branch: last commit date, last deployment date, and the 3 most recent commits with:
+     - First line of commit message
+     - Author name and commit timestamp
+     - Clickable short SHA linking to the full commit on GitHub
+     - Links to any associated pull requests that include the commit
    - All branches with open PRs, sorted by most recently updated PR first
    - Each branch listing includes: branch name, PR number, title, link, and last update date
+   - All dates and times are automatically converted to the viewer's local timezone using JavaScript
 
 7. **GitHub Pages Publish**: The updated `gh-pages` branch is deployed to GitHub Pages
 
@@ -62,6 +67,9 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 5. **CI/CD Integration**: Deployment happens automatically on every push to main or branches with open PRs
 6. **Resource Efficiency**: Branches without PRs are not deployed, saving CI/CD minutes
 7. **Sorted Navigation**: The branch index page (`branch.html`) shows main first, then the most recently updated PRs for easy access
+8. **Commit History**: The branch index shows the last 3 commits on main with author, timestamp, commit SHA links, and associated PR links
+9. **Local Timezone Display**: All dates and times are automatically converted to the viewer's local timezone for easier comprehension
+10. **GitHub Integration**: Direct links to commits and associated pull requests make it easy to trace changes from the deployment back to their source
 
 ## Cleanup
 
@@ -88,3 +96,4 @@ To modify the deployment behavior, edit `.github/workflows/deploy-branch.yml`:
 - **Branch filtering**: Adjust the `on.push.branches` pattern
 - **Deployment target**: Change the target branch from `gh-pages` if needed
 - **PR limit**: Modify the `per_page: 100` parameter to change the maximum number of PRs displayed (default supports up to 100 open PRs)
+- **Commit history depth**: Modify the `per_page: 3` parameter in the "Fetch main branch commits" step to show more or fewer commits (note: the HTML layout is optimized for displaying 3-5 commits)
