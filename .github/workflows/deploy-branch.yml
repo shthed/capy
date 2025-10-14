@@ -167,12 +167,23 @@ jobs:
 
             // For each commit, search for associated PRs
             const commitsWithPRs = await Promise.all(commits.map(async (commit) => {
-              // Search for PRs that include this commit
-              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                commit_sha: commit.sha
-              });
+              let prs = [];
+              try {
+                // Search for PRs that include this commit
+                const { data: prData } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  commit_sha: commit.sha
+                });
+                prs = prData.map(pr => ({
+                  number: pr.number,
+                  title: pr.title,
+                  url: pr.html_url
+                }));
+              } catch (error) {
+                console.log(`Warning: Could not fetch PRs for commit ${commit.sha}: ${error.message}`);
+                // Continue with empty prs array
+              }
               
               return {
                 sha: commit.sha,
@@ -182,11 +193,7 @@ jobs:
                 date: commit.commit.author.date,
                 timestamp: new Date(commit.commit.author.date).getTime(),
                 htmlUrl: commit.html_url,
-                prs: prs.map(pr => ({
-                  number: pr.number,
-                  title: pr.title,
-                  url: pr.html_url
-                }))
+                prs: prs
               };
             }));
 
