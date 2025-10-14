@@ -74,6 +74,7 @@ Playwright test runner and a lightweight `http-server` for local previews.
 - Keep `core.pager` set to `cat` for consistent command output.
 - Start work with `git fetch --all --prune` to align local refs with remote.
 - After each commit, push the branch so remote history mirrors local progress.
+- Add the upstream remote if missing: `git remote add origin https://github.com/shthed/capy.git`.
 
 ## Final Response & PR Expectations
 - Summaries should highlight UI and workflow changes, noting live preview URLs if
