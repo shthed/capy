@@ -66,6 +66,16 @@ jobs:
           restore-keys: |
             gh-pages-${{ github.repository }}-
 
+      - name: Validate gh-pages cache
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
+        run: |
+          # Check if gh-pages exists but is not a valid git repository
+          if [ -d "gh-pages" ] && [ ! -d "gh-pages/.git" ]; then
+            echo "Warning: gh-pages directory exists but is not a valid git repository"
+            echo "Removing invalid gh-pages directory from cache"
+            rm -rf gh-pages
+          fi
+
       - name: Setup gh-pages branch
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
@@ -175,6 +185,12 @@ jobs:
       - name: Deploy branch content
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
+          # Validate gh-pages is a valid git repository before proceeding
+          if [ ! -d "gh-pages/.git" ]; then
+            echo "Error: gh-pages is not a valid git repository"
+            exit 1
+          fi
+          
           cd gh-pages
           BRANCH_FOLDER="${{ steps.branch-name.outputs.safe_name }}"
 
