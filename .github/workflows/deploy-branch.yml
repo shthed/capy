@@ -263,16 +263,24 @@ jobs:
             # Get list of branches with open PRs
             ACTIVE_BRANCHES=$(cat ../pr-branches.json | grep -o '"safeName": "[^"]*"' | cut -d'"' -f4)
 
-            # Check each folder and remove if not in active list
+            # Collect folders to remove first, then remove them
+            # This prevents issues with directory iteration during deletion
+            FOLDERS_TO_REMOVE=()
             for dir in */; do
+              [ -d "$dir" ] || continue
               folder_name="${dir%/}"
               # Skip branch.html and README.md
               if [ "$folder_name" != "branch.html" ] && [ "$folder_name" != "README.md" ]; then
                 if ! echo "$ACTIVE_BRANCHES" | grep -q "^${folder_name}$"; then
-                  echo "Removing stale deployment: $folder_name"
-                  rm -rf "$folder_name"
+                  FOLDERS_TO_REMOVE+=("$folder_name")
                 fi
               fi
+            done
+
+            # Remove stale folders
+            for folder_name in "${FOLDERS_TO_REMOVE[@]}"; do
+              echo "Removing stale deployment: $folder_name"
+              rm -rf "$folder_name" || echo "Warning: Could not remove $folder_name"
             done
           fi
 
