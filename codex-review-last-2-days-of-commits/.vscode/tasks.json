@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+        "label": "Start http-server",
+        "type": "shell",
+        "command": "npm run dev",
+        "isBackground": true,
+        "problemMatcher": [],
+        "presentation": {
+            "reveal": "always",
+            "panel": "dedicated"
+        },
+        "options": {
+            "shell": {
+                "executable": "C:\\Windows\\System32\\cmd.exe",
+                "args": ["/c"]
+            }
+        }
+    },
+    {
+        "type": "shell",
+        "command": "npm run dev",
+        "problemMatcher": [],
+        "label": "npm: dev",
+        "detail": "npm run dev",
+        "options": {
+            "shell": {
+                "executable": "C:\\Windows\\System32\\cmd.exe",
+                "args": ["/c"]
+            }
+        }
+    }
+]
+}

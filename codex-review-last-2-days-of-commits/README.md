@@ -223,20 +223,21 @@ skips optional fields.
    boot; if nothing is stored yet the bundled “Capybara Springs” puzzle loads
    automatically in the high detail preset so you can start painting
    immediately. Drag a bitmap into the viewport, activate the “Choose an image”
-   button, or tap **Try the capybara sample** on the start overlay to reload the
-   bundled scene. The hint overlay disappears once a new source is selected, and
-   the Low/Medium/High detail chips can pre-seed the capybara sample with
-   relaxed or high-fidelity settings before you reload it.
+   button, tap **Try the capybara sample** on the start overlay, or press the 🐹
+   command button to reload the bundled scene. The hint overlay disappears once
+   a new source is selected, and the Low/Medium/High detail chips can pre-seed
+   the capybara sample with relaxed or high-fidelity settings before you reload
+   it.
 2. **Tune generation & appearance.** Open the **Generator** sheet to tweak
    palette size, minimum region area, resize detail, sample rate (for faster
    clustering), iteration count, smoothing passes, and the optional art prompt
-   metadata, then hop into **Settings** to refine gameplay toggles, palette
-   sorting, difficulty, auto-advance, hint behaviour, fade timing, overlay
-   intensity, right-click actions, themes, background colour, interface scale,
-   the status bar toggle, and the palette sort menu. Apply changes instantly
-   when working from an image source, then expand the **Advanced options**
-   accordion in Settings to edit the optional art prompt metadata before
-   exporting or regenerating a scene.
+   metadata. Then slide out **Settings** to adjust palette sorting, difficulty,
+   auto-advance, hint behaviour, fade timing, overlay intensity, right-click
+   actions, themes, background colour, interface scale, the status bar toggle,
+   hint animations, and the palette sort menu without leaving the playfield.
+   Apply changes instantly when working from an image source, then expand the
+   **Advanced options** accordion in Settings to edit the optional art prompt
+   metadata before exporting or regenerating a scene.
 3. **Explore the puzzle.** The game canvas shows outlines and number badges,
    while the **Preview** button floods the entire viewport with a fullscreen
    comparison of the clustered artwork.
@@ -297,12 +298,13 @@ before retrying.
   while adjusting sliders. Controls include palette size, minimum region area,
   resize detail, sample rate, k-means iterations, smoothing passes, interface
   theme, background colour, interface scale, palette sorting, auto-advance,
-  difficulty, the status bar toggle, hint animations, fade duration, overlay
-  intensity, right-click behaviour, and the palette sort menu. A dedicated
-  Hints & controls section lets you fine-tune those overlays, and the JSON
-  export action plus capybara detail chips stay within reach. Expand the
-  **Advanced options** accordion to edit the optional art prompt metadata before
-  exporting or regenerating a scene.
+  Easy/Standard difficulty, the status bar toggle, hint animations, fade
+  duration, overlay intensity, right-click behaviour, and the palette sort menu.
+  A dedicated Hints & controls section lets you fine-tune those overlays, the
+  panel houses the JSON export action, mirrors the Low/Medium/High detail chips
+  so you can reload the sample with tuned parameters without leaving the
+  sidecar, and keeps the art prompt query inside an **Advanced options**
+  accordion so casual play stays focused on painting.
 - **Generator sheet** – Collects palette size, minimum region threshold,
   resize/sampling sliders, iteration count, smoothing passes, the capybara
   detail chips, art prompt metadata, and the Apply button that regenerates the
