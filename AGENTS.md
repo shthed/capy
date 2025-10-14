@@ -30,6 +30,13 @@ Playwright test runner and a lightweight `http-server` for local previews.
 - `artifacts/ui-review/` – Expected location for Playwright reports and
   screenshots when you capture them locally; include relevant artifacts with major
   UI updates.
+- `.github/workflows/screenshot.yml` – Automated UI screenshot capture workflow
+  that runs on push to main and can be manually triggered. Captures screenshots
+  across desktop, tablet, and mobile viewports with visual regression detection.
+- `.github/screenshots/baseline/` – Baseline screenshots for visual regression
+  testing; update these when intentional UI changes are made.
+- `docs/screenshot-workflow.md` – Comprehensive guide to using the screenshot
+  workflow for visual testing and regression detection.
 
 ## Environment Setup
 1. Install Node.js 18 LTS or newer.
@@ -54,6 +61,9 @@ Playwright test runner and a lightweight `http-server` for local previews.
 - Manual QA: The app exposes `window.capyGenerator` helpers (`loadPuzzleFixture`,
   `togglePreview`, etc.) for ad-hoc scripting in DevTools; note any new helpers
   in the README and tests.
+- Visual testing: The screenshot workflow automatically captures UI screenshots on
+  push to main. For intentional UI changes, verify the diff artifacts and update
+  baseline screenshots in `.github/screenshots/baseline/` as needed.
 
 ## Tooling
 - Use the repository ripgrep defaults (`.ripgreprc` and `.rgignore`) so large fixture dumps do not overflow the terminal. Pass `--no-ignore` or `--max-columns` overrides explicitly if you need raw output.

@@ -30,6 +30,7 @@ single `index.html` document—no build tools or extra runtime required.
   - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
   - `docs/automation-loop.md` – Blueprint for the automated branching, testing, merging, and feedback loop.
   - `docs/branch-deployments.md` – Detailed guide to the multi-branch GitHub Pages deployment system.
+  - `docs/screenshot-workflow.md` – Guide to automated UI screenshot capture and visual regression testing.
 
 ## Development workflow
 
