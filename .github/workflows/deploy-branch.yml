@@ -273,12 +273,12 @@ jobs:
 
             # Copy content from source (excluding .git, node_modules, etc)
             echo "Copying content to: $BRANCH_FOLDER"
-            rsync -a --exclude='.git' \
-                      --exclude='node_modules' \
-                      --exclude='test-results' \
-                      --exclude='playwright-report' \
-                      --exclude='blob-report' \
-                      --exclude='artifacts' \
+            rsync -a --exclude='.git/' \
+                      --exclude='node_modules/' \
+                      --exclude='test-results/' \
+                      --exclude='playwright-report/' \
+                      --exclude='blob-report/' \
+                      --exclude='artifacts/' \
                       ../source/ "$BRANCH_FOLDER/"
           fi
 
