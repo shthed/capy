@@ -66,6 +66,16 @@ jobs:
           restore-keys: |
             gh-pages-${{ github.repository }}-
 
+      - name: Validate gh-pages cache
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
+        run: |
+          # Check if gh-pages exists but is not a valid git repository
+          if [ -d "gh-pages" ] && [ ! -d "gh-pages/.git" ]; then
+            echo "Warning: gh-pages directory exists but is not a valid git repository"
+            echo "Removing invalid gh-pages directory from cache"
+            rm -rf gh-pages
+          fi
+
       - name: Setup gh-pages branch
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
@@ -139,9 +149,74 @@ jobs:
 
             return branches;
 
+      - name: Fetch main branch commits
+        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
+        id: fetch-main-commits
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Fetch last 3 commits from main branch
+            const { data: commits } = await github.rest.repos.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: 'main',
+              per_page: 3
+            });
+
+            // For each commit, search for associated PRs
+            const commitsWithPRs = await Promise.all(commits.map(async (commit) => {
+              let prs = [];
+              try {
+                // Search for PRs that include this commit
+                const { data: prData } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  commit_sha: commit.sha
+                });
+                prs = prData.map(pr => ({
+                  number: pr.number,
+                  title: pr.title,
+                  url: pr.html_url
+                }));
+              } catch (error) {
+                console.log(`Warning: Could not fetch PRs for commit ${commit.sha}: ${error.message}`);
+                // Continue with empty prs array
+              }
+              
+              return {
+                sha: commit.sha,
+                shortSha: commit.sha.substring(0, 7),
+                message: commit.commit.message,
+                author: commit.commit.author.name,
+                date: commit.commit.author.date,
+                timestamp: new Date(commit.commit.author.date).getTime(),
+                htmlUrl: commit.html_url,
+                prs: prs
+              };
+            }));
+
+            const mainBranchData = {
+              commits: commitsWithPRs,
+              lastCommitDate: commits[0]?.commit.author.date,
+              lastCommitTimestamp: commits[0] ? new Date(commits[0].commit.author.date).getTime() : null,
+              deploymentTimestamp: Date.now()
+            };
+
+            fs.writeFileSync('main-branch-data.json', JSON.stringify(mainBranchData, null, 2));
+            
+            return mainBranchData;
+
       - name: Deploy branch content
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
+          # Validate gh-pages is a valid git repository before proceeding
+          if [ ! -d "gh-pages/.git" ]; then
+            echo "Error: gh-pages is not a valid git repository"
+            exit 1
+          fi
+          
           cd gh-pages
           BRANCH_FOLDER="${{ steps.branch-name.outputs.safe_name }}"
 
@@ -284,7 +359,72 @@ jobs:
                 color: white;
                 margin-left: 8px;
               }
+              .main-details {
+                margin-top: 10px;
+                font-size: 0.9em;
+                color: #586069;
+              }
+              .commit-list {
+                margin-top: 8px;
+                padding-left: 15px;
+                border-left: 2px solid #e1e4e8;
+              }
+              .commit-item {
+                margin: 5px 0;
+                font-size: 0.85em;
+              }
+              .commit-message {
+                color: #24292e;
+                font-weight: 500;
+              }
+              .commit-author {
+                color: #586069;
+              }
+              .commit-sha {
+                font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 0.9em;
+                color: #0366d6;
+                text-decoration: none;
+              }
+              .commit-sha:hover {
+                text-decoration: underline;
+              }
+              .commit-prs {
+                margin-top: 3px;
+                font-size: 0.8em;
+              }
+              .commit-pr-link {
+                color: #6f42c1;
+                text-decoration: none;
+                margin-right: 8px;
+              }
+              .commit-pr-link:hover {
+                text-decoration: underline;
+              }
             </style>
+            <script>
+              // Function to format timestamp to local timezone
+              function formatLocalTime(timestamp) {
+                if (!timestamp) return 'N/A';
+                const date = new Date(timestamp);
+                return date.toLocaleString(undefined, {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  timeZoneName: 'short'
+                });
+              }
+
+              // Convert all timestamps to local timezone after page loads
+              document.addEventListener('DOMContentLoaded', function() {
+                document.querySelectorAll('[data-timestamp]').forEach(function(element) {
+                  const timestamp = parseInt(element.getAttribute('data-timestamp'));
+                  element.textContent = formatLocalTime(timestamp);
+                });
+              });
+            </script>
           </head>
           <body>
             <h1>Capy Image Generator - Branch Deployments</h1>
@@ -292,17 +432,54 @@ jobs:
               <strong>Note:</strong> The main branch is always deployed to the root.
               Other branches with open pull requests are deployed to subfolders.
               Branches are sorted by most recently updated first.
+              All dates and times are shown in your local timezone.
             </div>
             <ul>
           EOF
 
-          # Add main branch first (always at root)
-          cat >> branch.html <<'EOF'
-              <li class="main-branch">
-                <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>
-                <div class="pr-info">The main production branch - always deployed to root</div>
-              </li>
-          EOF
+          # Add main branch first (always at root) with commit and deployment data
+          echo '              <li class="main-branch">' >> branch.html
+          echo '                <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>' >> branch.html
+          echo '                <div class="pr-info">The main production branch - always deployed to root</div>' >> branch.html
+          
+          # Add main branch details if data file exists
+          if [ -f ../main-branch-data.json ]; then
+            LAST_COMMIT_TS=$(cat ../main-branch-data.json | jq -r '.lastCommitTimestamp // empty')
+            DEPLOYMENT_TS=$(cat ../main-branch-data.json | jq -r '.deploymentTimestamp // empty')
+            
+            if [ -n "$LAST_COMMIT_TS" ]; then
+              echo '                <div class="main-details">' >> branch.html
+              echo "                  <div class=\"timestamp\">Last commit: <span data-timestamp=\"$LAST_COMMIT_TS\">$LAST_COMMIT_TS</span></div>" >> branch.html
+            fi
+            
+            if [ -n "$DEPLOYMENT_TS" ]; then
+              echo "                  <div class=\"timestamp\">Last deployment: <span data-timestamp=\"$DEPLOYMENT_TS\">$DEPLOYMENT_TS</span></div>" >> branch.html
+            fi
+            
+            # Add recent commits
+            COMMITS_COUNT=$(cat ../main-branch-data.json | jq '.commits | length')
+            if [ "$COMMITS_COUNT" -gt 0 ]; then
+              echo '                  <div class="commit-list">' >> branch.html
+              cat ../main-branch-data.json | jq -r '.commits[] |
+                "<div class=\"commit-item\">" +
+                "<div class=\"commit-message\">" + (.message | split("\n")[0]) + "</div>" +
+                "<div class=\"commit-author\">by " + .author + " · <span data-timestamp=\"" + (.timestamp|tostring) + "\">" + (.timestamp|tostring) + "</span> · <a class=\"commit-sha\" href=\"" + .htmlUrl + "\">" + .shortSha + "</a></div>" +
+                (if (.prs | length) > 0 then 
+                  "<div class=\"commit-prs\">" + 
+                  (.prs | map("<a class=\"commit-pr-link\" href=\"" + .url + "\">#" + (.number|tostring) + "</a>") | join("")) + 
+                  "</div>" 
+                else "" end) +
+                "</div>"
+              ' >> branch.html
+              echo '                  </div>' >> branch.html
+            fi
+            
+            if [ -n "$LAST_COMMIT_TS" ] || [ -n "$DEPLOYMENT_TS" ]; then
+              echo '                </div>' >> branch.html
+            fi
+          fi
+          
+          echo '              </li>' >> branch.html
 
           # Add branches from PR data (already sorted by updated date)
           if [ -f ../pr-branches.json ]; then
@@ -310,7 +487,7 @@ jobs:
               "<li>" +
               "<a class=\"branch-link\" href=\"" + .safeName + "/\">" + .branch + "</a>" +
               "<div class=\"pr-info\">PR #" + (.number|tostring) + ": " + .title + " - <a class=\"pr-link\" href=\"" + .url + "\">View PR</a></div>" +
-              "<div class=\"timestamp\">Last updated: " + .updated + "</div>" +
+              "<div class=\"timestamp\">Last updated: <span data-timestamp=\"" + ((.updated | fromdateiso8601) * 1000 | tostring) + "\">" + .updated + "</span></div>" +
               "</li>"
             ' >> branch.html
           fi

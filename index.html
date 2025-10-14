@@ -9,26 +9,39 @@
     Layout
     - Command rail + sheets host UI actions; look for "Command button" listeners when updating the
       chrome.
-    - #viewport, #canvasStage, and #canvasTransform coordinate viewState pan/zoom behavior.
+    - #viewport, #canvasStage, and #canvasTransform coordinate viewState pan/zoom behavior via
+      applyViewTransform/applyZoom.
     - Puzzle state feeds renderPuzzle → drawOutlines/drawNumbers; ensureRenderCache keeps canvases
-      hydrated.
+      hydrated while renderPreview mirrors the cache.
+    - Start screen + save manager run on createGameSaveManager; autosave scheduling refreshes
+      command enable states and menus.
+    - window.capyGenerator exposes devtools entry points; keep signatures stable when reorganizing
+      wiring.
 
     Script guide
     1. DOM/cache bootstrapping and default constants.
-    2. View state, pointer gestures, and canvas math helpers.
-    3. Generation + rendering pipeline (loadDefaultPuzzle, createPuzzleData, renderPuzzle).
-    4. Palette/command interactions, keyboard handlers, and hint animation loop.
-    5. Autosave, save manager wiring, and window.capyGenerator exports.
+    2. View state, pointer gestures, canvas math helpers, and resetView/applyViewTransform glue.
+    3. Generation + rendering pipeline (loadDefaultPuzzle/loadSamplePuzzle, createPuzzleData,
+       renderPuzzle/renderPreview).
+    4. Palette/command interactions, keyboard handlers, hint animation loop, and theming prefs.
+    5. Autosave + storage wiring, save manager refresh, and window.capyGenerator exports.
 
     Key functions
     - installBrowserZoomGuards(): Block browser zoom from hijacking wheel gestures.
-    - applyZoom(multiplier, clientX, clientY): Normalizes zoom around the pointer focus.
-    - loadDefaultPuzzle(options): Seeds the starter puzzle when nothing is saved.
-    - createPuzzleData(image, options): Runs quantization/segmentation in the worker.
-    - applyPuzzleResult(data, metadata): Applies puzzle state and schedules redraws.
-    - renderPalette(): Rebuilds the palette dock + accessibility metadata.
+    - applyViewTransform(options): Push viewState pan/zoom changes to the stage and pointer overlays.
+    - applyZoom(multiplier, clientX, clientY, options): Normalize zoom around the pointer focus.
+    - resetView(options): Fit the puzzle to the viewport and recentre the stage.
+    - loadDefaultPuzzle(options) / loadSamplePuzzle(options): Seed puzzles when nothing is saved.
+    - createPuzzleData(image, options): Run quantization/segmentation in the worker.
+    - applyPuzzleResult(data, metadata): Apply puzzle state, schedule redraws, and refresh metadata.
+    - renderPuzzle() / renderPreview(): Draw the active puzzle and thumbnail preview from the cache.
+    - renderPalette(): Rebuild the palette dock + accessibility metadata.
     - attemptFillRegion(hit, { label }): Paint interaction that triggers autosave scheduling.
-    - saveCurrentSnapshot(): Adds a manual save entry and refreshes the menus.
+    - updateCommandStates(): Enable/disable command rail buttons based on puzzle state.
+    - scheduleAutosave(reason) / persistAutosave(reason): Manage background save cadence.
+    - saveCurrentSnapshot(): Add a manual save entry and refresh the menus.
+    - applyTheme(theme, options) / applyBackgroundColor(hex, options): Refresh UI theming tokens and
+      persist preferences.
   -->
   <head>
     <meta charset="utf-8" />
@@ -48,8 +61,8 @@
         --app-width: 100vw;
         --app-height: 100vh;
         --viewport-padding: calc(32px * var(--ui-scale));
-        --rail-gap: calc(8px * var(--ui-scale));
-        --rail-gap-portrait: calc(6px * var(--ui-scale));
+        --rail-gap: calc(6px * var(--ui-scale));
+        --rail-gap-portrait: calc(4px * var(--ui-scale));
         --rail-padding-block: calc(12px * var(--ui-scale));
         --rail-padding-inline: calc(24px * var(--ui-scale));
         --command-button-size: clamp(
@@ -109,9 +122,9 @@
         --theme-chip-active-text: rgba(226, 232, 240, 0.98);
         --theme-palette-dock-bg: rgba(2, 6, 23, 0.94);
         --theme-palette-dock-border: rgba(15, 23, 42, 0.85);
-        --command-rail-top: calc(env(safe-area-inset-top, 0px) + 16px);
-        --command-rail-height: var(--command-button-size);
-        --command-rail-gap-current: calc(10px * var(--ui-scale));
+        --command-rail-top: calc(env(safe-area-inset-top, 0px) + 12px);
+        --command-rail-height: calc(40px * var(--ui-scale));
+        --command-rail-gap-current: var(--rail-gap);
         --command-button-measure: var(--command-button-size);
       }
 
@@ -281,8 +294,8 @@
       #commandRail {
         position: absolute;
         top: var(--command-rail-top);
-        left: calc(env(safe-area-inset-left, 0px) + 16px);
-        right: calc(env(safe-area-inset-right, 0px) + 16px);
+        left: calc(env(safe-area-inset-left, 0px) + 12px);
+        right: calc(env(safe-area-inset-right, 0px) + 12px);
         display: flex;
         justify-content: flex-start;
         align-items: center;
@@ -290,40 +303,84 @@
         gap: var(--command-rail-gap-current);
         padding: 0;
         margin: 0;
+        border: 0;
         background: none;
-        z-index: 3;
+        box-shadow: none;
+        backdrop-filter: none;
+        overflow-x: auto;
+        overflow-y: hidden;
         touch-action: manipulation;
+        z-index: 3;
+        scrollbar-width: none;
+      }
+
+      #commandRail::-webkit-scrollbar {
+        display: none;
       }
 
       #commandRail button {
-        border-radius: 12px;
-        padding: 0;
-        width: var(--command-button-measure);
-        height: var(--command-button-measure);
-        display: grid;
-        place-items: center;
-        background: var(--theme-command-bg);
+        display: inline-flex;
+        align-items: center;
+        gap: calc(6px * var(--ui-scale));
+        padding: calc(4px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        border-radius: calc(6px * var(--ui-scale));
+        border: 1px solid color-mix(in srgb, var(--theme-command-border) 60%, transparent);
+        background: color-mix(in srgb, var(--theme-command-bg) 88%, transparent);
         color: var(--theme-command-text);
-        border: 1px solid var(--theme-command-border);
+        font-size: calc(14px * var(--ui-scale));
+        font-weight: 500;
+        line-height: 1;
+        white-space: nowrap;
+        flex: 0 0 auto;
+        transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
       }
 
       #commandRail button.active {
-        background: var(--theme-command-active-bg);
-        border-color: var(--theme-command-active-border);
+        background: color-mix(in srgb, var(--theme-command-active-bg) 70%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
         color: var(--theme-command-active-text);
       }
 
       #commandRail button .icon {
-        font-size: 1.1rem;
+        font-size: 1.05rem;
         line-height: 1;
       }
 
-      #commandRail button:disabled {
-        background: var(--theme-command-disabled-bg);
-        color: var(--theme-command-disabled-text);
-        border-color: var(--theme-command-disabled-border);
+      #commandRail .label {
+        font-size: calc(13px * var(--ui-scale));
+        line-height: 1;
+        white-space: nowrap;
       }
 
+      #commandRail button:not(:disabled):hover,
+      #commandRail button:not(:disabled):focus-visible {
+        background: color-mix(in srgb, var(--theme-command-active-bg) 55%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
+        color: var(--theme-command-active-text);
+      }
+
+      #commandRail button:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
+        outline-offset: 2px;
+      }
+
+      #commandRail button:disabled {
+        background: color-mix(in srgb, var(--theme-command-disabled-bg) 70%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-disabled-border) 70%, transparent);
+        color: var(--theme-command-disabled-text);
+      }
+
+      body[data-orientation="portrait"] #commandRail {
+        gap: calc(4px * var(--ui-scale));
+      }
+
+      body.compact-commands #commandRail {
+        gap: calc(4px * var(--ui-scale));
+      }
+
+      body.compact-commands #commandRail .label {
+        display: none;
+      }
       body[data-orientation="portrait"] #paletteDock {
         gap: calc(10px * var(--ui-scale));
       }
@@ -688,11 +745,11 @@
         color: var(--theme-caption-text);
       }
 
-        #settingsSheet .detail-callout {
+        #generatorSheet .detail-callout {
           text-align: left;
         }
 
-        #settingsSheet .detail-picker {
+        #generatorSheet .detail-picker {
           justify-content: flex-start;
         }
       button {
@@ -1107,7 +1164,7 @@
         top: calc(
           env(safe-area-inset-top, 0px) +
             var(--rail-padding-block) +
-            var(--command-button-size) +
+            var(--command-rail-height) +
             calc(16px * var(--ui-scale))
         );
         right: calc(env(safe-area-inset-right, 0px) + 24px);
@@ -1359,6 +1416,7 @@
           disabled
         >
           <span class="icon" aria-hidden="true">?</span>
+          <span class="label">Hint</span>
         </button>
         <button
           id="resetButton"
@@ -1369,6 +1427,7 @@
           disabled
         >
           <span class="icon" aria-hidden="true">↺</span>
+          <span class="label">Reset</span>
         </button>
         <button
           id="previewToggle"
@@ -1379,16 +1438,17 @@
           disabled
         >
           <span class="icon" aria-hidden="true">🖼</span>
+          <span class="label">Preview</span>
         </button>
         <button
-          id="sampleCommand"
+          id="generatorButton"
           type="button"
-          data-testid="sample-art-button"
-          data-action="load-sample"
-          aria-label="Reload sample puzzle"
-          title="Reload sample puzzle"
+          data-testid="generator-button"
+          aria-label="Generator options"
+          title="Generator options"
         >
-          <span class="icon" aria-hidden="true">🐹</span>
+          <span class="icon" aria-hidden="true">🎛</span>
+          <span class="label">Generator</span>
         </button>
         <button
           id="fullscreenButton"
@@ -1398,6 +1458,7 @@
           title="Enter fullscreen"
         >
           <span class="icon" aria-hidden="true">⛶</span>
+          <span class="label">Fullscreen</span>
         </button>
         <button
           id="importButton"
@@ -1407,6 +1468,7 @@
           title="Import"
         >
           <span class="icon" aria-hidden="true">⬆</span>
+          <span class="label">Import</span>
         </button>
         <button
           id="saveManagerButton"
@@ -1417,6 +1479,7 @@
           disabled
         >
           <span class="icon" aria-hidden="true">💾</span>
+          <span class="label">Saves</span>
         </button>
         <button
           id="helpButton"
@@ -1426,6 +1489,7 @@
           title="Help &amp; shortcuts"
         >
           <span class="icon" aria-hidden="true">ℹ</span>
+          <span class="label">Help</span>
         </button>
         <button
           id="settingsButton"
@@ -1435,6 +1499,7 @@
           title="Settings"
         >
           <span class="icon" aria-hidden="true">⚙</span>
+          <span class="label">Settings</span>
         </button>
       </header>
       <div id="viewport">
@@ -1568,16 +1633,16 @@
             <dd>Clear every painted region and restart the current puzzle.</dd>
             <dt>🖼 Preview</dt>
             <dd>Toggle the finished artwork overlay to compare your progress.</dd>
-            <dt>🐹 Sample</dt>
-              <dd>
-                Reload the built-in capybara puzzle for a fresh board. Pair it with the Low/Medium/High
-                detail presets to jump between ≈26, ≈42, or ≈140 regions.
-              </dd>
-              <dt>🎚 Detail</dt>
-              <dd>
-                Toggle the capybara detail chips (start hint or Settings) to reload the sample with tuned
-                palette sizes, minimum region areas, resize targets, and the region counts noted above.
-              </dd>
+            <dt>🎛 Generator</dt>
+            <dd>
+              Adjust clustering sliders, choose capybara detail presets, reload the current source image, or
+              export JSON. The new sheet mirrors the k-means pipeline inputs used for puzzle creation.
+            </dd>
+            <dt>🎚 Detail</dt>
+            <dd>
+              Toggle the capybara detail chips (start hint or Generator sheet) to reload the sample with tuned
+              palette sizes, minimum region areas, resize targets, and the region counts noted above.
+            </dd>
             <dt>⛶ Fullscreen</dt>
             <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
             <dt>⬆ Import</dt>
@@ -1588,8 +1653,8 @@
             <dd>Open this guide and inspect the live debug log.</dd>
             <dt>⚙ Settings</dt>
             <dd>
-              Adjust generation sliders, toggle auto-advance, customise the background, resize the interface, or export JSON.
-              Expand Advanced options to edit the hidden art prompt metadata when you need to capture the original brief.
+              Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface
+              scale. Advanced options expose accessibility tweaks for the hint animations.
             </dd>
           </dl>
         </section>
@@ -1599,6 +1664,7 @@
             <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
             <li><kbd>Right click</kbd> Select the colour under the pointer (configurable in Settings).</li>
             <li>Select a palette swatch to set the active colour and flash every matching region.</li>
+            <li>Enable Easy difficulty in Settings to let clicks auto-select the tapped region's colour.</li>
             <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
             <li>
               <kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas. Switch the right-click action in Settings if you
@@ -1633,6 +1699,84 @@
       </div>
     </div>
     <div
+      id="generatorSheet"
+      class="sheet hidden"
+      role="dialog"
+      aria-labelledby="generatorTitle"
+      aria-hidden="true"
+    >
+      <div class="sheet-header">
+        <h2 id="generatorTitle">Puzzle generator</h2>
+        <button type="button" class="close-button" data-sheet-close="generator">Close</button>
+      </div>
+      <div class="sheet-body">
+        <section class="sheet-section" aria-labelledby="generatorHeading">
+          <h3 id="generatorHeading">Clustering &amp; detail</h3>
+          <p class="control-note">
+            Tune the colour clustering pipeline that powers new puzzles. These settings apply to fresh imports and the bundled
+            capybara sample when reloaded.
+          </p>
+          <div class="detail-callout">
+            <p class="detail-intro">Capybara sample detail presets</p>
+            <div class="detail-picker" role="group" aria-label="Capybara sample detail presets">
+              <button type="button" class="detail-chip" data-detail-level="low">Low</button>
+              <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
+              <button type="button" class="detail-chip" data-detail-level="high">High</button>
+            </div>
+            <p class="detail-caption" data-detail-caption></p>
+          </div>
+          <p class="control-note">
+            Switching presets updates every slider below and reloads the sample scene when it's active.
+          </p>
+          <label class="control">
+            <span>Colours <output data-for="colorCount">16</output></span>
+            <input id="colorCount" type="range" min="4" max="64" value="16" />
+          </label>
+          <label class="control">
+            <span>Regions <output data-for="minRegion">80 px²</output></span>
+            <input id="minRegion" type="range" min="1" max="600" value="80" />
+          </label>
+          <p class="control-note">Higher values merge smaller areas for fewer regions.</p>
+          <label class="control">
+            <span>Detail <output data-for="detailLevel">768 px</output></span>
+            <input id="detailLevel" type="range" min="256" max="1600" step="64" value="768" />
+          </label>
+          <p class="control-note">Controls the longest edge used when resizing the source image.</p>
+          <label class="control">
+            <span>Sample rate <output data-for="sampleRate">65%</output></span>
+            <input id="sampleRate" type="range" min="25" max="100" step="5" value="65" />
+          </label>
+          <p class="control-note">Lower values speed up clustering by sampling fewer pixels.</p>
+          <label class="control">
+            <span>Iterations <output data-for="kmeansIters">12</output></span>
+            <input id="kmeansIters" type="range" min="4" max="32" step="1" value="12" />
+          </label>
+          <label class="control">
+            <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
+            <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
+          </label>
+          <details class="advanced-options" id="generatorAdvanced">
+            <summary>Advanced options</summary>
+            <label class="control">
+              <span>Art prompt</span>
+              <textarea
+                id="artPrompt"
+                rows="3"
+                placeholder="Describe the scene you want to reinterpret"
+              ></textarea>
+            </label>
+            <p class="control-note">
+              Stored with saves and exports so you can revisit the inspiration later.
+            </p>
+          </details>
+        </section>
+      </div>
+      <div class="sheet-actions">
+        <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
+        <button id="applyOptions" type="button" disabled>Apply changes</button>
+      </div>
+    </div>
+    <div
       id="settingsSheet"
       class="sheet hidden"
       role="dialog"
@@ -1662,6 +1806,16 @@
             <input id="showStatusToggle" type="checkbox" />
             <span>Show status bar with filled/remaining counts after imports</span>
           </label>
+          <label class="control">
+            <span>Difficulty</span>
+            <select id="difficultySelect">
+              <option value="normal">Standard</option>
+              <option value="easy">Easy</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Easy mode lets you click any region to auto-select its colour before filling it.
+          </p>
         </section>
         <section class="sheet-section" aria-labelledby="hintsControlsHeading">
           <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
@@ -1731,66 +1885,6 @@
           </label>
           <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
         </section>
-        <section class="sheet-section" aria-labelledby="generatorHeading">
-          <h3 id="generatorHeading">Generator</h3>
-          <div class="detail-callout">
-            <p class="detail-intro">Capybara sample detail presets</p>
-            <div class="detail-picker" role="group" aria-label="Capybara sample detail presets">
-              <button type="button" class="detail-chip" data-detail-level="low">Low</button>
-              <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
-              <button type="button" class="detail-chip" data-detail-level="high">High</button>
-            </div>
-            <p class="detail-caption" data-detail-caption></p>
-          </div>
-          <p class="control-note">
-            Switching presets updates the sliders below and reloads the sample scene when it's active.
-          </p>
-          <label class="control">
-            <span>Colours <output data-for="colorCount">16</output></span>
-            <input id="colorCount" type="range" min="4" max="64" value="16" />
-          </label>
-          <label class="control">
-            <span>Regions <output data-for="minRegion">80 px²</output></span>
-            <input id="minRegion" type="range" min="1" max="600" value="80" />
-          </label>
-          <p class="control-note">Higher values merge smaller areas for fewer regions.</p>
-          <label class="control">
-            <span>Detail <output data-for="detailLevel">768 px</output></span>
-            <input id="detailLevel" type="range" min="256" max="1600" step="64" value="768" />
-          </label>
-          <p class="control-note">Controls the longest edge used when resizing the source image.</p>
-          <label class="control">
-            <span>Sample rate <output data-for="sampleRate">65%</output></span>
-            <input id="sampleRate" type="range" min="25" max="100" step="5" value="65" />
-          </label>
-          <p class="control-note">Lower values speed up clustering by sampling fewer pixels.</p>
-          <label class="control">
-            <span>Iterations <output data-for="kmeansIters">12</output></span>
-            <input id="kmeansIters" type="range" min="4" max="32" step="1" value="12" />
-          </label>
-          <label class="control">
-            <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
-            <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
-          </label>
-          <details class="advanced-options" id="generatorAdvanced">
-            <summary>Advanced options</summary>
-            <label class="control">
-              <span>Art prompt</span>
-              <textarea
-                id="artPrompt"
-                rows="3"
-                placeholder="Describe the scene you want to reinterpret"
-              ></textarea>
-            </label>
-            <p class="control-note">
-              Stored with saves and exports so you can revisit the inspiration later.
-            </p>
-          </details>
-        </section>
-      </div>
-      <div class="sheet-actions">
-        <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
-        <button id="applyOptions" type="button" disabled>Apply changes</button>
       </div>
     </div>
         <script>
@@ -1815,8 +1909,10 @@
       const fullscreenButton = document.getElementById("fullscreenButton");
       const importButton = document.getElementById("importButton");
       const saveManagerButton = document.getElementById("saveManagerButton");
+      const generatorButton = document.getElementById("generatorButton");
       const settingsButton = document.getElementById("settingsButton");
       const helpButton = document.getElementById("helpButton");
+      const generatorSheet = document.getElementById("generatorSheet");
       const settingsSheet = document.getElementById("settingsSheet");
       const helpSheet = document.getElementById("helpSheet");
       const debugLogEl = document.getElementById("debugLog");
@@ -1833,6 +1929,7 @@
       const hintFadeDurationInput = document.getElementById("hintFadeDuration");
       const hintIntensityInput = document.getElementById("hintIntensity");
       const rightClickActionSelect = document.getElementById("rightClickAction");
+      const difficultySelect = document.getElementById("difficultySelect");
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
       const showStatusToggle = document.getElementById("showStatusToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
@@ -1869,18 +1966,24 @@
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
 
-      // Settings sheet output mirrors we update while users drag sliders.
-      const optionOutputs = {
-        colorCount: settingsSheet.querySelector('output[data-for="colorCount"]'),
-        minRegion: settingsSheet.querySelector('output[data-for="minRegion"]'),
-        detail: settingsSheet.querySelector('output[data-for="detailLevel"]'),
-        sample: settingsSheet.querySelector('output[data-for="sampleRate"]'),
-        iterations: settingsSheet.querySelector('output[data-for="kmeansIters"]'),
-        smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
-        uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
-        hintFadeDuration: settingsSheet.querySelector('output[data-for="hintFadeDuration"]'),
-        hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
-      };
+      // Sheet output mirrors we update while users drag sliders.
+      const generatorOutputs = generatorSheet
+        ? {
+            colorCount: generatorSheet.querySelector('output[data-for="colorCount"]'),
+            minRegion: generatorSheet.querySelector('output[data-for="minRegion"]'),
+            detail: generatorSheet.querySelector('output[data-for="detailLevel"]'),
+            sample: generatorSheet.querySelector('output[data-for="sampleRate"]'),
+            iterations: generatorSheet.querySelector('output[data-for="kmeansIters"]'),
+            smoothing: generatorSheet.querySelector('output[data-for="smoothingPasses"]'),
+          }
+        : {};
+      const settingsOutputs = settingsSheet
+        ? {
+            uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
+            hintFadeDuration: settingsSheet.querySelector('output[data-for="hintFadeDuration"]'),
+            hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
+          }
+        : {};
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
@@ -1896,6 +1999,8 @@
       const MAX_HINT_INTENSITY = 0.9;
       const DEFAULT_RIGHT_CLICK_ACTION = "select";
       const VALID_RIGHT_CLICK_ACTIONS = new Set(["select", "pan"]);
+      const DEFAULT_DIFFICULTY = "normal";
+      const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
@@ -2125,15 +2230,23 @@
         if (!state.puzzle) return;
         const cache = ensureRenderCache();
         if (!cache.ready) return;
-        if (cache.outlineLayer && cache.outlineLayerCtx) {
+        const completedColors = getCompletedColorIds();
+        const hideCompleted = completedColors.size > 0;
+        const geometries = hideCompleted
+          ? cache.regions.filter((geometry) => !completedColors.has(geometry.colorId))
+          : cache.regions;
+        if (geometries.length === 0) {
+          return;
+        }
+        if (!hideCompleted && cache.outlineLayer && cache.outlineLayerCtx) {
           if (cache.outlineLayerDirty && !rasterizeOutlineLayer(cache)) {
-            strokeOutlinesDirect(cache);
+            strokeOutlinesDirect(cache, geometries);
             return;
           }
           puzzleCtx.drawImage(cache.outlineLayer, 0, 0);
           return;
         }
-        strokeOutlinesDirect(cache);
+        strokeOutlinesDirect(cache, geometries);
       }
 
       function createRenderCache() {
@@ -2157,14 +2270,14 @@
         };
       }
 
-      function strokeOutlinesDirect(cache) {
+      function strokeOutlinesDirect(cache, geometries) {
         const scale = cache.renderScale > 0 ? cache.renderScale : 1;
         withRenderScale(puzzleCtx, scale, () => {
           puzzleCtx.strokeStyle = backgroundInk.outline;
           puzzleCtx.lineWidth = cache.strokeWidth;
           puzzleCtx.lineJoin = "round";
           puzzleCtx.lineCap = "round";
-          strokeGeometries(puzzleCtx, cache.regions);
+          strokeGeometries(puzzleCtx, Array.isArray(geometries) ? geometries : cache.regions);
         });
       }
 
@@ -2859,6 +2972,7 @@
           hintFadeDuration: DEFAULT_HINT_FADE_DURATION,
           hintIntensity: DEFAULT_HINT_INTENSITY,
           rightClickAction: DEFAULT_RIGHT_CLICK_ACTION,
+          difficulty: DEFAULT_DIFFICULTY,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
@@ -3123,6 +3237,17 @@
           state.settings.rightClickAction = action;
           rightClickActionSelect.value = action;
         }
+        if (settings.difficulty != null) {
+          const difficulty = resolveDifficulty(settings.difficulty);
+          state.settings.difficulty = difficulty;
+          if (difficultySelect) {
+            difficultySelect.value = difficulty;
+          }
+        } else if (difficultySelect) {
+          const difficulty = resolveDifficulty(state.settings.difficulty);
+          state.settings.difficulty = difficulty;
+          difficultySelect.value = difficulty;
+        }
         if (typeof settings.showRegionLabels === "boolean") {
           applyRegionLabelVisibility(settings.showRegionLabels, {
             skipLog: true,
@@ -3217,6 +3342,7 @@
             }
             updatePreviewState();
           },
+          openGenerator: () => openSheet(generatorSheet),
           openSettings: () => openSheet(settingsSheet),
         };
       }
@@ -3288,6 +3414,9 @@
 
       selectButton.addEventListener("click", () => fileInput.click());
       importButton.addEventListener("click", () => fileInput.click());
+      if (generatorButton) {
+        generatorButton.addEventListener("click", () => openSheet(generatorSheet));
+      }
       settingsButton.addEventListener("click", () => openSheet(settingsSheet));
       saveManagerButton.addEventListener("click", () => showStartScreen({ scrollTo: "saves" }));
       if (helpButton) {
@@ -3340,6 +3469,8 @@
           const target = event.currentTarget.getAttribute("data-sheet-close");
           if (target === "settings") {
             closeSheet(settingsSheet);
+          } else if (target === "generator") {
+            closeSheet(generatorSheet);
           } else if (target === "help") {
             closeSheet(helpSheet);
           }
@@ -3384,6 +3515,21 @@
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
         scheduleAutosave("settings-hint-animations");
       });
+
+      if (difficultySelect) {
+        difficultySelect.value = resolveDifficulty(difficultySelect.value);
+        difficultySelect.addEventListener("change", () => {
+          const difficulty = resolveDifficulty(difficultySelect.value);
+          state.settings.difficulty = difficulty;
+          difficultySelect.value = difficulty;
+          logDebug(
+            difficulty === "easy"
+              ? "Difficulty set to Easy – clicks auto-select matching colours"
+              : "Difficulty set to Standard – clicks require the active colour"
+          );
+          scheduleAutosave("settings-difficulty");
+        });
+      }
 
       if (hintFadeDurationInput) {
         hintFadeDurationInput.value = String(normalizeHintFadeDuration(hintFadeDurationInput.value));
@@ -3797,17 +3943,28 @@
           return "already-filled";
         }
         if (region.colorId !== state.activeColor) {
-          const paletteColor = getPaletteEntry(region.colorId);
-          const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
-          if (state.settings.animateHints) {
-            flashRegion(regionId, { paletteColor, tint: fallbackTint, includeFilled: false });
-            flashColorRegions(region.colorId, {
-              paletteColor,
-              tint: fallbackTint,
-              onlyUnfilled: true,
-            });
+          const difficulty = resolveDifficulty(state.settings.difficulty);
+          if (difficulty === "easy") {
+            activateColor(region.colorId, { flash: false });
+          } else {
+            const paletteColor = getPaletteEntry(region.colorId);
+            const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
+            if (state.settings.animateHints) {
+              flashRegion(regionId, { paletteColor, tint: fallbackTint, includeFilled: false });
+              flashColorRegions(region.colorId, {
+                paletteColor,
+                tint: fallbackTint,
+                onlyUnfilled: true,
+              });
+            }
+            flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+            logDebug(
+              `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
+            );
+            return "mismatch";
           }
-          flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+        }
+        if (region.colorId !== state.activeColor) {
           logDebug(
             `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
           );
@@ -4482,30 +4639,42 @@
       }
 
       function updateOptionOutputs() {
-        if (optionOutputs.colorCount) optionOutputs.colorCount.textContent = String(colorCountEl.value);
-        if (optionOutputs.minRegion) optionOutputs.minRegion.textContent = `${minRegionEl.value} px²`;
-        if (optionOutputs.detail) optionOutputs.detail.textContent = `${detailEl.value} px`;
-        if (optionOutputs.sample) optionOutputs.sample.textContent = `${sampleRateEl.value}%`;
-        if (optionOutputs.iterations) optionOutputs.iterations.textContent = String(kmeansItersEl.value);
-        if (optionOutputs.smoothing) optionOutputs.smoothing.textContent = String(smoothingEl.value);
-        if (optionOutputs.uiScale) {
+        if (generatorOutputs.colorCount) {
+          generatorOutputs.colorCount.textContent = String(colorCountEl.value);
+        }
+        if (generatorOutputs.minRegion) {
+          generatorOutputs.minRegion.textContent = `${minRegionEl.value} px²`;
+        }
+        if (generatorOutputs.detail) {
+          generatorOutputs.detail.textContent = `${detailEl.value} px`;
+        }
+        if (generatorOutputs.sample) {
+          generatorOutputs.sample.textContent = `${sampleRateEl.value}%`;
+        }
+        if (generatorOutputs.iterations) {
+          generatorOutputs.iterations.textContent = String(kmeansItersEl.value);
+        }
+        if (generatorOutputs.smoothing) {
+          generatorOutputs.smoothing.textContent = String(smoothingEl.value);
+        }
+        if (settingsOutputs.uiScale) {
           const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
           const value = Number.isFinite(source) && source > 0
             ? source
             : (Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
                 ? state.settings.uiScale
                 : DEFAULT_UI_SCALE);
-          optionOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
+          settingsOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
         }
-        if (optionOutputs.hintFadeDuration) {
+        if (settingsOutputs.hintFadeDuration) {
           const source = hintFadeDurationInput ? Number(hintFadeDurationInput.value) : state.settings.hintFadeDuration;
           const duration = normalizeHintFadeDuration(source);
-          optionOutputs.hintFadeDuration.textContent = `${(duration / 1000).toFixed(1)} s`;
+          settingsOutputs.hintFadeDuration.textContent = `${(duration / 1000).toFixed(1)} s`;
         }
-        if (optionOutputs.hintIntensity) {
+        if (settingsOutputs.hintIntensity) {
           const source = hintIntensityInput ? Number(hintIntensityInput.value) : state.settings.hintIntensity * 100;
           const intensity = normalizeHintIntensity(source);
-          optionOutputs.hintIntensity.textContent = `${Math.round(intensity * 100)}%`;
+          settingsOutputs.hintIntensity.textContent = `${Math.round(intensity * 100)}%`;
         }
       }
 
@@ -5957,9 +6126,12 @@
         if (wantsRightClickSelect) {
           const hit = getRegionFromEvent(event);
           if (hit && hit.region) {
-            event.preventDefault();
-            activateColor(hit.region.colorId);
-            return;
+            const remaining = getRegionsByColor(hit.region.colorId, { includeFilled: false });
+            if (remaining.length > 0) {
+              event.preventDefault();
+              activateColor(hit.region.colorId);
+              return;
+            }
           }
         }
         const auxButton = event.button === 1 || event.button === 2;
@@ -6168,8 +6340,10 @@
         const colorId = paletteColor?.id ?? region.colorId;
         if (cursorNumberEl) {
           cursorNumberEl.textContent = String(colorId);
-          if (paletteColor?.hex) {
-            cursorNumberEl.style.color = paletteColor.hex;
+          const pointerNumberColor =
+            paletteColor?.hex != null ? computePointerNumberColor(paletteColor.hex) : null;
+          if (pointerNumberColor) {
+            cursorNumberEl.style.color = pointerNumberColor;
           } else {
             cursorNumberEl.style.removeProperty("color");
           }
@@ -6672,6 +6846,16 @@
         return DEFAULT_RIGHT_CLICK_ACTION;
       }
 
+      function resolveDifficulty(value) {
+        if (typeof value === "string") {
+          const normalized = value.trim().toLowerCase();
+          if (VALID_DIFFICULTY_LEVELS.has(normalized)) {
+            return normalized;
+          }
+        }
+        return DEFAULT_DIFFICULTY;
+      }
+
       function autoAdvanceColor(currentColorId) {
         if (!state.puzzle) return;
         const remainingForColor = getRegionsByColor(currentColorId, { includeFilled: false });
@@ -6695,6 +6879,23 @@
         });
       }
 
+      function getCompletedColorIds() {
+        const completed = new Set();
+        if (!state.puzzle) return completed;
+        const pendingColors = new Set();
+        for (const region of state.puzzle.regions) {
+          if (!state.filled.has(region.id)) {
+            pendingColors.add(region.colorId);
+          }
+        }
+        for (const entry of state.puzzle.palette) {
+          if (!pendingColors.has(entry.id)) {
+            completed.add(entry.id);
+          }
+        }
+        return completed;
+      }
+
       function getPaletteEntry(colorId) {
         if (!state.puzzle) return null;
         return state.puzzle.palette.find((entry) => entry.id === colorId) || null;
@@ -6706,13 +6907,19 @@
         const cache = ensureRenderCache();
         if (!cache.ready) return;
         const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+        const strokeWidth = cache.strokeWidth > 0 ? cache.strokeWidth : 1;
         withRenderScale(puzzleCtx, scale, () => {
           puzzleCtx.fillStyle = fillStyle;
+          puzzleCtx.strokeStyle = fillStyle;
+          puzzleCtx.lineWidth = strokeWidth;
+          puzzleCtx.lineJoin = "round";
+          puzzleCtx.lineCap = "round";
           if (SUPPORTS_PATH2D) {
             for (const region of regions) {
               const geometry = cache.regionsById.get(region.id);
               if (!geometry?.path) continue;
               puzzleCtx.fill(geometry.path);
+              puzzleCtx.stroke(geometry.path);
             }
             return;
           }
@@ -6731,6 +6938,7 @@
               puzzleCtx.closePath();
             }
             puzzleCtx.fill();
+            puzzleCtx.stroke();
           }
         });
       }
@@ -6892,6 +7100,7 @@
           rightClickAction: resolveRightClickAction(
             settingsSource.rightClickAction ?? state.settings.rightClickAction
           ),
+          difficulty: resolveDifficulty(settingsSource.difficulty ?? state.settings.difficulty),
           uiScale:
             Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
               ? clamp(settingsSource.uiScale, 0.6, 1.35)
@@ -6999,6 +7208,7 @@
             hintFadeDuration: normalizeHintFadeDuration(state.settings.hintFadeDuration),
             hintIntensity: normalizeHintIntensity(state.settings.hintIntensity),
             rightClickAction: resolveRightClickAction(state.settings.rightClickAction),
+            difficulty: resolveDifficulty(state.settings.difficulty),
             uiScale:
               Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
                 ? clamp(state.settings.uiScale, 0.6, 1.35)
@@ -7884,7 +8094,6 @@
         el.textContent = text;
         return el;
       }
-
       function createSaveActionButton(action, label) {
         const button = document.createElement("button");
         button.type = "button";
@@ -8105,6 +8314,22 @@
           outline: "rgba(15, 23, 42, 0.65)",
           number: "rgba(15, 23, 42, 0.95)",
         };
+      }
+
+      function computePointerNumberColor(hex) {
+        if (typeof hex !== "string") {
+          return null;
+        }
+        const sanitizedHex = sanitizeHexColor(hex, DEFAULT_BACKGROUND_HEX);
+        const [r, g, b] = hexToRgb(sanitizedHex);
+        const tooltipBackgroundLuminance = relativeLuminance([248, 250, 252]);
+        const numberLuminance = relativeLuminance([r, g, b]);
+        const contrast = contrastRatio(tooltipBackgroundLuminance, numberLuminance);
+        const MIN_POINTER_TOOLTIP_CONTRAST = 4.5;
+        if (contrast >= MIN_POINTER_TOOLTIP_CONTRAST) {
+          return sanitizedHex;
+        }
+        return null;
       }
 
       function computeSwatchLabelStyles(hex) {
