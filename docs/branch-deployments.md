@@ -36,7 +36,11 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 
 6. **Index Generation**: A sorted branch index page (`branch.html`) is generated showing:
    - The `main` branch first (always at root) with a production badge
-   - For the main branch: last commit date, last deployment date, and the 3 most recent commits (with first line of message, author, and date)
+   - For the main branch: last commit date, last deployment date, and the 3 most recent commits with:
+     - Clickable commit SHA (short format, e.g., `abc1234`) linking to the commit on GitHub
+     - First line of commit message
+     - Links to any associated pull requests (e.g., `(#123, #124)`)
+     - Author name and timestamp
    - All branches with open PRs, sorted by most recently updated PR first
    - Each branch listing includes: branch name, PR number, title, link, and last update date
    - All dates and times are automatically converted to the viewer's local timezone using JavaScript
@@ -64,7 +68,7 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 5. **CI/CD Integration**: Deployment happens automatically on every push to main or branches with open PRs
 6. **Resource Efficiency**: Branches without PRs are not deployed, saving CI/CD minutes
 7. **Sorted Navigation**: The branch index page (`branch.html`) shows main first, then the most recently updated PRs for easy access
-8. **Commit History**: The branch index shows the last 3 commits on main with author and timestamp information
+8. **Commit History**: The branch index shows the last 3 commits on main with clickable links to commits and associated PRs
 9. **Local Timezone Display**: All dates and times are automatically converted to the viewer's local timezone for easier comprehension
 
 ## Cleanup
