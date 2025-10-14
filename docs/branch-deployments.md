@@ -36,7 +36,7 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 
 6. **Index Generation**: A sorted branch index page (`branch.html`) is generated showing:
    - The `main` branch first (always at root) with a production badge
-   - For the main branch: last commit date, last deployment date, and the 3 most recent commits (with message, author, and date)
+   - For the main branch: last commit date, last deployment date, and the 3 most recent commits (with first line of message, author, and date)
    - All branches with open PRs, sorted by most recently updated PR first
    - Each branch listing includes: branch name, PR number, title, link, and last update date
    - All dates and times are automatically converted to the viewer's local timezone using JavaScript
@@ -92,4 +92,4 @@ To modify the deployment behavior, edit `.github/workflows/deploy-branch.yml`:
 - **Branch filtering**: Adjust the `on.push.branches` pattern
 - **Deployment target**: Change the target branch from `gh-pages` if needed
 - **PR limit**: Modify the `per_page: 100` parameter to change the maximum number of PRs displayed (default supports up to 100 open PRs)
-- **Commit history depth**: Modify the `per_page: 3` parameter in the "Fetch main branch commits" step to show more or fewer commits
+- **Commit history depth**: Modify the `per_page: 3` parameter in the "Fetch main branch commits" step to show more or fewer commits (note: the HTML layout is optimized for displaying 3-5 commits)
