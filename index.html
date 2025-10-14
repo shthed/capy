@@ -1784,6 +1784,7 @@
       let puzzleCtx = null;
       const labelCtx = labelCanvas ? labelCanvas.getContext("2d") : null;
       const previewCtx = previewCanvas.getContext("2d");
+      let rendererManager = null;
 
       if (labelCtx) {
         labelCtx.imageSmoothingEnabled = false;
@@ -2887,16 +2888,8 @@
         };
       }
 
-      applyGameplaySettings(state.settings);
-      updateOptionOutputs();
-      refreshSaveList();
-      updateStorageUsageSummary();
-      updateCommandStates();
-      renderDebugLog();
-      logDebug("Session started");
-      syncCommandRailMetrics();
-      handleViewportChange({ log: true, recenter: true });
-      resetView({ recenter: true });
+      // Renderer manager is created after the rendering backends are defined near the
+      // bottom of this script. Deferred initialization calls are also issued there.
 
       if (paletteSortEl) {
         paletteSortEl.value = state.paletteSort;
@@ -2923,13 +2916,6 @@
           const target = event?.currentTarget?.dataset?.detailLevel;
           applySampleDetailLevel(target);
         });
-      }
-
-      applySampleDetailLevel(DEFAULT_SAMPLE_DETAIL, { skipReload: true, skipLog: true });
-
-      const restoredSession = loadInitialSession();
-      if (!restoredSession && SAMPLE_ARTWORK?.dataUrl) {
-        loadSamplePuzzle({ detailLevel: state.sampleDetailLevel, skipDetailUpdate: true });
       }
 
       selectButton.addEventListener("click", () => fileInput.click());
@@ -5989,7 +5975,7 @@
         return manager;
       }
 
-      const rendererManager = createRendererManager();
+      rendererManager = createRendererManager();
 
       function renderPuzzle() {
         rendererManager.drawPuzzle();
@@ -5997,6 +5983,24 @@
 
       function paintRegions(regions, fillStyle) {
         rendererManager.highlightRegions(regions, fillStyle);
+      }
+
+      applyGameplaySettings(state.settings);
+      updateOptionOutputs();
+      refreshSaveList();
+      updateStorageUsageSummary();
+      updateCommandStates();
+      renderDebugLog();
+      logDebug("Session started");
+      syncCommandRailMetrics();
+      handleViewportChange({ log: true, recenter: true });
+      resetView({ recenter: true });
+
+      applySampleDetailLevel(DEFAULT_SAMPLE_DETAIL, { skipReload: true, skipLog: true });
+
+      const restoredSession = loadInitialSession();
+      if (!restoredSession && SAMPLE_ARTWORK?.dataUrl) {
+        loadSamplePuzzle({ detailLevel: state.sampleDetailLevel, skipDetailUpdate: true });
       }
 
       function flashPaletteSwatch(colorId, options = {}) {
