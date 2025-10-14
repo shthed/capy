@@ -14,6 +14,9 @@ permissions:
 jobs:
   deploy-branch:
     runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -211,6 +214,11 @@ jobs:
       - name: Deploy branch content
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
+          set -euo pipefail
+
+          # Initialize has_changes early
+          echo "has_changes=false" >> $GITHUB_ENV
+
           # Validate gh-pages is a valid git repository before proceeding
           if [ ! -d "gh-pages/.git" ]; then
             echo "gh-pages is not a valid git repository, re-cloning..."
@@ -230,8 +238,9 @@ jobs:
           if [ -z "$BRANCH_FOLDER" ]; then
             echo "Deploying main branch to root"
             # For main branch, copy files directly to root (including index.html)
-            # Preserve existing branch folders
-            rsync -a --exclude='.git' \
+            # Preserve existing branch folders and .git directory
+            rsync -a --delete \
+                      --exclude='.git/' \
                       --exclude='node_modules' \
                       --exclude='test-results' \
                       --exclude='playwright-report' \
@@ -239,7 +248,6 @@ jobs:
                       --exclude='artifacts' \
                       --exclude='README.md' \
                       --exclude='branch.html' \
-                      --delete-excluded \
                       ../source/ ./
           else
             # For other branches, deploy to subfolder
@@ -263,11 +271,20 @@ jobs:
                       ../source/ "$BRANCH_FOLDER/"
           fi
 
+          # Safety check: Verify .git directory still exists after rsync
+          if [ ! -d ".git" ]; then
+            echo "Error: .git directory is missing after rsync operation"
+            exit 1
+          fi
+
           # Clean up old branches that no longer have open PRs
           echo "Cleaning up branches without open PRs..."
           if [ -f ../pr-branches.json ]; then
             # Get list of branches with open PRs
             ACTIVE_BRANCHES=$(cat ../pr-branches.json | grep -o '"safeName": "[^"]*"' | cut -d'"' -f4)
+
+            # Define protected directories that should never be removed
+            PROTECTED_DIRS=("docs" "assets" "static" "vendor" "lib" "css" "js" "images" "fonts")
 
             # Collect folders to remove first, then remove them
             # This prevents issues with directory iteration during deletion
@@ -275,8 +292,18 @@ jobs:
             for dir in */; do
               [ -d "$dir" ] || continue
               folder_name="${dir%/}"
-              # Skip branch.html and README.md
-              if [ "$folder_name" != "branch.html" ] && [ "$folder_name" != "README.md" ]; then
+
+              # Skip protected directories and files
+              is_protected=false
+              for protected in "${PROTECTED_DIRS[@]}"; do
+                if [ "$folder_name" = "$protected" ]; then
+                  is_protected=true
+                  break
+                fi
+              done
+
+              # Only consider removing if it's not protected and not in active branches
+              if [ "$is_protected" = false ]; then
                 if ! echo "$ACTIVE_BRANCHES" | grep -q "^${folder_name}$"; then
                   FOLDERS_TO_REMOVE+=("$folder_name")
                 fi
@@ -524,10 +551,10 @@ jobs:
 
           if git diff --staged --quiet; then
             echo "No changes to commit"
-            echo "has_changes=false" >> $GITHUB_ENV
           else
             git commit -m "Deploy branch: ${{ github.ref_name }} (commit: ${{ github.sha }})"
             git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages --force
+            # Only set has_changes=true after successful commit and push
             echo "has_changes=true" >> $GITHUB_ENV
             if [ -z "$BRANCH_FOLDER" ]; then
               echo "Published main branch to root: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
