@@ -215,7 +215,12 @@ jobs:
           if [ ! -d "gh-pages/.git" ]; then
             echo "gh-pages is not a valid git repository, re-cloning..."
             rm -rf gh-pages
-            git clone --depth=1 --branch gh-pages --single-branch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
+            if git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
+              git clone --depth=1 --branch gh-pages --single-branch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
+            else
+              echo "Error: gh-pages branch does not exist remotely and should have been created by Setup gh-pages branch step"
+              exit 1
+            fi
           fi
 
           cd gh-pages
