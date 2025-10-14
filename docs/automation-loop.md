@@ -16,10 +16,10 @@ merging, and feedback collection so that single-file updates stay trustworthy.
    the fast-forward merge policy intact.
 3. **Advertise intent.** Open a draft PR immediately so CI history and reviewer
    notes accumulate in a single thread.
-4. **Preview deployments.** Every push to any branch automatically deploys to
-   GitHub Pages under a subfolder named after the branch (e.g.,
+4. **Preview deployments.** Every push to a branch with an open PR automatically
+   deploys to GitHub Pages under a subfolder named after the branch (e.g.,
    `automation/feature` → `/automation-feature/`), letting reviewers test the live
-   app without cloning the repository.
+   app without cloning the repository. The `main` branch always deploys to the root.
 
 ## Testing cadence
 
