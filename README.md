@@ -230,7 +230,7 @@ skips optional fields.
 2. **Tune generation & appearance.** Open **Settings** to slide out the
    sidecar and tweak palette size, minimum region area, resize detail, sample
   rate (for faster clustering), iteration count, smoothing passes,
-  auto-advance, the difficulty selector, the status bar toggle, hint animations,
+  auto-advance, the difficulty selector, the status bar toggle (for import/generation updates), hint animations,
   fade timing, overlay intensity, the right-click action, the interface theme,
   the canvas background colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
    when working from an image source, then expand the **Advanced options**
@@ -314,9 +314,9 @@ before retrying.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
   Each swatch now stretches into a flat colour tile with no gutters, and the
   number rides directly on the paint with a contrast-aware outline so it stays
-  readable without extra chrome. A collapsible status bar above the dock stays hidden
-  unless an image import is running; enable the Settings toggle to keep its filled/remaining
-  counts visible after generation completes. Tooltips and `data-color-id` attributes still
+  readable without extra chrome. A collapsible status bar above the dock now only
+  appears while imports or puzzle generation are in flight; disable the Settings toggle
+  if you'd prefer to hide those updates entirely. Tooltips and `data-color-id` attributes still
   expose the colour name plus remaining counts for automation hooks.
 
 ## Keyboard and accessibility notes

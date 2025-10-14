@@ -244,6 +244,18 @@
         touch-action: manipulation;
       }
 
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
       body {
         margin: 0;
         min-height: 100vh;
@@ -533,10 +545,14 @@
         position: absolute;
         inset: 0;
         display: grid;
-        place-items: center;
+        place-content: start center;
+        justify-items: center;
+        padding: calc(24px * var(--ui-scale)) calc(18px * var(--ui-scale));
         background: var(--theme-hint-overlay);
         backdrop-filter: blur(18px);
         transition: opacity 0.24s ease;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
         z-index: 2;
       }
 
@@ -554,7 +570,7 @@
         text-align: left;
         width: min(420px, calc(100vw - 48px));
         max-width: 420px;
-        max-height: min(calc(100vh - 96px), 720px);
+        max-height: min(calc(100vh - (48px * var(--ui-scale))), 720px);
         padding: calc(32px * var(--ui-scale));
         border-radius: calc(20px * var(--ui-scale));
         background: var(--theme-hint-body-bg);
@@ -1512,7 +1528,7 @@
         <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
             <div class="hint-header">
-              <h1 id="startHintTitle">Start or manage a game</h1>
+              <h1 id="startHintTitle" class="visually-hidden">Game setup</h1>
               <button
                 id="closeStartHint"
                 type="button"
@@ -1522,18 +1538,15 @@
                 Close
               </button>
             </div>
-            <p>
-              Resume a saved game, start the bundled Capybara Springs puzzle from <code>capy.json</code>,
-              or import your own image or JSON file.
-            </p>
-            <div id="gameSelection" class="game-selection" role="group" aria-labelledby="gameSelectionHeading">
-              <h2 id="gameSelectionHeading">Start a game</h2>
-              <p class="game-selection-description">
-                Select Capybara Springs or pick one of your saves stored in this browser. Manage manual snapshots
-                below when you need to rename, export, or delete them.
-              </p>
-              <ul id="gameSelectionList" class="game-selection-list" role="list"></ul>
-              <p id="gameSelectionEmpty" class="game-selection-empty" hidden>No saved games yet.</p>
+            <div class="hint-actions">
+              <button
+                id="samplePuzzle"
+                type="button"
+                data-action="load-sample"
+                aria-label="Load capybara sample puzzle"
+              >
+                Load sample
+              </button>
             </div>
             <div class="detail-callout">
               <p class="detail-intro">Pick a detail level for the capybara demo:</p>
@@ -1552,8 +1565,8 @@
             >
               <h2 id="saveManagerHeading">Manage saves</h2>
               <p class="save-manager-description">
-                Manual saves and autosaves live in this browser. Create a snapshot to pin the current puzzle or revisit an
-                earlier run.
+                Autosaves keep tracking progress in this browser. Review them here or capture a manual snapshot to revisit a
+                favourite moment.
               </p>
               <button id="saveSnapshot" type="button" disabled>Save current puzzle</button>
               <ul id="saveList" aria-live="polite" aria-labelledby="saveManagerHeading"></ul>
@@ -1563,14 +1576,6 @@
             </div>
             <div class="hint-actions">
               <button id="selectImage" type="button">Choose an image</button>
-              <button
-                id="samplePuzzle"
-                type="button"
-                data-action="load-sample"
-                aria-label="Load capybara sample puzzle"
-              >
-                Try the capybara sample
-              </button>
             </div>
           </div>
         </div>
@@ -1582,8 +1587,10 @@
             data-status="idle"
             role="status"
             aria-live="polite"
+            hidden
+            aria-hidden="true"
           >
-            <span id="progress" class="progress-message">Start or manage a game</span>
+            <span id="progress" class="progress-message">Ready to paint</span>
             <div
               id="progressMeter"
               class="progress-meter"
@@ -1792,8 +1799,8 @@
             <span>Show region numbers</span>
           </label>
           <label class="toggle">
-            <input id="showStatusToggle" type="checkbox" />
-            <span>Show status bar with filled/remaining counts after imports</span>
+            <input id="showStatusToggle" type="checkbox" checked />
+            <span>Show status bar during imports and generation</span>
           </label>
           <label class="control">
             <span>Difficulty</span>
@@ -1944,7 +1951,7 @@
       const defaultProgressLabel =
         progressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
       const PROGRESS_MESSAGES = {
-        idle: "Start or manage a game",
+        idle: "Ready to paint",
         loading: "Loading puzzle…",
         active: "Keep colouring",
         generating: "Processing image…",
@@ -2151,7 +2158,7 @@
 
       const DEFAULT_GAME_FALLBACK = {
         title: "Capybara Springs",
-        description: "A capybara with an orange crown relaxes beside a dachshund in a forest lagoon.",
+        description: "A capybara in a lavender scarf lounges with a dachshund beside a moonlit spring.",
       };
 
       let cachedDefaultGame = null;
@@ -2966,7 +2973,7 @@
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
           showRegionLabels: true,
-          showStatusBar: false,
+          showStatusBar: true,
           theme: DEFAULT_UI_THEME,
         },
         previewVisible: false,
@@ -5843,9 +5850,9 @@
           typeof statusOverride === "string" && statusOverride
             ? statusOverride
             : progressStatusEl.getAttribute("data-status") || "idle";
-        const forcedVisible = status === "generating" || status === "loading";
-        const userEnabled = state.settings.showStatusBar === true;
-        const shouldShow = forcedVisible || userEnabled;
+        const isGenerationStatus = status === "generating" || status === "loading";
+        const userEnabled = state.settings.showStatusBar !== false;
+        const shouldShow = isGenerationStatus && userEnabled;
         progressStatusEl.hidden = !shouldShow;
         progressStatusEl.setAttribute("aria-hidden", shouldShow ? "false" : "true");
       }
