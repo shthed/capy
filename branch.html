@@ -79,76 +79,7 @@
       color: white;
       margin-left: 8px;
     }
-    .main-details {
-      margin-top: 10px;
-      font-size: 0.9em;
-      color: #586069;
-    }
-    .commit-list {
-      margin-top: 8px;
-      padding-left: 15px;
-      border-left: 2px solid #e1e4e8;
-    }
-    .commit-item {
-      margin: 5px 0;
-      font-size: 0.85em;
-    }
-    .commit-message {
-      color: #24292e;
-      font-weight: 500;
-    }
-    .commit-message a {
-      font-family: 'Courier New', Courier, monospace;
-      font-weight: 600;
-    }
-    .commit-author {
-      color: #586069;
-    }
-    .commit-sha {
-      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-      font-size: 0.9em;
-      color: #0366d6;
-      text-decoration: none;
-    }
-    .commit-sha:hover {
-      text-decoration: underline;
-    }
-    .commit-prs {
-      margin-top: 3px;
-      font-size: 0.8em;
-    }
-    .commit-pr-link {
-      color: #6f42c1;
-      text-decoration: none;
-      margin-right: 8px;
-    }
-    .commit-pr-link:hover {
-      text-decoration: underline;
-    }
   </style>
-  <script>
-    // Function to format timestamp to local timezone
-    function formatLocalTime(timestamp) {
-      if (!timestamp) return 'N/A';
-      const date = new Date(timestamp);
-      return date.toLocaleString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZoneName: 'short'
-      });
-    }
-
-    // Convert all timestamps to local timezone after page loads
-    document.addEventListener('DOMContentLoaded', function() {
-      document.querySelectorAll('[data-timestamp]').forEach(function(element) {
-        const timestamp = parseInt(element.getAttribute('data-timestamp'));
-        element.textContent = formatLocalTime(timestamp);
-      });
-    });
-  </script>
 </head>
 <body>
   <h1>Capy Image Generator - Branch Deployments</h1>
@@ -156,28 +87,18 @@
     <strong>Note:</strong> The main branch is always deployed to the root.
     Other branches with open pull requests are deployed to subfolders.
     Branches are sorted by most recently updated first.
-    All dates and times are shown in your local timezone.
   </div>
   <ul>
-              <li class="main-branch">
-                <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>
-                <div class="pr-info">The main production branch - always deployed to root</div>
-                <div class="main-details">
-                  <div class="timestamp">Last commit: <span data-timestamp="1760463121000">1760463121000</span></div>
-                  <div class="timestamp">Last deployment: <span data-timestamp="1760465031701">1760465031701</span></div>
-                  <div class="commit-list">
-<div class="commit-item"><div class="commit-message">Merge pull request #130 from shthed/copilot/fix-github-pages-deployment</div><div class="commit-author">by Hairy Dog Trumpet · <span data-timestamp="1760463121000">1760463121000</span> · <a class="commit-sha" href="https://github.com/shthed/capy/commit/f6739009935b7e55517ac11385510a1b9b0c5995">f673900</a></div><div class="commit-prs"><a class="commit-pr-link" href="https://github.com/shthed/capy/pull/130">#130</a></div></div>
-<div class="commit-item"><div class="commit-message">Improve comments for clarity on rsync and protected directories</div><div class="commit-author">by Codex · <span data-timestamp="1760459997000">1760459997000</span> · <a class="commit-sha" href="https://github.com/shthed/capy/commit/c50ae069502e5e88c96fdbc5c123dd48ca1abe7c">c50ae06</a></div><div class="commit-prs"><a class="commit-pr-link" href="https://github.com/shthed/capy/pull/130">#130</a></div></div>
-<div class="commit-item"><div class="commit-message">Address code review feedback - improve consistency and documentation</div><div class="commit-author">by Codex · <span data-timestamp="1760459906000">1760459906000</span> · <a class="commit-sha" href="https://github.com/shthed/capy/commit/2aa79d674213602511ef618124cea835b0a4f62c">2aa79d6</a></div><div class="commit-prs"><a class="commit-pr-link" href="https://github.com/shthed/capy/pull/130">#130</a></div></div>
-                  </div>
-                </div>
-              </li>
-<li><a class="branch-link" href="codex-review-last-2-days-of-commits/">codex/review-last-2-days-of-commits</a><div class="pr-info">PR #125: Simplify developer map overview - <a class="pr-link" href="https://github.com/shthed/capy/pull/125">View PR</a></div><div class="timestamp">Last updated: <span data-timestamp="1760465022000">2025-10-14T18:03:42Z</span></div></li>
-<li><a class="branch-link" href="copilot-add-concurrency-control-workflow/">copilot/add-concurrency-control-workflow</a><div class="pr-info">PR #133: Add concurrency control to prevent overlapping GitHub Pages deployments - <a class="pr-link" href="https://github.com/shthed/capy/pull/133">View PR</a></div><div class="timestamp">Last updated: <span data-timestamp="1760464718000">2025-10-14T17:58:38Z</span></div></li>
-<li><a class="branch-link" href="codex-update-deploy-branch.yml-rsync-cleanup/">codex/update-deploy-branch.yml-rsync-cleanup</a><div class="pr-info">PR #132: Preserve git metadata during main branch deploy - <a class="pr-link" href="https://github.com/shthed/capy/pull/132">View PR</a></div><div class="timestamp">Last updated: <span data-timestamp="1760463954000">2025-10-14T17:45:54Z</span></div></li>
-<li><a class="branch-link" href="copilot-fix-github-pages-deployment-issue/">copilot/fix-github-pages-deployment-issue</a><div class="pr-info">PR #131: Fix GitHub Pages deployment workflow fatal: not in a git directory error - <a class="pr-link" href="https://github.com/shthed/capy/pull/131">View PR</a></div><div class="timestamp">Last updated: <span data-timestamp="1760463485000">2025-10-14T17:38:05Z</span></div></li>
-<li><a class="branch-link" href="copilot-update-automation-loop-md/">copilot/update-automation-loop-md</a><div class="pr-info">PR #120: Implement automated testing system with screenshot capture - <a class="pr-link" href="https://github.com/shthed/capy/pull/120">View PR</a></div><div class="timestamp">Last updated: <span data-timestamp="1760451855000">2025-10-14T14:24:15Z</span></div></li>
-<li><a class="branch-link" href="codex-introduce-renderer-abstraction-for-webgl/">codex/introduce-renderer-abstraction-for-webgl</a><div class="pr-info">PR #124: Scaffold renderer manager with label overlay canvas - <a class="pr-link" href="https://github.com/shthed/capy/pull/124">View PR</a></div><div class="timestamp">Last updated: <span data-timestamp="1760448133000">2025-10-14T13:22:13Z</span></div></li>
+    <li class="main-branch">
+      <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>
+      <div class="pr-info">The main production branch - always deployed to root</div>
+    </li>
+<li><a class="branch-link" href="codex-introduce-renderer-abstraction-for-webgl/">codex/introduce-renderer-abstraction-for-webgl</a><div class="pr-info">PR #124: Scaffold renderer manager with label overlay canvas - <a class="pr-link" href="https://github.com/shthed/capy/pull/124">View PR</a></div><div class="timestamp">Last updated: 2025-10-14T18:06:25Z</div></li>
+<li><a class="branch-link" href="codex-review-last-2-days-of-commits/">codex/review-last-2-days-of-commits</a><div class="pr-info">PR #125: Simplify developer map overview - <a class="pr-link" href="https://github.com/shthed/capy/pull/125">View PR</a></div><div class="timestamp">Last updated: 2025-10-14T18:05:35Z</div></li>
+<li><a class="branch-link" href="copilot-add-concurrency-control-workflow/">copilot/add-concurrency-control-workflow</a><div class="pr-info">PR #133: Add concurrency control to prevent overlapping GitHub Pages deployments - <a class="pr-link" href="https://github.com/shthed/capy/pull/133">View PR</a></div><div class="timestamp">Last updated: 2025-10-14T17:58:38Z</div></li>
+<li><a class="branch-link" href="codex-update-deploy-branch.yml-rsync-cleanup/">codex/update-deploy-branch.yml-rsync-cleanup</a><div class="pr-info">PR #132: Preserve git metadata during main branch deploy - <a class="pr-link" href="https://github.com/shthed/capy/pull/132">View PR</a></div><div class="timestamp">Last updated: 2025-10-14T17:45:54Z</div></li>
+<li><a class="branch-link" href="copilot-fix-github-pages-deployment-issue/">copilot/fix-github-pages-deployment-issue</a><div class="pr-info">PR #131: Fix GitHub Pages deployment workflow fatal: not in a git directory error - <a class="pr-link" href="https://github.com/shthed/capy/pull/131">View PR</a></div><div class="timestamp">Last updated: 2025-10-14T17:38:05Z</div></li>
+<li><a class="branch-link" href="copilot-update-automation-loop-md/">copilot/update-automation-loop-md</a><div class="pr-info">PR #120: Implement automated testing system with screenshot capture - <a class="pr-link" href="https://github.com/shthed/capy/pull/120">View PR</a></div><div class="timestamp">Last updated: 2025-10-14T14:24:15Z</div></li>
   </ul>
 </body>
 </html>
