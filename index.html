@@ -39,20 +39,8 @@
         --app-width: 100vw;
         --app-height: 100vh;
         --viewport-padding: calc(32px * var(--ui-scale));
-        --rail-gap: calc(8px * var(--ui-scale));
-        --rail-gap-portrait: calc(6px * var(--ui-scale));
-        --rail-padding-block: calc(12px * var(--ui-scale));
-        --rail-padding-inline: calc(24px * var(--ui-scale));
-        --command-button-size: clamp(
-          calc(32px * var(--ui-scale)),
-          calc(40px * var(--ui-scale)),
-          calc(48px * var(--ui-scale))
-        );
-        --command-button-size-portrait: clamp(
-          calc(30px * var(--ui-scale)),
-          calc(36px * var(--ui-scale)),
-          calc(44px * var(--ui-scale))
-        );
+        --rail-padding-block: calc(10px * var(--ui-scale));
+        --rail-padding-inline: calc(20px * var(--ui-scale));
         --theme-body-bg: #000000;
         --theme-body-color: #e2e8f0;
         --theme-command-bg: rgba(15, 23, 42, 0.82);
@@ -100,8 +88,8 @@
         --theme-chip-active-text: rgba(226, 232, 240, 0.98);
         --theme-palette-dock-bg: rgba(2, 6, 23, 0.94);
         --theme-palette-dock-border: rgba(15, 23, 42, 0.85);
-        --command-rail-top: calc(env(safe-area-inset-top, 0px) + 16px);
-        --command-rail-height: var(--command-button-size);
+        --command-rail-top: calc(env(safe-area-inset-top, 0px) + 12px);
+        --command-rail-height: calc(40px * var(--ui-scale));
       }
 
       body[data-theme="dark"] {
@@ -257,67 +245,91 @@
       #commandRail {
         position: absolute;
         top: var(--command-rail-top);
-        left: calc(env(safe-area-inset-left, 0px) + 16px);
-        right: calc(env(safe-area-inset-right, 0px) + 16px);
+        left: calc(env(safe-area-inset-left, 0px) + 12px);
+        right: calc(env(safe-area-inset-right, 0px) + 12px);
         display: flex;
-        justify-content: flex-start;
         align-items: center;
-        flex-wrap: wrap;
-        gap: calc(10px * var(--ui-scale));
+        gap: calc(6px * var(--ui-scale));
         padding: 0;
         margin: 0;
+        border: 0;
         background: none;
-        z-index: 3;
+        box-shadow: none;
+        backdrop-filter: none;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
         touch-action: manipulation;
+        z-index: 3;
+        scrollbar-width: none;
+      }
+
+      #commandRail::-webkit-scrollbar {
+        display: none;
       }
 
       #commandRail button {
-        border-radius: 12px;
-        padding: 0;
-        width: var(--command-button-size);
-        height: var(--command-button-size);
-        display: grid;
-        place-items: center;
-        background: var(--theme-command-bg);
+        display: inline-flex;
+        align-items: center;
+        gap: calc(6px * var(--ui-scale));
+        padding: calc(4px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        border-radius: calc(6px * var(--ui-scale));
+        border: 1px solid color-mix(in srgb, var(--theme-command-border) 60%, transparent);
+        background: color-mix(in srgb, var(--theme-command-bg) 88%, transparent);
         color: var(--theme-command-text);
-        border: 1px solid var(--theme-command-border);
+        font-size: calc(14px * var(--ui-scale));
+        font-weight: 500;
+        line-height: 1;
+        white-space: nowrap;
+        flex: 0 0 auto;
+        transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
       }
 
       #commandRail button.active {
-        background: var(--theme-command-active-bg);
-        border-color: var(--theme-command-active-border);
+        background: color-mix(in srgb, var(--theme-command-active-bg) 70%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
         color: var(--theme-command-active-text);
       }
 
       #commandRail button .icon {
-        font-size: 1.1rem;
+        font-size: 1.05rem;
         line-height: 1;
       }
 
+      #commandRail .label {
+        font-size: calc(13px * var(--ui-scale));
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      #commandRail button:not(:disabled):hover,
+      #commandRail button:not(:disabled):focus-visible {
+        background: color-mix(in srgb, var(--theme-command-active-bg) 55%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
+        color: var(--theme-command-active-text);
+      }
+
+      #commandRail button:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
+        outline-offset: 2px;
+      }
+
       #commandRail button:disabled {
-        background: var(--theme-command-disabled-bg);
+        background: color-mix(in srgb, var(--theme-command-disabled-bg) 70%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-disabled-border) 70%, transparent);
         color: var(--theme-command-disabled-text);
-        border-color: var(--theme-command-disabled-border);
       }
 
       body[data-orientation="portrait"] #commandRail {
-        gap: var(--rail-gap-portrait);
-        justify-content: flex-start;
-      }
-
-      body[data-orientation="portrait"] #commandRail button {
-        width: var(--command-button-size-portrait);
-        height: var(--command-button-size-portrait);
+        gap: calc(4px * var(--ui-scale));
       }
 
       body.compact-commands #commandRail {
-        justify-content: flex-start;
-        gap: var(--rail-gap-portrait);
+        gap: calc(4px * var(--ui-scale));
       }
 
-      body.compact-commands #commandRail button {
-        width: min(var(--command-button-size), calc(14vw));
-        height: min(var(--command-button-size), calc(14vw));
+      body.compact-commands #commandRail .label {
+        display: none;
       }
 
       body[data-orientation="portrait"] #paletteDock {
@@ -684,11 +696,11 @@
         color: var(--theme-caption-text);
       }
 
-        #settingsSheet .detail-callout {
+        #generatorSheet .detail-callout {
           text-align: left;
         }
 
-        #settingsSheet .detail-picker {
+        #generatorSheet .detail-picker {
           justify-content: flex-start;
         }
       button {
@@ -1103,7 +1115,7 @@
         top: calc(
           env(safe-area-inset-top, 0px) +
             var(--rail-padding-block) +
-            var(--command-button-size) +
+            var(--command-rail-height) +
             calc(16px * var(--ui-scale))
         );
         right: calc(env(safe-area-inset-right, 0px) + 24px);
@@ -1355,6 +1367,7 @@
           disabled
         >
           <span class="icon" aria-hidden="true">?</span>
+          <span class="label">Hint</span>
         </button>
         <button
           id="resetButton"
@@ -1365,6 +1378,7 @@
           disabled
         >
           <span class="icon" aria-hidden="true">↺</span>
+          <span class="label">Reset</span>
         </button>
         <button
           id="previewToggle"
@@ -1375,16 +1389,17 @@
           disabled
         >
           <span class="icon" aria-hidden="true">🖼</span>
+          <span class="label">Preview</span>
         </button>
         <button
-          id="sampleCommand"
+          id="generatorButton"
           type="button"
-          data-testid="sample-art-button"
-          data-action="load-sample"
-          aria-label="Reload sample puzzle"
-          title="Reload sample puzzle"
+          data-testid="generator-button"
+          aria-label="Generator options"
+          title="Generator options"
         >
-          <span class="icon" aria-hidden="true">🐹</span>
+          <span class="icon" aria-hidden="true">🎛</span>
+          <span class="label">Generator</span>
         </button>
         <button
           id="fullscreenButton"
@@ -1394,6 +1409,7 @@
           title="Enter fullscreen"
         >
           <span class="icon" aria-hidden="true">⛶</span>
+          <span class="label">Fullscreen</span>
         </button>
         <button
           id="importButton"
@@ -1403,6 +1419,7 @@
           title="Import"
         >
           <span class="icon" aria-hidden="true">⬆</span>
+          <span class="label">Import</span>
         </button>
         <button
           id="saveManagerButton"
@@ -1413,6 +1430,7 @@
           disabled
         >
           <span class="icon" aria-hidden="true">💾</span>
+          <span class="label">Saves</span>
         </button>
         <button
           id="helpButton"
@@ -1422,6 +1440,7 @@
           title="Help &amp; shortcuts"
         >
           <span class="icon" aria-hidden="true">ℹ</span>
+          <span class="label">Help</span>
         </button>
         <button
           id="settingsButton"
@@ -1431,6 +1450,7 @@
           title="Settings"
         >
           <span class="icon" aria-hidden="true">⚙</span>
+          <span class="label">Settings</span>
         </button>
       </header>
       <div id="viewport">
@@ -1564,16 +1584,16 @@
             <dd>Clear every painted region and restart the current puzzle.</dd>
             <dt>🖼 Preview</dt>
             <dd>Toggle the finished artwork overlay to compare your progress.</dd>
-            <dt>🐹 Sample</dt>
-              <dd>
-                Reload the built-in capybara puzzle for a fresh board. Pair it with the Low/Medium/High
-                detail presets to jump between ≈26, ≈42, or ≈140 regions.
-              </dd>
-              <dt>🎚 Detail</dt>
-              <dd>
-                Toggle the capybara detail chips (start hint or Settings) to reload the sample with tuned
-                palette sizes, minimum region areas, resize targets, and the region counts noted above.
-              </dd>
+            <dt>🎛 Generator</dt>
+            <dd>
+              Adjust clustering sliders, choose capybara detail presets, reload the current source image, or
+              export JSON. The new sheet mirrors the k-means pipeline inputs used for puzzle creation.
+            </dd>
+            <dt>🎚 Detail</dt>
+            <dd>
+              Toggle the capybara detail chips (start hint or Generator sheet) to reload the sample with tuned
+              palette sizes, minimum region areas, resize targets, and the region counts noted above.
+            </dd>
             <dt>⛶ Fullscreen</dt>
             <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
             <dt>⬆ Import</dt>
@@ -1584,8 +1604,8 @@
             <dd>Open this guide and inspect the live debug log.</dd>
             <dt>⚙ Settings</dt>
             <dd>
-              Adjust generation sliders, toggle auto-advance, customise the background, resize the interface, or export JSON.
-              Expand Advanced options to edit the hidden art prompt metadata when you need to capture the original brief.
+              Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface
+              scale. Advanced options expose accessibility tweaks for the hint animations.
             </dd>
           </dl>
         </section>
@@ -1626,6 +1646,84 @@
             <button id="clearDebugLog" type="button">Clear log</button>
           </div>
         </section>
+      </div>
+    </div>
+    <div
+      id="generatorSheet"
+      class="sheet hidden"
+      role="dialog"
+      aria-labelledby="generatorTitle"
+      aria-hidden="true"
+    >
+      <div class="sheet-header">
+        <h2 id="generatorTitle">Puzzle generator</h2>
+        <button type="button" class="close-button" data-sheet-close="generator">Close</button>
+      </div>
+      <div class="sheet-body">
+        <section class="sheet-section" aria-labelledby="generatorHeading">
+          <h3 id="generatorHeading">Clustering &amp; detail</h3>
+          <p class="control-note">
+            Tune the colour clustering pipeline that powers new puzzles. These settings apply to fresh imports and the bundled
+            capybara sample when reloaded.
+          </p>
+          <div class="detail-callout">
+            <p class="detail-intro">Capybara sample detail presets</p>
+            <div class="detail-picker" role="group" aria-label="Capybara sample detail presets">
+              <button type="button" class="detail-chip" data-detail-level="low">Low</button>
+              <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
+              <button type="button" class="detail-chip" data-detail-level="high">High</button>
+            </div>
+            <p class="detail-caption" data-detail-caption></p>
+          </div>
+          <p class="control-note">
+            Switching presets updates every slider below and reloads the sample scene when it's active.
+          </p>
+          <label class="control">
+            <span>Colours <output data-for="colorCount">16</output></span>
+            <input id="colorCount" type="range" min="4" max="64" value="16" />
+          </label>
+          <label class="control">
+            <span>Regions <output data-for="minRegion">80 px²</output></span>
+            <input id="minRegion" type="range" min="1" max="600" value="80" />
+          </label>
+          <p class="control-note">Higher values merge smaller areas for fewer regions.</p>
+          <label class="control">
+            <span>Detail <output data-for="detailLevel">768 px</output></span>
+            <input id="detailLevel" type="range" min="256" max="1600" step="64" value="768" />
+          </label>
+          <p class="control-note">Controls the longest edge used when resizing the source image.</p>
+          <label class="control">
+            <span>Sample rate <output data-for="sampleRate">65%</output></span>
+            <input id="sampleRate" type="range" min="25" max="100" step="5" value="65" />
+          </label>
+          <p class="control-note">Lower values speed up clustering by sampling fewer pixels.</p>
+          <label class="control">
+            <span>Iterations <output data-for="kmeansIters">12</output></span>
+            <input id="kmeansIters" type="range" min="4" max="32" step="1" value="12" />
+          </label>
+          <label class="control">
+            <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
+            <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
+          </label>
+          <details class="advanced-options" id="generatorAdvanced">
+            <summary>Advanced options</summary>
+            <label class="control">
+              <span>Art prompt</span>
+              <textarea
+                id="artPrompt"
+                rows="3"
+                placeholder="Describe the scene you want to reinterpret"
+              ></textarea>
+            </label>
+            <p class="control-note">
+              Stored with saves and exports so you can revisit the inspiration later.
+            </p>
+          </details>
+        </section>
+      </div>
+      <div class="sheet-actions">
+        <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
+        <button id="applyOptions" type="button" disabled>Apply changes</button>
       </div>
     </div>
     <div
@@ -1727,66 +1825,6 @@
           </label>
           <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
         </section>
-        <section class="sheet-section" aria-labelledby="generatorHeading">
-          <h3 id="generatorHeading">Generator</h3>
-          <div class="detail-callout">
-            <p class="detail-intro">Capybara sample detail presets</p>
-            <div class="detail-picker" role="group" aria-label="Capybara sample detail presets">
-              <button type="button" class="detail-chip" data-detail-level="low">Low</button>
-              <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
-              <button type="button" class="detail-chip" data-detail-level="high">High</button>
-            </div>
-            <p class="detail-caption" data-detail-caption></p>
-          </div>
-          <p class="control-note">
-            Switching presets updates the sliders below and reloads the sample scene when it's active.
-          </p>
-          <label class="control">
-            <span>Colours <output data-for="colorCount">16</output></span>
-            <input id="colorCount" type="range" min="4" max="64" value="16" />
-          </label>
-          <label class="control">
-            <span>Regions <output data-for="minRegion">80 px²</output></span>
-            <input id="minRegion" type="range" min="1" max="600" value="80" />
-          </label>
-          <p class="control-note">Higher values merge smaller areas for fewer regions.</p>
-          <label class="control">
-            <span>Detail <output data-for="detailLevel">768 px</output></span>
-            <input id="detailLevel" type="range" min="256" max="1600" step="64" value="768" />
-          </label>
-          <p class="control-note">Controls the longest edge used when resizing the source image.</p>
-          <label class="control">
-            <span>Sample rate <output data-for="sampleRate">65%</output></span>
-            <input id="sampleRate" type="range" min="25" max="100" step="5" value="65" />
-          </label>
-          <p class="control-note">Lower values speed up clustering by sampling fewer pixels.</p>
-          <label class="control">
-            <span>Iterations <output data-for="kmeansIters">12</output></span>
-            <input id="kmeansIters" type="range" min="4" max="32" step="1" value="12" />
-          </label>
-          <label class="control">
-            <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
-            <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
-          </label>
-          <details class="advanced-options" id="generatorAdvanced">
-            <summary>Advanced options</summary>
-            <label class="control">
-              <span>Art prompt</span>
-              <textarea
-                id="artPrompt"
-                rows="3"
-                placeholder="Describe the scene you want to reinterpret"
-              ></textarea>
-            </label>
-            <p class="control-note">
-              Stored with saves and exports so you can revisit the inspiration later.
-            </p>
-          </details>
-        </section>
-      </div>
-      <div class="sheet-actions">
-        <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
-        <button id="applyOptions" type="button" disabled>Apply changes</button>
       </div>
     </div>
         <script>
@@ -1811,8 +1849,10 @@
       const fullscreenButton = document.getElementById("fullscreenButton");
       const importButton = document.getElementById("importButton");
       const saveManagerButton = document.getElementById("saveManagerButton");
+      const generatorButton = document.getElementById("generatorButton");
       const settingsButton = document.getElementById("settingsButton");
       const helpButton = document.getElementById("helpButton");
+      const generatorSheet = document.getElementById("generatorSheet");
       const settingsSheet = document.getElementById("settingsSheet");
       const helpSheet = document.getElementById("helpSheet");
       const debugLogEl = document.getElementById("debugLog");
@@ -1865,18 +1905,24 @@
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
 
-      // Settings sheet output mirrors we update while users drag sliders.
-      const optionOutputs = {
-        colorCount: settingsSheet.querySelector('output[data-for="colorCount"]'),
-        minRegion: settingsSheet.querySelector('output[data-for="minRegion"]'),
-        detail: settingsSheet.querySelector('output[data-for="detailLevel"]'),
-        sample: settingsSheet.querySelector('output[data-for="sampleRate"]'),
-        iterations: settingsSheet.querySelector('output[data-for="kmeansIters"]'),
-        smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
-        uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
-        hintFadeDuration: settingsSheet.querySelector('output[data-for="hintFadeDuration"]'),
-        hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
-      };
+      // Sheet output mirrors we update while users drag sliders.
+      const generatorOutputs = generatorSheet
+        ? {
+            colorCount: generatorSheet.querySelector('output[data-for="colorCount"]'),
+            minRegion: generatorSheet.querySelector('output[data-for="minRegion"]'),
+            detail: generatorSheet.querySelector('output[data-for="detailLevel"]'),
+            sample: generatorSheet.querySelector('output[data-for="sampleRate"]'),
+            iterations: generatorSheet.querySelector('output[data-for="kmeansIters"]'),
+            smoothing: generatorSheet.querySelector('output[data-for="smoothingPasses"]'),
+          }
+        : {};
+      const settingsOutputs = settingsSheet
+        ? {
+            uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
+            hintFadeDuration: settingsSheet.querySelector('output[data-for="hintFadeDuration"]'),
+            hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
+          }
+        : {};
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
@@ -3213,6 +3259,7 @@
             }
             updatePreviewState();
           },
+          openGenerator: () => openSheet(generatorSheet),
           openSettings: () => openSheet(settingsSheet),
         };
       }
@@ -3284,6 +3331,9 @@
 
       selectButton.addEventListener("click", () => fileInput.click());
       importButton.addEventListener("click", () => fileInput.click());
+      if (generatorButton) {
+        generatorButton.addEventListener("click", () => openSheet(generatorSheet));
+      }
       settingsButton.addEventListener("click", () => openSheet(settingsSheet));
       saveManagerButton.addEventListener("click", () => showStartScreen({ scrollTo: "saves" }));
       if (helpButton) {
@@ -3336,6 +3386,8 @@
           const target = event.currentTarget.getAttribute("data-sheet-close");
           if (target === "settings") {
             closeSheet(settingsSheet);
+          } else if (target === "generator") {
+            closeSheet(generatorSheet);
           } else if (target === "help") {
             closeSheet(helpSheet);
           }
@@ -4483,30 +4535,42 @@
       }
 
       function updateOptionOutputs() {
-        if (optionOutputs.colorCount) optionOutputs.colorCount.textContent = String(colorCountEl.value);
-        if (optionOutputs.minRegion) optionOutputs.minRegion.textContent = `${minRegionEl.value} px²`;
-        if (optionOutputs.detail) optionOutputs.detail.textContent = `${detailEl.value} px`;
-        if (optionOutputs.sample) optionOutputs.sample.textContent = `${sampleRateEl.value}%`;
-        if (optionOutputs.iterations) optionOutputs.iterations.textContent = String(kmeansItersEl.value);
-        if (optionOutputs.smoothing) optionOutputs.smoothing.textContent = String(smoothingEl.value);
-        if (optionOutputs.uiScale) {
+        if (generatorOutputs.colorCount) {
+          generatorOutputs.colorCount.textContent = String(colorCountEl.value);
+        }
+        if (generatorOutputs.minRegion) {
+          generatorOutputs.minRegion.textContent = `${minRegionEl.value} px²`;
+        }
+        if (generatorOutputs.detail) {
+          generatorOutputs.detail.textContent = `${detailEl.value} px`;
+        }
+        if (generatorOutputs.sample) {
+          generatorOutputs.sample.textContent = `${sampleRateEl.value}%`;
+        }
+        if (generatorOutputs.iterations) {
+          generatorOutputs.iterations.textContent = String(kmeansItersEl.value);
+        }
+        if (generatorOutputs.smoothing) {
+          generatorOutputs.smoothing.textContent = String(smoothingEl.value);
+        }
+        if (settingsOutputs.uiScale) {
           const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
           const value = Number.isFinite(source) && source > 0
             ? source
             : (Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
                 ? state.settings.uiScale
                 : DEFAULT_UI_SCALE);
-          optionOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
+          settingsOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
         }
-        if (optionOutputs.hintFadeDuration) {
+        if (settingsOutputs.hintFadeDuration) {
           const source = hintFadeDurationInput ? Number(hintFadeDurationInput.value) : state.settings.hintFadeDuration;
           const duration = normalizeHintFadeDuration(source);
-          optionOutputs.hintFadeDuration.textContent = `${(duration / 1000).toFixed(1)} s`;
+          settingsOutputs.hintFadeDuration.textContent = `${(duration / 1000).toFixed(1)} s`;
         }
-        if (optionOutputs.hintIntensity) {
+        if (settingsOutputs.hintIntensity) {
           const source = hintIntensityInput ? Number(hintIntensityInput.value) : state.settings.hintIntensity * 100;
           const intensity = normalizeHintIntensity(source);
-          optionOutputs.hintIntensity.textContent = `${Math.round(intensity * 100)}%`;
+          settingsOutputs.hintIntensity.textContent = `${Math.round(intensity * 100)}%`;
         }
       }
 
