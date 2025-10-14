@@ -87,7 +87,7 @@ Branch folders are automatically cleaned up when their pull requests are closed 
 - Each deployment creates a single commit in the `gh-pages` branch
 - The workflow uses `--force` push to ensure the latest content is always deployed
 - Deployments are protected by GitHub Actions permissions and only run from the repository
-- **Concurrency control**: Each branch has its own deployment queue. When a new deployment is triggered for a branch, any in-progress deployment for that same branch is automatically cancelled to prevent conflicts
+- **Concurrency control**: Each branch has its own GitHub Actions concurrency group. When a new deployment is triggered for a branch, any in-progress deployment for that same branch is automatically cancelled. This prevents "in progress deployment" errors and ensures only the latest changes are deployed
 
 ## Configuration
 
