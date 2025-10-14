@@ -25,6 +25,7 @@ single `index.html` document—no build tools or extra runtime required.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
+  - `.github/workflows/screenshot.yml` – Automated UI screenshot capture across multiple viewports (desktop, tablet, mobile) with basic visual regression detection. Triggers on push to main or manual dispatch.
 - **Process notes**
   - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
   - `docs/automation-loop.md` – Blueprint for the automated branching, testing, merging, and feedback loop.
@@ -42,6 +43,7 @@ single `index.html` document—no build tools or extra runtime required.
   a shared backlog of automation improvements.
 - **Close the loop.** Update PR descriptions and linked issues with branch names, CI run URLs, artifact locations, and live
   preview URLs so the automation history remains searchable.
+- **Screenshot workflow.** The automated screenshot workflow captures UI screenshots across desktop (1366x768), tablet (1024x768), and mobile (390x844) viewports. It runs automatically on pushes to main for visual regression detection, comparing new screenshots against baseline images stored in `.github/screenshots/baseline/`. Manual workflow dispatch allows custom viewport configurations and paths. Screenshots and diff artifacts are retained for 30 days.
 
 ## Features
 

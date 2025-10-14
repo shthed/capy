@@ -1,0 +1,32 @@
+{
+  "name": "capy-image-generator",
+  "version": "1.0.0",
+  "description": "Static browser-based color-by-number puzzle generator",
+  "main": "index.html",
+  "scripts": {
+    "dev": "http-server -p 8000 -c-1",
+    "test": "echo 'No tests configured yet' && exit 0",
+    "test:smoke": "echo 'No tests configured yet' && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shthed/capy.git"
+  },
+  "keywords": [
+    "color-by-number",
+    "puzzle",
+    "image-generator",
+    "k-means",
+    "static-site"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/shthed/capy/issues"
+  },
+  "homepage": "https://github.com/shthed/capy#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "http-server": "^14.1.1"
+  }
+}

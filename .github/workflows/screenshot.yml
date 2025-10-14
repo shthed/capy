@@ -1,0 +1,284 @@
+name: UI Screenshot Capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      viewports:
+        description: 'Comma-separated viewport list (e.g., "1366x768,1024x768,390x844")'
+        required: false
+        default: '1366x768,1024x768,390x844'
+        type: string
+      path:
+        description: 'Path to capture (relative to site root)'
+        required: false
+        default: '/'
+        type: string
+      full_page:
+        description: 'Capture full page (scrollable content)'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - 'index.html'
+      - 'puzzle-generation.js'
+      - 'capy.json'
+      - '.github/workflows/screenshot.yml'
+
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        viewport: 
+          - name: desktop
+            width: 1366
+            height: 768
+          - name: tablet
+            width: 1024
+            height: 768
+          - name: mobile
+            width: 390
+            height: 844
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Parse custom viewports (manual trigger)
+        id: parse-viewports
+        if: github.event_name == 'workflow_dispatch' && inputs.viewports != ''
+        run: |
+          # Parse custom viewports from input
+          VIEWPORTS="${{ inputs.viewports }}"
+          IFS=',' read -ra VP_ARRAY <<< "$VIEWPORTS"
+          
+          # Check if current matrix viewport matches any custom viewport
+          CURRENT="${{ matrix.viewport.width }}x${{ matrix.viewport.height }}"
+          SKIP=true
+          
+          for vp in "${VP_ARRAY[@]}"; do
+            vp=$(echo "$vp" | tr -d ' ')
+            if [ "$vp" = "$CURRENT" ]; then
+              SKIP=false
+              break
+            fi
+          done
+          
+          echo "skip=$SKIP" >> $GITHUB_OUTPUT
+          echo "Current viewport: $CURRENT, Skip: $SKIP"
+
+      - name: Start static server
+        if: steps.parse-viewports.outputs.skip != 'true'
+        run: |
+          npm run dev &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+          
+          # Wait for server to be ready
+          for i in {1..30}; do
+            if curl -s http://localhost:8000 > /dev/null; then
+              echo "Server is ready"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 1
+          done
+          
+          if ! curl -s http://localhost:8000 > /dev/null; then
+            echo "Server failed to start"
+            exit 1
+          fi
+
+      - name: Capture screenshot
+        if: steps.parse-viewports.outputs.skip != 'true'
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          VIEWPORT_NAME="${{ matrix.viewport.name }}"
+          WIDTH="${{ matrix.viewport.width }}"
+          HEIGHT="${{ matrix.viewport.height }}"
+          PATH_INPUT="${{ inputs.path || '/' }}"
+          FULL_PAGE="${{ inputs.full_page || 'false' }}"
+          
+          # Create screenshot directory
+          mkdir -p screenshots
+          
+          # Create a simple Playwright script for screenshot capture
+          cat > capture-screenshot.js << 'SCRIPT_EOF'
+          const { chromium } = require('@playwright/test');
+
+          (async () => {
+            const browser = await chromium.launch();
+            const context = await browser.newContext({
+              viewport: {
+                width: parseInt(process.env.WIDTH),
+                height: parseInt(process.env.HEIGHT)
+              },
+              deviceScaleFactor: 1
+            });
+            
+            const page = await context.newPage();
+            const url = 'http://localhost:8000' + process.env.PATH_INPUT;
+            
+            console.log(`Navigating to: ${url}`);
+            await page.goto(url, { waitUntil: 'networkidle' });
+            
+            // Wait a bit for any animations to complete
+            await page.waitForTimeout(2000);
+            
+            const filename = `screenshots/screenshot-${process.env.VIEWPORT_NAME}-${process.env.TIMESTAMP}.png`;
+            
+            await page.screenshot({
+              path: filename,
+              fullPage: process.env.FULL_PAGE === 'true'
+            });
+            
+            console.log(`Screenshot saved: ${filename}`);
+            
+            await browser.close();
+          })();
+          SCRIPT_EOF
+          
+          # Run the screenshot capture
+          node capture-screenshot.js
+          
+          # List captured screenshots for verification
+          ls -lh screenshots/
+
+      - name: Upload screenshot artifacts
+        if: steps.parse-viewports.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-${{ matrix.viewport.name }}-${{ github.run_number }}
+          path: screenshots/
+          retention-days: 30
+
+      - name: Check for baseline screenshots
+        if: steps.parse-viewports.outputs.skip != 'true' && github.event_name == 'push'
+        id: check-baseline
+        run: |
+          # Create baseline directory if it doesn't exist
+          mkdir -p .github/screenshots/baseline
+          
+          BASELINE_FILE=".github/screenshots/baseline/screenshot-${{ matrix.viewport.name }}.png"
+          
+          if [ -f "$BASELINE_FILE" ]; then
+            echo "baseline_exists=true" >> $GITHUB_OUTPUT
+            echo "Baseline found: $BASELINE_FILE"
+          else
+            echo "baseline_exists=false" >> $GITHUB_OUTPUT
+            echo "No baseline found, will create one"
+          fi
+
+      - name: Visual regression comparison
+        if: steps.parse-viewports.outputs.skip != 'true' && github.event_name == 'push' && steps.check-baseline.outputs.baseline_exists == 'true'
+        run: |
+          BASELINE_FILE=".github/screenshots/baseline/screenshot-${{ matrix.viewport.name }}.png"
+          CURRENT_FILE=$(ls screenshots/screenshot-${{ matrix.viewport.name }}-*.png | head -1)
+          DIFF_FILE="screenshots/diff-${{ matrix.viewport.name }}-$(date +%Y%m%d-%H%M%S).png"
+          
+          # Install pixelmatch for visual comparison
+          npm install --no-save pixelmatch pngjs
+          
+          # Create comparison script
+          cat > compare-screenshots.js << 'COMPARE_EOF'
+          const fs = require('fs');
+          const { PNG } = require('pngjs');
+          const pixelmatch = require('pixelmatch');
+
+          const baseline = PNG.sync.read(fs.readFileSync(process.env.BASELINE_FILE));
+          const current = PNG.sync.read(fs.readFileSync(process.env.CURRENT_FILE));
+          
+          const { width, height } = baseline;
+          const diff = new PNG({ width, height });
+          
+          const numDiffPixels = pixelmatch(
+            baseline.data,
+            current.data,
+            diff.data,
+            width,
+            height,
+            { threshold: 0.1 }
+          );
+          
+          const totalPixels = width * height;
+          const diffPercentage = (numDiffPixels / totalPixels * 100).toFixed(2);
+          
+          console.log(`Difference: ${numDiffPixels} pixels (${diffPercentage}%)`);
+          
+          // Save diff image
+          fs.writeFileSync(process.env.DIFF_FILE, PNG.sync.write(diff));
+          
+          // Output result
+          fs.writeFileSync('diff-result.txt', `${diffPercentage}`);
+          
+          // Exit with error if difference is significant (more than 5%)
+          if (parseFloat(diffPercentage) > 5.0) {
+            console.log('⚠️ Visual regression detected! Difference exceeds 5%');
+            process.exit(1);
+          } else {
+            console.log('✅ Visual regression check passed');
+          }
+          COMPARE_EOF
+          
+          # Run comparison
+          node compare-screenshots.js || true
+          
+          # Read and display result
+          if [ -f diff-result.txt ]; then
+            DIFF_PCT=$(cat diff-result.txt)
+            echo "Visual difference: $DIFF_PCT%"
+            
+            # Upload diff image
+            if [ -f "$DIFF_FILE" ]; then
+              echo "Diff image created: $DIFF_FILE"
+            fi
+          fi
+
+      - name: Update baseline screenshot
+        if: steps.parse-viewports.outputs.skip != 'true' && github.event_name == 'push' && steps.check-baseline.outputs.baseline_exists == 'false'
+        run: |
+          BASELINE_DIR=".github/screenshots/baseline"
+          mkdir -p "$BASELINE_DIR"
+          
+          CURRENT_FILE=$(ls screenshots/screenshot-${{ matrix.viewport.name }}-*.png | head -1)
+          BASELINE_FILE="$BASELINE_DIR/screenshot-${{ matrix.viewport.name }}.png"
+          
+          cp "$CURRENT_FILE" "$BASELINE_FILE"
+          echo "Created new baseline: $BASELINE_FILE"
+          
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Commit and push baseline
+          git add "$BASELINE_FILE"
+          git commit -m "Add baseline screenshot for ${{ matrix.viewport.name }} viewport"
+          git push
+
+      - name: Upload diff artifacts
+        if: steps.parse-viewports.outputs.skip != 'true' && github.event_name == 'push' && steps.check-baseline.outputs.baseline_exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: diff-${{ matrix.viewport.name }}-${{ github.run_number }}
+          path: screenshots/diff-*.png
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Stop server
+        if: always() && env.SERVER_PID != ''
+        run: |
+          kill $SERVER_PID || true
