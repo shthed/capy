@@ -7853,6 +7853,97 @@
         logDebug(`Saved snapshot: ${entry.title}`);
       }
 
+      function describeSaveEntry(entry) {
+        const titleSource =
+          (typeof entry?.title === "string" && entry.title.trim()) ||
+          (typeof entry?.data?.title === "string" && entry.data.title);
+        const title = titleSource ? titleSource.trim() : "Untitled puzzle";
+        const doneCount = entry?.data?.filled?.length ?? 0;
+        const totalCount = entry?.data?.regions?.length ?? 0;
+        const progressText = totalCount
+          ? `${doneCount} of ${totalCount} regions filled`
+          : `${doneCount} regions filled`;
+        const timestampValue = Number(entry?.timestamp);
+        const hasTimestamp = Number.isFinite(timestampValue) && timestampValue > 0;
+        const timestamp = hasTimestamp ? new Date(timestampValue) : null;
+        const timestampLabel = timestamp ? `Saved ${timestamp.toLocaleString()}` : "";
+        const ariaLabelParts = [title, progressText];
+        if (timestampLabel) {
+          ariaLabelParts.push(timestampLabel);
+        }
+        return {
+          id: entry?.id,
+          title,
+          progressText,
+          timestamp,
+          timestampLabel,
+          ariaLabel: ariaLabelParts.join(" – "),
+        };
+      }
+
+      function createSaveActionButton(action, label) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.action = action;
+        button.textContent = label;
+        return button;
+      }
+
+      function createSaveSelectionItem(entry) {
+        const metadata = describeSaveEntry(entry);
+        const item = document.createElement("li");
+        item.className = "game-option";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "game-option-button";
+        button.dataset.gameId = metadata.id;
+        const title = document.createElement("span");
+        title.className = "game-option-title";
+        title.textContent = metadata.title;
+        const progress = document.createElement("span");
+        progress.className = "game-option-meta";
+        progress.textContent = metadata.progressText;
+        button.append(title, progress);
+        if (metadata.timestampLabel) {
+          const time = document.createElement("span");
+          time.className = "game-option-meta";
+          time.textContent = metadata.timestampLabel;
+          button.append(time);
+        }
+        button.setAttribute("aria-label", metadata.ariaLabel);
+        item.appendChild(button);
+        return item;
+      }
+
+      function createSaveManagementItem(entry) {
+        const metadata = describeSaveEntry(entry);
+        const item = document.createElement("li");
+        item.className = "save-entry";
+        item.dataset.saveId = metadata.id;
+        const header = document.createElement("header");
+        const title = document.createElement("strong");
+        title.textContent = metadata.title;
+        header.appendChild(title);
+        if (metadata.timestamp) {
+          const time = document.createElement("time");
+          time.dateTime = metadata.timestamp.toISOString();
+          time.textContent = metadata.timestamp.toLocaleString();
+          header.appendChild(time);
+        }
+        const progress = document.createElement("div");
+        progress.textContent = metadata.progressText;
+        const actions = document.createElement("div");
+        actions.className = "save-actions";
+        actions.append(
+          createSaveActionButton("load", "Load"),
+          createSaveActionButton("rename", "Rename"),
+          createSaveActionButton("export", "Export"),
+          createSaveActionButton("delete", "Delete"),
+        );
+        item.append(header, progress, actions);
+        return item;
+      }
+
       function refreshGameSelection() {
         if (!gameSelectionList) return;
         gameSelectionList.innerHTML = "";
@@ -7889,34 +7980,7 @@
         const hasSaves = Array.isArray(state.saves) && state.saves.length > 0;
         if (hasSaves) {
           for (const entry of state.saves) {
-            const item = document.createElement("li");
-            item.className = "game-option";
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = "game-option-button";
-            button.dataset.gameId = entry.id;
-            const title = document.createElement("span");
-            title.className = "game-option-title";
-            title.textContent = entry.title || "Untitled puzzle";
-            const doneCount = entry.data?.filled?.length ?? 0;
-            const totalCount = entry.data?.regions?.length ?? 0;
-            const progressText = totalCount
-              ? `${doneCount} of ${totalCount} regions filled`
-              : `${doneCount} regions filled`;
-            const progress = document.createElement("span");
-            progress.className = "game-option-meta";
-            progress.textContent = progressText;
-            const timestamp = Number(entry.timestamp);
-            if (Number.isFinite(timestamp) && timestamp > 0) {
-              const time = document.createElement("span");
-              time.className = "game-option-meta";
-              time.textContent = `Saved ${new Date(timestamp).toLocaleString()}`;
-              button.append(time);
-            }
-            button.setAttribute("aria-label", `${title.textContent} – ${progressText}`);
-            button.prepend(title, progress);
-            item.appendChild(button);
-            fragment.appendChild(item);
+            fragment.appendChild(createSaveSelectionItem(entry));
           }
         }
 
@@ -7928,29 +7992,14 @@
 
       function refreshSaveList() {
         saveList.innerHTML = "";
+        const fragment = document.createDocumentFragment();
         const hasEntries = Array.isArray(state.saves) && state.saves.length > 0;
-        for (const entry of state.saves) {
-          const item = document.createElement("li");
-          item.className = "save-entry";
-          item.dataset.saveId = entry.id;
-          const date = new Date(entry.timestamp);
-          const doneCount = entry.data?.filled?.length ?? 0;
-          const total = entry.data?.regions?.length ?? 0;
-          item.innerHTML = `
-            <header>
-              <strong>${entry.title || "Untitled puzzle"}</strong>
-              <time>${date.toLocaleString()}</time>
-            </header>
-            <div>${doneCount} of ${total} regions filled</div>
-            <div class="save-actions">
-              <button type="button" data-action="load">Load</button>
-              <button type="button" data-action="rename">Rename</button>
-              <button type="button" data-action="export">Export</button>
-              <button type="button" data-action="delete">Delete</button>
-            </div>
-          `;
-          saveList.appendChild(item);
+        if (hasEntries) {
+          for (const entry of state.saves) {
+            fragment.appendChild(createSaveManagementItem(entry));
+          }
         }
+        saveList.appendChild(fragment);
         if (saveListEmpty) {
           saveListEmpty.hidden = hasEntries;
         }
