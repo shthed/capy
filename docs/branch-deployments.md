@@ -27,9 +27,8 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
    - **Exception:** The `main` branch deploys to the root (no subfolder)
 
 4. **Content Deployment**: The workflow:
-   - For `main` branch: Copies content directly to the root of `gh-pages` (including the application's main index.html file)
-   - For other branches: Creates a folder in `gh-pages` matching the sanitized branch name and copies content there
-   - Copies all content except `.git`, `node_modules`, test results, and artifacts
+   - For `main` branch: Copies content directly to the root of `gh-pages` (excluding `.git`, `node_modules`, `test-results`, `playwright-report`, `blob-report`, `artifacts`, `README.md`, and `branch.html`)
+   - For other branches: Creates a folder in `gh-pages` matching the sanitized branch name and copies content there (excluding `.git`, `node_modules`, `test-results`, `playwright-report`, `blob-report`, and `artifacts`)
    - Updates the deployment with the latest content from the branch
 
 5. **Cleanup**: The workflow removes deployments for branches that no longer have open PRs

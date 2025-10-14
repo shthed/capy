@@ -1,5 +1,5 @@
 <a href="https://shthed.github.io/capy/">https://shthed.github.io/capy/</a>
-<a href="https://shthed.github.io/capy/branch">https://shthed.github.io/capy/branch</a>
+<a href="https://shthed.github.io/capy/branch.html">https://shthed.github.io/capy/branch.html</a>
 <a href="https://github.com/shthed/capy">https://github.com/shthed/capy</a>
 
 # Capy Image Generator
