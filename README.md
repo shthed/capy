@@ -1,5 +1,5 @@
 <a href="https://shthed.github.io/capy/">https://shthed.github.io/capy/</a>
-<a href="https://shthed.github.io/capy/branch">https://shthed.github.io/capy/branch</a>
+<a href="https://shthed.github.io/capy/branch.html">https://shthed.github.io/capy/branch.html</a>
 <a href="https://github.com/shthed/capy">https://github.com/shthed/capy</a>
 
 # Capy Image Generator
@@ -24,7 +24,7 @@ single `index.html` document—no build tools or extra runtime required.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
-  - `.github/workflows/deploy-branch.yml` – Deploys every branch to GitHub Pages under a subfolder matching the branch name.
+  - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
 - **Process notes**
   - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
   - `docs/automation-loop.md` – Blueprint for the automated branching, testing, merging, and feedback loop.
@@ -33,9 +33,9 @@ single `index.html` document—no build tools or extra runtime required.
 ## Development workflow
 
 - **Automation branches.** Create short-lived branches named `automation/<change>` so QA notes and preview URLs map directly to the experiment under review.
-- **Branch deployments.** Every push to any branch automatically deploys to GitHub Pages under a subfolder named after the branch
+- **Branch deployments.** Every push to a branch with an open PR automatically deploys to GitHub Pages under a subfolder named after the branch
   (e.g., `automation/feature` deploys to `/automation-feature/`). This lets reviewers preview changes in a live environment
-  without local setup. The main branch deploys to the root path.
+  without local setup. The `main` branch always deploys to the root path.
 - **Manual smoke tests.** Exercise the puzzle load, palette selection, painting, and save/load flows in at least one desktop and one mobile browser before requesting review.
 - **Fast-forward merges.** Rebase onto `main`, repeat the quick manual checks, and merge with `--ff-only` to preserve a linear history that keeps bisects practical for the single-file runtime.
 - **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up work in a standing Friday issue so the team has
@@ -236,8 +236,9 @@ skips optional fields.
    while the **Preview** button floods the entire viewport with a fullscreen
    comparison of the clustered artwork.
 4. **Fill regions.** Pick a colour from the bottom dock, click any numbered cell,
-   and the region fills in. Auto-advance can hop to the next incomplete colour
-   once you finish the current hue.
+   and the region fills in. Enable Easy difficulty if you'd like clicks to
+   auto-select the tapped region's colour before painting. Auto-advance can hop
+   to the next incomplete colour once you finish the current hue.
 5. **Save or export.** The save manager captures snapshots (including progress,
    generator options, and source metadata) in localStorage using a compact
    schema. Export the active puzzle as JSON at any time.
