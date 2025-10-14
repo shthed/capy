@@ -14,6 +14,10 @@ permissions:
 jobs:
   deploy-branch:
     runs-on: ubuntu-latest
+    # Serialize deployments to prevent race conditions with force-push to gh-pages
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -211,6 +215,12 @@ jobs:
       - name: Deploy branch content
         if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
         run: |
+          # Exit immediately on error, undefined variables, or pipe failures
+          set -euo pipefail
+          
+          # Initialize has_changes early to ensure downstream steps can reference it
+          echo "has_changes=false" >> $GITHUB_ENV
+          
           # Validate gh-pages is a valid git repository before proceeding
           if [ ! -d "gh-pages/.git" ]; then
             echo "gh-pages is not a valid git repository, re-cloning..."
@@ -230,17 +240,26 @@ jobs:
           if [ -z "$BRANCH_FOLDER" ]; then
             echo "Deploying main branch to root"
             # For main branch, copy files directly to root (including index.html)
-            # Preserve existing branch folders
-            rsync -a --exclude='.git' \
-                      --exclude='node_modules' \
-                      --exclude='test-results' \
-                      --exclude='playwright-report' \
-                      --exclude='blob-report' \
-                      --exclude='artifacts' \
+            # Preserve existing branch folders and permanent directories
+            # CRITICAL: Use --delete instead of --delete-excluded to avoid deleting .git
+            # --delete-excluded with --exclude='.git' paradoxically deletes the .git directory
+            rsync -a --exclude='.git/' \
+                      --exclude='node_modules/' \
+                      --exclude='test-results/' \
+                      --exclude='playwright-report/' \
+                      --exclude='blob-report/' \
+                      --exclude='artifacts/' \
                       --exclude='README.md' \
                       --exclude='branch.html' \
-                      --delete-excluded \
+                      --delete \
                       ../source/ ./
+            
+            # Verify .git directory still exists after rsync
+            if [ ! -d ".git" ]; then
+              echo "ERROR: .git directory was deleted during rsync. This should not happen."
+              echo "Deployment cannot proceed without git repository metadata."
+              exit 1
+            fi
           else
             # For other branches, deploy to subfolder
             # Remove old content for this branch if it exists
@@ -269,17 +288,39 @@ jobs:
             # Get list of branches with open PRs
             ACTIVE_BRANCHES=$(cat ../pr-branches.json | grep -o '"safeName": "[^"]*"' | cut -d'"' -f4)
 
+            # Protected permanent directories that should never be removed
+            PROTECTED_DIRS=("docs" "assets" ".well-known")
+            
             # Collect folders to remove first, then remove them
             # This prevents issues with directory iteration during deletion
             FOLDERS_TO_REMOVE=()
             for dir in */; do
               [ -d "$dir" ] || continue
               folder_name="${dir%/}"
-              # Skip branch.html and README.md
-              if [ "$folder_name" != "branch.html" ] && [ "$folder_name" != "README.md" ]; then
+              
+              # Skip if it's a protected permanent directory
+              is_protected=false
+              for protected in "${PROTECTED_DIRS[@]}"; do
+                if [ "$folder_name" = "$protected" ]; then
+                  is_protected=true
+                  break
+                fi
+              done
+              
+              if [ "$is_protected" = true ]; then
+                echo "Skipping protected directory: $folder_name"
+                continue
+              fi
+              
+              # Conservative approach: Only remove if it looks like a branch deployment
+              # Branch folders should contain an index.html (the app entry point)
+              if [ -f "$folder_name/index.html" ]; then
+                # This looks like a branch deployment, check if it's still active
                 if ! echo "$ACTIVE_BRANCHES" | grep -q "^${folder_name}$"; then
                   FOLDERS_TO_REMOVE+=("$folder_name")
                 fi
+              else
+                echo "Skipping non-branch directory (no index.html): $folder_name"
               fi
             done
 
