@@ -156,7 +156,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            
+
             // Fetch last 3 commits from main branch
             const { data: commits } = await github.rest.repos.listCommits({
               owner: context.repo.owner,
@@ -184,7 +184,7 @@ jobs:
                 console.log(`Warning: Could not fetch PRs for commit ${commit.sha}: ${error.message}`);
                 // Continue with empty prs array
               }
-              
+
               return {
                 sha: commit.sha,
                 shortSha: commit.sha.substring(0, 7),
@@ -205,7 +205,7 @@ jobs:
             };
 
             fs.writeFileSync('main-branch-data.json', JSON.stringify(mainBranchData, null, 2));
-            
+
             return mainBranchData;
 
       - name: Deploy branch content
@@ -216,7 +216,7 @@ jobs:
             echo "Error: gh-pages is not a valid git repository"
             exit 1
           fi
-          
+
           cd gh-pages
           BRANCH_FOLDER="${{ steps.branch-name.outputs.safe_name }}"
 
@@ -453,21 +453,21 @@ jobs:
           echo '              <li class="main-branch">' >> branch.html
           echo '                <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>' >> branch.html
           echo '                <div class="pr-info">The main production branch - always deployed to root</div>' >> branch.html
-          
+
           # Add main branch details if data file exists
           if [ -f ../main-branch-data.json ]; then
             LAST_COMMIT_TS=$(cat ../main-branch-data.json | jq -r '.lastCommitTimestamp // empty')
             DEPLOYMENT_TS=$(cat ../main-branch-data.json | jq -r '.deploymentTimestamp // empty')
-            
+
             if [ -n "$LAST_COMMIT_TS" ]; then
               echo '                <div class="main-details">' >> branch.html
               echo "                  <div class=\"timestamp\">Last commit: <span data-timestamp=\"$LAST_COMMIT_TS\">$LAST_COMMIT_TS</span></div>" >> branch.html
             fi
-            
+
             if [ -n "$DEPLOYMENT_TS" ]; then
               echo "                  <div class=\"timestamp\">Last deployment: <span data-timestamp=\"$DEPLOYMENT_TS\">$DEPLOYMENT_TS</span></div>" >> branch.html
             fi
-            
+
             # Add recent commits
             COMMITS_COUNT=$(cat ../main-branch-data.json | jq '.commits | length')
             if [ "$COMMITS_COUNT" -gt 0 ]; then
@@ -477,21 +477,21 @@ jobs:
                 "<div class=\"commit-item\">" +
                 "<div class=\"commit-message\">" + (.message | split("\n")[0]) + "</div>" +
                 "<div class=\"commit-author\">by " + .author + " · <span data-timestamp=\"" + (.timestamp|tostring) + "\">" + (.timestamp|tostring) + "</span> · <a class=\"commit-sha\" href=\"" + .htmlUrl + "\">" + .shortSha + "</a></div>" +
-                (if (.prs | length) > 0 then 
-                  "<div class=\"commit-prs\">" + 
-                  (.prs | map("<a class=\"commit-pr-link\" href=\"" + .url + "\">#" + (.number|tostring) + "</a>") | join("")) + 
-                  "</div>" 
+                (if (.prs | length) > 0 then
+                  "<div class=\"commit-prs\">" +
+                  (.prs | map("<a class=\"commit-pr-link\" href=\"" + .url + "\">#" + (.number|tostring) + "</a>") | join("")) +
+                  "</div>"
                 else "" end) +
                 "</div>"
               ' >> branch.html
               echo '                  </div>' >> branch.html
             fi
-            
+
             if [ -n "$LAST_COMMIT_TS" ] || [ -n "$DEPLOYMENT_TS" ]; then
               echo '                </div>' >> branch.html
             fi
           fi
-          
+
           echo '              </li>' >> branch.html
 
           # Add branches from PR data (already sorted by updated date)
