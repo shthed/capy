@@ -111,6 +111,8 @@
         --theme-palette-dock-border: rgba(15, 23, 42, 0.85);
         --command-rail-top: calc(env(safe-area-inset-top, 0px) + 16px);
         --command-rail-height: var(--command-button-size);
+        --command-rail-gap-current: calc(10px * var(--ui-scale));
+        --command-button-measure: var(--command-button-size);
       }
 
       body[data-theme="dark"] {
@@ -166,6 +168,19 @@
         --theme-chip-active-text: rgba(15, 23, 42, 0.85);
         --theme-palette-dock-bg: rgba(255, 255, 255, 0.9);
         --theme-palette-dock-border: rgba(148, 163, 184, 0.4);
+      }
+
+      body[data-orientation="portrait"],
+      body.compact-commands {
+        --command-rail-gap-current: var(--rail-gap-portrait);
+      }
+
+      body[data-orientation="portrait"] {
+        --command-button-measure: var(--command-button-size-portrait);
+      }
+
+      body.compact-commands {
+        --command-button-measure: min(var(--command-button-size), calc(14vw));
       }
 
       body[data-theme="colorful"] {
@@ -272,7 +287,7 @@
         justify-content: flex-start;
         align-items: center;
         flex-wrap: wrap;
-        gap: calc(10px * var(--ui-scale));
+        gap: var(--command-rail-gap-current);
         padding: 0;
         margin: 0;
         background: none;
@@ -283,8 +298,8 @@
       #commandRail button {
         border-radius: 12px;
         padding: 0;
-        width: var(--command-button-size);
-        height: var(--command-button-size);
+        width: var(--command-button-measure);
+        height: var(--command-button-measure);
         display: grid;
         place-items: center;
         background: var(--theme-command-bg);
@@ -307,26 +322,6 @@
         background: var(--theme-command-disabled-bg);
         color: var(--theme-command-disabled-text);
         border-color: var(--theme-command-disabled-border);
-      }
-
-      body[data-orientation="portrait"] #commandRail {
-        gap: var(--rail-gap-portrait);
-        justify-content: flex-start;
-      }
-
-      body[data-orientation="portrait"] #commandRail button {
-        width: var(--command-button-size-portrait);
-        height: var(--command-button-size-portrait);
-      }
-
-      body.compact-commands #commandRail {
-        justify-content: flex-start;
-        gap: var(--rail-gap-portrait);
-      }
-
-      body.compact-commands #commandRail button {
-        width: min(var(--command-button-size), calc(14vw));
-        height: min(var(--command-button-size), calc(14vw));
       }
 
       body[data-orientation="portrait"] #paletteDock {
@@ -4279,10 +4274,7 @@
         if (!debugLogEl) return;
         debugLogEl.innerHTML = "";
         if (debugLogEntries.length === 0) {
-          const empty = document.createElement("p");
-          empty.className = "log-empty";
-          empty.textContent = "No events yet.";
-          debugLogEl.appendChild(empty);
+          debugLogEl.appendChild(createTextElement("p", "No events yet.", "log-empty"));
           return;
         }
         const fragment = document.createDocumentFragment();
@@ -4293,10 +4285,8 @@
           const time = document.createElement("time");
           time.dateTime = entry.iso;
           time.textContent = entry.display;
-          const message = document.createElement("span");
-          message.textContent = entry.message;
           item.appendChild(time);
-          item.appendChild(message);
+          item.appendChild(createTextElement("span", entry.message));
           fragment.appendChild(item);
         }
         debugLogEl.appendChild(fragment);
@@ -5560,17 +5550,13 @@
           swatch.style.setProperty("--swatch-label-color", labelStyles.color);
           swatch.style.setProperty("--swatch-outline", labelStyles.outline);
           swatch.style.setProperty("--swatch-label-shadow", labelStyles.shadow);
-          const label = document.createElement("span");
-          label.className = "label";
-          const number = document.createElement("strong");
-          number.textContent = String(color.id);
+          const label = createTextElement("span", "", "label");
+          const number = createTextElement("strong", String(color.id));
           label.appendChild(number);
           swatch.appendChild(label);
           const tooltipId = `swatchTooltip-${color.id}`;
-          const tooltip = document.createElement("span");
+          const tooltip = createTextElement("span", tooltipText, "swatch-tooltip");
           tooltip.id = tooltipId;
-          tooltip.className = "swatch-tooltip";
-          tooltip.textContent = tooltipText;
           swatch.appendChild(tooltip);
           swatch.setAttribute("aria-describedby", tooltipId);
           swatch.addEventListener("click", () => {
@@ -7890,6 +7876,15 @@
         };
       }
 
+      function createTextElement(tag, text, className) {
+        const el = document.createElement(tag);
+        if (className) {
+          el.className = className;
+        }
+        el.textContent = text;
+        return el;
+      }
+
       function createSaveActionButton(action, label) {
         const button = document.createElement("button");
         button.type = "button";
@@ -7906,18 +7901,11 @@
         button.type = "button";
         button.className = "game-option-button";
         button.dataset.gameId = metadata.id;
-        const title = document.createElement("span");
-        title.className = "game-option-title";
-        title.textContent = metadata.title;
-        const progress = document.createElement("span");
-        progress.className = "game-option-meta";
-        progress.textContent = metadata.progressText;
+        const title = createTextElement("span", metadata.title, "game-option-title");
+        const progress = createTextElement("span", metadata.progressText, "game-option-meta");
         button.append(title, progress);
         if (metadata.timestampLabel) {
-          const time = document.createElement("span");
-          time.className = "game-option-meta";
-          time.textContent = metadata.timestampLabel;
-          button.append(time);
+          button.append(createTextElement("span", metadata.timestampLabel, "game-option-meta"));
         }
         button.setAttribute("aria-label", metadata.ariaLabel);
         item.appendChild(button);
@@ -7930,8 +7918,7 @@
         item.className = "save-entry";
         item.dataset.saveId = metadata.id;
         const header = document.createElement("header");
-        const title = document.createElement("strong");
-        title.textContent = metadata.title;
+        const title = createTextElement("strong", metadata.title);
         header.appendChild(title);
         if (metadata.timestamp) {
           const time = document.createElement("time");
@@ -7939,8 +7926,7 @@
           time.textContent = metadata.timestamp.toLocaleString();
           header.appendChild(time);
         }
-        const progress = document.createElement("div");
-        progress.textContent = metadata.progressText;
+        const progress = createTextElement("div", metadata.progressText);
         const actions = document.createElement("div");
         actions.className = "save-actions";
         actions.append(
@@ -7965,16 +7951,12 @@
         defaultButton.className = "game-option-button";
         const defaultMetadata = state.defaultGame || {};
         defaultButton.dataset.gameId = defaultMetadata.id || DEFAULT_GAME_SOURCE.id;
-        const defaultTitle = document.createElement("span");
-        defaultTitle.className = "game-option-title";
         const resolvedTitle = getDefaultGameTitle();
-        defaultTitle.textContent = resolvedTitle;
-        const defaultMeta = document.createElement("span");
-        defaultMeta.className = "game-option-meta";
+        const defaultTitle = createTextElement("span", resolvedTitle, "game-option-title");
         const resolvedDescription = getDefaultGameDescription();
         const fallbackMeta = DEFAULT_GAME_FALLBACK.description || DEFAULT_GAME_SOURCE.path;
         const metaText = resolvedDescription || fallbackMeta;
-        defaultMeta.textContent = metaText;
+        const defaultMeta = createTextElement("span", metaText, "game-option-meta");
         const hideMeta = !resolvedDescription && (!metaText || metaText === resolvedTitle);
         defaultMeta.hidden = hideMeta;
         const labelParts = [resolvedTitle];
