@@ -23,10 +23,22 @@ const now =
     ? () => performance.now()
     : () => Date.now();
 
+/**
+ * Type guard to check if a value is a function.
+ * @param {*} value - Value to check
+ * @returns {boolean} True if value is a function
+ */
 function isFunction(value) {
   return typeof value === "function";
 }
 
+/**
+ * Clamps a numeric value between minimum and maximum bounds.
+ * @param {number} value - The value to clamp
+ * @param {number} min - Minimum allowed value
+ * @param {number} max - Maximum allowed value
+ * @returns {number} The clamped value
+ */
 function clamp(value, min, max) {
   if (Number.isNaN(value)) return min;
   if (value < min) return min;
@@ -42,6 +54,14 @@ function accumulate(histogram, color) {
   histogram.set(color, (histogram.get(color) || 0) + 1);
 }
 
+/**
+ * Returns array indices of neighboring pixels (up, down, left, right).
+ * @param {number} x - X coordinate of the pixel
+ * @param {number} y - Y coordinate of the pixel
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @returns {number[]} Array of neighbor pixel indices
+ */
 function neighborIndexes(x, y, width, height) {
   const neighbors = [];
   if (x > 0) neighbors.push(y * width + (x - 1));
@@ -90,6 +110,14 @@ function floodFill(width, height, indexMap) {
   return { regionMap, regions };
 }
 
+/**
+ * Segments the image into contiguous color regions and merges small regions.
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @param {Uint16Array} assignments - Color assignments for each pixel
+ * @param {number} minRegion - Minimum region size in pixels
+ * @returns {{regionMap: Int32Array, regions: Array}} Region map and metadata
+ */
 function segmentRegions(width, height, assignments, minRegion) {
   const indexMap = new Uint16Array(assignments);
   let attempt = 0;
@@ -187,6 +215,16 @@ function serializeAssignments(pixels, centroids) {
   return assignments;
 }
 
+/**
+ * Performs k-means clustering to quantize image colors.
+ * @param {Uint8ClampedArray} pixels - RGBA pixel data
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @param {number} targetColors - Number of colors in output palette
+ * @param {number} iterations - Number of k-means iterations
+ * @param {number} sampleRate - Fraction of pixels to sample (0-1)
+ * @returns {{centroids: number[][], assignments: Uint16Array}} Color centroids and pixel assignments
+ */
 function kmeansQuantize(pixels, width, height, targetColors, iterations, sampleRate) {
   const totalPixels = width * height;
   const minSampleCount = targetColors * RGBA_CHANNELS;
@@ -253,6 +291,14 @@ function kmeansQuantize(pixels, width, height, targetColors, iterations, sampleR
   return { centroids: rounded, assignments };
 }
 
+/**
+ * Smooths color assignments using neighbor voting to reduce noise.
+ * @param {Uint16Array} assignments - Initial color assignments
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @param {number} passes - Number of smoothing passes
+ * @returns {Uint16Array} Smoothed color assignments
+ */
 function smoothAssignments(assignments, width, height, passes) {
   let current = new Uint16Array(assignments);
   for (let pass = 0; pass < passes; pass++) {
@@ -411,6 +457,9 @@ function ensureGenerationWorker() {
   return generationWorkerInstance;
 }
 
+/**
+ * Terminates and cleans up the generation worker.
+ */
 export function disposeGenerationWorker() {
   if (generationWorkerInstance) {
     try {
@@ -557,6 +606,14 @@ function runGenerationSynchronously(jobId, payload, hooks = {}) {
   return { centroids, regions, regionMap, timings };
 }
 
+/**
+ * Main entry point for puzzle generation. Quantizes colors, segments regions,
+ * and returns puzzle data ready for rendering.
+ * @param {HTMLImageElement} image - Source image to process
+ * @param {Object} options - Generation options (targetColors, minRegion, etc.)
+ * @param {Object} hooks - Callback hooks for progress reporting
+ * @returns {Promise<Object>} Puzzle data with palette, regions, and metadata
+ */
 export async function createPuzzleData(image, options = {}, hooks = {}) {
   if (!image || typeof image.width !== "number" || typeof image.height !== "number") {
     throw new Error("Invalid image supplied for puzzle generation");
