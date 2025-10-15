@@ -5909,6 +5909,14 @@
       }
 
 
+      function shouldDisplayStatusBar(status) {
+        const normalized = typeof status === "string" && status ? status : "idle";
+        if (state.settings.showStatusBar !== true) {
+          return false;
+        }
+        return normalized === "generating" || normalized === "loading";
+      }
+
       function syncStatusBarVisibility(statusOverride) {
         if (!progressStatusEl) {
           return;
@@ -5917,27 +5925,31 @@
           typeof statusOverride === "string" && statusOverride
             ? statusOverride
             : progressStatusEl.getAttribute("data-status") || "idle";
-        const isGenerationStatus = status === "generating" || status === "loading";
-        const userEnabled = state.settings.showStatusBar === true;
-        const shouldShow = isGenerationStatus && userEnabled;
+        const shouldShow = shouldDisplayStatusBar(status);
         progressStatusEl.hidden = !shouldShow;
         progressStatusEl.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+        if (!shouldShow && progressEl) {
+          progressEl.textContent = "";
+        }
       }
 
       function setProgressMessage(status, customMessage) {
-        const message =
-          typeof customMessage === "string" && customMessage.length > 0
+        const normalized = typeof status === "string" && status ? status : "idle";
+        const shouldShow = shouldDisplayStatusBar(normalized);
+        const message = shouldShow
+          ? typeof customMessage === "string" && customMessage.length > 0
             ? customMessage
-            : PROGRESS_MESSAGES[status] || DEFAULT_PROGRESS_MESSAGE;
+            : PROGRESS_MESSAGES[normalized] || DEFAULT_PROGRESS_MESSAGE
+          : "";
         if (progressEl) {
           progressEl.textContent = message;
-          progressEl.setAttribute("data-status", status || "idle");
+          progressEl.setAttribute("data-status", normalized);
         }
         if (progressStatusEl) {
-          progressStatusEl.setAttribute("data-status", status || "idle");
+          progressStatusEl.setAttribute("data-status", normalized);
         }
-        syncStatusBarVisibility(status);
-        if (status !== "generating") {
+        syncStatusBarVisibility(normalized);
+        if (normalized !== "generating") {
           clearGenerationProgress();
         }
       }
