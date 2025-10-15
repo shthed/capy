@@ -8,6 +8,13 @@ const GENERATION_STAGE_MESSAGES = {
   complete: "Generation complete",
 };
 
+// Constants for segmentation algorithm
+const MAX_SEGMENTATION_ATTEMPTS = 6;
+const MIN_CANVAS_DIMENSION = 8;
+const RGBA_CHANNELS = 4;
+const RGB_CHANNELS = 3;
+const BASE_HISTOGRAM_WEIGHT = 2;
+
 let generationWorkerInstance = null;
 let generationWorkerUrl = null;
 
@@ -15,6 +22,10 @@ const now =
   typeof performance !== "undefined" && typeof performance.now === "function"
     ? () => performance.now()
     : () => Date.now();
+
+function isFunction(value) {
+  return typeof value === "function";
+}
 
 function clamp(value, min, max) {
   if (Number.isNaN(value)) return min;
@@ -119,7 +130,7 @@ function segmentRegions(width, height, assignments, minRegion) {
       }
     }
     attempt += 1;
-    if (!changed || attempt > 6) {
+    if (!changed || attempt > MAX_SEGMENTATION_ATTEMPTS) {
       threshold = Math.max(1, Math.floor(threshold / 2));
     }
   }
@@ -155,9 +166,9 @@ function finalizeGeneratedRegions(regions, width) {
 }
 
 function serializeAssignments(pixels, centroids) {
-  const assignments = new Uint16Array(pixels.length / 4);
+  const assignments = new Uint16Array(pixels.length / RGBA_CHANNELS);
   for (let i = 0; i < assignments.length; i++) {
-    const base = i * 4;
+    const base = i * RGBA_CHANNELS;
     let best = 0;
     let bestDist = Infinity;
     for (let c = 0; c < centroids.length; c++) {
@@ -178,7 +189,8 @@ function serializeAssignments(pixels, centroids) {
 
 function kmeansQuantize(pixels, width, height, targetColors, iterations, sampleRate) {
   const totalPixels = width * height;
-  const sampleCount = Math.max(targetColors * 4, Math.floor(totalPixels * clamp(sampleRate, 0.05, 1)));
+  const minSampleCount = targetColors * RGBA_CHANNELS;
+  const sampleCount = Math.max(minSampleCount, Math.floor(totalPixels * clamp(sampleRate, 0.05, 1)));
   const sampleIndexes = new Uint32Array(Math.min(sampleCount, totalPixels));
   const step = Math.max(1, Math.floor(totalPixels / sampleIndexes.length));
   let pointer = 0;
@@ -191,7 +203,7 @@ function kmeansQuantize(pixels, width, height, targetColors, iterations, sampleR
   const centroids = [];
   for (let i = 0; i < targetColors; i++) {
     const sampleIdx = sampleIndexes[i % sampleIndexes.length];
-    const base = sampleIdx * 4;
+    const base = sampleIdx * RGBA_CHANNELS;
     centroids.push([
       pixels[base],
       pixels[base + 1],
@@ -208,7 +220,7 @@ function kmeansQuantize(pixels, width, height, targetColors, iterations, sampleR
     }
     for (let i = 0; i < sampleIndexes.length; i++) {
       const idx = sampleIndexes[i];
-      const base = idx * 4;
+      const base = idx * RGBA_CHANNELS;
       let best = 0;
       let bestDist = Infinity;
       for (let c = 0; c < centroids.length; c++) {
@@ -229,10 +241,11 @@ function kmeansQuantize(pixels, width, height, targetColors, iterations, sampleR
     }
     for (let c = 0; c < centroids.length; c++) {
       const bucket = sums[c];
-      if (bucket[3] === 0) continue;
-      centroids[c][0] = bucket[0] / bucket[3];
-      centroids[c][1] = bucket[1] / bucket[3];
-      centroids[c][2] = bucket[2] / bucket[3];
+      const count = bucket[RGB_CHANNELS];
+      if (count === 0) continue;
+      centroids[c][0] = bucket[0] / count;
+      centroids[c][1] = bucket[1] / count;
+      centroids[c][2] = bucket[2] / count;
     }
   }
   const rounded = centroids.map((c) => c.map((value) => Math.round(value)));
@@ -249,7 +262,7 @@ function smoothAssignments(assignments, width, height, passes) {
         const idx = y * width + x;
         const histogram = new Map();
         const baseColor = current[idx];
-        histogram.set(baseColor, (histogram.get(baseColor) || 0) + 2);
+        histogram.set(baseColor, (histogram.get(baseColor) || 0) + BASE_HISTOGRAM_WEIGHT);
         if (x > 0) accumulate(histogram, current[idx - 1]);
         if (x < width - 1) accumulate(histogram, current[idx + 1]);
         if (y > 0) accumulate(histogram, current[idx - width]);
@@ -273,6 +286,10 @@ function smoothAssignments(assignments, width, height, passes) {
 function buildGenerationWorkerSource() {
   const stageMessages = JSON.stringify(GENERATION_STAGE_MESSAGES);
   return `const STAGE_MESSAGES = ${stageMessages};
+const MAX_SEGMENTATION_ATTEMPTS = ${MAX_SEGMENTATION_ATTEMPTS};
+const RGBA_CHANNELS = ${RGBA_CHANNELS};
+const RGB_CHANNELS = ${RGB_CHANNELS};
+const BASE_HISTOGRAM_WEIGHT = ${BASE_HISTOGRAM_WEIGHT};
 const now = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
 ${clamp.toString()}
 ${accumulate.toString()}
@@ -428,7 +445,7 @@ function runGenerationWorker(message, { onProgress } = {}) {
         return;
       }
       if (data.type === "progress") {
-        if (typeof onProgress === "function") {
+        if (isFunction(onProgress)) {
           try {
             onProgress(data);
           } catch (error) {
@@ -489,7 +506,7 @@ function runGenerationSynchronously(jobId, payload, hooks = {}) {
   const { reportStage } = hooks;
   const timings = {};
   const totalStart = now();
-  if (typeof reportStage === "function") {
+  if (isFunction(reportStage)) {
     reportStage(jobId, 0.15, GENERATION_STAGE_MESSAGES.quantize);
   }
   const quantStart = now();
@@ -504,7 +521,7 @@ function runGenerationSynchronously(jobId, payload, hooks = {}) {
   timings.quantize = now() - quantStart;
   let workingAssignments = assignments;
   if (options.smoothingPasses > 0) {
-    if (typeof reportStage === "function") {
+    if (isFunction(reportStage)) {
       reportStage(jobId, 0.45, GENERATION_STAGE_MESSAGES.smooth);
     }
     const smoothStart = now();
@@ -516,12 +533,12 @@ function runGenerationSynchronously(jobId, payload, hooks = {}) {
     );
     timings.smoothing = now() - smoothStart;
   } else {
-    if (typeof reportStage === "function") {
+    if (isFunction(reportStage)) {
       reportStage(jobId, 0.45, GENERATION_STAGE_MESSAGES.smoothSkip);
     }
     timings.smoothing = 0;
   }
-  if (typeof reportStage === "function") {
+  if (isFunction(reportStage)) {
     reportStage(jobId, 0.75, GENERATION_STAGE_MESSAGES.segment);
   }
   const segmentStart = now();
@@ -532,7 +549,7 @@ function runGenerationSynchronously(jobId, payload, hooks = {}) {
     options.minRegion
   );
   timings.segment = now() - segmentStart;
-  if (typeof reportStage === "function") {
+  if (isFunction(reportStage)) {
     reportStage(jobId, 0.9, GENERATION_STAGE_MESSAGES.finalize);
   }
   finalizeGeneratedRegions(regions, width);
@@ -550,10 +567,10 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
     isLatestJob,
     logDebug,
   } = hooks;
-  const debug = typeof logDebug === "function" ? logDebug : (...args) => console.debug(...args);
-  const jobIdRaw = typeof beginJob === "function" ? beginJob() : Date.now();
+  const debug = isFunction(logDebug) ? logDebug : (...args) => console.debug(...args);
+  const jobIdRaw = isFunction(beginJob) ? beginJob() : Date.now();
   const jobId = Number.isFinite(jobIdRaw) ? jobIdRaw : Date.now();
-  if (typeof reportStage === "function") {
+  if (isFunction(reportStage)) {
     reportStage(jobId, 0, GENERATION_STAGE_MESSAGES.prepare);
   }
 
@@ -567,8 +584,8 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
   } = options;
 
   const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
-  const width = Math.max(8, Math.round(image.width * scale));
-  const height = Math.max(8, Math.round(image.height * scale));
+  const width = Math.max(MIN_CANVAS_DIMENSION, Math.round(image.width * scale));
+  const height = Math.max(MIN_CANVAS_DIMENSION, Math.round(image.height * scale));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -606,7 +623,7 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
             typeof event.message === "string" && event.message
               ? event.message
               : GENERATION_STAGE_MESSAGES[event.stage] || null;
-          if (typeof reportStage === "function") {
+          if (isFunction(reportStage)) {
             reportStage(jobId, event.progress, label);
           }
         },
@@ -633,12 +650,12 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
   if (!result) {
     throw new Error("Generation pipeline returned no data");
   }
-  const isLatest = typeof isLatestJob === "function" ? isLatestJob(jobId) : true;
+  const isLatest = isFunction(isLatestJob) ? isLatestJob(jobId) : true;
   if (!isLatest) {
     debug("Discarded superseded generation result");
     return null;
   }
-  if (typeof reportStage === "function") {
+  if (isFunction(reportStage)) {
     reportStage(jobId, 1, GENERATION_STAGE_MESSAGES.complete);
   }
   const { centroids, regions, regionMap, timings } = result;
