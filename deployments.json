@@ -25,5 +25,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-15T09:10:55+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/79a73cb5d8578526590182eef62b403686df148b"
+  },
+  "codex-remove-status-bar-and-confirm-import-settings": {
+    "branch": "codex/remove-status-bar-and-confirm-import-settings",
+    "safeName": "codex-remove-status-bar-and-confirm-import-settings",
+    "commit": "d94785a65b860ae490e99c0964b9bf41fe741181",
+    "message": "Merge pull request #139 from shthed/codex/hide-status-bar-by-default\n\nRemove idle Ready to paint status line",
+    "actor": "shthed",
+    "deployedAt": "2025-10-15T10:58:54+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/d94785a65b860ae490e99c0964b9bf41fe741181"
   }
 }
