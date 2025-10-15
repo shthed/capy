@@ -16,5 +16,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-15T02:09:35Z",
     "commitUrl": "https://github.com/shthed/capy/commit/79a73cb5d8578526590182eef62b403686df148b"
+  },
+  "fix-jq-slurpfile-gh-pages": {
+    "branch": "fix/jq-slurpfile-gh-pages",
+    "safeName": "fix-jq-slurpfile-gh-pages",
+    "commit": "79a73cb5d8578526590182eef62b403686df148b",
+    "message": "Merge pull request #137 from shthed/codex/review-deployment-workflow-for-updates\n\nSimplify branch deployments",
+    "actor": "shthed",
+    "deployedAt": "2025-10-15T09:10:55+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/79a73cb5d8578526590182eef62b403686df148b"
   }
 }
