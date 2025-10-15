@@ -1,0 +1,11 @@
+{
+  "codex-review-deployment-workflow-for-updates": {
+    "branch": "codex/review-deployment-workflow-for-updates",
+    "safeName": "codex-review-deployment-workflow-for-updates",
+    "commit": "935a034ac23c20ca75a4ea11fe488ee82139e531",
+    "message": "Skip gh-pages branch in deployment workflow",
+    "actor": "shthed",
+    "deployedAt": "2025-10-15T09:10:05+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/935a034ac23c20ca75a4ea11fe488ee82139e531"
+  }
+}
