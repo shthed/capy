@@ -219,7 +219,7 @@ jobs:
               gsub("<"; "&lt;") |
               gsub(">"; "&gt;") |
               gsub("\""; "&quot;") |
-              gsub("'"; "&#39;");
+              gsub("\u0027"; "&#39;");
 
             def first_line($text):
               ($text // "") | split("\n") | .[0];
