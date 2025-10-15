@@ -613,6 +613,12 @@
         width: 100%;
       }
 
+      #startHint .hint-note {
+        margin: 0;
+        font-size: 0.95rem;
+        color: var(--theme-muted-text);
+      }
+
         .detail-callout {
           display: grid;
           gap: calc(12px * var(--ui-scale));
@@ -1455,28 +1461,6 @@
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
         <button
-          id="hintButton"
-          type="button"
-          data-testid="hint-button"
-          aria-label="Hint"
-          title="Hint"
-          disabled
-        >
-          <span class="icon" aria-hidden="true">?</span>
-          <span class="label">Hint</span>
-        </button>
-        <button
-          id="resetButton"
-          type="button"
-          data-testid="reset-button"
-          aria-label="Reset puzzle"
-          title="Reset puzzle"
-          disabled
-        >
-          <span class="icon" aria-hidden="true">↺</span>
-          <span class="label">Reset</span>
-        </button>
-        <button
           id="previewToggle"
           type="button"
           data-testid="preview-toggle"
@@ -1581,6 +1565,10 @@
               </button>
             </div>
             <div class="hint-actions">
+              <button id="selectImage" type="button">Choose an image</button>
+              <p class="hint-note">Or drag and drop a photo or puzzle file anywhere to begin.</p>
+            </div>
+            <div class="hint-actions">
               <button
                 id="samplePuzzle"
                 type="button"
@@ -1621,9 +1609,6 @@
               <p class="save-manager-empty" data-save-empty hidden>
                 No manual saves yet. Create one above or keep playing to autosave progress.
               </p>
-            </div>
-            <div class="hint-actions">
-              <button id="selectImage" type="button">Choose an image</button>
             </div>
           </div>
         </div>
@@ -1683,10 +1668,6 @@
         <section class="sheet-section" aria-labelledby="commandsHeading">
           <h3 id="commandsHeading">Command buttons</h3>
           <dl class="command-list">
-            <dt>? Hint</dt>
-            <dd>Flash the smallest unfinished region and switch colours if needed.</dd>
-            <dt>↺ Reset</dt>
-            <dd>Clear every painted region and restart the current puzzle.</dd>
             <dt>🖼 Preview</dt>
             <dd>Toggle the finished artwork overlay to compare your progress.</dd>
             <dt>🎛 Generator</dt>
@@ -1718,14 +1699,11 @@
           <h3 id="controlsHeading">Canvas controls</h3>
           <ul class="control-list">
             <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
-            <li><kbd>Right click</kbd> Select the colour under the pointer (configurable in Settings).</li>
+            <li><kbd>Right click</kbd> Select the colour under the pointer.</li>
             <li>Select a palette swatch to set the active colour and flash every matching region.</li>
             <li>Enable Easy difficulty in Settings to let clicks auto-select the tapped region's colour.</li>
             <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
-            <li>
-              <kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas. Switch the right-click action in Settings if you
-              prefer dragging instead of selecting.
-            </li>
+            <li><kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas.</li>
             <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
           </ul>
         </section>
@@ -1918,16 +1896,6 @@
             <input id="hintIntensity" type="range" min="20" max="90" step="5" value="65" />
           </label>
           <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
-          <label class="control">
-            <span>Right-click action</span>
-            <select id="rightClickAction">
-              <option value="select">Select colour</option>
-              <option value="pan">Pan the canvas</option>
-            </select>
-          </label>
-          <p class="control-note">
-            Choose whether right-clicking picks colours or starts panning. Middle click and Space + drag always pan.
-          </p>
         </section>
         <section class="sheet-section" aria-labelledby="paletteHeading">
           <h3 id="paletteHeading">Palette</h3>
@@ -1991,8 +1959,6 @@
       const startHint = document.getElementById("startHint");
       const startHintCloseButton = document.getElementById("closeStartHint");
       const startSaveManagerSection = document.getElementById("saveManagerSection");
-      const hintButton = document.getElementById("hintButton");
-      const resetButton = document.getElementById("resetButton");
       const previewToggle = document.getElementById("previewToggle");
       const fullscreenButton = document.getElementById("fullscreenButton");
       const importButton = document.getElementById("importButton");
@@ -2020,7 +1986,6 @@
       const hintFlashToggle = document.getElementById("hintFlashToggle");
       const hintFadeDurationInput = document.getElementById("hintFadeDuration");
       const hintIntensityInput = document.getElementById("hintIntensity");
-      const rightClickActionSelect = document.getElementById("rightClickAction");
       const difficultySelect = document.getElementById("difficultySelect");
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
@@ -2098,8 +2063,6 @@
       const DEFAULT_HINT_INTENSITY = 0.65;
       const MIN_HINT_INTENSITY = 0.2;
       const MAX_HINT_INTENSITY = 0.9;
-      const DEFAULT_RIGHT_CLICK_ACTION = "select";
-      const VALID_RIGHT_CLICK_ACTIONS = new Set(["select", "pan"]);
       const DEFAULT_DIFFICULTY = "normal";
       const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
@@ -3072,7 +3035,6 @@
           animateHints: true,
           hintFadeDuration: DEFAULT_HINT_FADE_DURATION,
           hintIntensity: DEFAULT_HINT_INTENSITY,
-          rightClickAction: DEFAULT_RIGHT_CLICK_ACTION,
           difficulty: DEFAULT_DIFFICULTY,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
@@ -3325,17 +3287,6 @@
           const intensity = normalizeHintIntensity(state.settings.hintIntensity);
           state.settings.hintIntensity = intensity;
           hintIntensityInput.value = String(Math.round(intensity * 100));
-        }
-        if (settings.rightClickAction != null) {
-          const action = resolveRightClickAction(settings.rightClickAction);
-          state.settings.rightClickAction = action;
-          if (rightClickActionSelect) {
-            rightClickActionSelect.value = action;
-          }
-        } else if (rightClickActionSelect && state.settings.rightClickAction) {
-          const action = resolveRightClickAction(state.settings.rightClickAction);
-          state.settings.rightClickAction = action;
-          rightClickActionSelect.value = action;
         }
         if (settings.difficulty != null) {
           const difficulty = resolveDifficulty(settings.difficulty);
@@ -3672,19 +3623,6 @@
         });
       }
 
-      if (rightClickActionSelect) {
-        rightClickActionSelect.value = resolveRightClickAction(rightClickActionSelect.value);
-        rightClickActionSelect.addEventListener("change", (event) => {
-          const action = resolveRightClickAction(event.target.value);
-          state.settings.rightClickAction = action;
-          rightClickActionSelect.value = action;
-          logDebug(
-            action === "select" ? "Right-click will select colours" : "Right-click will pan the canvas"
-          );
-          scheduleAutosave("settings-right-click-action");
-        });
-      }
-
       if (showRegionLabelsToggle) {
         showRegionLabelsToggle.addEventListener("change", () => {
           applyRegionLabelVisibility(showRegionLabelsToggle.checked);
@@ -3724,25 +3662,6 @@
           applyArtPrompt(event.target.value);
         });
       }
-
-      hintButton.addEventListener("click", () => {
-        useHint();
-      });
-
-      resetButton.addEventListener("click", () => {
-        if (!state.puzzle) return;
-        state.filled = new Set();
-        markFilledLayerDirty();
-        renderPuzzle();
-        renderPalette();
-        if (state.activeColor != null) {
-          flashColorRegions(state.activeColor);
-        }
-        updateProgress();
-        refreshCustomCursorHighlight();
-        scheduleAutosave("reset-progress");
-        logDebug("Reset puzzle progress");
-      });
 
       if (paletteEl) {
         paletteEl.addEventListener("wheel", handlePaletteWheel, { passive: false });
@@ -4537,8 +4456,6 @@
 
       function updateCommandStates() {
         const hasPuzzle = Boolean(state.puzzle);
-        hintButton.disabled = !hasPuzzle;
-        resetButton.disabled = !hasPuzzle;
         previewToggle.disabled = !hasPuzzle;
         downloadBtn.disabled = !hasPuzzle;
         for (const button of saveSnapshotButtons) {
@@ -6327,7 +6244,6 @@
         const wantsRightClickSelect =
           event.pointerType === "mouse" &&
           event.button === 2 &&
-          resolveRightClickAction(state.settings.rightClickAction) === "select" &&
           !usesModifier &&
           !state.previewVisible;
         if (wantsRightClickSelect) {
@@ -7043,16 +6959,6 @@
         return clamp(candidate, MIN_HINT_INTENSITY, MAX_HINT_INTENSITY);
       }
 
-      function resolveRightClickAction(value) {
-        if (typeof value === "string") {
-          const normalized = value.trim().toLowerCase();
-          if (VALID_RIGHT_CLICK_ACTIONS.has(normalized)) {
-            return normalized;
-          }
-        }
-        return DEFAULT_RIGHT_CLICK_ACTION;
-      }
-
       function resolveDifficulty(value) {
         if (typeof value === "string") {
           const normalized = value.trim().toLowerCase();
@@ -7304,9 +7210,6 @@
             settingsSource.hintFadeDuration ?? state.settings.hintFadeDuration
           ),
           hintIntensity: normalizeHintIntensity(settingsSource.hintIntensity ?? state.settings.hintIntensity),
-          rightClickAction: resolveRightClickAction(
-            settingsSource.rightClickAction ?? state.settings.rightClickAction
-          ),
           difficulty: resolveDifficulty(settingsSource.difficulty ?? state.settings.difficulty),
           uiScale:
             Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
@@ -7414,7 +7317,6 @@
             animateHints: Boolean(state.settings.animateHints),
             hintFadeDuration: normalizeHintFadeDuration(state.settings.hintFadeDuration),
             hintIntensity: normalizeHintIntensity(state.settings.hintIntensity),
-            rightClickAction: resolveRightClickAction(state.settings.rightClickAction),
             difficulty: resolveDifficulty(state.settings.difficulty),
             uiScale:
               Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
