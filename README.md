@@ -94,9 +94,9 @@ single `index.html` document—no build tools or extra runtime required.
   region numbers once you're familiar with the artwork for an unobstructed
   canvas while you fill in the illustration.
 - **Precision view controls.** Pan the puzzle by click-dragging with the
-  primary mouse button or middle click, or hold <kbd>Space</kbd> to pan from anywhere. Right-click now
-  selects the colour under the pointer by default (toggleable in Settings if you prefer to pan with it), use
-  pinch gestures or the mouse wheel to zoom in and out, or tap `+`/`-` on the
+  primary mouse button or middle click, or hold <kbd>Space</kbd> to pan from anywhere. Right-click
+  always selects the colour under the pointer, use pinch gestures or the mouse
+  wheel to zoom in and out, or tap `+`/`-` on the
   keyboard for incremental adjustments. Ctrl/Cmd zoom shortcuts now target the
   puzzle instead of the surrounding UI so the HUD stays crisp while the canvas
   reacts. Zooming is now unbounded, letting you dive down to single-pixel
@@ -231,9 +231,9 @@ skips optional fields.
    you reload it.
 2. **Tune generation & appearance.** Open **Settings** to slide out the
    sidecar and tweak palette size, minimum region area, resize detail, sample
-   rate (for faster clustering), iteration count, smoothing passes,
-   auto-advance, the difficulty selector, hint animations, fade timing, overlay
-   intensity, the right-click action, the interface theme, the canvas
+  rate (for faster clustering), iteration count, smoothing passes,
+  auto-advance, the difficulty selector, hint animations, fade timing, overlay
+  intensity, the interface theme, the canvas
    background colour, the interface scale slider, and the Palette sort menu.
    Apply changes instantly when working from an image source, then expand the
    **Advanced options** accordion to edit the optional art prompt metadata
@@ -274,10 +274,9 @@ before retrying.
 
 ## UI guide
 
-- **Command rail** – A slim, right-aligned header exposing Hint, Reset, Preview,
-  Generator, Fullscreen, Import, Save manager, Help, and Settings buttons
-  through icon-only controls. Hint flashes tiny regions, Reset clears progress,
-  Preview reveals the clustered artwork, Generator opens the dedicated
+- **Command rail** – A slim, right-aligned header exposing Preview, Generator,
+  Fullscreen, Import, Save manager, Help, and Settings buttons through icon-only
+  controls. Preview reveals the clustered artwork, Generator opens the dedicated
   clustering sheet, Fullscreen pushes the stage edge-to-edge (and exits back to
   windowed mode), Import accepts images or JSON puzzles, Save manager opens the
   combined start & save screen, Help opens an in-app manual plus live debug log,
@@ -298,8 +297,7 @@ before retrying.
   smoothing passes, an interface theme switcher, a background colour picker, the
   interface scale slider, toggles for auto-advance, Easy/Standard difficulty,
   hint animations, and the Palette sort menu. A dedicated Hints & controls
-  section now lets you tune fade duration, overlay intensity, and remap the
-  right-click action.
+  section now lets you tune fade duration and overlay intensity.
   The panel also houses the JSON export action, mirrors the Low/Medium/High detail
   chips so you can reload the sample with tuned parameters without leaving the
   sidecar, and tucks the art prompt query inside an **Advanced options**
@@ -309,8 +307,10 @@ before retrying.
   know how many colours, what minimum region size, and which resize edge (and
   approximate region count) the next sample reload will use.
 - **Start & save screen** – Launch puzzles, reload the capybara sample, and
-  manage manual snapshots from the same dialog. Each entry shows completion
-  progress with quick actions to load, rename, export, or delete the save.
+  manage manual snapshots from the same dialog. A prominent **Choose an image**
+  button now leads the overlay and calls out that you can drag and drop files
+  anywhere to begin. Each entry shows completion progress with quick actions to
+  load, rename, export, or delete the save.
 - **Help panel** – Lists every command button, summarizes canvas gestures, and
   surfaces a live debug log so contributors can confirm state changes while
   testing.
