@@ -1,5 +1,27 @@
-﻿node_modules/
+﻿# Dependencies
+node_modules/
+
+# Testing
 test-results/
 playwright-report/
 blob-report/
 artifacts/
+
+# Build outputs
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+
+# Temporary files
+*.tmp
+*.log
+*.cache
