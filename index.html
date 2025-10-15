@@ -782,49 +782,6 @@
           z-index: 3;
         }
 
-        .progress-status {
-          display: flex;
-          flex-direction: column;
-          gap: calc(4px * var(--ui-scale));
-          align-items: stretch;
-          font-size: 0.95rem;
-          color: var(--theme-caption-text);
-        }
-
-        .progress-status .progress-message {
-          font-weight: 600;
-          letter-spacing: 0.01em;
-        }
-
-        .progress-meter {
-          position: relative;
-          width: 100%;
-          height: calc(6px * var(--ui-scale));
-          border-radius: 999px;
-          background: rgba(148, 163, 184, 0.25);
-          overflow: hidden;
-          transition: opacity 0.25s ease;
-          opacity: 0;
-          pointer-events: none;
-        }
-
-        .progress-status.show-progress .progress-meter {
-          opacity: 1;
-        }
-
-        .progress-meter[aria-hidden="true"] {
-          opacity: 0;
-        }
-
-        .progress-bar {
-          width: 0%;
-          height: 100%;
-          border-radius: inherit;
-          background: rgba(96, 165, 250, 0.92);
-          box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
-          transition: width 0.24s ease;
-        }
-
         #palette {
           flex: 1 1 auto;
           min-width: 0;
@@ -1199,6 +1156,93 @@
         gap: 22px;
         overflow-y: auto;
         padding-right: 4px;
+      }
+
+      .generator-import-notice,
+      .generator-progress {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: calc(14px * var(--ui-scale));
+        border-radius: calc(18px * var(--ui-scale));
+      }
+
+      .generator-import-notice {
+        border: 1px solid rgba(59, 130, 246, 0.45);
+        background: rgba(59, 130, 246, 0.16);
+        color: var(--theme-command-text);
+      }
+
+      body[data-theme="light"] .generator-import-notice {
+        background: rgba(191, 219, 254, 0.75);
+        border-color: rgba(59, 130, 246, 0.35);
+      }
+
+      .generator-import-title {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+      }
+
+      .generator-import-title strong {
+        font-weight: 700;
+      }
+
+      .generator-import-description {
+        margin: 0;
+        font-size: 0.95rem;
+        color: var(--theme-caption-text);
+      }
+
+      .generator-import-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .generator-progress {
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.6);
+        color: var(--theme-command-text);
+      }
+
+      body[data-theme="light"] .generator-progress {
+        background: rgba(226, 232, 240, 0.85);
+        border-color: rgba(148, 163, 184, 0.5);
+      }
+
+      .generator-progress-message {
+        margin: 0;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+
+      .generator-progress-meter {
+        position: relative;
+        width: 100%;
+        height: calc(6px * var(--ui-scale));
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.25);
+        overflow: hidden;
+        transition: opacity 0.25s ease;
+        opacity: 0;
+      }
+
+      .generator-progress-meter[aria-hidden="false"] {
+        opacity: 1;
+      }
+
+      body[data-theme="light"] .generator-progress-meter {
+        background: rgba(148, 163, 184, 0.35);
+      }
+
+      .generator-progress-bar {
+        width: 0%;
+        height: 100%;
+        border-radius: inherit;
+        background: rgba(59, 130, 246, 0.92);
+        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
+        transition: width 0.24s ease;
       }
 
       .sheet-section {
@@ -1587,29 +1631,6 @@
         </div>
       </div>
         <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-          <div
-            id="progressStatus"
-            class="progress-status"
-            data-status="idle"
-            role="status"
-            aria-live="polite"
-            hidden
-            aria-hidden="true"
-          >
-            <span id="progress" class="progress-message"></span>
-            <div
-              id="progressMeter"
-              class="progress-meter"
-              role="progressbar"
-              aria-label="Puzzle generation progress"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              aria-valuenow="0"
-              aria-hidden="true"
-            >
-              <div id="progressBar" class="progress-bar"></div>
-            </div>
-          </div>
           <div id="palette" role="list"></div>
         </footer>
     </div>
@@ -1747,6 +1768,43 @@
         <button type="button" class="close-button" data-sheet-close="generator">Close</button>
       </div>
       <div class="sheet-body">
+        <div
+          class="generator-import-notice"
+          data-import-notice
+          role="status"
+          aria-live="polite"
+          hidden
+        >
+          <p class="generator-import-title">
+            Ready to generate <strong data-import-file>your file</strong>
+          </p>
+          <p class="generator-import-description" data-import-description></p>
+          <div class="generator-import-actions">
+            <button id="confirmImport" type="button" data-import-confirm>Generate puzzle</button>
+            <button type="button" class="close-button" data-import-cancel>Cancel</button>
+          </div>
+        </div>
+        <div
+          class="generator-progress"
+          data-generator-progress
+          role="status"
+          aria-live="polite"
+          hidden
+        >
+          <p class="generator-progress-message" data-generator-progress-message></p>
+          <div
+            class="generator-progress-meter"
+            data-generator-progress-meter
+            role="progressbar"
+            aria-label="Puzzle generation progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+            aria-hidden="true"
+          >
+            <div class="generator-progress-bar" data-generator-progress-bar></div>
+          </div>
+        </div>
         <section class="sheet-section" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Clustering &amp; detail</h3>
           <p class="control-note">
@@ -1838,10 +1896,6 @@
           <label class="toggle">
             <input id="showRegionLabelsToggle" type="checkbox" checked />
             <span>Show region numbers</span>
-          </label>
-          <label class="toggle">
-            <input id="showStatusToggle" type="checkbox" />
-            <span>Show status bar during imports and generation</span>
           </label>
           <label class="control">
             <span>Difficulty</span>
@@ -1971,7 +2025,6 @@
       const rightClickActionSelect = document.getElementById("rightClickAction");
       const difficultySelect = document.getElementById("difficultySelect");
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
-      const showStatusToggle = document.getElementById("showStatusToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
       const backgroundColorInput = document.getElementById("backgroundColor");
       const uiScaleInput = document.getElementById("uiScale");
@@ -1989,16 +2042,25 @@
       const saveListEmptyStates = Array.from(document.querySelectorAll("[data-save-empty]"));
       const paletteEl = document.getElementById("palette");
       const paletteSortEl = document.getElementById("paletteSort");
-      const progressStatusEl = document.getElementById("progressStatus");
-      const progressEl = document.getElementById("progress");
-      const progressMeterEl = document.getElementById("progressMeter");
-      const progressBarEl = document.getElementById("progressBar");
+      const generatorImportNotice =
+        generatorSheet?.querySelector("[data-import-notice]") || null;
+      const generatorImportFileEl = generatorSheet?.querySelector("[data-import-file]") || null;
+      const generatorImportDescriptionEl =
+        generatorSheet?.querySelector("[data-import-description]") || null;
+      const confirmImportBtn = document.getElementById("confirmImport");
+      const cancelImportBtn = generatorSheet?.querySelector("[data-import-cancel]") || null;
+      const generatorProgressEl = generatorSheet?.querySelector("[data-generator-progress]") || null;
+      const generatorProgressMessageEl =
+        generatorSheet?.querySelector("[data-generator-progress-message]") || null;
+      const generatorProgressMeterEl =
+        generatorSheet?.querySelector("[data-generator-progress-meter]") || null;
+      const generatorProgressBarEl =
+        generatorSheet?.querySelector("[data-generator-progress-bar]") || null;
       const defaultProgressLabel =
-        progressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
+        generatorProgressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
       const DEFAULT_PROGRESS_MESSAGE = "";
       const PROGRESS_MESSAGES = {
         loading: "Loading puzzle…",
-        active: "Keep colouring",
         generating: "Processing image…",
         complete: "All done!",
       };
@@ -3018,7 +3080,6 @@
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
           showRegionLabels: true,
-          showStatusBar: false,
           theme: DEFAULT_UI_THEME,
         },
         previewVisible: false,
@@ -3034,11 +3095,11 @@
         sampleArtwork: null,
       };
 
-      syncStatusBarVisibility();
-
       let generationJobCounter = 0;
       let latestGenerationJobId = 0;
       let puzzleGenerationModulePromise = null;
+      let pendingImportFile = null;
+      updateImportNotice();
 
       gameSaveManager.subscribe((entries) => {
         state.saves = entries;
@@ -3302,18 +3363,6 @@
             skipRender: true,
           });
         }
-        if (typeof settings.showStatusBar === "boolean") {
-          applyStatusBarVisibility(settings.showStatusBar, {
-            skipLog: true,
-            skipAutosave: true,
-          });
-        } else {
-          applyStatusBarVisibility(state.settings.showStatusBar === true, {
-            skipLog: true,
-            skipAutosave: true,
-            force: true,
-          });
-        }
         if (typeof settings.uiScale === "number") {
           applyUiScale(settings.uiScale, { skipLog: true, skipAutosave: true });
         }
@@ -3543,10 +3592,25 @@
       fileInput.addEventListener("change", (event) => {
         const [file] = event.target.files || [];
         if (file) {
-          handleFile(file);
+          prepareImport(file);
         }
         fileInput.value = "";
       });
+
+      if (confirmImportBtn) {
+        confirmImportBtn.hidden = true;
+        confirmImportBtn.disabled = true;
+        confirmImportBtn.addEventListener("click", () => {
+          executePendingImport();
+        });
+      }
+
+      if (cancelImportBtn) {
+        cancelImportBtn.hidden = true;
+        cancelImportBtn.addEventListener("click", () => {
+          clearPendingImport();
+        });
+      }
 
       autoAdvanceToggle.addEventListener("change", () => {
         state.settings.autoAdvance = autoAdvanceToggle.checked;
@@ -3626,11 +3690,6 @@
       if (showRegionLabelsToggle) {
         showRegionLabelsToggle.addEventListener("change", () => {
           applyRegionLabelVisibility(showRegionLabelsToggle.checked);
-        });
-      }
-      if (showStatusToggle) {
-        showStatusToggle.addEventListener("change", () => {
-          applyStatusBarVisibility(showStatusToggle.checked);
         });
       }
 
@@ -3805,7 +3864,7 @@
         dragDepth = 0;
         document.body.classList.remove("dragging");
         if (file) {
-          handleFile(file);
+          prepareImport(file);
         }
       });
 
@@ -4140,6 +4199,9 @@
         if (!sheet) return;
         sheet.classList.add("hidden");
         sheet.setAttribute("aria-hidden", "true");
+        if (sheet === generatorSheet) {
+          clearPendingImport();
+        }
       }
 
       function showStartScreen(options = {}) {
@@ -4616,24 +4678,6 @@
         return resolved;
       }
 
-      function applyStatusBarVisibility(visible, options = {}) {
-        const { skipLog = false, skipAutosave = false, force = false } = options;
-        const resolved = visible === true;
-        const previous = state.settings.showStatusBar === true;
-        state.settings.showStatusBar = resolved;
-        if (showStatusToggle && showStatusToggle.checked !== resolved) {
-          showStatusToggle.checked = resolved;
-        }
-        syncStatusBarVisibility();
-        if ((force || previous !== resolved) && !skipLog) {
-          logDebug(`Status bar ${resolved ? "shown" : "hidden"}`);
-        }
-        if ((force || previous !== resolved) && !skipAutosave) {
-          scheduleAutosave("settings-status-bar");
-        }
-        return resolved;
-      }
-
       function applyTheme(theme, options = {}) {
         const { skipLog = false, skipAutosave = false, force = false } = options;
         const requested = typeof theme === "string" ? theme.trim().toLowerCase() : "";
@@ -4780,8 +4824,120 @@
         loadImage(state.sourceUrl);
       }
 
+      function isJsonFile(file) {
+        if (!file) {
+          return false;
+        }
+        if (typeof file.type === "string" && file.type.toLowerCase().includes("json")) {
+          return true;
+        }
+        const name = typeof file.name === "string" ? file.name.toLowerCase() : "";
+        return name.endsWith(".json");
+      }
+
+      function describeImportIntent(file) {
+        const fallbackName = "selected file";
+        if (!file) {
+          return {
+            name: fallbackName,
+            description: "",
+            actionLabel: "Generate puzzle",
+          };
+        }
+        const name =
+          typeof file.name === "string" && file.name.trim().length > 0 ? file.name.trim() : fallbackName;
+        if (isJsonFile(file)) {
+          return {
+            name,
+            description:
+              "Puzzle JSON imports will replace the current puzzle and do not use the generator settings.",
+            actionLabel: "Import puzzle",
+          };
+        }
+        return {
+          name,
+          description: "Review the generator settings, then create a new puzzle from your image.",
+          actionLabel: "Generate puzzle",
+        };
+      }
+
+      function updateImportNotice() {
+        if (!generatorImportNotice) {
+          return;
+        }
+        if (!pendingImportFile) {
+          generatorImportNotice.hidden = true;
+          if (generatorImportFileEl) {
+            generatorImportFileEl.textContent = "your file";
+          }
+          if (generatorImportDescriptionEl) {
+            generatorImportDescriptionEl.textContent = "";
+          }
+          if (confirmImportBtn) {
+            confirmImportBtn.hidden = true;
+            confirmImportBtn.disabled = true;
+            confirmImportBtn.textContent = "Generate puzzle";
+          }
+          if (cancelImportBtn) {
+            cancelImportBtn.hidden = true;
+          }
+          return;
+        }
+        const { name, description, actionLabel } = describeImportIntent(pendingImportFile);
+        generatorImportNotice.hidden = false;
+        if (generatorImportFileEl) {
+          generatorImportFileEl.textContent = name;
+        }
+        if (generatorImportDescriptionEl) {
+          generatorImportDescriptionEl.textContent = description;
+        }
+        if (confirmImportBtn) {
+          confirmImportBtn.hidden = false;
+          confirmImportBtn.disabled = false;
+          confirmImportBtn.textContent = actionLabel;
+        }
+        if (cancelImportBtn) {
+          cancelImportBtn.hidden = false;
+        }
+      }
+
+      function clearPendingImport() {
+        pendingImportFile = null;
+        updateImportNotice();
+      }
+
+      function prepareImport(file) {
+        if (!file) {
+          return;
+        }
+        if (!generatorSheet) {
+          handleFile(file);
+          return;
+        }
+        pendingImportFile = file;
+        updateImportNotice();
+        openSheet(generatorSheet);
+        requestAnimationFrame(() => {
+          if (confirmImportBtn && !confirmImportBtn.hidden) {
+            confirmImportBtn.focus();
+          }
+        });
+      }
+
+      function executePendingImport() {
+        if (!pendingImportFile) {
+          return;
+        }
+        const file = pendingImportFile;
+        if (confirmImportBtn) {
+          confirmImportBtn.disabled = true;
+        }
+        clearPendingImport();
+        handleFile(file);
+      }
+
       function handleFile(file) {
-        if (file.type === "application/json" || file.name.toLowerCase().endsWith(".json")) {
+        if (isJsonFile(file)) {
           resetPuzzleUI();
           const reader = new FileReader();
           reader.onload = () => {
@@ -5841,41 +5997,35 @@
       }
 
       function updateGenerationProgress(progress, label) {
-        if (!progressMeterEl || !progressBarEl) {
+        if (!generatorProgressMeterEl || !generatorProgressBarEl) {
           return;
         }
         const hasProgress = typeof progress === "number" && Number.isFinite(progress);
         if (!hasProgress) {
-          if (progressStatusEl) {
-            progressStatusEl.classList.remove("show-progress");
-          }
-          progressMeterEl.setAttribute("aria-hidden", "true");
-          progressMeterEl.setAttribute("aria-valuenow", "0");
-          progressMeterEl.setAttribute("aria-label", label || defaultProgressLabel);
-          progressBarEl.style.width = "0%";
+          generatorProgressMeterEl.setAttribute("aria-hidden", "true");
+          generatorProgressMeterEl.setAttribute("aria-valuenow", "0");
+          generatorProgressMeterEl.setAttribute("aria-label", label || defaultProgressLabel);
+          generatorProgressBarEl.style.width = "0%";
           return;
         }
         const clamped = Math.min(1, Math.max(0, progress));
-        if (progressStatusEl) {
-          progressStatusEl.classList.add("show-progress");
+        generatorProgressMeterEl.setAttribute("aria-hidden", "false");
+        generatorProgressMeterEl.setAttribute("aria-valuenow", String(Math.round(clamped * 100)));
+        generatorProgressMeterEl.setAttribute("aria-label", label || defaultProgressLabel);
+        generatorProgressBarEl.style.width = `${(clamped * 100).toFixed(1)}%`;
+        if (generatorProgressEl && generatorProgressEl.hidden && generatorProgressMessageEl?.textContent) {
+          generatorProgressEl.hidden = false;
         }
-        progressMeterEl.setAttribute("aria-hidden", "false");
-        progressMeterEl.setAttribute("aria-valuenow", String(Math.round(clamped * 100)));
-        progressMeterEl.setAttribute("aria-label", label || defaultProgressLabel);
-        progressBarEl.style.width = `${(clamped * 100).toFixed(1)}%`;
       }
 
       function clearGenerationProgress() {
-        if (!progressMeterEl || !progressBarEl) {
+        if (!generatorProgressMeterEl || !generatorProgressBarEl) {
           return;
         }
-        if (progressStatusEl) {
-          progressStatusEl.classList.remove("show-progress");
-        }
-        progressMeterEl.setAttribute("aria-hidden", "true");
-        progressMeterEl.setAttribute("aria-valuenow", "0");
-        progressMeterEl.setAttribute("aria-label", defaultProgressLabel);
-        progressBarEl.style.width = "0%";
+        generatorProgressMeterEl.setAttribute("aria-hidden", "true");
+        generatorProgressMeterEl.setAttribute("aria-valuenow", "0");
+        generatorProgressMeterEl.setAttribute("aria-label", defaultProgressLabel);
+        generatorProgressBarEl.style.width = "0%";
       }
 
       function beginGenerationJob() {
@@ -5908,47 +6058,22 @@
         }
       }
 
-
-      function shouldDisplayStatusBar(status) {
-        const normalized = typeof status === "string" && status ? status : "idle";
-        if (state.settings.showStatusBar !== true) {
-          return false;
-        }
-        return normalized === "generating" || normalized === "loading";
-      }
-
-      function syncStatusBarVisibility(statusOverride) {
-        if (!progressStatusEl) {
-          return;
-        }
-        const status =
-          typeof statusOverride === "string" && statusOverride
-            ? statusOverride
-            : progressStatusEl.getAttribute("data-status") || "idle";
-        const shouldShow = shouldDisplayStatusBar(status);
-        progressStatusEl.hidden = !shouldShow;
-        progressStatusEl.setAttribute("aria-hidden", shouldShow ? "false" : "true");
-        if (!shouldShow && progressEl) {
-          progressEl.textContent = "";
-        }
-      }
-
       function setProgressMessage(status, customMessage) {
         const normalized = typeof status === "string" && status ? status : "idle";
-        const shouldShow = shouldDisplayStatusBar(normalized);
+        const shouldShow = normalized === "loading" || normalized === "generating" || normalized === "complete";
         const message = shouldShow
           ? typeof customMessage === "string" && customMessage.length > 0
             ? customMessage
             : PROGRESS_MESSAGES[normalized] || DEFAULT_PROGRESS_MESSAGE
           : "";
-        if (progressEl) {
-          progressEl.textContent = message;
-          progressEl.setAttribute("data-status", normalized);
+        if (generatorProgressMessageEl) {
+          generatorProgressMessageEl.textContent = message;
+          generatorProgressMessageEl.setAttribute("data-status", normalized);
         }
-        if (progressStatusEl) {
-          progressStatusEl.setAttribute("data-status", normalized);
+        if (generatorProgressEl) {
+          generatorProgressEl.hidden = !shouldShow || message.length === 0;
+          generatorProgressEl.setAttribute("data-status", normalized);
         }
-        syncStatusBarVisibility(normalized);
         if (normalized !== "generating") {
           clearGenerationProgress();
         }
@@ -7299,7 +7424,6 @@
                 : DEFAULT_UI_SCALE,
             artPrompt: state.settings.artPrompt || "",
             showRegionLabels: state.settings.showRegionLabels !== false,
-            showStatusBar: state.settings.showStatusBar === true,
             theme: state.settings.theme || DEFAULT_UI_THEME,
           },
         };

@@ -223,19 +223,21 @@ skips optional fields.
    boot; if nothing is stored yet the bundled “Capybara Springs” puzzle loads
    automatically in the high detail preset so you can start painting
    immediately. Drag a bitmap into the viewport, activate the “Choose an image”
-   button, or press the 🐹 command button to reload the bundled scene. The hint
-   overlay disappears once a new source is selected, and the Low/Medium/High
-   detail chips can pre-seed the capybara sample with relaxed or high-fidelity
-   settings before you reload it.
+   button, or press the 🐹 command button to reload the bundled scene. When you
+   choose a new file the Puzzle generator sheet opens so you can confirm
+   clustering settings before generation begins. The hint overlay disappears
+   once a new source is selected, and the Low/Medium/High detail chips can
+   pre-seed the capybara sample with relaxed or high-fidelity settings before
+   you reload it.
 2. **Tune generation & appearance.** Open **Settings** to slide out the
    sidecar and tweak palette size, minimum region area, resize detail, sample
-  rate (for faster clustering), iteration count, smoothing passes,
-  auto-advance, the difficulty selector, the status bar toggle (for import/generation updates), hint animations,
-  fade timing, overlay intensity, the right-click action, the interface theme,
-  the canvas background colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
-   when working from an image source, then expand the **Advanced options**
-   accordion to edit the optional art prompt metadata before exporting or
-   regenerating a scene.
+   rate (for faster clustering), iteration count, smoothing passes,
+   auto-advance, the difficulty selector, hint animations, fade timing, overlay
+   intensity, the right-click action, the interface theme, the canvas
+   background colour, the interface scale slider, and the Palette sort menu.
+   Apply changes instantly when working from an image source, then expand the
+   **Advanced options** accordion to edit the optional art prompt metadata
+   before exporting or regenerating a scene.
 3. **Explore the puzzle.** The game canvas shows outlines and number badges,
    while the **Preview** button floods the entire viewport with a fullscreen
    comparison of the clustered artwork.
@@ -295,8 +297,9 @@ before retrying.
   colours, minimum region size, resize detail, sample rate, k-means iterations,
   smoothing passes, an interface theme switcher, a background colour picker, the
   interface scale slider, toggles for auto-advance, Easy/Standard difficulty,
-  the status bar, hint animations, and the Palette sort menu. A
-  dedicated Hints & controls section now lets you tune fade duration, overlay intensity, and remap the right-click action.
+  hint animations, and the Palette sort menu. A dedicated Hints & controls
+  section now lets you tune fade duration, overlay intensity, and remap the
+  right-click action.
   The panel also houses the JSON export action, mirrors the Low/Medium/High detail
   chips so you can reload the sample with tuned parameters without leaving the
   sidecar, and tucks the art prompt query inside an **Advanced options**
@@ -314,10 +317,10 @@ before retrying.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
   Each swatch now stretches into a flat colour tile with no gutters, and the
   number rides directly on the paint with a contrast-aware outline so it stays
-  readable without extra chrome. A collapsible status bar above the dock now only
-  appears while imports or puzzle generation are in flight; disable the Settings toggle
-  if you'd prefer to hide those updates entirely. Tooltips and `data-color-id` attributes still
-  expose the colour name plus remaining counts for automation hooks.
+  readable without extra chrome. Generation progress now lives in the Puzzle
+  generator sheet, keeping the dock dedicated to colour selection. Tooltips and
+  `data-color-id` attributes still expose the colour name plus remaining counts
+  for automation hooks.
 
 ## Keyboard and accessibility notes
 
