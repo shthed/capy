@@ -29,10 +29,10 @@
   "codex-remove-status-bar-and-confirm-import-settings": {
     "branch": "codex/remove-status-bar-and-confirm-import-settings",
     "safeName": "codex-remove-status-bar-and-confirm-import-settings",
-    "commit": "35f1119175c6eea223ebe27894913c17189ab480",
-    "message": "feat: confirm imports in generator sheet",
+    "commit": "0124a0e5de9fbf2224f3fad1adbe2a1f821d14ac",
+    "message": "tune command rail and palette dock layout",
     "actor": "shthed",
-    "deployedAt": "2025-10-15T11:26:47+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/35f1119175c6eea223ebe27894913c17189ab480"
+    "deployedAt": "2025-10-15T14:58:50+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/0124a0e5de9fbf2224f3fad1adbe2a1f821d14ac"
   }
 }
