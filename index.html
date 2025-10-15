@@ -680,28 +680,6 @@
         font-size: 0.95rem;
       }
 
-      #startHint .save-manager {
-        display: grid;
-        gap: calc(12px * var(--ui-scale));
-      }
-
-      #startHint .save-manager h2 {
-        margin: 0;
-        font-size: 1.1rem;
-      }
-
-      #startHint .save-manager-description {
-        margin: 0;
-        color: var(--theme-muted-text);
-        font-size: 0.95rem;
-      }
-
-      #startHint .save-manager-empty {
-        margin: 0;
-        font-size: 0.85rem;
-        color: var(--theme-caption-text);
-      }
-
       #startHint .game-selection-list {
         list-style: none;
         margin: 0;
@@ -1235,6 +1213,28 @@
         letter-spacing: 0.02em;
       }
 
+      .save-manager {
+        display: grid;
+        gap: calc(12px * var(--ui-scale));
+      }
+
+      .save-manager h2 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      .save-manager-description {
+        margin: 0;
+        color: var(--theme-muted-text);
+        font-size: 0.95rem;
+      }
+
+      .save-manager-empty {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--theme-caption-text);
+      }
+
       .command-list {
         display: grid;
         grid-template-columns: minmax(0, auto) 1fr;
@@ -1342,7 +1342,7 @@
         height: 18px;
       }
 
-      #saveList {
+      .save-manager-list {
         list-style: none;
         margin: 0;
         padding: 0;
@@ -1561,16 +1561,22 @@
               id="saveManagerSection"
               class="save-manager"
               role="group"
-              aria-labelledby="saveManagerHeading"
+              aria-labelledby="startSaveManagerHeading"
+              data-save-section="start"
             >
-              <h2 id="saveManagerHeading">Manage saves</h2>
+              <h2 id="startSaveManagerHeading">Manage saves</h2>
               <p class="save-manager-description">
                 Autosaves keep tracking progress in this browser. Review them here or capture a manual snapshot to revisit a
                 favourite moment.
               </p>
-              <button id="saveSnapshot" type="button" disabled>Save current puzzle</button>
-              <ul id="saveList" aria-live="polite" aria-labelledby="saveManagerHeading"></ul>
-              <p id="saveListEmpty" class="save-manager-empty" hidden>
+              <button type="button" data-save-snapshot disabled>Save current puzzle</button>
+              <ul
+                class="save-manager-list"
+                data-save-list
+                aria-live="polite"
+                aria-labelledby="startSaveManagerHeading"
+              ></ul>
+              <p class="save-manager-empty" data-save-empty hidden>
                 No manual saves yet. Create one above or keep playing to autosave progress.
               </p>
             </div>
@@ -1590,7 +1596,7 @@
             hidden
             aria-hidden="true"
           >
-            <span id="progress" class="progress-message">Ready to paint</span>
+            <span id="progress" class="progress-message"></span>
             <div
               id="progressMeter"
               class="progress-meter"
@@ -1608,6 +1614,41 @@
         </footer>
     </div>
     <input id="fileInput" type="file" accept=".json,image/*" hidden />
+    <div
+      id="saveManagerSheet"
+      class="sheet hidden"
+      role="dialog"
+      aria-labelledby="saveManagerTitle"
+      aria-hidden="true"
+    >
+      <div class="sheet-header">
+        <h2 id="saveManagerTitle">Manage saves</h2>
+        <button type="button" class="close-button" data-sheet-close="saves">Close</button>
+      </div>
+      <div class="sheet-body">
+        <section
+          class="sheet-section save-manager"
+          role="group"
+          aria-labelledby="saveManagerTitle"
+          data-save-section="dialog"
+        >
+          <p class="save-manager-description">
+            Autosaves keep tracking progress in this browser. Review them here or capture a manual snapshot to revisit a
+            favourite moment.
+          </p>
+          <button type="button" data-save-snapshot disabled>Save current puzzle</button>
+          <ul
+            class="save-manager-list"
+            data-save-list
+            aria-live="polite"
+            aria-labelledby="saveManagerTitle"
+          ></ul>
+          <p class="save-manager-empty" data-save-empty hidden>
+            No manual saves yet. Create one above or keep playing to autosave progress.
+          </p>
+        </section>
+      </div>
+    </div>
     <div
       id="helpSheet"
       class="sheet hidden"
@@ -1799,7 +1840,7 @@
             <span>Show region numbers</span>
           </label>
           <label class="toggle">
-            <input id="showStatusToggle" type="checkbox" checked />
+            <input id="showStatusToggle" type="checkbox" />
             <span>Show status bar during imports and generation</span>
           </label>
           <label class="control">
@@ -1897,8 +1938,7 @@
       const gameSelectionEmpty = document.getElementById("gameSelectionEmpty");
       const startHint = document.getElementById("startHint");
       const startHintCloseButton = document.getElementById("closeStartHint");
-      const saveManagerSection = document.getElementById("saveManagerSection");
-      const saveListEmpty = document.getElementById("saveListEmpty");
+      const startSaveManagerSection = document.getElementById("saveManagerSection");
       const hintButton = document.getElementById("hintButton");
       const resetButton = document.getElementById("resetButton");
       const previewToggle = document.getElementById("previewToggle");
@@ -1911,6 +1951,10 @@
       const generatorSheet = document.getElementById("generatorSheet");
       const settingsSheet = document.getElementById("settingsSheet");
       const helpSheet = document.getElementById("helpSheet");
+      const saveManagerSheet = document.getElementById("saveManagerSheet");
+      const sheetRegistry = [generatorSheet, settingsSheet, helpSheet, saveManagerSheet].filter(
+        Boolean
+      );
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
       const saveStorageSummary = document.getElementById("saveStorageSummary");
@@ -1940,8 +1984,9 @@
       const artPromptInput = document.getElementById("artPrompt");
       const applyBtn = document.getElementById("applyOptions");
       const downloadBtn = document.getElementById("downloadJson");
-      const saveSnapshotBtn = document.getElementById("saveSnapshot");
-      const saveList = document.getElementById("saveList");
+      const saveSnapshotButtons = Array.from(document.querySelectorAll("[data-save-snapshot]"));
+      const saveListContainers = Array.from(document.querySelectorAll("[data-save-list]"));
+      const saveListEmptyStates = Array.from(document.querySelectorAll("[data-save-empty]"));
       const paletteEl = document.getElementById("palette");
       const paletteSortEl = document.getElementById("paletteSort");
       const progressStatusEl = document.getElementById("progressStatus");
@@ -1950,8 +1995,8 @@
       const progressBarEl = document.getElementById("progressBar");
       const defaultProgressLabel =
         progressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
+      const DEFAULT_PROGRESS_MESSAGE = "";
       const PROGRESS_MESSAGES = {
-        idle: "Ready to paint",
         loading: "Loading puzzle…",
         active: "Keep colouring",
         generating: "Processing image…",
@@ -2973,7 +3018,7 @@
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
           showRegionLabels: true,
-          showStatusBar: true,
+          showStatusBar: false,
           theme: DEFAULT_UI_THEME,
         },
         previewVisible: false,
@@ -3340,6 +3385,7 @@
           },
           openGenerator: () => openSheet(generatorSheet),
           openSettings: () => openSheet(settingsSheet),
+          openSaves: () => openSheet(saveManagerSheet),
         };
       }
 
@@ -3414,7 +3460,10 @@
         generatorButton.addEventListener("click", () => openSheet(generatorSheet));
       }
       settingsButton.addEventListener("click", () => openSheet(settingsSheet));
-      saveManagerButton.addEventListener("click", () => showStartScreen({ scrollTo: "saves" }));
+      saveManagerButton.addEventListener("click", () => {
+        hideStartScreen();
+        openSheet(saveManagerSheet);
+      });
       if (helpButton) {
         helpButton.addEventListener("click", () => openSheet(helpSheet));
       }
@@ -3469,6 +3518,8 @@
             closeSheet(generatorSheet);
           } else if (target === "help") {
             closeSheet(helpSheet);
+          } else if (target === "saves") {
+            closeSheet(saveManagerSheet);
           }
         });
       }
@@ -3671,12 +3722,14 @@
         logDebug("Exported puzzle JSON");
       });
 
-      saveSnapshotBtn.addEventListener("click", () => {
-        if (!state.puzzle) return;
-        saveCurrentSnapshot();
-      });
+      for (const button of saveSnapshotButtons) {
+        button.addEventListener("click", () => {
+          if (!state.puzzle) return;
+          saveCurrentSnapshot();
+        });
+      }
 
-      saveList.addEventListener("click", (event) => {
+      function handleSaveListClick(event) {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
         const entryEl = target.closest("[data-save-id]");
@@ -3692,7 +3745,11 @@
         } else if (target.dataset.action === "rename") {
           renameSaveEntry(id);
         }
-      });
+      }
+
+      for (const list of saveListContainers) {
+        list.addEventListener("click", handleSaveListClick);
+      }
 
       colorCountEl.addEventListener("input", updateOptionOutputs);
       minRegionEl.addEventListener("input", updateOptionOutputs);
@@ -4070,6 +4127,11 @@
 
       function openSheet(sheet) {
         if (!sheet) return;
+        for (const candidate of sheetRegistry) {
+          if (!candidate || candidate === sheet) continue;
+          candidate.classList.add("hidden");
+          candidate.setAttribute("aria-hidden", "true");
+        }
         sheet.classList.remove("hidden");
         sheet.setAttribute("aria-hidden", "false");
       }
@@ -4082,6 +4144,9 @@
 
       function showStartScreen(options = {}) {
         if (!startHint) return;
+        for (const sheet of sheetRegistry) {
+          closeSheet(sheet);
+        }
         startHint.classList.remove("hidden");
         startHint.setAttribute("aria-hidden", "false");
         const { focus = true, scrollTo } = options;
@@ -4092,9 +4157,9 @@
             }
           });
         }
-        if (scrollTo === "saves" && saveManagerSection) {
+        if (scrollTo === "saves" && startSaveManagerSection) {
           requestAnimationFrame(() => {
-            saveManagerSection.scrollIntoView({ block: "start" });
+            startSaveManagerSection.scrollIntoView({ block: "start" });
           });
         }
       }
@@ -4416,7 +4481,9 @@
         resetButton.disabled = !hasPuzzle;
         previewToggle.disabled = !hasPuzzle;
         downloadBtn.disabled = !hasPuzzle;
-        saveSnapshotBtn.disabled = !hasPuzzle;
+        for (const button of saveSnapshotButtons) {
+          button.disabled = !hasPuzzle;
+        }
         saveManagerButton.disabled = !hasPuzzle && state.saves.length === 0;
         if (startHintCloseButton) {
           startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
@@ -5842,6 +5909,14 @@
       }
 
 
+      function shouldDisplayStatusBar(status) {
+        const normalized = typeof status === "string" && status ? status : "idle";
+        if (state.settings.showStatusBar !== true) {
+          return false;
+        }
+        return normalized === "generating" || normalized === "loading";
+      }
+
       function syncStatusBarVisibility(statusOverride) {
         if (!progressStatusEl) {
           return;
@@ -5850,27 +5925,31 @@
           typeof statusOverride === "string" && statusOverride
             ? statusOverride
             : progressStatusEl.getAttribute("data-status") || "idle";
-        const isGenerationStatus = status === "generating" || status === "loading";
-        const userEnabled = state.settings.showStatusBar !== false;
-        const shouldShow = isGenerationStatus && userEnabled;
+        const shouldShow = shouldDisplayStatusBar(status);
         progressStatusEl.hidden = !shouldShow;
         progressStatusEl.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+        if (!shouldShow && progressEl) {
+          progressEl.textContent = "";
+        }
       }
 
       function setProgressMessage(status, customMessage) {
-        const message =
-          typeof customMessage === "string" && customMessage.length > 0
+        const normalized = typeof status === "string" && status ? status : "idle";
+        const shouldShow = shouldDisplayStatusBar(normalized);
+        const message = shouldShow
+          ? typeof customMessage === "string" && customMessage.length > 0
             ? customMessage
-            : PROGRESS_MESSAGES[status] || PROGRESS_MESSAGES.idle;
+            : PROGRESS_MESSAGES[normalized] || DEFAULT_PROGRESS_MESSAGE
+          : "";
         if (progressEl) {
           progressEl.textContent = message;
-          progressEl.setAttribute("data-status", status || "idle");
+          progressEl.setAttribute("data-status", normalized);
         }
         if (progressStatusEl) {
-          progressStatusEl.setAttribute("data-status", status || "idle");
+          progressStatusEl.setAttribute("data-status", normalized);
         }
-        syncStatusBarVisibility(status);
-        if (status !== "generating") {
+        syncStatusBarVisibility(normalized);
+        if (normalized !== "generating") {
           clearGenerationProgress();
         }
       }
@@ -8201,17 +8280,21 @@
       }
 
       function refreshSaveList() {
-        saveList.innerHTML = "";
-        const fragment = document.createDocumentFragment();
         const hasEntries = Array.isArray(state.saves) && state.saves.length > 0;
-        if (hasEntries) {
-          for (const entry of state.saves) {
-            fragment.appendChild(createSaveManagementItem(entry));
+        for (const list of saveListContainers) {
+          if (!list) continue;
+          list.innerHTML = "";
+          if (hasEntries) {
+            const fragment = document.createDocumentFragment();
+            for (const entry of state.saves) {
+              fragment.appendChild(createSaveManagementItem(entry));
+            }
+            list.appendChild(fragment);
           }
         }
-        saveList.appendChild(fragment);
-        if (saveListEmpty) {
-          saveListEmpty.hidden = hasEntries;
+        for (const emptyState of saveListEmptyStates) {
+          if (!emptyState) continue;
+          emptyState.hidden = hasEntries;
         }
         updateCommandStates();
         refreshGameSelection();
