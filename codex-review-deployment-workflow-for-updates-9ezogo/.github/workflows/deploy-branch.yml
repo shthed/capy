@@ -1,0 +1,493 @@
+name: Deploy GitHub Pages previews
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    if: github.ref != 'refs/heads/gh-pages'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deployments
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy-pages.outputs.page_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch open PR metadata
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pulls } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 100
+            });
+
+            const branches = pulls.map(pr => ({
+              branch: pr.head.ref,
+              safeName: pr.head.ref.replace(/[^a-zA-Z0-9._-]/g, '-'),
+              title: pr.title,
+              number: pr.number,
+              updatedAt: pr.updated_at,
+              url: pr.html_url
+            }));
+
+            const fs = require('fs');
+            fs.writeFileSync('pr-branches.json', JSON.stringify(branches, null, 2));
+
+            return branches.length;
+
+      - name: Fetch main branch commits
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            const { data: commits } = await github.rest.repos.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: 'main',
+              per_page: 3
+            });
+
+            const commitsWithPRs = await Promise.all(commits.map(async (commit) => {
+              let prs = [];
+              try {
+                const { data: prData } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  commit_sha: commit.sha
+                });
+                prs = prData.map(pr => ({
+                  number: pr.number,
+                  title: pr.title,
+                  url: pr.html_url
+                }));
+              } catch (error) {
+                core.warning(`Could not fetch PRs for commit ${commit.sha}: ${error.message}`);
+              }
+
+              return {
+                sha: commit.sha,
+                shortSha: commit.sha.substring(0, 7),
+                message: commit.commit.message,
+                author: commit.commit.author?.name ?? commit.commit.committer?.name ?? 'Unknown author',
+                date: commit.commit.author?.date ?? commit.commit.committer?.date ?? '',
+                htmlUrl: commit.html_url,
+                prs
+              };
+            }));
+
+            const mainBranchData = {
+              commits: commitsWithPRs,
+              lastCommitDate: commits[0]?.commit.author?.date ?? commits[0]?.commit.committer?.date ?? null,
+              deploymentTimestamp: Date.now()
+            };
+
+            fs.writeFileSync('main-branch-data.json', JSON.stringify(mainBranchData, null, 2));
+
+            return mainBranchData.commits.length;
+
+      - name: Sync branch to gh-pages
+        id: sync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
+          COMMIT_TIMESTAMP: ${{ github.event.head_commit.timestamp || '' }}
+        run: |
+          set -euo pipefail
+
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          SAFE_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          TARGET_DIR="."
+          TARGET_KEY="main"
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            SAFE_NAME=""
+          else
+            TARGET_DIR="$SAFE_NAME"
+            TARGET_KEY="$SAFE_NAME"
+          fi
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          rm -rf pages
+          if git ls-remote --exit-code origin gh-pages >/dev/null 2>&1; then
+            git clone --depth=1 --branch gh-pages "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages
+          else
+            mkdir pages
+            git -C pages init
+            git -C pages checkout -b gh-pages
+            git -C pages remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            touch pages/.nojekyll
+            git -C pages add .nojekyll
+            git -C pages commit -m "Initialize gh-pages"
+            git -C pages push origin gh-pages
+          fi
+
+          cd pages
+
+          touch .nojekyll
+          MANIFEST=".branch-manifest"
+          touch "$MANIFEST"
+
+          RSYNC_ARGS=(
+            "--exclude=.git/"
+            "--exclude=.github/"
+            "--exclude=.github"
+            "--exclude=node_modules/"
+            "--exclude=pages/"
+            "--exclude=.branch-manifest"
+            "--exclude=deployments.json"
+            "--exclude=branch.html"
+            "--exclude=.gitignore"
+            "--exclude=.gitattributes"
+            "--exclude=.DS_Store"
+          )
+
+          if [ "$TARGET_DIR" = "." ]; then
+            EXTRA_EXCLUDES=()
+            while IFS= read -r entry; do
+              [ -n "$entry" ] || continue
+              EXTRA_EXCLUDES+=("--exclude=${entry}/")
+            done < "$MANIFEST"
+
+            rsync -a --delete "${RSYNC_ARGS[@]}" "${EXTRA_EXCLUDES[@]}" ../ ./
+          else
+            rm -rf "$TARGET_DIR"
+            mkdir -p "$TARGET_DIR"
+            rsync -a --delete "${RSYNC_ARGS[@]}" ../ "$TARGET_DIR/"
+            if ! grep -qxF "$TARGET_KEY" "$MANIFEST"; then
+              echo "$TARGET_KEY" >> "$MANIFEST"
+            fi
+          fi
+
+          DEPLOY_DATA="deployments.json"
+          if [ ! -f "$DEPLOY_DATA" ]; then
+            echo '{}' > "$DEPLOY_DATA"
+          fi
+
+          MESSAGE="$COMMIT_MESSAGE"
+          if [ -z "$MESSAGE" ]; then
+            MESSAGE=$(git -C .. log -1 --pretty=%B | head -n 1)
+          fi
+
+          TIMESTAMP="$COMMIT_TIMESTAMP"
+          if [ -z "$TIMESTAMP" ]; then
+            TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          fi
+
+          jq --arg key "$TARGET_KEY" \
+             --arg branch "$BRANCH_NAME" \
+             --arg safe "$SAFE_NAME" \
+             --arg commit "${GITHUB_SHA}" \
+             --arg message "$MESSAGE" \
+             --arg actor "${GITHUB_ACTOR}" \
+             --arg timestamp "$TIMESTAMP" \
+             --arg url "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" \
+             '.[$key] = {
+               branch: $branch,
+               safeName: $safe,
+               commit: $commit,
+               message: $message,
+               actor: $actor,
+               deployedAt: $timestamp,
+               commitUrl: $url
+             }' "$DEPLOY_DATA" > "$DEPLOY_DATA.tmp"
+          mv "$DEPLOY_DATA.tmp" "$DEPLOY_DATA"
+
+          cat > branch.html <<'HTML'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Capy Branch Deployments</title>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", sans-serif;
+                max-width: 960px;
+                margin: 40px auto;
+                padding: 0 20px 40px;
+                line-height: 1.6;
+                color: #24292e;
+                background: #f6f8fa;
+              }
+              h1 {
+                margin-bottom: 16px;
+              }
+              ul.deployments {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+                display: grid;
+                gap: 16px;
+              }
+              li.card {
+                background: #fff;
+                border: 1px solid #d0d7de;
+                border-radius: 8px;
+                padding: 16px;
+                box-shadow: 0 1px 0 rgba(31,35,40,0.04);
+              }
+              li.card.main {
+                border-color: #4c8eda;
+                box-shadow: 0 4px 12px rgba(76,142,218,0.12);
+              }
+              .commit-section {
+                margin-top: 16px;
+                padding-top: 12px;
+                border-top: 1px solid #d0d7de;
+              }
+              .commit-title {
+                font-size: 0.95em;
+                font-weight: 600;
+                margin-bottom: 8px;
+                color: #24292e;
+              }
+              .commit-list {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                display: grid;
+                gap: 8px;
+              }
+              .commit-item {
+                font-size: 0.9em;
+                color: #24292e;
+              }
+              .commit-sha {
+                font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 0.9em;
+                font-weight: 600;
+                color: #0969da;
+                margin-right: 8px;
+                text-decoration: none;
+              }
+              .commit-sha:hover {
+                text-decoration: underline;
+              }
+              .commit-message {
+                font-weight: 500;
+                color: #24292e;
+                display: inline-block;
+                margin-left: 4px;
+              }
+              .commit-meta {
+                margin-top: 4px;
+                color: #57606a;
+                font-size: 0.85em;
+              }
+              .commit-pr-link {
+                color: #8250df;
+                text-decoration: none;
+                margin-right: 8px;
+              }
+              .commit-pr-link:hover {
+                text-decoration: underline;
+              }
+              a.branch-link {
+                font-weight: 600;
+                color: #0969da;
+                text-decoration: none;
+              }
+              a.branch-link:hover {
+                text-decoration: underline;
+              }
+              span.badge {
+                display: inline-block;
+                margin-left: 8px;
+                padding: 2px 8px;
+                font-size: 12px;
+                font-weight: 600;
+                color: #0f5132;
+                background: #d1e7dd;
+                border-radius: 999px;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+              }
+              .message {
+                margin-top: 8px;
+                color: #24292e;
+              }
+              .meta {
+                margin-top: 8px;
+                font-size: 0.9em;
+                color: #57606a;
+              }
+              .meta a {
+                color: #57606a;
+                font-weight: 600;
+              }
+              .pr-meta {
+                margin-top: 6px;
+                font-size: 0.85em;
+                color: #57606a;
+              }
+              .pr-link {
+                color: #8250df;
+                font-weight: 600;
+                text-decoration: none;
+                margin-right: 4px;
+              }
+              .pr-link:hover {
+                text-decoration: underline;
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Capy Branch Deployments</h1>
+            <ul class="deployments">
+          HTML
+
+          PR_DATA_FILE="../pr-branches.json"
+          MAIN_DATA_FILE="../main-branch-data.json"
+          if [ ! -f "$PR_DATA_FILE" ]; then
+            echo '[]' > "$PR_DATA_FILE"
+          fi
+          if [ ! -f "$MAIN_DATA_FILE" ]; then
+            echo '{"commits":[]}' > "$MAIN_DATA_FILE"
+          fi
+
+          jq -n \
+            --argfile deployments "$DEPLOY_DATA" \
+            --argfile prs "$PR_DATA_FILE" \
+            --argfile main "$MAIN_DATA_FILE" '
+            def html_escape:
+              gsub("&"; "&amp;") |
+              gsub("<"; "&lt;") |
+              gsub(">"; "&gt;") |
+              gsub("\""; "&quot;") |
+              gsub("\u0027"; "&#39;");
+
+            def first_line($text):
+              ($text // "") | split("\n") | .[0];
+
+            ($deployments // {}) as $deployments |
+            ($prs // []) as $pr_list |
+            ($main // {commits: []}) as $main_data |
+            (reduce $pr_list[] as $pr ({}; .[$pr.branch] = $pr)) as $pr_by_branch |
+            (reduce $pr_list[] as $pr ({}; .[$pr.safeName] = $pr)) as $pr_by_safe |
+
+            def branch_pr($entry):
+              $pr_by_branch[$entry.value.branch] // $pr_by_safe[$entry.value.safeName];
+
+            def base_data($entry):
+              ($entry.value | {
+                branch: (.branch // ""),
+                safe: (.safeName // ""),
+                message: first_line(.message),
+                deployed: (.deployedAt // "unknown"),
+                actor: (.actor // "unknown"),
+                commit: (.commit // ""),
+                url: (.commitUrl // "#")
+              });
+
+            def commit_item($commit):
+              "<li class=\"commit-item\"><a class=\"commit-sha\" href=\"" + (($commit.htmlUrl // "#") | html_escape) + "\">" + (($commit.shortSha // "") | html_escape) + "</a>" +
+              "<span class=\"commit-message\">" + (first_line($commit.message) | html_escape) + "</span>" +
+              "<div class=\"commit-meta\">by " + (($commit.author // "unknown") | html_escape) +
+              (if ($commit.date // "") != "" then " · " + (($commit.date) | html_escape) else "" end) +
+              (if ($commit.prs // []) | length > 0 then
+                " · " + (($commit.prs // []) | map("<a class=\"commit-pr-link\" href=\"" + ((.url // "#") | html_escape) + "\">PR #" + (.number|tostring) + "</a>") | join(" "))
+              else "" end) +
+              "</div></li>";
+
+            def render_main($entry):
+              base_data($entry) as $data |
+              "<li class=\"card main\"><a class=\"branch-link\" href=\"./\">main<span class=\"badge\">production</span></a>" +
+              (if $data.message != "" then "<div class=\"message\">" + ($data.message | html_escape) + "</div>" else "" end) +
+              "<div class=\"meta\">Last deployed " + ($data.deployed | html_escape) +
+              " by " + ($data.actor | html_escape) +
+              " · <a href=\"" + ($data.url | html_escape) + "\">" + ($data.commit[:7]) + "</a></div>" +
+              (if ($main_data.commits // []) | length > 0 then
+                "<div class=\"commit-section\"><div class=\"commit-title\">Recent commits</div><ul class=\"commit-list\">" +
+                (($main_data.commits // []) | map(commit_item(.)) | join("")) +
+                "</ul></div>"
+              else "" end) +
+              "</li>\n";
+
+            def render_branch($entry):
+              base_data($entry) as $data |
+              branch_pr($entry) as $pr |
+              "<li class=\"card\"><a class=\"branch-link\" href=\"./" + ($data.safe | html_escape) + "/\">" + ($data.branch | html_escape) + "</a>" +
+              (if $pr then "<div class=\"pr-meta\"><a class=\"pr-link\" href=\"" + (($pr.url // "#") | html_escape) + "\">PR #" + ($pr.number|tostring) + "</a> · " + ($pr.title | html_escape) + "</div>" else "" end) +
+              (if $data.message != "" then "<div class=\"message\">" + ($data.message | html_escape) + "</div>" else "" end) +
+              "<div class=\"meta\">Last deployed " + ($data.deployed | html_escape) +
+              " by " + ($data.actor | html_escape) +
+              " · <a href=\"" + ($data.url | html_escape) + "\">" + ($data.commit[:7]) + "</a></div>" +
+              "</li>\n";
+
+            ($deployments | to_entries | map(select(.key != "main"))) as $all_branches |
+            ($all_branches | map(select(branch_pr(.) != null))) as $branches_with_pr |
+            ($branches_with_pr | sort_by(.value.deployedAt // "") | reverse) as $sorted_branches |
+
+            ((if $deployments | has("main") then [render_main({key: "main", value: $deployments.main})] else [] end) +
+            ($sorted_branches | map(render_branch(.)))) | .[]
+          ' >> branch.html
+
+          cat >> branch.html <<'HTML'
+            </ul>
+          </body>
+          </html>
+          HTML
+
+          git add -A
+          if [ -n "$(git status --short)" ]; then
+            git commit -m "Deploy ${BRANCH_NAME} (${GITHUB_SHA})"
+            git push origin gh-pages
+          else
+            echo "No changes to commit"
+          fi
+
+          BASE_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+          if [ -z "$SAFE_NAME" ]; then
+            PREVIEW_URL="${BASE_URL}/"
+          else
+            PREVIEW_URL="${BASE_URL}/${SAFE_NAME}/"
+          fi
+
+          echo "preview_url=${PREVIEW_URL}" >> "$GITHUB_OUTPUT"
+          echo "Branch deployed to: ${PREVIEW_URL}"
+
+          cd ..
+
+      - name: Prepare Pages artifact
+        run: |
+          set -euo pipefail
+          rm -rf site
+          mkdir -p site
+          rsync -a --exclude='.git/' pages/ site/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deploy-pages
+        uses: actions/deploy-pages@v4
+
+      - name: Preview URL
+        run: echo "Preview available at ${{ steps.sync.outputs.preview_url }}"
