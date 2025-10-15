@@ -1,9 +1,9 @@
-name: Deploy Branch to GitHub Pages
+name: Deploy GitHub Pages previews
 
 on:
   push:
     branches:
-      - '**'  # Trigger on all branches
+      - '**'
   workflow_dispatch:
 
 permissions:
@@ -12,585 +12,294 @@ permissions:
   id-token: write
 
 jobs:
-  deploy-branch:
+  deploy:
     runs-on: ubuntu-latest
-    # Cancel in-progress deployments to prevent 400 errors from actions/deploy-pages@v4
-    # when multiple runs attempt to create overlapping GitHub Pages deployments.
-    # This ensures the latest commit wins and avoids "deployment request failed due to
-    # in progress deployment" errors.
     concurrency:
-      group: pages-deploy
-      cancel-in-progress: true
+      group: pages-deployments
+      cancel-in-progress: false
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deploy-pages.outputs.page_url }}
     steps:
-      - name: Check if branch has an open PR
-        id: check-pr
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: pulls } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              head: `${context.repo.owner}:${context.payload.ref.replace('refs/heads/', '')}`
-            });
-
-            const hasPR = pulls.length > 0;
-            console.log(`Branch ${context.ref} has open PR: ${hasPR}`);
-            return hasPR;
-
-      - name: Skip deployment if no open PR (except main)
-        if: steps.check-pr.outputs.result == 'false' && github.ref != 'refs/heads/main'
-        run: |
-          echo "Skipping deployment: Branch does not have an open PR"
-          exit 0
-
-      - name: Checkout current branch
-        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.ref }}
-          path: source
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Configure git credentials for authenticated operations
-        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-          git config --global credential.helper store
-          echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
-
-      - name: Restore gh-pages cache
-        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
-        uses: actions/cache/restore@v4
-        with:
-          path: gh-pages
-          key: gh-pages-${{ github.repository }}-${{ github.run_id }}
-          restore-keys: |
-            gh-pages-${{ github.repository }}-
-
-      - name: Validate gh-pages cache
-        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
-        run: |
-          # Check if gh-pages exists but is not a valid git repository
-          if [ -d "gh-pages" ] && [ ! -d "gh-pages/.git" ]; then
-            echo "Warning: gh-pages directory exists but is not a valid git repository"
-            echo "Removing invalid gh-pages directory from cache"
-            rm -rf gh-pages
-          fi
-
-      - name: Setup gh-pages branch
-        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
-        run: |
-          # Check if gh-pages branch exists remotely
-          if [ -d "gh-pages/.git" ]; then
-            echo "gh-pages cache exists, updating it"
-            cd gh-pages
-            git fetch origin gh-pages
-            git reset --hard origin/gh-pages
-          elif git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
-            echo "gh-pages branch exists, cloning it"
-            git clone --depth=1 --branch gh-pages --single-branch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
-          else
-            echo "gh-pages branch doesn't exist, initializing it"
-            mkdir -p gh-pages
-            cd gh-pages
-            git init
-            git checkout -b gh-pages
-            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-            echo "# GitHub Pages" > README.md
-            echo "This branch contains deployed content from all branches." >> README.md
-            git add README.md
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "Initialize gh-pages branch"
-            git push origin gh-pages
-          fi
-
-      - name: Prepare branch name for folder
-        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
-        id: branch-name
-        run: |
-          # Convert branch name to safe folder name
-          BRANCH_NAME="${{ github.ref_name }}"
-          # Main branch deploys to root (empty folder name), others to subfolders
-          if [ "$BRANCH_NAME" = "main" ]; then
-            SAFE_BRANCH_NAME=""
-          else
-            SAFE_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g')
-          fi
-          echo "safe_name=$SAFE_BRANCH_NAME" >> $GITHUB_OUTPUT
-          echo "Branch: $BRANCH_NAME -> Folder: $SAFE_BRANCH_NAME"
-
-      - name: Fetch open PRs with branches
-        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
-        id: fetch-prs
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: pulls } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              sort: 'updated',
-              direction: 'desc',
-              per_page: 100
-            });
-
-            const branches = pulls.map(pr => ({
-              branch: pr.head.ref,
-              safeName: pr.head.ref.replace(/[^a-zA-Z0-9._-]/g, '-'),
-              title: pr.title,
-              number: pr.number,
-              updated: pr.updated_at,
-              url: pr.html_url
-            }));
-
-            // Write to file for shell script to read
-            const fs = require('fs');
-            fs.writeFileSync('pr-branches.json', JSON.stringify(branches, null, 2));
-
-            return branches;
-
-      - name: Fetch main branch commits
-        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
-        id: fetch-main-commits
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-
-            // Fetch last 3 commits from main branch
-            const { data: commits } = await github.rest.repos.listCommits({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: 'main',
-              per_page: 3
-            });
-
-            // For each commit, search for associated PRs
-            const commitsWithPRs = await Promise.all(commits.map(async (commit) => {
-              let prs = [];
-              try {
-                // Search for PRs that include this commit
-                const { data: prData } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  commit_sha: commit.sha
-                });
-                prs = prData.map(pr => ({
-                  number: pr.number,
-                  title: pr.title,
-                  url: pr.html_url
-                }));
-              } catch (error) {
-                console.log(`Warning: Could not fetch PRs for commit ${commit.sha}: ${error.message}`);
-                // Continue with empty prs array
-              }
-
-              return {
-                sha: commit.sha,
-                shortSha: commit.sha.substring(0, 7),
-                message: commit.commit.message,
-                author: commit.commit.author.name,
-                date: commit.commit.author.date,
-                timestamp: new Date(commit.commit.author.date).getTime(),
-                htmlUrl: commit.html_url,
-                prs: prs
-              };
-            }));
-
-            const mainBranchData = {
-              commits: commitsWithPRs,
-              lastCommitDate: commits[0]?.commit.author.date,
-              lastCommitTimestamp: commits[0] ? new Date(commits[0].commit.author.date).getTime() : null,
-              deploymentTimestamp: Date.now()
-            };
-
-            fs.writeFileSync('main-branch-data.json', JSON.stringify(mainBranchData, null, 2));
-
-            return mainBranchData;
-
-      - name: Deploy branch content
-        if: steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main'
+      - name: Sync branch to gh-pages
+        id: sync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
+          COMMIT_TIMESTAMP: ${{ github.event.head_commit.timestamp || '' }}
         run: |
           set -euo pipefail
 
-          # Initialize has_changes early
-          echo "has_changes=false" >> $GITHUB_ENV
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          SAFE_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          TARGET_DIR="."
+          TARGET_KEY="main"
 
-          # Validate gh-pages is a valid git repository before proceeding
-          if [ ! -d "gh-pages/.git" ]; then
-            echo "gh-pages is not a valid git repository, re-cloning..."
-            rm -rf gh-pages
-            if git ls-remote --exit-code --heads https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages >/dev/null 2>&1; then
-              git clone --depth=1 --branch gh-pages --single-branch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
-            else
-              echo "Error: gh-pages branch does not exist remotely and should have been created by Setup gh-pages branch step"
-              exit 1
-            fi
-          fi
-
-          cd gh-pages
-          BRANCH_FOLDER="${{ steps.branch-name.outputs.safe_name }}"
-
-          # Handle main branch differently (deploys to root)
-          if [ -z "$BRANCH_FOLDER" ]; then
-            echo "Deploying main branch to root"
-            # For main branch, copy files directly to root (including index.html)
-            # Preserve existing branch folders and .git directory
-            # --delete removes destination files not in source, EXCEPT excluded paths
-            rsync -a --delete \
-                      --exclude='.git/' \
-                      --exclude='node_modules' \
-                      --exclude='test-results' \
-                      --exclude='playwright-report' \
-                      --exclude='blob-report' \
-                      --exclude='artifacts' \
-                      --exclude='README.md' \
-                      --exclude='branch.html' \
-                      ../source/ ./
+          if [ "$BRANCH_NAME" = "main" ]; then
+            SAFE_NAME=""
           else
-            # For other branches, deploy to subfolder
-            # Remove old content for this branch if it exists
-            if [ -d "$BRANCH_FOLDER" ]; then
-              echo "Removing old content for branch: $BRANCH_FOLDER"
-              rm -rf "$BRANCH_FOLDER"
+            TARGET_DIR="$SAFE_NAME"
+            TARGET_KEY="$SAFE_NAME"
+          fi
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          rm -rf pages
+          if git ls-remote --exit-code origin gh-pages >/dev/null 2>&1; then
+            git clone --depth=1 --branch gh-pages "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages
+          else
+            mkdir pages
+            git -C pages init
+            git -C pages checkout -b gh-pages
+            git -C pages remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            touch pages/.nojekyll
+            git -C pages add .nojekyll
+            git -C pages commit -m "Initialize gh-pages"
+            git -C pages push origin gh-pages
+          fi
+
+          cd pages
+
+          touch .nojekyll
+          MANIFEST=".branch-manifest"
+          touch "$MANIFEST"
+
+          RSYNC_ARGS=(
+            "--exclude=.git/"
+            "--exclude=.github/"
+            "--exclude=.github"
+            "--exclude=node_modules/"
+            "--exclude=pages/"
+            "--exclude=.branch-manifest"
+            "--exclude=deployments.json"
+            "--exclude=branch.html"
+            "--exclude=.gitignore"
+            "--exclude=.gitattributes"
+            "--exclude=.DS_Store"
+          )
+
+          if [ "$TARGET_DIR" = "." ]; then
+            EXTRA_EXCLUDES=()
+            while IFS= read -r entry; do
+              [ -n "$entry" ] || continue
+              EXTRA_EXCLUDES+=("--exclude=${entry}/")
+            done < "$MANIFEST"
+
+            rsync -a --delete "${RSYNC_ARGS[@]}" "${EXTRA_EXCLUDES[@]}" ../ ./
+          else
+            rm -rf "$TARGET_DIR"
+            mkdir -p "$TARGET_DIR"
+            rsync -a --delete "${RSYNC_ARGS[@]}" ../ "$TARGET_DIR/"
+            if ! grep -qxF "$TARGET_KEY" "$MANIFEST"; then
+              echo "$TARGET_KEY" >> "$MANIFEST"
             fi
-
-            # Create branch folder
-            mkdir -p "$BRANCH_FOLDER"
-
-            # Copy content from source (excluding .git, node_modules, etc)
-            echo "Copying content to: $BRANCH_FOLDER"
-            rsync -a --exclude='.git/' \
-                      --exclude='node_modules' \
-                      --exclude='test-results' \
-                      --exclude='playwright-report' \
-                      --exclude='blob-report' \
-                      --exclude='artifacts' \
-                      ../source/ "$BRANCH_FOLDER/"
           fi
 
-          # Safety check: Verify .git directory still exists after rsync
-          if [ ! -d ".git" ]; then
-            echo "Error: .git directory is missing after rsync operation"
-            exit 1
+          DEPLOY_DATA="deployments.json"
+          if [ ! -f "$DEPLOY_DATA" ]; then
+            echo '{}' > "$DEPLOY_DATA"
           fi
 
-          # Clean up old branches that no longer have open PRs
-          echo "Cleaning up branches without open PRs..."
-          if [ -f ../pr-branches.json ]; then
-            # Get list of branches with open PRs
-            ACTIVE_BRANCHES=$(cat ../pr-branches.json | grep -o '"safeName": "[^"]*"' | cut -d'"' -f4)
-
-            # Define protected directories that should never be removed during cleanup
-            # These are common names for persistent site assets (docs, stylesheets, images, etc.)
-            # that may exist in gh-pages for deployment purposes but not in source branches
-            PROTECTED_DIRS=("docs" "assets" "static" "vendor" "lib" "css" "js" "images" "fonts")
-
-            # Collect folders to remove first, then remove them
-            # This prevents issues with directory iteration during deletion
-            FOLDERS_TO_REMOVE=()
-            for dir in */; do
-              [ -d "$dir" ] || continue
-              folder_name="${dir%/}"
-
-              # Skip protected directories and files
-              is_protected=false
-              for protected in "${PROTECTED_DIRS[@]}"; do
-                if [ "$folder_name" = "$protected" ]; then
-                  is_protected=true
-                  break
-                fi
-              done
-
-              # Only consider removing if it's not protected and not in active branches
-              if [ "$is_protected" = false ]; then
-                if ! echo "$ACTIVE_BRANCHES" | grep -q "^${folder_name}$"; then
-                  FOLDERS_TO_REMOVE+=("$folder_name")
-                fi
-              fi
-            done
-
-            # Remove stale folders
-            for folder_name in "${FOLDERS_TO_REMOVE[@]}"; do
-              echo "Removing stale deployment: $folder_name"
-              rm -rf "$folder_name" || echo "Warning: Could not remove $folder_name"
-            done
+          MESSAGE="$COMMIT_MESSAGE"
+          if [ -z "$MESSAGE" ]; then
+            MESSAGE=$(git -C .. log -1 --pretty=%B | head -n 1)
           fi
 
-          # Generate branch index page with main first, then sorted branches from open PRs
-          cat > branch.html <<'EOF'
+          TIMESTAMP="$COMMIT_TIMESTAMP"
+          if [ -z "$TIMESTAMP" ]; then
+            TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          fi
+
+          jq --arg key "$TARGET_KEY" \
+             --arg branch "$BRANCH_NAME" \
+             --arg safe "$SAFE_NAME" \
+             --arg commit "${GITHUB_SHA}" \
+             --arg message "$MESSAGE" \
+             --arg actor "${GITHUB_ACTOR}" \
+             --arg timestamp "$TIMESTAMP" \
+             --arg url "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" \
+             '.[$key] = {
+               branch: $branch,
+               safeName: $safe,
+               commit: $commit,
+               message: $message,
+               actor: $actor,
+               deployedAt: $timestamp,
+               commitUrl: $url
+             }' "$DEPLOY_DATA" > "$DEPLOY_DATA.tmp"
+          mv "$DEPLOY_DATA.tmp" "$DEPLOY_DATA"
+
+          cat > branch.html <<'HTML'
           <!DOCTYPE html>
           <html lang="en">
           <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>Capy Branch Deployments</title>
             <style>
               body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-                max-width: 900px;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", sans-serif;
+                max-width: 960px;
                 margin: 40px auto;
-                padding: 0 20px;
+                padding: 0 20px 40px;
                 line-height: 1.6;
+                color: #24292e;
+                background: #f6f8fa;
               }
               h1 {
-                color: #333;
-                border-bottom: 2px solid #e1e4e8;
-                padding-bottom: 10px;
+                margin-bottom: 16px;
               }
-              .info {
-                background: #f6f8fa;
-                border: 1px solid #e1e4e8;
-                border-radius: 6px;
-                padding: 15px;
-                margin: 20px 0;
-              }
-              ul {
+              ul.deployments {
                 list-style: none;
                 padding: 0;
+                margin: 0;
+                display: grid;
+                gap: 16px;
               }
-              li {
-                margin: 15px 0;
-                padding: 15px;
+              li.card {
                 background: #fff;
-                border: 1px solid #e1e4e8;
-                border-radius: 6px;
-                transition: box-shadow 0.2s;
+                border: 1px solid #d0d7de;
+                border-radius: 8px;
+                padding: 16px;
+                box-shadow: 0 1px 0 rgba(31,35,40,0.04);
               }
-              li:hover {
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+              li.card.main {
+                border-color: #4c8eda;
+                box-shadow: 0 4px 12px rgba(76,142,218,0.12);
               }
-              li.main-branch {
-                background: #e6f7ff;
-                border-color: #91d5ff;
-              }
-              .branch-link {
-                font-size: 1.1em;
+              a.branch-link {
                 font-weight: 600;
-                color: #0366d6;
+                color: #0969da;
                 text-decoration: none;
               }
-              .branch-link:hover {
+              a.branch-link:hover {
                 text-decoration: underline;
               }
-              .pr-info {
-                margin-top: 5px;
-                font-size: 0.9em;
-                color: #586069;
-              }
-              .pr-link {
-                color: #0366d6;
-                text-decoration: none;
-              }
-              .pr-link:hover {
-                text-decoration: underline;
-              }
-              .timestamp {
-                font-size: 0.85em;
-                color: #6a737d;
-                margin-top: 5px;
-              }
-              .badge {
+              span.badge {
                 display: inline-block;
-                padding: 2px 8px;
-                font-size: 0.75em;
-                font-weight: 600;
-                border-radius: 12px;
-                background: #28a745;
-                color: white;
                 margin-left: 8px;
-              }
-              .main-details {
-                margin-top: 10px;
-                font-size: 0.9em;
-                color: #586069;
-              }
-              .commit-list {
-                margin-top: 8px;
-                padding-left: 15px;
-                border-left: 2px solid #e1e4e8;
-              }
-              .commit-item {
-                margin: 5px 0;
-                font-size: 0.85em;
-              }
-              .commit-message {
-                color: #24292e;
-                font-weight: 500;
-              }
-              .commit-message a {
-                font-family: 'Courier New', Courier, monospace;
+                padding: 2px 8px;
+                font-size: 12px;
                 font-weight: 600;
+                color: #0f5132;
+                background: #d1e7dd;
+                border-radius: 999px;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
               }
-              .commit-author {
-                color: #586069;
+              .message {
+                margin-top: 8px;
+                color: #24292e;
               }
-              .commit-sha {
-                font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+              .meta {
+                margin-top: 8px;
                 font-size: 0.9em;
-                color: #0366d6;
-                text-decoration: none;
+                color: #57606a;
               }
-              .commit-sha:hover {
-                text-decoration: underline;
-              }
-              .commit-prs {
-                margin-top: 3px;
-                font-size: 0.8em;
-              }
-              .commit-pr-link {
-                color: #6f42c1;
-                text-decoration: none;
-                margin-right: 8px;
-              }
-              .commit-pr-link:hover {
-                text-decoration: underline;
+              .meta a {
+                color: #57606a;
+                font-weight: 600;
               }
             </style>
-            <script>
-              // Function to format timestamp to local timezone
-              function formatLocalTime(timestamp) {
-                if (!timestamp) return 'N/A';
-                const date = new Date(timestamp);
-                return date.toLocaleString(undefined, {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  timeZoneName: 'short'
-                });
-              }
-
-              // Convert all timestamps to local timezone after page loads
-              document.addEventListener('DOMContentLoaded', function() {
-                document.querySelectorAll('[data-timestamp]').forEach(function(element) {
-                  const timestamp = parseInt(element.getAttribute('data-timestamp'));
-                  element.textContent = formatLocalTime(timestamp);
-                });
-              });
-            </script>
           </head>
           <body>
-            <h1>Capy Image Generator - Branch Deployments</h1>
-            <div class="info">
-              <strong>Note:</strong> The main branch is always deployed to the root.
-              Other branches with open pull requests are deployed to subfolders.
-              Branches are sorted by most recently updated first.
-              All dates and times are shown in your local timezone.
-            </div>
-            <ul>
-          EOF
+            <h1>Capy Branch Deployments</h1>
+            <ul class="deployments">
+          HTML
 
-          # Add main branch first (always at root) with commit and deployment data
-          echo '              <li class="main-branch">' >> branch.html
-          echo '                <a class="branch-link" href="./">main<span class="badge">PRODUCTION</span></a>' >> branch.html
-          echo '                <div class="pr-info">The main production branch - always deployed to root</div>' >> branch.html
+          jq -r '
+            def html_escape:
+              gsub("&"; "&amp;") |
+              gsub("<"; "&lt;") |
+              gsub(">"; "&gt;") |
+              gsub("\""; "&quot;") |
+              gsub("'"; "&#39;");
 
-          # Add main branch details if data file exists
-          if [ -f ../main-branch-data.json ]; then
-            LAST_COMMIT_TS=$(cat ../main-branch-data.json | jq -r '.lastCommitTimestamp // empty')
-            DEPLOYMENT_TS=$(cat ../main-branch-data.json | jq -r '.deploymentTimestamp // empty')
+            def first_line($text):
+              ($text // "") | split("\n") | .[0];
 
-            if [ -n "$LAST_COMMIT_TS" ]; then
-              echo '                <div class="main-details">' >> branch.html
-              echo "                  <div class=\"timestamp\">Last commit: <span data-timestamp=\"$LAST_COMMIT_TS\">$LAST_COMMIT_TS</span></div>" >> branch.html
-            fi
+            def render($entry):
+              ($entry.value | {
+                branch: (.branch // ""),
+                safe: (.safeName // ""),
+                message: first_line(.message),
+                deployed: (.deployedAt // "unknown"),
+                actor: (.actor // "unknown"),
+                commit: (.commit // ""),
+                url: (.commitUrl // "#")
+              }) as $data |
+              if $entry.key == "main" then
+                "<li class=\"card main\"><a class=\"branch-link\" href=\"./\">main<span class=\"badge\">production</span></a>" +
+                (if $data.message != "" then "<div class=\"message\">" + ($data.message | html_escape) + "</div>" else "" end) +
+                "<div class=\"meta\">Last deployed " + ($data.deployed | html_escape) +
+                " by " + ($data.actor | html_escape) +
+                " · <a href=\"" + $data.url + "\">" + ($data.commit[:7]) + "</a></div></li>"
+              else
+                "<li class=\"card\"><a class=\"branch-link\" href=\"./" + $data.safe + "/\">" +
+                ($data.branch | html_escape) + "</a>" +
+                (if $data.message != "" then "<div class=\"message\">" + ($data.message | html_escape) + "</div>" else "" end) +
+                "<div class=\"meta\">Last deployed " + ($data.deployed | html_escape) +
+                " by " + ($data.actor | html_escape) +
+                " · <a href=\"" + $data.url + "\">" + ($data.commit[:7]) + "</a></div></li>"
+              end;
 
-            if [ -n "$DEPLOYMENT_TS" ]; then
-              echo "                  <div class=\"timestamp\">Last deployment: <span data-timestamp=\"$DEPLOYMENT_TS\">$DEPLOYMENT_TS</span></div>" >> branch.html
-            fi
+            def ordered_entries:
+              (if has("main") then [{key: "main", value: .main}] else [] end) +
+              ([to_entries[] | select(.key != "main")] | sort_by(.value.deployedAt // "") | reverse);
 
-            # Add recent commits
-            COMMITS_COUNT=$(cat ../main-branch-data.json | jq '.commits | length')
-            if [ "$COMMITS_COUNT" -gt 0 ]; then
-              echo '                  <div class="commit-list">' >> branch.html
-              cat ../main-branch-data.json | jq -r '.commits[] |
-                . as $commit |
-                "<div class=\"commit-item\">" +
-                "<div class=\"commit-message\">" + (.message | split("\n")[0]) + "</div>" +
-                "<div class=\"commit-author\">by " + .author + " · <span data-timestamp=\"" + (.timestamp|tostring) + "\">" + (.timestamp|tostring) + "</span> · <a class=\"commit-sha\" href=\"" + .htmlUrl + "\">" + .shortSha + "</a></div>" +
-                (if (.prs | length) > 0 then
-                  "<div class=\"commit-prs\">" +
-                  (.prs | map("<a class=\"commit-pr-link\" href=\"" + .url + "\">#" + (.number|tostring) + "</a>") | join("")) +
-                  "</div>"
-                else "" end) +
-                "</div>"
-              ' >> branch.html
-              echo '                  </div>' >> branch.html
-            fi
+            ordered_entries | map(render(.)) | .[]
+          ' "$DEPLOY_DATA" >> branch.html
 
-            if [ -n "$LAST_COMMIT_TS" ] || [ -n "$DEPLOYMENT_TS" ]; then
-              echo '                </div>' >> branch.html
-            fi
-          fi
-
-          echo '              </li>' >> branch.html
-
-          # Add branches from PR data (already sorted by updated date)
-          if [ -f ../pr-branches.json ]; then
-            cat ../pr-branches.json | jq -r '.[] |
-              "<li>" +
-              "<a class=\"branch-link\" href=\"" + .safeName + "/\">" + .branch + "</a>" +
-              "<div class=\"pr-info\">PR #" + (.number|tostring) + ": " + .title + " - <a class=\"pr-link\" href=\"" + .url + "\">View PR</a></div>" +
-              "<div class=\"timestamp\">Last updated: <span data-timestamp=\"" + ((.updated | fromdateiso8601) * 1000 | tostring) + "\">" + .updated + "</span></div>" +
-              "</li>"
-            ' >> branch.html
-          fi
-
-          cat >> branch.html <<'EOF'
+          cat >> branch.html <<'HTML'
             </ul>
           </body>
           </html>
-          EOF
+          HTML
 
-          # Commit and push
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
+          if [ -n "$(git status --short)" ]; then
+            git commit -m "Deploy ${BRANCH_NAME} (${GITHUB_SHA})"
+            git push origin gh-pages
           else
-            git commit -m "Deploy branch: ${{ github.ref_name }} (commit: ${{ github.sha }})"
-            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages --force
-            # Only set has_changes=true after successful commit and push
-            echo "has_changes=true" >> $GITHUB_ENV
-            if [ -z "$BRANCH_FOLDER" ]; then
-              echo "Published main branch to root: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
-            else
-              echo "Published branch to: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/$BRANCH_FOLDER/"
-            fi
-            echo "Branch index available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/branch.html"
+            echo "No changes to commit"
           fi
 
-      - name: Save gh-pages cache
-        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: gh-pages
-          key: gh-pages-${{ github.repository }}-${{ github.run_id }}
+          BASE_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+          if [ -z "$SAFE_NAME" ]; then
+            PREVIEW_URL="${BASE_URL}/"
+          else
+            PREVIEW_URL="${BASE_URL}/${SAFE_NAME}/"
+          fi
+
+          echo "preview_url=${PREVIEW_URL}" >> "$GITHUB_OUTPUT"
+          echo "Branch deployed to: ${PREVIEW_URL}"
+
+          cd ..
+
+      - name: Prepare Pages artifact
+        run: |
+          set -euo pipefail
+          rm -rf site
+          mkdir -p site
+          rsync -a --exclude='.git/' pages/ site/
 
       - name: Setup Pages
-        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'gh-pages'
+          path: site
 
       - name: Deploy to GitHub Pages
-        if: (steps.check-pr.outputs.result == 'true' || github.ref == 'refs/heads/main') && env.has_changes == 'true'
-        id: deployment
+        id: deploy-pages
         uses: actions/deploy-pages@v4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Preview URL
+        run: echo "Preview available at ${{ steps.sync.outputs.preview_url }}"
