@@ -1,0 +1,11 @@
+{
+  "codex-review-deployment-workflow-for-updates": {
+    "branch": "codex/review-deployment-workflow-for-updates",
+    "safeName": "codex-review-deployment-workflow-for-updates",
+    "commit": "80a5b9a6b9bbeb34fd396e9351cad2557298f019",
+    "message": "Fix jq quoting in branch deployment workflow",
+    "actor": "shthed",
+    "deployedAt": "2025-10-15T09:00:33+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/80a5b9a6b9bbeb34fd396e9351cad2557298f019"
+  }
+}
