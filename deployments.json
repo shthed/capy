@@ -12,9 +12,9 @@
     "branch": "main",
     "safeName": "",
     "commit": "58e9b5aec2e8d2e4ce283e28a10f9c0207332881",
-    "message": "Merge pull request #152 from shthed/codex/revise-deploy-branch.yml-for-commit-display\n\nImprove branch deployment summary layout",
+    "message": "Merge pull request #152 from shthed/codex/revise-deploy-branch.yml-for-commit-display",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T19:59:31+08:00",
+    "deployedAt": "2025-10-16T12:11:00Z",
     "commitUrl": "https://github.com/shthed/capy/commit/58e9b5aec2e8d2e4ce283e28a10f9c0207332881"
   },
   "fix-jq-slurpfile-gh-pages": {
