@@ -61,5 +61,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-16T11:38:28+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/aeab9b96df6313eb1d361abe4ef7d142c40df336"
+  },
+  "codex-cherry-pick-changes-from-codex-resolve-issue-with-codex-4krf96": {
+    "branch": "codex/cherry-pick-changes-from-codex/resolve-issue-with-codex-4krf96",
+    "safeName": "codex-cherry-pick-changes-from-codex-resolve-issue-with-codex-4krf96",
+    "commit": "78ec396cd4988b4650bc668fae40e166fd65637f",
+    "message": "Resolve branch deployment jq merge conflict",
+    "actor": "shthed",
+    "deployedAt": "2025-10-16T13:58:48+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/78ec396cd4988b4650bc668fae40e166fd65637f"
   }
 }
