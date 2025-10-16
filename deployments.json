@@ -11,11 +11,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "c8a7c4cf7058fd9daa53daf529eef77793c3dba1",
-    "message": "Merge pull request #157 from shthed/codex/review-.github/workflows/deploy-branch.yml-change-fc82xt",
+    "commit": "2a14e656d3a1e071a215468d9a84a44ef9bdc61e",
+    "message": "Merge pull request #159 from shthed/codex/improve-game-performance-for-mobile\n\nImprove mobile gesture responsiveness",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T16:26:10Z",
-    "commitUrl": "https://github.com/shthed/capy/commit/c8a7c4cf7058fd9daa53daf529eef77793c3dba1"
+    "deployedAt": "2025-10-17T00:37:15+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/2a14e656d3a1e071a215468d9a84a44ef9bdc61e"
   },
   "fix-jq-slurpfile-gh-pages": {
     "branch": "fix/jq-slurpfile-gh-pages",
