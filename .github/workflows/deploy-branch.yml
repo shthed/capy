@@ -176,47 +176,13 @@ jobs:
                   url: pr.url ?? pr.html_url ?? null
                 };
 
-                const commitsWithMetadata = await Promise.all(commits.map(async (commit) => {
-                  let prs = [];
-                  try {
-                    const { data: associated } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      commit_sha: commit.sha
-                    });
-
-                    prs = Array.isArray(associated)
-                      ? associated.map((pr) => ({
-                          number: pr.number,
-                          title: pr.title,
-                          url: pr.html_url
-                        }))
-                      : [];
-                  } catch (error) {
-                    core.warning(`Could not fetch PRs for branch commit ${commit.sha}: ${error.message}`);
-                  }
-
-                  if ((!prs || prs.length === 0) && (prInfo.number != null || prInfo.title || prInfo.url)) {
-                    prs = [prInfo];
-                  } else if (prs && prs.length > 0 && (prInfo.number != null || prInfo.title || prInfo.url)) {
-                    const hasMatchingBranchPr = prs.some((candidate) =>
-                      candidate.number != null && prInfo.number != null
-                        ? candidate.number === prInfo.number
-                        : candidate.url === prInfo.url
-                    );
-                    if (!hasMatchingBranchPr) {
-                      prs.push(prInfo);
-                    }
-                  }
-
-                  return {
-                    sha: commit.sha,
-                    shortSha: commit.sha.substring(0, 7),
-                    message: commit.commit.message,
-                    date: commit.commit.author?.date ?? commit.commit.committer?.date ?? '',
-                    htmlUrl: commit.html_url,
-                    prs
-                  };
+                const commitsWithMetadata = commits.map((commit) => ({
+                  sha: commit.sha,
+                  shortSha: commit.sha.substring(0, 7),
+                  message: commit.commit.message,
+                  date: commit.commit.author?.date ?? commit.commit.committer?.date ?? '',
+                  htmlUrl: commit.html_url,
+                  prs: prInfo.number != null || prInfo.title || prInfo.url ? [prInfo] : []
                 }));
 
                 branchCommitData[branchName] = commitsWithMetadata;
