@@ -119,11 +119,11 @@
   "codex-review-.github-workflows-deploy-branch.yml-change-fc82xt": {
     "branch": "codex/review-.github/workflows/deploy-branch.yml-change-fc82xt",
     "safeName": "codex-review-.github-workflows-deploy-branch.yml-change-fc82xt",
-    "commit": "b999f8d71ec28f0c610fde62c187a7ea97a6c6d2",
-    "message": "Sync branch deploy workflow CSS",
+    "commit": "7b94136c0a8f3af95381a7b3592c791d0e69390e",
+    "message": "Merge branch 'main' into codex/review-.github/workflows/deploy-branch.yml-change-fc82xt",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T23:42:23+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/b999f8d71ec28f0c610fde62c187a7ea97a6c6d2"
+    "deployedAt": "2025-10-17T00:00:12+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/7b94136c0a8f3af95381a7b3592c791d0e69390e"
   },
   "codex-review-starthint-dialog-and-first-run-process-tlj5hg": {
     "branch": "codex/review-starthint-dialog-and-first-run-process-tlj5hg",
