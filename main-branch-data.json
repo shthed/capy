@@ -1,51 +1,51 @@
 {
   "commits": [
     {
-      "sha": "92e5987874f8a64e85a6b26a747b69764d5b3db3",
-      "shortSha": "92e5987",
-      "message": "Merge pull request #156 from shthed/codex/review-.github/workflows/deploy-branch.yml-change\n\nStreamline branch deploy index metadata",
+      "sha": "3b6a2e64f611c24ee24332f8b547cc179083edec",
+      "shortSha": "3b6a2e6",
+      "message": "Merge pull request #158 from shthed/codex/review-starthint-dialog-and-first-run-process-tlj5hg\n\nAdd reset progress button to save manager",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-16T14:29:45Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/92e5987874f8a64e85a6b26a747b69764d5b3db3",
+      "date": "2025-10-16T15:55:09Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3b6a2e64f611c24ee24332f8b547cc179083edec",
       "prs": [
         {
-          "number": 156,
-          "title": "Streamline branch deploy index metadata",
-          "url": "https://github.com/shthed/capy/pull/156"
+          "number": 158,
+          "title": "Add reset progress button to save manager",
+          "url": "https://github.com/shthed/capy/pull/158"
         }
       ]
     },
     {
-      "sha": "5dd583c4f72aa41148b0602c890b12d1f59b4057",
-      "shortSha": "5dd583c",
-      "message": "Refine branch deployment index layout",
+      "sha": "6b80d6c9682b909b0b428ad549f70c848e165e91",
+      "shortSha": "6b80d6c",
+      "message": "Merge branch 'main' into codex/review-starthint-dialog-and-first-run-process-tlj5hg",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-16T14:26:52Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/5dd583c4f72aa41148b0602c890b12d1f59b4057",
+      "date": "2025-10-16T15:50:54Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/6b80d6c9682b909b0b428ad549f70c848e165e91",
       "prs": [
         {
-          "number": 156,
-          "title": "Streamline branch deploy index metadata",
-          "url": "https://github.com/shthed/capy/pull/156"
+          "number": 158,
+          "title": "Add reset progress button to save manager",
+          "url": "https://github.com/shthed/capy/pull/158"
         }
       ]
     },
     {
-      "sha": "681cac5b83077347e270c27011c9813725acf220",
-      "shortSha": "681cac5",
-      "message": "Merge pull request #155 from shthed/codex/revise-deploy-branch.yml-for-commit-display-o3qaeu\n\nStandardize branch deployment commit listings",
+      "sha": "97347549f637759a7f67717f0819afbcac61d98e",
+      "shortSha": "9734754",
+      "message": "Add reset progress control to saves sheet",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-16T13:49:45Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/681cac5b83077347e270c27011c9813725acf220",
+      "date": "2025-10-16T15:47:19Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/97347549f637759a7f67717f0819afbcac61d98e",
       "prs": [
         {
-          "number": 155,
-          "title": "Standardize branch deployment commit listings",
-          "url": "https://github.com/shthed/capy/pull/155"
+          "number": 158,
+          "title": "Add reset progress button to save manager",
+          "url": "https://github.com/shthed/capy/pull/158"
         }
       ]
     }
   ],
-  "lastCommitDate": "2025-10-16T14:29:45Z",
-  "deploymentTimestamp": 1760624997376
+  "lastCommitDate": "2025-10-16T15:55:09Z",
+  "deploymentTimestamp": 1760630122855
 }
