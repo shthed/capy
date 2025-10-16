@@ -83,11 +83,11 @@
   "codex-revise-deploy-branch.yml-for-commit-display": {
     "branch": "codex/revise-deploy-branch.yml-for-commit-display",
     "safeName": "codex-revise-deploy-branch.yml-for-commit-display",
-    "commit": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
-    "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
+    "commit": "d40eb46c20e58dade0923887146b35193b7a863c",
+    "message": "Adjust branch deploy timestamps to local 12-hour format",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T19:44:16+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5"
+    "deployedAt": "2025-10-16T21:32:10+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/d40eb46c20e58dade0923887146b35193b7a863c"
   },
   "codex-review-starthint-dialog-and-first-run-process": {
     "branch": "codex/review-starthint-dialog-and-first-run-process",
