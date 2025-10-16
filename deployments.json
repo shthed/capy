@@ -12,9 +12,9 @@
     "branch": "main",
     "safeName": "",
     "commit": "1af521c634b2ede6c4215aed188eda2640eacbd2",
-    "message": "Merge pull request #150 from shthed/codex/fix-yaml-syntax-error-in-deploy-branch.yml\n\nFix deploy workflow heredoc indentation",
+    "message": "Merge pull request #150 from shthed/codex/fix-yaml-syntax-error-in-deploy-branch.yml",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T19:41:26+08:00",
+    "deployedAt": "2025-10-16T11:42:17Z",
     "commitUrl": "https://github.com/shthed/capy/commit/1af521c634b2ede6c4215aed188eda2640eacbd2"
   },
   "fix-jq-slurpfile-gh-pages": {
