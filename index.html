@@ -13,7 +13,7 @@
       drawOutlines/drawNumbers use ensureRenderCache to hydrate canvases and labels.
     - Generation pipeline: loadImage → createPuzzleData orchestrates quantization, segmentation,
       and palette prep. Regeneration, fixture loading, and saves all call applyPuzzleResult.
-    - Persistence + exports: createGameSaveManager backs the start screen + manager. Autosave,
+    - Persistence + exports: createGameSaveManager backs the Saves sheet. Autosave,
       manual saves, and exports live alongside serializeCurrentPuzzle.
     - External API: window.capyGenerator exposes devtools entry points; keep signatures stable when
       reorganizing internal wiring.
@@ -36,8 +36,8 @@
     - applyZoom(multiplier, clientX, clientY, options): Normalizes zoom gestures around the pointer
       focus and updates viewState.
     - resetView(options): Fits the puzzle to the viewport and recenters the stage.
-    - loadSamplePuzzle(options) / loadDefaultPuzzle(options): Bootstrap the start screen selection
-      or fallback puzzle payload.
+    - loadSamplePuzzle(options) / loadDefaultPuzzle(options): Bootstrap the bundled sample or
+      fallback puzzle payload.
     - createPuzzleData(image, options): Invokes the generation worker to quantize colors and
       segment regions.
     - applyPuzzleResult(data, metadata): Hydrates puzzle state, triggers canvas redraw, and updates
@@ -53,8 +53,8 @@
       persist preferences.
     - scheduleAutosave(reason) / persistAutosave(reason): Manage background save cadence and writes
       to storage.
-    - saveCurrentSnapshot(): Captures a manual save entry and refreshes start/manager lists.
-    - refreshGameSelection() / refreshSaveList(): Render launcher + manager items from shared
+    - saveCurrentSnapshot(): Captures a manual save entry and refreshes manager lists.
+    - refreshGameSelection() / refreshSaveList(): Render save management surfaces from shared
       templates.
     - createGameSaveManager(): Wraps persistence with list, subscribe, and persist helpers for UI
       consumers.
@@ -542,198 +542,6 @@
         touch-action: none;
       }
 
-      #startHint {
-        position: absolute;
-        inset: 0;
-        display: grid;
-        place-content: start center;
-        justify-items: center;
-        padding: calc(24px * var(--ui-scale)) calc(18px * var(--ui-scale));
-        background: var(--theme-hint-overlay);
-        backdrop-filter: blur(18px);
-        transition: opacity 0.24s ease;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        z-index: 2;
-      }
-
-      #startHint.hidden {
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      #startHint.hidden * {
-        pointer-events: none !important;
-      }
-
-      #startHint .hint-body {
-        pointer-events: auto;
-        text-align: left;
-        width: min(420px, calc(100vw - 48px));
-        max-width: 420px;
-        max-height: min(calc(100vh - (48px * var(--ui-scale))), 720px);
-        padding: calc(32px * var(--ui-scale));
-        border-radius: calc(20px * var(--ui-scale));
-        background: var(--theme-hint-body-bg);
-        border: 1px solid var(--theme-hint-body-border);
-        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.6);
-        display: grid;
-        gap: calc(20px * var(--ui-scale));
-        justify-items: stretch;
-        align-content: start;
-        overflow-y: auto;
-      }
-
-      #startHint .hint-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: calc(12px * var(--ui-scale));
-      }
-
-      #startHint h1 {
-        margin: 0;
-        font-size: clamp(1.8rem, 3vw + 0.5rem, 2.6rem);
-      }
-
-      #startHint .hint-close-button {
-        align-self: flex-start;
-        padding: calc(6px * var(--ui-scale)) calc(14px * var(--ui-scale));
-      }
-
-      #startHint p {
-        margin: 0 0 20px;
-        color: var(--theme-hint-body-text);
-        font-size: 1rem;
-      }
-
-      #startHint .hint-actions {
-        display: grid;
-        gap: calc(12px * var(--ui-scale));
-        width: 100%;
-      }
-
-      #startHint .hint-note {
-        margin: 0;
-        font-size: 0.95rem;
-        color: var(--theme-muted-text);
-      }
-
-        .detail-callout {
-          display: grid;
-          gap: calc(12px * var(--ui-scale));
-          width: 100%;
-          text-align: left;
-        }
-
-        .detail-intro {
-          margin: 0;
-          font-size: 0.95rem;
-          color: var(--theme-muted-text);
-        }
-
-        .detail-picker {
-          display: flex;
-          justify-content: flex-start;
-          gap: calc(8px * var(--ui-scale));
-          flex-wrap: wrap;
-        }
-
-        button.detail-chip {
-          padding: 6px 16px;
-          border-radius: 999px;
-          border: 1px solid var(--theme-chip-border);
-          background: var(--theme-chip-bg);
-          color: var(--theme-chip-text);
-          font-weight: 600;
-          font-size: 0.85rem;
-          letter-spacing: 0.01em;
-          box-shadow: none;
-        }
-
-        button.detail-chip:hover:not(:disabled) {
-          transform: none;
-          box-shadow: none;
-          background: var(--theme-chip-hover-bg);
-          color: var(--theme-chip-hover-text);
-        }
-
-        button.detail-chip[aria-pressed="true"] {
-          background: var(--theme-chip-active-bg);
-          border-color: var(--theme-chip-active-border);
-          color: var(--theme-chip-active-text);
-        }
-
-      .detail-caption {
-        margin: 0;
-        font-size: 0.85rem;
-        color: var(--theme-caption-text);
-      }
-
-      #startHint .game-selection { 
-        display: grid;
-        gap: calc(12px * var(--ui-scale));
-        padding: 0;
-      }
-
-      #startHint .game-selection h2 {
-        margin: 0;
-        font-size: 1.1rem;
-      }
-
-      #startHint .game-selection-description {
-        margin: 0;
-        color: var(--theme-muted-text);
-        font-size: 0.95rem;
-      }
-
-      #startHint .game-selection-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: calc(10px * var(--ui-scale));
-      }
-
-      #startHint .game-selection-list li {
-        margin: 0;
-      }
-
-      #startHint .game-option-button {
-        width: 100%;
-        text-align: left;
-        display: grid;
-        gap: calc(4px * var(--ui-scale));
-        border-radius: calc(16px * var(--ui-scale));
-        border: 1px solid var(--theme-sheet-button-border);
-        background: var(--theme-sheet-button-bg);
-        color: var(--theme-sheet-button-text);
-        padding: calc(14px * var(--ui-scale)) calc(18px * var(--ui-scale));
-        box-shadow: none;
-      }
-
-      #startHint .game-option-button:hover:not(:disabled) {
-        transform: translateY(-1px);
-        box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
-        background: var(--theme-chip-hover-bg);
-        color: var(--theme-chip-hover-text);
-      }
-
-      #startHint .game-option-title {
-        font-size: 1rem;
-        font-weight: 600;
-      }
-
-      #startHint .game-option-meta {
-        font-size: 0.85rem;
-        color: var(--theme-caption-text);
-      }
-
-      #startHint .game-selection-empty {
-        margin: 0;
-        font-size: 0.85rem;
-        color: var(--theme-caption-text);
-      }
 
         #generatorSheet .detail-callout {
           text-align: left;
@@ -1266,6 +1074,16 @@
         gap: calc(12px * var(--ui-scale));
       }
 
+      .save-start-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: calc(12px * var(--ui-scale));
+      }
+
+      .save-start-actions button {
+        flex: 1 1 180px;
+      }
+
       .save-manager h2 {
         margin: 0;
         font-size: 1.1rem;
@@ -1507,7 +1325,6 @@
           data-testid="save-manager-button"
           aria-label="Save manager"
           title="Save manager"
-          disabled
         >
           <span class="icon" aria-hidden="true">💾</span>
           <span class="label">Saves</span>
@@ -1551,67 +1368,6 @@
             <strong class="pointer-number" data-pointer-number></strong>
           </div>
         </div>
-        <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
-          <div class="hint-body">
-            <div class="hint-header">
-              <h1 id="startHintTitle" class="visually-hidden">Game setup</h1>
-              <button
-                id="closeStartHint"
-                type="button"
-                class="close-button hint-close-button"
-                hidden
-              >
-                Close
-              </button>
-            </div>
-            <div class="hint-actions">
-              <button id="selectImage" type="button">Choose an image</button>
-              <p class="hint-note">Or drag and drop a photo or puzzle file anywhere to begin.</p>
-            </div>
-            <div class="hint-actions">
-              <button
-                id="samplePuzzle"
-                type="button"
-                data-action="load-sample"
-                aria-label="Load capybara sample puzzle"
-              >
-                Load sample
-              </button>
-            </div>
-            <div class="detail-callout">
-              <p class="detail-intro">Pick a detail level for the capybara demo:</p>
-              <div class="detail-picker" role="group" aria-label="Capybara sample detail level">
-                <button type="button" class="detail-chip" data-detail-level="low">Low</button>
-                <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
-                <button type="button" class="detail-chip" data-detail-level="high">High</button>
-              </div>
-              <p class="detail-caption" data-detail-caption></p>
-            </div>
-            <div
-              id="saveManagerSection"
-              class="save-manager"
-              role="group"
-              aria-labelledby="startSaveManagerHeading"
-              data-save-section="start"
-            >
-              <h2 id="startSaveManagerHeading">Manage saves</h2>
-              <p class="save-manager-description">
-                Autosaves keep tracking progress in this browser. Review them here or capture a manual snapshot to revisit a
-                favourite moment.
-              </p>
-              <button type="button" data-save-snapshot disabled>Save current puzzle</button>
-              <ul
-                class="save-manager-list"
-                data-save-list
-                aria-live="polite"
-                aria-labelledby="startSaveManagerHeading"
-              ></ul>
-              <p class="save-manager-empty" data-save-empty hidden>
-                No manual saves yet. Create one above or keep playing to autosave progress.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
         <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
           <div id="palette" role="list"></div>
@@ -1630,6 +1386,23 @@
         <button type="button" class="close-button" data-sheet-close="saves">Close</button>
       </div>
       <div class="sheet-body">
+        <section class="sheet-section" aria-labelledby="saveStartHeading">
+          <h3 id="saveStartHeading">Start a puzzle</h3>
+          <p class="save-manager-description">
+            Import a new image or JSON puzzle, or reload the bundled Capybara Springs sample.
+          </p>
+          <div class="save-start-actions">
+            <button id="selectImage" type="button">Import image or JSON</button>
+            <button
+              id="samplePuzzle"
+              type="button"
+              data-action="load-sample"
+              aria-label="Load capybara sample puzzle"
+            >
+              Load capybara sample
+            </button>
+          </div>
+        </section>
         <section
           class="sheet-section save-manager"
           role="group"
@@ -1641,6 +1414,7 @@
             favourite moment.
           </p>
           <button type="button" data-save-snapshot disabled>Save current puzzle</button>
+          <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
           <ul
             class="save-manager-list"
             data-save-list
@@ -1677,8 +1451,8 @@
             </dd>
             <dt>🎚 Detail</dt>
             <dd>
-              Toggle the capybara detail chips (start hint or Generator sheet) to reload the sample with tuned
-              palette sizes, minimum region areas, resize targets, and the region counts noted above.
+              Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes,
+              minimum region areas, resize targets, and the region counts noted above.
             </dd>
             <dt>⛶ Fullscreen</dt>
             <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
@@ -2001,6 +1775,7 @@
       const applyBtn = document.getElementById("applyOptions");
       const downloadBtn = document.getElementById("downloadJson");
       const saveSnapshotButtons = Array.from(document.querySelectorAll("[data-save-snapshot]"));
+      const resetProgressButtons = Array.from(document.querySelectorAll("[data-reset-progress]"));
       const saveListContainers = Array.from(document.querySelectorAll("[data-save-list]"));
       const saveListEmptyStates = Array.from(document.querySelectorAll("[data-save-empty]"));
       const paletteEl = document.getElementById("palette");
@@ -3060,6 +2835,36 @@
       let puzzleGenerationModulePromise = null;
       let pendingImportFile = null;
       updateImportNotice();
+      let shouldAutoLoadSample = false;
+
+      function disableSampleAutoload() {
+        shouldAutoLoadSample = false;
+      }
+
+      function maybeAutoLoadSample(options = {}) {
+        if (!shouldAutoLoadSample) {
+          return;
+        }
+        if (state.puzzle) {
+          shouldAutoLoadSample = false;
+          return;
+        }
+        if (pendingImportFile) {
+          return;
+        }
+        const dataUrl = getSampleDataUrl();
+        const hasDefaultGame = Boolean(DEFAULT_GAME_SOURCE?.path);
+        if (!dataUrl && !hasDefaultGame) {
+          return;
+        }
+        disableSampleAutoload();
+        const { announce = false } = options;
+        loadSamplePuzzle({
+          detailLevel: state.sampleDetailLevel,
+          skipDetailUpdate: true,
+          announce,
+        });
+      }
 
       gameSaveManager.subscribe((entries) => {
         state.saves = entries;
@@ -3384,6 +3189,7 @@
           openGenerator: () => openSheet(generatorSheet),
           openSettings: () => openSheet(settingsSheet),
           openSaves: () => openSheet(saveManagerSheet),
+          resetProgress: () => resetCurrentProgress(),
         };
       }
 
@@ -3414,6 +3220,9 @@
           if (!getSampleDataUrl()) {
             return;
           }
+          if (saveManagerSheet && saveManagerSheet.contains(button)) {
+            closeSheet(saveManagerSheet);
+          }
           loadSamplePuzzle({ detailLevel: state.sampleDetailLevel });
         });
       }
@@ -3443,16 +3252,26 @@
 
       applySampleDetailLevel(DEFAULT_SAMPLE_DETAIL, { skipReload: true, skipLog: true });
 
-      fetchDefaultGamePayload().catch((error) => {
-        console.error("Failed to preload default puzzle metadata", error);
-      });
-
       const restoredSession = loadInitialSession();
-      if (!restoredSession && getSampleDataUrl()) {
-        loadSamplePuzzle({ detailLevel: state.sampleDetailLevel, skipDetailUpdate: true, announce: false });
-      }
+      shouldAutoLoadSample = !restoredSession;
+      maybeAutoLoadSample();
 
-      selectButton.addEventListener("click", () => fileInput.click());
+      fetchDefaultGamePayload()
+        .then(() => {
+          maybeAutoLoadSample();
+        })
+        .catch((error) => {
+          console.error("Failed to preload default puzzle metadata", error);
+        });
+
+      if (selectButton) {
+        selectButton.addEventListener("click", () => {
+          if (saveManagerSheet && saveManagerSheet.contains(selectButton)) {
+            closeSheet(saveManagerSheet);
+          }
+          fileInput.click();
+        });
+      }
       importButton.addEventListener("click", () => fileInput.click());
       if (generatorButton) {
         generatorButton.addEventListener("click", () => openSheet(generatorSheet));
@@ -3522,21 +3341,23 @@
         });
       }
 
-      startHint.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") {
-          if (!startHint.classList.contains("hidden") && (state.puzzle || state.saves.length > 0)) {
-            hideStartScreen();
-            if (saveManagerButton && !saveManagerButton.disabled) {
-              saveManagerButton.focus();
+      if (startHint) {
+        startHint.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") {
+            if (!startHint.classList.contains("hidden") && (state.puzzle || state.saves.length > 0)) {
+              hideStartScreen();
+              if (saveManagerButton && !saveManagerButton.disabled) {
+                saveManagerButton.focus();
+              }
             }
+            return;
           }
-          return;
-        }
-        if ((event.key === "Enter" || event.key === " ") && event.target === startHint) {
-          event.preventDefault();
-          fileInput.click();
-        }
-      });
+          if ((event.key === "Enter" || event.key === " ") && event.target === startHint) {
+            event.preventDefault();
+            fileInput.click();
+          }
+        });
+      }
 
       fileInput.addEventListener("change", (event) => {
         const [file] = event.target.files || [];
@@ -3702,6 +3523,20 @@
         button.addEventListener("click", () => {
           if (!state.puzzle) return;
           saveCurrentSnapshot();
+        });
+      }
+
+      for (const button of resetProgressButtons) {
+        button.addEventListener("click", () => {
+          if (!state.puzzle) return;
+          if (state.filled.size === 0) return;
+          const confirmed = window.confirm(
+            "Reset progress on this puzzle? All filled regions will be cleared."
+          );
+          if (!confirmed) {
+            return;
+          }
+          resetCurrentProgress();
         });
       }
 
@@ -4007,6 +3842,7 @@
           flashColorRegions(state.activeColor);
         }
         updateProgress();
+        updateCommandStates();
         scheduleAutosave("fill-region");
         logDebug(
           `Filled region ${region.id} with colour #${region.colorId} (${state.filled.size}/${state.puzzle.regions.length})`
@@ -4294,6 +4130,7 @@
         const sampleDescription = getSampleDescription();
         const sampleDataUrl = getSampleDataUrl();
         const sampleAvailable = Boolean(sampleDataUrl);
+        const canReloadSample = sampleAvailable || Boolean(DEFAULT_GAME_SOURCE?.path);
         const reloadLabel = sampleTitle ? `Reload ${sampleTitle}` : "Reload sample puzzle";
 
         for (const button of sampleDetailButtons) {
@@ -4323,7 +4160,7 @@
             : `${reloadLabel} (${config.label})`;
           button.title = titleText;
           button.setAttribute("aria-label", ariaText);
-          button.disabled = !sampleAvailable;
+          button.disabled = !canReloadSample;
           if (config.approxRegions != null) {
             button.dataset.detailRegions = String(config.approxRegions);
           } else {
@@ -4383,15 +4220,18 @@
 
       function loadSamplePuzzle(options = {}) {
         const { announce = true, detailLevel, skipDetailUpdate = false } = options;
-        const dataUrl = getSampleDataUrl();
-        if (!dataUrl) return;
-        const sampleTitle = getSampleTitle();
+        disableSampleAutoload();
         const targetLevel = detailLevel || state.sampleDetailLevel || DEFAULT_SAMPLE_DETAIL;
         const detailConfig = skipDetailUpdate
           ? SAMPLE_DETAIL_LEVELS[targetLevel] || SAMPLE_DETAIL_LEVELS[DEFAULT_SAMPLE_DETAIL]
           : applySampleDetailLevel(targetLevel, { skipReload: true, skipLog: !announce }) ||
             SAMPLE_DETAIL_LEVELS[targetLevel] ||
             SAMPLE_DETAIL_LEVELS[DEFAULT_SAMPLE_DETAIL];
+        const dataUrl = getSampleDataUrl();
+        if (!dataUrl) {
+          return loadDefaultPuzzle({ announce });
+        }
+        const sampleTitle = getSampleTitle();
         resetPuzzleUI();
         state.sourceUrl = dataUrl;
         state.sourceTitle = sampleTitle || "Sample puzzle";
@@ -4414,6 +4254,7 @@
 
       async function loadDefaultPuzzle(options = {}) {
         const { announce = true, forceRefresh = false } = options;
+        disableSampleAutoload();
         resetPuzzleUI();
         try {
           const { payload, resolvedTitle, resolvedDescription } = await fetchDefaultGamePayload({
@@ -4461,7 +4302,12 @@
         for (const button of saveSnapshotButtons) {
           button.disabled = !hasPuzzle;
         }
-        saveManagerButton.disabled = !hasPuzzle && state.saves.length === 0;
+        for (const button of resetProgressButtons) {
+          button.disabled = !hasPuzzle || state.filled.size === 0;
+        }
+        if (saveManagerButton) {
+          saveManagerButton.disabled = false;
+        }
         if (startHintCloseButton) {
           startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
         }
@@ -4825,6 +4671,7 @@
         if (!file) {
           return;
         }
+        disableSampleAutoload();
         if (!generatorSheet) {
           handleFile(file);
           return;
@@ -4852,6 +4699,7 @@
       }
 
       function handleFile(file) {
+        disableSampleAutoload();
         if (isJsonFile(file)) {
           resetPuzzleUI();
           const reader = new FileReader();
@@ -5012,6 +4860,7 @@
       }
 
       function applyPuzzleResult(data, metadata = {}) {
+        disableSampleAutoload();
         if (!data || typeof data.width !== "number" || typeof data.height !== "number") {
           console.error("Puzzle data missing required dimensions.");
           setProgressMessage("idle");
@@ -8148,6 +7997,24 @@
         }
 
         return api;
+      }
+
+      function resetCurrentProgress() {
+        if (!state.puzzle) return false;
+        if (state.filled.size === 0) {
+          logDebug("No filled regions yet; nothing to reset");
+          return false;
+        }
+        state.filled = new Set();
+        markFilledLayerDirty();
+        renderPuzzle();
+        renderPalette();
+        refreshCustomCursorHighlight();
+        updateProgress();
+        updateCommandStates();
+        scheduleAutosave("reset-progress", { immediate: true });
+        logDebug("Reset puzzle progress to a blank canvas");
+        return true;
       }
 
       function saveCurrentSnapshot() {
