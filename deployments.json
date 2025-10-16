@@ -11,11 +11,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "6c015ab3933121afc282df62bb5c4f38912a4a85",
-    "message": "Merge pull request #140 from shthed/codex/remove-status-bar-and-confirm-import-settings\n\nfeat: confirm imports in generator sheet",
+    "commit": "1af521c634b2ede6c4215aed188eda2640eacbd2",
+    "message": "Merge pull request #150 from shthed/codex/fix-yaml-syntax-error-in-deploy-branch.yml\n\nFix deploy workflow heredoc indentation",
     "actor": "shthed",
-    "deployedAt": "2025-10-15T16:49:01+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/6c015ab3933121afc282df62bb5c4f38912a4a85"
+    "deployedAt": "2025-10-16T19:41:26+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/1af521c634b2ede6c4215aed188eda2640eacbd2"
   },
   "fix-jq-slurpfile-gh-pages": {
     "branch": "fix/jq-slurpfile-gh-pages",
