@@ -1,6 +1,36 @@
 {
   "commits": [
     {
+      "sha": "d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
+      "shortSha": "d8dbdab",
+      "message": "Merge pull request #153 from shthed/codex/review-starthint-dialog-and-first-run-process\n\nRemove onboarding start hint and add quick start actions to Saves sheet",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T13:45:30Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
+      "prs": [
+        {
+          "number": 153,
+          "title": "Remove onboarding start hint and add quick start actions to Saves sheet",
+          "url": "https://github.com/shthed/capy/pull/153"
+        }
+      ]
+    },
+    {
+      "sha": "9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
+      "shortSha": "9fbf57c",
+      "message": "Allow sample reload without artwork",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T13:37:19Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
+      "prs": [
+        {
+          "number": 153,
+          "title": "Remove onboarding start hint and add quick start actions to Saves sheet",
+          "url": "https://github.com/shthed/capy/pull/153"
+        }
+      ]
+    },
+    {
       "sha": "8845ed2d078e393fc6d8e7466301de8cd92c2f65",
       "shortSha": "8845ed2",
       "message": "Merge pull request #154 from shthed/codex/revise-deploy-branch.yml-for-commit-display\n\nStandardize branch deployment commit listings",
@@ -14,38 +44,8 @@
           "url": "https://github.com/shthed/capy/pull/154"
         }
       ]
-    },
-    {
-      "sha": "9adf8f29042dd9d438970ad721b4d9ce12743633",
-      "shortSha": "9adf8f2",
-      "message": "Merge branch 'main' into codex/revise-deploy-branch.yml-for-commit-display",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-16T13:34:43Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9adf8f29042dd9d438970ad721b4d9ce12743633",
-      "prs": [
-        {
-          "number": 154,
-          "title": "Standardize branch deployment commit listings",
-          "url": "https://github.com/shthed/capy/pull/154"
-        }
-      ]
-    },
-    {
-      "sha": "d40eb46c20e58dade0923887146b35193b7a863c",
-      "shortSha": "d40eb46",
-      "message": "Adjust branch deploy timestamps to local 12-hour format",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-16T13:32:10Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/d40eb46c20e58dade0923887146b35193b7a863c",
-      "prs": [
-        {
-          "number": 154,
-          "title": "Standardize branch deployment commit listings",
-          "url": "https://github.com/shthed/capy/pull/154"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-16T13:36:36Z",
-  "deploymentTimestamp": 1760621809263
+  "lastCommitDate": "2025-10-16T13:45:30Z",
+  "deploymentTimestamp": 1760622345431
 }
