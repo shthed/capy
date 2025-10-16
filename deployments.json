@@ -11,11 +11,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "681cac5b83077347e270c27011c9813725acf220",
-    "message": "Merge pull request #155 from shthed/codex/revise-deploy-branch.yml-for-commit-display-o3qaeu\n\nStandardize branch deployment commit listings",
+    "commit": "92e5987874f8a64e85a6b26a747b69764d5b3db3",
+    "message": "Merge pull request #156 from shthed/codex/review-.github/workflows/deploy-branch.yml-change\n\nStreamline branch deploy index metadata",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T21:49:45+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/681cac5b83077347e270c27011c9813725acf220"
+    "deployedAt": "2025-10-16T22:29:45+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/92e5987874f8a64e85a6b26a747b69764d5b3db3"
   },
   "fix-jq-slurpfile-gh-pages": {
     "branch": "fix/jq-slurpfile-gh-pages",
