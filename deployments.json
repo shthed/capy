@@ -92,10 +92,10 @@
   "codex-review-starthint-dialog-and-first-run-process": {
     "branch": "codex/review-starthint-dialog-and-first-run-process",
     "safeName": "codex-review-starthint-dialog-and-first-run-process",
-    "commit": "455d15533594b0e42bcab11c1a7f37fae6e761d3",
-    "message": "Fix sample autoload and enable saves sheet",
+    "commit": "9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
+    "message": "Allow sample reload without artwork",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T21:21:23+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/455d15533594b0e42bcab11c1a7f37fae6e761d3"
+    "deployedAt": "2025-10-16T21:37:19+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/9fbf57cd70f370027b78b96eda0aa359b5c1b0df"
   }
 }
