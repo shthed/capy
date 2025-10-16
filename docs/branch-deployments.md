@@ -35,14 +35,10 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 
 6. **Index Generation**: A sorted branch index page (`branch.html`) is generated showing:
    - The `main` branch first (always at root) with a production badge
-   - For the main branch: last commit date, last deployment date, and the 3 most recent commits with:
-     - First line of commit message
-     - Author name and commit timestamp
-     - Clickable short SHA linking to the full commit on GitHub
-     - Links to any associated pull requests that include the commit
+   - For the main branch: last commit date, last deployment date, and the 3 most recent commits with local timestamp, the first line of the commit message, and a clickable short SHA linking to the full commit on GitHub
    - All branches with open PRs, sorted by most recently updated PR first
-   - Each branch listing includes: branch name, PR number, title, link, and last update date
-   - All dates and times are automatically converted to the viewer's local timezone using JavaScript
+   - Each branch listing includes: the branch name, quick links to the live preview and GitHub branch, associated PR number and title (if available), last deployment details, and up to 3 recent commits from that branch using the same timestamp + message + short SHA display as `main`
+   - All dates and times are automatically converted to the viewer's local timezone using JavaScript with 12-hour clock formatting and a best-effort timezone suffix
 
 7. **GitHub Pages Publish**: The updated `gh-pages` branch is deployed to GitHub Pages
 
@@ -67,9 +63,9 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 5. **CI/CD Integration**: Deployment happens automatically on every push to main or branches with open PRs
 6. **Resource Efficiency**: Branches without PRs are not deployed, saving CI/CD minutes
 7. **Sorted Navigation**: The branch index page (`branch.html`) shows main first, then the most recently updated PRs for easy access
-8. **Commit History**: The branch index shows the last 3 commits on main with author, timestamp, commit SHA links, and associated PR links
-9. **Local Timezone Display**: All dates and times are automatically converted to the viewer's local timezone for easier comprehension
-10. **GitHub Integration**: Direct links to commits and associated pull requests make it easy to trace changes from the deployment back to their source
+8. **Commit History**: The branch index shows the last 3 commits on `main` and for each open-PR branch, including localized timestamps, commit message summaries, and short SHA links back to GitHub
+9. **Local Timezone Display**: All dates and times are automatically converted to the viewer's local timezone using 12-hour notation and, when available, the viewer's timezone abbreviation
+10. **GitHub Integration**: Direct links to commits, branches, and associated pull requests make it easy to trace changes from the deployment back to their source
 
 ## Cleanup
 

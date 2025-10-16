@@ -346,6 +346,24 @@ jobs:
                 border-color: #4c8eda;
                 box-shadow: 0 4px 12px rgba(76,142,218,0.12);
               }
+              .card-header {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: space-between;
+                align-items: baseline;
+                gap: 12px;
+              }
+              .branch-title {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 8px;
+              }
+              .branch-name {
+                font-size: 1.1em;
+                font-weight: 600;
+                color: #1f2328;
+              }
               .commit-section {
                 margin-top: 16px;
                 padding-top: 12px;
@@ -380,6 +398,10 @@ jobs:
                 color: #8c959f;
                 margin: 0 4px;
               }
+              .commit-message {
+                font-weight: 500;
+                color: #24292e;
+              }
               .commit-sha {
                 font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
                 font-size: 0.9em;
@@ -390,28 +412,24 @@ jobs:
               .commit-sha:hover {
                 text-decoration: underline;
               }
-              .commit-pr-link {
-                color: #8250df;
-                text-decoration: none;
-                font-weight: 500;
+              .card-links {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 12px;
+                font-size: 0.85em;
               }
-              .commit-pr-link:hover {
-                text-decoration: underline;
-              }
-              .commit-description {
-                color: #57606a;
-              }
-              a.branch-link {
-                font-weight: 600;
+              .card-link {
                 color: #0969da;
+                font-weight: 600;
                 text-decoration: none;
               }
-              a.branch-link:hover {
+              .card-link:hover {
                 text-decoration: underline;
               }
               span.badge {
                 display: inline-block;
-                margin-left: 8px;
+                margin-left: 4px;
                 padding: 2px 8px;
                 font-size: 12px;
                 font-weight: 600;
@@ -420,10 +438,6 @@ jobs:
                 border-radius: 999px;
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
-              }
-              .message {
-                margin-top: 8px;
-                color: #24292e;
               }
               .meta {
                 margin-top: 8px;
@@ -487,6 +501,20 @@ jobs:
           const prList = readJson(process.env.PR_DATA_PATH, []);
           const mainData = readJson(process.env.MAIN_DATA_PATH, { commits: [] });
           const branchCommits = readJson(process.env.BRANCH_COMMITS_PATH, {});
+          const repoSlug = process.env.GITHUB_REPOSITORY ?? '';
+          const githubBaseUrl = repoSlug ? `https://github.com/${repoSlug}` : '';
+          const githubBranchUrl = (branch) => {
+            if (!githubBaseUrl) {
+              return '';
+            }
+
+            const name = String(branch ?? '').trim();
+            if (!name) {
+              return '';
+            }
+
+            return `${githubBaseUrl}/tree/${encodeURIComponent(name)}`;
+          };
 
           const htmlEscape = (value) => String(value ?? '')
             .replace(/&/g, '&amp;')
@@ -581,12 +609,10 @@ jobs:
 
           const baseData = (entry) => {
             const value = entry.value ?? {};
-            const message = firstLine(value.message ?? '');
 
             return {
               branch: value.branch ?? '',
               safe: value.safeName ?? '',
-              message,
               deployed: value.deployedAt ?? 'unknown',
               actor: value.actor ?? 'unknown',
               commit: value.commit ?? '',
@@ -615,18 +641,11 @@ jobs:
 
           const joinSegments = (segments) => segments.filter(Boolean).join('<span class="commit-separator">·</span>');
 
-          const commitItem = (commit, prFallback = null) => {
+          const commitItem = (commit) => {
             const shortSha = commit?.shortSha ?? (commit?.sha ? String(commit.sha).slice(0, 7) : '');
             const commitUrl = commit?.htmlUrl ?? '#';
             const dateMarkup = renderDate(commit?.date ?? '');
             const message = firstLine(commit?.message ?? '');
-
-            const prCandidates = Array.isArray(commit?.prs) ? commit.prs.filter((pr) => pr && typeof pr === 'object') : [];
-            let prData = prCandidates.find((pr) => pr.number != null) ?? prCandidates[0] ?? null;
-
-            if (!prData && prFallback && typeof prFallback === 'object') {
-              prData = prFallback;
-            }
 
             const segments = [];
 
@@ -634,15 +653,8 @@ jobs:
               segments.push(dateMarkup);
             }
 
-            if (prData) {
-              const number = prData.number != null ? String(prData.number) : '';
-              const title = firstLine(prData.title ?? '');
-              const prLabel = number ? `PR #${number}${title ? ` — ${title}` : ''}` : title;
-              if (prLabel) {
-                segments.push(`<a class="commit-pr-link" href="${htmlEscape(prData.url ?? '#')}">${htmlEscape(prLabel)}</a>`);
-              }
-            } else if (message) {
-              segments.push(`<span class="commit-description">${htmlEscape(message)}</span>`);
+            if (message) {
+              segments.push(`<span class="commit-message">${htmlEscape(message)}</span>`);
             }
 
             if (shortSha) {
@@ -654,11 +666,22 @@ jobs:
 
           const renderMain = (entry) => {
             const data = baseData(entry);
-            let html = `<li class="card main"><a class="branch-link" href="./">main<span class="badge">production</span></a>`;
-
-            if (data.message) {
-              html += `<div class="message">${htmlEscape(data.message)}</div>`;
+            const githubUrl = githubBranchUrl('main');
+            const previewHref = './';
+            const actionLinks = [];
+            if (previewHref) {
+              actionLinks.push(`<a class="card-link" href="${htmlEscape(previewHref)}">Preview</a>`);
             }
+            if (githubUrl) {
+              actionLinks.push(`<a class="card-link" href="${htmlEscape(githubUrl)}">GitHub</a>`);
+            }
+            let html = `<li class="card main">`;
+            html += `<div class="card-header">`;
+            html += `<div class="branch-title"><span class="branch-name">main</span><span class="badge">production</span></div>`;
+            if (actionLinks.length > 0) {
+              html += `<div class="card-links">${actionLinks.join('')}</div>`;
+            }
+            html += `</div>`;
 
             const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
             const deployedDisplay = renderDate(data.deployed) || (data.deployed ? htmlEscape(data.deployed) : '');
@@ -678,17 +701,30 @@ jobs:
           const renderBranch = (entry) => {
             const data = baseData(entry);
             const pr = branchPr(entry);
-            let html = `<li class="card"><a class="branch-link" href="./${htmlEscape(data.safe)}/">${htmlEscape(data.branch)}</a>`;
+            const branchName = firstLine(data.branch ?? '') || 'unknown branch';
+            const previewHref = data.safe ? `./${data.safe}/` : './';
+            const githubUrl = githubBranchUrl(data.branch);
+            const actionLinks = [];
+            if (previewHref) {
+              actionLinks.push(`<a class="card-link" href="${htmlEscape(previewHref)}">Preview</a>`);
+            }
+            if (githubUrl) {
+              actionLinks.push(`<a class="card-link" href="${htmlEscape(githubUrl)}">GitHub</a>`);
+            }
+            let html = `<li class="card">`;
+            html += `<div class="card-header">`;
+            html += `<div class="branch-title"><span class="branch-name">${htmlEscape(branchName)}</span></div>`;
+            if (actionLinks.length > 0) {
+              html += `<div class="card-links">${actionLinks.join('')}</div>`;
+            }
+
+            html += `</div>`;
 
             if (pr) {
               const prNumber = pr.number != null ? String(pr.number) : '';
               const prTitle = firstLine(pr.title ?? '');
               const prLabel = prNumber ? `PR #${prNumber}${prTitle ? ` — ${prTitle}` : ''}` : prTitle;
               html += `<div class="pr-meta"><a class="pr-link" href="${htmlEscape(pr.url ?? '#')}">${htmlEscape(prLabel)}</a></div>`;
-            }
-
-            if (data.message) {
-              html += `<div class="message">${htmlEscape(data.message)}</div>`;
             }
 
             const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
@@ -698,7 +734,7 @@ jobs:
             const commits = uniqueCommits(branchCommitsFor(entry)).slice(0, 3);
             if (commits.length > 0) {
               html += `<div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list">`;
-              html += commits.map((commit) => commitItem(commit, pr)).join('');
+              html += commits.map((commit) => commitItem(commit)).join('');
               html += `</ul></div>`;
             }
 
