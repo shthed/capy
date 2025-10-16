@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "sha": "92e5987874f8a64e85a6b26a747b69764d5b3db3",
+      "shortSha": "92e5987",
+      "message": "Merge pull request #156 from shthed/codex/review-.github/workflows/deploy-branch.yml-change\n\nStreamline branch deploy index metadata",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T14:29:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/92e5987874f8a64e85a6b26a747b69764d5b3db3",
+      "prs": [
+        {
+          "number": 156,
+          "title": "Streamline branch deploy index metadata",
+          "url": "https://github.com/shthed/capy/pull/156"
+        }
+      ]
+    },
+    {
+      "sha": "5dd583c4f72aa41148b0602c890b12d1f59b4057",
+      "shortSha": "5dd583c",
+      "message": "Refine branch deployment index layout",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T14:26:52Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/5dd583c4f72aa41148b0602c890b12d1f59b4057",
+      "prs": [
+        {
+          "number": 156,
+          "title": "Streamline branch deploy index metadata",
+          "url": "https://github.com/shthed/capy/pull/156"
+        }
+      ]
+    },
+    {
+      "sha": "681cac5b83077347e270c27011c9813725acf220",
+      "shortSha": "681cac5",
+      "message": "Merge pull request #155 from shthed/codex/revise-deploy-branch.yml-for-commit-display-o3qaeu\n\nStandardize branch deployment commit listings",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T13:49:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/681cac5b83077347e270c27011c9813725acf220",
+      "prs": [
+        {
+          "number": 155,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/155"
+        }
+      ]
+    }
+  ],
+  "lastCommitDate": "2025-10-16T14:29:45Z",
+  "deploymentTimestamp": 1760628643141
+}

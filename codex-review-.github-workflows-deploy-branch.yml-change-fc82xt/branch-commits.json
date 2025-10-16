@@ -1,0 +1,178 @@
+{
+  "codex/review-.github/workflows/deploy-branch.yml-change-fc82xt": [
+    {
+      "sha": "771c3415e4954194cc16b1cb56137b231720e5ba",
+      "shortSha": "771c341",
+      "message": "Streamline branch index cards",
+      "date": "2025-10-16T15:30:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/771c3415e4954194cc16b1cb56137b231720e5ba",
+      "prs": [
+        {
+          "number": 157,
+          "title": "Simplify branch deploy index cards",
+          "url": "https://github.com/shthed/capy/pull/157"
+        }
+      ]
+    },
+    {
+      "sha": "d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
+      "shortSha": "d8dbdab",
+      "message": "Merge pull request #153 from shthed/codex/review-starthint-dialog-and-first-run-process\n\nRemove onboarding start hint and add quick start actions to Saves sheet",
+      "date": "2025-10-16T13:45:30Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
+      "prs": [
+        {
+          "number": 157,
+          "title": "Simplify branch deploy index cards",
+          "url": "https://github.com/shthed/capy/pull/157"
+        }
+      ]
+    },
+    {
+      "sha": "9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
+      "shortSha": "9fbf57c",
+      "message": "Allow sample reload without artwork",
+      "date": "2025-10-16T13:37:19Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
+      "prs": [
+        {
+          "number": 157,
+          "title": "Simplify branch deploy index cards",
+          "url": "https://github.com/shthed/capy/pull/157"
+        }
+      ]
+    }
+  ],
+  "codex-review-.github-workflows-deploy-branch.yml-change-fc82xt": [
+    {
+      "sha": "771c3415e4954194cc16b1cb56137b231720e5ba",
+      "shortSha": "771c341",
+      "message": "Streamline branch index cards",
+      "date": "2025-10-16T15:30:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/771c3415e4954194cc16b1cb56137b231720e5ba",
+      "prs": [
+        {
+          "number": 157,
+          "title": "Simplify branch deploy index cards",
+          "url": "https://github.com/shthed/capy/pull/157"
+        }
+      ]
+    },
+    {
+      "sha": "d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
+      "shortSha": "d8dbdab",
+      "message": "Merge pull request #153 from shthed/codex/review-starthint-dialog-and-first-run-process\n\nRemove onboarding start hint and add quick start actions to Saves sheet",
+      "date": "2025-10-16T13:45:30Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
+      "prs": [
+        {
+          "number": 157,
+          "title": "Simplify branch deploy index cards",
+          "url": "https://github.com/shthed/capy/pull/157"
+        }
+      ]
+    },
+    {
+      "sha": "9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
+      "shortSha": "9fbf57c",
+      "message": "Allow sample reload without artwork",
+      "date": "2025-10-16T13:37:19Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
+      "prs": [
+        {
+          "number": 157,
+          "title": "Simplify branch deploy index cards",
+          "url": "https://github.com/shthed/capy/pull/157"
+        }
+      ]
+    }
+  ],
+  "codex/introduce-renderer-abstraction-for-webgl": [
+    {
+      "sha": "fedcafb678bac485449081f8a860a06f34ce0180",
+      "shortSha": "fedcafb",
+      "message": "Merge branch 'main' into work",
+      "date": "2025-10-16T01:37:27Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "shortSha": "15fadfe",
+      "message": "Fix renderer init ordering to restore interactions",
+      "date": "2025-10-14T18:06:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "shortSha": "a348b08",
+      "message": "Refactor renderer scaffolding with overlay canvas",
+      "date": "2025-10-14T13:22:10Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    }
+  ],
+  "codex-introduce-renderer-abstraction-for-webgl": [
+    {
+      "sha": "fedcafb678bac485449081f8a860a06f34ce0180",
+      "shortSha": "fedcafb",
+      "message": "Merge branch 'main' into work",
+      "date": "2025-10-16T01:37:27Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "shortSha": "15fadfe",
+      "message": "Fix renderer init ordering to restore interactions",
+      "date": "2025-10-14T18:06:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "shortSha": "a348b08",
+      "message": "Refactor renderer scaffolding with overlay canvas",
+      "date": "2025-10-14T13:22:10Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    }
+  ]
+}
