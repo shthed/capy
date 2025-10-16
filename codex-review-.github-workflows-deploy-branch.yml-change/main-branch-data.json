@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "sha": "681cac5b83077347e270c27011c9813725acf220",
+      "shortSha": "681cac5",
+      "message": "Merge pull request #155 from shthed/codex/revise-deploy-branch.yml-for-commit-display-o3qaeu\n\nStandardize branch deployment commit listings",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T13:49:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/681cac5b83077347e270c27011c9813725acf220",
+      "prs": [
+        {
+          "number": 155,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/155"
+        }
+      ]
+    },
+    {
+      "sha": "d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
+      "shortSha": "d8dbdab",
+      "message": "Merge pull request #153 from shthed/codex/review-starthint-dialog-and-first-run-process\n\nRemove onboarding start hint and add quick start actions to Saves sheet",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T13:45:30Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
+      "prs": [
+        {
+          "number": 153,
+          "title": "Remove onboarding start hint and add quick start actions to Saves sheet",
+          "url": "https://github.com/shthed/capy/pull/153"
+        }
+      ]
+    },
+    {
+      "sha": "1195e89dd27a784fabbcb7baf9b4aafe42f76e6c",
+      "shortSha": "1195e89",
+      "message": "Merge branch 'main' into codex/revise-deploy-branch.yml-for-commit-display-o3qaeu",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T13:44:24Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1195e89dd27a784fabbcb7baf9b4aafe42f76e6c",
+      "prs": [
+        {
+          "number": 155,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/155"
+        }
+      ]
+    }
+  ],
+  "lastCommitDate": "2025-10-16T13:49:45Z",
+  "deploymentTimestamp": 1760624821520
+}

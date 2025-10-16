@@ -1,0 +1,18 @@
+[
+  {
+    "branch": "codex/review-.github/workflows/deploy-branch.yml-change",
+    "safeName": "codex-review-.github-workflows-deploy-branch.yml-change",
+    "title": "Streamline branch deploy index metadata",
+    "number": 156,
+    "updatedAt": "2025-10-16T14:26:58Z",
+    "url": "https://github.com/shthed/capy/pull/156"
+  },
+  {
+    "branch": "codex/introduce-renderer-abstraction-for-webgl",
+    "safeName": "codex-introduce-renderer-abstraction-for-webgl",
+    "title": "WebGL renderer",
+    "number": 124,
+    "updatedAt": "2025-10-16T01:37:28Z",
+    "url": "https://github.com/shthed/capy/pull/124"
+  }
+]
