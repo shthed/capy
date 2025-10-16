@@ -92,10 +92,10 @@
   "codex-review-starthint-dialog-and-first-run-process": {
     "branch": "codex/review-starthint-dialog-and-first-run-process",
     "safeName": "codex-review-starthint-dialog-and-first-run-process",
-    "commit": "58e9b5aec2e8d2e4ce283e28a10f9c0207332881",
-    "message": "Merge pull request #152 from shthed/codex/revise-deploy-branch.yml-for-commit-display\n\nImprove branch deployment summary layout",
+    "commit": "a545ed4f72b03b13a2cac6306903b5c6add96b38",
+    "message": "Simplify onboarding by relying on Saves sheet",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T19:59:31+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/58e9b5aec2e8d2e4ce283e28a10f9c0207332881"
+    "deployedAt": "2025-10-16T20:17:33+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/a545ed4f72b03b13a2cac6306903b5c6add96b38"
   }
 }
