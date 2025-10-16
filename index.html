@@ -2851,7 +2851,8 @@
           return;
         }
         const dataUrl = getSampleDataUrl();
-        if (!dataUrl) {
+        const hasDefaultGame = Boolean(DEFAULT_GAME_SOURCE?.path);
+        if (!dataUrl && !hasDefaultGame) {
           return;
         }
         disableSampleAutoload();
@@ -4111,6 +4112,7 @@
         const sampleDescription = getSampleDescription();
         const sampleDataUrl = getSampleDataUrl();
         const sampleAvailable = Boolean(sampleDataUrl);
+        const canReloadSample = sampleAvailable || Boolean(DEFAULT_GAME_SOURCE?.path);
         const reloadLabel = sampleTitle ? `Reload ${sampleTitle}` : "Reload sample puzzle";
 
         for (const button of sampleDetailButtons) {
@@ -4140,7 +4142,7 @@
             : `${reloadLabel} (${config.label})`;
           button.title = titleText;
           button.setAttribute("aria-label", ariaText);
-          button.disabled = !sampleAvailable;
+          button.disabled = !canReloadSample;
           if (config.approxRegions != null) {
             button.dataset.detailRegions = String(config.approxRegions);
           } else {
@@ -4201,15 +4203,17 @@
       function loadSamplePuzzle(options = {}) {
         const { announce = true, detailLevel, skipDetailUpdate = false } = options;
         disableSampleAutoload();
-        const dataUrl = getSampleDataUrl();
-        if (!dataUrl) return;
-        const sampleTitle = getSampleTitle();
         const targetLevel = detailLevel || state.sampleDetailLevel || DEFAULT_SAMPLE_DETAIL;
         const detailConfig = skipDetailUpdate
           ? SAMPLE_DETAIL_LEVELS[targetLevel] || SAMPLE_DETAIL_LEVELS[DEFAULT_SAMPLE_DETAIL]
           : applySampleDetailLevel(targetLevel, { skipReload: true, skipLog: !announce }) ||
             SAMPLE_DETAIL_LEVELS[targetLevel] ||
             SAMPLE_DETAIL_LEVELS[DEFAULT_SAMPLE_DETAIL];
+        const dataUrl = getSampleDataUrl();
+        if (!dataUrl) {
+          return loadDefaultPuzzle({ announce });
+        }
+        const sampleTitle = getSampleTitle();
         resetPuzzleUI();
         state.sourceUrl = dataUrl;
         state.sourceTitle = sampleTitle || "Sample puzzle";
