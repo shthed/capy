@@ -79,5 +79,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-16T19:40:50+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/bf513a450478217347b5d0255ab9f94e1edfab32"
+  },
+  "codex-revise-deploy-branch.yml-for-commit-display": {
+    "branch": "codex/revise-deploy-branch.yml-for-commit-display",
+    "safeName": "codex-revise-deploy-branch.yml-for-commit-display",
+    "commit": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+    "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
+    "actor": "shthed",
+    "deployedAt": "2025-10-16T19:44:16+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5"
   }
 }

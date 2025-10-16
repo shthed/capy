@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "sha": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+      "shortSha": "4e2da42",
+      "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T11:44:16Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+      "prs": [
+        {
+          "number": 151,
+          "title": "Document branch update workflow",
+          "url": "https://github.com/shthed/capy/pull/151"
+        }
+      ]
+    },
+    {
+      "sha": "927a5838931f2365ee524aa79910c8d75b0c63fc",
+      "shortSha": "927a583",
+      "message": "Document branch update workflow",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T11:43:12Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/927a5838931f2365ee524aa79910c8d75b0c63fc",
+      "prs": [
+        {
+          "number": 151,
+          "title": "Document branch update workflow",
+          "url": "https://github.com/shthed/capy/pull/151"
+        }
+      ]
+    },
+    {
+      "sha": "1af521c634b2ede6c4215aed188eda2640eacbd2",
+      "shortSha": "1af521c",
+      "message": "Merge pull request #150 from shthed/codex/fix-yaml-syntax-error-in-deploy-branch.yml\n\nFix deploy workflow heredoc indentation",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T11:41:26Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1af521c634b2ede6c4215aed188eda2640eacbd2",
+      "prs": [
+        {
+          "number": 150,
+          "title": "Fix deploy workflow heredoc indentation",
+          "url": "https://github.com/shthed/capy/pull/150"
+        }
+      ]
+    }
+  ],
+  "lastCommitDate": "2025-10-16T11:44:16Z",
+  "deploymentTimestamp": 1760615794044
+}

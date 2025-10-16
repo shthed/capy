@@ -1,0 +1,18 @@
+[
+  {
+    "branch": "codex/revise-deploy-branch.yml-for-commit-display",
+    "safeName": "codex-revise-deploy-branch.yml-for-commit-display",
+    "title": "Improve branch deployment summary layout",
+    "number": 152,
+    "updatedAt": "2025-10-16T11:56:31Z",
+    "url": "https://github.com/shthed/capy/pull/152"
+  },
+  {
+    "branch": "codex/introduce-renderer-abstraction-for-webgl",
+    "safeName": "codex-introduce-renderer-abstraction-for-webgl",
+    "title": "WebGL renderer",
+    "number": 124,
+    "updatedAt": "2025-10-16T01:37:28Z",
+    "url": "https://github.com/shthed/capy/pull/124"
+  }
+]
