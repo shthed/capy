@@ -401,86 +401,168 @@ jobs:
             echo '{"commits":[]}' > "$MAIN_DATA_FILE"
           fi
 
-          DEPLOYMENTS_JSON=$(cat "$DEPLOY_DATA")
-          PR_JSON=$(cat "$PR_DATA_FILE")
-          MAIN_JSON=$(cat "$MAIN_DATA_FILE")
+          DEPLOY_DATA_PATH="$DEPLOY_DATA" \
+          PR_DATA_PATH="$PR_DATA_FILE" \
+          MAIN_DATA_PATH="$MAIN_DATA_FILE" \
+          node <<'NODE'
+const fs = require('fs');
 
-          jq -n \
-            --argjson deployments "$DEPLOYMENTS_JSON" \
-            --argjson prs "$PR_JSON" \
-            --argjson main "$MAIN_JSON" '
-            def html_escape:
-              gsub("&"; "&amp;") |
-              gsub("<"; "&lt;") |
-              gsub(">"; "&gt;") |
-              gsub("\""; "&quot;") |
-              gsub("\u0027"; "&#39;");
+const readJson = (path, fallback) => {
+  try {
+    return JSON.parse(fs.readFileSync(path, 'utf8'));
+  } catch (error) {
+    return fallback;
+  }
+};
 
-            def first_line($text):
-              ($text // "") | split("\n") | .[0];
+const deployments = readJson(process.env.DEPLOY_DATA_PATH, {});
+const prList = readJson(process.env.PR_DATA_PATH, []);
+const mainData = readJson(process.env.MAIN_DATA_PATH, { commits: [] });
 
-            ($deployments // {}) as $deployments |
-            ($prs // []) as $pr_list |
-            ($main // {commits: []}) as $main_data |
-            (reduce $pr_list[] as $pr ({}; .[$pr.branch] = $pr)) as $pr_by_branch |
-            (reduce $pr_list[] as $pr ({}; .[$pr.safeName] = $pr)) as $pr_by_safe |
+const htmlEscape = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
 
-            def branch_pr($entry):
-              $pr_by_branch[$entry.value.branch] // $pr_by_safe[$entry.value.safeName];
+const firstLine = (text) => {
+  const str = String(text ?? '');
+  const newlineIndex = str.indexOf('\n');
+  return newlineIndex === -1 ? str : str.slice(0, newlineIndex);
+};
 
-            def base_data($entry):
-              ($entry.value | {
-                branch: (.branch // ""),
-                safe: (.safeName // ""),
-                message: first_line(.message),
-                deployed: (.deployedAt // "unknown"),
-                actor: (.actor // "unknown"),
-                commit: (.commit // ""),
-                url: (.commitUrl // "#")
-              });
+const prByBranch = new Map();
+const prBySafe = new Map();
 
-            def commit_item($commit):
-              "<li class=\"commit-item\"><a class=\"commit-sha\" href=\"" + (($commit.htmlUrl // "#") | html_escape) + "\">" + (($commit.shortSha // "") | html_escape) + "</a>" +
-              "<span class=\"commit-message\">" + (first_line($commit.message) | html_escape) + "</span>" +
-              "<div class=\"commit-meta\">by " + (($commit.author // "unknown") | html_escape) +
-              (if ($commit.date // "") != "" then " · " + (($commit.date) | html_escape) else "" end) +
-              (if ($commit.prs // []) | length > 0 then
-                " · " + (($commit.prs // []) | map("<a class=\"commit-pr-link\" href=\"" + ((.url // "#") | html_escape) + "\">PR #" + (.number|tostring) + "</a>") | join(" "))
-              else "" end) +
-              "</div></li>";
+for (const pr of prList) {
+  if (pr && typeof pr === 'object') {
+    if (pr.branch) {
+      prByBranch.set(pr.branch, pr);
+    }
+    if (pr.safeName) {
+      prBySafe.set(pr.safeName, pr);
+    }
+  }
+}
 
-            def render_main($entry):
-              base_data($entry) as $data |
-              "<li class=\"card main\"><a class=\"branch-link\" href=\"./\">main<span class=\"badge\">production</span></a>" +
-              (if $data.message != "" then "<div class=\"message\">" + ($data.message | html_escape) + "</div>" else "" end) +
-              "<div class=\"meta\">Last deployed " + ($data.deployed | html_escape) +
-              " by " + ($data.actor | html_escape) +
-              " · <a href=\"" + ($data.url | html_escape) + "\">" + ($data.commit[:7]) + "</a></div>" +
-              (if ($main_data.commits // []) | length > 0 then
-                "<div class=\"commit-section\"><div class=\"commit-title\">Recent commits</div><ul class=\"commit-list\">" +
-                (($main_data.commits // []) | map(commit_item(.)) | join("")) +
-                "</ul></div>"
-              else "" end) +
-              "</li>\n";
+const branchPr = (entry) => {
+  const value = entry.value ?? {};
+  return prByBranch.get(value.branch) ?? prBySafe.get(value.safeName) ?? null;
+};
 
-            def render_branch($entry):
-              base_data($entry) as $data |
-              branch_pr($entry) as $pr |
-              "<li class=\"card\"><a class=\"branch-link\" href=\"./" + ($data.safe | html_escape) + "/\">" + ($data.branch | html_escape) + "</a>" +
-              (if $pr then "<div class=\"pr-meta\"><a class=\"pr-link\" href=\"" + (($pr.url // "#") | html_escape) + "\">PR #" + ($pr.number|tostring) + "</a> · " + ($pr.title | html_escape) + "</div>" else "" end) +
-              (if $data.message != "" then "<div class=\"message\">" + ($data.message | html_escape) + "</div>" else "" end) +
-              "<div class=\"meta\">Last deployed " + ($data.deployed | html_escape) +
-              " by " + ($data.actor | html_escape) +
-              " · <a href=\"" + ($data.url | html_escape) + "\">" + ($data.commit[:7]) + "</a></div>" +
-              "</li>\n";
+const baseData = (entry) => {
+  const value = entry.value ?? {};
+  const message = firstLine(value.message ?? '');
 
-            ($deployments | to_entries | map(select(.key != "main"))) as $all_branches |
-            ($all_branches | map(select(branch_pr(.) != null))) as $branches_with_pr |
-            ($branches_with_pr | sort_by(.value.deployedAt // "") | reverse) as $sorted_branches |
+  return {
+    branch: value.branch ?? '',
+    safe: value.safeName ?? '',
+    message,
+    deployed: value.deployedAt ?? 'unknown',
+    actor: value.actor ?? 'unknown',
+    commit: value.commit ?? '',
+    url: value.commitUrl ?? '#'
+  };
+};
 
-            ((if $deployments | has("main") then [render_main({key: "main", value: $deployments.main})] else [] end) +
-            ($sorted_branches | map(render_branch(.)))) | .[]
-          ' >> branch.html
+const commitItem = (commit) => {
+  const shortSha = commit?.shortSha ?? (commit?.sha ? String(commit.sha).slice(0, 7) : '');
+  const message = firstLine(commit?.message ?? '');
+  const author = commit?.author ?? 'unknown';
+  const date = commit?.date ? String(commit.date) : '';
+
+  let meta = `by ${htmlEscape(author)}`;
+  if (date) {
+    meta += ` · ${htmlEscape(date)}`;
+  }
+
+  if (Array.isArray(commit?.prs) && commit.prs.length > 0) {
+    const prLinks = commit.prs.map((pr) => {
+      const prNumber = pr?.number != null ? String(pr.number) : '';
+      const prTitle = prNumber ? `PR #${prNumber}` : 'PR';
+      return `<a class="commit-pr-link" href="${htmlEscape(pr?.url ?? '#')}">${prTitle}</a>`;
+    }).join(' ');
+    if (prLinks) {
+      meta += ` · ${prLinks}`;
+    }
+  }
+
+  return `<li class="commit-item"><a class="commit-sha" href="${htmlEscape(commit?.htmlUrl ?? '#')}">${htmlEscape(shortSha)}</a><span class="commit-message">${htmlEscape(message)}</span><div class="commit-meta">${meta}</div></li>`;
+};
+
+const renderMain = (entry) => {
+  const data = baseData(entry);
+  let html = `<li class="card main"><a class="branch-link" href="./">main<span class="badge">production</span></a>`;
+
+  if (data.message) {
+    html += `<div class="message">${htmlEscape(data.message)}</div>`;
+  }
+
+  const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
+  html += `<div class="meta">Last deployed ${htmlEscape(data.deployed)} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
+
+  if (Array.isArray(mainData.commits) && mainData.commits.length > 0) {
+    html += `<div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list">`;
+    html += mainData.commits.map((commit) => commitItem(commit)).join('');
+    html += `</ul></div>`;
+  }
+
+  html += `</li>\n`;
+  return html;
+};
+
+const renderBranch = (entry) => {
+  const data = baseData(entry);
+  const pr = branchPr(entry);
+  let html = `<li class="card"><a class="branch-link" href="./${htmlEscape(data.safe)}/">${htmlEscape(data.branch)}</a>`;
+
+  if (pr) {
+    const prNumber = pr.number != null ? String(pr.number) : '';
+    html += `<div class="pr-meta"><a class="pr-link" href="${htmlEscape(pr.url ?? '#')}">PR #${htmlEscape(prNumber)}</a>`;
+    html += ` · ${htmlEscape(pr.title ?? '')}</div>`;
+  }
+
+  if (data.message) {
+    html += `<div class="message">${htmlEscape(data.message)}</div>`;
+  }
+
+  const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
+  html += `<div class="meta">Last deployed ${htmlEscape(data.deployed)} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
+
+  html += `</li>\n`;
+  return html;
+};
+
+const toTimestamp = (value) => {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const entries = Object.entries(deployments ?? {}).map(([key, value]) => ({ key, value }));
+let output = '';
+
+const mainEntry = entries.find((entry) => entry.key === 'main' && entry.value);
+if (mainEntry) {
+  output += renderMain(mainEntry);
+}
+
+const branchEntries = entries
+  .filter((entry) => entry.key !== 'main')
+  .filter((entry) => branchPr(entry));
+
+branchEntries.sort((a, b) => toTimestamp(b.value?.deployedAt) - toTimestamp(a.value?.deployedAt));
+
+for (const entry of branchEntries) {
+  output += renderBranch(entry);
+}
+
+fs.appendFileSync('branch.html', output);
+NODE
 
           cat >> branch.html <<'HTML'
             </ul>
