@@ -70,5 +70,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-16T13:58:48+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/78ec396cd4988b4650bc668fae40e166fd65637f"
+  },
+  "codex-fix-yaml-syntax-error-in-deploy-branch.yml": {
+    "branch": "codex/fix-yaml-syntax-error-in-deploy-branch.yml",
+    "safeName": "codex-fix-yaml-syntax-error-in-deploy-branch.yml",
+    "commit": "bf513a450478217347b5d0255ab9f94e1edfab32",
+    "message": "Fix heredoc indentation in deploy workflow",
+    "actor": "shthed",
+    "deployedAt": "2025-10-16T19:40:50+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/bf513a450478217347b5d0255ab9f94e1edfab32"
   }
 }

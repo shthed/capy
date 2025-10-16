@@ -1,0 +1,18 @@
+[
+  {
+    "branch": "codex/fix-yaml-syntax-error-in-deploy-branch.yml",
+    "safeName": "codex-fix-yaml-syntax-error-in-deploy-branch.yml",
+    "title": "Fix deploy workflow heredoc indentation",
+    "number": 150,
+    "updatedAt": "2025-10-16T11:40:53Z",
+    "url": "https://github.com/shthed/capy/pull/150"
+  },
+  {
+    "branch": "codex/introduce-renderer-abstraction-for-webgl",
+    "safeName": "codex-introduce-renderer-abstraction-for-webgl",
+    "title": "WebGL renderer",
+    "number": 124,
+    "updatedAt": "2025-10-16T01:37:28Z",
+    "url": "https://github.com/shthed/capy/pull/124"
+  }
+]

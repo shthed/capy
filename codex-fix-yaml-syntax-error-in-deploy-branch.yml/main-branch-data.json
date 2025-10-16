@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "sha": "b695057aeefcaa90a09b938e7f9eb80caefe5705",
+      "shortSha": "b695057",
+      "message": "Merge pull request #149 from shthed/codex/cherry-pick-changes-from-codex/resolve-issue-with-codex-4krf96\n\nResolve branch deployment jq merge conflict",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T11:40:22Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b695057aeefcaa90a09b938e7f9eb80caefe5705",
+      "prs": [
+        {
+          "number": 149,
+          "title": "Resolve branch deployment jq merge conflict",
+          "url": "https://github.com/shthed/capy/pull/149"
+        }
+      ]
+    },
+    {
+      "sha": "17fd379446676b2314a1605a79074c3b289b933f",
+      "shortSha": "17fd379",
+      "message": "Merge remote-tracking branch 'origin/main' into codex/cherry-pick-changes-from-codex/resolve-issue-with-codex-4krf96\n\n# Conflicts:\n#\t.github/workflows/deploy-branch.yml",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T10:14:51Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/17fd379446676b2314a1605a79074c3b289b933f",
+      "prs": [
+        {
+          "number": 149,
+          "title": "Resolve branch deployment jq merge conflict",
+          "url": "https://github.com/shthed/capy/pull/149"
+        }
+      ]
+    },
+    {
+      "sha": "78ec396cd4988b4650bc668fae40e166fd65637f",
+      "shortSha": "78ec396",
+      "message": "Resolve branch deployment jq merge conflict",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T05:58:48Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/78ec396cd4988b4650bc668fae40e166fd65637f",
+      "prs": [
+        {
+          "number": 149,
+          "title": "Resolve branch deployment jq merge conflict",
+          "url": "https://github.com/shthed/capy/pull/149"
+        }
+      ]
+    }
+  ],
+  "lastCommitDate": "2025-10-16T11:40:22Z",
+  "deploymentTimestamp": 1760614866230
+}
