@@ -1,0 +1,18 @@
+[
+  {
+    "branch": "codex/improve-game-performance-for-mobile",
+    "safeName": "codex-improve-game-performance-for-mobile",
+    "title": "Improve mobile gesture responsiveness",
+    "number": 159,
+    "updatedAt": "2025-10-16T16:27:05Z",
+    "url": "https://github.com/shthed/capy/pull/159"
+  },
+  {
+    "branch": "codex/introduce-renderer-abstraction-for-webgl",
+    "safeName": "codex-introduce-renderer-abstraction-for-webgl",
+    "title": "WebGL renderer",
+    "number": 124,
+    "updatedAt": "2025-10-16T01:37:28Z",
+    "url": "https://github.com/shthed/capy/pull/124"
+  }
+]

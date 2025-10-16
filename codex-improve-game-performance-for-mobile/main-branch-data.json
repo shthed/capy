@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "sha": "c8a7c4cf7058fd9daa53daf529eef77793c3dba1",
+      "shortSha": "c8a7c4c",
+      "message": "Merge pull request #157 from shthed/codex/review-.github/workflows/deploy-branch.yml-change-fc82xt\n\nSimplify branch deploy index cards",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T16:00:47Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/c8a7c4cf7058fd9daa53daf529eef77793c3dba1",
+      "prs": [
+        {
+          "number": 157,
+          "title": "Simplify branch deploy index cards",
+          "url": "https://github.com/shthed/capy/pull/157"
+        }
+      ]
+    },
+    {
+      "sha": "7b94136c0a8f3af95381a7b3592c791d0e69390e",
+      "shortSha": "7b94136",
+      "message": "Merge branch 'main' into codex/review-.github/workflows/deploy-branch.yml-change-fc82xt",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T16:00:12Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7b94136c0a8f3af95381a7b3592c791d0e69390e",
+      "prs": [
+        {
+          "number": 157,
+          "title": "Simplify branch deploy index cards",
+          "url": "https://github.com/shthed/capy/pull/157"
+        }
+      ]
+    },
+    {
+      "sha": "3b6a2e64f611c24ee24332f8b547cc179083edec",
+      "shortSha": "3b6a2e6",
+      "message": "Merge pull request #158 from shthed/codex/review-starthint-dialog-and-first-run-process-tlj5hg\n\nAdd reset progress button to save manager",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T15:55:09Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3b6a2e64f611c24ee24332f8b547cc179083edec",
+      "prs": [
+        {
+          "number": 158,
+          "title": "Add reset progress button to save manager",
+          "url": "https://github.com/shthed/capy/pull/158"
+        }
+      ]
+    }
+  ],
+  "lastCommitDate": "2025-10-16T16:00:47Z",
+  "deploymentTimestamp": 1760632035108
+}
