@@ -28,6 +28,7 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch open PR metadata
+        id: pr-metadata
         uses: actions/github-script@v7
         with:
           script: |
@@ -49,12 +50,44 @@ jobs:
               url: pr.html_url
             }));
 
+            const currentBranch = (context.ref || '').replace('refs/heads/', '');
+            const hasOpenPr = branches.some(pr => pr.branch === currentBranch);
+
+            core.setOutput('has-open-pr', hasOpenPr ? 'true' : 'false');
+
             const fs = require('fs');
             fs.writeFileSync('pr-branches.json', JSON.stringify(branches, null, 2));
 
             return branches.length;
 
+      - name: Determine deployment eligibility
+        id: deployment-gate
+        env:
+          HAS_OPEN_PR: ${{ steps.pr-metadata.outputs.has-open-pr }}
+        run: |
+          set -euo pipefail
+
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${HAS_OPEN_PR}" = "true" ]; then
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "eligible=false" >> "$GITHUB_OUTPUT"
+
+      - name: Skip deployment for branches without open PRs
+        if: steps.deployment-gate.outputs.eligible != 'true'
+        run: |
+          echo "No open pull request detected for ${GITHUB_REF_NAME}; skipping deployment."
+
       - name: Fetch main branch commits
+        if: steps.deployment-gate.outputs.eligible == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -106,6 +139,7 @@ jobs:
             return mainBranchData.commits.length;
 
       - name: Sync branch to gh-pages
+        if: steps.deployment-gate.outputs.eligible == 'true'
         id: sync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -471,6 +505,7 @@ jobs:
           cd ..
 
       - name: Prepare Pages artifact
+        if: steps.deployment-gate.outputs.eligible == 'true'
         run: |
           set -euo pipefail
           rm -rf site
@@ -478,16 +513,20 @@ jobs:
           rsync -a --exclude='.git/' pages/ site/
 
       - name: Setup Pages
+        if: steps.deployment-gate.outputs.eligible == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
+        if: steps.deployment-gate.outputs.eligible == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
       - name: Deploy to GitHub Pages
+        if: steps.deployment-gate.outputs.eligible == 'true'
         id: deploy-pages
         uses: actions/deploy-pages@v4
 
       - name: Preview URL
+        if: steps.deployment-gate.outputs.eligible == 'true'
         run: echo "Preview available at ${{ steps.sync.outputs.preview_url }}"
