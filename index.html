@@ -244,18 +244,6 @@
         touch-action: manipulation;
       }
 
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-      }
-
       body {
         margin: 0;
         min-height: 100vh;
@@ -296,6 +284,7 @@
         position: absolute;
         top: var(--command-rail-top);
         left: calc(env(safe-area-inset-left, 0px) + 12px);
+        right: calc(env(safe-area-inset-right, 0px) + 12px);
         display: flex;
         align-items: center;
         gap: calc(6px * var(--ui-scale));
@@ -311,8 +300,6 @@
         touch-action: manipulation;
         z-index: 3;
         scrollbar-width: none;
-        width: max-content;
-        max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px);
       }
 
       #commandRail::-webkit-scrollbar {
@@ -546,14 +533,10 @@
         position: absolute;
         inset: 0;
         display: grid;
-        place-content: start center;
-        justify-items: center;
-        padding: calc(24px * var(--ui-scale)) calc(18px * var(--ui-scale));
+        place-items: center;
         background: var(--theme-hint-overlay);
         backdrop-filter: blur(18px);
         transition: opacity 0.24s ease;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
         z-index: 2;
       }
 
@@ -571,7 +554,7 @@
         text-align: left;
         width: min(420px, calc(100vw - 48px));
         max-width: 420px;
-        max-height: min(calc(100vh - (48px * var(--ui-scale))), 720px);
+        max-height: min(calc(100vh - 96px), 720px);
         padding: calc(32px * var(--ui-scale));
         border-radius: calc(20px * var(--ui-scale));
         background: var(--theme-hint-body-bg);
@@ -611,12 +594,6 @@
         display: grid;
         gap: calc(12px * var(--ui-scale));
         width: 100%;
-      }
-
-      #startHint .hint-note {
-        margin: 0;
-        font-size: 0.95rem;
-        color: var(--theme-muted-text);
       }
 
         .detail-callout {
@@ -685,6 +662,28 @@
         margin: 0;
         color: var(--theme-muted-text);
         font-size: 0.95rem;
+      }
+
+      #startHint .save-manager {
+        display: grid;
+        gap: calc(12px * var(--ui-scale));
+      }
+
+      #startHint .save-manager h2 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      #startHint .save-manager-description {
+        margin: 0;
+        color: var(--theme-muted-text);
+        font-size: 0.95rem;
+      }
+
+      #startHint .save-manager-empty {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--theme-caption-text);
       }
 
       #startHint .game-selection-list {
@@ -779,11 +778,57 @@
         gap: calc(6px * var(--ui-scale));
         align-items: stretch;
         justify-content: flex-start;
-        padding: 0;
+        padding-block-start: calc(6px * var(--ui-scale));
+        padding-block-end: calc(6px * var(--ui-scale) + env(safe-area-inset-bottom, 0px));
+        padding-inline-start: calc(12px * var(--ui-scale) + env(safe-area-inset-left, 0px));
+        padding-inline-end: calc(12px * var(--ui-scale) + env(safe-area-inset-right, 0px));
         background: var(--theme-palette-dock-bg);
         border-top: 1px solid var(--theme-palette-dock-border);
         overflow: visible;
           z-index: 3;
+        }
+
+        .progress-status {
+          display: flex;
+          flex-direction: column;
+          gap: calc(4px * var(--ui-scale));
+          align-items: stretch;
+          font-size: 0.95rem;
+          color: var(--theme-caption-text);
+        }
+
+        .progress-status .progress-message {
+          font-weight: 600;
+          letter-spacing: 0.01em;
+        }
+
+        .progress-meter {
+          position: relative;
+          width: 100%;
+          height: calc(6px * var(--ui-scale));
+          border-radius: 999px;
+          background: rgba(148, 163, 184, 0.25);
+          overflow: hidden;
+          transition: opacity 0.25s ease;
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .progress-status.show-progress .progress-meter {
+          opacity: 1;
+        }
+
+        .progress-meter[aria-hidden="true"] {
+          opacity: 0;
+        }
+
+        .progress-bar {
+          width: 0%;
+          height: 100%;
+          border-radius: inherit;
+          background: rgba(96, 165, 250, 0.92);
+          box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
+          transition: width 0.24s ease;
         }
 
         #palette {
@@ -1162,93 +1207,6 @@
         padding-right: 4px;
       }
 
-      .generator-import-notice,
-      .generator-progress {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        padding: calc(14px * var(--ui-scale));
-        border-radius: calc(18px * var(--ui-scale));
-      }
-
-      .generator-import-notice {
-        border: 1px solid rgba(59, 130, 246, 0.45);
-        background: rgba(59, 130, 246, 0.16);
-        color: var(--theme-command-text);
-      }
-
-      body[data-theme="light"] .generator-import-notice {
-        background: rgba(191, 219, 254, 0.75);
-        border-color: rgba(59, 130, 246, 0.35);
-      }
-
-      .generator-import-title {
-        margin: 0;
-        font-size: 1.05rem;
-        font-weight: 600;
-      }
-
-      .generator-import-title strong {
-        font-weight: 700;
-      }
-
-      .generator-import-description {
-        margin: 0;
-        font-size: 0.95rem;
-        color: var(--theme-caption-text);
-      }
-
-      .generator-import-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-      }
-
-      .generator-progress {
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        background: rgba(15, 23, 42, 0.6);
-        color: var(--theme-command-text);
-      }
-
-      body[data-theme="light"] .generator-progress {
-        background: rgba(226, 232, 240, 0.85);
-        border-color: rgba(148, 163, 184, 0.5);
-      }
-
-      .generator-progress-message {
-        margin: 0;
-        font-weight: 600;
-        letter-spacing: 0.01em;
-      }
-
-      .generator-progress-meter {
-        position: relative;
-        width: 100%;
-        height: calc(6px * var(--ui-scale));
-        border-radius: 999px;
-        background: rgba(148, 163, 184, 0.25);
-        overflow: hidden;
-        transition: opacity 0.25s ease;
-        opacity: 0;
-      }
-
-      .generator-progress-meter[aria-hidden="false"] {
-        opacity: 1;
-      }
-
-      body[data-theme="light"] .generator-progress-meter {
-        background: rgba(148, 163, 184, 0.35);
-      }
-
-      .generator-progress-bar {
-        width: 0%;
-        height: 100%;
-        border-radius: inherit;
-        background: rgba(59, 130, 246, 0.92);
-        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
-        transition: width 0.24s ease;
-      }
-
       .sheet-section {
         display: flex;
         flex-direction: column;
@@ -1259,28 +1217,6 @@
         margin: 0;
         font-size: 1.05rem;
         letter-spacing: 0.02em;
-      }
-
-      .save-manager {
-        display: grid;
-        gap: calc(12px * var(--ui-scale));
-      }
-
-      .save-manager h2 {
-        margin: 0;
-        font-size: 1.1rem;
-      }
-
-      .save-manager-description {
-        margin: 0;
-        color: var(--theme-muted-text);
-        font-size: 0.95rem;
-      }
-
-      .save-manager-empty {
-        margin: 0;
-        font-size: 0.85rem;
-        color: var(--theme-caption-text);
       }
 
       .command-list {
@@ -1390,7 +1326,7 @@
         height: 18px;
       }
 
-      .save-manager-list {
+      #saveList {
         list-style: none;
         margin: 0;
         padding: 0;
@@ -1460,6 +1396,28 @@
   <body data-theme="dark">
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
+        <button
+          id="hintButton"
+          type="button"
+          data-testid="hint-button"
+          aria-label="Hint"
+          title="Hint"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">?</span>
+          <span class="label">Hint</span>
+        </button>
+        <button
+          id="resetButton"
+          type="button"
+          data-testid="reset-button"
+          aria-label="Reset puzzle"
+          title="Reset puzzle"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">↺</span>
+          <span class="label">Reset</span>
+        </button>
         <button
           id="previewToggle"
           type="button"
@@ -1554,7 +1512,7 @@
         <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
             <div class="hint-header">
-              <h1 id="startHintTitle" class="visually-hidden">Game setup</h1>
+              <h1 id="startHintTitle">Start or manage a game</h1>
               <button
                 id="closeStartHint"
                 type="button"
@@ -1564,19 +1522,18 @@
                 Close
               </button>
             </div>
-            <div class="hint-actions">
-              <button id="selectImage" type="button">Choose an image</button>
-              <p class="hint-note">Or drag and drop a photo or puzzle file anywhere to begin.</p>
-            </div>
-            <div class="hint-actions">
-              <button
-                id="samplePuzzle"
-                type="button"
-                data-action="load-sample"
-                aria-label="Load capybara sample puzzle"
-              >
-                Load sample
-              </button>
+            <p>
+              Resume a saved game, start the bundled Capybara Springs puzzle from <code>capy.json</code>,
+              or import your own image or JSON file.
+            </p>
+            <div id="gameSelection" class="game-selection" role="group" aria-labelledby="gameSelectionHeading">
+              <h2 id="gameSelectionHeading">Start a game</h2>
+              <p class="game-selection-description">
+                Select Capybara Springs or pick one of your saves stored in this browser. Manage manual snapshots
+                below when you need to rename, export, or delete them.
+              </p>
+              <ul id="gameSelectionList" class="game-selection-list" role="list"></ul>
+              <p id="gameSelectionEmpty" class="game-selection-empty" hidden>No saved games yet.</p>
             </div>
             <div class="detail-callout">
               <p class="detail-intro">Pick a detail level for the capybara demo:</p>
@@ -1591,68 +1548,59 @@
               id="saveManagerSection"
               class="save-manager"
               role="group"
-              aria-labelledby="startSaveManagerHeading"
-              data-save-section="start"
+              aria-labelledby="saveManagerHeading"
             >
-              <h2 id="startSaveManagerHeading">Manage saves</h2>
+              <h2 id="saveManagerHeading">Manage saves</h2>
               <p class="save-manager-description">
-                Autosaves keep tracking progress in this browser. Review them here or capture a manual snapshot to revisit a
-                favourite moment.
+                Manual saves and autosaves live in this browser. Create a snapshot to pin the current puzzle or revisit an
+                earlier run.
               </p>
-              <button type="button" data-save-snapshot disabled>Save current puzzle</button>
-              <ul
-                class="save-manager-list"
-                data-save-list
-                aria-live="polite"
-                aria-labelledby="startSaveManagerHeading"
-              ></ul>
-              <p class="save-manager-empty" data-save-empty hidden>
+              <button id="saveSnapshot" type="button" disabled>Save current puzzle</button>
+              <ul id="saveList" aria-live="polite" aria-labelledby="saveManagerHeading"></ul>
+              <p id="saveListEmpty" class="save-manager-empty" hidden>
                 No manual saves yet. Create one above or keep playing to autosave progress.
               </p>
+            </div>
+            <div class="hint-actions">
+              <button id="selectImage" type="button">Choose an image</button>
+              <button
+                id="samplePuzzle"
+                type="button"
+                data-action="load-sample"
+                aria-label="Load capybara sample puzzle"
+              >
+                Try the capybara sample
+              </button>
             </div>
           </div>
         </div>
       </div>
         <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
+          <div
+            id="progressStatus"
+            class="progress-status"
+            data-status="idle"
+            role="status"
+            aria-live="polite"
+          >
+            <span id="progress" class="progress-message">Start or manage a game</span>
+            <div
+              id="progressMeter"
+              class="progress-meter"
+              role="progressbar"
+              aria-label="Puzzle generation progress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+              aria-hidden="true"
+            >
+              <div id="progressBar" class="progress-bar"></div>
+            </div>
+          </div>
           <div id="palette" role="list"></div>
         </footer>
     </div>
     <input id="fileInput" type="file" accept=".json,image/*" hidden />
-    <div
-      id="saveManagerSheet"
-      class="sheet hidden"
-      role="dialog"
-      aria-labelledby="saveManagerTitle"
-      aria-hidden="true"
-    >
-      <div class="sheet-header">
-        <h2 id="saveManagerTitle">Manage saves</h2>
-        <button type="button" class="close-button" data-sheet-close="saves">Close</button>
-      </div>
-      <div class="sheet-body">
-        <section
-          class="sheet-section save-manager"
-          role="group"
-          aria-labelledby="saveManagerTitle"
-          data-save-section="dialog"
-        >
-          <p class="save-manager-description">
-            Autosaves keep tracking progress in this browser. Review them here or capture a manual snapshot to revisit a
-            favourite moment.
-          </p>
-          <button type="button" data-save-snapshot disabled>Save current puzzle</button>
-          <ul
-            class="save-manager-list"
-            data-save-list
-            aria-live="polite"
-            aria-labelledby="saveManagerTitle"
-          ></ul>
-          <p class="save-manager-empty" data-save-empty hidden>
-            No manual saves yet. Create one above or keep playing to autosave progress.
-          </p>
-        </section>
-      </div>
-    </div>
     <div
       id="helpSheet"
       class="sheet hidden"
@@ -1668,6 +1616,10 @@
         <section class="sheet-section" aria-labelledby="commandsHeading">
           <h3 id="commandsHeading">Command buttons</h3>
           <dl class="command-list">
+            <dt>? Hint</dt>
+            <dd>Flash the smallest unfinished region and switch colours if needed.</dd>
+            <dt>↺ Reset</dt>
+            <dd>Clear every painted region and restart the current puzzle.</dd>
             <dt>🖼 Preview</dt>
             <dd>Toggle the finished artwork overlay to compare your progress.</dd>
             <dt>🎛 Generator</dt>
@@ -1699,11 +1651,14 @@
           <h3 id="controlsHeading">Canvas controls</h3>
           <ul class="control-list">
             <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
-            <li><kbd>Right click</kbd> Select the colour under the pointer.</li>
+            <li><kbd>Right click</kbd> Select the colour under the pointer (configurable in Settings).</li>
             <li>Select a palette swatch to set the active colour and flash every matching region.</li>
             <li>Enable Easy difficulty in Settings to let clicks auto-select the tapped region's colour.</li>
             <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
-            <li><kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas.</li>
+            <li>
+              <kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas. Switch the right-click action in Settings if you
+              prefer dragging instead of selecting.
+            </li>
             <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
           </ul>
         </section>
@@ -1744,43 +1699,6 @@
         <button type="button" class="close-button" data-sheet-close="generator">Close</button>
       </div>
       <div class="sheet-body">
-        <div
-          class="generator-import-notice"
-          data-import-notice
-          role="status"
-          aria-live="polite"
-          hidden
-        >
-          <p class="generator-import-title">
-            Ready to generate <strong data-import-file>your file</strong>
-          </p>
-          <p class="generator-import-description" data-import-description></p>
-          <div class="generator-import-actions">
-            <button id="confirmImport" type="button" data-import-confirm>Generate puzzle</button>
-            <button type="button" class="close-button" data-import-cancel>Cancel</button>
-          </div>
-        </div>
-        <div
-          class="generator-progress"
-          data-generator-progress
-          role="status"
-          aria-live="polite"
-          hidden
-        >
-          <p class="generator-progress-message" data-generator-progress-message></p>
-          <div
-            class="generator-progress-meter"
-            data-generator-progress-meter
-            role="progressbar"
-            aria-label="Puzzle generation progress"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            aria-valuenow="0"
-            aria-hidden="true"
-          >
-            <div class="generator-progress-bar" data-generator-progress-bar></div>
-          </div>
-        </div>
         <section class="sheet-section" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Clustering &amp; detail</h3>
           <p class="control-note">
@@ -1873,6 +1791,10 @@
             <input id="showRegionLabelsToggle" type="checkbox" checked />
             <span>Show region numbers</span>
           </label>
+          <label class="toggle">
+            <input id="showStatusToggle" type="checkbox" />
+            <span>Show status bar with filled/remaining counts after imports</span>
+          </label>
           <label class="control">
             <span>Difficulty</span>
             <select id="difficultySelect">
@@ -1896,6 +1818,16 @@
             <input id="hintIntensity" type="range" min="20" max="90" step="5" value="65" />
           </label>
           <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
+          <label class="control">
+            <span>Right-click action</span>
+            <select id="rightClickAction">
+              <option value="select">Select colour</option>
+              <option value="pan">Pan the canvas</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Choose whether right-clicking picks colours or starts panning. Middle click and Space + drag always pan.
+          </p>
         </section>
         <section class="sheet-section" aria-labelledby="paletteHeading">
           <h3 id="paletteHeading">Palette</h3>
@@ -1958,7 +1890,10 @@
       const gameSelectionEmpty = document.getElementById("gameSelectionEmpty");
       const startHint = document.getElementById("startHint");
       const startHintCloseButton = document.getElementById("closeStartHint");
-      const startSaveManagerSection = document.getElementById("saveManagerSection");
+      const saveManagerSection = document.getElementById("saveManagerSection");
+      const saveListEmpty = document.getElementById("saveListEmpty");
+      const hintButton = document.getElementById("hintButton");
+      const resetButton = document.getElementById("resetButton");
       const previewToggle = document.getElementById("previewToggle");
       const fullscreenButton = document.getElementById("fullscreenButton");
       const importButton = document.getElementById("importButton");
@@ -1969,10 +1904,6 @@
       const generatorSheet = document.getElementById("generatorSheet");
       const settingsSheet = document.getElementById("settingsSheet");
       const helpSheet = document.getElementById("helpSheet");
-      const saveManagerSheet = document.getElementById("saveManagerSheet");
-      const sheetRegistry = [generatorSheet, settingsSheet, helpSheet, saveManagerSheet].filter(
-        Boolean
-      );
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
       const saveStorageSummary = document.getElementById("saveStorageSummary");
@@ -1986,8 +1917,10 @@
       const hintFlashToggle = document.getElementById("hintFlashToggle");
       const hintFadeDurationInput = document.getElementById("hintFadeDuration");
       const hintIntensityInput = document.getElementById("hintIntensity");
+      const rightClickActionSelect = document.getElementById("rightClickAction");
       const difficultySelect = document.getElementById("difficultySelect");
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
+      const showStatusToggle = document.getElementById("showStatusToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
       const backgroundColorInput = document.getElementById("backgroundColor");
       const uiScaleInput = document.getElementById("uiScale");
@@ -2000,30 +1933,20 @@
       const artPromptInput = document.getElementById("artPrompt");
       const applyBtn = document.getElementById("applyOptions");
       const downloadBtn = document.getElementById("downloadJson");
-      const saveSnapshotButtons = Array.from(document.querySelectorAll("[data-save-snapshot]"));
-      const saveListContainers = Array.from(document.querySelectorAll("[data-save-list]"));
-      const saveListEmptyStates = Array.from(document.querySelectorAll("[data-save-empty]"));
+      const saveSnapshotBtn = document.getElementById("saveSnapshot");
+      const saveList = document.getElementById("saveList");
       const paletteEl = document.getElementById("palette");
       const paletteSortEl = document.getElementById("paletteSort");
-      const generatorImportNotice =
-        generatorSheet?.querySelector("[data-import-notice]") || null;
-      const generatorImportFileEl = generatorSheet?.querySelector("[data-import-file]") || null;
-      const generatorImportDescriptionEl =
-        generatorSheet?.querySelector("[data-import-description]") || null;
-      const confirmImportBtn = document.getElementById("confirmImport");
-      const cancelImportBtn = generatorSheet?.querySelector("[data-import-cancel]") || null;
-      const generatorProgressEl = generatorSheet?.querySelector("[data-generator-progress]") || null;
-      const generatorProgressMessageEl =
-        generatorSheet?.querySelector("[data-generator-progress-message]") || null;
-      const generatorProgressMeterEl =
-        generatorSheet?.querySelector("[data-generator-progress-meter]") || null;
-      const generatorProgressBarEl =
-        generatorSheet?.querySelector("[data-generator-progress-bar]") || null;
+      const progressStatusEl = document.getElementById("progressStatus");
+      const progressEl = document.getElementById("progress");
+      const progressMeterEl = document.getElementById("progressMeter");
+      const progressBarEl = document.getElementById("progressBar");
       const defaultProgressLabel =
-        generatorProgressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
-      const DEFAULT_PROGRESS_MESSAGE = "";
+        progressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
       const PROGRESS_MESSAGES = {
+        idle: "Start or manage a game",
         loading: "Loading puzzle…",
+        active: "Keep colouring",
         generating: "Processing image…",
         complete: "All done!",
       };
@@ -2063,6 +1986,8 @@
       const DEFAULT_HINT_INTENSITY = 0.65;
       const MIN_HINT_INTENSITY = 0.2;
       const MAX_HINT_INTENSITY = 0.9;
+      const DEFAULT_RIGHT_CLICK_ACTION = "select";
+      const VALID_RIGHT_CLICK_ACTIONS = new Set(["select", "pan"]);
       const DEFAULT_DIFFICULTY = "normal";
       const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
@@ -2226,7 +2151,7 @@
 
       const DEFAULT_GAME_FALLBACK = {
         title: "Capybara Springs",
-        description: "A capybara in a lavender scarf lounges with a dachshund beside a moonlit spring.",
+        description: "A capybara with an orange crown relaxes beside a dachshund in a forest lagoon.",
       };
 
       let cachedDefaultGame = null;
@@ -3035,11 +2960,13 @@
           animateHints: true,
           hintFadeDuration: DEFAULT_HINT_FADE_DURATION,
           hintIntensity: DEFAULT_HINT_INTENSITY,
+          rightClickAction: DEFAULT_RIGHT_CLICK_ACTION,
           difficulty: DEFAULT_DIFFICULTY,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
           showRegionLabels: true,
+          showStatusBar: false,
           theme: DEFAULT_UI_THEME,
         },
         previewVisible: false,
@@ -3055,11 +2982,11 @@
         sampleArtwork: null,
       };
 
+      syncStatusBarVisibility();
+
       let generationJobCounter = 0;
       let latestGenerationJobId = 0;
       let puzzleGenerationModulePromise = null;
-      let pendingImportFile = null;
-      updateImportNotice();
 
       gameSaveManager.subscribe((entries) => {
         state.saves = entries;
@@ -3288,6 +3215,17 @@
           state.settings.hintIntensity = intensity;
           hintIntensityInput.value = String(Math.round(intensity * 100));
         }
+        if (settings.rightClickAction != null) {
+          const action = resolveRightClickAction(settings.rightClickAction);
+          state.settings.rightClickAction = action;
+          if (rightClickActionSelect) {
+            rightClickActionSelect.value = action;
+          }
+        } else if (rightClickActionSelect && state.settings.rightClickAction) {
+          const action = resolveRightClickAction(state.settings.rightClickAction);
+          state.settings.rightClickAction = action;
+          rightClickActionSelect.value = action;
+        }
         if (settings.difficulty != null) {
           const difficulty = resolveDifficulty(settings.difficulty);
           state.settings.difficulty = difficulty;
@@ -3310,6 +3248,18 @@
             skipLog: true,
             skipAutosave: true,
             skipRender: true,
+          });
+        }
+        if (typeof settings.showStatusBar === "boolean") {
+          applyStatusBarVisibility(settings.showStatusBar, {
+            skipLog: true,
+            skipAutosave: true,
+          });
+        } else {
+          applyStatusBarVisibility(state.settings.showStatusBar === true, {
+            skipLog: true,
+            skipAutosave: true,
+            force: true,
           });
         }
         if (typeof settings.uiScale === "number") {
@@ -3383,7 +3333,6 @@
           },
           openGenerator: () => openSheet(generatorSheet),
           openSettings: () => openSheet(settingsSheet),
-          openSaves: () => openSheet(saveManagerSheet),
         };
       }
 
@@ -3458,10 +3407,7 @@
         generatorButton.addEventListener("click", () => openSheet(generatorSheet));
       }
       settingsButton.addEventListener("click", () => openSheet(settingsSheet));
-      saveManagerButton.addEventListener("click", () => {
-        hideStartScreen();
-        openSheet(saveManagerSheet);
-      });
+      saveManagerButton.addEventListener("click", () => showStartScreen({ scrollTo: "saves" }));
       if (helpButton) {
         helpButton.addEventListener("click", () => openSheet(helpSheet));
       }
@@ -3516,8 +3462,6 @@
             closeSheet(generatorSheet);
           } else if (target === "help") {
             closeSheet(helpSheet);
-          } else if (target === "saves") {
-            closeSheet(saveManagerSheet);
           }
         });
       }
@@ -3541,25 +3485,10 @@
       fileInput.addEventListener("change", (event) => {
         const [file] = event.target.files || [];
         if (file) {
-          prepareImport(file);
+          handleFile(file);
         }
         fileInput.value = "";
       });
-
-      if (confirmImportBtn) {
-        confirmImportBtn.hidden = true;
-        confirmImportBtn.disabled = true;
-        confirmImportBtn.addEventListener("click", () => {
-          executePendingImport();
-        });
-      }
-
-      if (cancelImportBtn) {
-        cancelImportBtn.hidden = true;
-        cancelImportBtn.addEventListener("click", () => {
-          clearPendingImport();
-        });
-      }
 
       autoAdvanceToggle.addEventListener("change", () => {
         state.settings.autoAdvance = autoAdvanceToggle.checked;
@@ -3623,9 +3552,27 @@
         });
       }
 
+      if (rightClickActionSelect) {
+        rightClickActionSelect.value = resolveRightClickAction(rightClickActionSelect.value);
+        rightClickActionSelect.addEventListener("change", (event) => {
+          const action = resolveRightClickAction(event.target.value);
+          state.settings.rightClickAction = action;
+          rightClickActionSelect.value = action;
+          logDebug(
+            action === "select" ? "Right-click will select colours" : "Right-click will pan the canvas"
+          );
+          scheduleAutosave("settings-right-click-action");
+        });
+      }
+
       if (showRegionLabelsToggle) {
         showRegionLabelsToggle.addEventListener("change", () => {
           applyRegionLabelVisibility(showRegionLabelsToggle.checked);
+        });
+      }
+      if (showStatusToggle) {
+        showStatusToggle.addEventListener("change", () => {
+          applyStatusBarVisibility(showStatusToggle.checked);
         });
       }
 
@@ -3663,6 +3610,25 @@
         });
       }
 
+      hintButton.addEventListener("click", () => {
+        useHint();
+      });
+
+      resetButton.addEventListener("click", () => {
+        if (!state.puzzle) return;
+        state.filled = new Set();
+        markFilledLayerDirty();
+        renderPuzzle();
+        renderPalette();
+        if (state.activeColor != null) {
+          flashColorRegions(state.activeColor);
+        }
+        updateProgress();
+        refreshCustomCursorHighlight();
+        scheduleAutosave("reset-progress");
+        logDebug("Reset puzzle progress");
+      });
+
       if (paletteEl) {
         paletteEl.addEventListener("wheel", handlePaletteWheel, { passive: false });
       }
@@ -3698,14 +3664,12 @@
         logDebug("Exported puzzle JSON");
       });
 
-      for (const button of saveSnapshotButtons) {
-        button.addEventListener("click", () => {
-          if (!state.puzzle) return;
-          saveCurrentSnapshot();
-        });
-      }
+      saveSnapshotBtn.addEventListener("click", () => {
+        if (!state.puzzle) return;
+        saveCurrentSnapshot();
+      });
 
-      function handleSaveListClick(event) {
+      saveList.addEventListener("click", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
         const entryEl = target.closest("[data-save-id]");
@@ -3721,11 +3685,7 @@
         } else if (target.dataset.action === "rename") {
           renameSaveEntry(id);
         }
-      }
-
-      for (const list of saveListContainers) {
-        list.addEventListener("click", handleSaveListClick);
-      }
+      });
 
       colorCountEl.addEventListener("input", updateOptionOutputs);
       minRegionEl.addEventListener("input", updateOptionOutputs);
@@ -3781,7 +3741,7 @@
         dragDepth = 0;
         document.body.classList.remove("dragging");
         if (file) {
-          prepareImport(file);
+          handleFile(file);
         }
       });
 
@@ -4103,11 +4063,6 @@
 
       function openSheet(sheet) {
         if (!sheet) return;
-        for (const candidate of sheetRegistry) {
-          if (!candidate || candidate === sheet) continue;
-          candidate.classList.add("hidden");
-          candidate.setAttribute("aria-hidden", "true");
-        }
         sheet.classList.remove("hidden");
         sheet.setAttribute("aria-hidden", "false");
       }
@@ -4116,16 +4071,10 @@
         if (!sheet) return;
         sheet.classList.add("hidden");
         sheet.setAttribute("aria-hidden", "true");
-        if (sheet === generatorSheet) {
-          clearPendingImport();
-        }
       }
 
       function showStartScreen(options = {}) {
         if (!startHint) return;
-        for (const sheet of sheetRegistry) {
-          closeSheet(sheet);
-        }
         startHint.classList.remove("hidden");
         startHint.setAttribute("aria-hidden", "false");
         const { focus = true, scrollTo } = options;
@@ -4136,9 +4085,9 @@
             }
           });
         }
-        if (scrollTo === "saves" && startSaveManagerSection) {
+        if (scrollTo === "saves" && saveManagerSection) {
           requestAnimationFrame(() => {
-            startSaveManagerSection.scrollIntoView({ block: "start" });
+            saveManagerSection.scrollIntoView({ block: "start" });
           });
         }
       }
@@ -4456,11 +4405,11 @@
 
       function updateCommandStates() {
         const hasPuzzle = Boolean(state.puzzle);
+        hintButton.disabled = !hasPuzzle;
+        resetButton.disabled = !hasPuzzle;
         previewToggle.disabled = !hasPuzzle;
         downloadBtn.disabled = !hasPuzzle;
-        for (const button of saveSnapshotButtons) {
-          button.disabled = !hasPuzzle;
-        }
+        saveSnapshotBtn.disabled = !hasPuzzle;
         saveManagerButton.disabled = !hasPuzzle && state.saves.length === 0;
         if (startHintCloseButton) {
           startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
@@ -4589,6 +4538,24 @@
           if (!skipAutosave) {
             scheduleAutosave("settings-region-labels");
           }
+        }
+        return resolved;
+      }
+
+      function applyStatusBarVisibility(visible, options = {}) {
+        const { skipLog = false, skipAutosave = false, force = false } = options;
+        const resolved = visible === true;
+        const previous = state.settings.showStatusBar === true;
+        state.settings.showStatusBar = resolved;
+        if (showStatusToggle && showStatusToggle.checked !== resolved) {
+          showStatusToggle.checked = resolved;
+        }
+        syncStatusBarVisibility();
+        if ((force || previous !== resolved) && !skipLog) {
+          logDebug(`Status bar ${resolved ? "shown" : "hidden"}`);
+        }
+        if ((force || previous !== resolved) && !skipAutosave) {
+          scheduleAutosave("settings-status-bar");
         }
         return resolved;
       }
@@ -4739,120 +4706,8 @@
         loadImage(state.sourceUrl);
       }
 
-      function isJsonFile(file) {
-        if (!file) {
-          return false;
-        }
-        if (typeof file.type === "string" && file.type.toLowerCase().includes("json")) {
-          return true;
-        }
-        const name = typeof file.name === "string" ? file.name.toLowerCase() : "";
-        return name.endsWith(".json");
-      }
-
-      function describeImportIntent(file) {
-        const fallbackName = "selected file";
-        if (!file) {
-          return {
-            name: fallbackName,
-            description: "",
-            actionLabel: "Generate puzzle",
-          };
-        }
-        const name =
-          typeof file.name === "string" && file.name.trim().length > 0 ? file.name.trim() : fallbackName;
-        if (isJsonFile(file)) {
-          return {
-            name,
-            description:
-              "Puzzle JSON imports will replace the current puzzle and do not use the generator settings.",
-            actionLabel: "Import puzzle",
-          };
-        }
-        return {
-          name,
-          description: "Review the generator settings, then create a new puzzle from your image.",
-          actionLabel: "Generate puzzle",
-        };
-      }
-
-      function updateImportNotice() {
-        if (!generatorImportNotice) {
-          return;
-        }
-        if (!pendingImportFile) {
-          generatorImportNotice.hidden = true;
-          if (generatorImportFileEl) {
-            generatorImportFileEl.textContent = "your file";
-          }
-          if (generatorImportDescriptionEl) {
-            generatorImportDescriptionEl.textContent = "";
-          }
-          if (confirmImportBtn) {
-            confirmImportBtn.hidden = true;
-            confirmImportBtn.disabled = true;
-            confirmImportBtn.textContent = "Generate puzzle";
-          }
-          if (cancelImportBtn) {
-            cancelImportBtn.hidden = true;
-          }
-          return;
-        }
-        const { name, description, actionLabel } = describeImportIntent(pendingImportFile);
-        generatorImportNotice.hidden = false;
-        if (generatorImportFileEl) {
-          generatorImportFileEl.textContent = name;
-        }
-        if (generatorImportDescriptionEl) {
-          generatorImportDescriptionEl.textContent = description;
-        }
-        if (confirmImportBtn) {
-          confirmImportBtn.hidden = false;
-          confirmImportBtn.disabled = false;
-          confirmImportBtn.textContent = actionLabel;
-        }
-        if (cancelImportBtn) {
-          cancelImportBtn.hidden = false;
-        }
-      }
-
-      function clearPendingImport() {
-        pendingImportFile = null;
-        updateImportNotice();
-      }
-
-      function prepareImport(file) {
-        if (!file) {
-          return;
-        }
-        if (!generatorSheet) {
-          handleFile(file);
-          return;
-        }
-        pendingImportFile = file;
-        updateImportNotice();
-        openSheet(generatorSheet);
-        requestAnimationFrame(() => {
-          if (confirmImportBtn && !confirmImportBtn.hidden) {
-            confirmImportBtn.focus();
-          }
-        });
-      }
-
-      function executePendingImport() {
-        if (!pendingImportFile) {
-          return;
-        }
-        const file = pendingImportFile;
-        if (confirmImportBtn) {
-          confirmImportBtn.disabled = true;
-        }
-        clearPendingImport();
-        handleFile(file);
-      }
-
       function handleFile(file) {
-        if (isJsonFile(file)) {
+        if (file.type === "application/json" || file.name.toLowerCase().endsWith(".json")) {
           resetPuzzleUI();
           const reader = new FileReader();
           reader.onload = () => {
@@ -5912,35 +5767,41 @@
       }
 
       function updateGenerationProgress(progress, label) {
-        if (!generatorProgressMeterEl || !generatorProgressBarEl) {
+        if (!progressMeterEl || !progressBarEl) {
           return;
         }
         const hasProgress = typeof progress === "number" && Number.isFinite(progress);
         if (!hasProgress) {
-          generatorProgressMeterEl.setAttribute("aria-hidden", "true");
-          generatorProgressMeterEl.setAttribute("aria-valuenow", "0");
-          generatorProgressMeterEl.setAttribute("aria-label", label || defaultProgressLabel);
-          generatorProgressBarEl.style.width = "0%";
+          if (progressStatusEl) {
+            progressStatusEl.classList.remove("show-progress");
+          }
+          progressMeterEl.setAttribute("aria-hidden", "true");
+          progressMeterEl.setAttribute("aria-valuenow", "0");
+          progressMeterEl.setAttribute("aria-label", label || defaultProgressLabel);
+          progressBarEl.style.width = "0%";
           return;
         }
         const clamped = Math.min(1, Math.max(0, progress));
-        generatorProgressMeterEl.setAttribute("aria-hidden", "false");
-        generatorProgressMeterEl.setAttribute("aria-valuenow", String(Math.round(clamped * 100)));
-        generatorProgressMeterEl.setAttribute("aria-label", label || defaultProgressLabel);
-        generatorProgressBarEl.style.width = `${(clamped * 100).toFixed(1)}%`;
-        if (generatorProgressEl && generatorProgressEl.hidden && generatorProgressMessageEl?.textContent) {
-          generatorProgressEl.hidden = false;
+        if (progressStatusEl) {
+          progressStatusEl.classList.add("show-progress");
         }
+        progressMeterEl.setAttribute("aria-hidden", "false");
+        progressMeterEl.setAttribute("aria-valuenow", String(Math.round(clamped * 100)));
+        progressMeterEl.setAttribute("aria-label", label || defaultProgressLabel);
+        progressBarEl.style.width = `${(clamped * 100).toFixed(1)}%`;
       }
 
       function clearGenerationProgress() {
-        if (!generatorProgressMeterEl || !generatorProgressBarEl) {
+        if (!progressMeterEl || !progressBarEl) {
           return;
         }
-        generatorProgressMeterEl.setAttribute("aria-hidden", "true");
-        generatorProgressMeterEl.setAttribute("aria-valuenow", "0");
-        generatorProgressMeterEl.setAttribute("aria-label", defaultProgressLabel);
-        generatorProgressBarEl.style.width = "0%";
+        if (progressStatusEl) {
+          progressStatusEl.classList.remove("show-progress");
+        }
+        progressMeterEl.setAttribute("aria-hidden", "true");
+        progressMeterEl.setAttribute("aria-valuenow", "0");
+        progressMeterEl.setAttribute("aria-label", defaultProgressLabel);
+        progressBarEl.style.width = "0%";
       }
 
       function beginGenerationJob() {
@@ -5973,23 +5834,36 @@
         }
       }
 
+
+      function syncStatusBarVisibility(statusOverride) {
+        if (!progressStatusEl) {
+          return;
+        }
+        const status =
+          typeof statusOverride === "string" && statusOverride
+            ? statusOverride
+            : progressStatusEl.getAttribute("data-status") || "idle";
+        const forcedVisible = status === "generating" || status === "loading";
+        const userEnabled = state.settings.showStatusBar === true;
+        const shouldShow = forcedVisible || userEnabled;
+        progressStatusEl.hidden = !shouldShow;
+        progressStatusEl.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+      }
+
       function setProgressMessage(status, customMessage) {
-        const normalized = typeof status === "string" && status ? status : "idle";
-        const shouldShow = normalized === "loading" || normalized === "generating" || normalized === "complete";
-        const message = shouldShow
-          ? typeof customMessage === "string" && customMessage.length > 0
+        const message =
+          typeof customMessage === "string" && customMessage.length > 0
             ? customMessage
-            : PROGRESS_MESSAGES[normalized] || DEFAULT_PROGRESS_MESSAGE
-          : "";
-        if (generatorProgressMessageEl) {
-          generatorProgressMessageEl.textContent = message;
-          generatorProgressMessageEl.setAttribute("data-status", normalized);
+            : PROGRESS_MESSAGES[status] || PROGRESS_MESSAGES.idle;
+        if (progressEl) {
+          progressEl.textContent = message;
+          progressEl.setAttribute("data-status", status || "idle");
         }
-        if (generatorProgressEl) {
-          generatorProgressEl.hidden = !shouldShow || message.length === 0;
-          generatorProgressEl.setAttribute("data-status", normalized);
+        if (progressStatusEl) {
+          progressStatusEl.setAttribute("data-status", status || "idle");
         }
-        if (normalized !== "generating") {
+        syncStatusBarVisibility(status);
+        if (status !== "generating") {
           clearGenerationProgress();
         }
       }
@@ -6244,6 +6118,7 @@
         const wantsRightClickSelect =
           event.pointerType === "mouse" &&
           event.button === 2 &&
+          resolveRightClickAction(state.settings.rightClickAction) === "select" &&
           !usesModifier &&
           !state.previewVisible;
         if (wantsRightClickSelect) {
@@ -6959,6 +6834,16 @@
         return clamp(candidate, MIN_HINT_INTENSITY, MAX_HINT_INTENSITY);
       }
 
+      function resolveRightClickAction(value) {
+        if (typeof value === "string") {
+          const normalized = value.trim().toLowerCase();
+          if (VALID_RIGHT_CLICK_ACTIONS.has(normalized)) {
+            return normalized;
+          }
+        }
+        return DEFAULT_RIGHT_CLICK_ACTION;
+      }
+
       function resolveDifficulty(value) {
         if (typeof value === "string") {
           const normalized = value.trim().toLowerCase();
@@ -7210,6 +7095,9 @@
             settingsSource.hintFadeDuration ?? state.settings.hintFadeDuration
           ),
           hintIntensity: normalizeHintIntensity(settingsSource.hintIntensity ?? state.settings.hintIntensity),
+          rightClickAction: resolveRightClickAction(
+            settingsSource.rightClickAction ?? state.settings.rightClickAction
+          ),
           difficulty: resolveDifficulty(settingsSource.difficulty ?? state.settings.difficulty),
           uiScale:
             Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
@@ -7317,6 +7205,7 @@
             animateHints: Boolean(state.settings.animateHints),
             hintFadeDuration: normalizeHintFadeDuration(state.settings.hintFadeDuration),
             hintIntensity: normalizeHintIntensity(state.settings.hintIntensity),
+            rightClickAction: resolveRightClickAction(state.settings.rightClickAction),
             difficulty: resolveDifficulty(state.settings.difficulty),
             uiScale:
               Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
@@ -7324,6 +7213,7 @@
                 : DEFAULT_UI_SCALE,
             artPrompt: state.settings.artPrompt || "",
             showRegionLabels: state.settings.showRegionLabels !== false,
+            showStatusBar: state.settings.showStatusBar === true,
             theme: state.settings.theme || DEFAULT_UI_THEME,
           },
         };
@@ -8304,21 +8194,17 @@
       }
 
       function refreshSaveList() {
+        saveList.innerHTML = "";
+        const fragment = document.createDocumentFragment();
         const hasEntries = Array.isArray(state.saves) && state.saves.length > 0;
-        for (const list of saveListContainers) {
-          if (!list) continue;
-          list.innerHTML = "";
-          if (hasEntries) {
-            const fragment = document.createDocumentFragment();
-            for (const entry of state.saves) {
-              fragment.appendChild(createSaveManagementItem(entry));
-            }
-            list.appendChild(fragment);
+        if (hasEntries) {
+          for (const entry of state.saves) {
+            fragment.appendChild(createSaveManagementItem(entry));
           }
         }
-        for (const emptyState of saveListEmptyStates) {
-          if (!emptyState) continue;
-          emptyState.hidden = hasEntries;
+        saveList.appendChild(fragment);
+        if (saveListEmpty) {
+          saveListEmpty.hidden = hasEntries;
         }
         updateCommandStates();
         refreshGameSelection();
