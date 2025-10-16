@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "sha": "d5313121b5b9f37c4aaab9ef3a23300da6481a44",
+      "shortSha": "d531312",
+      "message": "Merge pull request #147 from shthed/codex/cherry-pick-changes-from-codex/resolve-issue-with-codex\n\nCherry-pick branch deployment metadata and gating",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T01:37:30Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d5313121b5b9f37c4aaab9ef3a23300da6481a44",
+      "prs": [
+        {
+          "number": 147,
+          "title": "Cherry-pick branch deployment metadata and gating",
+          "url": "https://github.com/shthed/capy/pull/147"
+        }
+      ]
+    },
+    {
+      "sha": "e069e265da2ffeaeeee391e0873b38b21bfed298",
+      "shortSha": "e069e26",
+      "message": "Reinstate branch deployment gate",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T01:36:44Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/e069e265da2ffeaeeee391e0873b38b21bfed298",
+      "prs": [
+        {
+          "number": 147,
+          "title": "Cherry-pick branch deployment metadata and gating",
+          "url": "https://github.com/shthed/capy/pull/147"
+        }
+      ]
+    },
+    {
+      "sha": "f24af3bdcfad81b065fc57c56599d6046aaeadec",
+      "shortSha": "f24af3b",
+      "message": "Merge pull request #142 from shthed/codex/update-deploy-branch.yml-to-link-prs\n\nInclude PR links in branch deployment dashboard",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T00:21:34Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f24af3bdcfad81b065fc57c56599d6046aaeadec",
+      "prs": [
+        {
+          "number": 142,
+          "title": "Include PR links in branch deployment dashboard",
+          "url": "https://github.com/shthed/capy/pull/142"
+        }
+      ]
+    }
+  ],
+  "lastCommitDate": "2025-10-16T01:37:30Z",
+  "deploymentTimestamp": 1760585922328
+}

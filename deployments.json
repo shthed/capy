@@ -52,5 +52,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-16T03:32:54Z",
     "commitUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180"
+  },
+  "codex-cherry-pick-changes-from-codex-resolve-issue-with-codex-7dz65v": {
+    "branch": "codex/cherry-pick-changes-from-codex/resolve-issue-with-codex-7dz65v",
+    "safeName": "codex-cherry-pick-changes-from-codex-resolve-issue-with-codex-7dz65v",
+    "commit": "aeab9b96df6313eb1d361abe4ef7d142c40df336",
+    "message": "Use jq argjson for branch index generation",
+    "actor": "shthed",
+    "deployedAt": "2025-10-16T11:38:28+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/aeab9b96df6313eb1d361abe4ef7d142c40df336"
   }
 }
