@@ -83,11 +83,11 @@
   "codex-revise-deploy-branch.yml-for-commit-display": {
     "branch": "codex/revise-deploy-branch.yml-for-commit-display",
     "safeName": "codex-revise-deploy-branch.yml-for-commit-display",
-    "commit": "d40eb46c20e58dade0923887146b35193b7a863c",
-    "message": "Adjust branch deploy timestamps to local 12-hour format",
+    "commit": "9adf8f29042dd9d438970ad721b4d9ce12743633",
+    "message": "Merge branch 'main' into codex/revise-deploy-branch.yml-for-commit-display",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T21:32:10+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/d40eb46c20e58dade0923887146b35193b7a863c"
+    "deployedAt": "2025-10-16T21:34:43+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/9adf8f29042dd9d438970ad721b4d9ce12743633"
   },
   "codex-review-starthint-dialog-and-first-run-process": {
     "branch": "codex/review-starthint-dialog-and-first-run-process",

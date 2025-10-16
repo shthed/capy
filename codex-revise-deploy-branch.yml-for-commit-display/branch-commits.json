@@ -1,6 +1,20 @@
 {
   "codex/revise-deploy-branch.yml-for-commit-display": [
     {
+      "sha": "9adf8f29042dd9d438970ad721b4d9ce12743633",
+      "shortSha": "9adf8f2",
+      "message": "Merge branch 'main' into codex/revise-deploy-branch.yml-for-commit-display",
+      "date": "2025-10-16T13:34:43Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9adf8f29042dd9d438970ad721b4d9ce12743633",
+      "prs": [
+        {
+          "number": 154,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/154"
+        }
+      ]
+    },
+    {
       "sha": "d40eb46c20e58dade0923887146b35193b7a863c",
       "shortSha": "d40eb46",
       "message": "Adjust branch deploy timestamps to local 12-hour format",
@@ -15,25 +29,11 @@
       ]
     },
     {
-      "sha": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
-      "shortSha": "4e2da42",
-      "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
-      "date": "2025-10-16T11:44:16Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5",
-      "prs": [
-        {
-          "number": 154,
-          "title": "Standardize branch deployment commit listings",
-          "url": "https://github.com/shthed/capy/pull/154"
-        }
-      ]
-    },
-    {
-      "sha": "927a5838931f2365ee524aa79910c8d75b0c63fc",
-      "shortSha": "927a583",
-      "message": "Document branch update workflow",
-      "date": "2025-10-16T11:43:12Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/927a5838931f2365ee524aa79910c8d75b0c63fc",
+      "sha": "58e9b5aec2e8d2e4ce283e28a10f9c0207332881",
+      "shortSha": "58e9b5a",
+      "message": "Merge pull request #152 from shthed/codex/revise-deploy-branch.yml-for-commit-display\n\nImprove branch deployment summary layout",
+      "date": "2025-10-16T11:59:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/58e9b5aec2e8d2e4ce283e28a10f9c0207332881",
       "prs": [
         {
           "number": 154,
@@ -45,6 +45,20 @@
   ],
   "codex-revise-deploy-branch.yml-for-commit-display": [
     {
+      "sha": "9adf8f29042dd9d438970ad721b4d9ce12743633",
+      "shortSha": "9adf8f2",
+      "message": "Merge branch 'main' into codex/revise-deploy-branch.yml-for-commit-display",
+      "date": "2025-10-16T13:34:43Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9adf8f29042dd9d438970ad721b4d9ce12743633",
+      "prs": [
+        {
+          "number": 154,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/154"
+        }
+      ]
+    },
+    {
       "sha": "d40eb46c20e58dade0923887146b35193b7a863c",
       "shortSha": "d40eb46",
       "message": "Adjust branch deploy timestamps to local 12-hour format",
@@ -59,25 +73,11 @@
       ]
     },
     {
-      "sha": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
-      "shortSha": "4e2da42",
-      "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
-      "date": "2025-10-16T11:44:16Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5",
-      "prs": [
-        {
-          "number": 154,
-          "title": "Standardize branch deployment commit listings",
-          "url": "https://github.com/shthed/capy/pull/154"
-        }
-      ]
-    },
-    {
-      "sha": "927a5838931f2365ee524aa79910c8d75b0c63fc",
-      "shortSha": "927a583",
-      "message": "Document branch update workflow",
-      "date": "2025-10-16T11:43:12Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/927a5838931f2365ee524aa79910c8d75b0c63fc",
+      "sha": "58e9b5aec2e8d2e4ce283e28a10f9c0207332881",
+      "shortSha": "58e9b5a",
+      "message": "Merge pull request #152 from shthed/codex/revise-deploy-branch.yml-for-commit-display\n\nImprove branch deployment summary layout",
+      "date": "2025-10-16T11:59:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/58e9b5aec2e8d2e4ce283e28a10f9c0207332881",
       "prs": [
         {
           "number": 154,
