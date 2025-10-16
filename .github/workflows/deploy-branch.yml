@@ -28,6 +28,7 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch open PR metadata
+        id: fetch-open-prs
         uses: actions/github-script@v7
         with:
           script: |
@@ -54,7 +55,32 @@ jobs:
 
             return branches.length;
 
+      - name: Determine deployment eligibility
+        id: deployment-eligibility
+        run: |
+          set -euo pipefail
+
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if jq -e --arg branch "$BRANCH_NAME" '.[] | select(.branch == $branch)' pr-branches.json > /dev/null; then
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No open pull request found for ${BRANCH_NAME}. Skipping deployment."
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip deployment (no open PR)
+        if: steps.deployment-eligibility.outputs.should_deploy != 'true'
+        run: |
+          echo "Branch ${GITHUB_REF_NAME} has no open pull request; deployment skipped."
+
       - name: Fetch main branch commits
+        if: steps.deployment-eligibility.outputs.should_deploy == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -106,6 +132,7 @@ jobs:
             return mainBranchData.commits.length;
 
       - name: Sync branch to gh-pages
+        if: steps.deployment-eligibility.outputs.should_deploy == 'true'
         id: sync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -351,6 +378,9 @@ jobs:
               .pr-link:hover {
                 text-decoration: underline;
               }
+              .pr-meta.no-pr {
+                color: #a40e26;
+              }
             </style>
           </head>
           <body>
@@ -429,7 +459,7 @@ jobs:
               base_data($entry) as $data |
               branch_pr($entry) as $pr |
               "<li class=\"card\"><a class=\"branch-link\" href=\"./" + ($data.safe | html_escape) + "/\">" + ($data.branch | html_escape) + "</a>" +
-              (if $pr then "<div class=\"pr-meta\"><a class=\"pr-link\" href=\"" + (($pr.url // "#") | html_escape) + "\">PR #" + ($pr.number|tostring) + "</a> · " + ($pr.title | html_escape) + "</div>" else "" end) +
+              (if $pr then "<div class=\"pr-meta\"><a class=\"pr-link\" href=\"" + (($pr.url // "#") | html_escape) + "\">PR #" + ($pr.number|tostring) + "</a> · " + ($pr.title | html_escape) + "</div>" else "<div class=\"pr-meta no-pr\">No open pull request</div>" end) +
               (if $data.message != "" then "<div class=\"message\">" + ($data.message | html_escape) + "</div>" else "" end) +
               "<div class=\"meta\">Last deployed " + ($data.deployed | html_escape) +
               " by " + ($data.actor | html_escape) +
@@ -437,8 +467,7 @@ jobs:
               "</li>\n";
 
             ($deployments | to_entries | map(select(.key != "main"))) as $all_branches |
-            ($all_branches | map(select(branch_pr(.) != null))) as $branches_with_pr |
-            ($branches_with_pr | sort_by(.value.deployedAt // "") | reverse) as $sorted_branches |
+            ($all_branches | sort_by(.value.deployedAt // "") | reverse) as $sorted_branches |
 
             ((if $deployments | has("main") then [render_main({key: "main", value: $deployments.main})] else [] end) +
             ($sorted_branches | map(render_branch(.)))) | .[]
