@@ -101,10 +101,10 @@
   "codex-revise-deploy-branch.yml-for-commit-display-o3qaeu": {
     "branch": "codex/revise-deploy-branch.yml-for-commit-display-o3qaeu",
     "safeName": "codex-revise-deploy-branch.yml-for-commit-display-o3qaeu",
-    "commit": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
-    "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
+    "commit": "734f6fadf7595b3f3dec1d0132f743f30f06d655",
+    "message": "Improve branch commit PR metadata",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T19:44:16+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5"
+    "deployedAt": "2025-10-16T21:40:28+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/734f6fadf7595b3f3dec1d0132f743f30f06d655"
   }
 }

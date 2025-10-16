@@ -1,0 +1,286 @@
+{
+  "codex/revise-deploy-branch.yml-for-commit-display-o3qaeu": [
+    {
+      "sha": "734f6fadf7595b3f3dec1d0132f743f30f06d655",
+      "shortSha": "734f6fa",
+      "message": "Improve branch commit PR metadata",
+      "date": "2025-10-16T13:40:28Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/734f6fadf7595b3f3dec1d0132f743f30f06d655",
+      "prs": [
+        {
+          "number": 155,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/155"
+        }
+      ]
+    },
+    {
+      "sha": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+      "shortSha": "4e2da42",
+      "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
+      "date": "2025-10-16T11:44:16Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+      "prs": [
+        {
+          "number": 151,
+          "title": "Document branch update workflow",
+          "url": "https://github.com/shthed/capy/pull/151"
+        },
+        {
+          "number": 155,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/155"
+        }
+      ]
+    },
+    {
+      "sha": "927a5838931f2365ee524aa79910c8d75b0c63fc",
+      "shortSha": "927a583",
+      "message": "Document branch update workflow",
+      "date": "2025-10-16T11:43:12Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/927a5838931f2365ee524aa79910c8d75b0c63fc",
+      "prs": [
+        {
+          "number": 151,
+          "title": "Document branch update workflow",
+          "url": "https://github.com/shthed/capy/pull/151"
+        },
+        {
+          "number": 155,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/155"
+        }
+      ]
+    }
+  ],
+  "codex-revise-deploy-branch.yml-for-commit-display-o3qaeu": [
+    {
+      "sha": "734f6fadf7595b3f3dec1d0132f743f30f06d655",
+      "shortSha": "734f6fa",
+      "message": "Improve branch commit PR metadata",
+      "date": "2025-10-16T13:40:28Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/734f6fadf7595b3f3dec1d0132f743f30f06d655",
+      "prs": [
+        {
+          "number": 155,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/155"
+        }
+      ]
+    },
+    {
+      "sha": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+      "shortSha": "4e2da42",
+      "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
+      "date": "2025-10-16T11:44:16Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+      "prs": [
+        {
+          "number": 151,
+          "title": "Document branch update workflow",
+          "url": "https://github.com/shthed/capy/pull/151"
+        },
+        {
+          "number": 155,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/155"
+        }
+      ]
+    },
+    {
+      "sha": "927a5838931f2365ee524aa79910c8d75b0c63fc",
+      "shortSha": "927a583",
+      "message": "Document branch update workflow",
+      "date": "2025-10-16T11:43:12Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/927a5838931f2365ee524aa79910c8d75b0c63fc",
+      "prs": [
+        {
+          "number": 151,
+          "title": "Document branch update workflow",
+          "url": "https://github.com/shthed/capy/pull/151"
+        },
+        {
+          "number": 155,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/155"
+        }
+      ]
+    }
+  ],
+  "codex/review-starthint-dialog-and-first-run-process": [
+    {
+      "sha": "9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
+      "shortSha": "9fbf57c",
+      "message": "Allow sample reload without artwork",
+      "date": "2025-10-16T13:37:19Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
+      "prs": [
+        {
+          "number": 153,
+          "title": "Remove onboarding start hint and add quick start actions to Saves sheet",
+          "url": "https://github.com/shthed/capy/pull/153"
+        }
+      ]
+    },
+    {
+      "sha": "455d15533594b0e42bcab11c1a7f37fae6e761d3",
+      "shortSha": "455d155",
+      "message": "Fix sample autoload and enable saves sheet",
+      "date": "2025-10-16T13:21:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/455d15533594b0e42bcab11c1a7f37fae6e761d3",
+      "prs": [
+        {
+          "number": 153,
+          "title": "Remove onboarding start hint and add quick start actions to Saves sheet",
+          "url": "https://github.com/shthed/capy/pull/153"
+        }
+      ]
+    },
+    {
+      "sha": "a545ed4f72b03b13a2cac6306903b5c6add96b38",
+      "shortSha": "a545ed4",
+      "message": "Simplify onboarding by relying on Saves sheet",
+      "date": "2025-10-16T12:17:33Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a545ed4f72b03b13a2cac6306903b5c6add96b38",
+      "prs": [
+        {
+          "number": 153,
+          "title": "Remove onboarding start hint and add quick start actions to Saves sheet",
+          "url": "https://github.com/shthed/capy/pull/153"
+        }
+      ]
+    }
+  ],
+  "codex-review-starthint-dialog-and-first-run-process": [
+    {
+      "sha": "9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
+      "shortSha": "9fbf57c",
+      "message": "Allow sample reload without artwork",
+      "date": "2025-10-16T13:37:19Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
+      "prs": [
+        {
+          "number": 153,
+          "title": "Remove onboarding start hint and add quick start actions to Saves sheet",
+          "url": "https://github.com/shthed/capy/pull/153"
+        }
+      ]
+    },
+    {
+      "sha": "455d15533594b0e42bcab11c1a7f37fae6e761d3",
+      "shortSha": "455d155",
+      "message": "Fix sample autoload and enable saves sheet",
+      "date": "2025-10-16T13:21:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/455d15533594b0e42bcab11c1a7f37fae6e761d3",
+      "prs": [
+        {
+          "number": 153,
+          "title": "Remove onboarding start hint and add quick start actions to Saves sheet",
+          "url": "https://github.com/shthed/capy/pull/153"
+        }
+      ]
+    },
+    {
+      "sha": "a545ed4f72b03b13a2cac6306903b5c6add96b38",
+      "shortSha": "a545ed4",
+      "message": "Simplify onboarding by relying on Saves sheet",
+      "date": "2025-10-16T12:17:33Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a545ed4f72b03b13a2cac6306903b5c6add96b38",
+      "prs": [
+        {
+          "number": 153,
+          "title": "Remove onboarding start hint and add quick start actions to Saves sheet",
+          "url": "https://github.com/shthed/capy/pull/153"
+        }
+      ]
+    }
+  ],
+  "codex/introduce-renderer-abstraction-for-webgl": [
+    {
+      "sha": "fedcafb678bac485449081f8a860a06f34ce0180",
+      "shortSha": "fedcafb",
+      "message": "Merge branch 'main' into work",
+      "date": "2025-10-16T01:37:27Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "shortSha": "15fadfe",
+      "message": "Fix renderer init ordering to restore interactions",
+      "date": "2025-10-14T18:06:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "shortSha": "a348b08",
+      "message": "Refactor renderer scaffolding with overlay canvas",
+      "date": "2025-10-14T13:22:10Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    }
+  ],
+  "codex-introduce-renderer-abstraction-for-webgl": [
+    {
+      "sha": "fedcafb678bac485449081f8a860a06f34ce0180",
+      "shortSha": "fedcafb",
+      "message": "Merge branch 'main' into work",
+      "date": "2025-10-16T01:37:27Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "shortSha": "15fadfe",
+      "message": "Fix renderer init ordering to restore interactions",
+      "date": "2025-10-14T18:06:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "shortSha": "a348b08",
+      "message": "Refactor renderer scaffolding with overlay canvas",
+      "date": "2025-10-14T13:22:10Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    }
+  ]
+}
