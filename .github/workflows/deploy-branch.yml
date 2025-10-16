@@ -138,6 +138,66 @@ jobs:
 
             return mainBranchData.commits.length;
 
+      - name: Fetch branch commit history
+        if: steps.deployment-gate.outputs.eligible == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let prBranches = [];
+            try {
+              prBranches = JSON.parse(fs.readFileSync('pr-branches.json', 'utf8'));
+            } catch (error) {
+              core.warning(`Could not read pr-branches.json: ${error.message}`);
+            }
+
+            const branchCommitData = {};
+
+            const branches = Array.isArray(prBranches) ? prBranches : [];
+
+            for (const pr of branches) {
+              const branchName = pr?.branch;
+              if (!branchName) {
+                continue;
+              }
+
+              try {
+                const { data: commits } = await github.rest.repos.listCommits({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  sha: branchName,
+                  per_page: 3
+                });
+
+                const prInfo = {
+                  number: pr.number,
+                  title: pr.title,
+                  url: pr.url ?? pr.html_url ?? null
+                };
+
+                const commitsWithMetadata = commits.map((commit) => ({
+                  sha: commit.sha,
+                  shortSha: commit.sha.substring(0, 7),
+                  message: commit.commit.message,
+                  date: commit.commit.author?.date ?? commit.commit.committer?.date ?? '',
+                  htmlUrl: commit.html_url,
+                  prs: prInfo.number != null || prInfo.title || prInfo.url ? [prInfo] : []
+                }));
+
+                branchCommitData[branchName] = commitsWithMetadata;
+
+                const safeName = typeof pr?.safeName === 'string' ? pr.safeName : branchName.replace(/[^a-zA-Z0-9._-]/g, '-');
+                branchCommitData[safeName] = commitsWithMetadata;
+              } catch (error) {
+                core.warning(`Could not fetch commits for branch ${branchName}: ${error.message}`);
+              }
+            }
+
+            fs.writeFileSync('branch-commits.json', JSON.stringify(branchCommitData, null, 2));
+
+            return Object.keys(branchCommitData).length;
+
       - name: Sync branch to gh-pages
         if: steps.deployment-gate.outputs.eligible == 'true'
         id: sync
@@ -286,6 +346,19 @@ jobs:
                 border-color: #4c8eda;
                 box-shadow: 0 4px 12px rgba(76,142,218,0.12);
               }
+              .card-header {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: space-between;
+                align-items: baseline;
+                gap: 12px;
+              }
+              .branch-title {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 8px;
+              }
               .commit-section {
                 margin-top: 16px;
                 padding-top: 12px;
@@ -309,8 +382,16 @@ jobs:
                 color: #24292e;
                 display: flex;
                 flex-wrap: wrap;
-                align-items: center;
+                align-items: baseline;
                 gap: 6px;
+              }
+              .commit-date {
+                color: #57606a;
+                font-weight: 500;
+              }
+              .commit-separator {
+                color: #8c959f;
+                margin: 0 4px;
               }
               .commit-sha {
                 font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
@@ -322,20 +403,16 @@ jobs:
               .commit-sha:hover {
                 text-decoration: underline;
               }
-              .commit-message {
-                font-weight: 500;
-                color: #24292e;
-              }
-              .commit-meta {
-                color: #57606a;
-                font-size: 0.85em;
-              }
               .commit-pr-link {
                 color: #8250df;
                 text-decoration: none;
+                font-weight: 500;
               }
               .commit-pr-link:hover {
                 text-decoration: underline;
+              }
+              .commit-description {
+                color: #57606a;
               }
               a.branch-link {
                 font-weight: 600;
@@ -345,9 +422,25 @@ jobs:
               a.branch-link:hover {
                 text-decoration: underline;
               }
+              .card-actions {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 12px;
+                font-size: 0.85em;
+              }
+              .card-actions a {
+                color: #57606a;
+                font-weight: 600;
+                text-decoration: none;
+              }
+              .card-actions a:hover {
+                color: #24292e;
+                text-decoration: underline;
+              }
               span.badge {
                 display: inline-block;
-                margin-left: 8px;
+                margin-left: 4px;
                 padding: 2px 8px;
                 font-size: 12px;
                 font-weight: 600;
@@ -356,10 +449,6 @@ jobs:
                 border-radius: 999px;
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
-              }
-              .message {
-                margin-top: 8px;
-                color: #24292e;
               }
               .meta {
                 margin-top: 8px;
@@ -379,7 +468,6 @@ jobs:
                 color: #8250df;
                 font-weight: 600;
                 text-decoration: none;
-                margin-right: 4px;
               }
               .pr-link:hover {
                 text-decoration: underline;
@@ -400,9 +488,15 @@ jobs:
             echo '{"commits":[]}' > "$MAIN_DATA_FILE"
           fi
 
+          BRANCH_COMMITS_FILE="../branch-commits.json"
+          if [ ! -f "$BRANCH_COMMITS_FILE" ]; then
+            echo '{}' > "$BRANCH_COMMITS_FILE"
+          fi
+
           DEPLOY_DATA_PATH="$DEPLOY_DATA" \
           PR_DATA_PATH="$PR_DATA_FILE" \
           MAIN_DATA_PATH="$MAIN_DATA_FILE" \
+          BRANCH_COMMITS_PATH="$BRANCH_COMMITS_FILE" \
           node <<'NODE'
           const fs = require('fs');
 
@@ -417,6 +511,21 @@ jobs:
           const deployments = readJson(process.env.DEPLOY_DATA_PATH, {});
           const prList = readJson(process.env.PR_DATA_PATH, []);
           const mainData = readJson(process.env.MAIN_DATA_PATH, { commits: [] });
+          const branchCommits = readJson(process.env.BRANCH_COMMITS_PATH, {});
+          const repoSlug = process.env.GITHUB_REPOSITORY ?? '';
+          const githubBaseUrl = repoSlug ? `https://github.com/${repoSlug}` : '';
+          const githubBranchUrl = (branch) => {
+            if (!githubBaseUrl) {
+              return '';
+            }
+
+            const name = String(branch ?? '').trim();
+            if (!name) {
+              return '';
+            }
+
+            return `${githubBaseUrl}/tree/${encodeURIComponent(name)}`;
+          };
 
           const htmlEscape = (value) => String(value ?? '')
             .replace(/&/g, '&amp;')
@@ -429,6 +538,57 @@ jobs:
             const str = String(text ?? '');
             const newlineIndex = str.indexOf('\n');
             return newlineIndex === -1 ? str : str.slice(0, newlineIndex);
+          };
+
+          const formatDate = (value) => {
+            if (!value) {
+              return { text: '', iso: '' };
+            }
+
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+              return { text: '', iso: '' };
+            }
+
+            const parts = new Intl.DateTimeFormat('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: '2-digit',
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true
+            }).formatToParts(date);
+
+            const get = (type) => {
+              const part = parts.find((entry) => entry.type === type);
+              return part ? part.value : '';
+            };
+
+            const month = get('month');
+            const rawDay = get('day');
+            const day = rawDay ? rawDay.padStart(2, '0') : '';
+            const year = get('year');
+            const hour = get('hour');
+            const minute = get('minute');
+            const period = get('dayPeriod');
+
+            if (!month || !day || !year || !hour || !minute || !period) {
+              return { text: '', iso: '' };
+            }
+
+            const text = `${month} ${day}, ${year} ${hour}:${minute} ${period}`;
+            return { text, iso: date.toISOString() };
+          };
+
+          const renderDate = (value, className = 'commit-date') => {
+            const { text, iso } = formatDate(value);
+            if (iso) {
+              return `<time class="${htmlEscape(className)}" datetime="${htmlEscape(iso)}" data-local-datetime="${htmlEscape(iso)}">${htmlEscape(text)}</time>`;
+            }
+            if (text) {
+              return `<span class="${htmlEscape(className)}">${htmlEscape(text)}</span>`;
+            }
+            return '';
           };
 
           const prByBranch = new Map();
@@ -450,14 +610,20 @@ jobs:
             return prByBranch.get(value.branch) ?? prBySafe.get(value.safeName) ?? null;
           };
 
+          const branchCommitsFor = (entry) => {
+            const value = entry.value ?? {};
+            const branchName = value.branch ?? '';
+            const safeName = value.safeName ?? '';
+            const commits = branchCommits?.[branchName] ?? branchCommits?.[safeName] ?? [];
+            return Array.isArray(commits) ? commits : [];
+          };
+
           const baseData = (entry) => {
             const value = entry.value ?? {};
-            const message = firstLine(value.message ?? '');
 
             return {
               branch: value.branch ?? '',
               safe: value.safeName ?? '',
-              message,
               deployed: value.deployedAt ?? 'unknown',
               actor: value.actor ?? 'unknown',
               commit: value.commit ?? '',
@@ -484,55 +650,61 @@ jobs:
             return results;
           };
 
-          const commitItem = (commit) => {
+          const joinSegments = (segments) => segments.filter(Boolean).join('<span class="commit-separator">·</span>');
+
+          const commitItem = (commit, prFallback = null) => {
             const shortSha = commit?.shortSha ?? (commit?.sha ? String(commit.sha).slice(0, 7) : '');
+            const commitUrl = commit?.htmlUrl ?? '#';
+            const dateMarkup = renderDate(commit?.date ?? '');
             const message = firstLine(commit?.message ?? '');
-            const date = commit?.date ? String(commit.date) : '';
 
-            const segments = [
-              `<a class="commit-sha" href="${htmlEscape(commit?.htmlUrl ?? '#')}">${htmlEscape(shortSha)}</a>`
-            ];
+            const prCandidates = Array.isArray(commit?.prs) ? commit.prs.filter((pr) => pr && typeof pr === 'object') : [];
+            let prData = prCandidates.find((pr) => pr.number != null) ?? prCandidates[0] ?? null;
 
-            if (message) {
-              segments.push(`<span class="commit-message">${htmlEscape(message)}</span>`);
+            if (!prData && prFallback && typeof prFallback === 'object') {
+              prData = prFallback;
             }
 
-            const metaSegments = [];
+            const segments = [];
 
-            if (date) {
-              metaSegments.push(`<span class="commit-date">${htmlEscape(date)}</span>`);
+            if (dateMarkup) {
+              segments.push(dateMarkup);
             }
 
-            if (Array.isArray(commit?.prs) && commit.prs.length > 0) {
-              const prLinks = commit.prs.map((pr) => {
-                const prNumber = pr?.number != null ? String(pr.number) : '';
-                const prTitle = prNumber ? `PR #${prNumber}` : 'PR';
-                return `<a class="commit-pr-link" href="${htmlEscape(pr?.url ?? '#')}">${htmlEscape(prTitle)}</a>`;
-              }).join(' ');
-              if (prLinks) {
-                metaSegments.push(prLinks);
+            if (prData) {
+              const number = prData.number != null ? String(prData.number) : '';
+              const title = firstLine(prData.title ?? '');
+              const prLabel = number ? `PR #${number}${title ? ` — ${title}` : ''}` : title;
+              if (prLabel) {
+                segments.push(`<a class="commit-pr-link" href="${htmlEscape(prData.url ?? '#')}">${htmlEscape(prLabel)}</a>`);
               }
+            } else if (message) {
+              segments.push(`<span class="commit-description">${htmlEscape(message)}</span>`);
             }
 
-            if (metaSegments.length > 0) {
-              segments.push(`<span class="commit-meta">· ${metaSegments.join(' · ')}</span>`);
+            if (shortSha) {
+              segments.push(`<a class="commit-sha" href="${htmlEscape(commitUrl)}">${htmlEscape(shortSha)}</a>`);
             }
 
-            return `<li class="commit-item">${segments.join(' ')}</li>`;
+            return `<li class="commit-item">${joinSegments(segments)}</li>`;
           };
 
           const renderMain = (entry) => {
             const data = baseData(entry);
-            let html = `<li class="card main"><a class="branch-link" href="./">main<span class="badge">production</span></a>`;
-
-            if (data.message) {
-              html += `<div class="message">${htmlEscape(data.message)}</div>`;
+            const githubUrl = githubBranchUrl('main');
+            let html = `<li class="card main">`;
+            html += `<div class="card-header">`;
+            html += `<div class="branch-title"><a class="branch-link" href="./">main</a><span class="badge">production</span></div>`;
+            if (githubUrl) {
+              html += `<div class="card-actions"><a class="github-branch-link" href="${htmlEscape(githubUrl)}">View on GitHub</a></div>`;
             }
+            html += `</div>`;
 
             const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
-            html += `<div class="meta">Last deployed ${htmlEscape(data.deployed)} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
+            const deployedDisplay = renderDate(data.deployed) || (data.deployed ? htmlEscape(data.deployed) : '');
+            html += `<div class="meta">Last deployed ${deployedDisplay || htmlEscape('unknown')} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
 
-            const commits = uniqueCommits(mainData.commits);
+            const commits = uniqueCommits(mainData.commits).slice(0, 3);
             if (commits.length > 0) {
               html += `<div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list">`;
               html += commits.map((commit) => commitItem(commit)).join('');
@@ -546,20 +718,41 @@ jobs:
           const renderBranch = (entry) => {
             const data = baseData(entry);
             const pr = branchPr(entry);
-            let html = `<li class="card"><a class="branch-link" href="./${htmlEscape(data.safe)}/">${htmlEscape(data.branch)}</a>`;
+            const branchName = firstLine(data.branch ?? '') || 'unknown branch';
+            const previewHref = data.safe ? `./${data.safe}/` : './';
+            const githubUrl = githubBranchUrl(data.branch);
+            let html = `<li class="card">`;
+            html += `<div class="card-header">`;
+            html += `<div class="branch-title"><a class="branch-link" href="${htmlEscape(previewHref)}">${htmlEscape(branchName)}</a></div>`;
+
+            const actionLinks = [];
+            if (githubUrl) {
+              actionLinks.push(`<a class="github-branch-link" href="${htmlEscape(githubUrl)}">View on GitHub</a>`);
+            }
+
+            if (actionLinks.length > 0) {
+              html += `<div class="card-actions">${actionLinks.join('')}</div>`;
+            }
+
+            html += `</div>`;
 
             if (pr) {
               const prNumber = pr.number != null ? String(pr.number) : '';
-              html += `<div class="pr-meta"><a class="pr-link" href="${htmlEscape(pr.url ?? '#')}">PR #${htmlEscape(prNumber)}</a>`;
-              html += ` · ${htmlEscape(pr.title ?? '')}</div>`;
-            }
-
-            if (data.message) {
-              html += `<div class="message">${htmlEscape(data.message)}</div>`;
+              const prTitle = firstLine(pr.title ?? '');
+              const prLabel = prNumber ? `PR #${prNumber}${prTitle ? ` — ${prTitle}` : ''}` : prTitle;
+              html += `<div class="pr-meta"><a class="pr-link" href="${htmlEscape(pr.url ?? '#')}">${htmlEscape(prLabel)}</a></div>`;
             }
 
             const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
-            html += `<div class="meta">Last deployed ${htmlEscape(data.deployed)} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
+            const deployedDisplay = renderDate(data.deployed) || (data.deployed ? htmlEscape(data.deployed) : '');
+            html += `<div class="meta">Last deployed ${deployedDisplay || htmlEscape('unknown')} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
+
+            const commits = uniqueCommits(branchCommitsFor(entry)).slice(0, 3);
+            if (commits.length > 0) {
+              html += `<div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list">`;
+              html += commits.map((commit) => commitItem(commit, pr)).join('');
+              html += `</ul></div>`;
+            }
 
             html += `</li>\n`;
             return html;
@@ -597,6 +790,77 @@ jobs:
 
           cat >> branch.html <<'HTML'
             </ul>
+            <script>
+              (() => {
+                const baseOptions = {
+                  year: 'numeric',
+                  month: 'short',
+                  day: '2-digit',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true
+                };
+
+                let zoneFormatter = null;
+                try {
+                  zoneFormatter = new Intl.DateTimeFormat(undefined, { ...baseOptions, timeZoneName: 'short' });
+                } catch (error) {
+                  zoneFormatter = null;
+                }
+
+                const fallbackFormatter = new Intl.DateTimeFormat(undefined, baseOptions);
+
+                const formatParts = (formatter, date) => {
+                  if (!formatter) {
+                    return null;
+                  }
+
+                  try {
+                    const parts = formatter.formatToParts(date);
+                    const find = (type) => {
+                      const entry = parts.find((part) => part.type === type);
+                      return entry ? entry.value : '';
+                    };
+
+                    const month = find('month');
+                    const rawDay = find('day');
+                    const day = rawDay ? rawDay.padStart(2, '0') : '';
+                    const year = find('year');
+                    const hour = find('hour');
+                    const minute = find('minute');
+                    const period = find('dayPeriod');
+                    const zone = find('timeZoneName');
+
+                    if (!month || !day || !year || !hour || !minute || !period) {
+                      return null;
+                    }
+
+                    const zoneSuffix = zone ? ` ${zone}` : '';
+                    return `${month} ${day}, ${year} ${hour}:${minute} ${period}${zoneSuffix}`;
+                  } catch (error) {
+                    return null;
+                  }
+                };
+
+                const elements = document.querySelectorAll('[data-local-datetime]');
+                for (const element of elements) {
+                  const iso = element.getAttribute('data-local-datetime');
+                  if (!iso) {
+                    continue;
+                  }
+
+                  const date = new Date(iso);
+                  if (Number.isNaN(date.getTime())) {
+                    continue;
+                  }
+
+                  const display = formatParts(zoneFormatter, date) ?? formatParts(fallbackFormatter, date);
+                  if (display) {
+                    element.textContent = display;
+                  }
+                }
+              })();
+            </script>
           </body>
           </html>
           HTML
