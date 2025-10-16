@@ -117,6 +117,46 @@ jobs:
             TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
           fi
 
+          PR_API="https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls"
+          PR_RESPONSE=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                               -H "Accept: application/vnd.github.groot-preview+json" \
+                               "$PR_API" || echo "[]")
+          if ! echo "$PR_RESPONSE" | jq -e 'type == "array"' >/dev/null 2>&1; then
+            PR_RESPONSE='[]'
+          fi
+          PR_LIST=$(echo "$PR_RESPONSE" | jq '[.[] | {number: .number, title: .title, url: .html_url}]')
+
+          git -C .. fetch --no-tags origin main >/dev/null 2>&1 || true
+          MAIN_COMMITS_JSON='[]'
+          if git -C .. show-ref --verify --quiet refs/remotes/origin/main; then
+            while IFS=$'\x1e' read -r entry; do
+              [ -n "$entry" ] || continue
+              IFS=$'\x1f' read -r sha summary author date <<<"$entry"
+              COMMIT_PR_API="https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${sha}/pulls"
+              COMMIT_PR_RESPONSE=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                                           -H "Accept: application/vnd.github.groot-preview+json" \
+                                           "$COMMIT_PR_API" || echo "[]")
+              if ! echo "$COMMIT_PR_RESPONSE" | jq -e 'type == "array"' >/dev/null 2>&1; then
+                COMMIT_PR_RESPONSE='[]'
+              fi
+              COMMIT_PR_LIST=$(echo "$COMMIT_PR_RESPONSE" | jq '[.[] | {number: .number, title: .title, url: .html_url}]')
+              MAIN_COMMITS_JSON=$(jq --arg sha "$sha" \
+                                     --arg summary "$summary" \
+                                     --arg author "$author" \
+                                     --arg date "$date" \
+                                     --arg url "https://github.com/${GITHUB_REPOSITORY}/commit/${sha}" \
+                                     --argjson prs "$COMMIT_PR_LIST" \
+                                     '. + [{
+                                        sha: $sha,
+                                        summary: $summary,
+                                        author: $author,
+                                        date: $date,
+                                        commitUrl: $url,
+                                        pullRequests: $prs
+                                     }]' <<<"$MAIN_COMMITS_JSON")
+            done < <(git -C .. log origin/main -n 3 --pretty=format:'%H%x1f%s%x1f%an%x1f%cI%x1e')
+          fi
+
           jq --arg key "$TARGET_KEY" \
              --arg branch "$BRANCH_NAME" \
              --arg safe "$SAFE_NAME" \
@@ -125,6 +165,8 @@ jobs:
              --arg actor "${GITHUB_ACTOR}" \
              --arg timestamp "$TIMESTAMP" \
              --arg url "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" \
+             --argjson pulls "$PR_LIST" \
+             --argjson history "$MAIN_COMMITS_JSON" \
              '.[$key] = {
                branch: $branch,
                safeName: $safe,
@@ -132,8 +174,10 @@ jobs:
                message: $message,
                actor: $actor,
                deployedAt: $timestamp,
-               commitUrl: $url
-             }' "$DEPLOY_DATA" > "$DEPLOY_DATA.tmp"
+               commitUrl: $url,
+               pullRequests: $pulls
+             } |
+             .["_mainHistory"] = $history' "$DEPLOY_DATA" > "$DEPLOY_DATA.tmp"
           mv "$DEPLOY_DATA.tmp" "$DEPLOY_DATA"
 
           cat > branch.html <<'HTML'
@@ -207,11 +251,54 @@ jobs:
                 color: #57606a;
                 font-weight: 600;
               }
-            </style>
-          </head>
-          <body>
-            <h1>Capy Branch Deployments</h1>
-            <ul class="deployments">
+              .prs {
+                margin-top: 8px;
+                font-size: 0.9em;
+                color: #24292e;
+              }
+              .prs a {
+                color: #0969da;
+                font-weight: 600;
+                text-decoration: none;
+              }
+              .prs a:hover {
+                text-decoration: underline;
+              }
+              .prs.none {
+                color: #6e7781;
+                font-style: italic;
+              }
+              section.main-history {
+                margin-top: 40px;
+                background: #fff;
+                border: 1px solid #d0d7de;
+                border-radius: 8px;
+                padding: 24px;
+                box-shadow: 0 1px 0 rgba(31,35,40,0.04);
+              }
+              section.main-history h2 {
+                margin-top: 0;
+              }
+              .history-list {
+                margin: 16px 0 0;
+                padding-left: 20px;
+              }
+              .history-list li {
+                margin-bottom: 12px;
+              }
+              .history-meta {
+                font-size: 0.9em;
+                color: #57606a;
+              }
+              .history-meta a {
+                color: #0969da;
+                font-weight: 600;
+              }
+          </style>
+        </head>
+        <body>
+          <h1>Capy Branch Deployments</h1>
+          <ul class="deployments">
           HTML
 
           jq -r '
@@ -225,6 +312,16 @@ jobs:
             def first_line($text):
               ($text // "") | split("\n") | .[0];
 
+            def render_prs($prs):
+              ($prs // []) as $items |
+              if ($items | length) > 0 then
+                "<div class=\"prs\">" +
+                ($items | map("<a href=\"" + (.url // "#") + "\" title=\"" + ((.title // "") | html_escape) + "\">PR #" + ((.number // 0)|tostring) + "</a>") | join(" &middot; ")) +
+                "</div>"
+              else
+                "<div class=\"prs none\">No linked pull requests</div>"
+              end;
+
             def render($entry):
               ($entry.value | {
                 branch: (.branch // ""),
@@ -233,32 +330,82 @@ jobs:
                 deployed: (.deployedAt // "unknown"),
                 actor: (.actor // "unknown"),
                 commit: (.commit // ""),
-                url: (.commitUrl // "#")
+                url: (.commitUrl // "#"),
+                prs: (.pullRequests // [])
               }) as $data |
               if $entry.key == "main" then
                 "<li class=\"card main\"><a class=\"branch-link\" href=\"./\">main<span class=\"badge\">production</span></a>" +
                 (if $data.message != "" then "<div class=\"message\">" + ($data.message | html_escape) + "</div>" else "" end) +
                 "<div class=\"meta\">Last deployed " + ($data.deployed | html_escape) +
                 " by " + ($data.actor | html_escape) +
-                " · <a href=\"" + $data.url + "\">" + ($data.commit[:7]) + "</a></div></li>"
+                " · <a href=\"" + $data.url + "\">" + ($data.commit[:7]) + "</a></div>" +
+                render_prs($data.prs) +
+                "</li>"
               else
                 "<li class=\"card\"><a class=\"branch-link\" href=\"./" + $data.safe + "/\">" +
                 ($data.branch | html_escape) + "</a>" +
                 (if $data.message != "" then "<div class=\"message\">" + ($data.message | html_escape) + "</div>" else "" end) +
                 "<div class=\"meta\">Last deployed " + ($data.deployed | html_escape) +
                 " by " + ($data.actor | html_escape) +
-                " · <a href=\"" + $data.url + "\">" + ($data.commit[:7]) + "</a></div></li>"
+                " · <a href=\"" + $data.url + "\">" + ($data.commit[:7]) + "</a></div>" +
+                render_prs($data.prs) +
+                "</li>"
               end;
 
             def ordered_entries:
               (if has("main") then [{key: "main", value: .main}] else [] end) +
-              ([to_entries[] | select(.key != "main")] | sort_by(.value.deployedAt // "") | reverse);
+              ([to_entries[] | select(.key != "main" and .key != "_mainHistory")] | sort_by(.value.deployedAt // "") | reverse);
 
             ordered_entries | map(render(.)) | .[]
           ' "$DEPLOY_DATA" >> branch.html
 
           cat >> branch.html <<'HTML'
             </ul>
+          HTML
+
+          jq -r '
+            def html_escape:
+              gsub("&"; "&amp;") |
+              gsub("<"; "&lt;") |
+              gsub(">"; "&gt;") |
+              gsub("\""; "&quot;") |
+              gsub("\u0027"; "&#39;");
+
+            def render_prs($prs):
+              ($prs // []) as $items |
+              if ($items | length) > 0 then
+                "<div class=\"prs\">" +
+                ($items | map("<a href=\"" + (.url // "#") + "\" title=\"" + ((.title // "") | html_escape) + "\">PR #" + ((.number // 0)|tostring) + "</a>") | join(" &middot; ")) +
+                "</div>"
+              else
+                "<div class=\"prs none\">No linked pull requests</div>"
+              end;
+
+            def render_history_item($item):
+              ($item // {}) as $data |
+              "<li><strong>" + (($data.summary // "") | html_escape) + "</strong>" +
+              "<div class=\"history-meta\">" +
+              "<a href=\"" + (($data.commitUrl // "#")) + "\">" + (($data.sha // "")[:7]) + "</a>" +
+              " · " + (($data.date // "") | html_escape) +
+              " · " + (($data.author // "") | html_escape) +
+              "</div>" +
+              render_prs($data.pullRequests) +
+              "</li>";
+
+            def render_history($history):
+              ($history // []) as $items |
+              if ($items | length) > 0 then
+                "<section class=\"main-history\"><h2>Recent main merges</h2><ol class=\"history-list\">" +
+                ($items | map(render_history_item(.)) | join("")) +
+                "</ol></section>"
+              else
+                ""
+              end;
+
+            render_history(._mainHistory)
+          ' "$DEPLOY_DATA" >> branch.html
+
+          cat >> branch.html <<'HTML'
           </body>
           </html>
           HTML
