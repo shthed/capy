@@ -1414,6 +1414,7 @@
             favourite moment.
           </p>
           <button type="button" data-save-snapshot disabled>Save current puzzle</button>
+          <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
           <ul
             class="save-manager-list"
             data-save-list
@@ -1774,6 +1775,7 @@
       const applyBtn = document.getElementById("applyOptions");
       const downloadBtn = document.getElementById("downloadJson");
       const saveSnapshotButtons = Array.from(document.querySelectorAll("[data-save-snapshot]"));
+      const resetProgressButtons = Array.from(document.querySelectorAll("[data-reset-progress]"));
       const saveListContainers = Array.from(document.querySelectorAll("[data-save-list]"));
       const saveListEmptyStates = Array.from(document.querySelectorAll("[data-save-empty]"));
       const paletteEl = document.getElementById("palette");
@@ -3187,6 +3189,7 @@
           openGenerator: () => openSheet(generatorSheet),
           openSettings: () => openSheet(settingsSheet),
           openSaves: () => openSheet(saveManagerSheet),
+          resetProgress: () => resetCurrentProgress(),
         };
       }
 
@@ -3523,6 +3526,20 @@
         });
       }
 
+      for (const button of resetProgressButtons) {
+        button.addEventListener("click", () => {
+          if (!state.puzzle) return;
+          if (state.filled.size === 0) return;
+          const confirmed = window.confirm(
+            "Reset progress on this puzzle? All filled regions will be cleared."
+          );
+          if (!confirmed) {
+            return;
+          }
+          resetCurrentProgress();
+        });
+      }
+
       function handleSaveListClick(event) {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
@@ -3825,6 +3842,7 @@
           flashColorRegions(state.activeColor);
         }
         updateProgress();
+        updateCommandStates();
         scheduleAutosave("fill-region");
         logDebug(
           `Filled region ${region.id} with colour #${region.colorId} (${state.filled.size}/${state.puzzle.regions.length})`
@@ -4283,6 +4301,9 @@
         downloadBtn.disabled = !hasPuzzle;
         for (const button of saveSnapshotButtons) {
           button.disabled = !hasPuzzle;
+        }
+        for (const button of resetProgressButtons) {
+          button.disabled = !hasPuzzle || state.filled.size === 0;
         }
         if (saveManagerButton) {
           saveManagerButton.disabled = false;
@@ -7976,6 +7997,24 @@
         }
 
         return api;
+      }
+
+      function resetCurrentProgress() {
+        if (!state.puzzle) return false;
+        if (state.filled.size === 0) {
+          logDebug("No filled regions yet; nothing to reset");
+          return false;
+        }
+        state.filled = new Set();
+        markFilledLayerDirty();
+        renderPuzzle();
+        renderPalette();
+        refreshCustomCursorHighlight();
+        updateProgress();
+        updateCommandStates();
+        scheduleAutosave("reset-progress", { immediate: true });
+        logDebug("Reset puzzle progress to a blank canvas");
+        return true;
       }
 
       function saveCurrentSnapshot() {
