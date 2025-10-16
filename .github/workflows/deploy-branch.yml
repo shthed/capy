@@ -443,6 +443,22 @@ jobs:
                 color: #24292e;
                 text-decoration: underline;
               }
+              .card-actions {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 12px;
+                font-size: 0.85em;
+              }
+              .card-actions a {
+                color: #57606a;
+                font-weight: 600;
+                text-decoration: none;
+              }
+              .card-actions a:hover {
+                color: #24292e;
+                text-decoration: underline;
+              }
               span.badge {
                 display: inline-block;
                 margin-left: 4px;
