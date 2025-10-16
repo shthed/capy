@@ -47,21 +47,21 @@ single `index.html` document—no build tools or extra runtime required.
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
   previously exported JSON puzzles straight into the generator pipeline.
-- **Game selection screen.** The onboarding hint now surfaces a "Start a game"
-  picker that highlights the bundled Capybara Springs puzzle loaded from
-  `capy.json` alongside every manual save on this browser. The title,
-  description, and preview art fall back to the inline Capybara vignette when
-  the fixture omits optional metadata so the landing copy always has something
-  friendly to show.
+- **Saves sheet quick start.** The Saves panel now surfaces quick actions to
+  import a new image or JSON puzzle and reload the bundled Capybara Springs
+  board, so onboarding happens alongside ongoing save management.
+  A **Reset puzzle progress** control clears the current board without touching
+  autosaves or manual snapshots, so you can start over mid-session without
+  leaving the dialog.
 - **Built-in capybara sample.** The "Capybara Springs" illustration now loads
   automatically on boot in the high detail preset (when no autosave is
   available) so you can start painting without importing anything. The vignette
   features an orange-balanced capybara lounging in a lagoon with a curious
-  dachshund, water mushrooms, and a distant waterfall, and the start screen's
-  **Try the capybara sample** action instantly reloads it whenever you want a
+  dachshund, water mushrooms, and a distant waterfall, and the Saves panel's
+  **Load capybara sample** action instantly reloads it whenever you want a
   fresh board while reflecting whichever detail preset you last chose.
-- **Sample detail presets.** Low/Medium/High chips live on the onboarding hint
-  and inside the Generator sheet, instantly reloading the sample with tuned colour counts,
+- **Sample detail presets.** Low/Medium/High chips live inside the Generator sheet,
+  instantly reloading the sample with tuned colour counts,
   resize targets, k-means iterations, and smoothing passes so QA can cycle
   between breezy ≈26-region boards, balanced ≈42-region sessions, or
   high-fidelity ≈140-region showpieces.
@@ -116,8 +116,8 @@ single `index.html` document—no build tools or extra runtime required.
 - **Sidecar panels.** Generator, Settings, and Help dock to the right as floating
   panels instead of modal overlays, so you can keep painting while tweaking
   clustering sliders, gameplay preferences, or reviewing shortcuts. Save
-  management now lives inside the start screen so manual snapshots share the
-  same launcher surface. Each panel remembers its scroll position and stays
+  management now lives inside the Saves sheet so manual snapshots share the
+  same management surface. Each panel remembers its scroll position and stays
   interactive alongside the canvas.
 - **Palette manager.** Swipe through edge-to-edge swatches rendered as simple,
   gutterless colour blocks so the dock stays packed. Completed colours collapse
@@ -138,7 +138,7 @@ single `index.html` document—no build tools or extra runtime required.
 
 ### Capybara Springs detail presets
 
-  The Low/Medium/High detail chips on the onboarding hint and Settings panel
+  The Low/Medium/High detail chips in the Generator and Settings panels
 toggle tuned generator options for the built-in capybara vignette:
 
 | Preset | Colours | Approx. regions | Min region | Resize edge | Sample rate | Iterations | Smoothing | Use it when… |
@@ -156,8 +156,8 @@ region counts above are based on the bundled Capybara Springs artwork and keep
 every preset playable—from the breezy ≈26-region low detail board to the
 ≈140-region high fidelity scene. Preview copy prefers metadata pulled from
 `capy.json`, but the inline Capybara fallback strings and artwork keep the
-detail picker, start screen, and sample preview populated whenever the fixture
-skips optional fields.
+detail picker and sample preview populated whenever the fixture skips optional
+fields.
 
 ## Code architecture tour
 
@@ -247,7 +247,9 @@ skips optional fields.
    to the next incomplete colour once you finish the current hue.
 5. **Save or export.** The save manager captures snapshots (including progress,
    generator options, and source metadata) in localStorage using a compact
-   schema. Export the active puzzle as JSON at any time.
+   schema. Export the active puzzle as JSON at any time. Use **Reset puzzle
+   progress** from the same sheet to clear the current board while keeping
+   autosaves and manual saves intact when you want a fresh attempt.
 
 ## Puzzle JSON format
 
@@ -309,8 +311,9 @@ before retrying.
 - **Start & save screen** – Launch puzzles, reload the capybara sample, and
   manage manual snapshots from the same dialog. A prominent **Choose an image**
   button now leads the overlay and calls out that you can drag and drop files
-  anywhere to begin. Each entry shows completion progress with quick actions to
-  load, rename, export, or delete the save.
+  anywhere to begin. Capture manual snapshots or use **Reset puzzle progress**
+  to clear the active board from this dialog. Each entry shows completion
+  progress with quick actions to load, rename, export, or delete the save.
 - **Help panel** – Lists every command button, summarizes canvas gestures, and
   surfaces a live debug log so contributors can confirm state changes while
   testing.

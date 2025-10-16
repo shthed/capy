@@ -128,10 +128,10 @@
   "codex-review-starthint-dialog-and-first-run-process-tlj5hg": {
     "branch": "codex/review-starthint-dialog-and-first-run-process-tlj5hg",
     "safeName": "codex-review-starthint-dialog-and-first-run-process-tlj5hg",
-    "commit": "58e9b5aec2e8d2e4ce283e28a10f9c0207332881",
-    "message": "Merge pull request #152 from shthed/codex/revise-deploy-branch.yml-for-commit-display\n\nImprove branch deployment summary layout",
+    "commit": "97347549f637759a7f67717f0819afbcac61d98e",
+    "message": "Add reset progress control to saves sheet",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T19:59:31+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/58e9b5aec2e8d2e4ce283e28a10f9c0207332881"
+    "deployedAt": "2025-10-16T23:47:19+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/97347549f637759a7f67717f0819afbcac61d98e"
   }
 }
