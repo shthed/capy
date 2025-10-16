@@ -43,5 +43,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-15T10:58:54+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/d94785a65b860ae490e99c0964b9bf41fe741181"
+  },
+  "codex-introduce-renderer-abstraction-for-webgl": {
+    "branch": "codex/introduce-renderer-abstraction-for-webgl",
+    "safeName": "codex-introduce-renderer-abstraction-for-webgl",
+    "commit": "fedcafb678bac485449081f8a860a06f34ce0180",
+    "message": "Merge branch 'main' into work",
+    "actor": "shthed",
+    "deployedAt": "2025-10-16T09:37:27+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180"
   }
 }
