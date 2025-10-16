@@ -27,7 +27,119 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Fetch open PR metadata
+        id: pr-metadata
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pulls } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 100
+            });
+
+            const branches = pulls.map(pr => ({
+              branch: pr.head.ref,
+              safeName: pr.head.ref.replace(/[^a-zA-Z0-9._-]/g, '-'),
+              title: pr.title,
+              number: pr.number,
+              updatedAt: pr.updated_at,
+              url: pr.html_url
+            }));
+
+            const currentBranch = (context.ref || '').replace('refs/heads/', '');
+            const hasOpenPr = branches.some(pr => pr.branch === currentBranch);
+
+            core.setOutput('has-open-pr', hasOpenPr ? 'true' : 'false');
+
+            const fs = require('fs');
+            fs.writeFileSync('pr-branches.json', JSON.stringify(branches, null, 2));
+
+            return branches.length;
+
+      - name: Determine deployment eligibility
+        id: deployment-gate
+        env:
+          HAS_OPEN_PR: ${{ steps.pr-metadata.outputs.has-open-pr }}
+        run: |
+          set -euo pipefail
+
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${HAS_OPEN_PR}" = "true" ]; then
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "eligible=false" >> "$GITHUB_OUTPUT"
+
+      - name: Skip deployment for branches without open PRs
+        if: steps.deployment-gate.outputs.eligible != 'true'
+        run: |
+          echo "No open pull request detected for ${GITHUB_REF_NAME}; skipping deployment."
+
+      - name: Fetch main branch commits
+        if: steps.deployment-gate.outputs.eligible == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            const { data: commits } = await github.rest.repos.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: 'main',
+              per_page: 3
+            });
+
+            const commitsWithPRs = await Promise.all(commits.map(async (commit) => {
+              let prs = [];
+              try {
+                const { data: prData } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  commit_sha: commit.sha
+                });
+                prs = prData.map(pr => ({
+                  number: pr.number,
+                  title: pr.title,
+                  url: pr.html_url
+                }));
+              } catch (error) {
+                core.warning(`Could not fetch PRs for commit ${commit.sha}: ${error.message}`);
+              }
+
+              return {
+                sha: commit.sha,
+                shortSha: commit.sha.substring(0, 7),
+                message: commit.commit.message,
+                author: commit.commit.author?.name ?? commit.commit.committer?.name ?? 'Unknown author',
+                date: commit.commit.author?.date ?? commit.commit.committer?.date ?? '',
+                htmlUrl: commit.html_url,
+                prs
+              };
+            }));
+
+            const mainBranchData = {
+              commits: commitsWithPRs,
+              lastCommitDate: commits[0]?.commit.author?.date ?? commits[0]?.commit.committer?.date ?? null,
+              deploymentTimestamp: Date.now()
+            };
+
+            fs.writeFileSync('main-branch-data.json', JSON.stringify(mainBranchData, null, 2));
+
+            return mainBranchData.commits.length;
+
       - name: Sync branch to gh-pages
+        if: steps.deployment-gate.outputs.eligible == 'true'
         id: sync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -117,46 +229,6 @@ jobs:
             TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
           fi
 
-          PR_API="https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls"
-          PR_RESPONSE=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                               -H "Accept: application/vnd.github.groot-preview+json" \
-                               "$PR_API" || echo "[]")
-          if ! echo "$PR_RESPONSE" | jq -e 'type == "array"' >/dev/null 2>&1; then
-            PR_RESPONSE='[]'
-          fi
-          PR_LIST=$(echo "$PR_RESPONSE" | jq '[.[] | {number: .number, title: .title, url: .html_url}]')
-
-          git -C .. fetch --no-tags origin main >/dev/null 2>&1 || true
-          MAIN_COMMITS_JSON='[]'
-          if git -C .. show-ref --verify --quiet refs/remotes/origin/main; then
-            while IFS=$'\x1e' read -r entry; do
-              [ -n "$entry" ] || continue
-              IFS=$'\x1f' read -r sha summary author date <<<"$entry"
-              COMMIT_PR_API="https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${sha}/pulls"
-              COMMIT_PR_RESPONSE=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                                           -H "Accept: application/vnd.github.groot-preview+json" \
-                                           "$COMMIT_PR_API" || echo "[]")
-              if ! echo "$COMMIT_PR_RESPONSE" | jq -e 'type == "array"' >/dev/null 2>&1; then
-                COMMIT_PR_RESPONSE='[]'
-              fi
-              COMMIT_PR_LIST=$(echo "$COMMIT_PR_RESPONSE" | jq '[.[] | {number: .number, title: .title, url: .html_url}]')
-              MAIN_COMMITS_JSON=$(jq --arg sha "$sha" \
-                                     --arg summary "$summary" \
-                                     --arg author "$author" \
-                                     --arg date "$date" \
-                                     --arg url "https://github.com/${GITHUB_REPOSITORY}/commit/${sha}" \
-                                     --argjson prs "$COMMIT_PR_LIST" \
-                                     '. + [{
-                                        sha: $sha,
-                                        summary: $summary,
-                                        author: $author,
-                                        date: $date,
-                                        commitUrl: $url,
-                                        pullRequests: $prs
-                                     }]' <<<"$MAIN_COMMITS_JSON")
-            done < <(git -C .. log origin/main -n 3 --pretty=format:'%H%x1f%s%x1f%an%x1f%cI%x1e')
-          fi
-
           jq --arg key "$TARGET_KEY" \
              --arg branch "$BRANCH_NAME" \
              --arg safe "$SAFE_NAME" \
@@ -165,8 +237,6 @@ jobs:
              --arg actor "${GITHUB_ACTOR}" \
              --arg timestamp "$TIMESTAMP" \
              --arg url "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" \
-             --argjson pulls "$PR_LIST" \
-             --argjson history "$MAIN_COMMITS_JSON" \
              '.[$key] = {
                branch: $branch,
                safeName: $safe,
@@ -174,10 +244,8 @@ jobs:
                message: $message,
                actor: $actor,
                deployedAt: $timestamp,
-               commitUrl: $url,
-               pullRequests: $pulls
-             } |
-             .["_mainHistory"] = $history' "$DEPLOY_DATA" > "$DEPLOY_DATA.tmp"
+               commitUrl: $url
+             }' "$DEPLOY_DATA" > "$DEPLOY_DATA.tmp"
           mv "$DEPLOY_DATA.tmp" "$DEPLOY_DATA"
 
           cat > branch.html <<'HTML'
@@ -218,6 +286,58 @@ jobs:
                 border-color: #4c8eda;
                 box-shadow: 0 4px 12px rgba(76,142,218,0.12);
               }
+              .commit-section {
+                margin-top: 16px;
+                padding-top: 12px;
+                border-top: 1px solid #d0d7de;
+              }
+              .commit-title {
+                font-size: 0.95em;
+                font-weight: 600;
+                margin-bottom: 8px;
+                color: #24292e;
+              }
+              .commit-list {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                display: grid;
+                gap: 8px;
+              }
+              .commit-item {
+                font-size: 0.9em;
+                color: #24292e;
+              }
+              .commit-sha {
+                font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 0.9em;
+                font-weight: 600;
+                color: #0969da;
+                margin-right: 8px;
+                text-decoration: none;
+              }
+              .commit-sha:hover {
+                text-decoration: underline;
+              }
+              .commit-message {
+                font-weight: 500;
+                color: #24292e;
+                display: inline-block;
+                margin-left: 4px;
+              }
+              .commit-meta {
+                margin-top: 4px;
+                color: #57606a;
+                font-size: 0.85em;
+              }
+              .commit-pr-link {
+                color: #8250df;
+                text-decoration: none;
+                margin-right: 8px;
+              }
+              .commit-pr-link:hover {
+                text-decoration: underline;
+              }
               a.branch-link {
                 font-weight: 600;
                 color: #0969da;
@@ -251,161 +371,201 @@ jobs:
                 color: #57606a;
                 font-weight: 600;
               }
-              .prs {
-                margin-top: 8px;
-                font-size: 0.9em;
-                color: #24292e;
-              }
-              .prs a {
-                color: #0969da;
-                font-weight: 600;
-                text-decoration: none;
-              }
-              .prs a:hover {
-                text-decoration: underline;
-              }
-              .prs.none {
-                color: #6e7781;
-                font-style: italic;
-              }
-              section.main-history {
-                margin-top: 40px;
-                background: #fff;
-                border: 1px solid #d0d7de;
-                border-radius: 8px;
-                padding: 24px;
-                box-shadow: 0 1px 0 rgba(31,35,40,0.04);
-              }
-              section.main-history h2 {
-                margin-top: 0;
-              }
-              .history-list {
-                margin: 16px 0 0;
-                padding-left: 20px;
-              }
-              .history-list li {
-                margin-bottom: 12px;
-              }
-              .history-meta {
-                font-size: 0.9em;
+              .pr-meta {
+                margin-top: 6px;
+                font-size: 0.85em;
                 color: #57606a;
               }
-              .history-meta a {
-                color: #0969da;
+              .pr-link {
+                color: #8250df;
                 font-weight: 600;
+                text-decoration: none;
+                margin-right: 4px;
               }
-          </style>
-        </head>
-        <body>
-          <h1>Capy Branch Deployments</h1>
-          <ul class="deployments">
+              .pr-link:hover {
+                text-decoration: underline;
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Capy Branch Deployments</h1>
+            <ul class="deployments">
           HTML
 
-          jq -r '
-            def html_escape:
-              gsub("&"; "&amp;") |
-              gsub("<"; "&lt;") |
-              gsub(">"; "&gt;") |
-              gsub("\""; "&quot;") |
-              gsub("\u0027"; "&#39;");
+          PR_DATA_FILE="../pr-branches.json"
+          MAIN_DATA_FILE="../main-branch-data.json"
+          if [ ! -f "$PR_DATA_FILE" ]; then
+            echo '[]' > "$PR_DATA_FILE"
+          fi
+          if [ ! -f "$MAIN_DATA_FILE" ]; then
+            echo '{"commits":[]}' > "$MAIN_DATA_FILE"
+          fi
 
-            def first_line($text):
-              ($text // "") | split("\n") | .[0];
+          DEPLOY_DATA_PATH="$DEPLOY_DATA" \
+          PR_DATA_PATH="$PR_DATA_FILE" \
+          MAIN_DATA_PATH="$MAIN_DATA_FILE" \
+          node <<'NODE'
+const fs = require('fs');
 
-            def render_prs($prs):
-              ($prs // []) as $items |
-              if ($items | length) > 0 then
-                "<div class=\"prs\">" +
-                ($items | map("<a href=\"" + (.url // "#") + "\" title=\"" + ((.title // "") | html_escape) + "\">PR #" + ((.number // 0)|tostring) + "</a>") | join(" &middot; ")) +
-                "</div>"
-              else
-                "<div class=\"prs none\">No linked pull requests</div>"
-              end;
+const readJson = (path, fallback) => {
+  try {
+    return JSON.parse(fs.readFileSync(path, 'utf8'));
+  } catch (error) {
+    return fallback;
+  }
+};
 
-            def render($entry):
-              ($entry.value | {
-                branch: (.branch // ""),
-                safe: (.safeName // ""),
-                message: first_line(.message),
-                deployed: (.deployedAt // "unknown"),
-                actor: (.actor // "unknown"),
-                commit: (.commit // ""),
-                url: (.commitUrl // "#"),
-                prs: (.pullRequests // [])
-              }) as $data |
-              if $entry.key == "main" then
-                "<li class=\"card main\"><a class=\"branch-link\" href=\"./\">main<span class=\"badge\">production</span></a>" +
-                (if $data.message != "" then "<div class=\"message\">" + ($data.message | html_escape) + "</div>" else "" end) +
-                "<div class=\"meta\">Last deployed " + ($data.deployed | html_escape) +
-                " by " + ($data.actor | html_escape) +
-                " · <a href=\"" + $data.url + "\">" + ($data.commit[:7]) + "</a></div>" +
-                render_prs($data.prs) +
-                "</li>"
-              else
-                "<li class=\"card\"><a class=\"branch-link\" href=\"./" + $data.safe + "/\">" +
-                ($data.branch | html_escape) + "</a>" +
-                (if $data.message != "" then "<div class=\"message\">" + ($data.message | html_escape) + "</div>" else "" end) +
-                "<div class=\"meta\">Last deployed " + ($data.deployed | html_escape) +
-                " by " + ($data.actor | html_escape) +
-                " · <a href=\"" + $data.url + "\">" + ($data.commit[:7]) + "</a></div>" +
-                render_prs($data.prs) +
-                "</li>"
-              end;
+const deployments = readJson(process.env.DEPLOY_DATA_PATH, {});
+const prList = readJson(process.env.PR_DATA_PATH, []);
+const mainData = readJson(process.env.MAIN_DATA_PATH, { commits: [] });
 
-            def ordered_entries:
-              (if has("main") then [{key: "main", value: .main}] else [] end) +
-              ([to_entries[] | select(.key != "main" and .key != "_mainHistory")] | sort_by(.value.deployedAt // "") | reverse);
+const htmlEscape = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
 
-            ordered_entries | map(render(.)) | .[]
-          ' "$DEPLOY_DATA" >> branch.html
+const firstLine = (text) => {
+  const str = String(text ?? '');
+  const newlineIndex = str.indexOf('\n');
+  return newlineIndex === -1 ? str : str.slice(0, newlineIndex);
+};
+
+const prByBranch = new Map();
+const prBySafe = new Map();
+
+for (const pr of prList) {
+  if (pr && typeof pr === 'object') {
+    if (pr.branch) {
+      prByBranch.set(pr.branch, pr);
+    }
+    if (pr.safeName) {
+      prBySafe.set(pr.safeName, pr);
+    }
+  }
+}
+
+const branchPr = (entry) => {
+  const value = entry.value ?? {};
+  return prByBranch.get(value.branch) ?? prBySafe.get(value.safeName) ?? null;
+};
+
+const baseData = (entry) => {
+  const value = entry.value ?? {};
+  const message = firstLine(value.message ?? '');
+
+  return {
+    branch: value.branch ?? '',
+    safe: value.safeName ?? '',
+    message,
+    deployed: value.deployedAt ?? 'unknown',
+    actor: value.actor ?? 'unknown',
+    commit: value.commit ?? '',
+    url: value.commitUrl ?? '#'
+  };
+};
+
+const commitItem = (commit) => {
+  const shortSha = commit?.shortSha ?? (commit?.sha ? String(commit.sha).slice(0, 7) : '');
+  const message = firstLine(commit?.message ?? '');
+  const author = commit?.author ?? 'unknown';
+  const date = commit?.date ? String(commit.date) : '';
+
+  let meta = `by ${htmlEscape(author)}`;
+  if (date) {
+    meta += ` · ${htmlEscape(date)}`;
+  }
+
+  if (Array.isArray(commit?.prs) && commit.prs.length > 0) {
+    const prLinks = commit.prs.map((pr) => {
+      const prNumber = pr?.number != null ? String(pr.number) : '';
+      const prTitle = prNumber ? `PR #${prNumber}` : 'PR';
+      return `<a class="commit-pr-link" href="${htmlEscape(pr?.url ?? '#')}">${prTitle}</a>`;
+    }).join(' ');
+    if (prLinks) {
+      meta += ` · ${prLinks}`;
+    }
+  }
+
+  return `<li class="commit-item"><a class="commit-sha" href="${htmlEscape(commit?.htmlUrl ?? '#')}">${htmlEscape(shortSha)}</a><span class="commit-message">${htmlEscape(message)}</span><div class="commit-meta">${meta}</div></li>`;
+};
+
+const renderMain = (entry) => {
+  const data = baseData(entry);
+  let html = `<li class="card main"><a class="branch-link" href="./">main<span class="badge">production</span></a>`;
+
+  if (data.message) {
+    html += `<div class="message">${htmlEscape(data.message)}</div>`;
+  }
+
+  const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
+  html += `<div class="meta">Last deployed ${htmlEscape(data.deployed)} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
+
+  if (Array.isArray(mainData.commits) && mainData.commits.length > 0) {
+    html += `<div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list">`;
+    html += mainData.commits.map((commit) => commitItem(commit)).join('');
+    html += `</ul></div>`;
+  }
+
+  html += `</li>\n`;
+  return html;
+};
+
+const renderBranch = (entry) => {
+  const data = baseData(entry);
+  const pr = branchPr(entry);
+  let html = `<li class="card"><a class="branch-link" href="./${htmlEscape(data.safe)}/">${htmlEscape(data.branch)}</a>`;
+
+  if (pr) {
+    const prNumber = pr.number != null ? String(pr.number) : '';
+    html += `<div class="pr-meta"><a class="pr-link" href="${htmlEscape(pr.url ?? '#')}">PR #${htmlEscape(prNumber)}</a>`;
+    html += ` · ${htmlEscape(pr.title ?? '')}</div>`;
+  }
+
+  if (data.message) {
+    html += `<div class="message">${htmlEscape(data.message)}</div>`;
+  }
+
+  const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
+  html += `<div class="meta">Last deployed ${htmlEscape(data.deployed)} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
+
+  html += `</li>\n`;
+  return html;
+};
+
+const toTimestamp = (value) => {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const entries = Object.entries(deployments ?? {}).map(([key, value]) => ({ key, value }));
+let output = '';
+
+const mainEntry = entries.find((entry) => entry.key === 'main' && entry.value);
+if (mainEntry) {
+  output += renderMain(mainEntry);
+}
+
+const branchEntries = entries
+  .filter((entry) => entry.key !== 'main')
+  .filter((entry) => branchPr(entry));
+
+branchEntries.sort((a, b) => toTimestamp(b.value?.deployedAt) - toTimestamp(a.value?.deployedAt));
+
+for (const entry of branchEntries) {
+  output += renderBranch(entry);
+}
+
+fs.appendFileSync('branch.html', output);
+NODE
 
           cat >> branch.html <<'HTML'
             </ul>
-          HTML
-
-          jq -r '
-            def html_escape:
-              gsub("&"; "&amp;") |
-              gsub("<"; "&lt;") |
-              gsub(">"; "&gt;") |
-              gsub("\""; "&quot;") |
-              gsub("\u0027"; "&#39;");
-
-            def render_prs($prs):
-              ($prs // []) as $items |
-              if ($items | length) > 0 then
-                "<div class=\"prs\">" +
-                ($items | map("<a href=\"" + (.url // "#") + "\" title=\"" + ((.title // "") | html_escape) + "\">PR #" + ((.number // 0)|tostring) + "</a>") | join(" &middot; ")) +
-                "</div>"
-              else
-                "<div class=\"prs none\">No linked pull requests</div>"
-              end;
-
-            def render_history_item($item):
-              ($item // {}) as $data |
-              "<li><strong>" + (($data.summary // "") | html_escape) + "</strong>" +
-              "<div class=\"history-meta\">" +
-              "<a href=\"" + (($data.commitUrl // "#")) + "\">" + (($data.sha // "")[:7]) + "</a>" +
-              " · " + (($data.date // "") | html_escape) +
-              " · " + (($data.author // "") | html_escape) +
-              "</div>" +
-              render_prs($data.pullRequests) +
-              "</li>";
-
-            def render_history($history):
-              ($history // []) as $items |
-              if ($items | length) > 0 then
-                "<section class=\"main-history\"><h2>Recent main merges</h2><ol class=\"history-list\">" +
-                ($items | map(render_history_item(.)) | join("")) +
-                "</ol></section>"
-              else
-                ""
-              end;
-
-            render_history(._mainHistory)
-          ' "$DEPLOY_DATA" >> branch.html
-
-          cat >> branch.html <<'HTML'
           </body>
           </html>
           HTML
@@ -431,6 +591,7 @@ jobs:
           cd ..
 
       - name: Prepare Pages artifact
+        if: steps.deployment-gate.outputs.eligible == 'true'
         run: |
           set -euo pipefail
           rm -rf site
@@ -438,16 +599,20 @@ jobs:
           rsync -a --exclude='.git/' pages/ site/
 
       - name: Setup Pages
+        if: steps.deployment-gate.outputs.eligible == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
+        if: steps.deployment-gate.outputs.eligible == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
       - name: Deploy to GitHub Pages
+        if: steps.deployment-gate.outputs.eligible == 'true'
         id: deploy-pages
         uses: actions/deploy-pages@v4
 
       - name: Preview URL
+        if: steps.deployment-gate.outputs.eligible == 'true'
         run: echo "Preview available at ${{ steps.sync.outputs.preview_url }}"
