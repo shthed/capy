@@ -405,164 +405,164 @@ jobs:
           PR_DATA_PATH="$PR_DATA_FILE" \
           MAIN_DATA_PATH="$MAIN_DATA_FILE" \
           node <<'NODE'
-const fs = require('fs');
+          const fs = require('fs');
 
-const readJson = (path, fallback) => {
-  try {
-    return JSON.parse(fs.readFileSync(path, 'utf8'));
-  } catch (error) {
-    return fallback;
-  }
-};
+          const readJson = (path, fallback) => {
+            try {
+              return JSON.parse(fs.readFileSync(path, 'utf8'));
+            } catch (error) {
+              return fallback;
+            }
+          };
 
-const deployments = readJson(process.env.DEPLOY_DATA_PATH, {});
-const prList = readJson(process.env.PR_DATA_PATH, []);
-const mainData = readJson(process.env.MAIN_DATA_PATH, { commits: [] });
+          const deployments = readJson(process.env.DEPLOY_DATA_PATH, {});
+          const prList = readJson(process.env.PR_DATA_PATH, []);
+          const mainData = readJson(process.env.MAIN_DATA_PATH, { commits: [] });
 
-const htmlEscape = (value) => String(value ?? '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;');
+          const htmlEscape = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
 
-const firstLine = (text) => {
-  const str = String(text ?? '');
-  const newlineIndex = str.indexOf('\n');
-  return newlineIndex === -1 ? str : str.slice(0, newlineIndex);
-};
+          const firstLine = (text) => {
+            const str = String(text ?? '');
+            const newlineIndex = str.indexOf('\n');
+            return newlineIndex === -1 ? str : str.slice(0, newlineIndex);
+          };
 
-const prByBranch = new Map();
-const prBySafe = new Map();
+          const prByBranch = new Map();
+          const prBySafe = new Map();
 
-for (const pr of prList) {
-  if (pr && typeof pr === 'object') {
-    if (pr.branch) {
-      prByBranch.set(pr.branch, pr);
-    }
-    if (pr.safeName) {
-      prBySafe.set(pr.safeName, pr);
-    }
-  }
-}
+          for (const pr of prList) {
+            if (pr && typeof pr === 'object') {
+              if (pr.branch) {
+                prByBranch.set(pr.branch, pr);
+              }
+              if (pr.safeName) {
+                prBySafe.set(pr.safeName, pr);
+              }
+            }
+          }
 
-const branchPr = (entry) => {
-  const value = entry.value ?? {};
-  return prByBranch.get(value.branch) ?? prBySafe.get(value.safeName) ?? null;
-};
+          const branchPr = (entry) => {
+            const value = entry.value ?? {};
+            return prByBranch.get(value.branch) ?? prBySafe.get(value.safeName) ?? null;
+          };
 
-const baseData = (entry) => {
-  const value = entry.value ?? {};
-  const message = firstLine(value.message ?? '');
+          const baseData = (entry) => {
+            const value = entry.value ?? {};
+            const message = firstLine(value.message ?? '');
 
-  return {
-    branch: value.branch ?? '',
-    safe: value.safeName ?? '',
-    message,
-    deployed: value.deployedAt ?? 'unknown',
-    actor: value.actor ?? 'unknown',
-    commit: value.commit ?? '',
-    url: value.commitUrl ?? '#'
-  };
-};
+            return {
+              branch: value.branch ?? '',
+              safe: value.safeName ?? '',
+              message,
+              deployed: value.deployedAt ?? 'unknown',
+              actor: value.actor ?? 'unknown',
+              commit: value.commit ?? '',
+              url: value.commitUrl ?? '#'
+            };
+          };
 
-const commitItem = (commit) => {
-  const shortSha = commit?.shortSha ?? (commit?.sha ? String(commit.sha).slice(0, 7) : '');
-  const message = firstLine(commit?.message ?? '');
-  const author = commit?.author ?? 'unknown';
-  const date = commit?.date ? String(commit.date) : '';
+          const commitItem = (commit) => {
+            const shortSha = commit?.shortSha ?? (commit?.sha ? String(commit.sha).slice(0, 7) : '');
+            const message = firstLine(commit?.message ?? '');
+            const author = commit?.author ?? 'unknown';
+            const date = commit?.date ? String(commit.date) : '';
 
-  let meta = `by ${htmlEscape(author)}`;
-  if (date) {
-    meta += ` · ${htmlEscape(date)}`;
-  }
+            let meta = `by ${htmlEscape(author)}`;
+            if (date) {
+              meta += ` · ${htmlEscape(date)}`;
+            }
 
-  if (Array.isArray(commit?.prs) && commit.prs.length > 0) {
-    const prLinks = commit.prs.map((pr) => {
-      const prNumber = pr?.number != null ? String(pr.number) : '';
-      const prTitle = prNumber ? `PR #${prNumber}` : 'PR';
-      return `<a class="commit-pr-link" href="${htmlEscape(pr?.url ?? '#')}">${prTitle}</a>`;
-    }).join(' ');
-    if (prLinks) {
-      meta += ` · ${prLinks}`;
-    }
-  }
+            if (Array.isArray(commit?.prs) && commit.prs.length > 0) {
+              const prLinks = commit.prs.map((pr) => {
+                const prNumber = pr?.number != null ? String(pr.number) : '';
+                const prTitle = prNumber ? `PR #${prNumber}` : 'PR';
+                return `<a class="commit-pr-link" href="${htmlEscape(pr?.url ?? '#')}">${prTitle}</a>`;
+              }).join(' ');
+              if (prLinks) {
+                meta += ` · ${prLinks}`;
+              }
+            }
 
-  return `<li class="commit-item"><a class="commit-sha" href="${htmlEscape(commit?.htmlUrl ?? '#')}">${htmlEscape(shortSha)}</a><span class="commit-message">${htmlEscape(message)}</span><div class="commit-meta">${meta}</div></li>`;
-};
+            return `<li class="commit-item"><a class="commit-sha" href="${htmlEscape(commit?.htmlUrl ?? '#')}">${htmlEscape(shortSha)}</a><span class="commit-message">${htmlEscape(message)}</span><div class="commit-meta">${meta}</div></li>`;
+          };
 
-const renderMain = (entry) => {
-  const data = baseData(entry);
-  let html = `<li class="card main"><a class="branch-link" href="./">main<span class="badge">production</span></a>`;
+          const renderMain = (entry) => {
+            const data = baseData(entry);
+            let html = `<li class="card main"><a class="branch-link" href="./">main<span class="badge">production</span></a>`;
 
-  if (data.message) {
-    html += `<div class="message">${htmlEscape(data.message)}</div>`;
-  }
+            if (data.message) {
+              html += `<div class="message">${htmlEscape(data.message)}</div>`;
+            }
 
-  const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
-  html += `<div class="meta">Last deployed ${htmlEscape(data.deployed)} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
+            const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
+            html += `<div class="meta">Last deployed ${htmlEscape(data.deployed)} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
 
-  if (Array.isArray(mainData.commits) && mainData.commits.length > 0) {
-    html += `<div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list">`;
-    html += mainData.commits.map((commit) => commitItem(commit)).join('');
-    html += `</ul></div>`;
-  }
+            if (Array.isArray(mainData.commits) && mainData.commits.length > 0) {
+              html += `<div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list">`;
+              html += mainData.commits.map((commit) => commitItem(commit)).join('');
+              html += `</ul></div>`;
+            }
 
-  html += `</li>\n`;
-  return html;
-};
+            html += `</li>\n`;
+            return html;
+          };
 
-const renderBranch = (entry) => {
-  const data = baseData(entry);
-  const pr = branchPr(entry);
-  let html = `<li class="card"><a class="branch-link" href="./${htmlEscape(data.safe)}/">${htmlEscape(data.branch)}</a>`;
+          const renderBranch = (entry) => {
+            const data = baseData(entry);
+            const pr = branchPr(entry);
+            let html = `<li class="card"><a class="branch-link" href="./${htmlEscape(data.safe)}/">${htmlEscape(data.branch)}</a>`;
 
-  if (pr) {
-    const prNumber = pr.number != null ? String(pr.number) : '';
-    html += `<div class="pr-meta"><a class="pr-link" href="${htmlEscape(pr.url ?? '#')}">PR #${htmlEscape(prNumber)}</a>`;
-    html += ` · ${htmlEscape(pr.title ?? '')}</div>`;
-  }
+            if (pr) {
+              const prNumber = pr.number != null ? String(pr.number) : '';
+              html += `<div class="pr-meta"><a class="pr-link" href="${htmlEscape(pr.url ?? '#')}">PR #${htmlEscape(prNumber)}</a>`;
+              html += ` · ${htmlEscape(pr.title ?? '')}</div>`;
+            }
 
-  if (data.message) {
-    html += `<div class="message">${htmlEscape(data.message)}</div>`;
-  }
+            if (data.message) {
+              html += `<div class="message">${htmlEscape(data.message)}</div>`;
+            }
 
-  const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
-  html += `<div class="meta">Last deployed ${htmlEscape(data.deployed)} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
+            const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
+            html += `<div class="meta">Last deployed ${htmlEscape(data.deployed)} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
 
-  html += `</li>\n`;
-  return html;
-};
+            html += `</li>\n`;
+            return html;
+          };
 
-const toTimestamp = (value) => {
-  if (!value) {
-    return 0;
-  }
+          const toTimestamp = (value) => {
+            if (!value) {
+              return 0;
+            }
 
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? 0 : parsed;
-};
+            const parsed = Date.parse(value);
+            return Number.isNaN(parsed) ? 0 : parsed;
+          };
 
-const entries = Object.entries(deployments ?? {}).map(([key, value]) => ({ key, value }));
-let output = '';
+          const entries = Object.entries(deployments ?? {}).map(([key, value]) => ({ key, value }));
+          let output = '';
 
-const mainEntry = entries.find((entry) => entry.key === 'main' && entry.value);
-if (mainEntry) {
-  output += renderMain(mainEntry);
-}
+          const mainEntry = entries.find((entry) => entry.key === 'main' && entry.value);
+          if (mainEntry) {
+            output += renderMain(mainEntry);
+          }
 
-const branchEntries = entries
-  .filter((entry) => entry.key !== 'main')
-  .filter((entry) => branchPr(entry));
+          const branchEntries = entries
+            .filter((entry) => entry.key !== 'main')
+            .filter((entry) => branchPr(entry));
 
-branchEntries.sort((a, b) => toTimestamp(b.value?.deployedAt) - toTimestamp(a.value?.deployedAt));
+          branchEntries.sort((a, b) => toTimestamp(b.value?.deployedAt) - toTimestamp(a.value?.deployedAt));
 
-for (const entry of branchEntries) {
-  output += renderBranch(entry);
-}
+          for (const entry of branchEntries) {
+            output += renderBranch(entry);
+          }
 
-fs.appendFileSync('branch.html', output);
-NODE
+          fs.appendFileSync('branch.html', output);
+          NODE
 
           cat >> branch.html <<'HTML'
             </ul>
@@ -616,3 +616,5 @@ NODE
       - name: Preview URL
         if: steps.deployment-gate.outputs.eligible == 'true'
         run: echo "Preview available at ${{ steps.sync.outputs.preview_url }}"
+
+
