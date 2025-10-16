@@ -51,18 +51,21 @@
       margin: 0;
       padding: 0;
       display: grid;
-      gap: 8px;
+      gap: 6px;
     }
     .commit-item {
       font-size: 0.9em;
       color: #24292e;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
     }
     .commit-sha {
       font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
       font-size: 0.9em;
       font-weight: 600;
       color: #0969da;
-      margin-right: 8px;
       text-decoration: none;
     }
     .commit-sha:hover {
@@ -71,18 +74,14 @@
     .commit-message {
       font-weight: 500;
       color: #24292e;
-      display: inline-block;
-      margin-left: 4px;
     }
     .commit-meta {
-      margin-top: 4px;
       color: #57606a;
       font-size: 0.85em;
     }
     .commit-pr-link {
       color: #8250df;
       text-decoration: none;
-      margin-right: 8px;
     }
     .commit-pr-link:hover {
       text-decoration: underline;
@@ -139,8 +138,8 @@
 <body>
   <h1>Capy Branch Deployments</h1>
   <ul class="deployments">
-<li class="card main"><a class="branch-link" href="./">main<span class="badge">production</span></a><div class="message">Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure</div><div class="meta">Last deployed 2025-10-16T19:44:16+08:00 by shthed · <a href="https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5">4e2da42</a></div><div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list"><li class="commit-item"><a class="commit-sha" href="https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5">4e2da42</a><span class="commit-message">Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure</span><div class="commit-meta">by Hairy Dog Trumpet · 2025-10-16T11:44:16Z · <a class="commit-pr-link" href="https://github.com/shthed/capy/pull/151">PR #151</a></div></li><li class="commit-item"><a class="commit-sha" href="https://github.com/shthed/capy/commit/927a5838931f2365ee524aa79910c8d75b0c63fc">927a583</a><span class="commit-message">Document branch update workflow</span><div class="commit-meta">by Hairy Dog Trumpet · 2025-10-16T11:43:12Z · <a class="commit-pr-link" href="https://github.com/shthed/capy/pull/151">PR #151</a></div></li><li class="commit-item"><a class="commit-sha" href="https://github.com/shthed/capy/commit/1af521c634b2ede6c4215aed188eda2640eacbd2">1af521c</a><span class="commit-message">Merge pull request #150 from shthed/codex/fix-yaml-syntax-error-in-deploy-branch.yml</span><div class="commit-meta">by Hairy Dog Trumpet · 2025-10-16T11:41:26Z · <a class="commit-pr-link" href="https://github.com/shthed/capy/pull/150">PR #150</a></div></li></ul></div></li>
-<li class="card"><a class="branch-link" href="./codex-revise-deploy-branch.yml-for-commit-display/">codex/revise-deploy-branch.yml-for-commit-display</a><div class="pr-meta"><a class="pr-link" href="https://github.com/shthed/capy/pull/152">PR #152</a> · Improve branch deployment summary layout</div><div class="message">Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure</div><div class="meta">Last deployed 2025-10-16T19:44:16+08:00 by shthed · <a href="https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5">4e2da42</a></div></li>
+<li class="card main"><a class="branch-link" href="./">main<span class="badge">production</span></a><div class="message">Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure</div><div class="meta">Last deployed 2025-10-16T19:44:16+08:00 by shthed · <a href="https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5">4e2da42</a></div><div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list"><li class="commit-item"><a class="commit-sha" href="https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5">4e2da42</a> <span class="commit-message">Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure</span> <span class="commit-meta">· <span class="commit-date">2025-10-16T11:44:16Z</span> · <a class="commit-pr-link" href="https://github.com/shthed/capy/pull/151">PR #151</a></span></li><li class="commit-item"><a class="commit-sha" href="https://github.com/shthed/capy/commit/927a5838931f2365ee524aa79910c8d75b0c63fc">927a583</a> <span class="commit-message">Document branch update workflow</span> <span class="commit-meta">· <span class="commit-date">2025-10-16T11:43:12Z</span> · <a class="commit-pr-link" href="https://github.com/shthed/capy/pull/151">PR #151</a></span></li><li class="commit-item"><a class="commit-sha" href="https://github.com/shthed/capy/commit/1af521c634b2ede6c4215aed188eda2640eacbd2">1af521c</a> <span class="commit-message">Merge pull request #150 from shthed/codex/fix-yaml-syntax-error-in-deploy-branch.yml</span> <span class="commit-meta">· <span class="commit-date">2025-10-16T11:41:26Z</span> · <a class="commit-pr-link" href="https://github.com/shthed/capy/pull/150">PR #150</a></span></li></ul></div></li>
+<li class="card"><a class="branch-link" href="./codex-revise-deploy-branch.yml-for-commit-display/">codex/revise-deploy-branch.yml-for-commit-display</a><div class="pr-meta"><a class="pr-link" href="https://github.com/shthed/capy/pull/152">PR #152</a> · Improve branch deployment summary layout</div><div class="message">Refine branch deployment summary layout</div><div class="meta">Last deployed 2025-10-16T19:56:25+08:00 by shthed · <a href="https://github.com/shthed/capy/commit/70a4b09c5034f7f9bdbafc699717d3166f3a21b5">70a4b09</a></div></li>
 <li class="card"><a class="branch-link" href="./codex-introduce-renderer-abstraction-for-webgl/">codex/introduce-renderer-abstraction-for-webgl</a><div class="pr-meta"><a class="pr-link" href="https://github.com/shthed/capy/pull/124">PR #124</a> · WebGL renderer</div><div class="message">Merge branch &#39;main&#39; into work</div><div class="meta">Last deployed 2025-10-16T03:32:54Z by shthed · <a href="https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180">fedcafb</a></div></li>
   </ul>
 </body>
