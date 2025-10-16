@@ -11,11 +11,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
-    "message": "Merge pull request #153 from shthed/codex/review-starthint-dialog-and-first-run-process\n\nRemove onboarding start hint and add quick start actions to Saves sheet",
+    "commit": "681cac5b83077347e270c27011c9813725acf220",
+    "message": "Merge pull request #155 from shthed/codex/revise-deploy-branch.yml-for-commit-display-o3qaeu\n\nStandardize branch deployment commit listings",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T21:45:30+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/d8dbdabf3ce6086c319e5efffd50092b4c5405f5"
+    "deployedAt": "2025-10-16T21:49:45+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/681cac5b83077347e270c27011c9813725acf220"
   },
   "fix-jq-slurpfile-gh-pages": {
     "branch": "fix/jq-slurpfile-gh-pages",
