@@ -2564,9 +2564,6 @@
       };
 
       let cachedCanvasRect = null;
-      let pendingViewTransform = null;
-      let viewTransformFrame = null;
-      let cancelViewTransformFrame = null;
 
       function invalidateCanvasRect() {
         cachedCanvasRect = null;
@@ -6163,7 +6160,7 @@
                 const multiplier = targetZoom / currentZoom;
                 const centerX = (first.x + second.x) / 2;
                 const centerY = (first.y + second.y) / 2;
-                applyZoom(multiplier, centerX, centerY, { skipLog: true, defer: true });
+                applyZoom(multiplier, centerX, centerY, { skipLog: true });
               }
               const centerX = (first.x + second.x) / 2;
               const centerY = (first.y + second.y) / 2;
@@ -6181,7 +6178,7 @@
                 viewState.panX += deltaX;
                 viewState.panY += deltaY;
                 pinchSession.hasChanged = true;
-                scheduleViewTransform({ skipSizing: true });
+                applyViewTransform();
               }
               pinchSession.lastCenterX = centerX;
               pinchSession.lastCenterY = centerY;
@@ -6195,7 +6192,7 @@
           const dy = event.clientY - panOrigin.y;
           viewState.panX = panOrigin.panX + dx;
           viewState.panY = panOrigin.panY + dy;
-          scheduleViewTransform({ skipSizing: true });
+          applyViewTransform();
           return;
         }
         if (!panCandidate || panCandidate.pointerId !== event.pointerId) return;
@@ -6454,11 +6451,7 @@
         const nextZoom = normalizeZoomValue(targetScale / baseScale, currentZoom);
         const significant = Math.abs(targetScale - currentScale) >= Math.max(0.01, currentScale * 0.001);
         viewState.zoom = nextZoom;
-        if (options.defer) {
-          scheduleViewTransform({ forceRender: true });
-        } else {
-          applyViewTransform({ forceRender: true });
-        }
+        applyViewTransform();
         if (significant && !options.skipLog) {
           logDebug(`Zoom set to ${(targetScale * 100).toFixed(0)}%`);
         }
@@ -6472,66 +6465,17 @@
       }
 
       function applyViewTransform(options = {}) {
-        const { forceRender = false, skipSizing = false } = options;
-        if (viewTransformFrame != null && typeof cancelViewTransformFrame === "function") {
-          cancelViewTransformFrame(viewTransformFrame);
-          viewTransformFrame = null;
-          cancelViewTransformFrame = null;
-          pendingViewTransform = null;
-        }
-        if (canvasStage) {
-          canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
-          canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
-        }
+        const { forceRender = false } = options;
+        canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
+        canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
         invalidateCanvasRect();
         if (!state.puzzle) {
           return;
         }
-        const metricsChanged = skipSizing ? false : applyCanvasSizing();
+        const metricsChanged = applyCanvasSizing();
         if (metricsChanged || forceRender) {
           ensureRenderCache();
           renderPuzzle();
-        }
-      }
-
-      function scheduleViewTransform(options = {}) {
-        const { forceRender = false, skipSizing = false } = options;
-        if (!pendingViewTransform) {
-          pendingViewTransform = { forceRender: false, skipSizing: true };
-        }
-        if (forceRender) {
-          pendingViewTransform.forceRender = true;
-        }
-        if (!skipSizing) {
-          pendingViewTransform.skipSizing = false;
-        }
-        if (viewTransformFrame != null) {
-          return;
-        }
-        const hasWindow = typeof window !== "undefined";
-        const canRaf = hasWindow && typeof window.requestAnimationFrame === "function";
-        if (canRaf) {
-          cancelViewTransformFrame = (id) => {
-            if (typeof window.cancelAnimationFrame === "function") {
-              window.cancelAnimationFrame(id);
-            }
-          };
-          viewTransformFrame = window.requestAnimationFrame(() => {
-            viewTransformFrame = null;
-            cancelViewTransformFrame = null;
-            const payload = pendingViewTransform;
-            pendingViewTransform = null;
-            applyViewTransform(payload || {});
-          });
-        } else {
-          cancelViewTransformFrame = (id) => clearTimeout(id);
-          viewTransformFrame = setTimeout(() => {
-            viewTransformFrame = null;
-            cancelViewTransformFrame = null;
-            const payload = pendingViewTransform;
-            pendingViewTransform = null;
-            applyViewTransform(payload || {});
-          }, 16);
         }
       }
 

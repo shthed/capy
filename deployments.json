@@ -137,10 +137,10 @@
   "codex-improve-game-performance-for-mobile": {
     "branch": "codex/improve-game-performance-for-mobile",
     "safeName": "codex-improve-game-performance-for-mobile",
-    "commit": "0b31593b5ee6f3341cc4bc5892d983cf3dd7f4f1",
-    "message": "Optimize mobile pan responsiveness",
+    "commit": "c8a7c4cf7058fd9daa53daf529eef77793c3dba1",
+    "message": "Merge pull request #157 from shthed/codex/review-.github/workflows/deploy-branch.yml-change-fc82xt\n\nSimplify branch deploy index cards",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T00:27:00+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/0b31593b5ee6f3341cc4bc5892d983cf3dd7f4f1"
+    "deployedAt": "2025-10-17T00:00:47+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/c8a7c4cf7058fd9daa53daf529eef77793c3dba1"
   }
 }
