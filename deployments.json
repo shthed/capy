@@ -124,5 +124,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-16T23:42:23+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/b999f8d71ec28f0c610fde62c187a7ea97a6c6d2"
+  },
+  "codex-review-starthint-dialog-and-first-run-process-tlj5hg": {
+    "branch": "codex/review-starthint-dialog-and-first-run-process-tlj5hg",
+    "safeName": "codex-review-starthint-dialog-and-first-run-process-tlj5hg",
+    "commit": "58e9b5aec2e8d2e4ce283e28a10f9c0207332881",
+    "message": "Merge pull request #152 from shthed/codex/revise-deploy-branch.yml-for-commit-display\n\nImprove branch deployment summary layout",
+    "actor": "shthed",
+    "deployedAt": "2025-10-16T19:59:31+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/58e9b5aec2e8d2e4ce283e28a10f9c0207332881"
   }
 }
