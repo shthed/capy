@@ -119,10 +119,10 @@
   "codex-review-.github-workflows-deploy-branch.yml-change-fc82xt": {
     "branch": "codex/review-.github/workflows/deploy-branch.yml-change-fc82xt",
     "safeName": "codex-review-.github-workflows-deploy-branch.yml-change-fc82xt",
-    "commit": "d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
-    "message": "Merge pull request #153 from shthed/codex/review-starthint-dialog-and-first-run-process\n\nRemove onboarding start hint and add quick start actions to Saves sheet",
+    "commit": "771c3415e4954194cc16b1cb56137b231720e5ba",
+    "message": "Streamline branch index cards",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T21:45:30+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/d8dbdabf3ce6086c319e5efffd50092b4c5405f5"
+    "deployedAt": "2025-10-16T23:30:31+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/771c3415e4954194cc16b1cb56137b231720e5ba"
   }
 }
