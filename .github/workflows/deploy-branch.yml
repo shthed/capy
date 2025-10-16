@@ -302,18 +302,21 @@ jobs:
                 margin: 0;
                 padding: 0;
                 display: grid;
-                gap: 8px;
+                gap: 6px;
               }
               .commit-item {
                 font-size: 0.9em;
                 color: #24292e;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 6px;
               }
               .commit-sha {
                 font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
                 font-size: 0.9em;
                 font-weight: 600;
                 color: #0969da;
-                margin-right: 8px;
                 text-decoration: none;
               }
               .commit-sha:hover {
@@ -322,18 +325,14 @@ jobs:
               .commit-message {
                 font-weight: 500;
                 color: #24292e;
-                display: inline-block;
-                margin-left: 4px;
               }
               .commit-meta {
-                margin-top: 4px;
                 color: #57606a;
                 font-size: 0.85em;
               }
               .commit-pr-link {
                 color: #8250df;
                 text-decoration: none;
-                margin-right: 8px;
               }
               .commit-pr-link:hover {
                 text-decoration: underline;
@@ -466,29 +465,60 @@ jobs:
             };
           };
 
+          const uniqueCommits = (commits) => {
+            const seen = new Set();
+            const results = [];
+
+            for (const commit of Array.isArray(commits) ? commits : []) {
+              const sha = commit?.sha ?? commit?.shortSha ?? commit?.htmlUrl ?? commit?.message ?? null;
+              const key = sha ? String(sha) : null;
+              if (key && seen.has(key)) {
+                continue;
+              }
+              if (key) {
+                seen.add(key);
+              }
+              results.push(commit);
+            }
+
+            return results;
+          };
+
           const commitItem = (commit) => {
             const shortSha = commit?.shortSha ?? (commit?.sha ? String(commit.sha).slice(0, 7) : '');
             const message = firstLine(commit?.message ?? '');
-            const author = commit?.author ?? 'unknown';
             const date = commit?.date ? String(commit.date) : '';
 
-            let meta = `by ${htmlEscape(author)}`;
+            const segments = [
+              `<a class="commit-sha" href="${htmlEscape(commit?.htmlUrl ?? '#')}">${htmlEscape(shortSha)}</a>`
+            ];
+
+            if (message) {
+              segments.push(`<span class="commit-message">${htmlEscape(message)}</span>`);
+            }
+
+            const metaSegments = [];
+
             if (date) {
-              meta += ` · ${htmlEscape(date)}`;
+              metaSegments.push(`<span class="commit-date">${htmlEscape(date)}</span>`);
             }
 
             if (Array.isArray(commit?.prs) && commit.prs.length > 0) {
               const prLinks = commit.prs.map((pr) => {
                 const prNumber = pr?.number != null ? String(pr.number) : '';
                 const prTitle = prNumber ? `PR #${prNumber}` : 'PR';
-                return `<a class="commit-pr-link" href="${htmlEscape(pr?.url ?? '#')}">${prTitle}</a>`;
+                return `<a class="commit-pr-link" href="${htmlEscape(pr?.url ?? '#')}">${htmlEscape(prTitle)}</a>`;
               }).join(' ');
               if (prLinks) {
-                meta += ` · ${prLinks}`;
+                metaSegments.push(prLinks);
               }
             }
 
-            return `<li class="commit-item"><a class="commit-sha" href="${htmlEscape(commit?.htmlUrl ?? '#')}">${htmlEscape(shortSha)}</a><span class="commit-message">${htmlEscape(message)}</span><div class="commit-meta">${meta}</div></li>`;
+            if (metaSegments.length > 0) {
+              segments.push(`<span class="commit-meta">· ${metaSegments.join(' · ')}</span>`);
+            }
+
+            return `<li class="commit-item">${segments.join(' ')}</li>`;
           };
 
           const renderMain = (entry) => {
@@ -502,9 +532,10 @@ jobs:
             const commitLinkText = data.commit ? htmlEscape(String(data.commit).slice(0, 7)) : '';
             html += `<div class="meta">Last deployed ${htmlEscape(data.deployed)} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
 
-            if (Array.isArray(mainData.commits) && mainData.commits.length > 0) {
+            const commits = uniqueCommits(mainData.commits);
+            if (commits.length > 0) {
               html += `<div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list">`;
-              html += mainData.commits.map((commit) => commitItem(commit)).join('');
+              html += commits.map((commit) => commitItem(commit)).join('');
               html += `</ul></div>`;
             }
 
