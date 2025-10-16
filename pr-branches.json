@@ -1,13 +1,5 @@
 [
   {
-    "branch": "codex/review-.github/workflows/deploy-branch.yml-change-fc82xt",
-    "safeName": "codex-review-.github-workflows-deploy-branch.yml-change-fc82xt",
-    "title": "Simplify branch deploy index cards",
-    "number": 157,
-    "updatedAt": "2025-10-16T15:42:25Z",
-    "url": "https://github.com/shthed/capy/pull/157"
-  },
-  {
     "branch": "codex/introduce-renderer-abstraction-for-webgl",
     "safeName": "codex-introduce-renderer-abstraction-for-webgl",
     "title": "WebGL renderer",

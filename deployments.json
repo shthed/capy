@@ -11,11 +11,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "3b6a2e64f611c24ee24332f8b547cc179083edec",
-    "message": "Merge pull request #158 from shthed/codex/review-starthint-dialog-and-first-run-process-tlj5hg\n\nAdd reset progress button to save manager",
+    "commit": "c8a7c4cf7058fd9daa53daf529eef77793c3dba1",
+    "message": "Merge pull request #157 from shthed/codex/review-.github/workflows/deploy-branch.yml-change-fc82xt\n\nSimplify branch deploy index cards",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T23:55:09+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/3b6a2e64f611c24ee24332f8b547cc179083edec"
+    "deployedAt": "2025-10-17T00:00:47+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/c8a7c4cf7058fd9daa53daf529eef77793c3dba1"
   },
   "fix-jq-slurpfile-gh-pages": {
     "branch": "fix/jq-slurpfile-gh-pages",
