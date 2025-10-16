@@ -1,6 +1,20 @@
 {
   "codex/revise-deploy-branch.yml-for-commit-display-o3qaeu": [
     {
+      "sha": "1195e89dd27a784fabbcb7baf9b4aafe42f76e6c",
+      "shortSha": "1195e89",
+      "message": "Merge branch 'main' into codex/revise-deploy-branch.yml-for-commit-display-o3qaeu",
+      "date": "2025-10-16T13:44:24Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1195e89dd27a784fabbcb7baf9b4aafe42f76e6c",
+      "prs": [
+        {
+          "number": 155,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/155"
+        }
+      ]
+    },
+    {
       "sha": "734f6fadf7595b3f3dec1d0132f743f30f06d655",
       "shortSha": "734f6fa",
       "message": "Improve branch commit PR metadata",
@@ -15,36 +29,12 @@
       ]
     },
     {
-      "sha": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
-      "shortSha": "4e2da42",
-      "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
-      "date": "2025-10-16T11:44:16Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+      "sha": "8845ed2d078e393fc6d8e7466301de8cd92c2f65",
+      "shortSha": "8845ed2",
+      "message": "Merge pull request #154 from shthed/codex/revise-deploy-branch.yml-for-commit-display\n\nStandardize branch deployment commit listings",
+      "date": "2025-10-16T13:36:36Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8845ed2d078e393fc6d8e7466301de8cd92c2f65",
       "prs": [
-        {
-          "number": 151,
-          "title": "Document branch update workflow",
-          "url": "https://github.com/shthed/capy/pull/151"
-        },
-        {
-          "number": 155,
-          "title": "Standardize branch deployment commit listings",
-          "url": "https://github.com/shthed/capy/pull/155"
-        }
-      ]
-    },
-    {
-      "sha": "927a5838931f2365ee524aa79910c8d75b0c63fc",
-      "shortSha": "927a583",
-      "message": "Document branch update workflow",
-      "date": "2025-10-16T11:43:12Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/927a5838931f2365ee524aa79910c8d75b0c63fc",
-      "prs": [
-        {
-          "number": 151,
-          "title": "Document branch update workflow",
-          "url": "https://github.com/shthed/capy/pull/151"
-        },
         {
           "number": 155,
           "title": "Standardize branch deployment commit listings",
@@ -55,6 +45,20 @@
   ],
   "codex-revise-deploy-branch.yml-for-commit-display-o3qaeu": [
     {
+      "sha": "1195e89dd27a784fabbcb7baf9b4aafe42f76e6c",
+      "shortSha": "1195e89",
+      "message": "Merge branch 'main' into codex/revise-deploy-branch.yml-for-commit-display-o3qaeu",
+      "date": "2025-10-16T13:44:24Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1195e89dd27a784fabbcb7baf9b4aafe42f76e6c",
+      "prs": [
+        {
+          "number": 155,
+          "title": "Standardize branch deployment commit listings",
+          "url": "https://github.com/shthed/capy/pull/155"
+        }
+      ]
+    },
+    {
       "sha": "734f6fadf7595b3f3dec1d0132f743f30f06d655",
       "shortSha": "734f6fa",
       "message": "Improve branch commit PR metadata",
@@ -69,36 +73,12 @@
       ]
     },
     {
-      "sha": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
-      "shortSha": "4e2da42",
-      "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
-      "date": "2025-10-16T11:44:16Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+      "sha": "8845ed2d078e393fc6d8e7466301de8cd92c2f65",
+      "shortSha": "8845ed2",
+      "message": "Merge pull request #154 from shthed/codex/revise-deploy-branch.yml-for-commit-display\n\nStandardize branch deployment commit listings",
+      "date": "2025-10-16T13:36:36Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8845ed2d078e393fc6d8e7466301de8cd92c2f65",
       "prs": [
-        {
-          "number": 151,
-          "title": "Document branch update workflow",
-          "url": "https://github.com/shthed/capy/pull/151"
-        },
-        {
-          "number": 155,
-          "title": "Standardize branch deployment commit listings",
-          "url": "https://github.com/shthed/capy/pull/155"
-        }
-      ]
-    },
-    {
-      "sha": "927a5838931f2365ee524aa79910c8d75b0c63fc",
-      "shortSha": "927a583",
-      "message": "Document branch update workflow",
-      "date": "2025-10-16T11:43:12Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/927a5838931f2365ee524aa79910c8d75b0c63fc",
-      "prs": [
-        {
-          "number": 151,
-          "title": "Document branch update workflow",
-          "url": "https://github.com/shthed/capy/pull/151"
-        },
         {
           "number": 155,
           "title": "Standardize branch deployment commit listings",
