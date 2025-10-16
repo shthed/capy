@@ -41,8 +41,8 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
      - Clickable short SHA linking to the full commit on GitHub
      - Links to any associated pull requests that include the commit
    - All branches with open PRs, sorted by most recently updated PR first
-   - Each branch listing includes: branch name, PR number, title, link, and last update date
-   - All dates and times are automatically converted to the viewer's local timezone using JavaScript
+   - Each branch listing includes: branch name, PR number, title, link, last update date, and up to 3 recent commits from that branch (mirroring the metadata surfaced for `main`)
+   - All dates and times are automatically converted to the viewer's local timezone using JavaScript with 12-hour clock formatting and a best-effort timezone suffix
 
 7. **GitHub Pages Publish**: The updated `gh-pages` branch is deployed to GitHub Pages
 
@@ -67,8 +67,8 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 5. **CI/CD Integration**: Deployment happens automatically on every push to main or branches with open PRs
 6. **Resource Efficiency**: Branches without PRs are not deployed, saving CI/CD minutes
 7. **Sorted Navigation**: The branch index page (`branch.html`) shows main first, then the most recently updated PRs for easy access
-8. **Commit History**: The branch index shows the last 3 commits on main with author, timestamp, commit SHA links, and associated PR links
-9. **Local Timezone Display**: All dates and times are automatically converted to the viewer's local timezone for easier comprehension
+8. **Commit History**: The branch index shows the last 3 commits on main and for each open-PR branch, including author, timestamp, commit SHA links, and associated PR links
+9. **Local Timezone Display**: All dates and times are automatically converted to the viewer's local timezone using 12-hour notation and, when available, the viewer's timezone abbreviation
 10. **GitHub Integration**: Direct links to commits and associated pull requests make it easy to trace changes from the deployment back to their source
 
 ## Cleanup

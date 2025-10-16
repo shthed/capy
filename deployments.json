@@ -110,10 +110,10 @@
   "codex-review-.github-workflows-deploy-branch.yml-change": {
     "branch": "codex/review-.github/workflows/deploy-branch.yml-change",
     "safeName": "codex-review-.github-workflows-deploy-branch.yml-change",
-    "commit": "d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
-    "message": "Merge pull request #153 from shthed/codex/review-starthint-dialog-and-first-run-process\n\nRemove onboarding start hint and add quick start actions to Saves sheet",
+    "commit": "5dd583c4f72aa41148b0602c890b12d1f59b4057",
+    "message": "Refine branch deployment index layout",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T21:45:30+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/d8dbdabf3ce6086c319e5efffd50092b4c5405f5"
+    "deployedAt": "2025-10-16T22:26:52+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/5dd583c4f72aa41148b0602c890b12d1f59b4057"
   }
 }
