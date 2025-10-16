@@ -88,5 +88,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-16T19:56:25+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/70a4b09c5034f7f9bdbafc699717d3166f3a21b5"
+  },
+  "codex-review-starthint-dialog-and-first-run-process": {
+    "branch": "codex/review-starthint-dialog-and-first-run-process",
+    "safeName": "codex-review-starthint-dialog-and-first-run-process",
+    "commit": "58e9b5aec2e8d2e4ce283e28a10f9c0207332881",
+    "message": "Merge pull request #152 from shthed/codex/revise-deploy-branch.yml-for-commit-display\n\nImprove branch deployment summary layout",
+    "actor": "shthed",
+    "deployedAt": "2025-10-16T19:59:31+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/58e9b5aec2e8d2e4ce283e28a10f9c0207332881"
   }
 }
