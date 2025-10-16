@@ -12,9 +12,9 @@
     "branch": "main",
     "safeName": "",
     "commit": "c8a7c4cf7058fd9daa53daf529eef77793c3dba1",
-    "message": "Merge pull request #157 from shthed/codex/review-.github/workflows/deploy-branch.yml-change-fc82xt\n\nSimplify branch deploy index cards",
+    "message": "Merge pull request #157 from shthed/codex/review-.github/workflows/deploy-branch.yml-change-fc82xt",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T00:00:47+08:00",
+    "deployedAt": "2025-10-16T16:01:25Z",
     "commitUrl": "https://github.com/shthed/capy/commit/c8a7c4cf7058fd9daa53daf529eef77793c3dba1"
   },
   "fix-jq-slurpfile-gh-pages": {
