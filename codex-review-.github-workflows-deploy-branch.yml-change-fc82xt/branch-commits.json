@@ -1,6 +1,20 @@
 {
   "codex/review-.github/workflows/deploy-branch.yml-change-fc82xt": [
     {
+      "sha": "b999f8d71ec28f0c610fde62c187a7ea97a6c6d2",
+      "shortSha": "b999f8d",
+      "message": "Sync branch deploy workflow CSS",
+      "date": "2025-10-16T15:42:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b999f8d71ec28f0c610fde62c187a7ea97a6c6d2",
+      "prs": [
+        {
+          "number": 157,
+          "title": "Simplify branch deploy index cards",
+          "url": "https://github.com/shthed/capy/pull/157"
+        }
+      ]
+    },
+    {
       "sha": "771c3415e4954194cc16b1cb56137b231720e5ba",
       "shortSha": "771c341",
       "message": "Streamline branch index cards",
@@ -20,20 +34,6 @@
       "message": "Merge pull request #153 from shthed/codex/review-starthint-dialog-and-first-run-process\n\nRemove onboarding start hint and add quick start actions to Saves sheet",
       "date": "2025-10-16T13:45:30Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
-      "prs": [
-        {
-          "number": 157,
-          "title": "Simplify branch deploy index cards",
-          "url": "https://github.com/shthed/capy/pull/157"
-        }
-      ]
-    },
-    {
-      "sha": "9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
-      "shortSha": "9fbf57c",
-      "message": "Allow sample reload without artwork",
-      "date": "2025-10-16T13:37:19Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
       "prs": [
         {
           "number": 157,
@@ -45,6 +45,20 @@
   ],
   "codex-review-.github-workflows-deploy-branch.yml-change-fc82xt": [
     {
+      "sha": "b999f8d71ec28f0c610fde62c187a7ea97a6c6d2",
+      "shortSha": "b999f8d",
+      "message": "Sync branch deploy workflow CSS",
+      "date": "2025-10-16T15:42:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b999f8d71ec28f0c610fde62c187a7ea97a6c6d2",
+      "prs": [
+        {
+          "number": 157,
+          "title": "Simplify branch deploy index cards",
+          "url": "https://github.com/shthed/capy/pull/157"
+        }
+      ]
+    },
+    {
       "sha": "771c3415e4954194cc16b1cb56137b231720e5ba",
       "shortSha": "771c341",
       "message": "Streamline branch index cards",
@@ -64,20 +78,6 @@
       "message": "Merge pull request #153 from shthed/codex/review-starthint-dialog-and-first-run-process\n\nRemove onboarding start hint and add quick start actions to Saves sheet",
       "date": "2025-10-16T13:45:30Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/d8dbdabf3ce6086c319e5efffd50092b4c5405f5",
-      "prs": [
-        {
-          "number": 157,
-          "title": "Simplify branch deploy index cards",
-          "url": "https://github.com/shthed/capy/pull/157"
-        }
-      ]
-    },
-    {
-      "sha": "9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
-      "shortSha": "9fbf57c",
-      "message": "Allow sample reload without artwork",
-      "date": "2025-10-16T13:37:19Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
       "prs": [
         {
           "number": 157,
