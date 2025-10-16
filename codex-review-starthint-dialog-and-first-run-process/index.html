@@ -1325,7 +1325,6 @@
           data-testid="save-manager-button"
           aria-label="Save manager"
           title="Save manager"
-          disabled
         >
           <span class="icon" aria-hidden="true">💾</span>
           <span class="label">Saves</span>
@@ -2834,6 +2833,35 @@
       let puzzleGenerationModulePromise = null;
       let pendingImportFile = null;
       updateImportNotice();
+      let shouldAutoLoadSample = false;
+
+      function disableSampleAutoload() {
+        shouldAutoLoadSample = false;
+      }
+
+      function maybeAutoLoadSample(options = {}) {
+        if (!shouldAutoLoadSample) {
+          return;
+        }
+        if (state.puzzle) {
+          shouldAutoLoadSample = false;
+          return;
+        }
+        if (pendingImportFile) {
+          return;
+        }
+        const dataUrl = getSampleDataUrl();
+        if (!dataUrl) {
+          return;
+        }
+        disableSampleAutoload();
+        const { announce = false } = options;
+        loadSamplePuzzle({
+          detailLevel: state.sampleDetailLevel,
+          skipDetailUpdate: true,
+          announce,
+        });
+      }
 
       gameSaveManager.subscribe((entries) => {
         state.saves = entries;
@@ -3220,14 +3248,17 @@
 
       applySampleDetailLevel(DEFAULT_SAMPLE_DETAIL, { skipReload: true, skipLog: true });
 
-      fetchDefaultGamePayload().catch((error) => {
-        console.error("Failed to preload default puzzle metadata", error);
-      });
-
       const restoredSession = loadInitialSession();
-      if (!restoredSession && getSampleDataUrl()) {
-        loadSamplePuzzle({ detailLevel: state.sampleDetailLevel, skipDetailUpdate: true, announce: false });
-      }
+      shouldAutoLoadSample = !restoredSession;
+      maybeAutoLoadSample();
+
+      fetchDefaultGamePayload()
+        .then(() => {
+          maybeAutoLoadSample();
+        })
+        .catch((error) => {
+          console.error("Failed to preload default puzzle metadata", error);
+        });
 
       if (selectButton) {
         selectButton.addEventListener("click", () => {
@@ -4169,6 +4200,7 @@
 
       function loadSamplePuzzle(options = {}) {
         const { announce = true, detailLevel, skipDetailUpdate = false } = options;
+        disableSampleAutoload();
         const dataUrl = getSampleDataUrl();
         if (!dataUrl) return;
         const sampleTitle = getSampleTitle();
@@ -4200,6 +4232,7 @@
 
       async function loadDefaultPuzzle(options = {}) {
         const { announce = true, forceRefresh = false } = options;
+        disableSampleAutoload();
         resetPuzzleUI();
         try {
           const { payload, resolvedTitle, resolvedDescription } = await fetchDefaultGamePayload({
@@ -4247,7 +4280,9 @@
         for (const button of saveSnapshotButtons) {
           button.disabled = !hasPuzzle;
         }
-        saveManagerButton.disabled = !hasPuzzle && state.saves.length === 0;
+        if (saveManagerButton) {
+          saveManagerButton.disabled = false;
+        }
         if (startHintCloseButton) {
           startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
         }
@@ -4611,6 +4646,7 @@
         if (!file) {
           return;
         }
+        disableSampleAutoload();
         if (!generatorSheet) {
           handleFile(file);
           return;
@@ -4638,6 +4674,7 @@
       }
 
       function handleFile(file) {
+        disableSampleAutoload();
         if (isJsonFile(file)) {
           resetPuzzleUI();
           const reader = new FileReader();
@@ -4798,6 +4835,7 @@
       }
 
       function applyPuzzleResult(data, metadata = {}) {
+        disableSampleAutoload();
         if (!data || typeof data.width !== "number" || typeof data.height !== "number") {
           console.error("Puzzle data missing required dimensions.");
           setProgressMessage("idle");

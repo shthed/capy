@@ -92,10 +92,10 @@
   "codex-review-starthint-dialog-and-first-run-process": {
     "branch": "codex/review-starthint-dialog-and-first-run-process",
     "safeName": "codex-review-starthint-dialog-and-first-run-process",
-    "commit": "a545ed4f72b03b13a2cac6306903b5c6add96b38",
-    "message": "Simplify onboarding by relying on Saves sheet",
+    "commit": "455d15533594b0e42bcab11c1a7f37fae6e761d3",
+    "message": "Fix sample autoload and enable saves sheet",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T20:17:33+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/a545ed4f72b03b13a2cac6306903b5c6add96b38"
+    "deployedAt": "2025-10-16T21:21:23+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/455d15533594b0e42bcab11c1a7f37fae6e761d3"
   }
 }
