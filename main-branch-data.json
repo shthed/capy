@@ -1,6 +1,36 @@
 {
   "commits": [
     {
+      "sha": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+      "shortSha": "4e2da42",
+      "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T11:44:16Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+      "prs": [
+        {
+          "number": 151,
+          "title": "Document branch update workflow",
+          "url": "https://github.com/shthed/capy/pull/151"
+        }
+      ]
+    },
+    {
+      "sha": "927a5838931f2365ee524aa79910c8d75b0c63fc",
+      "shortSha": "927a583",
+      "message": "Document branch update workflow",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-16T11:43:12Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/927a5838931f2365ee524aa79910c8d75b0c63fc",
+      "prs": [
+        {
+          "number": 151,
+          "title": "Document branch update workflow",
+          "url": "https://github.com/shthed/capy/pull/151"
+        }
+      ]
+    },
+    {
       "sha": "1af521c634b2ede6c4215aed188eda2640eacbd2",
       "shortSha": "1af521c",
       "message": "Merge pull request #150 from shthed/codex/fix-yaml-syntax-error-in-deploy-branch.yml\n\nFix deploy workflow heredoc indentation",
@@ -14,38 +44,8 @@
           "url": "https://github.com/shthed/capy/pull/150"
         }
       ]
-    },
-    {
-      "sha": "bf513a450478217347b5d0255ab9f94e1edfab32",
-      "shortSha": "bf513a4",
-      "message": "Fix heredoc indentation in deploy workflow",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-16T11:40:50Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/bf513a450478217347b5d0255ab9f94e1edfab32",
-      "prs": [
-        {
-          "number": 150,
-          "title": "Fix deploy workflow heredoc indentation",
-          "url": "https://github.com/shthed/capy/pull/150"
-        }
-      ]
-    },
-    {
-      "sha": "b695057aeefcaa90a09b938e7f9eb80caefe5705",
-      "shortSha": "b695057",
-      "message": "Merge pull request #149 from shthed/codex/cherry-pick-changes-from-codex/resolve-issue-with-codex-4krf96\n\nResolve branch deployment jq merge conflict",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-16T11:40:22Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/b695057aeefcaa90a09b938e7f9eb80caefe5705",
-      "prs": [
-        {
-          "number": 149,
-          "title": "Resolve branch deployment jq merge conflict",
-          "url": "https://github.com/shthed/capy/pull/149"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-16T11:41:26Z",
-  "deploymentTimestamp": 1760614896785
+  "lastCommitDate": "2025-10-16T11:44:16Z",
+  "deploymentTimestamp": 1760615069417
 }

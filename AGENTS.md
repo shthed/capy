@@ -76,6 +76,40 @@ Playwright test runner and a lightweight `http-server` for local previews.
 - After each commit, push the branch so remote history mirrors local progress.
 - Add the upstream remote if missing: `git remote add origin https://github.com/shthed/capy.git`.
 
+### Branch Update Procedure
+- Prefer rebasing feature branches onto the latest `origin/main` to preserve a
+  linear history. Merging is acceptable only when you intentionally avoid
+  rewriting history.
+- Recommended one-time git configuration:
+  ```bash
+  git config --global pull.rebase true
+  git config --global rebase.autoStash true
+  git config --global rerere.enabled true
+  ```
+- Standard rebase workflow:
+  ```bash
+  git fetch --all --prune
+  git switch <feature-branch>
+  git rebase origin/main
+  # resolve conflicts
+  git push --force-with-lease
+  ```
+- If you must merge instead, follow the same fetch/switch cadence, run
+  `git merge origin/main`, resolve conflicts, and finish with a regular
+  `git push`.
+- During rebases, remember `ours` = the commit being replayed (your feature
+  work) and `theirs` = upstream (`origin/main`). For merges, `ours` = your
+  feature branch and `theirs` = the target branch.
+- Common conflict shortcuts:
+  ```bash
+  git checkout --theirs package-lock.json yarn.lock pnpm-lock.yaml
+  git checkout --ours .editorconfig .eslintrc.* .prettierrc*
+  git add -A && git rebase --continue   # or: git merge --continue
+  ```
+- Abort a bad resolution with `git rebase --abort` (or `git merge --abort`).
+- After rebasing, always push with `--force-with-lease` to avoid clobbering
+  collaborators.
+
 ## Final Response & PR Expectations
 - Summaries should highlight UI and workflow changes, noting live preview URLs if
   applicable.

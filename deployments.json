@@ -11,11 +11,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "1af521c634b2ede6c4215aed188eda2640eacbd2",
-    "message": "Merge pull request #150 from shthed/codex/fix-yaml-syntax-error-in-deploy-branch.yml",
+    "commit": "4e2da421264078f5f16b4d4c50f91d5908fc17b5",
+    "message": "Merge pull request #151 from shthed/codex/update-agents.md-with-git-update-procedure\n\nDocument branch update workflow",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T11:42:17Z",
-    "commitUrl": "https://github.com/shthed/capy/commit/1af521c634b2ede6c4215aed188eda2640eacbd2"
+    "deployedAt": "2025-10-16T19:44:16+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/4e2da421264078f5f16b4d4c50f91d5908fc17b5"
   },
   "fix-jq-slurpfile-gh-pages": {
     "branch": "fix/jq-slurpfile-gh-pages",
