@@ -3,23 +3,61 @@
   <!--
     Developer Map
     ==========
-    - UI chrome (header/footer modals): command rail + sheets define primary controls and expose
-      buttons that wire into the handler helpers inside the script. Look for "Command button"
-      listeners when adjusting layout interactions.
-    - Viewport + stage: #viewport, #canvasStage, and #canvasTransform cooperate with the
-      viewState structure. applyViewTransform, applyZoom, resetView, and the pointer handlers are
-      the touch/mouse entry points for navigation. Pointerdown/up/move feed handlePan* while
-      wheel/key events route through applyZoom.
-    - Puzzle state + rendering: the state object captures palette, regions, fill progress, and
-      metadata. Rendering flows through renderPuzzle → drawOutlines/drawNumbers using the vector
-      cache built by ensureRenderCache.
-    - Generation pipeline: loadImage → createPuzzleData orchestrates quantization (kmeansQuantize),
-      segmentation (segmentRegions), and palette prep. Regeneration, fixture loading, and saves all
-      call applyPuzzleResult to hydrate UI.
-    - Persistence + exports: local storage helpers (persistSaves/loadSavedEntries) back the save
-      sheet. serializeCurrentPuzzle produces an export-safe object.
-    - External API: window.capyGenerator exposes entry points that manual test harnesses
-      rely on. Keep it stable whenever you shuffle internal wiring.
+    Layout overview
+    --------------
+    - UI chrome (command rail, modal sheets, and the debug console) exposes primary actions wired
+      to script handlers. Scan for "Command button" listeners when adjusting layout interactions.
+    - Viewport + stage: #viewport, #canvasStage, and #canvasTransform cooperate with viewState for
+      pan/zoom. Pointer handlers (handlePanStart/Move/End) and applyZoom feed navigation updates.
+    - Puzzle state & rendering: state holds palette, fills, and metadata. renderPuzzle →
+      drawOutlines/drawNumbers use ensureRenderCache to hydrate canvases and labels.
+    - Generation pipeline: loadImage → createPuzzleData orchestrates quantization, segmentation,
+      and palette prep. Regeneration, fixture loading, and saves all call applyPuzzleResult.
+    - Persistence + exports: createGameSaveManager backs the start screen + manager. Autosave,
+      manual saves, and exports live alongside serializeCurrentPuzzle.
+    - External API: window.capyGenerator exposes devtools entry points; keep signatures stable when
+      reorganizing internal wiring.
+
+    Script organization
+    -------------------
+    1. Cached DOM references, constants, and default settings.
+    2. Canvas metrics, view state, pointer capture, and custom cursor helpers.
+    3. Generation + rendering pipeline (loadDefaultPuzzle, createPuzzleData, renderPuzzle, etc.).
+    4. Palette interactions, keyboard/mouse handlers, and hint overlay animation loop.
+    5. Autosave + storage encoding, save manager wiring, and UI refresh routines.
+    6. window.capyGenerator bindings exported last for manual QA tooling.
+
+    Function highlights
+    -------------------
+    - installBrowserZoomGuards(): Prevents browser zoom from intercepting wheel gestures on the
+      canvas.
+    - applyViewTransform(options): Pushes viewState pan/zoom changes to the stage and pointer
+      overlays.
+    - applyZoom(multiplier, clientX, clientY, options): Normalizes zoom gestures around the pointer
+      focus and updates viewState.
+    - resetView(options): Fits the puzzle to the viewport and recenters the stage.
+    - loadSamplePuzzle(options) / loadDefaultPuzzle(options): Bootstrap the start screen selection
+      or fallback puzzle payload.
+    - createPuzzleData(image, options): Invokes the generation worker to quantize colors and
+      segment regions.
+    - applyPuzzleResult(data, metadata): Hydrates puzzle state, triggers canvas redraw, and updates
+      metadata surfaces.
+    - renderPuzzle() / renderPreview(): Draw the active puzzle and thumbnail preview using the
+      shared render cache.
+    - renderPalette(): Rebuilds the palette dock and accessibility metadata for the active colors.
+    - attemptFillRegion(hit, { label }): Processes paint interactions, updates fills, and schedules
+      autosave.
+    - useHint(): Coordinates palette flashing + overlay animations to guide the next region.
+    - updateCommandStates(): Enables/disables command rail buttons based on current puzzle state.
+    - applyTheme(theme, options) / applyBackgroundColor(hex, options): Refresh UI theming tokens and
+      persist preferences.
+    - scheduleAutosave(reason) / persistAutosave(reason): Manage background save cadence and writes
+      to storage.
+    - saveCurrentSnapshot(): Captures a manual save entry and refreshes start/manager lists.
+    - refreshGameSelection() / refreshSaveList(): Render launcher + manager items from shared
+      templates.
+    - createGameSaveManager(): Wraps persistence with list, subscribe, and persist helpers for UI
+      consumers.
   -->
   <head>
     <meta charset="utf-8" />
@@ -39,20 +77,8 @@
         --app-width: 100vw;
         --app-height: 100vh;
         --viewport-padding: calc(32px * var(--ui-scale));
-        --rail-gap: calc(8px * var(--ui-scale));
-        --rail-gap-portrait: calc(6px * var(--ui-scale));
-        --rail-padding-block: calc(12px * var(--ui-scale));
-        --rail-padding-inline: calc(24px * var(--ui-scale));
-        --command-button-size: clamp(
-          calc(32px * var(--ui-scale)),
-          calc(40px * var(--ui-scale)),
-          calc(48px * var(--ui-scale))
-        );
-        --command-button-size-portrait: clamp(
-          calc(30px * var(--ui-scale)),
-          calc(36px * var(--ui-scale)),
-          calc(44px * var(--ui-scale))
-        );
+        --rail-padding-block: calc(10px * var(--ui-scale));
+        --rail-padding-inline: calc(20px * var(--ui-scale));
         --theme-body-bg: #000000;
         --theme-body-color: #e2e8f0;
         --theme-command-bg: rgba(15, 23, 42, 0.82);
@@ -100,8 +126,8 @@
         --theme-chip-active-text: rgba(226, 232, 240, 0.98);
         --theme-palette-dock-bg: rgba(2, 6, 23, 0.94);
         --theme-palette-dock-border: rgba(15, 23, 42, 0.85);
-        --command-rail-top: calc(env(safe-area-inset-top, 0px) + 16px);
-        --command-rail-height: var(--command-button-size);
+        --command-rail-top: calc(env(safe-area-inset-top, 0px) + 12px);
+        --command-rail-height: calc(40px * var(--ui-scale));
       }
 
       body[data-theme="dark"] {
@@ -218,6 +244,18 @@
         touch-action: manipulation;
       }
 
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
       body {
         margin: 0;
         min-height: 100vh;
@@ -257,67 +295,91 @@
       #commandRail {
         position: absolute;
         top: var(--command-rail-top);
-        left: calc(env(safe-area-inset-left, 0px) + 16px);
-        right: calc(env(safe-area-inset-right, 0px) + 16px);
+        left: calc(env(safe-area-inset-left, 0px) + 12px);
+        right: calc(env(safe-area-inset-right, 0px) + 12px);
         display: flex;
-        justify-content: flex-start;
         align-items: center;
-        flex-wrap: wrap;
-        gap: calc(10px * var(--ui-scale));
+        gap: calc(6px * var(--ui-scale));
         padding: 0;
         margin: 0;
+        border: 0;
         background: none;
-        z-index: 3;
+        box-shadow: none;
+        backdrop-filter: none;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
         touch-action: manipulation;
+        z-index: 3;
+        scrollbar-width: none;
+      }
+
+      #commandRail::-webkit-scrollbar {
+        display: none;
       }
 
       #commandRail button {
-        border-radius: 12px;
-        padding: 0;
-        width: var(--command-button-size);
-        height: var(--command-button-size);
-        display: grid;
-        place-items: center;
-        background: var(--theme-command-bg);
+        display: inline-flex;
+        align-items: center;
+        gap: calc(6px * var(--ui-scale));
+        padding: calc(4px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        border-radius: calc(6px * var(--ui-scale));
+        border: 1px solid color-mix(in srgb, var(--theme-command-border) 60%, transparent);
+        background: color-mix(in srgb, var(--theme-command-bg) 88%, transparent);
         color: var(--theme-command-text);
-        border: 1px solid var(--theme-command-border);
+        font-size: calc(14px * var(--ui-scale));
+        font-weight: 500;
+        line-height: 1;
+        white-space: nowrap;
+        flex: 0 0 auto;
+        transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
       }
 
       #commandRail button.active {
-        background: var(--theme-command-active-bg);
-        border-color: var(--theme-command-active-border);
+        background: color-mix(in srgb, var(--theme-command-active-bg) 70%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
         color: var(--theme-command-active-text);
       }
 
       #commandRail button .icon {
-        font-size: 1.1rem;
+        font-size: 1.05rem;
         line-height: 1;
       }
 
+      #commandRail .label {
+        font-size: calc(13px * var(--ui-scale));
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      #commandRail button:not(:disabled):hover,
+      #commandRail button:not(:disabled):focus-visible {
+        background: color-mix(in srgb, var(--theme-command-active-bg) 55%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
+        color: var(--theme-command-active-text);
+      }
+
+      #commandRail button:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
+        outline-offset: 2px;
+      }
+
       #commandRail button:disabled {
-        background: var(--theme-command-disabled-bg);
+        background: color-mix(in srgb, var(--theme-command-disabled-bg) 70%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-disabled-border) 70%, transparent);
         color: var(--theme-command-disabled-text);
-        border-color: var(--theme-command-disabled-border);
       }
 
       body[data-orientation="portrait"] #commandRail {
-        gap: var(--rail-gap-portrait);
-        justify-content: flex-start;
-      }
-
-      body[data-orientation="portrait"] #commandRail button {
-        width: var(--command-button-size-portrait);
-        height: var(--command-button-size-portrait);
+        gap: calc(4px * var(--ui-scale));
       }
 
       body.compact-commands #commandRail {
-        justify-content: flex-start;
-        gap: var(--rail-gap-portrait);
+        gap: calc(4px * var(--ui-scale));
       }
 
-      body.compact-commands #commandRail button {
-        width: min(var(--command-button-size), calc(14vw));
-        height: min(var(--command-button-size), calc(14vw));
+      body.compact-commands #commandRail .label {
+        display: none;
       }
 
       body[data-orientation="portrait"] #paletteDock {
@@ -456,24 +518,10 @@
       }
 
       #canvasTransform {
-        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
         will-change: width, height;
-      }
-
-      #canvasTransform canvas.renderer-layer {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-      }
-
-      #canvasTransform canvas.renderer-surface {
-        position: relative;
-        z-index: 0;
       }
 
       #viewport::before {
@@ -493,43 +541,18 @@
         touch-action: none;
       }
 
-      #previewOverlay {
-        position: absolute;
-        inset: 0;
-        display: grid;
-        place-items: center;
-        background: var(--theme-preview-overlay);
-        backdrop-filter: blur(16px);
-        z-index: 4;
-        transition: opacity 0.24s ease;
-      }
-
-      #previewOverlay.hidden {
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      #previewOverlay canvas {
-        width: min(100%, calc(100vh - 140px));
-        height: auto;
-        border-radius: calc(20px * var(--ui-scale));
-        border: 1px solid rgba(148, 163, 184, 0.4);
-        box-shadow: 0 32px 70px rgba(2, 6, 23, 0.65);
-        image-rendering: pixelated;
-      }
-
-      #previewOverlay button {
-        margin-top: calc(24px * var(--ui-scale));
-      }
-
       #startHint {
         position: absolute;
         inset: 0;
         display: grid;
-        place-items: center;
+        place-content: start center;
+        justify-items: center;
+        padding: calc(24px * var(--ui-scale)) calc(18px * var(--ui-scale));
         background: var(--theme-hint-overlay);
         backdrop-filter: blur(18px);
         transition: opacity 0.24s ease;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
         z-index: 2;
       }
 
@@ -545,7 +568,9 @@
       #startHint .hint-body {
         pointer-events: auto;
         text-align: left;
-        max-width: 360px;
+        width: min(420px, calc(100vw - 48px));
+        max-width: 420px;
+        max-height: min(calc(100vh - (48px * var(--ui-scale))), 720px);
         padding: calc(32px * var(--ui-scale));
         border-radius: calc(20px * var(--ui-scale));
         background: var(--theme-hint-body-bg);
@@ -554,11 +579,25 @@
         display: grid;
         gap: calc(20px * var(--ui-scale));
         justify-items: stretch;
+        align-content: start;
+        overflow-y: auto;
+      }
+
+      #startHint .hint-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: calc(12px * var(--ui-scale));
       }
 
       #startHint h1 {
-        margin: 0 0 12px;
+        margin: 0;
         font-size: clamp(1.8rem, 3vw + 0.5rem, 2.6rem);
+      }
+
+      #startHint .hint-close-button {
+        align-self: flex-start;
+        padding: calc(6px * var(--ui-scale)) calc(14px * var(--ui-scale));
       }
 
       #startHint p {
@@ -618,17 +657,82 @@
           color: var(--theme-chip-active-text);
         }
 
-        .detail-caption {
-          margin: 0;
-          font-size: 0.85rem;
-          color: var(--theme-caption-text);
-        }
+      .detail-caption {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--theme-caption-text);
+      }
 
-        #settingsSheet .detail-callout {
+      #startHint .game-selection { 
+        display: grid;
+        gap: calc(12px * var(--ui-scale));
+        padding: 0;
+      }
+
+      #startHint .game-selection h2 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      #startHint .game-selection-description {
+        margin: 0;
+        color: var(--theme-muted-text);
+        font-size: 0.95rem;
+      }
+
+      #startHint .game-selection-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: calc(10px * var(--ui-scale));
+      }
+
+      #startHint .game-selection-list li {
+        margin: 0;
+      }
+
+      #startHint .game-option-button {
+        width: 100%;
+        text-align: left;
+        display: grid;
+        gap: calc(4px * var(--ui-scale));
+        border-radius: calc(16px * var(--ui-scale));
+        border: 1px solid var(--theme-sheet-button-border);
+        background: var(--theme-sheet-button-bg);
+        color: var(--theme-sheet-button-text);
+        padding: calc(14px * var(--ui-scale)) calc(18px * var(--ui-scale));
+        box-shadow: none;
+      }
+
+      #startHint .game-option-button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
+        background: var(--theme-chip-hover-bg);
+        color: var(--theme-chip-hover-text);
+      }
+
+      #startHint .game-option-title {
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      #startHint .game-option-meta {
+        font-size: 0.85rem;
+        color: var(--theme-caption-text);
+      }
+
+      #startHint .game-selection-empty {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--theme-caption-text);
+      }
+
+        #generatorSheet .detail-callout {
           text-align: left;
         }
 
-        #settingsSheet .detail-picker {
+        #generatorSheet .detail-picker {
           justify-content: flex-start;
         }
       button {
@@ -920,15 +1024,6 @@
         padding: 10px 0;
       }
 
-      #previewCanvas {
-        width: 100%;
-        height: auto;
-        border-radius: 12px;
-        border: 1px solid var(--theme-preview-canvas-border);
-        background: var(--theme-preview-canvas-bg);
-        image-rendering: pixelated;
-      }
-
       .swatch {
         flex: 0 0 calc(72px * var(--ui-scale));
         display: flex;
@@ -1052,7 +1147,7 @@
         top: calc(
           env(safe-area-inset-top, 0px) +
             var(--rail-padding-block) +
-            var(--command-button-size) +
+            var(--command-rail-height) +
             calc(16px * var(--ui-scale))
         );
         right: calc(env(safe-area-inset-right, 0px) + 24px);
@@ -1116,6 +1211,28 @@
         margin: 0;
         font-size: 1.05rem;
         letter-spacing: 0.02em;
+      }
+
+      .save-manager {
+        display: grid;
+        gap: calc(12px * var(--ui-scale));
+      }
+
+      .save-manager h2 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      .save-manager-description {
+        margin: 0;
+        color: var(--theme-muted-text);
+        font-size: 0.95rem;
+      }
+
+      .save-manager-empty {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--theme-caption-text);
       }
 
       .command-list {
@@ -1225,7 +1342,7 @@
         height: 18px;
       }
 
-      #saveList {
+      .save-manager-list {
         list-style: none;
         margin: 0;
         padding: 0;
@@ -1304,6 +1421,7 @@
           disabled
         >
           <span class="icon" aria-hidden="true">?</span>
+          <span class="label">Hint</span>
         </button>
         <button
           id="resetButton"
@@ -1314,6 +1432,7 @@
           disabled
         >
           <span class="icon" aria-hidden="true">↺</span>
+          <span class="label">Reset</span>
         </button>
         <button
           id="previewToggle"
@@ -1324,16 +1443,17 @@
           disabled
         >
           <span class="icon" aria-hidden="true">🖼</span>
+          <span class="label">Preview</span>
         </button>
         <button
-          id="sampleCommand"
+          id="generatorButton"
           type="button"
-          data-testid="sample-art-button"
-          data-action="load-sample"
-          aria-label="Reload sample puzzle"
-          title="Reload sample puzzle"
+          data-testid="generator-button"
+          aria-label="Generator options"
+          title="Generator options"
         >
-          <span class="icon" aria-hidden="true">🐹</span>
+          <span class="icon" aria-hidden="true">🎛</span>
+          <span class="label">Generator</span>
         </button>
         <button
           id="fullscreenButton"
@@ -1343,6 +1463,7 @@
           title="Enter fullscreen"
         >
           <span class="icon" aria-hidden="true">⛶</span>
+          <span class="label">Fullscreen</span>
         </button>
         <button
           id="importButton"
@@ -1352,6 +1473,7 @@
           title="Import"
         >
           <span class="icon" aria-hidden="true">⬆</span>
+          <span class="label">Import</span>
         </button>
         <button
           id="saveManagerButton"
@@ -1362,6 +1484,7 @@
           disabled
         >
           <span class="icon" aria-hidden="true">💾</span>
+          <span class="label">Saves</span>
         </button>
         <button
           id="helpButton"
@@ -1371,6 +1494,7 @@
           title="Help &amp; shortcuts"
         >
           <span class="icon" aria-hidden="true">ℹ</span>
+          <span class="label">Help</span>
         </button>
         <button
           id="settingsButton"
@@ -1380,6 +1504,7 @@
           title="Settings"
         >
           <span class="icon" aria-hidden="true">⚙</span>
+          <span class="label">Settings</span>
         </button>
       </header>
       <div id="viewport">
@@ -1387,15 +1512,7 @@
           <div id="canvasTransform">
             <canvas
               id="puzzleCanvas"
-              class="renderer-surface"
               data-testid="puzzle-canvas"
-              width="640"
-              height="480"
-            ></canvas>
-            <canvas
-              id="labelCanvas"
-              class="renderer-layer"
-              aria-hidden="true"
               width="640"
               height="480"
             ></canvas>
@@ -1408,45 +1525,63 @@
             <strong class="pointer-number" data-pointer-number></strong>
           </div>
         </div>
-        <div id="previewOverlay" class="hidden" aria-hidden="true">
-          <div>
-            <canvas
-              id="previewCanvas"
-              data-testid="preview-canvas"
-              width="640"
-              height="480"
-            ></canvas>
-            <div style="display: grid; place-items: center; margin-top: 16px;">
-              <button id="closePreview" type="button">Return to puzzle</button>
-            </div>
-          </div>
-        </div>
         <div id="startHint" class="hint" tabindex="0" data-testid="start-hint">
           <div class="hint-body">
-            <h1>Drop an image to start</h1>
-            <p>
-              Drag a picture anywhere on the screen, choose a file from your device,
-              or jump straight into our capybara sample scene.
-            </p>
-              <div class="detail-callout">
-                <p class="detail-intro">Pick a detail level for the capybara demo:</p>
-                <div class="detail-picker" role="group" aria-label="Capybara sample detail level">
-                  <button type="button" class="detail-chip" data-detail-level="low">Low</button>
-                  <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
-                  <button type="button" class="detail-chip" data-detail-level="high">High</button>
-                </div>
-                <p class="detail-caption" data-detail-caption></p>
-              </div>
+            <div class="hint-header">
+              <h1 id="startHintTitle" class="visually-hidden">Game setup</h1>
+              <button
+                id="closeStartHint"
+                type="button"
+                class="close-button hint-close-button"
+                hidden
+              >
+                Close
+              </button>
+            </div>
             <div class="hint-actions">
-              <button id="selectImage" type="button">Choose an image</button>
               <button
                 id="samplePuzzle"
                 type="button"
                 data-action="load-sample"
                 aria-label="Load capybara sample puzzle"
               >
-                Try the capybara sample
+                Load sample
               </button>
+            </div>
+            <div class="detail-callout">
+              <p class="detail-intro">Pick a detail level for the capybara demo:</p>
+              <div class="detail-picker" role="group" aria-label="Capybara sample detail level">
+                <button type="button" class="detail-chip" data-detail-level="low">Low</button>
+                <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
+                <button type="button" class="detail-chip" data-detail-level="high">High</button>
+              </div>
+              <p class="detail-caption" data-detail-caption></p>
+            </div>
+            <div
+              id="saveManagerSection"
+              class="save-manager"
+              role="group"
+              aria-labelledby="startSaveManagerHeading"
+              data-save-section="start"
+            >
+              <h2 id="startSaveManagerHeading">Manage saves</h2>
+              <p class="save-manager-description">
+                Autosaves keep tracking progress in this browser. Review them here or capture a manual snapshot to revisit a
+                favourite moment.
+              </p>
+              <button type="button" data-save-snapshot disabled>Save current puzzle</button>
+              <ul
+                class="save-manager-list"
+                data-save-list
+                aria-live="polite"
+                aria-labelledby="startSaveManagerHeading"
+              ></ul>
+              <p class="save-manager-empty" data-save-empty hidden>
+                No manual saves yet. Create one above or keep playing to autosave progress.
+              </p>
+            </div>
+            <div class="hint-actions">
+              <button id="selectImage" type="button">Choose an image</button>
             </div>
           </div>
         </div>
@@ -1458,8 +1593,10 @@
             data-status="idle"
             role="status"
             aria-live="polite"
+            hidden
+            aria-hidden="true"
           >
-            <span id="progress" class="progress-message">Choose an artwork to start</span>
+            <span id="progress" class="progress-message"></span>
             <div
               id="progressMeter"
               class="progress-meter"
@@ -1477,6 +1614,41 @@
         </footer>
     </div>
     <input id="fileInput" type="file" accept=".json,image/*" hidden />
+    <div
+      id="saveManagerSheet"
+      class="sheet hidden"
+      role="dialog"
+      aria-labelledby="saveManagerTitle"
+      aria-hidden="true"
+    >
+      <div class="sheet-header">
+        <h2 id="saveManagerTitle">Manage saves</h2>
+        <button type="button" class="close-button" data-sheet-close="saves">Close</button>
+      </div>
+      <div class="sheet-body">
+        <section
+          class="sheet-section save-manager"
+          role="group"
+          aria-labelledby="saveManagerTitle"
+          data-save-section="dialog"
+        >
+          <p class="save-manager-description">
+            Autosaves keep tracking progress in this browser. Review them here or capture a manual snapshot to revisit a
+            favourite moment.
+          </p>
+          <button type="button" data-save-snapshot disabled>Save current puzzle</button>
+          <ul
+            class="save-manager-list"
+            data-save-list
+            aria-live="polite"
+            aria-labelledby="saveManagerTitle"
+          ></ul>
+          <p class="save-manager-empty" data-save-empty hidden>
+            No manual saves yet. Create one above or keep playing to autosave progress.
+          </p>
+        </section>
+      </div>
+    </div>
     <div
       id="helpSheet"
       class="sheet hidden"
@@ -1498,16 +1670,16 @@
             <dd>Clear every painted region and restart the current puzzle.</dd>
             <dt>🖼 Preview</dt>
             <dd>Toggle the finished artwork overlay to compare your progress.</dd>
-            <dt>🐹 Sample</dt>
-              <dd>
-                Reload the built-in capybara puzzle for a fresh board. Pair it with the Low/Medium/High
-                detail presets to jump between ≈26, ≈42, or ≈140 regions.
-              </dd>
-              <dt>🎚 Detail</dt>
-              <dd>
-                Toggle the capybara detail chips (start hint or Settings) to reload the sample with tuned
-                palette sizes, minimum region areas, resize targets, and the region counts noted above.
-              </dd>
+            <dt>🎛 Generator</dt>
+            <dd>
+              Adjust clustering sliders, choose capybara detail presets, reload the current source image, or
+              export JSON. The new sheet mirrors the k-means pipeline inputs used for puzzle creation.
+            </dd>
+            <dt>🎚 Detail</dt>
+            <dd>
+              Toggle the capybara detail chips (start hint or Generator sheet) to reload the sample with tuned
+              palette sizes, minimum region areas, resize targets, and the region counts noted above.
+            </dd>
             <dt>⛶ Fullscreen</dt>
             <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
             <dt>⬆ Import</dt>
@@ -1518,8 +1690,8 @@
             <dd>Open this guide and inspect the live debug log.</dd>
             <dt>⚙ Settings</dt>
             <dd>
-              Adjust generation sliders, toggle auto-advance, customise the background, resize the interface, or export JSON.
-              Expand Advanced options to edit the hidden art prompt metadata when you need to capture the original brief.
+              Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface
+              scale. Advanced options expose accessibility tweaks for the hint animations.
             </dd>
           </dl>
         </section>
@@ -1527,9 +1699,14 @@
           <h3 id="controlsHeading">Canvas controls</h3>
           <ul class="control-list">
             <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
+            <li><kbd>Right click</kbd> Select the colour under the pointer (configurable in Settings).</li>
             <li>Select a palette swatch to set the active colour and flash every matching region.</li>
+            <li>Enable Easy difficulty in Settings to let clicks auto-select the tapped region's colour.</li>
             <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
-            <li><kbd>Space</kbd> + drag (or middle/right drag) Pan the canvas.</li>
+            <li>
+              <kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas. Switch the right-click action in Settings if you
+              prefer dragging instead of selecting.
+            </li>
             <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
           </ul>
         </section>
@@ -1559,83 +1736,23 @@
       </div>
     </div>
     <div
-      id="settingsSheet"
+      id="generatorSheet"
       class="sheet hidden"
       role="dialog"
-      aria-labelledby="settingsTitle"
+      aria-labelledby="generatorTitle"
       aria-hidden="true"
     >
       <div class="sheet-header">
-        <h2 id="settingsTitle">Settings</h2>
-        <button type="button" class="close-button" data-sheet-close="settings">Close</button>
+        <h2 id="generatorTitle">Puzzle generator</h2>
+        <button type="button" class="close-button" data-sheet-close="generator">Close</button>
       </div>
       <div class="sheet-body">
-        <section class="sheet-section" aria-labelledby="gameplayHeading">
-          <h3 id="gameplayHeading">Gameplay</h3>
-          <label class="toggle">
-            <input id="autoAdvanceToggle" type="checkbox" checked />
-            <span>Auto-advance to the next colour when complete</span>
-          </label>
-          <label class="toggle">
-            <input id="hintFlashToggle" type="checkbox" checked />
-            <span>Animate hint highlights</span>
-          </label>
-          <label class="toggle">
-            <input id="showRegionLabelsToggle" type="checkbox" checked />
-            <span>Show region numbers</span>
-          </label>
-          <label class="toggle">
-            <input id="showStatusToggle" type="checkbox" />
-            <span>Show status bar with filled/remaining counts after imports</span>
-          </label>
-        </section>
-        <section class="sheet-section" aria-labelledby="paletteHeading">
-          <h3 id="paletteHeading">Palette</h3>
-          <label class="control">
-            <span>Sort swatches</span>
-            <select id="paletteSort" data-testid="palette-sort" disabled>
-              <option value="region">Number</option>
-              <option value="remaining">Remaining regions</option>
-              <option value="name">Colour name</option>
-              <option value="hue">Hue</option>
-              <option value="brightness">Brightness</option>
-            </select>
-          </label>
-          <p class="control-note">Choose how unfinished colours appear in the dock.</p>
-        </section>
-        <section class="sheet-section" aria-labelledby="appearanceHeading">
-          <h3 id="appearanceHeading">Appearance</h3>
-          <label class="control">
-            <span>Interface theme</span>
-            <select id="uiTheme">
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-              <option value="colorful">Colourful</option>
-            </select>
-          </label>
-          <p class="control-note">Switch between dark, light, or colourful chrome accents.</p>
-          <label class="control">
-            <span>Background colour</span>
-            <input id="backgroundColor" type="color" value="#f8fafc" />
-          </label>
-          <p class="control-note">
-            Applies to unfinished regions and adjusts outline contrast automatically.
-          </p>
-          <label class="control">
-            <span>Interface scale <output data-for="uiScale">90%</output></span>
-            <input
-              id="uiScale"
-              type="range"
-              min="0.6"
-              max="1.35"
-              step="0.05"
-              value="0.9"
-            />
-          </label>
-          <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
-        </section>
         <section class="sheet-section" aria-labelledby="generatorHeading">
-          <h3 id="generatorHeading">Generator</h3>
+          <h3 id="generatorHeading">Clustering &amp; detail</h3>
+          <p class="control-note">
+            Tune the colour clustering pipeline that powers new puzzles. These settings apply to fresh imports and the bundled
+            capybara sample when reloaded.
+          </p>
           <div class="detail-callout">
             <p class="detail-intro">Capybara sample detail presets</p>
             <div class="detail-picker" role="group" aria-label="Capybara sample detail presets">
@@ -1646,7 +1763,7 @@
             <p class="detail-caption" data-detail-caption></p>
           </div>
           <p class="control-note">
-            Switching presets updates the sliders below and reloads the sample scene when it's active.
+            Switching presets updates every slider below and reloads the sample scene when it's active.
           </p>
           <label class="control">
             <span>Colours <output data-for="colorCount">16</output></span>
@@ -1697,19 +1814,114 @@
       </div>
     </div>
     <div
-      id="saveSheet"
+      id="settingsSheet"
       class="sheet hidden"
       role="dialog"
-      aria-labelledby="saveTitle"
+      aria-labelledby="settingsTitle"
       aria-hidden="true"
     >
       <div class="sheet-header">
-        <h2 id="saveTitle">Save manager</h2>
-        <button type="button" class="close-button" data-sheet-close="save">Close</button>
+        <h2 id="settingsTitle">Settings</h2>
+        <button type="button" class="close-button" data-sheet-close="settings">Close</button>
       </div>
       <div class="sheet-body">
-        <button id="saveSnapshot" type="button" disabled>Save current puzzle</button>
-        <ul id="saveList" aria-live="polite"></ul>
+        <section class="sheet-section" aria-labelledby="gameplayHeading">
+          <h3 id="gameplayHeading">Gameplay</h3>
+          <label class="toggle">
+            <input id="autoAdvanceToggle" type="checkbox" checked />
+            <span>Auto-advance to the next colour when complete</span>
+          </label>
+          <label class="toggle">
+            <input id="hintFlashToggle" type="checkbox" checked />
+            <span>Animate hint highlights</span>
+          </label>
+          <label class="toggle">
+            <input id="showRegionLabelsToggle" type="checkbox" checked />
+            <span>Show region numbers</span>
+          </label>
+          <label class="toggle">
+            <input id="showStatusToggle" type="checkbox" />
+            <span>Show status bar during imports and generation</span>
+          </label>
+          <label class="control">
+            <span>Difficulty</span>
+            <select id="difficultySelect">
+              <option value="normal">Standard</option>
+              <option value="easy">Easy</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Easy mode lets you click any region to auto-select its colour before filling it.
+          </p>
+        </section>
+        <section class="sheet-section" aria-labelledby="hintsControlsHeading">
+          <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
+          <label class="control">
+            <span>Hint fade duration <output data-for="hintFadeDuration">1.2 s</output></span>
+            <input id="hintFadeDuration" type="range" min="400" max="2400" step="100" value="1200" />
+          </label>
+          <p class="control-note">Set how long hint highlights linger before fading out.</p>
+          <label class="control">
+            <span>Hint intensity <output data-for="hintIntensity">65%</output></span>
+            <input id="hintIntensity" type="range" min="20" max="90" step="5" value="65" />
+          </label>
+          <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
+          <label class="control">
+            <span>Right-click action</span>
+            <select id="rightClickAction">
+              <option value="select">Select colour</option>
+              <option value="pan">Pan the canvas</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Choose whether right-clicking picks colours or starts panning. Middle click and Space + drag always pan.
+          </p>
+        </section>
+        <section class="sheet-section" aria-labelledby="paletteHeading">
+          <h3 id="paletteHeading">Palette</h3>
+          <label class="control">
+            <span>Sort swatches</span>
+            <select id="paletteSort" data-testid="palette-sort" disabled>
+              <option value="region">Number</option>
+              <option value="remaining">Remaining regions</option>
+              <option value="name">Colour name</option>
+              <option value="hue">Hue</option>
+              <option value="brightness">Brightness</option>
+            </select>
+          </label>
+          <p class="control-note">Choose how unfinished colours appear in the dock.</p>
+        </section>
+        <section class="sheet-section" aria-labelledby="appearanceHeading">
+          <h3 id="appearanceHeading">Appearance</h3>
+          <label class="control">
+            <span>Interface theme</span>
+            <select id="uiTheme">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="colorful">Colourful</option>
+            </select>
+          </label>
+          <p class="control-note">Switch between dark, light, or colourful chrome accents.</p>
+          <label class="control">
+            <span>Background colour</span>
+            <input id="backgroundColor" type="color" value="#f8fafc" />
+          </label>
+          <p class="control-note">
+            Applies to unfinished regions and adjusts outline contrast automatically.
+          </p>
+          <label class="control">
+            <span>Interface scale <output data-for="uiScale">90%</output></span>
+            <input
+              id="uiScale"
+              type="range"
+              min="0.6"
+              max="1.35"
+              step="0.05"
+              value="0.9"
+            />
+          </label>
+          <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
+        </section>
       </div>
     </div>
         <script>
@@ -1722,20 +1934,27 @@
       const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
       const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
       const samplePreview = document.getElementById("sampleArtPreview");
+      const gameSelectionList = document.getElementById("gameSelectionList");
+      const gameSelectionEmpty = document.getElementById("gameSelectionEmpty");
       const startHint = document.getElementById("startHint");
+      const startHintCloseButton = document.getElementById("closeStartHint");
+      const startSaveManagerSection = document.getElementById("saveManagerSection");
       const hintButton = document.getElementById("hintButton");
       const resetButton = document.getElementById("resetButton");
       const previewToggle = document.getElementById("previewToggle");
       const fullscreenButton = document.getElementById("fullscreenButton");
       const importButton = document.getElementById("importButton");
       const saveManagerButton = document.getElementById("saveManagerButton");
+      const generatorButton = document.getElementById("generatorButton");
       const settingsButton = document.getElementById("settingsButton");
       const helpButton = document.getElementById("helpButton");
-      const closePreviewButton = document.getElementById("closePreview");
-      const previewOverlay = document.getElementById("previewOverlay");
+      const generatorSheet = document.getElementById("generatorSheet");
       const settingsSheet = document.getElementById("settingsSheet");
-      const saveSheet = document.getElementById("saveSheet");
       const helpSheet = document.getElementById("helpSheet");
+      const saveManagerSheet = document.getElementById("saveManagerSheet");
+      const sheetRegistry = [generatorSheet, settingsSheet, helpSheet, saveManagerSheet].filter(
+        Boolean
+      );
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
       const saveStorageSummary = document.getElementById("saveStorageSummary");
@@ -1747,6 +1966,10 @@
       const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
+      const hintFadeDurationInput = document.getElementById("hintFadeDuration");
+      const hintIntensityInput = document.getElementById("hintIntensity");
+      const rightClickActionSelect = document.getElementById("rightClickAction");
+      const difficultySelect = document.getElementById("difficultySelect");
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
       const showStatusToggle = document.getElementById("showStatusToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
@@ -1761,8 +1984,9 @@
       const artPromptInput = document.getElementById("artPrompt");
       const applyBtn = document.getElementById("applyOptions");
       const downloadBtn = document.getElementById("downloadJson");
-      const saveSnapshotBtn = document.getElementById("saveSnapshot");
-      const saveList = document.getElementById("saveList");
+      const saveSnapshotButtons = Array.from(document.querySelectorAll("[data-save-snapshot]"));
+      const saveListContainers = Array.from(document.querySelectorAll("[data-save-list]"));
+      const saveListEmptyStates = Array.from(document.querySelectorAll("[data-save-empty]"));
       const paletteEl = document.getElementById("palette");
       const paletteSortEl = document.getElementById("paletteSort");
       const progressStatusEl = document.getElementById("progressStatus");
@@ -1771,35 +1995,36 @@
       const progressBarEl = document.getElementById("progressBar");
       const defaultProgressLabel =
         progressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
+      const DEFAULT_PROGRESS_MESSAGE = "";
       const PROGRESS_MESSAGES = {
-        idle: "Choose an artwork to start",
         loading: "Loading puzzle…",
         active: "Keep colouring",
         generating: "Processing image…",
         complete: "All done!",
       };
       const puzzleCanvas = document.getElementById("puzzleCanvas");
-      const labelCanvas = document.getElementById("labelCanvas");
-      const previewCanvas = document.getElementById("previewCanvas");
-      let puzzleCtx = null;
-      const labelCtx = labelCanvas ? labelCanvas.getContext("2d") : null;
+      const previewCanvas = document.createElement("canvas");
+      const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
-      let rendererManager = null;
 
-      if (labelCtx) {
-        labelCtx.imageSmoothingEnabled = false;
-      }
-
-      // Settings sheet output mirrors we update while users drag sliders.
-      const optionOutputs = {
-        colorCount: settingsSheet.querySelector('output[data-for="colorCount"]'),
-        minRegion: settingsSheet.querySelector('output[data-for="minRegion"]'),
-        detail: settingsSheet.querySelector('output[data-for="detailLevel"]'),
-        sample: settingsSheet.querySelector('output[data-for="sampleRate"]'),
-        iterations: settingsSheet.querySelector('output[data-for="kmeansIters"]'),
-        smoothing: settingsSheet.querySelector('output[data-for="smoothingPasses"]'),
-        uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
-      };
+      // Sheet output mirrors we update while users drag sliders.
+      const generatorOutputs = generatorSheet
+        ? {
+            colorCount: generatorSheet.querySelector('output[data-for="colorCount"]'),
+            minRegion: generatorSheet.querySelector('output[data-for="minRegion"]'),
+            detail: generatorSheet.querySelector('output[data-for="detailLevel"]'),
+            sample: generatorSheet.querySelector('output[data-for="sampleRate"]'),
+            iterations: generatorSheet.querySelector('output[data-for="kmeansIters"]'),
+            smoothing: generatorSheet.querySelector('output[data-for="smoothingPasses"]'),
+          }
+        : {};
+      const settingsOutputs = settingsSheet
+        ? {
+            uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
+            hintFadeDuration: settingsSheet.querySelector('output[data-for="hintFadeDuration"]'),
+            hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
+          }
+        : {};
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
@@ -1807,6 +2032,16 @@
       const DEFAULT_UI_SCALE = 0.9;
       const DEFAULT_UI_THEME = "dark";
       const VALID_UI_THEMES = new Set(["dark", "light", "colorful"]);
+      const DEFAULT_HINT_FADE_DURATION = 1200;
+      const MIN_HINT_FADE_DURATION = 400;
+      const MAX_HINT_FADE_DURATION = 2400;
+      const DEFAULT_HINT_INTENSITY = 0.65;
+      const MIN_HINT_INTENSITY = 0.2;
+      const MAX_HINT_INTENSITY = 0.9;
+      const DEFAULT_RIGHT_CLICK_ACTION = "select";
+      const VALID_RIGHT_CLICK_ACTIONS = new Set(["select", "pan"]);
+      const DEFAULT_DIFFICULTY = "normal";
+      const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
@@ -1960,13 +2195,19 @@
         preventingBrowserZoom = true;
       }
 
-      // Embedded sample used for onboarding and smoke tests.
-      const SAMPLE_ARTWORK = {
-        title: "Capybara Springs",
-        description: "A capybara with an orange crown relaxes beside a dachshund in a forest lagoon.",
-        dataUrl:
-          "data:image/svg+xml;base64,PCEtLSBDYXB5YmFyYSBMYWdvb24gU3VucmlzZSAtIFNlZ21lbnRlZCBTVkcgLS0+CjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSIwIDAgOTYwIDYwMCIgd2lkdGg9Ijk2MCIgaGVpZ2h0PSI2MDAiIHJvbGU9ImltZyIgYXJpYS1sYWJlbGxlZGJ5PSJ0aXRsZSBkZXNjIj4KICA8dGl0bGUgaWQ9InRpdGxlIj5DYXB5YmFyYSBMYWdvb24gU3VucmlzZTwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkxheWVyZWQgc3VucmlzZSBiYW5kcyBvdmVyIGEgbGFnb29uIHdpdGggYSBzdHlsaXplZCBjYXB5YmFyYSBvbiB0aGUgc2hvcmUuPC9kZXNjPgogIDxnIGlkPSJyZWdpb24tYzAxIiBkYXRhLWNlbGwtaWQ9ImMxIiBkYXRhLWNvbG9yLWlkPSIxIiBkYXRhLWNvbG9yLW5hbWU9IlN1bnJpc2UgU2t5IiBkYXRhLWNvbG9yLWhleD0iI2Y2YmY2MCIgZmlsbD0iI2Y2YmY2MCI+CiAgICA8dGl0bGU+UmVnaW9uIGMxIOKAkyBDb2xvciAjMSAoU3VucmlzZSBTa3kpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0wIDAgTDk2MCAwIEw5NjAgODAgQyA4MjAgNzAgNjgwIDY4IDU0MCA3MiBDIDM4MCA3OCAyMjAgODYgMCA4MCBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzAyIiBkYXRhLWNlbGwtaWQ9ImMyIiBkYXRhLWNvbG9yLWlkPSIxIiBkYXRhLWNvbG9yLW5hbWU9IlN1bnJpc2UgU2t5IiBkYXRhLWNvbG9yLWhleD0iI2Y2YmY2MCIgZmlsbD0iI2Y2YmY2MCI+CiAgICA8dGl0bGU+UmVnaW9uIGMyIOKAkyBDb2xvciAjMSAoU3VucmlzZSBTa3kpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0wIDgwIEMgMjAwIDkwIDM2MCA4NiA1NDAgODAgQyA3MjAgNzQgODYwIDc2IDk2MCA4MCBMOTYwIDE0OCBDIDgyMCAxNDIgNjgwIDE0OCA1MjAgMTU2IEMgMzYwIDE2NiAyMDAgMTY0IDAgMTQ4IFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMDMiIGRhdGEtY2VsbC1pZD0iYzMiIGRhdGEtY29sb3ItaWQ9IjIiIGRhdGEtY29sb3ItbmFtZT0iQW1iZXIgRHJpZnQiIGRhdGEtY29sb3ItaGV4PSIjZjQ5OTRjIiBmaWxsPSIjZjQ5OTRjIj4KICAgIDx0aXRsZT5SZWdpb24gYzMg4oCTIENvbG9yICMyIChBbWJlciBEcmlmdCk8L3RpdGxlPgogICAgPHBhdGggZD0iTTAgMTQ4IEMgMTYwIDE1NiAzMjAgMTYwIDUyMCAxNTIgQyA1MDAgMTc2IDQ4MCAxOTggNDQwIDIxMiBDIDMyMCAyMjAgMTYwIDIxOCAwIDIxNiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzA0IiBkYXRhLWNlbGwtaWQ9ImM0IiBkYXRhLWNvbG9yLWlkPSIyIiBkYXRhLWNvbG9yLW5hbWU9IkFtYmVyIERyaWZ0IiBkYXRhLWNvbG9yLWhleD0iI2Y0OTk0YyIgZmlsbD0iI2Y0OTk0YyI+CiAgICA8dGl0bGU+UmVnaW9uIGM0IOKAkyBDb2xvciAjMiAoQW1iZXIgRHJpZnQpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik01MjAgMTUyIEMgNzAwIDE1MCA4NDAgMTQ2IDk2MCAxNDggQyA5NDAgMTc2IDkwMCAxOTggODYwIDIxMCBDIDc0MCAyMjAgNjQwIDIyMCA1MjAgMjE0IEMgNTIwIDE5NCA1MjAgMTcyIDUyMCAxNTIgWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMwNSIgZGF0YS1jZWxsLWlkPSJjNSIgZGF0YS1jb2xvci1pZD0iMyIgZGF0YS1jb2xvci1uYW1lPSJWaW9sZXQgUmlkZ2UiIGRhdGEtY29sb3ItaGV4PSIjOWE2YmIzIiBmaWxsPSIjOWE2YmIzIj4KICAgIDx0aXRsZT5SZWdpb24gYzUg4oCTIENvbG9yICMzIChWaW9sZXQgUmlkZ2UpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0wIDIxNiBDIDEyMCAyMjggMjIwIDIzMiAzMjAgMjMwIEMgMzAwIDI0OCAyNjAgMjY4IDIxMCAyNzggQyAxNTAgMjg2IDgwIDI4NCAwIDI4MCBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzA2IiBkYXRhLWNlbGwtaWQ9ImM2IiBkYXRhLWNvbG9yLWlkPSIzIiBkYXRhLWNvbG9yLW5hbWU9IlZpb2xldCBSaWRnZSIgZGF0YS1jb2xvci1oZXg9IiM5YTZiYjMiIGZpbGw9IiM5YTZiYjMiPgogICAgPHRpdGxlPlJlZ2lvbiBjNiDigJMgQ29sb3IgIzMgKFZpb2xldCBSaWRnZSk8L3RpdGxlPgogICAgPHBhdGggZD0iTTMyMCAyMzAgQyA0NDAgMjM2IDUyMCAyMzQgNjQwIDIyNiBDIDYzMCAyNTAgNjAwIDI2OCA1NjAgMjc2IEMgNDgwIDI4NiA0MDAgMjg0IDMyMCAyNzggQyAzMjAgMjU4IDMyMCAyNDQgMzIwIDIzMCBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzA3IiBkYXRhLWNlbGwtaWQ9ImM3IiBkYXRhLWNvbG9yLWlkPSIzIiBkYXRhLWNvbG9yLW5hbWU9IlZpb2xldCBSaWRnZSIgZGF0YS1jb2xvci1oZXg9IiM5YTZiYjMiIGZpbGw9IiM5YTZiYjMiPgogICAgPHRpdGxlPlJlZ2lvbiBjNyDigJMgQ29sb3IgIzMgKFZpb2xldCBSaWRnZSk8L3RpdGxlPgogICAgPHBhdGggZD0iTTY0MCAyMjYgQyA3NjAgMjI0IDg2MCAyMjAgOTYwIDIyMCBDIDk0MCAyNDAgOTAwIDI2MCA4NjAgMjcyIEMgNzgwIDI4NiA3MDAgMjg0IDY0MCAyNzggQyA2NDAgMjU2IDY0MCAyNDAgNjQwIDIyNiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzA4IiBkYXRhLWNlbGwtaWQ9ImM4IiBkYXRhLWNvbG9yLWlkPSI0IiBkYXRhLWNvbG9yLW5hbWU9IkZvcmVzdCBSaWRnZSIgZGF0YS1jb2xvci1oZXg9IiM1ZDdhNzYiIGZpbGw9IiM1ZDdhNzYiPgogICAgPHRpdGxlPlJlZ2lvbiBjOCDigJMgQ29sb3IgIzQgKEZvcmVzdCBSaWRnZSk8L3RpdGxlPgogICAgPHBhdGggZD0iTTAgMjgwIEMgMTAwIDI5MiAyMDAgMzAwIDMyMCAyOTIgQyAzMDAgMzEyIDI2MCAzMjggMjEwIDMzNiBDIDE1MCAzNDQgODAgMzQ0IDAgMzQwIFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMDkiIGRhdGEtY2VsbC1pZD0iYzkiIGRhdGEtY29sb3ItaWQ9IjQiIGRhdGEtY29sb3ItbmFtZT0iRm9yZXN0IFJpZGdlIiBkYXRhLWNvbG9yLWhleD0iIzVkN2E3NiIgZmlsbD0iIzVkN2E3NiI+CiAgICA8dGl0bGU+UmVnaW9uIGM5IOKAkyBDb2xvciAjNCAoRm9yZXN0IFJpZGdlKTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNMzIwIDI5MiBDIDQ0MCAyOTggNTQwIDMwMCA2NDAgMjk4IEMgNjIwIDMxOCA1ODAgMzMyIDU0MCAzNDAgQyA0NjAgMzQ4IDM4MCAzNDYgMzIwIDM0MCBDIDMyMCAzMjAgMzIwIDMwNiAzMjAgMjkyIFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMTAiIGRhdGEtY2VsbC1pZD0iYzEwIiBkYXRhLWNvbG9yLWlkPSI0IiBkYXRhLWNvbG9yLW5hbWU9IkZvcmVzdCBSaWRnZSIgZGF0YS1jb2xvci1oZXg9IiM1ZDdhNzYiIGZpbGw9IiM1ZDdhNzYiPgogICAgPHRpdGxlPlJlZ2lvbiBjMTAg4oCTIENvbG9yICM0IChGb3Jlc3QgUmlkZ2UpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik02NDAgMjk4IEMgNzYwIDMwMCA4NjAgMzAwIDk2MCAzMDAgQyA5NDAgMzIwIDkwMCAzMzIgODYwIDM0MCBDIDc4MCAzNDggNzAwIDM0OCA2NDAgMzQwIEMgNjQwIDMyMCA2NDAgMzA4IDY0MCAyOTggWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMxMSIgZGF0YS1jZWxsLWlkPSJjMTEiIGRhdGEtY29sb3ItaWQ9IjUiIGRhdGEtY29sb3ItbmFtZT0iTGFnb29uIExpZ2h0IiBkYXRhLWNvbG9yLWhleD0iIzc2YzdkNiIgZmlsbD0iIzc2YzdkNiI+CiAgICA8dGl0bGU+UmVnaW9uIGMxMSDigJMgQ29sb3IgIzUgKExhZ29vbiBMaWdodCk8L3RpdGxlPgogICAgPHBhdGggZD0iTTAgMzQwIEMgMTIwIDM0NCAyMjAgMzQ2IDMyMCAzNDQgQyAzMDAgMzUwIDMwMCAzNTIgMzIwIDM1MiBDIDIwMCAzNTYgMTIwIDM1NCAwIDM1MiBDIDAgMzQ4IDAgMzQ0IDAgMzQwIFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMTIiIGRhdGEtY2VsbC1pZD0iYzEyIiBkYXRhLWNvbG9yLWlkPSI1IiBkYXRhLWNvbG9yLW5hbWU9IkxhZ29vbiBMaWdodCIgZGF0YS1jb2xvci1oZXg9IiM3NmM3ZDYiIGZpbGw9IiM3NmM3ZDYiPgogICAgPHRpdGxlPlJlZ2lvbiBjMTIg4oCTIENvbG9yICM1IChMYWdvb24gTGlnaHQpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0zMjAgMzQ0IEMgNDQwIDM0NiA1NDAgMzQ0IDY0MCAzNDIgQyA2NDAgMzQ2IDY0MCAzNTAgNjQwIDM1MiBDIDUyMCAzNTYgNDIwIDM1NiAzMjAgMzUyIEMgMzIwIDM0OCAzMjAgMzQ2IDMyMCAzNDQgWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMxMyIgZGF0YS1jZWxsLWlkPSJjMTMiIGRhdGEtY29sb3ItaWQ9IjUiIGRhdGEtY29sb3ItbmFtZT0iTGFnb29uIExpZ2h0IiBkYXRhLWNvbG9yLWhleD0iIzc2YzdkNiIgZmlsbD0iIzc2YzdkNiI+CiAgICA8dGl0bGU+UmVnaW9uIGMxMyDigJMgQ29sb3IgIzUgKExhZ29vbiBMaWdodCk8L3RpdGxlPgogICAgPHBhdGggZD0iTTY0MCAzNDIgQyA3NjAgMzQwIDg2MCAzMzggOTYwIDM0MCBDIDk2MCAzNDQgOTYwIDM0OCA5NjAgMzUyIEMgODQwIDM1NCA3NDAgMzU0IDY0MCAzNTIgQyA2NDAgMzQ4IDY0MCAzNDQgNjQwIDM0MiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzE0IiBkYXRhLWNlbGwtaWQ9ImMxNCIgZGF0YS1jb2xvci1pZD0iNSIgZGF0YS1jb2xvci1uYW1lPSJMYWdvb24gTGlnaHQiIGRhdGEtY29sb3ItaGV4PSIjNzZjN2Q2IiBmaWxsPSIjNzZjN2Q2Ij4KICAgIDx0aXRsZT5SZWdpb24gYzE0IOKAkyBDb2xvciAjNSAoTGFnb29uIExpZ2h0KTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNMCAzNTIgQyAxMjAgMzU2IDIyMCAzNTYgMzIwIDM1MiBDIDMxMCAzNjQgMzEwIDM3MiAzMjAgMzc2IEMgMjAwIDM4MiAxMjAgMzgwIDAgMzc2IEMgMCAzNjQgMCAzNTggMCAzNTIgWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMxNSIgZGF0YS1jZWxsLWlkPSJjMTUiIGRhdGEtY29sb3ItaWQ9IjUiIGRhdGEtY29sb3ItbmFtZT0iTGFnb29uIExpZ2h0IiBkYXRhLWNvbG9yLWhleD0iIzc2YzdkNiIgZmlsbD0iIzc2YzdkNiI+CiAgICA8dGl0bGU+UmVnaW9uIGMxNSDigJMgQ29sb3IgIzUgKExhZ29vbiBMaWdodCk8L3RpdGxlPgogICAgPHBhdGggZD0iTTMyMCAzNTIgQyA0NDAgMzU0IDU0MCAzNTIgNjQwIDM1MiBDIDY1MCAzNjIgNjUwIDM3MCA2NDAgMzc2IEMgNTIwIDM4MiA0MjAgMzgyIDMyMCAzNzYgQyAzMjAgMzY2IDMyMCAzNjAgMzIwIDM1MiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzE2IiBkYXRhLWNlbGwtaWQ9ImMxNiIgZGF0YS1jb2xvci1pZD0iNSIgZGF0YS1jb2xvci1uYW1lPSJMYWdvb24gTGlnaHQiIGRhdGEtY29sb3ItaGV4PSIjNzZjN2Q2IiBmaWxsPSIjNzZjN2Q2Ij4KICAgIDx0aXRsZT5SZWdpb24gYzE2IOKAkyBDb2xvciAjNSAoTGFnb29uIExpZ2h0KTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNNjQwIDM1MiBDIDc2MCAzNTIgODYwIDM1MCA5NjAgMzUyIEMgOTYwIDM2MiA5NjAgMzcyIDk2MCAzNzYgQyA4NDAgMzgwIDc0MCAzODAgNjQwIDM3NiBDIDY0MCAzNjYgNjQwIDM1OCA2NDAgMzUyIFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMTciIGRhdGEtY2VsbC1pZD0iYzE3IiBkYXRhLWNvbG9yLWlkPSI2IiBkYXRhLWNvbG9yLW5hbWU9IkxhZ29vbiBEZXB0aCIgZGF0YS1jb2xvci1oZXg9IiMxYzZmOGMiIGZpbGw9IiMxYzZmOGMiPgogICAgPHRpdGxlPlJlZ2lvbiBjMTcg4oCTIENvbG9yICM2IChMYWdvb24gRGVwdGgpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0wIDM3NiBDIDE2MCAzODIgMzIwIDM4OCA0ODAgMzg0IEMgNDgwIDM5NCA0ODAgNDAwIDQ4MCA0MDQgQyAzMjAgNDA4IDE2MCA0MDQgMCA0MDQgQyAwIDM5MiAwIDM4NCAwIDM3NiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzE4IiBkYXRhLWNlbGwtaWQ9ImMxOCIgZGF0YS1jb2xvci1pZD0iNiIgZGF0YS1jb2xvci1uYW1lPSJMYWdvb24gRGVwdGgiIGRhdGEtY29sb3ItaGV4PSIjMWM2ZjhjIiBmaWxsPSIjMWM2ZjhjIj4KICAgIDx0aXRsZT5SZWdpb24gYzE4IOKAkyBDb2xvciAjNiAoTGFnb29uIERlcHRoKTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNNDgwIDM3NiBDIDY0MCAzODIgODAwIDM4MCA5NjAgMzc2IEw5NjAgNDA0IEMgODAwIDQxMCA2NDAgNDEyIDQ4MCA0MDQgQyA0ODAgMzk0IDQ4MCAzODYgNDgwIDM3NiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzE5IiBkYXRhLWNlbGwtaWQ9ImMxOSIgZGF0YS1jb2xvci1pZD0iNiIgZGF0YS1jb2xvci1uYW1lPSJMYWdvb24gRGVwdGgiIGRhdGEtY29sb3ItaGV4PSIjMWM2ZjhjIiBmaWxsPSIjMWM2ZjhjIj4KICAgIDx0aXRsZT5SZWdpb24gYzE5IOKAkyBDb2xvciAjNiAoTGFnb29uIERlcHRoKTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNMCA0MDQgQyAxNjAgNDEwIDMyMCA0MTYgNDgwIDQxMiBDIDQ4MCA0MjggNDgwIDQ0MCA0ODAgNDQ4IEMgMzIwIDQ1NiAxNjAgNDUyIDAgNDQ4IEMgMCA0MzAgMCA0MTYgMCA0MDQgWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMyMCIgZGF0YS1jZWxsLWlkPSJjMjAiIGRhdGEtY29sb3ItaWQ9IjYiIGRhdGEtY29sb3ItbmFtZT0iTGFnb29uIERlcHRoIiBkYXRhLWNvbG9yLWhleD0iIzFjNmY4YyIgZmlsbD0iIzFjNmY4YyI+CiAgICA8dGl0bGU+UmVnaW9uIGMyMCDigJMgQ29sb3IgIzYgKExhZ29vbiBEZXB0aCk8L3RpdGxlPgogICAgPHBhdGggZD0iTTQ4MCA0MTIgQyA2NDAgNDE2IDgwMCA0MTAgOTYwIDQwNCBMOTYwIDQ0OCBDIDgyMCA0NTYgNjgwIDQ2MCA1MjAgNDU2IEMgNTAwIDQ1NCA0OTAgNDQ4IDQ4MCA0NDggQyA0ODAgNDMyIDQ4MCA0MjAgNDgwIDQxMiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzIxIiBkYXRhLWNlbGwtaWQ9ImMyMSIgZGF0YS1jb2xvci1pZD0iNyIgZGF0YS1jb2xvci1uYW1lPSJTaG9yZSBMZWZ0IiBkYXRhLWNvbG9yLWhleD0iIzRmN2Q1YyIgZmlsbD0iIzRmN2Q1YyI+CiAgICA8dGl0bGU+UmVnaW9uIGMyMSDigJMgQ29sb3IgIzcgKFNob3JlIExlZnQpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik0wIDQ0OCBDIDEyMCA0NTQgMjIwIDQ1OCAzMDAgNDYyIEMgMjgwIDUwMCAyMjAgNTQwIDE0MCA1NjYgQyA4MCA1ODQgMzAgNTkyIDAgNTkyIEMgMCA1NDQgMCA0OTYgMCA0NDggWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMyMiIgZGF0YS1jZWxsLWlkPSJjMjIiIGRhdGEtY29sb3ItaWQ9IjciIGRhdGEtY29sb3ItbmFtZT0iU2hvcmUgTGVmdCIgZGF0YS1jb2xvci1oZXg9IiM0ZjdkNWMiIGZpbGw9IiM0ZjdkNWMiPgogICAgPHRpdGxlPlJlZ2lvbiBjMjIg4oCTIENvbG9yICM3IChTaG9yZSBMZWZ0KTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNMzAwIDQ2MiBDIDM2MCA0NjggNDIwIDQ3MiA1MjAgNDU2IEMgNTEwIDQ4NiA0OTAgNTE0IDQ2MCA1NDAgQyA0MjAgNTY4IDM2MCA1ODAgMzAwIDU3MiBDIDI4MCA1NDAgMjkwIDUwMCAzMDAgNDYyIFoiLz4KICA8L2c+CiAgPGcgaWQ9InJlZ2lvbi1jMjMiIGRhdGEtY2VsbC1pZD0iYzIzIiBkYXRhLWNvbG9yLWlkPSI4IiBkYXRhLWNvbG9yLW5hbWU9IlNob3JlIE1pZGRsZSIgZGF0YS1jb2xvci1oZXg9IiM2YjkzNTgiIGZpbGw9IiM2YjkzNTgiPgogICAgPHRpdGxlPlJlZ2lvbiBjMjMg4oCTIENvbG9yICM4IChTaG9yZSBNaWRkbGUpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik01MjAgNDU2IEMgNjQwIDQ2MiA3MjAgNDY0IDc4MCA0NjAgQyA3ODggNDc0IDc5MiA0OTggNzk2IDUyOCBDIDc4NiA1ODAgNzY4IDU4NCA3NTIgNTg4IEMgNzAwIDYwMCA2NTYgNTk4IDYwNCA1ODggQyA1NjYgNTgwIDUzNCA1NjQgNTE4IDU0NiBDIDUwNiA1MzIgNTA2IDUyMCA1MjAgNTEwIEMgNTA4IDQ5NiA1MTIgNDc2IDUyMCA0NTYgWiIvPgogIDwvZz4KICA8ZyBpZD0icmVnaW9uLWMyNCIgZGF0YS1jZWxsLWlkPSJjMjQiIGRhdGEtY29sb3ItaWQ9IjkiIGRhdGEtY29sb3ItbmFtZT0iQ2FweSBCb2R5IiBkYXRhLWNvbG9yLWhleD0iIzdkNTczNSIgZmlsbD0iIzdkNTczNSI+CiAgICA8dGl0bGU+UmVnaW9uIGMyNCDigJMgQ29sb3IgIzkgKENhcHkgQm9keSk8L3RpdGxlPgogICAgPHBhdGggZD0iTTUyMCA1MTAgQyA1NDggNDcwIDYxMiA0NDAgNjkyIDQzNCBDIDc0NCA0MzAgNzY4IDQzOCA3ODAgNDU2IEMgNzkwIDQ3NCA3OTQgNDk4IDc5NiA1MjggQyA3OTggNTU2IDc4NiA1ODAgNzUyIDU4OCBDIDcwOCA2MDAgNjU2IDU5OCA2MDQgNTg4IEMgNTY2IDU4MCA1MzQgNTY0IDUxOCA1NDYgQyA1MDggNTMyIDUwNiA1MTggNTIwIDUxMCBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzI1IiBkYXRhLWNlbGwtaWQ9ImMyNSIgZGF0YS1jb2xvci1pZD0iMTAiIGRhdGEtY29sb3ItbmFtZT0iQ2FweSBIZWFkIiBkYXRhLWNvbG9yLWhleD0iIzVlM2IyNCIgZmlsbD0iIzVlM2IyNCI+CiAgICA8dGl0bGU+UmVnaW9uIGMyNSDigJMgQ29sb3IgIzEwIChDYXB5IEhlYWQpPC90aXRsZT4KICAgIDxwYXRoIGQ9Ik03ODAgNDU2IEMgODA0IDQzOCA4MzggNDM4IDg2NiA0NjAgQyA4OTQgNDgyIDkwNCA1MjAgODkyIDU1NiBDIDg3OCA1OTQgODQ2IDYwOCA4MTAgNjAwIEMgODAwIDU5OCA3OTYgNTkwIDc5NiA1MjggQyA3OTQgNTAwIDc4OCA0NzQgNzgwIDQ1NiBaIi8+CiAgPC9nPgogIDxnIGlkPSJyZWdpb24tYzI2IiBkYXRhLWNlbGwtaWQ9ImMyNiIgZGF0YS1jb2xvci1pZD0iMTEiIGRhdGEtY29sb3ItbmFtZT0iU2hvcmUgUmlnaHQiIGRhdGEtY29sb3ItaGV4PSIjM2Y1YjNiIiBmaWxsPSIjM2Y1YjNiIj4KICAgIDx0aXRsZT5SZWdpb24gYzI2IOKAkyBDb2xvciAjMTEgKFNob3JlIFJpZ2h0KTwvdGl0bGU+CiAgICA8cGF0aCBkPSJNNzgwIDQ2MCBDIDg0MCA0NTYgOTAwIDQ1NCA5NjAgNDUyIEw5NjAgNjAwIEMgOTEwIDYwMCA4NzAgNTk4IDgxMCA2MDAgQyA4NDYgNjA4IDg3OCA1OTQgODkyIDU1NiBDIDg4NCA1MjAgODYwIDQ4OCA3ODAgNDYwIFoiLz4KICA8L2c+Cjwvc3ZnPgo=",
+      // Default puzzle metadata fallback used for onboarding and smoke tests.
+      const DEFAULT_GAME_SOURCE = {
+        id: "capy-default",
+        path: "capy.json",
       };
+
+      const DEFAULT_GAME_FALLBACK = {
+        title: "Capybara Springs",
+        description: "A capybara in a lavender scarf lounges with a dachshund beside a moonlit spring.",
+      };
+
+      let cachedDefaultGame = null;
+      let defaultGameRequest = null;
 
       const SAMPLE_DETAIL_LEVELS = {
         low: {
@@ -2026,18 +2267,27 @@
       };
       const DEFAULT_SAMPLE_DETAIL = "high";
 
-      function drawOutlines2D(ctx, cache) {
-        if (!state.puzzle || !ctx) return;
-        if (!cache || !cache.ready) return;
-        if (cache.outlineLayer && cache.outlineLayerCtx) {
-          if (cache.outlineLayerDirty && !rasterizeOutlineLayer(cache)) {
-            strokeOutlinesDirect(ctx, cache);
-            return;
-          }
-          ctx.drawImage(cache.outlineLayer, 0, 0);
+      function drawOutlines() {
+        if (!state.puzzle) return;
+        const cache = ensureRenderCache();
+        if (!cache.ready) return;
+        const completedColors = getCompletedColorIds();
+        const hideCompleted = completedColors.size > 0;
+        const geometries = hideCompleted
+          ? cache.regions.filter((geometry) => !completedColors.has(geometry.colorId))
+          : cache.regions;
+        if (geometries.length === 0) {
           return;
         }
-        strokeOutlinesDirect(ctx, cache);
+        if (!hideCompleted && cache.outlineLayer && cache.outlineLayerCtx) {
+          if (cache.outlineLayerDirty && !rasterizeOutlineLayer(cache)) {
+            strokeOutlinesDirect(cache, geometries);
+            return;
+          }
+          puzzleCtx.drawImage(cache.outlineLayer, 0, 0);
+          return;
+        }
+        strokeOutlinesDirect(cache, geometries);
       }
 
       function createRenderCache() {
@@ -2061,14 +2311,14 @@
         };
       }
 
-      function strokeOutlinesDirect(ctx, cache) {
+      function strokeOutlinesDirect(cache, geometries) {
         const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        withRenderScale(ctx, scale, () => {
-          ctx.strokeStyle = backgroundInk.outline;
-          ctx.lineWidth = cache.strokeWidth;
-          ctx.lineJoin = "round";
-          ctx.lineCap = "round";
-          strokeGeometries(ctx, cache.regions);
+        withRenderScale(puzzleCtx, scale, () => {
+          puzzleCtx.strokeStyle = backgroundInk.outline;
+          puzzleCtx.lineWidth = cache.strokeWidth;
+          puzzleCtx.lineJoin = "round";
+          puzzleCtx.lineCap = "round";
+          strokeGeometries(puzzleCtx, Array.isArray(geometries) ? geometries : cache.regions);
         });
       }
 
@@ -2478,9 +2728,16 @@
         return deviceWidth / renderScale;
       }
       if (samplePreview) {
-        samplePreview.src = SAMPLE_ARTWORK.dataUrl;
-        samplePreview.alt = SAMPLE_ARTWORK.description;
-        samplePreview.title = SAMPLE_ARTWORK.title;
+        const dataUrl = getSampleDataUrl();
+        if (dataUrl) {
+          samplePreview.src = dataUrl;
+          samplePreview.alt = getSampleDescription() || getSampleTitle();
+          samplePreview.title = getSampleTitle();
+        } else {
+          samplePreview.removeAttribute("src");
+          samplePreview.alt = "";
+          samplePreview.title = "";
+        }
       }
 
       // View state drives pan/zoom transforms. baseScale keeps the puzzle fit-to-screen while
@@ -2507,6 +2764,28 @@
         pixelWidth: 0,
         pixelHeight: 0,
       };
+
+      let cachedCanvasRect = null;
+
+      function invalidateCanvasRect() {
+        cachedCanvasRect = null;
+      }
+
+      function getPuzzleCanvasRect() {
+        if (!puzzleCanvas) {
+          return null;
+        }
+        if (cachedCanvasRect) {
+          return cachedCanvasRect;
+        }
+        const rect = puzzleCanvas.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) {
+          cachedCanvasRect = null;
+          return null;
+        }
+        cachedCanvasRect = rect;
+        return cachedCanvasRect;
+      }
 
       function getDevicePixelRatio() {
         if (typeof window === "undefined") {
@@ -2558,10 +2837,6 @@
         const metricsChanged = updateCanvasMetrics();
         puzzleCanvas.style.width = `${canvasMetrics.displayWidth}px`;
         puzzleCanvas.style.height = `${canvasMetrics.displayHeight}px`;
-        if (labelCanvas) {
-          labelCanvas.style.width = `${canvasMetrics.displayWidth}px`;
-          labelCanvas.style.height = `${canvasMetrics.displayHeight}px`;
-        }
         if (canvasTransform) {
           canvasTransform.style.width = `${canvasMetrics.displayWidth}px`;
           canvasTransform.style.height = `${canvasMetrics.displayHeight}px`;
@@ -2572,22 +2847,9 @@
         if (puzzleCanvas.height !== canvasMetrics.pixelHeight) {
           puzzleCanvas.height = canvasMetrics.pixelHeight;
         }
-        if (labelCanvas) {
-          if (labelCanvas.width !== canvasMetrics.pixelWidth) {
-            labelCanvas.width = canvasMetrics.pixelWidth;
-          }
-          if (labelCanvas.height !== canvasMetrics.pixelHeight) {
-            labelCanvas.height = canvasMetrics.pixelHeight;
-          }
-        }
-        if (puzzleCtx) {
-          puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
-          puzzleCtx.imageSmoothingEnabled = false;
-        }
-        if (labelCtx) {
-          labelCtx.setTransform(1, 0, 0, 1, 0, 0);
-          labelCtx.imageSmoothingEnabled = false;
-        }
+        puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
+        puzzleCtx.imageSmoothingEnabled = false;
+        invalidateCanvasRect();
         return metricsChanged;
       }
 
@@ -2681,8 +2943,9 @@
       let panGlobalListenersAttached = false;
       const globalPanListenerOptions = { capture: true };
       let spacePressed = false;
-      let colorFlashTimer = null;
-      const QUICK_HINT_FLASH_DURATION = 160;
+      const overlayAnimations = new Map();
+      let overlayAnimationFrame = null;
+      let overlayAnimationTimeout = null;
       const activeTouches = new Map();
       let pinchSession = null;
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
@@ -2747,6 +3010,10 @@
         settings: {
           autoAdvance: true,
           animateHints: true,
+          hintFadeDuration: DEFAULT_HINT_FADE_DURATION,
+          hintIntensity: DEFAULT_HINT_INTENSITY,
+          rightClickAction: DEFAULT_RIGHT_CLICK_ACTION,
+          difficulty: DEFAULT_DIFFICULTY,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
@@ -2758,6 +3025,13 @@
         saves: gameSaveManager.hydrate(),
         previewImageData: null,
         renderCache: createRenderCache(),
+        defaultGame: {
+          id: DEFAULT_GAME_SOURCE.id,
+          path: DEFAULT_GAME_SOURCE.path,
+          title: DEFAULT_GAME_FALLBACK.title,
+          description: DEFAULT_GAME_FALLBACK.description,
+        },
+        sampleArtwork: null,
       };
 
       syncStatusBarVisibility();
@@ -2771,6 +3045,186 @@
         refreshSaveList();
         updateStorageUsageSummary();
       });
+
+      function getDefaultGameTitle() {
+        const title = state.defaultGame?.title;
+        if (typeof title === "string" && title.trim()) {
+          return title.trim();
+        }
+        const fallback = DEFAULT_GAME_FALLBACK.title;
+        if (typeof fallback === "string" && fallback.trim()) {
+          return fallback.trim();
+        }
+        return DEFAULT_GAME_SOURCE.path;
+      }
+
+      function getDefaultGameDescription() {
+        const description = state.defaultGame?.description;
+        if (typeof description === "string" && description.trim()) {
+          return description.trim();
+        }
+        const fallback = DEFAULT_GAME_FALLBACK.description;
+        if (typeof fallback === "string" && fallback.trim()) {
+          return fallback.trim();
+        }
+        return "";
+      }
+
+      function getSampleArtwork() {
+        return state.sampleArtwork || null;
+      }
+
+      function getSampleDataUrl() {
+        const artwork = getSampleArtwork();
+        if (!artwork || typeof artwork.dataUrl !== "string") {
+          return null;
+        }
+        const trimmed = artwork.dataUrl.trim();
+        return trimmed ? trimmed : null;
+      }
+
+      function getSampleTitle() {
+        const artwork = getSampleArtwork();
+        if (artwork && typeof artwork.title === "string" && artwork.title.trim()) {
+          return artwork.title.trim();
+        }
+        const fallback = getDefaultGameTitle();
+        return fallback || "Sample puzzle";
+      }
+
+      function getSampleDescription() {
+        const artwork = getSampleArtwork();
+        if (artwork && typeof artwork.description === "string" && artwork.description.trim()) {
+          return artwork.description.trim();
+        }
+        const fallback = getDefaultGameDescription();
+        return fallback || "";
+      }
+
+      function applyDefaultGameMetadata(metadata = {}) {
+        const fallbackTitle = DEFAULT_GAME_FALLBACK.title;
+        const fallbackDescription = DEFAULT_GAME_FALLBACK.description;
+        const titleValue =
+          typeof metadata.title === "string" && metadata.title.trim()
+            ? metadata.title.trim()
+            : typeof fallbackTitle === "string" && fallbackTitle.trim()
+            ? fallbackTitle.trim()
+            : "";
+        const descriptionValue =
+          typeof metadata.description === "string" && metadata.description.trim()
+            ? metadata.description.trim()
+            : typeof fallbackDescription === "string" && fallbackDescription.trim()
+            ? fallbackDescription.trim()
+            : "";
+        state.defaultGame = {
+          id: DEFAULT_GAME_SOURCE.id,
+          path: DEFAULT_GAME_SOURCE.path,
+          title: titleValue,
+          description: descriptionValue,
+        };
+        refreshGameSelection();
+      }
+
+      function applySampleArtwork(artwork) {
+        state.sampleArtwork = artwork || null;
+        applySampleDetailLevel(state.sampleDetailLevel, {
+          skipReload: true,
+          skipLog: true,
+          skipOptions: true,
+        });
+      }
+
+      function normalizeSampleArtwork(source, defaults = {}) {
+        if (!source || typeof source !== "object") return null;
+        const dataUrl = typeof source.dataUrl === "string" ? source.dataUrl.trim() : "";
+        if (!dataUrl) return null;
+        const title =
+          typeof source.title === "string" && source.title.trim()
+            ? source.title.trim()
+            : typeof defaults.title === "string" && defaults.title.trim()
+            ? defaults.title.trim()
+            : "";
+        const description =
+          typeof source.description === "string" && source.description.trim()
+            ? source.description.trim()
+            : typeof defaults.description === "string" && defaults.description.trim()
+            ? defaults.description.trim()
+            : "";
+        return {
+          title,
+          description,
+          dataUrl,
+        };
+      }
+
+      async function fetchDefaultGamePayload(options = {}) {
+        const { forceRefresh = false } = options;
+        if (!forceRefresh && cachedDefaultGame) {
+          return cachedDefaultGame;
+        }
+        if (!forceRefresh && defaultGameRequest) {
+          return defaultGameRequest;
+        }
+        const request = (async () => {
+          const response = await fetch(DEFAULT_GAME_SOURCE.path, { cache: "no-store" });
+          if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+          const payload = await response.json();
+          const requestedTitle =
+            typeof payload.title === "string" && payload.title.trim() ? payload.title.trim() : "";
+          const requestedDescription =
+            typeof payload.description === "string" && payload.description.trim()
+              ? payload.description.trim()
+              : "";
+          applyDefaultGameMetadata({
+            title: requestedTitle,
+            description: requestedDescription,
+          });
+          const resolvedTitle = getDefaultGameTitle();
+          const resolvedDescription = getDefaultGameDescription();
+          const artwork = normalizeSampleArtwork(payload.sampleArtwork, {
+            title: resolvedTitle,
+            description: resolvedDescription,
+          });
+          applySampleArtwork(artwork);
+          return {
+            payload,
+            resolvedTitle,
+            resolvedDescription,
+          };
+        })();
+
+        if (!forceRefresh) {
+          defaultGameRequest = request
+            .then((result) => {
+              cachedDefaultGame = result;
+              return result;
+            })
+            .catch((error) => {
+              if (defaultGameRequest === request) {
+                defaultGameRequest = null;
+              }
+              throw error;
+            })
+            .finally(() => {
+              if (defaultGameRequest === request) {
+                defaultGameRequest = null;
+              }
+            });
+          return defaultGameRequest;
+        }
+
+        try {
+          const result = await request;
+          cachedDefaultGame = result;
+          return result;
+        } finally {
+          if (defaultGameRequest === request) {
+            defaultGameRequest = null;
+          }
+        }
+      }
 
       function applyGameplaySettings(settings = {}) {
         if (!settings || typeof settings !== "object") return;
@@ -2790,6 +3244,50 @@
           if (hintFlashToggle) {
             hintFlashToggle.checked = settings.animateHints;
           }
+        }
+        if (settings.hintFadeDuration != null) {
+          const duration = normalizeHintFadeDuration(settings.hintFadeDuration);
+          state.settings.hintFadeDuration = duration;
+          if (hintFadeDurationInput) {
+            hintFadeDurationInput.value = String(duration);
+          }
+        } else if (hintFadeDurationInput && state.settings.hintFadeDuration != null) {
+          const duration = normalizeHintFadeDuration(state.settings.hintFadeDuration);
+          state.settings.hintFadeDuration = duration;
+          hintFadeDurationInput.value = String(duration);
+        }
+        if (settings.hintIntensity != null) {
+          const intensity = normalizeHintIntensity(settings.hintIntensity);
+          state.settings.hintIntensity = intensity;
+          if (hintIntensityInput) {
+            hintIntensityInput.value = String(Math.round(intensity * 100));
+          }
+        } else if (hintIntensityInput && state.settings.hintIntensity != null) {
+          const intensity = normalizeHintIntensity(state.settings.hintIntensity);
+          state.settings.hintIntensity = intensity;
+          hintIntensityInput.value = String(Math.round(intensity * 100));
+        }
+        if (settings.rightClickAction != null) {
+          const action = resolveRightClickAction(settings.rightClickAction);
+          state.settings.rightClickAction = action;
+          if (rightClickActionSelect) {
+            rightClickActionSelect.value = action;
+          }
+        } else if (rightClickActionSelect && state.settings.rightClickAction) {
+          const action = resolveRightClickAction(state.settings.rightClickAction);
+          state.settings.rightClickAction = action;
+          rightClickActionSelect.value = action;
+        }
+        if (settings.difficulty != null) {
+          const difficulty = resolveDifficulty(settings.difficulty);
+          state.settings.difficulty = difficulty;
+          if (difficultySelect) {
+            difficultySelect.value = difficulty;
+          }
+        } else if (difficultySelect) {
+          const difficulty = resolveDifficulty(state.settings.difficulty);
+          state.settings.difficulty = difficulty;
+          difficultySelect.value = difficulty;
         }
         if (typeof settings.showRegionLabels === "boolean") {
           applyRegionLabelVisibility(settings.showRegionLabels, {
@@ -2822,6 +3320,7 @@
         if (typeof settings.artPrompt === "string") {
           applyArtPrompt(settings.artPrompt, { skipLog: true, skipAutosave: true });
         }
+        updateOptionOutputs();
       }
 
       const debugLogEntries = [];
@@ -2847,7 +3346,7 @@
                 ? metadata.trim()
                 : null;
             state.sourceTitle = metadataTitle || "External data";
-            startHint.classList.add("hidden");
+            hideStartScreen();
             logDebug(`Loading external puzzle data: ${state.sourceTitle}`);
             loadImage(dataUrl);
           },
@@ -2884,12 +3383,22 @@
             }
             updatePreviewState();
           },
+          openGenerator: () => openSheet(generatorSheet),
           openSettings: () => openSheet(settingsSheet),
+          openSaves: () => openSheet(saveManagerSheet),
         };
       }
 
-      // Renderer manager is created after the rendering backends are defined near the
-      // bottom of this script. Deferred initialization calls are also issued there.
+      applyGameplaySettings(state.settings);
+      updateOptionOutputs();
+      refreshSaveList();
+      updateStorageUsageSummary();
+      updateCommandStates();
+      renderDebugLog();
+      logDebug("Session started");
+      syncCommandRailMetrics();
+      handleViewportChange({ log: true, recenter: true });
+      resetView({ recenter: true });
 
       if (paletteSortEl) {
         paletteSortEl.value = state.paletteSort;
@@ -2903,9 +3412,25 @@
       for (const button of sampleButtons) {
         if (!button) continue;
         button.setAttribute("type", "button");
-        button.title = `Play ${SAMPLE_ARTWORK.title}`;
         button.addEventListener("click", () => {
+          if (!getSampleDataUrl()) {
+            return;
+          }
           loadSamplePuzzle({ detailLevel: state.sampleDetailLevel });
+        });
+      }
+
+      if (gameSelectionList) {
+        gameSelectionList.addEventListener("click", (event) => {
+          const target = event.target.closest("[data-game-id]");
+          if (!target) return;
+          const gameId = target.getAttribute("data-game-id");
+          if (!gameId) return;
+          if (gameId === DEFAULT_GAME_SOURCE.id) {
+            loadDefaultPuzzle({ announce: true });
+          } else {
+            loadSaveEntry(gameId);
+          }
         });
       }
 
@@ -2918,12 +3443,38 @@
         });
       }
 
+      applySampleDetailLevel(DEFAULT_SAMPLE_DETAIL, { skipReload: true, skipLog: true });
+
+      fetchDefaultGamePayload().catch((error) => {
+        console.error("Failed to preload default puzzle metadata", error);
+      });
+
+      const restoredSession = loadInitialSession();
+      if (!restoredSession && getSampleDataUrl()) {
+        loadSamplePuzzle({ detailLevel: state.sampleDetailLevel, skipDetailUpdate: true, announce: false });
+      }
+
       selectButton.addEventListener("click", () => fileInput.click());
       importButton.addEventListener("click", () => fileInput.click());
+      if (generatorButton) {
+        generatorButton.addEventListener("click", () => openSheet(generatorSheet));
+      }
       settingsButton.addEventListener("click", () => openSheet(settingsSheet));
-      saveManagerButton.addEventListener("click", () => openSheet(saveSheet));
+      saveManagerButton.addEventListener("click", () => {
+        hideStartScreen();
+        openSheet(saveManagerSheet);
+      });
       if (helpButton) {
         helpButton.addEventListener("click", () => openSheet(helpSheet));
+      }
+
+      if (startHintCloseButton) {
+        startHintCloseButton.addEventListener("click", () => {
+          hideStartScreen();
+          if (saveManagerButton && !saveManagerButton.disabled) {
+            saveManagerButton.focus();
+          }
+        });
       }
 
       if (fullscreenButton) {
@@ -2963,16 +3514,27 @@
           const target = event.currentTarget.getAttribute("data-sheet-close");
           if (target === "settings") {
             closeSheet(settingsSheet);
-          } else if (target === "save") {
-            closeSheet(saveSheet);
+          } else if (target === "generator") {
+            closeSheet(generatorSheet);
           } else if (target === "help") {
             closeSheet(helpSheet);
+          } else if (target === "saves") {
+            closeSheet(saveManagerSheet);
           }
         });
       }
 
       startHint.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.key === "Escape") {
+          if (!startHint.classList.contains("hidden") && (state.puzzle || state.saves.length > 0)) {
+            hideStartScreen();
+            if (saveManagerButton && !saveManagerButton.disabled) {
+              saveManagerButton.focus();
+            }
+          }
+          return;
+        }
+        if ((event.key === "Enter" || event.key === " ") && event.target === startHint) {
           event.preventDefault();
           fileInput.click();
         }
@@ -2994,9 +3556,72 @@
 
       hintFlashToggle.addEventListener("change", () => {
         state.settings.animateHints = hintFlashToggle.checked;
+        if (!hintFlashToggle.checked) {
+          clearOverlayAnimations();
+        }
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
         scheduleAutosave("settings-hint-animations");
       });
+
+      if (difficultySelect) {
+        difficultySelect.value = resolveDifficulty(difficultySelect.value);
+        difficultySelect.addEventListener("change", () => {
+          const difficulty = resolveDifficulty(difficultySelect.value);
+          state.settings.difficulty = difficulty;
+          difficultySelect.value = difficulty;
+          logDebug(
+            difficulty === "easy"
+              ? "Difficulty set to Easy – clicks auto-select matching colours"
+              : "Difficulty set to Standard – clicks require the active colour"
+          );
+          scheduleAutosave("settings-difficulty");
+        });
+      }
+
+      if (hintFadeDurationInput) {
+        hintFadeDurationInput.value = String(normalizeHintFadeDuration(hintFadeDurationInput.value));
+        hintFadeDurationInput.addEventListener("input", () => {
+          state.settings.hintFadeDuration = normalizeHintFadeDuration(hintFadeDurationInput.value);
+          updateOptionOutputs();
+        });
+        hintFadeDurationInput.addEventListener("change", () => {
+          const duration = normalizeHintFadeDuration(hintFadeDurationInput.value);
+          state.settings.hintFadeDuration = duration;
+          hintFadeDurationInput.value = String(duration);
+          updateOptionOutputs();
+          logDebug(`Hint fade set to ${(duration / 1000).toFixed(1)}s`);
+          scheduleAutosave("settings-hint-fade");
+        });
+      }
+
+      if (hintIntensityInput) {
+        hintIntensityInput.value = String(Math.round(normalizeHintIntensity(hintIntensityInput.value) * 100));
+        hintIntensityInput.addEventListener("input", () => {
+          state.settings.hintIntensity = normalizeHintIntensity(hintIntensityInput.value);
+          updateOptionOutputs();
+        });
+        hintIntensityInput.addEventListener("change", () => {
+          const intensity = normalizeHintIntensity(hintIntensityInput.value);
+          state.settings.hintIntensity = intensity;
+          hintIntensityInput.value = String(Math.round(intensity * 100));
+          updateOptionOutputs();
+          logDebug(`Hint intensity set to ${Math.round(intensity * 100)}%`);
+          scheduleAutosave("settings-hint-intensity");
+        });
+      }
+
+      if (rightClickActionSelect) {
+        rightClickActionSelect.value = resolveRightClickAction(rightClickActionSelect.value);
+        rightClickActionSelect.addEventListener("change", (event) => {
+          const action = resolveRightClickAction(event.target.value);
+          state.settings.rightClickAction = action;
+          rightClickActionSelect.value = action;
+          logDebug(
+            action === "select" ? "Right-click will select colours" : "Right-click will pan the canvas"
+          );
+          scheduleAutosave("settings-right-click-action");
+        });
+      }
 
       if (showRegionLabelsToggle) {
         showRegionLabelsToggle.addEventListener("change", () => {
@@ -3069,13 +3694,7 @@
       previewToggle.addEventListener("click", () => {
         state.previewVisible = !state.previewVisible;
         updatePreviewState();
-        logDebug(state.previewVisible ? "Opened preview overlay" : "Closed preview overlay");
-      });
-
-      closePreviewButton.addEventListener("click", () => {
-        state.previewVisible = false;
-        updatePreviewState();
-        logDebug("Closed preview overlay");
+        logDebug(state.previewVisible ? "Showing preview" : "Hiding preview");
       });
 
       applyBtn.addEventListener("click", () => {
@@ -3103,12 +3722,14 @@
         logDebug("Exported puzzle JSON");
       });
 
-      saveSnapshotBtn.addEventListener("click", () => {
-        if (!state.puzzle) return;
-        saveCurrentSnapshot();
-      });
+      for (const button of saveSnapshotButtons) {
+        button.addEventListener("click", () => {
+          if (!state.puzzle) return;
+          saveCurrentSnapshot();
+        });
+      }
 
-      saveList.addEventListener("click", (event) => {
+      function handleSaveListClick(event) {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
         const entryEl = target.closest("[data-save-id]");
@@ -3124,7 +3745,11 @@
         } else if (target.dataset.action === "rename") {
           renameSaveEntry(id);
         }
-      });
+      }
+
+      for (const list of saveListContainers) {
+        list.addEventListener("click", handleSaveListClick);
+      }
 
       colorCountEl.addEventListener("input", updateOptionOutputs);
       minRegionEl.addEventListener("input", updateOptionOutputs);
@@ -3215,20 +3840,29 @@
         if (viewportEl) {
           viewportEl.addEventListener("pointerleave", hideCustomCursor);
         }
-        window.addEventListener("scroll", hideCustomCursor, { passive: true });
+        window.addEventListener(
+          "scroll",
+          () => {
+            hideCustomCursor();
+            invalidateCanvasRect();
+          },
+          { passive: true }
+        );
       }
 
       const DOUBLE_TAP_WINDOW_MS = 320;
       const POINTER_CLICK_SUPPRESSION_MS = 360;
+      const REGION_HINT_HOVER_DELAY_MS = 280;
+      const REGION_HINT_PRESS_DELAY_MS = 160;
 
-      function readRegionAtPointFromCanvas(canvas, clientX, clientY) {
-        if (!state.puzzle || !canvas) {
+      function getRegionAtPoint(clientX, clientY) {
+        if (!state.puzzle || !puzzleCanvas) {
           return null;
         }
         if (typeof clientX !== "number" || typeof clientY !== "number") {
           return null;
         }
-        const rect = canvas.getBoundingClientRect();
+        const rect = getPuzzleCanvasRect();
         if (!rect || rect.width <= 0 || rect.height <= 0) {
           return null;
         }
@@ -3246,11 +3880,6 @@
           return null;
         }
         return { regionId, region };
-      }
-
-      function getRegionAtPoint(clientX, clientY) {
-        if (!rendererManager) return null;
-        return rendererManager.readRegionAtPoint(clientX, clientY);
       }
 
       function getRegionFromEvent(event) {
@@ -3307,6 +3936,37 @@
       }
 
       let suppressNextCanvasClickUntil = 0;
+      let lastRegionHintId = null;
+      let lastRegionHintTime = 0;
+
+      function maybeShowRegionHint(region, paletteColor, options = {}) {
+        if (!state.puzzle) return;
+        if (state.previewVisible) return;
+        if (!region) return;
+        const { trigger = "hover", flashSwatch = false } = options;
+        const now = Date.now();
+        const delay = trigger === "press" ? REGION_HINT_PRESS_DELAY_MS : REGION_HINT_HOVER_DELAY_MS;
+        if (lastRegionHintId === region.id && now - lastRegionHintTime < delay) {
+          if (flashSwatch && !state.settings.animateHints) {
+            flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+          }
+          return;
+        }
+        const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
+        const showOverlay = state.settings.animateHints !== false;
+        if (showOverlay && remaining.length > 0) {
+          flashRegion(region.id, { paletteColor, includeFilled: false });
+          flashColorRegions(region.colorId, { paletteColor, onlyUnfilled: true });
+          lastRegionHintId = region.id;
+          lastRegionHintTime = now;
+        } else {
+          lastRegionHintId = region.id;
+          lastRegionHintTime = now;
+        }
+        if (flashSwatch) {
+          flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+        }
+      }
 
       function attemptFillRegion(hit, { label = "click" } = {}) {
         if (!state.puzzle) {
@@ -3325,7 +3985,7 @@
         if (state.filled.has(regionId)) {
           const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
           if (remaining.length > 0) {
-            flashColorRegions(region.colorId, { onlyUnfilled: true });
+            flashColorRegions(region.colorId, { paletteColor: getPaletteEntry(region.colorId), onlyUnfilled: true });
             const regionWord = remaining.length === 1 ? "region" : "regions";
             logDebug(
               `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
@@ -3336,13 +3996,28 @@
           return "already-filled";
         }
         if (region.colorId !== state.activeColor) {
-          const paletteColor = getPaletteEntry(region.colorId);
-          const hintTint = paletteColor ? rgbaFromHex(paletteColor.hex, 0.5) : "rgba(250, 204, 21, 0.55)";
-          if (state.settings.animateHints) {
-            flashRegion(regionId, hintTint);
-            flashColorRegions(region.colorId, { tint: hintTint, duration: QUICK_HINT_FLASH_DURATION });
+          const difficulty = resolveDifficulty(state.settings.difficulty);
+          if (difficulty === "easy") {
+            activateColor(region.colorId, { flash: false });
+          } else {
+            const paletteColor = getPaletteEntry(region.colorId);
+            const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
+            if (state.settings.animateHints) {
+              flashRegion(regionId, { paletteColor, tint: fallbackTint, includeFilled: false });
+              flashColorRegions(region.colorId, {
+                paletteColor,
+                tint: fallbackTint,
+                onlyUnfilled: true,
+              });
+            }
+            flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+            logDebug(
+              `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
+            );
+            return "mismatch";
           }
-          flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+        }
+        if (region.colorId !== state.activeColor) {
           logDebug(
             `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
           );
@@ -3401,6 +4076,20 @@
         activateColor(hit.region.colorId);
       });
 
+      puzzleCanvas.addEventListener("pointerdown", (event) => {
+        const pointerType = event.pointerType;
+        if (pointerType !== "touch" && pointerType !== "pen") {
+          return;
+        }
+        if (!event.isPrimary) return;
+        if (!state.puzzle || state.previewVisible) return;
+        if (isPanning || pinchSession) return;
+        const hit = getRegionFromEvent(event);
+        if (!hit) return;
+        const paletteColor = getPaletteEntry(hit.region.colorId);
+        maybeShowRegionHint(hit.region, paletteColor, { trigger: "press", flashSwatch: true });
+      });
+
       puzzleCanvas.addEventListener(
         "pointerup",
         (event) => {
@@ -3438,6 +4127,11 @@
 
       function openSheet(sheet) {
         if (!sheet) return;
+        for (const candidate of sheetRegistry) {
+          if (!candidate || candidate === sheet) continue;
+          candidate.classList.add("hidden");
+          candidate.setAttribute("aria-hidden", "true");
+        }
         sheet.classList.remove("hidden");
         sheet.setAttribute("aria-hidden", "false");
       }
@@ -3448,24 +4142,53 @@
         sheet.setAttribute("aria-hidden", "true");
       }
 
+      function showStartScreen(options = {}) {
+        if (!startHint) return;
+        for (const sheet of sheetRegistry) {
+          closeSheet(sheet);
+        }
+        startHint.classList.remove("hidden");
+        startHint.setAttribute("aria-hidden", "false");
+        const { focus = true, scrollTo } = options;
+        if (focus) {
+          requestAnimationFrame(() => {
+            if (document.activeElement !== startHint) {
+              startHint.focus();
+            }
+          });
+        }
+        if (scrollTo === "saves" && startSaveManagerSection) {
+          requestAnimationFrame(() => {
+            startSaveManagerSection.scrollIntoView({ block: "start" });
+          });
+        }
+      }
+
+      function hideStartScreen() {
+        if (!startHint) return;
+        startHint.classList.add("hidden");
+        startHint.setAttribute("aria-hidden", "true");
+      }
+
       function updatePreviewState() {
+        if (!previewToggle) return;
+        if (!state.puzzle) {
+          state.previewVisible = false;
+        }
         if (state.previewVisible && state.puzzle) {
-          previewOverlay.classList.remove("hidden");
-          previewOverlay.setAttribute("aria-hidden", "false");
           previewToggle.setAttribute("aria-pressed", "true");
           previewToggle.setAttribute("aria-label", "Hide preview");
           previewToggle.title = "Hide preview";
           previewToggle.classList.add("active");
           hideCustomCursor();
         } else {
-          previewOverlay.classList.add("hidden");
-          previewOverlay.setAttribute("aria-hidden", "true");
           previewToggle.setAttribute("aria-pressed", "false");
           previewToggle.setAttribute("aria-label", "Show preview");
           previewToggle.title = "Show preview";
           previewToggle.classList.remove("active");
           refreshCustomCursorHighlight();
         }
+        renderPuzzle();
       }
 
       function updateFullscreenState() {
@@ -3528,6 +4251,7 @@
         }
         const combined = clamp(userValue * autoValue, 0.6, 1.8);
         root.style.setProperty("--ui-scale", combined.toFixed(4));
+        invalidateCanvasRect();
         return combined;
       }
 
@@ -3587,6 +4311,12 @@
         if (!config) return null;
         const previousLevel = state.sampleDetailLevel;
         state.sampleDetailLevel = config.id;
+        const sampleTitle = getSampleTitle();
+        const sampleDescription = getSampleDescription();
+        const sampleDataUrl = getSampleDataUrl();
+        const sampleAvailable = Boolean(sampleDataUrl);
+        const reloadLabel = sampleTitle ? `Reload ${sampleTitle}` : "Reload sample puzzle";
+
         for (const button of sampleDetailButtons) {
           if (!button) continue;
           const targetLevel = button.dataset.detailLevel;
@@ -3606,23 +4336,38 @@
         }
         for (const button of sampleButtons) {
           if (!button) continue;
-          const labelBase = `Reload ${SAMPLE_ARTWORK.title}`;
           const detailSummary = config.summary || config.label;
-          const titleText = detailSummary ? `${labelBase} – ${detailSummary}` : `${labelBase} – ${config.label}`;
-          const ariaText = detailSummary ? `${labelBase} (${detailSummary})` : `${labelBase} (${config.label})`;
+          const defaultLabel = `${reloadLabel} – ${config.label}`;
+          const titleText = detailSummary ? `${reloadLabel} – ${detailSummary}` : defaultLabel;
+          const ariaText = detailSummary
+            ? `${reloadLabel} (${detailSummary})`
+            : `${reloadLabel} (${config.label})`;
           button.title = titleText;
           button.setAttribute("aria-label", ariaText);
+          button.disabled = !sampleAvailable;
           if (config.approxRegions != null) {
             button.dataset.detailRegions = String(config.approxRegions);
+          } else {
+            delete button.dataset.detailRegions;
           }
         }
         if (samplePreview) {
           const previewSummary = config.summary || config.label;
+          const previewTitle = sampleTitle || "Sample puzzle";
+          if (sampleAvailable) {
+            samplePreview.src = sampleDataUrl;
+            samplePreview.alt = sampleDescription || previewTitle;
+          } else {
+            samplePreview.removeAttribute("src");
+            samplePreview.alt = "";
+          }
           samplePreview.title = previewSummary
-            ? `${SAMPLE_ARTWORK.title} – ${previewSummary}`
-            : `${SAMPLE_ARTWORK.title} – ${config.label}`;
+            ? `${previewTitle} – ${previewSummary}`
+            : `${previewTitle} – ${config.label}`;
           if (config.approxRegions != null) {
             samplePreview.dataset.detailRegions = String(config.approxRegions);
+          } else {
+            delete samplePreview.dataset.detailRegions;
           }
         }
         if (!skipOptions) {
@@ -3651,7 +4396,7 @@
         if (!skipLog && previousLevel !== config.id) {
           logDebug(`Sample detail set to ${config.label} – ${config.summary}`);
         }
-        if (!skipReload && state.sourceUrl === SAMPLE_ARTWORK.dataUrl) {
+        if (!skipReload && sampleAvailable && state.sourceUrl === sampleDataUrl) {
           loadSamplePuzzle({ detailLevel: config.id, skipDetailUpdate: true });
         }
         return config;
@@ -3659,8 +4404,9 @@
 
       function loadSamplePuzzle(options = {}) {
         const { announce = true, detailLevel, skipDetailUpdate = false } = options;
-        const { dataUrl } = SAMPLE_ARTWORK;
+        const dataUrl = getSampleDataUrl();
         if (!dataUrl) return;
+        const sampleTitle = getSampleTitle();
         const targetLevel = detailLevel || state.sampleDetailLevel || DEFAULT_SAMPLE_DETAIL;
         const detailConfig = skipDetailUpdate
           ? SAMPLE_DETAIL_LEVELS[targetLevel] || SAMPLE_DETAIL_LEVELS[DEFAULT_SAMPLE_DETAIL]
@@ -3669,8 +4415,8 @@
             SAMPLE_DETAIL_LEVELS[DEFAULT_SAMPLE_DETAIL];
         resetPuzzleUI();
         state.sourceUrl = dataUrl;
-        state.sourceTitle = SAMPLE_ARTWORK.title || "Sample puzzle";
-        startHint.classList.add("hidden");
+        state.sourceTitle = sampleTitle || "Sample puzzle";
+        hideStartScreen();
         const label = detailConfig ? detailConfig.label : null;
         const logDescriptor = detailConfig?.logDescriptor || (label ? label.toLowerCase() : null);
         const loadOptions = announce
@@ -3687,14 +4433,61 @@
         loadImage(dataUrl, loadOptions);
       }
 
+      async function loadDefaultPuzzle(options = {}) {
+        const { announce = true, forceRefresh = false } = options;
+        resetPuzzleUI();
+        try {
+          const { payload, resolvedTitle, resolvedDescription } = await fetchDefaultGamePayload({
+            forceRefresh,
+          });
+          const descriptorTitle = resolvedTitle || getDefaultGameTitle();
+          const descriptor = resolvedDescription
+            ? `${descriptorTitle} – ${resolvedDescription}`
+            : descriptorTitle;
+          if (announce) {
+            logDebug(`Loading ${descriptor}`);
+          }
+          const applied = applyPuzzleResult(payload, {
+            options: payload.options || getCurrentOptions(),
+            filled: payload.filled,
+            activeColor: payload.activeColor,
+            backgroundColor: payload.backgroundColor,
+            viewport: payload.viewport,
+            settings: payload.settings,
+            title: descriptorTitle || DEFAULT_GAME_SOURCE.path || "Puzzle",
+            skipDefaultLog: !announce,
+          });
+          if (applied) {
+            state.sourceUrl = DEFAULT_GAME_SOURCE.path;
+            state.sourceTitle = descriptorTitle || DEFAULT_GAME_SOURCE.path || "Puzzle";
+            hideStartScreen();
+            setProgressMessage("active");
+            if (!announce) {
+              logDebug(`Loaded ${state.sourceTitle} from ${DEFAULT_GAME_SOURCE.path}`);
+            }
+            return true;
+          }
+        } catch (error) {
+          console.error("Failed to load default puzzle", error);
+          logDebug(`Unable to load ${DEFAULT_GAME_SOURCE.path}. Check the console for details.`);
+        }
+        setProgressMessage("idle");
+        return false;
+      }
+
       function updateCommandStates() {
         const hasPuzzle = Boolean(state.puzzle);
         hintButton.disabled = !hasPuzzle;
         resetButton.disabled = !hasPuzzle;
         previewToggle.disabled = !hasPuzzle;
         downloadBtn.disabled = !hasPuzzle;
-        saveSnapshotBtn.disabled = !hasPuzzle;
+        for (const button of saveSnapshotButtons) {
+          button.disabled = !hasPuzzle;
+        }
         saveManagerButton.disabled = !hasPuzzle && state.saves.length === 0;
+        if (startHintCloseButton) {
+          startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
+        }
       }
 
       function renderDebugLog() {
@@ -3894,7 +4687,7 @@
         if (!skipRender) {
           if (state.puzzle) {
             renderPuzzle();
-          } else if (puzzleCtx) {
+          } else {
             puzzleCtx.save();
             puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
             puzzleCtx.fillStyle = normalized;
@@ -3914,20 +4707,42 @@
       }
 
       function updateOptionOutputs() {
-        if (optionOutputs.colorCount) optionOutputs.colorCount.textContent = String(colorCountEl.value);
-        if (optionOutputs.minRegion) optionOutputs.minRegion.textContent = `${minRegionEl.value} px²`;
-        if (optionOutputs.detail) optionOutputs.detail.textContent = `${detailEl.value} px`;
-        if (optionOutputs.sample) optionOutputs.sample.textContent = `${sampleRateEl.value}%`;
-        if (optionOutputs.iterations) optionOutputs.iterations.textContent = String(kmeansItersEl.value);
-        if (optionOutputs.smoothing) optionOutputs.smoothing.textContent = String(smoothingEl.value);
-        if (optionOutputs.uiScale) {
+        if (generatorOutputs.colorCount) {
+          generatorOutputs.colorCount.textContent = String(colorCountEl.value);
+        }
+        if (generatorOutputs.minRegion) {
+          generatorOutputs.minRegion.textContent = `${minRegionEl.value} px²`;
+        }
+        if (generatorOutputs.detail) {
+          generatorOutputs.detail.textContent = `${detailEl.value} px`;
+        }
+        if (generatorOutputs.sample) {
+          generatorOutputs.sample.textContent = `${sampleRateEl.value}%`;
+        }
+        if (generatorOutputs.iterations) {
+          generatorOutputs.iterations.textContent = String(kmeansItersEl.value);
+        }
+        if (generatorOutputs.smoothing) {
+          generatorOutputs.smoothing.textContent = String(smoothingEl.value);
+        }
+        if (settingsOutputs.uiScale) {
           const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
           const value = Number.isFinite(source) && source > 0
             ? source
             : (Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
                 ? state.settings.uiScale
                 : DEFAULT_UI_SCALE);
-          optionOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
+          settingsOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
+        }
+        if (settingsOutputs.hintFadeDuration) {
+          const source = hintFadeDurationInput ? Number(hintFadeDurationInput.value) : state.settings.hintFadeDuration;
+          const duration = normalizeHintFadeDuration(source);
+          settingsOutputs.hintFadeDuration.textContent = `${(duration / 1000).toFixed(1)} s`;
+        }
+        if (settingsOutputs.hintIntensity) {
+          const source = hintIntensityInput ? Number(hintIntensityInput.value) : state.settings.hintIntensity * 100;
+          const intensity = normalizeHintIntensity(source);
+          settingsOutputs.hintIntensity.textContent = `${Math.round(intensity * 100)}%`;
         }
       }
 
@@ -3985,7 +4800,7 @@
                 title: resolvedTitle,
               });
               if (applied) {
-                startHint.classList.add("hidden");
+                hideStartScreen();
                 state.sourceUrl = payload.sourceUrl || null;
                 logDebug(`Imported puzzle from JSON: ${resolvedTitle}`);
               } else {
@@ -4010,7 +4825,7 @@
           if (typeof result === "string") {
             state.sourceUrl = result;
             state.sourceTitle = file.name || "Imported image";
-            startHint.classList.add("hidden");
+            hideStartScreen();
             logDebug(`Generating puzzle from image: ${state.sourceTitle}`);
             loadImage(result);
           } else {
@@ -4063,11 +4878,7 @@
       }
 
       function resetPuzzleUI() {
-        if (colorFlashTimer) {
-          clearTimeout(colorFlashTimer);
-          colorFlashTimer = null;
-        }
-        delete canvasStage.dataset.flashingColor;
+        clearOverlayAnimations();
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
@@ -4086,7 +4897,11 @@
         }
         setProgressMessage("loading");
         clearContext(puzzleCtx);
-        previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        if (previewCtx) {
+          previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        }
+        previewCanvas.width = 0;
+        previewCanvas.height = 0;
         state.previewImageData = null;
         state.renderCache = createRenderCache();
         state.previewVisible = false;
@@ -4266,7 +5081,7 @@
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
-          flashColorRegions(state.activeColor, { duration: 360 });
+          flashColorRegions(state.activeColor);
         }
         updateProgress();
         updateCommandStates();
@@ -4310,7 +5125,7 @@
           title: resolvedTitle,
         });
         if (applied) {
-          startHint.classList.add("hidden");
+          hideStartScreen();
         }
         return applied;
       }
@@ -4318,7 +5133,20 @@
       function renderPreview() {
         if (!state.puzzle) return;
         const { width, height, regions, palette } = state.puzzle;
-        const imageData = previewCtx.createImageData(width, height);
+        if (previewCanvas) {
+          previewCanvas.width = width;
+          previewCanvas.height = height;
+        }
+        let imageData = null;
+        if (previewCtx && typeof previewCtx.createImageData === "function") {
+          imageData = previewCtx.createImageData(width, height);
+        } else if (typeof ImageData === "function") {
+          imageData = new ImageData(width, height);
+        }
+        if (!imageData) {
+          state.previewImageData = null;
+          return;
+        }
         const data = imageData.data;
         for (const region of regions) {
           const color = palette[region.colorId - 1];
@@ -4332,60 +5160,81 @@
             data[base + 3] = 255;
           }
         }
-        previewCtx.putImageData(imageData, 0, 0);
+        if (previewCtx && typeof previewCtx.putImageData === "function") {
+          previewCtx.putImageData(imageData, 0, 0);
+        }
         state.previewImageData = imageData;
       }
 
-      function renderPuzzle2D(ctx, labelCtx) {
-        if (!state.puzzle || !ctx) return;
+      function renderPuzzle() {
+        if (!state.puzzle) return;
         ensureCanvasMetricsInitialized();
         const cache = ensureRenderCache();
         const pixelWidth = puzzleCanvas.width;
         const pixelHeight = puzzleCanvas.height;
-        ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, pixelWidth, pixelHeight);
-        ctx.fillStyle = state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX;
-        ctx.fillRect(0, 0, pixelWidth, pixelHeight);
+        puzzleCtx.save();
+        puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
+        puzzleCtx.clearRect(0, 0, pixelWidth, pixelHeight);
+        puzzleCtx.fillStyle = state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX;
+        puzzleCtx.fillRect(0, 0, pixelWidth, pixelHeight);
+        if (state.previewVisible) {
+          if (!state.previewImageData) {
+            renderPreview();
+          }
+          if (state.previewImageData) {
+            if (previewCanvas && previewCanvas.width && previewCanvas.height) {
+              const sourceWidth = previewCanvas.width;
+              const sourceHeight = previewCanvas.height;
+              const targetWidth = canvasMetrics.pixelWidth || pixelWidth;
+              const targetHeight = canvasMetrics.pixelHeight || pixelHeight;
+              puzzleCtx.imageSmoothingEnabled = false;
+              puzzleCtx.drawImage(
+                previewCanvas,
+                0,
+                0,
+                sourceWidth,
+                sourceHeight,
+                0,
+                0,
+                targetWidth,
+                targetHeight
+              );
+            } else if (typeof puzzleCtx.putImageData === "function") {
+              puzzleCtx.putImageData(state.previewImageData, 0, 0);
+            }
+          }
+          puzzleCtx.restore();
+          return;
+        }
         if (cache.ready) {
           let drewFromLayer = false;
           if (cache.filledLayer && cache.filledLayerCtx) {
             drewFromLayer = cache.filledLayerDirty ? rebuildFilledLayer(cache) : true;
             if (drewFromLayer) {
-              ctx.drawImage(cache.filledLayer, 0, 0);
+              puzzleCtx.drawImage(cache.filledLayer, 0, 0);
             }
           }
           if (!drewFromLayer) {
-            compositeFilledRegionsDirect(ctx, cache);
+            compositeFilledRegionsDirect(puzzleCtx, cache);
           }
         }
-        ctx.restore();
-        drawOutlines2D(ctx, cache);
-        drawNumbers2D(labelCtx, cache);
+        puzzleCtx.restore();
+        drawOutlines();
+        drawNumbers();
       }
 
-      function drawNumbers2D(labelCtx, cache) {
-        if (!state.puzzle || !labelCtx) return;
-        if (state.settings.showRegionLabels === false) {
-          labelCtx.save();
-          labelCtx.setTransform(1, 0, 0, 1, 0, 0);
-          labelCtx.clearRect(0, 0, labelCtx.canvas.width, labelCtx.canvas.height);
-          labelCtx.restore();
-          return;
-        }
-        labelCtx.save();
-        labelCtx.setTransform(1, 0, 0, 1, 0, 0);
-        labelCtx.clearRect(0, 0, labelCtx.canvas.width, labelCtx.canvas.height);
-        labelCtx.restore();
+      function drawNumbers() {
+        if (!state.puzzle) return;
+        if (state.settings.showRegionLabels === false) return;
         const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
-        withRenderScale(labelCtx, scale, () => {
+        withRenderScale(puzzleCtx, scale, () => {
           const fallbackNumberInk = backgroundInk.number;
           const fallbackOutlineInk = backgroundInk.outline;
-          labelCtx.textAlign = "center";
-          labelCtx.textBaseline = "middle";
-          labelCtx.strokeStyle = fallbackOutlineInk;
-          labelCtx.lineJoin = "round";
-          labelCtx.lineCap = "round";
+          puzzleCtx.textAlign = "center";
+          puzzleCtx.textBaseline = "middle";
+          puzzleCtx.strokeStyle = fallbackOutlineInk;
+          puzzleCtx.lineJoin = "round";
+          puzzleCtx.lineCap = "round";
           for (const region of state.puzzle.regions) {
             if (state.filled.has(region.id)) continue;
             const layout = getRegionLabelLayout(region);
@@ -4395,32 +5244,59 @@
               paletteColor?.hex && typeof paletteColor.hex === "string"
                 ? rgbaFromHex(paletteColor.hex, 1)
                 : fallbackNumberInk;
-            labelCtx.fillStyle = regionInk;
-            labelCtx.font = layout.font;
+            puzzleCtx.fillStyle = regionInk;
+            puzzleCtx.font = layout.font;
             if (layout.strokeWidth) {
-              labelCtx.lineWidth = layout.strokeWidth;
-              labelCtx.strokeText(layout.text, layout.x, layout.y);
+              puzzleCtx.lineWidth = layout.strokeWidth;
+              puzzleCtx.strokeText(layout.text, layout.x, layout.y);
             }
-            labelCtx.fillText(layout.text, layout.x, layout.y);
+            puzzleCtx.fillText(layout.text, layout.x, layout.y);
           }
         });
       }
 
-      function getRegionLabelLayout(region) {
-        if (!region || !state.puzzle) return null;
-        if (!region.labelLayout) {
-          region.labelLayout = computeRegionLabelLayout(region);
+      function getRegionLabelText(region) {
+        if (!region) return "";
+        const normalize = (value) => {
+          if (typeof value === "string") {
+            const trimmed = value.trim();
+            return trimmed ? trimmed : null;
+          }
+          if (typeof value === "number" && Number.isFinite(value)) {
+            return String(value);
+          }
+          return null;
+        };
+        const directLabel =
+          normalize(region.label) ?? normalize(region.title) ?? normalize(region.name);
+        if (directLabel) {
+          return directLabel;
         }
-        return region.labelLayout;
+        const fallbackId = region.colorId != null ? String(region.colorId) : "";
+        return fallbackId;
       }
 
-      function computeRegionLabelLayout(region) {
+      function getRegionLabelLayout(region) {
+        if (!region || !state.puzzle) return null;
+        const text = getRegionLabelText(region);
+        if (!text) return null;
+        if (region.labelLayoutText === text) {
+          return region.labelLayout || null;
+        }
+        const layout = computeRegionLabelLayout(region, text);
+        region.labelLayout = layout;
+        region.labelLayoutText = text;
+        return layout;
+      }
+
+      function computeRegionLabelLayout(region, rawText) {
         if (!state.puzzle) return null;
         if (!Array.isArray(region.pixels) || region.pixels.length === 0) return null;
+        const text = typeof rawText === "string" ? rawText.trim() : "";
+        if (!text) return null;
         const { width, height, regionMap } = state.puzzle;
         const bounds = ensureRegionBounds(region, width);
         if (!bounds) return null;
-        const text = String(region.colorId);
         const area = Math.max(1, region.pixelCount || region.pixels.length);
         const MIN_LABEL_SIZE = 1.75;
         const MAX_LABEL_SIZE = 96;
@@ -4528,10 +5404,8 @@
       function measureLabelMetrics(text, size) {
         if (!text || size <= 0) return null;
         const font = `${size}px "Inter", "Segoe UI", sans-serif`;
-        const textCtx = labelCtx || puzzleCtx;
-        if (!textCtx) return null;
-        textCtx.font = font;
-        const metrics = textCtx.measureText(text);
+        puzzleCtx.font = font;
+        const metrics = puzzleCtx.measureText(text);
         const textWidth = metrics.width || size;
         const ascent = metrics.actualBoundingBoxAscent || size * 0.78;
         const descent = metrics.actualBoundingBoxDescent || size * 0.22;
@@ -4929,6 +5803,17 @@
           swatch.addEventListener("click", () => {
             activateColor(color.id);
           });
+          swatch.addEventListener("pointerdown", (event) => {
+            if (event.button !== 2) {
+              return;
+            }
+            event.preventDefault();
+            activateColor(color.id);
+          });
+          swatch.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            activateColor(color.id);
+          });
           paletteEl.appendChild(swatch);
         }
       }
@@ -5024,6 +5909,14 @@
       }
 
 
+      function shouldDisplayStatusBar(status) {
+        const normalized = typeof status === "string" && status ? status : "idle";
+        if (state.settings.showStatusBar !== true) {
+          return false;
+        }
+        return normalized === "generating" || normalized === "loading";
+      }
+
       function syncStatusBarVisibility(statusOverride) {
         if (!progressStatusEl) {
           return;
@@ -5032,27 +5925,31 @@
           typeof statusOverride === "string" && statusOverride
             ? statusOverride
             : progressStatusEl.getAttribute("data-status") || "idle";
-        const forcedVisible = status === "generating" || status === "loading";
-        const userEnabled = state.settings.showStatusBar === true;
-        const shouldShow = forcedVisible || userEnabled;
+        const shouldShow = shouldDisplayStatusBar(status);
         progressStatusEl.hidden = !shouldShow;
         progressStatusEl.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+        if (!shouldShow && progressEl) {
+          progressEl.textContent = "";
+        }
       }
 
       function setProgressMessage(status, customMessage) {
-        const message =
-          typeof customMessage === "string" && customMessage.length > 0
+        const normalized = typeof status === "string" && status ? status : "idle";
+        const shouldShow = shouldDisplayStatusBar(normalized);
+        const message = shouldShow
+          ? typeof customMessage === "string" && customMessage.length > 0
             ? customMessage
-            : PROGRESS_MESSAGES[status] || PROGRESS_MESSAGES.idle;
+            : PROGRESS_MESSAGES[normalized] || DEFAULT_PROGRESS_MESSAGE
+          : "";
         if (progressEl) {
           progressEl.textContent = message;
-          progressEl.setAttribute("data-status", status || "idle");
+          progressEl.setAttribute("data-status", normalized);
         }
         if (progressStatusEl) {
-          progressStatusEl.setAttribute("data-status", status || "idle");
+          progressStatusEl.setAttribute("data-status", normalized);
         }
-        syncStatusBarVisibility(status);
-        if (status !== "generating") {
+        syncStatusBarVisibility(normalized);
+        if (normalized !== "generating") {
           clearGenerationProgress();
         }
       }
@@ -5304,6 +6201,23 @@
           return;
         }
         const usesModifier = spacePressed || event.altKey || event.ctrlKey || event.metaKey;
+        const wantsRightClickSelect =
+          event.pointerType === "mouse" &&
+          event.button === 2 &&
+          resolveRightClickAction(state.settings.rightClickAction) === "select" &&
+          !usesModifier &&
+          !state.previewVisible;
+        if (wantsRightClickSelect) {
+          const hit = getRegionFromEvent(event);
+          if (hit && hit.region) {
+            const remaining = getRegionsByColor(hit.region.colorId, { includeFilled: false });
+            if (remaining.length > 0) {
+              event.preventDefault();
+              activateColor(hit.region.colorId);
+              return;
+            }
+          }
+        }
         const auxButton = event.button === 1 || event.button === 2;
         if (auxButton || usesModifier) {
           event.preventDefault();
@@ -5510,8 +6424,10 @@
         const colorId = paletteColor?.id ?? region.colorId;
         if (cursorNumberEl) {
           cursorNumberEl.textContent = String(colorId);
-          if (paletteColor?.hex) {
-            cursorNumberEl.style.color = paletteColor.hex;
+          const pointerNumberColor =
+            paletteColor?.hex != null ? computePointerNumberColor(paletteColor.hex) : null;
+          if (pointerNumberColor) {
+            cursorNumberEl.style.color = pointerNumberColor;
           } else {
             cursorNumberEl.style.removeProperty("color");
           }
@@ -5545,7 +6461,7 @@
         if (isPanning) {
           return;
         }
-        const rect = puzzleCanvas.getBoundingClientRect();
+        const rect = getPuzzleCanvasRect();
         if (!rect || rect.width <= 0 || rect.height <= 0) {
           hideCustomCursor();
           return;
@@ -5573,6 +6489,9 @@
         }
         const paletteColor = getPaletteEntry(region.colorId);
         applyCustomCursor(region, paletteColor, event.clientX, event.clientY);
+        maybeShowRegionHint(region, paletteColor, {
+          trigger: event.type === "pointerdown" ? "press" : "hover",
+        });
       }
 
       function refreshCustomCursorHighlight() {
@@ -5661,7 +6580,7 @@
         const { forceRender = false } = options;
         canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
         canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
-        rendererManager.applyViewTransform();
+        invalidateCanvasRect();
         if (!state.puzzle) {
           return;
         }
@@ -5765,7 +6684,9 @@
           activateColor(target.colorId, { flash: false });
         }
         if (state.settings.animateHints) {
-          flashRegion(target.id, "rgba(59, 130, 246, 0.45)");
+          const paletteColor = getPaletteEntry(target.colorId);
+          flashRegion(target.id, { paletteColor });
+          flashColorRegions(target.colorId, { paletteColor, onlyUnfilled: true });
         }
         logDebug(`Hint spotlighted region ${target.id} (colour #${target.colorId})`);
       }
@@ -5773,46 +6694,250 @@
       function flashColorRegions(colorId, options = {}) {
         if (!state.puzzle) return;
         if (colorId == null) return;
-        const paletteColor = getPaletteEntry(colorId);
-        const duration =
-          typeof options.duration === "number" && Number.isFinite(options.duration)
-            ? options.duration
-            : QUICK_HINT_FLASH_DURATION;
-        const alpha =
-          typeof options.alpha === "number" && Number.isFinite(options.alpha)
-            ? clamp(options.alpha, 0.05, 1)
-            : 0.45;
-        const tint =
-          options.tint ||
-          (paletteColor ? rgbaFromHex(paletteColor.hex, alpha) : "rgba(96, 165, 250, 0.32)");
         const includeFilled = options.onlyUnfilled ? false : true;
         const targets = getRegionsByColor(colorId, { includeFilled });
         if (targets.length === 0) {
-          delete canvasStage.dataset.flashingColor;
+          overlayAnimations.delete(`color:${colorId}:${includeFilled ? "all" : "remaining"}`);
+          if (overlayAnimations.size === 0) {
+            renderPuzzle();
+          }
           return;
         }
-        if (colorFlashTimer) {
-          clearTimeout(colorFlashTimer);
-          colorFlashTimer = null;
-        }
-        renderPuzzle();
-        canvasStage.dataset.flashingColor = String(colorId);
-        paintRegions(targets, tint);
-        colorFlashTimer = window.setTimeout(() => {
-          colorFlashTimer = null;
-          delete canvasStage.dataset.flashingColor;
-          renderPuzzle();
-        }, duration);
+        const paletteColor = options.paletteColor || getPaletteEntry(colorId);
+        const duration = normalizeHintFadeDuration(
+          typeof options.duration === "number" ? options.duration : state.settings.hintFadeDuration
+        );
+        const alpha = normalizeHintIntensity(
+          typeof options.alpha === "number" ? options.alpha : state.settings.hintIntensity
+        );
+        const fallbackRgb = options.tint ? parseTintToRgb(options.tint) : null;
+        queueOverlayAnimation(
+          `color:${colorId}:${includeFilled ? "all" : "remaining"}`,
+          targets.map((region) => region.id),
+          {
+            paletteColor,
+            fallbackRgb,
+            baseAlpha: alpha,
+            duration,
+            includeFilled,
+          }
+        );
       }
 
-      function flashRegion(regionId, color) {
+      function flashRegion(regionId, options = {}) {
         if (!state.puzzle) return;
         const region = state.puzzle.regions[regionId];
         if (!region) return;
-        paintRegions([region], color);
-        window.setTimeout(() => {
+        const paletteColor = options.paletteColor || getPaletteEntry(region.colorId);
+        const duration = normalizeHintFadeDuration(
+          typeof options.duration === "number" ? options.duration : state.settings.hintFadeDuration
+        );
+        const alpha = normalizeHintIntensity(
+          typeof options.alpha === "number" ? options.alpha : state.settings.hintIntensity
+        );
+        const fallbackRgb = options.tint ? parseTintToRgb(options.tint) : null;
+        queueOverlayAnimation(`region:${regionId}`, [regionId], {
+          paletteColor,
+          fallbackRgb,
+          baseAlpha: alpha,
+          duration,
+          includeFilled: options.includeFilled !== false,
+        });
+      }
+
+      function queueOverlayAnimation(key, regionIds, options = {}) {
+        if (!state.puzzle) return;
+        if (!Array.isArray(regionIds) || regionIds.length === 0) return;
+        const ids = regionIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id >= 0);
+        if (ids.length === 0) return;
+        const includeFilled = options.includeFilled !== false;
+        const baseAlpha = clamp(
+          typeof options.baseAlpha === "number" ? options.baseAlpha : state.settings.hintIntensity ?? DEFAULT_HINT_INTENSITY,
+          MIN_HINT_INTENSITY,
+          MAX_HINT_INTENSITY
+        );
+        const duration = normalizeHintFadeDuration(options.duration);
+        overlayAnimations.set(key, {
+          regionIds: ids,
+          includeFilled,
+          paletteColor: options.paletteColor || null,
+          fallbackRgb: Array.isArray(options.fallbackRgb) ? options.fallbackRgb : null,
+          baseAlpha,
+          duration,
+          start: getNow(),
+          power: typeof options.power === "number" && options.power > 0 ? options.power : 2,
+        });
+        scheduleOverlayFrame();
+      }
+
+      function scheduleOverlayFrame() {
+        if (overlayAnimations.size === 0) {
+          return;
+        }
+        if (overlayAnimationFrame != null || overlayAnimationTimeout != null) {
+          return;
+        }
+        if (typeof window?.requestAnimationFrame === "function") {
+          overlayAnimationFrame = window.requestAnimationFrame(stepOverlayAnimations);
+        } else {
+          overlayAnimationTimeout = window.setTimeout(() => {
+            overlayAnimationTimeout = null;
+            stepOverlayAnimations(getNow());
+          }, 16);
+        }
+      }
+
+      function stepOverlayAnimations(timestamp) {
+        if (overlayAnimationFrame != null && typeof window?.cancelAnimationFrame === "function") {
+          window.cancelAnimationFrame(overlayAnimationFrame);
+        }
+        overlayAnimationFrame = null;
+        if (overlayAnimationTimeout != null) {
+          clearTimeout(overlayAnimationTimeout);
+          overlayAnimationTimeout = null;
+        }
+        if (!state.puzzle || overlayAnimations.size === 0) {
           renderPuzzle();
-        }, QUICK_HINT_FLASH_DURATION);
+          return;
+        }
+        const now = typeof timestamp === "number" && Number.isFinite(timestamp) ? timestamp : getNow();
+        const overlaysByTint = new Map();
+        overlayAnimations.forEach((animation, key) => {
+          const duration = animation.duration <= 0 ? MIN_HINT_FADE_DURATION : animation.duration;
+          const elapsed = now - animation.start;
+          const progress = clamp(duration > 0 ? elapsed / duration : 1, 0, 1);
+          if (progress >= 1) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          const strength = Math.pow(1 - progress, animation.power || 2);
+          if (strength <= 0.0001) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          const alpha = clamp(animation.baseAlpha * strength, 0.01, 1);
+          const tint = resolveOverlayTint(animation.paletteColor, animation.fallbackRgb, alpha);
+          if (!tint) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          const regions = [];
+          for (const regionId of animation.regionIds) {
+            const region = state.puzzle.regions[regionId];
+            if (!region) continue;
+            if (!animation.includeFilled && state.filled.has(regionId)) {
+              continue;
+            }
+            regions.push(region);
+          }
+          if (regions.length === 0) {
+            overlayAnimations.delete(key);
+            return;
+          }
+          if (overlaysByTint.has(tint)) {
+            overlaysByTint.get(tint).push(...regions);
+          } else {
+            overlaysByTint.set(tint, regions.slice());
+          }
+        });
+        renderPuzzle();
+        overlaysByTint.forEach((regions, tint) => {
+          paintRegions(regions, tint);
+        });
+        if (overlayAnimations.size > 0) {
+          scheduleOverlayFrame();
+        }
+      }
+
+      function resolveOverlayTint(paletteColor, fallbackRgb, alpha) {
+        const normalizedAlpha = clamp(alpha, 0, 1);
+        if (paletteColor) {
+          if (Array.isArray(paletteColor.rgba) && paletteColor.rgba.length >= 3) {
+            const [r, g, b] = paletteColor.rgba;
+            return `rgba(${clamp(Math.round(r), 0, 255)}, ${clamp(Math.round(g), 0, 255)}, ${clamp(Math.round(b), 0, 255)}, ${normalizedAlpha})`;
+          }
+          if (typeof paletteColor.hex === "string" && paletteColor.hex) {
+            return rgbaFromHex(paletteColor.hex, normalizedAlpha);
+          }
+        }
+        const rgb = Array.isArray(fallbackRgb) && fallbackRgb.length >= 3 ? fallbackRgb : [96, 165, 250];
+        const [r, g, b] = rgb.map((value) => clamp(Math.round(value), 0, 255));
+        return `rgba(${r}, ${g}, ${b}, ${normalizedAlpha})`;
+      }
+
+      function parseTintToRgb(value) {
+        if (typeof value !== "string") return null;
+        const match = value.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+        if (!match) return null;
+        return match.slice(1, 4).map((component) => clamp(Number(component) || 0, 0, 255));
+      }
+
+      function getNow() {
+        if (typeof performance !== "undefined" && typeof performance.now === "function") {
+          return performance.now();
+        }
+        return Date.now();
+      }
+
+      function clearOverlayAnimations() {
+        overlayAnimations.clear();
+        if (overlayAnimationFrame != null && typeof window?.cancelAnimationFrame === "function") {
+          window.cancelAnimationFrame(overlayAnimationFrame);
+        }
+        overlayAnimationFrame = null;
+        if (overlayAnimationTimeout != null) {
+          clearTimeout(overlayAnimationTimeout);
+          overlayAnimationTimeout = null;
+        }
+        if (state.puzzle) {
+          renderPuzzle();
+        }
+      }
+
+      function normalizeHintFadeDuration(value) {
+        let candidate = Number(value);
+        if (!Number.isFinite(candidate) || candidate <= 0) {
+          const stateValue = state?.settings?.hintFadeDuration;
+          candidate = Number.isFinite(stateValue) && stateValue > 0 ? stateValue : DEFAULT_HINT_FADE_DURATION;
+        }
+        return clamp(Math.round(candidate), MIN_HINT_FADE_DURATION, MAX_HINT_FADE_DURATION);
+      }
+
+      function normalizeHintIntensity(value) {
+        let candidate = Number(value);
+        if (!Number.isFinite(candidate)) {
+          const stateValue = state?.settings?.hintIntensity;
+          candidate = Number.isFinite(stateValue) ? stateValue : DEFAULT_HINT_INTENSITY;
+        }
+        if (candidate > 1) {
+          candidate /= 100;
+        }
+        if (!Number.isFinite(candidate) || candidate <= 0) {
+          candidate = DEFAULT_HINT_INTENSITY;
+        }
+        return clamp(candidate, MIN_HINT_INTENSITY, MAX_HINT_INTENSITY);
+      }
+
+      function resolveRightClickAction(value) {
+        if (typeof value === "string") {
+          const normalized = value.trim().toLowerCase();
+          if (VALID_RIGHT_CLICK_ACTIONS.has(normalized)) {
+            return normalized;
+          }
+        }
+        return DEFAULT_RIGHT_CLICK_ACTION;
+      }
+
+      function resolveDifficulty(value) {
+        if (typeof value === "string") {
+          const normalized = value.trim().toLowerCase();
+          if (VALID_DIFFICULTY_LEVELS.has(normalized)) {
+            return normalized;
+          }
+        }
+        return DEFAULT_DIFFICULTY;
       }
 
       function autoAdvanceColor(currentColorId) {
@@ -5838,169 +6963,68 @@
         });
       }
 
+      function getCompletedColorIds() {
+        const completed = new Set();
+        if (!state.puzzle) return completed;
+        const pendingColors = new Set();
+        for (const region of state.puzzle.regions) {
+          if (!state.filled.has(region.id)) {
+            pendingColors.add(region.colorId);
+          }
+        }
+        for (const entry of state.puzzle.palette) {
+          if (!pendingColors.has(entry.id)) {
+            completed.add(entry.id);
+          }
+        }
+        return completed;
+      }
+
       function getPaletteEntry(colorId) {
         if (!state.puzzle) return null;
         return state.puzzle.palette.find((entry) => entry.id === colorId) || null;
       }
 
       // Shared renderer for flashing overlays (hints + colour selection pulses).
-      function paintRegions2D(ctx, regions, fillStyle) {
-        if (!state.puzzle || !ctx || regions.length === 0) return;
+      function paintRegions(regions, fillStyle) {
+        if (!state.puzzle || regions.length === 0) return;
         const cache = ensureRenderCache();
         if (!cache.ready) return;
         const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
-        withRenderScale(ctx, scale, () => {
-          ctx.fillStyle = fillStyle;
+        const strokeWidth = cache.strokeWidth > 0 ? cache.strokeWidth : 1;
+        withRenderScale(puzzleCtx, scale, () => {
+          puzzleCtx.fillStyle = fillStyle;
+          puzzleCtx.strokeStyle = fillStyle;
+          puzzleCtx.lineWidth = strokeWidth;
+          puzzleCtx.lineJoin = "round";
+          puzzleCtx.lineCap = "round";
           if (SUPPORTS_PATH2D) {
             for (const region of regions) {
               const geometry = cache.regionsById.get(region.id);
               if (!geometry?.path) continue;
-              ctx.fill(geometry.path);
+              puzzleCtx.fill(geometry.path);
+              puzzleCtx.stroke(geometry.path);
             }
             return;
           }
           for (const region of regions) {
             const geometry = cache.regionsById.get(region.id);
             if (!geometry?.contours) continue;
-            ctx.beginPath();
+            puzzleCtx.beginPath();
             for (const contour of geometry.contours) {
               if (contour.length === 0) continue;
               const first = contour[0];
-              ctx.moveTo(first[0], first[1]);
+              puzzleCtx.moveTo(first[0], first[1]);
               for (let i = 1; i < contour.length; i++) {
                 const point = contour[i];
-                ctx.lineTo(point[0], point[1]);
+                puzzleCtx.lineTo(point[0], point[1]);
               }
-              ctx.closePath();
+              puzzleCtx.closePath();
             }
-            ctx.fill();
+            puzzleCtx.fill();
+            puzzleCtx.stroke();
           }
         });
-      }
-
-      class Canvas2DRenderer {
-        constructor(options) {
-          this.canvas = options.canvas;
-          this.labelCanvas = options.labelCanvas;
-          this.ctx = this.canvas ? this.canvas.getContext("2d") : null;
-          if (!puzzleCtx) {
-            puzzleCtx = this.ctx;
-          }
-          this.labelCtx = options.labelCtx || null;
-        }
-
-        drawPuzzle() {
-          renderPuzzle2D(this.ctx, this.labelCtx);
-        }
-
-        highlightRegions(regions, fillStyle) {
-          paintRegions2D(this.ctx, regions, fillStyle);
-        }
-
-        readRegionAtPoint(clientX, clientY) {
-          return readRegionAtPointFromCanvas(this.canvas, clientX, clientY);
-        }
-
-        applyViewTransform() {
-          // Canvas sizing already handled by applyCanvasSizing(); nothing additional for 2D.
-        }
-      }
-
-      class WebGLRenderer {
-        constructor(options) {
-          throw new Error("WebGL renderer is not yet implemented");
-        }
-      }
-
-      function createRendererManager() {
-        const manager = {
-          activeRenderer: null,
-          canvasRenderer: null,
-          webglRenderer: null,
-          failureReason: null,
-          ensureRenderer() {
-            if (!this.activeRenderer) {
-              this.useCanvasRenderer();
-            }
-            return this.activeRenderer;
-          },
-          useCanvasRenderer() {
-            if (!this.canvasRenderer) {
-              this.canvasRenderer = new Canvas2DRenderer({
-                canvas: puzzleCanvas,
-                labelCanvas,
-                labelCtx,
-              });
-            }
-            this.activeRenderer = this.canvasRenderer;
-          },
-          tryActivateWebGL() {
-            if (this.webglRenderer || this.activeRenderer) {
-              return;
-            }
-          try {
-            this.webglRenderer = new WebGLRenderer({
-              canvas: puzzleCanvas,
-              labelCanvas,
-              labelCtx,
-            });
-            this.activeRenderer = this.webglRenderer;
-          } catch (error) {
-            this.failureReason = error;
-            if (typeof logDebug === "function") {
-              logDebug(`WebGL renderer unavailable: ${error?.message || error}`);
-            }
-            this.useCanvasRenderer();
-          }
-        },
-          drawPuzzle() {
-            const renderer = this.ensureRenderer();
-            renderer?.drawPuzzle();
-          },
-          highlightRegions(regions, fillStyle) {
-            const renderer = this.ensureRenderer();
-            renderer?.highlightRegions(regions, fillStyle);
-          },
-          readRegionAtPoint(clientX, clientY) {
-            const renderer = this.ensureRenderer();
-            if (!renderer) return null;
-            return renderer.readRegionAtPoint(clientX, clientY);
-          },
-          applyViewTransform() {
-            const renderer = this.ensureRenderer();
-            renderer?.applyViewTransform();
-          },
-        };
-        manager.tryActivateWebGL();
-        return manager;
-      }
-
-      rendererManager = createRendererManager();
-
-      function renderPuzzle() {
-        rendererManager.drawPuzzle();
-      }
-
-      function paintRegions(regions, fillStyle) {
-        rendererManager.highlightRegions(regions, fillStyle);
-      }
-
-      applyGameplaySettings(state.settings);
-      updateOptionOutputs();
-      refreshSaveList();
-      updateStorageUsageSummary();
-      updateCommandStates();
-      renderDebugLog();
-      logDebug("Session started");
-      syncCommandRailMetrics();
-      handleViewportChange({ log: true, recenter: true });
-      resetView({ recenter: true });
-
-      applySampleDetailLevel(DEFAULT_SAMPLE_DETAIL, { skipReload: true, skipLog: true });
-
-      const restoredSession = loadInitialSession();
-      if (!restoredSession && SAMPLE_ARTWORK?.dataUrl) {
-        loadSamplePuzzle({ detailLevel: state.sampleDetailLevel, skipDetailUpdate: true });
       }
 
       function flashPaletteSwatch(colorId, options = {}) {
@@ -6153,6 +7177,14 @@
         payload.settings = {
           autoAdvance: Boolean(settingsSource.autoAdvance),
           animateHints: Boolean(settingsSource.animateHints),
+          hintFadeDuration: normalizeHintFadeDuration(
+            settingsSource.hintFadeDuration ?? state.settings.hintFadeDuration
+          ),
+          hintIntensity: normalizeHintIntensity(settingsSource.hintIntensity ?? state.settings.hintIntensity),
+          rightClickAction: resolveRightClickAction(
+            settingsSource.rightClickAction ?? state.settings.rightClickAction
+          ),
+          difficulty: resolveDifficulty(settingsSource.difficulty ?? state.settings.difficulty),
           uiScale:
             Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
               ? clamp(settingsSource.uiScale, 0.6, 1.35)
@@ -6257,6 +7289,10 @@
           settings: {
             autoAdvance: Boolean(state.settings.autoAdvance),
             animateHints: Boolean(state.settings.animateHints),
+            hintFadeDuration: normalizeHintFadeDuration(state.settings.hintFadeDuration),
+            hintIntensity: normalizeHintIntensity(state.settings.hintIntensity),
+            rightClickAction: resolveRightClickAction(state.settings.rightClickAction),
+            difficulty: resolveDifficulty(state.settings.difficulty),
             uiScale:
               Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
                 ? clamp(state.settings.uiScale, 0.6, 1.35)
@@ -6583,7 +7619,7 @@
           if (applied) {
             state.sourceUrl = latest.data.sourceUrl ?? null;
             state.sourceTitle = descriptor;
-            startHint.classList.add("hidden");
+            hideStartScreen();
             logDebug(`Restored previous session from ${latest.origin || "backup storage"}`);
             return true;
           }
@@ -7106,31 +8142,162 @@
         logDebug(`Saved snapshot: ${entry.title}`);
       }
 
+      function describeSaveEntry(entry) {
+        const titleSource =
+          (typeof entry?.title === "string" && entry.title.trim()) ||
+          (typeof entry?.data?.title === "string" && entry.data.title);
+        const title = titleSource ? titleSource.trim() : "Untitled puzzle";
+        const doneCount = entry?.data?.filled?.length ?? 0;
+        const totalCount = entry?.data?.regions?.length ?? 0;
+        const progressText = totalCount
+          ? `${doneCount} of ${totalCount} regions filled`
+          : `${doneCount} regions filled`;
+        const timestampValue = Number(entry?.timestamp);
+        const hasTimestamp = Number.isFinite(timestampValue) && timestampValue > 0;
+        const timestamp = hasTimestamp ? new Date(timestampValue) : null;
+        const timestampLabel = timestamp ? `Saved ${timestamp.toLocaleString()}` : "";
+        const ariaLabelParts = [title, progressText];
+        if (timestampLabel) {
+          ariaLabelParts.push(timestampLabel);
+        }
+        return {
+          id: entry?.id,
+          title,
+          progressText,
+          timestamp,
+          timestampLabel,
+          ariaLabel: ariaLabelParts.join(" – "),
+        };
+      }
+
+      function createSaveActionButton(action, label) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.action = action;
+        button.textContent = label;
+        return button;
+      }
+
+      function createSaveSelectionItem(entry) {
+        const metadata = describeSaveEntry(entry);
+        const item = document.createElement("li");
+        item.className = "game-option";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "game-option-button";
+        button.dataset.gameId = metadata.id;
+        const title = document.createElement("span");
+        title.className = "game-option-title";
+        title.textContent = metadata.title;
+        const progress = document.createElement("span");
+        progress.className = "game-option-meta";
+        progress.textContent = metadata.progressText;
+        button.append(title, progress);
+        if (metadata.timestampLabel) {
+          const time = document.createElement("span");
+          time.className = "game-option-meta";
+          time.textContent = metadata.timestampLabel;
+          button.append(time);
+        }
+        button.setAttribute("aria-label", metadata.ariaLabel);
+        item.appendChild(button);
+        return item;
+      }
+
+      function createSaveManagementItem(entry) {
+        const metadata = describeSaveEntry(entry);
+        const item = document.createElement("li");
+        item.className = "save-entry";
+        item.dataset.saveId = metadata.id;
+        const header = document.createElement("header");
+        const title = document.createElement("strong");
+        title.textContent = metadata.title;
+        header.appendChild(title);
+        if (metadata.timestamp) {
+          const time = document.createElement("time");
+          time.dateTime = metadata.timestamp.toISOString();
+          time.textContent = metadata.timestamp.toLocaleString();
+          header.appendChild(time);
+        }
+        const progress = document.createElement("div");
+        progress.textContent = metadata.progressText;
+        const actions = document.createElement("div");
+        actions.className = "save-actions";
+        actions.append(
+          createSaveActionButton("load", "Load"),
+          createSaveActionButton("rename", "Rename"),
+          createSaveActionButton("export", "Export"),
+          createSaveActionButton("delete", "Delete"),
+        );
+        item.append(header, progress, actions);
+        return item;
+      }
+
+      function refreshGameSelection() {
+        if (!gameSelectionList) return;
+        gameSelectionList.innerHTML = "";
+        const fragment = document.createDocumentFragment();
+
+        const defaultItem = document.createElement("li");
+        defaultItem.className = "game-option";
+        const defaultButton = document.createElement("button");
+        defaultButton.type = "button";
+        defaultButton.className = "game-option-button";
+        const defaultMetadata = state.defaultGame || {};
+        defaultButton.dataset.gameId = defaultMetadata.id || DEFAULT_GAME_SOURCE.id;
+        const defaultTitle = document.createElement("span");
+        defaultTitle.className = "game-option-title";
+        const resolvedTitle = getDefaultGameTitle();
+        defaultTitle.textContent = resolvedTitle;
+        const defaultMeta = document.createElement("span");
+        defaultMeta.className = "game-option-meta";
+        const resolvedDescription = getDefaultGameDescription();
+        const fallbackMeta = DEFAULT_GAME_FALLBACK.description || DEFAULT_GAME_SOURCE.path;
+        const metaText = resolvedDescription || fallbackMeta;
+        defaultMeta.textContent = metaText;
+        const hideMeta = !resolvedDescription && (!metaText || metaText === resolvedTitle);
+        defaultMeta.hidden = hideMeta;
+        const labelParts = [resolvedTitle];
+        if (!hideMeta && metaText && metaText !== resolvedTitle) {
+          labelParts.push(metaText);
+        }
+        defaultButton.setAttribute("aria-label", labelParts.join(" – "));
+        defaultButton.append(defaultTitle, defaultMeta);
+        defaultItem.appendChild(defaultButton);
+        fragment.appendChild(defaultItem);
+
+        const hasSaves = Array.isArray(state.saves) && state.saves.length > 0;
+        if (hasSaves) {
+          for (const entry of state.saves) {
+            fragment.appendChild(createSaveSelectionItem(entry));
+          }
+        }
+
+        gameSelectionList.appendChild(fragment);
+        if (gameSelectionEmpty) {
+          gameSelectionEmpty.hidden = hasSaves;
+        }
+      }
+
       function refreshSaveList() {
-        saveList.innerHTML = "";
-        for (const entry of state.saves) {
-          const item = document.createElement("li");
-          item.className = "save-entry";
-          item.dataset.saveId = entry.id;
-          const date = new Date(entry.timestamp);
-          const doneCount = entry.data?.filled?.length ?? 0;
-          const total = entry.data?.regions?.length ?? 0;
-          item.innerHTML = `
-            <header>
-              <strong>${entry.title || "Untitled puzzle"}</strong>
-              <time>${date.toLocaleString()}</time>
-            </header>
-            <div>${doneCount} of ${total} regions filled</div>
-            <div class="save-actions">
-              <button type="button" data-action="load">Load</button>
-              <button type="button" data-action="rename">Rename</button>
-              <button type="button" data-action="export">Export</button>
-              <button type="button" data-action="delete">Delete</button>
-            </div>
-          `;
-          saveList.appendChild(item);
+        const hasEntries = Array.isArray(state.saves) && state.saves.length > 0;
+        for (const list of saveListContainers) {
+          if (!list) continue;
+          list.innerHTML = "";
+          if (hasEntries) {
+            const fragment = document.createDocumentFragment();
+            for (const entry of state.saves) {
+              fragment.appendChild(createSaveManagementItem(entry));
+            }
+            list.appendChild(fragment);
+          }
+        }
+        for (const emptyState of saveListEmptyStates) {
+          if (!emptyState) continue;
+          emptyState.hidden = hasEntries;
         }
         updateCommandStates();
+        refreshGameSelection();
       }
 
       function persistSaves() {
@@ -7157,7 +8324,7 @@
         ) {
           state.sourceUrl = entry.data.sourceUrl ?? null;
           state.sourceTitle = entry.title || state.sourceTitle;
-          startHint.classList.add("hidden");
+          hideStartScreen();
           logDebug(`Loaded save: ${entry.title || "Untitled puzzle"}`);
         }
       }
@@ -7240,6 +8407,22 @@
           outline: "rgba(15, 23, 42, 0.65)",
           number: "rgba(15, 23, 42, 0.95)",
         };
+      }
+
+      function computePointerNumberColor(hex) {
+        if (typeof hex !== "string") {
+          return null;
+        }
+        const sanitizedHex = sanitizeHexColor(hex, DEFAULT_BACKGROUND_HEX);
+        const [r, g, b] = hexToRgb(sanitizedHex);
+        const tooltipBackgroundLuminance = relativeLuminance([248, 250, 252]);
+        const numberLuminance = relativeLuminance([r, g, b]);
+        const contrast = contrastRatio(tooltipBackgroundLuminance, numberLuminance);
+        const MIN_POINTER_TOOLTIP_CONTRAST = 4.5;
+        if (contrast >= MIN_POINTER_TOOLTIP_CONTRAST) {
+          return sanitizedHex;
+        }
+        return null;
       }
 
       function computeSwatchLabelStyles(hex) {

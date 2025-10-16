@@ -1,11 +1,15 @@
+<a href="https://shthed.github.io/capy/">https://shthed.github.io/capy/</a>
+<a href="https://shthed.github.io/capy/branch.html">https://shthed.github.io/capy/branch.html</a>
+<a href="https://github.com/shthed/capy">https://github.com/shthed/capy</a>
+
 # Capy Image Generator
 
 Capy turns any bitmap image into a color-by-number puzzle entirely in the
 browser. Drop a file (or load one via the hidden file picker) and the app will
 resize it, run k-means clustering to build a discrete palette, merge tiny
-regions, and paint a canvas you can immediately play. A fullscreen preview, hint
-tools, a save manager, and a configurable generator all live inside a single
-`index.html` document—no build tools or extra runtime required.
+regions, and paint a canvas you can immediately play. An instant preview toggle,
+hint tools, a save manager, and a configurable generator all live inside a
+single `index.html` document—no build tools or extra runtime required.
 
 ## Repository report
 
@@ -20,7 +24,7 @@ tools, a save manager, and a configurable generator all live inside a single
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
-  - `.github/workflows/deploy-branch.yml` – Deploys every branch to GitHub Pages under a subfolder matching the branch name.
+  - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
 - **Process notes**
   - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
   - `docs/automation-loop.md` – Blueprint for the automated branching, testing, merging, and feedback loop.
@@ -29,9 +33,9 @@ tools, a save manager, and a configurable generator all live inside a single
 ## Development workflow
 
 - **Automation branches.** Create short-lived branches named `automation/<change>` so QA notes and preview URLs map directly to the experiment under review.
-- **Branch deployments.** Every push to any branch automatically deploys to GitHub Pages under a subfolder named after the branch
+- **Branch deployments.** Every push to a branch with an open PR automatically deploys to GitHub Pages under a subfolder named after the branch
   (e.g., `automation/feature` deploys to `/automation-feature/`). This lets reviewers preview changes in a live environment
-  without local setup. The main branch deploys to the root path.
+  without local setup. The `main` branch always deploys to the root path.
 - **Manual smoke tests.** Exercise the puzzle load, palette selection, painting, and save/load flows in at least one desktop and one mobile browser before requesting review.
 - **Fast-forward merges.** Rebase onto `main`, repeat the quick manual checks, and merge with `--ff-only` to preserve a linear history that keeps bisects practical for the single-file runtime.
 - **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up work in a standing Friday issue so the team has
@@ -43,15 +47,21 @@ tools, a save manager, and a configurable generator all live inside a single
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or
   previously exported JSON puzzles straight into the generator pipeline.
+- **Game selection screen.** The onboarding hint now surfaces a "Start a game"
+  picker that highlights the bundled Capybara Springs puzzle loaded from
+  `capy.json` alongside every manual save on this browser. The title,
+  description, and preview art fall back to the inline Capybara vignette when
+  the fixture omits optional metadata so the landing copy always has something
+  friendly to show.
 - **Built-in capybara sample.** The "Capybara Springs" illustration now loads
   automatically on boot in the high detail preset (when no autosave is
   available) so you can start painting without importing anything. The vignette
   features an orange-balanced capybara lounging in a lagoon with a curious
-  dachshund, water mushrooms, and a distant waterfall, and the 🐹 command rail
-  button instantly reloads it whenever you want a fresh board while reflecting
-  whichever detail preset you last chose.
+  dachshund, water mushrooms, and a distant waterfall, and the start screen's
+  **Try the capybara sample** action instantly reloads it whenever you want a
+  fresh board while reflecting whichever detail preset you last chose.
 - **Sample detail presets.** Low/Medium/High chips live on the onboarding hint
-  and inside Settings, instantly reloading the sample with tuned colour counts,
+  and inside the Generator sheet, instantly reloading the sample with tuned colour counts,
   resize targets, k-means iterations, and smoothing passes so QA can cycle
   between breezy ≈26-region boards, balanced ≈42-region sessions, or
   high-fidelity ≈140-region showpieces.
@@ -84,7 +94,8 @@ tools, a save manager, and a configurable generator all live inside a single
   region numbers once you're familiar with the artwork for an unobstructed
   canvas while you fill in the illustration.
 - **Precision view controls.** Pan the puzzle by click-dragging with the
-  primary mouse button (spacebar, middle, and right buttons still work), use
+  primary mouse button or middle click, or hold <kbd>Space</kbd> to pan from anywhere. Right-click now
+  selects the colour under the pointer by default (toggleable in Settings if you prefer to pan with it), use
   pinch gestures or the mouse wheel to zoom in and out, or tap `+`/`-` on the
   keyboard for incremental adjustments. Ctrl/Cmd zoom shortcuts now target the
   puzzle instead of the surrounding UI so the HUD stays crisp while the canvas
@@ -97,18 +108,23 @@ tools, a save manager, and a configurable generator all live inside a single
   command rail and palette scale cleanly on phones, tablets, or desktops while
   the artwork stays centred.
 - **Contextual hinting.** Trigger highlight pulses for the current colour or let
-  the app surface the smallest unfinished region when you need a nudge.
+  the app surface the smallest unfinished region when you need a nudge. Hints now
+  flash with the region's true paint colour and ease out slowly, and Settings exposes
+  controls for tuning the fade duration and overlay intensity.
 - **Fullscreen preview.** Toggle a comparison overlay that shows the clustered
   artwork at its final resolution without leaving the play surface.
-- **Sidecar panels.** Settings, Help, and the Save manager now dock to the
-  right as floating panels instead of modal overlays, so you can keep painting
-  while tweaking generator sliders or reviewing shortcuts. Each panel remembers
-  its scroll position and stays interactive alongside the canvas.
+- **Sidecar panels.** Generator, Settings, and Help dock to the right as floating
+  panels instead of modal overlays, so you can keep painting while tweaking
+  clustering sliders, gameplay preferences, or reviewing shortcuts. Save
+  management now lives inside the start screen so manual snapshots share the
+  same launcher surface. Each panel remembers its scroll position and stays
+  interactive alongside the canvas.
 - **Palette manager.** Swipe through edge-to-edge swatches rendered as simple,
   gutterless colour blocks so the dock stays packed. Completed colours collapse
   out of view once every region is filled, tooltips call out how many areas are
   left, and the Settings → Palette control lets you reorder swatches by number,
-  remaining regions, colour name, hue, or brightness. The digits automatically flip
+  remaining regions, colour name, hue, or brightness. Right-clicking a swatch now
+  selects it just like a primary click so alternate buttons stay consistent. The digits automatically flip
   between dark and light treatments (with a subtle halo) to stay legible on any
   swatch, and the dock scrolls horizontally whenever palettes stretch beyond the
   screen so every colour stays accessible without vertical overflow.
@@ -138,7 +154,10 @@ the high preset so playtesters immediately see the full ≈140-region canvas, bu
 the remembered preset keeps medium or low runs sticky after you switch. The
 region counts above are based on the bundled Capybara Springs artwork and keep
 every preset playable—from the breezy ≈26-region low detail board to the
-≈140-region high fidelity scene.
+≈140-region high fidelity scene. Preview copy prefers metadata pulled from
+`capy.json`, but the inline Capybara fallback strings and artwork keep the
+detail picker, start screen, and sample preview populated whenever the fixture
+skips optional fields.
 
 ## Code architecture tour
 
@@ -210,9 +229,10 @@ every preset playable—from the breezy ≈26-region low detail board to the
    settings before you reload it.
 2. **Tune generation & appearance.** Open **Settings** to slide out the
    sidecar and tweak palette size, minimum region area, resize detail, sample
-   rate (for faster clustering), iteration count, smoothing passes,
-   auto-advance, the status bar toggle, hint animations, the interface theme,
-   the canvas background colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
+  rate (for faster clustering), iteration count, smoothing passes,
+  auto-advance, the difficulty selector, the status bar toggle (for import/generation updates), hint animations,
+  fade timing, overlay intensity, the right-click action, the interface theme,
+  the canvas background colour, the interface scale slider, and the Palette sort menu. Apply changes instantly
    when working from an image source, then expand the **Advanced options**
    accordion to edit the optional art prompt metadata before exporting or
    regenerating a scene.
@@ -220,8 +240,9 @@ every preset playable—from the breezy ≈26-region low detail board to the
    while the **Preview** button floods the entire viewport with a fullscreen
    comparison of the clustered artwork.
 4. **Fill regions.** Pick a colour from the bottom dock, click any numbered cell,
-   and the region fills in. Auto-advance can hop to the next incomplete colour
-   once you finish the current hue.
+   and the region fills in. Enable Easy difficulty if you'd like clicks to
+   auto-select the tapped region's colour before painting. Auto-advance can hop
+   to the next incomplete colour once you finish the current hue.
 5. **Save or export.** The save manager captures snapshots (including progress,
    generator options, and source metadata) in localStorage using a compact
    schema. Export the active puzzle as JSON at any time.
@@ -252,13 +273,13 @@ before retrying.
 ## UI guide
 
 - **Command rail** – A slim, right-aligned header exposing Hint, Reset, Preview,
-  Sample, Fullscreen, Import, Save manager, Help, and Settings buttons through
-  icon-only controls. Hint flashes tiny regions, Reset clears progress, Preview
-  reveals the clustered artwork, Sample reloads the bundled capybara puzzle,
-  Fullscreen pushes the stage edge-to-edge (and exits back to windowed mode),
-  Import accepts images or JSON puzzles, Save manager opens the local snapshot
-  vault, Help opens an in-app manual plus live
-  debug log, and Settings reveals generator/gameplay options.
+  Generator, Fullscreen, Import, Save manager, Help, and Settings buttons
+  through icon-only controls. Hint flashes tiny regions, Reset clears progress,
+  Preview reveals the clustered artwork, Generator opens the dedicated
+  clustering sheet, Fullscreen pushes the stage edge-to-edge (and exits back to
+  windowed mode), Import accepts images or JSON puzzles, Save manager opens the
+  combined start & save screen, Help opens an in-app manual plus live debug log,
+  and Settings reveals gameplay, palette, and accessibility options.
 - **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`).
   The canvas renders outlines, remaining numbers, and filled regions, respects
   auto-advance / hint animation toggles, and supports smooth pan + zoom so you
@@ -266,15 +287,17 @@ before retrying.
   scene and use the scroll wheel (or trackpad gesture) to zoom — mobile pinch
   gestures now feed directly into the stage, and a double-tap guard keeps the
   browser from scaling the interface accidentally while you navigate.
-- **Fullscreen preview overlay** – Triggered by the Preview button. The preview
-  canvas stretches to fit the viewport so contributors can inspect the clustered
-  output in detail before painting.
+- **Preview mode** – Triggered by the Preview button. The puzzle canvas
+  temporarily renders every region in its target colour so you can inspect the
+  clustered output before painting without leaving the play surface.
 - **Settings panel** – Slides in beside the playfield instead of taking over the
   window so you can keep painting while adjusting sliders. Controls include
   colours, minimum region size, resize detail, sample rate, k-means iterations,
   smoothing passes, an interface theme switcher, a background colour picker, the
-  interface scale slider, toggles for auto-advance, the status bar, and hint animations, and the Palette sort menu. The
-  panel also houses the JSON export action, mirrors the Low/Medium/High detail
+  interface scale slider, toggles for auto-advance, Easy/Standard difficulty,
+  the status bar, hint animations, and the Palette sort menu. A
+  dedicated Hints & controls section now lets you tune fade duration, overlay intensity, and remap the right-click action.
+  The panel also houses the JSON export action, mirrors the Low/Medium/High detail
   chips so you can reload the sample with tuned parameters without leaving the
   sidecar, and tucks the art prompt query inside an **Advanced options**
   accordion so casual play stays focused on painting.
@@ -282,24 +305,25 @@ before retrying.
   Low/Medium/High chips with a live caption describing the active preset so you
   know how many colours, what minimum region size, and which resize edge (and
   approximate region count) the next sample reload will use.
-- **Save manager panel** – Lists every stored snapshot without blocking the
-  canvas. Each entry shows completion progress with quick actions to load,
-  rename, export, or delete the save.
+- **Start & save screen** – Launch puzzles, reload the capybara sample, and
+  manage manual snapshots from the same dialog. Each entry shows completion
+  progress with quick actions to load, rename, export, or delete the save.
 - **Help panel** – Lists every command button, summarizes canvas gestures, and
   surfaces a live debug log so contributors can confirm state changes while
   testing.
 - **Palette dock** – A horizontal scroller anchored to the bottom of the page.
   Each swatch now stretches into a flat colour tile with no gutters, and the
   number rides directly on the paint with a contrast-aware outline so it stays
-  readable without extra chrome. A collapsible status bar above the dock stays hidden
-  unless an image import is running; enable the Settings toggle to keep its filled/remaining
-  counts visible after generation completes. Tooltips and `data-color-id` attributes still
+  readable without extra chrome. A collapsible status bar above the dock now only
+  appears while imports or puzzle generation are in flight; disable the Settings toggle
+  if you'd prefer to hide those updates entirely. Tooltips and `data-color-id` attributes still
   expose the colour name plus remaining counts for automation hooks.
 
 ## Keyboard and accessibility notes
 
-- The hint overlay is focusable and reacts to Enter/Space to trigger the file
-  picker, keeping the first interaction accessible.
+- The start/saves overlay stays focusable: press Enter/Space while it has
+  focus to trigger the file picker, or hit Escape (once a puzzle or save exists)
+  to close it without leaving the keyboard.
 - The Help panel’s debug log uses an `aria-live="polite"` region for gameplay
   telemetry so assistive tech announces save loads, resets, and palette
   activity.
