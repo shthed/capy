@@ -50,6 +50,9 @@ single `index.html` document—no build tools or extra runtime required.
 - **Saves sheet quick start.** The Saves panel now surfaces quick actions to
   import a new image or JSON puzzle and reload the bundled Capybara Springs
   board, so onboarding happens alongside ongoing save management.
+  A **Reset puzzle progress** control clears the current board without touching
+  autosaves or manual snapshots, so you can start over mid-session without
+  leaving the dialog.
 - **Built-in capybara sample.** The "Capybara Springs" illustration now loads
   automatically on boot in the high detail preset (when no autosave is
   available) so you can start painting without importing anything. The vignette
@@ -244,7 +247,9 @@ fields.
    to the next incomplete colour once you finish the current hue.
 5. **Save or export.** The save manager captures snapshots (including progress,
    generator options, and source metadata) in localStorage using a compact
-   schema. Export the active puzzle as JSON at any time.
+   schema. Export the active puzzle as JSON at any time. Use **Reset puzzle
+   progress** from the same sheet to clear the current board while keeping
+   autosaves and manual saves intact when you want a fresh attempt.
 
 ## Puzzle JSON format
 
@@ -306,8 +311,9 @@ before retrying.
 - **Start & save screen** – Launch puzzles, reload the capybara sample, and
   manage manual snapshots from the same dialog. A prominent **Choose an image**
   button now leads the overlay and calls out that you can drag and drop files
-  anywhere to begin. Each entry shows completion progress with quick actions to
-  load, rename, export, or delete the save.
+  anywhere to begin. Capture manual snapshots or use **Reset puzzle progress**
+  to clear the active board from this dialog. Each entry shows completion
+  progress with quick actions to load, rename, export, or delete the save.
 - **Help panel** – Lists every command button, summarizes canvas gestures, and
   surfaces a live debug log so contributors can confirm state changes while
   testing.
