@@ -11,11 +11,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "2a14e656d3a1e071a215468d9a84a44ef9bdc61e",
-    "message": "Merge pull request #159 from shthed/codex/improve-game-performance-for-mobile\n\nImprove mobile gesture responsiveness",
+    "commit": "f5b4be820b1b667ec79d8fd03b0118673d14cc20",
+    "message": "Merge pull request #160 from shthed/codex/modify-file-save-and-progress-features\n\nAuto-start generation and relocate saves export",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T00:37:15+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/2a14e656d3a1e071a215468d9a84a44ef9bdc61e"
+    "deployedAt": "2025-10-17T10:03:42+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/f5b4be820b1b667ec79d8fd03b0118673d14cc20"
   },
   "fix-jq-slurpfile-gh-pages": {
     "branch": "fix/jq-slurpfile-gh-pages",
