@@ -3221,7 +3221,9 @@
         if (!button) continue;
         button.setAttribute("type", "button");
         button.addEventListener("click", () => {
-          if (!getSampleDataUrl()) {
+          const hasSampleArtwork = Boolean(getSampleDataUrl());
+          const hasDefaultPuzzle = Boolean(DEFAULT_GAME_SOURCE?.path);
+          if (!hasSampleArtwork && !hasDefaultPuzzle) {
             return;
           }
           if (saveManagerSheet && saveManagerSheet.contains(button)) {

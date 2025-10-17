@@ -146,10 +146,10 @@
   "codex-modify-file-save-and-progress-features": {
     "branch": "codex/modify-file-save-and-progress-features",
     "safeName": "codex-modify-file-save-and-progress-features",
-    "commit": "9b14ef438344467e2a79ce0cddfd40f29643a62a",
-    "message": "Auto-start imports and surface saves export",
+    "commit": "5cd98eadc02a269409978c9f6015cf9b5c7c51c5",
+    "message": "Fix Capybara sample reload button",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T09:20:29+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/9b14ef438344467e2a79ce0cddfd40f29643a62a"
+    "deployedAt": "2025-10-17T09:47:29+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/5cd98eadc02a269409978c9f6015cf9b5c7c51c5"
   }
 }

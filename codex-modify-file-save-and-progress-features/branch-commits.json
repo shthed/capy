@@ -1,6 +1,20 @@
 {
   "codex/modify-file-save-and-progress-features": [
     {
+      "sha": "5cd98eadc02a269409978c9f6015cf9b5c7c51c5",
+      "shortSha": "5cd98ea",
+      "message": "Fix Capybara sample reload button",
+      "date": "2025-10-17T01:47:29Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/5cd98eadc02a269409978c9f6015cf9b5c7c51c5",
+      "prs": [
+        {
+          "number": 160,
+          "title": "Auto-start generation and relocate saves export",
+          "url": "https://github.com/shthed/capy/pull/160"
+        }
+      ]
+    },
+    {
       "sha": "9b14ef438344467e2a79ce0cddfd40f29643a62a",
       "shortSha": "9b14ef4",
       "message": "Auto-start imports and surface saves export",
@@ -20,20 +34,6 @@
       "message": "Merge pull request #159 from shthed/codex/improve-game-performance-for-mobile\n\nImprove mobile gesture responsiveness",
       "date": "2025-10-16T16:37:15Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/2a14e656d3a1e071a215468d9a84a44ef9bdc61e",
-      "prs": [
-        {
-          "number": 160,
-          "title": "Auto-start generation and relocate saves export",
-          "url": "https://github.com/shthed/capy/pull/160"
-        }
-      ]
-    },
-    {
-      "sha": "0b31593b5ee6f3341cc4bc5892d983cf3dd7f4f1",
-      "shortSha": "0b31593",
-      "message": "Optimize mobile pan responsiveness",
-      "date": "2025-10-16T16:27:00Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/0b31593b5ee6f3341cc4bc5892d983cf3dd7f4f1",
       "prs": [
         {
           "number": 160,
@@ -45,6 +45,20 @@
   ],
   "codex-modify-file-save-and-progress-features": [
     {
+      "sha": "5cd98eadc02a269409978c9f6015cf9b5c7c51c5",
+      "shortSha": "5cd98ea",
+      "message": "Fix Capybara sample reload button",
+      "date": "2025-10-17T01:47:29Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/5cd98eadc02a269409978c9f6015cf9b5c7c51c5",
+      "prs": [
+        {
+          "number": 160,
+          "title": "Auto-start generation and relocate saves export",
+          "url": "https://github.com/shthed/capy/pull/160"
+        }
+      ]
+    },
+    {
       "sha": "9b14ef438344467e2a79ce0cddfd40f29643a62a",
       "shortSha": "9b14ef4",
       "message": "Auto-start imports and surface saves export",
@@ -64,20 +78,6 @@
       "message": "Merge pull request #159 from shthed/codex/improve-game-performance-for-mobile\n\nImprove mobile gesture responsiveness",
       "date": "2025-10-16T16:37:15Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/2a14e656d3a1e071a215468d9a84a44ef9bdc61e",
-      "prs": [
-        {
-          "number": 160,
-          "title": "Auto-start generation and relocate saves export",
-          "url": "https://github.com/shthed/capy/pull/160"
-        }
-      ]
-    },
-    {
-      "sha": "0b31593b5ee6f3341cc4bc5892d983cf3dd7f4f1",
-      "shortSha": "0b31593",
-      "message": "Optimize mobile pan responsiveness",
-      "date": "2025-10-16T16:27:00Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/0b31593b5ee6f3341cc4bc5892d983cf3dd7f4f1",
       "prs": [
         {
           "number": 160,
