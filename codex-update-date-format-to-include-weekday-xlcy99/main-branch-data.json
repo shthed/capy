@@ -11,7 +11,8 @@
         {
           "number": 164,
           "title": "Include weekday in branch deployment timestamps",
-          "url": "https://github.com/shthed/capy/pull/164"
+          "url": "https://github.com/shthed/capy/pull/164",
+          "branch": "codex/update-date-format-to-include-weekday"
         }
       ]
     },
@@ -26,7 +27,8 @@
         {
           "number": 164,
           "title": "Include weekday in branch deployment timestamps",
-          "url": "https://github.com/shthed/capy/pull/164"
+          "url": "https://github.com/shthed/capy/pull/164",
+          "branch": "codex/update-date-format-to-include-weekday"
         }
       ]
     },
@@ -41,11 +43,12 @@
         {
           "number": 163,
           "title": "Add npm scaffolding and placeholder test runner",
-          "url": "https://github.com/shthed/capy/pull/163"
+          "url": "https://github.com/shthed/capy/pull/163",
+          "branch": "codex/explain-system-prompt-and-tools-accessibility"
         }
       ]
     }
   ],
   "lastCommitDate": "2025-10-17T07:49:05Z",
-  "deploymentTimestamp": 1760688430124
+  "deploymentTimestamp": 1760688460974
 }
