@@ -1,0 +1,18 @@
+[
+  {
+    "branch": "codex/update-manage-saves-page-features",
+    "safeName": "codex-update-manage-saves-page-features",
+    "title": "Improve save management autosave experience",
+    "number": 161,
+    "updatedAt": "2025-10-17T03:26:05Z",
+    "url": "https://github.com/shthed/capy/pull/161"
+  },
+  {
+    "branch": "codex/introduce-renderer-abstraction-for-webgl",
+    "safeName": "codex-introduce-renderer-abstraction-for-webgl",
+    "title": "WebGL renderer",
+    "number": 124,
+    "updatedAt": "2025-10-16T01:37:28Z",
+    "url": "https://github.com/shthed/capy/pull/124"
+  }
+]

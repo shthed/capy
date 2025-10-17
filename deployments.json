@@ -151,5 +151,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-17T09:47:29+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/5cd98eadc02a269409978c9f6015cf9b5c7c51c5"
+  },
+  "codex-update-manage-saves-page-features": {
+    "branch": "codex/update-manage-saves-page-features",
+    "safeName": "codex-update-manage-saves-page-features",
+    "commit": "f5b4be820b1b667ec79d8fd03b0118673d14cc20",
+    "message": "Merge pull request #160 from shthed/codex/modify-file-save-and-progress-features\n\nAuto-start generation and relocate saves export",
+    "actor": "shthed",
+    "deployedAt": "2025-10-17T10:03:42+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/f5b4be820b1b667ec79d8fd03b0118673d14cc20"
   }
 }

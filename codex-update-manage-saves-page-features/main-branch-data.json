@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "sha": "f5b4be820b1b667ec79d8fd03b0118673d14cc20",
+      "shortSha": "f5b4be8",
+      "message": "Merge pull request #160 from shthed/codex/modify-file-save-and-progress-features\n\nAuto-start generation and relocate saves export",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-17T02:03:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f5b4be820b1b667ec79d8fd03b0118673d14cc20",
+      "prs": [
+        {
+          "number": 160,
+          "title": "Auto-start generation and relocate saves export",
+          "url": "https://github.com/shthed/capy/pull/160"
+        }
+      ]
+    },
+    {
+      "sha": "5cd98eadc02a269409978c9f6015cf9b5c7c51c5",
+      "shortSha": "5cd98ea",
+      "message": "Fix Capybara sample reload button",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-17T01:47:29Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/5cd98eadc02a269409978c9f6015cf9b5c7c51c5",
+      "prs": [
+        {
+          "number": 160,
+          "title": "Auto-start generation and relocate saves export",
+          "url": "https://github.com/shthed/capy/pull/160"
+        }
+      ]
+    },
+    {
+      "sha": "9b14ef438344467e2a79ce0cddfd40f29643a62a",
+      "shortSha": "9b14ef4",
+      "message": "Auto-start imports and surface saves export",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-17T01:20:29Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9b14ef438344467e2a79ce0cddfd40f29643a62a",
+      "prs": [
+        {
+          "number": 160,
+          "title": "Auto-start generation and relocate saves export",
+          "url": "https://github.com/shthed/capy/pull/160"
+        }
+      ]
+    }
+  ],
+  "lastCommitDate": "2025-10-17T02:03:42Z",
+  "deploymentTimestamp": 1760671571566
+}
