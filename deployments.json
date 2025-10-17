@@ -14,7 +14,7 @@
     "commit": "2cff9f77852d9e58973fc5c28dbf64f7f5452bdc",
     "message": "Increase the number of commits fetched for PRs and exclude specific commits from the recent commits list",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T16:09:36+08:00",
+    "deployedAt": "2025-10-17T08:12:36Z",
     "commitUrl": "https://github.com/shthed/capy/commit/2cff9f77852d9e58973fc5c28dbf64f7f5452bdc"
   },
   "fix-jq-slurpfile-gh-pages": {
