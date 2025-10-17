@@ -223,5 +223,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-17T16:29:27+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/7cacdaf53c8b283f320c1b34d06c3a6fc1301b39"
+  },
+  "codex-update-readme-for-core-application-files": {
+    "branch": "codex/update-readme-for-core-application-files",
+    "safeName": "codex-update-readme-for-core-application-files",
+    "commit": "8a225825915231ccf2b77936a676eb857954baec",
+    "message": "Merge pull request #166 from shthed/codex/integrate-capy-documentation-into-help\n\nEmbed hosted README inside help panel",
+    "actor": "shthed",
+    "deployedAt": "2025-10-17T16:32:53+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/8a225825915231ccf2b77936a676eb857954baec"
   }
 }
