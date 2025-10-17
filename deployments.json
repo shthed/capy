@@ -12,9 +12,9 @@
     "branch": "main",
     "safeName": "",
     "commit": "2e8a09b2b994ae02a52dcd8de9fc49021a90c514",
-    "message": "Merge pull request #164 from shthed/codex/update-date-format-to-include-weekday\n\nInclude weekday in branch deployment timestamps",
+    "message": "Merge pull request #164 from shthed/codex/update-date-format-to-include-weekday",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T15:49:05+08:00",
+    "deployedAt": "2025-10-17T07:52:53Z",
     "commitUrl": "https://github.com/shthed/capy/commit/2e8a09b2b994ae02a52dcd8de9fc49021a90c514"
   },
   "fix-jq-slurpfile-gh-pages": {
