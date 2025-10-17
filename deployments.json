@@ -227,10 +227,10 @@
   "codex-update-readme-for-core-application-files": {
     "branch": "codex/update-readme-for-core-application-files",
     "safeName": "codex-update-readme-for-core-application-files",
-    "commit": "8a225825915231ccf2b77936a676eb857954baec",
-    "message": "Merge pull request #166 from shthed/codex/integrate-capy-documentation-into-help\n\nEmbed hosted README inside help panel",
+    "commit": "a65053f31cff64824abb484207f86abfcaf064dc",
+    "message": "Correct core asset reference",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T16:32:53+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/8a225825915231ccf2b77936a676eb857954baec"
+    "deployedAt": "2025-10-17T17:34:19+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/a65053f31cff64824abb484207f86abfcaf064dc"
   }
 }
