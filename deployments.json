@@ -164,10 +164,10 @@
   "codex-add-chatgpt-link-and-image-description-field": {
     "branch": "codex/add-chatgpt-link-and-image-description-field",
     "safeName": "codex-add-chatgpt-link-and-image-description-field",
-    "commit": "b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
-    "message": "Add ChatGPT link and description field to generator",
+    "commit": "e13041e701ca5ad376914ac46693cf82291e81df",
+    "message": "Move generator prompt helper to advanced options",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T14:23:28+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/b3f705bd4e71e3cb917a76dc456941a4d7c2e419"
+    "deployedAt": "2025-10-17T15:08:48+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/e13041e701ca5ad376914ac46693cf82291e81df"
   }
 }

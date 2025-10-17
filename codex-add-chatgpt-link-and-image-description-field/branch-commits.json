@@ -1,6 +1,20 @@
 {
   "codex/add-chatgpt-link-and-image-description-field": [
     {
+      "sha": "e13041e701ca5ad376914ac46693cf82291e81df",
+      "shortSha": "e13041e",
+      "message": "Move generator prompt helper to advanced options",
+      "date": "2025-10-17T07:08:48Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/e13041e701ca5ad376914ac46693cf82291e81df",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
       "sha": "b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
       "shortSha": "b3f705b",
       "message": "Add ChatGPT link and description field to generator",
@@ -20,20 +34,6 @@
       "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
       "date": "2025-10-17T03:54:32Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
-      "prs": [
-        {
-          "number": 162,
-          "title": "Add ChatGPT image prompt helper to generator tab",
-          "url": "https://github.com/shthed/capy/pull/162"
-        }
-      ]
-    },
-    {
-      "sha": "aef52b965810682bf2f8018675c2f6784626c902",
-      "shortSha": "aef52b9",
-      "message": "Improve save management autosave experience",
-      "date": "2025-10-17T03:26:01Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902",
       "prs": [
         {
           "number": 162,
@@ -45,6 +45,20 @@
   ],
   "codex-add-chatgpt-link-and-image-description-field": [
     {
+      "sha": "e13041e701ca5ad376914ac46693cf82291e81df",
+      "shortSha": "e13041e",
+      "message": "Move generator prompt helper to advanced options",
+      "date": "2025-10-17T07:08:48Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/e13041e701ca5ad376914ac46693cf82291e81df",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
       "sha": "b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
       "shortSha": "b3f705b",
       "message": "Add ChatGPT link and description field to generator",
@@ -64,20 +78,6 @@
       "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
       "date": "2025-10-17T03:54:32Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
-      "prs": [
-        {
-          "number": 162,
-          "title": "Add ChatGPT image prompt helper to generator tab",
-          "url": "https://github.com/shthed/capy/pull/162"
-        }
-      ]
-    },
-    {
-      "sha": "aef52b965810682bf2f8018675c2f6784626c902",
-      "shortSha": "aef52b9",
-      "message": "Improve save management autosave experience",
-      "date": "2025-10-17T03:26:01Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902",
       "prs": [
         {
           "number": 162,
