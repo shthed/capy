@@ -2215,10 +2215,10 @@
         if (!state.puzzle) return;
         const cache = ensureRenderCache();
         if (!cache.ready) return;
-        const completedColors = getCompletedColorIds();
-        const hideCompleted = completedColors.size > 0;
+        const filledRegions = state.filled || new Set();
+        const hideCompleted = filledRegions.size > 0;
         const geometries = hideCompleted
-          ? cache.regions.filter((geometry) => !completedColors.has(geometry.colorId))
+          ? cache.regions.filter((geometry) => !filledRegions.has(geometry.id))
           : cache.regions;
         if (geometries.length === 0) {
           return;
