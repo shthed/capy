@@ -392,7 +392,7 @@ jobs:
             """)
 
             out_file.write_text(template)
-            PY
+PY
 
             rm -f "$tmp_html"
           }
@@ -599,7 +599,7 @@ jobs:
           <body>
             <h1>Capy Branch Deployments</h1>
             <ul class="deployments">
-          HTML
+HTML
 
           PR_DATA_FILE="../pr-branches.json"
           MAIN_DATA_FILE="../main-branch-data.json"
@@ -1023,7 +1023,7 @@ jobs:
           }
 
           fs.appendFileSync('branch.html', output);
-          NODE
+NODE
 
           cat >> branch.html <<'HTML'
             </ul>
@@ -1104,7 +1104,7 @@ jobs:
             </script>
           </body>
           </html>
-          HTML
+HTML
 
           git add -A
           if [ -n "$(git status --short)" ]; then
