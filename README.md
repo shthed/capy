@@ -16,6 +16,8 @@ single `index.html` document—no build tools or extra runtime required.
 - **Core application**
   - `index.html` – Single-file UI, styles, and generator logic powering the coloring experience.
   - `README.md` – Usage guide and architecture reference for contributors.
+  - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the single-page runtime.
+  - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, and metadata assembly off the main thread.
 - **Testing & QA**
   - Automated Playwright smoke tests have been retired for now. Run quick manual passes in desktop and mobile browsers before pushing.
   - `npm test --silent` prints a skip notice while the Playwright suite is offline so CI still tracks the placeholder hook.
