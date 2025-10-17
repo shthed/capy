@@ -1131,6 +1131,75 @@
         list-style: none;
       }
 
+      .readme-preview {
+        margin: 0;
+        padding: 16px;
+        border-radius: 16px;
+        border: 1px solid var(--theme-sheet-border);
+        background: var(--theme-sheet-bg);
+        color: var(--theme-body-color);
+        max-height: 320px;
+        overflow: auto;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        white-space: normal;
+        word-break: break-word;
+      }
+
+      .readme-preview--plaintext {
+        white-space: pre-wrap;
+        font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco,
+          Consolas, 'Liberation Mono', 'Courier New', monospace;
+        font-size: 0.85rem;
+      }
+
+      .readme-preview h1,
+      .readme-preview h2,
+      .readme-preview h3,
+      .readme-preview h4,
+      .readme-preview h5,
+      .readme-preview h6 {
+        margin-top: 1.5em;
+        margin-bottom: 0.6em;
+      }
+
+      .readme-preview h1:first-child,
+      .readme-preview h2:first-child,
+      .readme-preview h3:first-child,
+      .readme-preview h4:first-child,
+      .readme-preview h5:first-child,
+      .readme-preview h6:first-child {
+        margin-top: 0;
+      }
+
+      .readme-preview p,
+      .readme-preview ul,
+      .readme-preview ol {
+        margin: 0 0 1em;
+      }
+
+      .readme-preview ul,
+      .readme-preview ol {
+        padding-left: 1.4em;
+      }
+
+      .readme-preview pre {
+        border-radius: 12px;
+        border: 1px solid var(--theme-debug-border);
+        background: rgba(15, 23, 42, 0.35);
+        padding: 12px;
+        white-space: pre-wrap;
+        overflow-x: auto;
+      }
+
+      body[data-theme="light"] .readme-preview pre {
+        background: rgba(226, 232, 240, 0.6);
+      }
+
+      .readme-preview a {
+        color: var(--theme-command-active-text);
+      }
+
       .control-list kbd {
         display: inline-flex;
         align-items: center;
@@ -1518,6 +1587,19 @@
             <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
           </ul>
         </section>
+        <section class="sheet-section" aria-labelledby="readmeHeading">
+          <h3 id="readmeHeading">Project README</h3>
+          <p class="control-note">
+            Loads the live documentation from
+            <a href="https://shthed.github.io/capy/README" target="_blank" rel="noreferrer noopener"
+              >https://shthed.github.io/capy/README</a
+            >
+            so you can review gameplay notes and contributor guidance without leaving the app.
+          </p>
+          <p class="control-note" data-readme-status role="status">Loading README…</p>
+          <p class="control-note" data-readme-error role="alert" hidden></p>
+          <article class="readme-preview" data-readme-content hidden aria-live="polite"></article>
+        </section>
         <section class="sheet-section" aria-labelledby="debugHeading">
           <h3 id="debugHeading">Debug log</h3>
           <p class="control-note">
@@ -1776,6 +1858,11 @@
       const sheetRegistry = [generatorSheet, settingsSheet, helpSheet, saveManagerSheet].filter(
         Boolean
       );
+      const readmeContentEl = helpSheet?.querySelector("[data-readme-content]") || null;
+      const readmeStatusEl = helpSheet?.querySelector("[data-readme-status]") || null;
+      const readmeErrorEl = helpSheet?.querySelector("[data-readme-error]") || null;
+      const README_SOURCE_URL = "https://shthed.github.io/capy/README";
+      let readmeLoadState = "idle";
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
       const saveStorageSummary = document.getElementById("saveStorageSummary");
@@ -3977,6 +4064,94 @@
         { passive: false }
       );
 
+      async function ensureHelpReadmeLoaded() {
+        if (!readmeContentEl) return;
+        if (readmeLoadState === "loading" || readmeLoadState === "loaded") {
+          return;
+        }
+        readmeLoadState = "loading";
+        if (readmeStatusEl) {
+          readmeStatusEl.hidden = false;
+          readmeStatusEl.textContent = "Loading README…";
+        }
+        if (readmeErrorEl) {
+          readmeErrorEl.hidden = true;
+          readmeErrorEl.textContent = "";
+        }
+        readmeContentEl.hidden = true;
+        readmeContentEl.innerHTML = "";
+        readmeContentEl.classList.remove("readme-preview--plaintext");
+        try {
+          const response = await fetch(README_SOURCE_URL, { cache: "no-store" });
+          if (!response || !response.ok) {
+            throw new Error(`HTTP ${response ? response.status : "error"}`);
+          }
+          const contentType = response.headers?.get("content-type") || "";
+          const raw = await response.text();
+          if (contentType.includes("text/html")) {
+            let html = raw;
+            if (typeof DOMParser !== "undefined") {
+              try {
+                const parser = new DOMParser();
+                const parsed = parser.parseFromString(raw, "text/html");
+                const source = parsed.querySelector("main") || parsed.body;
+                if (source) {
+                  source.querySelectorAll("script").forEach((node) => node.remove());
+                  source.querySelectorAll("a[href]").forEach((anchor) => {
+                    const href = anchor.getAttribute("href");
+                    if (!href) return;
+                    if (!href.startsWith("#")) {
+                      try {
+                        const absolute = new URL(href, README_SOURCE_URL);
+                        anchor.setAttribute("href", absolute.toString());
+                      } catch (_) {
+                        // Ignore malformed URLs.
+                      }
+                    }
+                    anchor.setAttribute("target", "_blank");
+                    anchor.setAttribute("rel", "noreferrer noopener");
+                  });
+                  source.querySelectorAll("img[src]").forEach((img) => {
+                    const src = img.getAttribute("src");
+                    if (!src) return;
+                    try {
+                      const absolute = new URL(src, README_SOURCE_URL);
+                      img.setAttribute("src", absolute.toString());
+                    } catch (_) {
+                      // Ignore malformed URLs.
+                    }
+                  });
+                  html = source.innerHTML;
+                }
+              } catch (_) {
+                // Fall back to the original HTML string if parsing fails.
+              }
+            }
+            readmeContentEl.innerHTML = html;
+            readmeContentEl.classList.remove("readme-preview--plaintext");
+          } else {
+            const trimmed = raw.trim();
+            readmeContentEl.textContent = trimmed.length > 0 ? trimmed : raw;
+            readmeContentEl.classList.add("readme-preview--plaintext");
+          }
+          readmeContentEl.hidden = false;
+          if (readmeStatusEl) {
+            readmeStatusEl.hidden = true;
+          }
+          readmeLoadState = "loaded";
+        } catch (error) {
+          readmeLoadState = "error";
+          if (readmeStatusEl) {
+            readmeStatusEl.hidden = true;
+          }
+          if (readmeErrorEl) {
+            const message = error && error.message ? error.message : "unknown error";
+            readmeErrorEl.hidden = false;
+            readmeErrorEl.textContent = `Couldn't load the README (${message}). Reopen this panel to try again.`;
+          }
+        }
+      }
+
       function openSheet(sheet) {
         if (!sheet) return;
         for (const candidate of sheetRegistry) {
@@ -3986,6 +4161,9 @@
         }
         sheet.classList.remove("hidden");
         sheet.setAttribute("aria-hidden", "false");
+        if (sheet === helpSheet) {
+          void ensureHelpReadmeLoaded();
+        }
       }
 
       function closeSheet(sheet) {

@@ -70,6 +70,9 @@ single `index.html` document—no build tools or extra runtime required.
   sample puzzle begins loading and when it completes, alongside fills, hints,
   zooms, background tweaks, fullscreen toggles, and ignored clicks, so QA can
   confirm the entire flow without cracking open DevTools.
+- **Embedded documentation.** The Help panel now loads the hosted README from
+  `https://shthed.github.io/capy/README`, making it easy to review gameplay,
+  accessibility, and contributor notes without tabbing away from the app.
 - **Configurable puzzle generator.** Tune palette size, minimum region area,
   resize detail, sampling, iteration count, and smoothing passes before
   rebuilding the scene.
