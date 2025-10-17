@@ -196,5 +196,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-17T16:07:01+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/569ad861f7c40dd12ade068ecfad37d3fb39fb2c"
+  },
+  "codex-integrate-capy-documentation-into-help": {
+    "branch": "codex/integrate-capy-documentation-into-help",
+    "safeName": "codex-integrate-capy-documentation-into-help",
+    "commit": "70f7b728ccaf16400753853bec6238814561da3c",
+    "message": "Merge pull request #163 from shthed/codex/explain-system-prompt-and-tools-accessibility\n\nAdd npm scaffolding and placeholder test runner",
+    "actor": "shthed",
+    "deployedAt": "2025-10-17T15:45:57+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/70f7b728ccaf16400753853bec6238814561da3c"
   }
 }
