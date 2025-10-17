@@ -1,6 +1,36 @@
 {
   "commits": [
     {
+      "sha": "7cacdaf53c8b283f320c1b34d06c3a6fc1301b39",
+      "shortSha": "7cacdaf",
+      "message": "Merge pull request #167 from shthed/codex/update-branch-deployments-for-game-files\n\nLimit branch previews to runtime assets",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-17T08:29:27Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7cacdaf53c8b283f320c1b34d06c3a6fc1301b39",
+      "prs": [
+        {
+          "number": 167,
+          "title": "Limit branch previews to runtime assets",
+          "url": "https://github.com/shthed/capy/pull/167"
+        }
+      ]
+    },
+    {
+      "sha": "a8edd488164892836174d2e5e48d33bd4d077a6e",
+      "shortSha": "a8edd48",
+      "message": "Limit branch deployments to runtime assets",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-17T08:27:55Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a8edd488164892836174d2e5e48d33bd4d077a6e",
+      "prs": [
+        {
+          "number": 167,
+          "title": "Limit branch previews to runtime assets",
+          "url": "https://github.com/shthed/capy/pull/167"
+        }
+      ]
+    },
+    {
       "sha": "2cff9f77852d9e58973fc5c28dbf64f7f5452bdc",
       "shortSha": "2cff9f7",
       "message": "Increase the number of commits fetched for PRs and exclude specific commits from the recent commits list",
@@ -23,38 +53,8 @@
           "url": "https://github.com/shthed/capy/pull/164"
         }
       ]
-    },
-    {
-      "sha": "de98f7b5a8a4e587763b0b989d0365d11a6035a7",
-      "shortSha": "de98f7b",
-      "message": "Include weekday in branch index timestamps",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T07:47:04Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/de98f7b5a8a4e587763b0b989d0365d11a6035a7",
-      "prs": [
-        {
-          "number": 164,
-          "title": "Include weekday in branch deployment timestamps",
-          "url": "https://github.com/shthed/capy/pull/164"
-        }
-      ]
-    },
-    {
-      "sha": "70f7b728ccaf16400753853bec6238814561da3c",
-      "shortSha": "70f7b72",
-      "message": "Merge pull request #163 from shthed/codex/explain-system-prompt-and-tools-accessibility\n\nAdd npm scaffolding and placeholder test runner",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T07:45:57Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/70f7b728ccaf16400753853bec6238814561da3c",
-      "prs": [
-        {
-          "number": 163,
-          "title": "Add npm scaffolding and placeholder test runner",
-          "url": "https://github.com/shthed/capy/pull/163"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-17T08:09:36Z",
-  "deploymentTimestamp": 1760689537345
+  "lastCommitDate": "2025-10-17T08:29:27Z",
+  "deploymentTimestamp": 1760689780918
 }

@@ -1,5 +1,13 @@
 [
   {
+    "branch": "codex/integrate-capy-documentation-into-help",
+    "safeName": "codex-integrate-capy-documentation-into-help",
+    "title": "Embed hosted README inside help panel",
+    "number": 166,
+    "updatedAt": "2025-10-17T08:26:05Z",
+    "url": "https://github.com/shthed/capy/pull/166"
+  },
+  {
     "branch": "codex/update-date-format-to-include-weekday-xlcy99",
     "safeName": "codex-update-date-format-to-include-weekday-xlcy99",
     "title": "Revamp branch deployment index layout",

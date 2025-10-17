@@ -1,4 +1,120 @@
 {
+  "codex/integrate-capy-documentation-into-help": [
+    {
+      "sha": "a24f86e5561ee47ad67027e67a31488577aa78e7",
+      "shortSha": "a24f86e",
+      "message": "Embed hosted README inside help sheet",
+      "date": "2025-10-17T08:26:00Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a24f86e5561ee47ad67027e67a31488577aa78e7",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "70f7b728ccaf16400753853bec6238814561da3c",
+      "shortSha": "70f7b72",
+      "message": "Merge pull request #163 from shthed/codex/explain-system-prompt-and-tools-accessibility\n\nAdd npm scaffolding and placeholder test runner",
+      "date": "2025-10-17T07:45:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/70f7b728ccaf16400753853bec6238814561da3c",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "ef41274c6b4430c8c639c5a10becb57c7efcd14b",
+      "shortSha": "ef41274",
+      "message": "Add npm metadata and placeholder test harness",
+      "date": "2025-10-17T07:44:38Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ef41274c6b4430c8c639c5a10becb57c7efcd14b",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "shortSha": "1be83c6",
+      "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
+      "date": "2025-10-17T03:54:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    }
+  ],
+  "codex-integrate-capy-documentation-into-help": [
+    {
+      "sha": "a24f86e5561ee47ad67027e67a31488577aa78e7",
+      "shortSha": "a24f86e",
+      "message": "Embed hosted README inside help sheet",
+      "date": "2025-10-17T08:26:00Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a24f86e5561ee47ad67027e67a31488577aa78e7",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "70f7b728ccaf16400753853bec6238814561da3c",
+      "shortSha": "70f7b72",
+      "message": "Merge pull request #163 from shthed/codex/explain-system-prompt-and-tools-accessibility\n\nAdd npm scaffolding and placeholder test runner",
+      "date": "2025-10-17T07:45:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/70f7b728ccaf16400753853bec6238814561da3c",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "ef41274c6b4430c8c639c5a10becb57c7efcd14b",
+      "shortSha": "ef41274",
+      "message": "Add npm metadata and placeholder test harness",
+      "date": "2025-10-17T07:44:38Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ef41274c6b4430c8c639c5a10becb57c7efcd14b",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "shortSha": "1be83c6",
+      "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
+      "date": "2025-10-17T03:54:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    }
+  ],
   "codex/update-date-format-to-include-weekday-xlcy99": [
     {
       "sha": "569ad861f7c40dd12ade068ecfad37d3fb39fb2c",
