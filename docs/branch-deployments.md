@@ -27,8 +27,8 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
    - **Exception:** The `main` branch deploys to the root (no subfolder)
 
 4. **Content Deployment**: The workflow:
-   - For `main` branch: Copies content directly to the root of `gh-pages` (excluding `.git`, `node_modules`, `test-results`, `playwright-report`, `blob-report`, `artifacts`, `README.md`, and `branch.html`)
-   - For other branches: Creates a folder in `gh-pages` matching the sanitized branch name and copies only the files required to load the game (`index.html`, `puzzle-generation.js`, and `capy.json`)
+   - For `main` branch: Copies content directly to the root of `gh-pages` (excluding `.git`, `node_modules`, `test-results`, `playwright-report`, `blob-report`, `artifacts`, `README.md`, and `branch.html`) and generates a `/README/index.html` page from the repository `README.md` so `https://<owner>.github.io/<repo>/README/` always renders the handbook in HTML form
+   - For other branches: Creates a folder in `gh-pages` matching the sanitized branch name, copies the files required to load the game (`index.html`, `puzzle-generation.js`, and `capy.json`), and adds a branch-scoped `/README/index.html` generated from the repository `README.md` so the documentation stays in sync with code reviews
    - Updates the deployment with the latest content from the branch
 
 5. **Cleanup**: The workflow removes deployments for branches that no longer have open PRs
@@ -50,6 +50,10 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 - **Other branches**: Accessible under their sanitized branch name
   - `https://<owner>.github.io/<repo>/<branch-name>/`
   - Example: `automation/feature` → `https://<owner>.github.io/<repo>/automation-feature/`
+
+- **README reference**: The repository handbook is rendered at
+  - `https://<owner>.github.io/<repo>/README/`
+  - `https://<owner>.github.io/<repo>/<branch-name>/README/`
 
 - **Branch index**: Accessible at
   - `https://<owner>.github.io/<repo>/branch.html`
