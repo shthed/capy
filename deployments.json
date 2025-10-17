@@ -146,10 +146,10 @@
   "codex-modify-file-save-and-progress-features": {
     "branch": "codex/modify-file-save-and-progress-features",
     "safeName": "codex-modify-file-save-and-progress-features",
-    "commit": "2a14e656d3a1e071a215468d9a84a44ef9bdc61e",
-    "message": "Merge pull request #159 from shthed/codex/improve-game-performance-for-mobile\n\nImprove mobile gesture responsiveness",
+    "commit": "9b14ef438344467e2a79ce0cddfd40f29643a62a",
+    "message": "Auto-start imports and surface saves export",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T00:37:15+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/2a14e656d3a1e071a215468d9a84a44ef9bdc61e"
+    "deployedAt": "2025-10-17T09:20:29+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/9b14ef438344467e2a79ce0cddfd40f29643a62a"
   }
 }

@@ -224,8 +224,9 @@ fields.
    automatically in the high detail preset so you can start painting
    immediately. Drag a bitmap into the viewport, activate the “Choose an image”
    button, or press the 🐹 command button to reload the bundled scene. When you
-   choose a new file the Puzzle generator sheet opens so you can confirm
-   clustering settings before generation begins. The hint overlay disappears
+   choose a new file the Puzzle generator sheet opens and immediately begins
+   generating a new puzzle with your current settings, so tweak the sliders
+   first if you need different clustering options. The hint overlay disappears
    once a new source is selected, and the Low/Medium/High detail chips can
    pre-seed the capybara sample with relaxed or high-fidelity settings before
    you reload it.
@@ -247,9 +248,10 @@ fields.
    to the next incomplete colour once you finish the current hue.
 5. **Save or export.** The save manager captures snapshots (including progress,
    generator options, and source metadata) in localStorage using a compact
-   schema. Export the active puzzle as JSON at any time. Use **Reset puzzle
-   progress** from the same sheet to clear the current board while keeping
-   autosaves and manual saves intact when you want a fresh attempt.
+   schema. Export the active puzzle as JSON from the Saves sheet, rename manual
+   saves to keep versions organised, and use **Reset puzzle progress** from the
+   same panel to clear the current board while keeping autosaves and manual
+   saves intact when you want a fresh attempt.
 
 ## Puzzle JSON format
 
