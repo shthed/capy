@@ -1415,6 +1415,7 @@
           </p>
           <button type="button" data-save-snapshot disabled>Save current puzzle</button>
           <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
+          <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
           <ul
             class="save-manager-list"
             data-save-list
@@ -1446,8 +1447,8 @@
             <dd>Toggle the finished artwork overlay to compare your progress.</dd>
             <dt>🎛 Generator</dt>
             <dd>
-              Adjust clustering sliders, choose capybara detail presets, reload the current source image, or
-              export JSON. The new sheet mirrors the k-means pipeline inputs used for puzzle creation.
+              Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor
+              generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation.
             </dd>
             <dt>🎚 Detail</dt>
             <dd>
@@ -1534,27 +1535,6 @@
             <button type="button" class="close-button" data-import-cancel>Cancel</button>
           </div>
         </div>
-        <div
-          class="generator-progress"
-          data-generator-progress
-          role="status"
-          aria-live="polite"
-          hidden
-        >
-          <p class="generator-progress-message" data-generator-progress-message></p>
-          <div
-            class="generator-progress-meter"
-            data-generator-progress-meter
-            role="progressbar"
-            aria-label="Puzzle generation progress"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            aria-valuenow="0"
-            aria-hidden="true"
-          >
-            <div class="generator-progress-bar" data-generator-progress-bar></div>
-          </div>
-        </div>
         <section class="sheet-section" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Clustering &amp; detail</h3>
           <p class="control-note">
@@ -1617,8 +1597,28 @@
         </section>
       </div>
       <div class="sheet-actions">
-        <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
         <button id="applyOptions" type="button" disabled>Apply changes</button>
+      </div>
+      <div
+        class="generator-progress"
+        data-generator-progress
+        role="status"
+        aria-live="polite"
+        hidden
+      >
+        <p class="generator-progress-message" data-generator-progress-message></p>
+        <div
+          class="generator-progress-meter"
+          data-generator-progress-meter
+          role="progressbar"
+          aria-label="Puzzle generation progress"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+          aria-hidden="true"
+        >
+          <div class="generator-progress-bar" data-generator-progress-bar></div>
+        </div>
       </div>
     </div>
     <div
@@ -2837,6 +2837,7 @@
       let latestGenerationJobId = 0;
       let puzzleGenerationModulePromise = null;
       let pendingImportFile = null;
+      let pendingImportAutoStart = false;
       updateImportNotice();
       let shouldAutoLoadSample = false;
 
@@ -3220,7 +3221,9 @@
         if (!button) continue;
         button.setAttribute("type", "button");
         button.addEventListener("click", () => {
-          if (!getSampleDataUrl()) {
+          const hasSampleArtwork = Boolean(getSampleDataUrl());
+          const hasDefaultPuzzle = Boolean(DEFAULT_GAME_SOURCE?.path);
+          if (!hasSampleArtwork && !hasDefaultPuzzle) {
             return;
           }
           if (saveManagerSheet && saveManagerSheet.contains(button)) {
@@ -4620,9 +4623,14 @@
         }
         return {
           name,
-          description: "Review the generator settings, then create a new puzzle from your image.",
-          actionLabel: "Generate puzzle",
+          description:
+            "Generation starts immediately using the current settings. Adjust the sliders before importing if needed.",
+          actionLabel: "Generating puzzle",
         };
+      }
+
+      function shouldAutoImport(file) {
+        return Boolean(file) && !isJsonFile(file);
       }
 
       function updateImportNotice() {
@@ -4648,25 +4656,35 @@
           return;
         }
         const { name, description, actionLabel } = describeImportIntent(pendingImportFile);
+        const autoStart = pendingImportAutoStart;
         generatorImportNotice.hidden = false;
         if (generatorImportFileEl) {
           generatorImportFileEl.textContent = name;
         }
         if (generatorImportDescriptionEl) {
-          generatorImportDescriptionEl.textContent = description;
+          const resolvedDescription = autoStart
+            ? "Generating will begin immediately with the current settings. Adjust them beforehand if you need different results."
+            : description;
+          generatorImportDescriptionEl.textContent = resolvedDescription;
         }
         if (confirmImportBtn) {
-          confirmImportBtn.hidden = false;
-          confirmImportBtn.disabled = false;
-          confirmImportBtn.textContent = actionLabel;
+          if (autoStart) {
+            confirmImportBtn.hidden = true;
+            confirmImportBtn.disabled = true;
+          } else {
+            confirmImportBtn.hidden = false;
+            confirmImportBtn.disabled = false;
+            confirmImportBtn.textContent = actionLabel;
+          }
         }
         if (cancelImportBtn) {
-          cancelImportBtn.hidden = false;
+          cancelImportBtn.hidden = autoStart;
         }
       }
 
       function clearPendingImport() {
         pendingImportFile = null;
+        pendingImportAutoStart = false;
         updateImportNotice();
       }
 
@@ -4680,10 +4698,13 @@
           return;
         }
         pendingImportFile = file;
+        pendingImportAutoStart = shouldAutoImport(file);
         updateImportNotice();
         openSheet(generatorSheet);
         requestAnimationFrame(() => {
-          if (confirmImportBtn && !confirmImportBtn.hidden) {
+          if (pendingImportAutoStart) {
+            executePendingImport();
+          } else if (confirmImportBtn && !confirmImportBtn.hidden) {
             confirmImportBtn.focus();
           }
         });
@@ -8076,9 +8097,16 @@
       function saveCurrentSnapshot() {
         const payload = serializeCurrentPuzzle();
         const id = `save-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        const resolvedTitle =
+          (typeof payload?.title === "string" && payload.title.trim()) ||
+          (typeof state.sourceTitle === "string" && state.sourceTitle.trim()) ||
+          `Puzzle ${new Date().toLocaleTimeString()}`;
+        if (payload && typeof payload === "object") {
+          payload.title = resolvedTitle;
+        }
         const entry = {
           id,
-          title: `Puzzle ${new Date().toLocaleTimeString()}`,
+          title: resolvedTitle,
           timestamp: Date.now(),
           data: payload,
         };
