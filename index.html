@@ -703,7 +703,6 @@
         transform: rotate(180deg);
       }
 
-      #artPrompt,
       #imageDescription {
         width: 100%;
         min-height: calc(120px * var(--ui-scale));
@@ -716,14 +715,12 @@
         resize: vertical;
       }
 
-      #artPrompt:focus,
       #imageDescription:focus {
         outline: none;
         border-color: rgba(96, 165, 250, 0.7);
         box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
       }
 
-      #artPrompt::placeholder,
       #imageDescription::placeholder {
         color: rgba(148, 163, 184, 0.7);
       }
@@ -1602,25 +1599,6 @@
             Switching presets updates every slider below and reloads the sample scene when it's active.
           </p>
           <label class="control">
-            <span>Image description</span>
-            <textarea
-              id="imageDescription"
-              rows="2"
-              placeholder="Describe the image you want to generate"
-            ></textarea>
-          </label>
-          <p class="control-note">
-            <a
-              id="chatGptLink"
-              class="chatgpt-link"
-              href="https://chat.openai.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open ChatGPT to craft an image prompt <span aria-hidden="true">↗</span>
-            </a>
-          </p>
-          <label class="control">
             <span>Colours <output data-for="colorCount">16</output></span>
             <input id="colorCount" type="range" min="4" max="64" value="16" />
           </label>
@@ -1650,15 +1628,26 @@
           <details class="advanced-options" id="generatorAdvanced">
             <summary>Advanced options</summary>
             <label class="control">
-              <span>Art prompt</span>
+              <span>Image description</span>
               <textarea
-                id="artPrompt"
+                id="imageDescription"
                 rows="3"
-                placeholder="Describe the scene you want to reinterpret"
+                placeholder="Describe the image you want to generate"
               ></textarea>
             </label>
             <p class="control-note">
               Stored with saves and exports so you can revisit the inspiration later.
+            </p>
+            <p class="control-note">
+              <a
+                id="chatGptLink"
+                class="chatgpt-link"
+                href="https://chat.openai.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open ChatGPT to craft an image prompt <span aria-hidden="true">↗</span>
+              </a>
             </p>
           </details>
         </section>
@@ -4502,7 +4491,7 @@
         const prompt = trimmed
           ? `You help craft vivid prompts for image generators. Based on the description below, write a polished prompt ready for DALLE or similar tools.\n\nDescription:\n${trimmed}\n\nReturn only the improved prompt.`
           : "You help craft vivid prompts for image generators. Suggest a playful capybara-themed scene prompt suitable for DALLE or similar tools.";
-        const params = new URLSearchParams({ model: "gpt-4o-mini", input: prompt });
+        const params = new URLSearchParams({ q: prompt });
         chatGptLink.href = `https://chat.openai.com/?${params.toString()}`;
       }
 
