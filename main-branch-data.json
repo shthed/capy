@@ -1,6 +1,21 @@
 {
   "commits": [
     {
+      "sha": "8a225825915231ccf2b77936a676eb857954baec",
+      "shortSha": "8a22582",
+      "message": "Merge pull request #166 from shthed/codex/integrate-capy-documentation-into-help\n\nEmbed hosted README inside help panel",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-17T08:32:53Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8a225825915231ccf2b77936a676eb857954baec",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
       "sha": "7cacdaf53c8b283f320c1b34d06c3a6fc1301b39",
       "shortSha": "7cacdaf",
       "message": "Merge pull request #167 from shthed/codex/update-branch-deployments-for-game-files\n\nLimit branch previews to runtime assets",
@@ -31,30 +46,21 @@
       ]
     },
     {
-      "sha": "2cff9f77852d9e58973fc5c28dbf64f7f5452bdc",
-      "shortSha": "2cff9f7",
-      "message": "Increase the number of commits fetched for PRs and exclude specific commits from the recent commits list",
-      "author": "shthed",
-      "date": "2025-10-17T08:09:36Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/2cff9f77852d9e58973fc5c28dbf64f7f5452bdc",
-      "prs": []
-    },
-    {
-      "sha": "2e8a09b2b994ae02a52dcd8de9fc49021a90c514",
-      "shortSha": "2e8a09b",
-      "message": "Merge pull request #164 from shthed/codex/update-date-format-to-include-weekday\n\nInclude weekday in branch deployment timestamps",
+      "sha": "a24f86e5561ee47ad67027e67a31488577aa78e7",
+      "shortSha": "a24f86e",
+      "message": "Embed hosted README inside help sheet",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T07:49:05Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/2e8a09b2b994ae02a52dcd8de9fc49021a90c514",
+      "date": "2025-10-17T08:26:00Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a24f86e5561ee47ad67027e67a31488577aa78e7",
       "prs": [
         {
-          "number": 164,
-          "title": "Include weekday in branch deployment timestamps",
-          "url": "https://github.com/shthed/capy/pull/164"
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
         }
       ]
     }
   ],
-  "lastCommitDate": "2025-10-17T08:29:27Z",
-  "deploymentTimestamp": 1760689780918
+  "lastCommitDate": "2025-10-17T08:32:53Z",
+  "deploymentTimestamp": 1760689986677
 }
