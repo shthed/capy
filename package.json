@@ -1,0 +1,19 @@
+{
+  "name": "capy",
+  "version": "1.0.0",
+  "description": "Static color-by-number playground with optional Playwright smoke tests.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "http-server -c-1 . -p 8000",
+    "test": "node ./scripts/run-tests.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.43.1",
+    "http-server": "^14.1.1"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "postinstall": "npx playwright install"
+}
