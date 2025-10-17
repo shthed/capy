@@ -2,11 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "8a225825915231ccf2b77936a676eb857954baec",
-    "message": "Merge pull request #166 from shthed/codex/integrate-capy-documentation-into-help\n\nEmbed hosted README inside help panel",
+    "commit": "86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
+    "message": "Merge pull request #178 from shthed/codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8\n\nHarden branch deployment workflow data handling",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T16:32:53+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/8a225825915231ccf2b77936a676eb857954baec",
+    "deployedAt": "2025-10-18T07:09:24+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
     "key": "main"
   },
   "codex-introduce-renderer-abstraction-for-webgl": {
@@ -18,15 +18,5 @@
     "deployedAt": "2025-10-16T03:32:54Z",
     "commitUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
     "key": "codex-introduce-renderer-abstraction-for-webgl"
-  },
-  "codex-validate-yaml-syntax-in-deploy-branch.yml-jyity8": {
-    "key": "codex-validate-yaml-syntax-in-deploy-branch.yml-jyity8",
-    "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8",
-    "safeName": "codex-validate-yaml-syntax-in-deploy-branch.yml-jyity8",
-    "commit": "caf523af31899c4d83b6d0eb796f02bd24c6d770",
-    "message": "Merge branch 'main' into codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8",
-    "actor": "shthed",
-    "deployedAt": "2025-10-18T07:06:19+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/caf523af31899c4d83b6d0eb796f02bd24c6d770"
   }
 }

@@ -1,66 +1,70 @@
 {
   "commits": [
     {
-      "sha": "8a225825915231ccf2b77936a676eb857954baec",
-      "shortSha": "8a22582",
-      "message": "Merge pull request #166 from shthed/codex/integrate-capy-documentation-into-help\n\nEmbed hosted README inside help panel",
+      "sha": "86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
+      "shortSha": "86bb3b5",
+      "message": "Merge pull request #178 from shthed/codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8\n\nHarden branch deployment workflow data handling",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T08:32:53Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/8a225825915231ccf2b77936a676eb857954baec",
+      "date": "2025-10-17T23:09:24Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
       "prs": [
         {
-          "number": 166,
-          "title": "Embed hosted README inside help panel",
-          "url": "https://github.com/shthed/capy/pull/166"
+          "number": 178,
+          "title": "Harden branch deployment workflow data handling",
+          "url": "https://github.com/shthed/capy/pull/178",
+          "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8"
         }
       ]
     },
     {
-      "sha": "7cacdaf53c8b283f320c1b34d06c3a6fc1301b39",
-      "shortSha": "7cacdaf",
-      "message": "Merge pull request #167 from shthed/codex/update-branch-deployments-for-game-files\n\nLimit branch previews to runtime assets",
+      "sha": "caf523af31899c4d83b6d0eb796f02bd24c6d770",
+      "shortSha": "caf523a",
+      "message": "Merge branch 'main' into codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T08:29:27Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/7cacdaf53c8b283f320c1b34d06c3a6fc1301b39",
+      "date": "2025-10-17T23:06:19Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/caf523af31899c4d83b6d0eb796f02bd24c6d770",
       "prs": [
         {
-          "number": 167,
-          "title": "Limit branch previews to runtime assets",
-          "url": "https://github.com/shthed/capy/pull/167"
+          "number": 178,
+          "title": "Harden branch deployment workflow data handling",
+          "url": "https://github.com/shthed/capy/pull/178",
+          "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8"
         }
       ]
     },
     {
-      "sha": "a8edd488164892836174d2e5e48d33bd4d077a6e",
-      "shortSha": "a8edd48",
-      "message": "Limit branch deployments to runtime assets",
+      "sha": "4bfe55ee13547fe135562564c3780d893adcc27b",
+      "shortSha": "4bfe55e",
+      "message": "Improve deployment data handling",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T08:27:55Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/a8edd488164892836174d2e5e48d33bd4d077a6e",
+      "date": "2025-10-17T23:04:48Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4bfe55ee13547fe135562564c3780d893adcc27b",
       "prs": [
         {
-          "number": 167,
-          "title": "Limit branch previews to runtime assets",
-          "url": "https://github.com/shthed/capy/pull/167"
+          "number": 178,
+          "title": "Harden branch deployment workflow data handling",
+          "url": "https://github.com/shthed/capy/pull/178",
+          "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8"
         }
       ]
     },
     {
-      "sha": "a24f86e5561ee47ad67027e67a31488577aa78e7",
-      "shortSha": "a24f86e",
-      "message": "Embed hosted README inside help sheet",
+      "sha": "e4800333508485f0ed32cc26f477769d65ebced8",
+      "shortSha": "e480033",
+      "message": "Merge pull request #177 from shthed/codex/validate-yaml-syntax-in-deploy-branch.yml\n\nFix deploy workflow by moving inline scripts to dedicated files",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T08:26:00Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/a24f86e5561ee47ad67027e67a31488577aa78e7",
+      "date": "2025-10-17T22:58:11Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/e4800333508485f0ed32cc26f477769d65ebced8",
       "prs": [
         {
-          "number": 166,
-          "title": "Embed hosted README inside help panel",
-          "url": "https://github.com/shthed/capy/pull/166"
+          "number": 177,
+          "title": "Fix deploy workflow by moving inline scripts to dedicated files",
+          "url": "https://github.com/shthed/capy/pull/177",
+          "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml"
         }
       ]
     }
   ],
-  "lastCommitDate": "2025-10-17T08:32:53Z",
-  "deploymentTimestamp": 1760689986677
+  "lastCommitDate": "2025-10-17T23:09:24Z",
+  "deploymentTimestamp": 1760742575791
 }
