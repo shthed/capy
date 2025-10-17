@@ -23,10 +23,10 @@
     "key": "codex-validate-yaml-syntax-in-deploy-branch.yml-jyity8",
     "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8",
     "safeName": "codex-validate-yaml-syntax-in-deploy-branch.yml-jyity8",
-    "commit": "4bfe55ee13547fe135562564c3780d893adcc27b",
-    "message": "Improve deployment data handling",
+    "commit": "caf523af31899c4d83b6d0eb796f02bd24c6d770",
+    "message": "Merge branch 'main' into codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T07:04:48+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/4bfe55ee13547fe135562564c3780d893adcc27b"
+    "deployedAt": "2025-10-18T07:06:19+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/caf523af31899c4d83b6d0eb796f02bd24c6d770"
   }
 }
