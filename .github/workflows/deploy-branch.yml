@@ -268,7 +268,20 @@ jobs:
           else
             rm -rf "$TARGET_DIR"
             mkdir -p "$TARGET_DIR"
-            rsync -a --delete "${RSYNC_ARGS[@]}" ../ "$TARGET_DIR/"
+
+            ESSENTIAL_FILES=(
+              "index.html"
+              "puzzle-generation.js"
+              "capy.json"
+            )
+
+            for file in "${ESSENTIAL_FILES[@]}"; do
+              if [ -e "../$file" ]; then
+                cp -a "../$file" "$TARGET_DIR/"
+              else
+                echo "Warning: required file $file not found during branch deployment sync" >&2
+              fi
+            done
             if ! grep -qxF "$TARGET_KEY" "$MANIFEST"; then
               echo "$TARGET_KEY" >> "$MANIFEST"
             fi

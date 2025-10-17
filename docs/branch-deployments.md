@@ -28,7 +28,7 @@ The `.github/workflows/deploy-branch.yml` workflow triggers on:
 
 4. **Content Deployment**: The workflow:
    - For `main` branch: Copies content directly to the root of `gh-pages` (excluding `.git`, `node_modules`, `test-results`, `playwright-report`, `blob-report`, `artifacts`, `README.md`, and `branch.html`)
-   - For other branches: Creates a folder in `gh-pages` matching the sanitized branch name and copies content there (excluding `.git`, `node_modules`, `test-results`, `playwright-report`, `blob-report`, and `artifacts`)
+   - For other branches: Creates a folder in `gh-pages` matching the sanitized branch name and copies only the files required to load the game (`index.html`, `puzzle-generation.js`, and `capy.json`)
    - Updates the deployment with the latest content from the branch
 
 5. **Cleanup**: The workflow removes deployments for branches that no longer have open PRs
