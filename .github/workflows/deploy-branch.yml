@@ -1147,7 +1147,7 @@ jobs:
       - name: Deploy to GitHub Pages
         if: steps.deployment-gate.outputs.eligible == 'true'
         id: deploy-pages
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@v4
 
       - name: Preview URL
         if: steps.deployment-gate.outputs.eligible == 'true'
