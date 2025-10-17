@@ -11,11 +11,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "70f7b728ccaf16400753853bec6238814561da3c",
-    "message": "Merge pull request #163 from shthed/codex/explain-system-prompt-and-tools-accessibility\n\nAdd npm scaffolding and placeholder test runner",
+    "commit": "2e8a09b2b994ae02a52dcd8de9fc49021a90c514",
+    "message": "Merge pull request #164 from shthed/codex/update-date-format-to-include-weekday\n\nInclude weekday in branch deployment timestamps",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T15:45:57+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/70f7b728ccaf16400753853bec6238814561da3c"
+    "deployedAt": "2025-10-17T15:49:05+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/2e8a09b2b994ae02a52dcd8de9fc49021a90c514"
   },
   "fix-jq-slurpfile-gh-pages": {
     "branch": "fix/jq-slurpfile-gh-pages",
