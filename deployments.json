@@ -142,5 +142,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-16T16:31:05Z",
     "commitUrl": "https://github.com/shthed/capy/commit/0b31593b5ee6f3341cc4bc5892d983cf3dd7f4f1"
+  },
+  "codex-modify-file-save-and-progress-features": {
+    "branch": "codex/modify-file-save-and-progress-features",
+    "safeName": "codex-modify-file-save-and-progress-features",
+    "commit": "2a14e656d3a1e071a215468d9a84a44ef9bdc61e",
+    "message": "Merge pull request #159 from shthed/codex/improve-game-performance-for-mobile\n\nImprove mobile gesture responsiveness",
+    "actor": "shthed",
+    "deployedAt": "2025-10-17T00:37:15+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/2a14e656d3a1e071a215468d9a84a44ef9bdc61e"
   }
 }
