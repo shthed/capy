@@ -3,9 +3,9 @@
     "branch": "main",
     "safeName": "",
     "commit": "86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
-    "message": "Merge pull request #178 from shthed/codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8\n\nHarden branch deployment workflow data handling",
+    "message": "Merge pull request #178 from shthed/codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T07:09:24+08:00",
+    "deployedAt": "2025-10-17T23:10:21Z",
     "commitUrl": "https://github.com/shthed/capy/commit/86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
     "key": "main"
   },
