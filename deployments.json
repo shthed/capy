@@ -200,10 +200,10 @@
   "codex-integrate-capy-documentation-into-help": {
     "branch": "codex/integrate-capy-documentation-into-help",
     "safeName": "codex-integrate-capy-documentation-into-help",
-    "commit": "70f7b728ccaf16400753853bec6238814561da3c",
-    "message": "Merge pull request #163 from shthed/codex/explain-system-prompt-and-tools-accessibility\n\nAdd npm scaffolding and placeholder test runner",
+    "commit": "a24f86e5561ee47ad67027e67a31488577aa78e7",
+    "message": "Embed hosted README inside help sheet",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T15:45:57+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/70f7b728ccaf16400753853bec6238814561da3c"
+    "deployedAt": "2025-10-17T16:26:00+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/a24f86e5561ee47ad67027e67a31488577aa78e7"
   }
 }
