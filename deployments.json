@@ -23,10 +23,10 @@
     "key": "codex-remove-border-for-filled-regions",
     "branch": "codex/remove-border-for-filled-regions",
     "safeName": "codex-remove-border-for-filled-regions",
-    "commit": "86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
-    "message": "Merge pull request #178 from shthed/codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8\n\nHarden branch deployment workflow data handling",
+    "commit": "895b96a23cf8b189eb84ffde93d906f220be97dd",
+    "message": "Hide outlines for filled regions",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T07:09:24+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/86bb3b58568cfd0df5e150b8425e77ebfd2d96bc"
+    "deployedAt": "2025-10-18T07:34:24+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/895b96a23cf8b189eb84ffde93d906f220be97dd"
   }
 }
