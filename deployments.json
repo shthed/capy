@@ -178,5 +178,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-17T15:44:38+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/ef41274c6b4430c8c639c5a10becb57c7efcd14b"
+  },
+  "codex-update-date-format-to-include-weekday": {
+    "branch": "codex/update-date-format-to-include-weekday",
+    "safeName": "codex-update-date-format-to-include-weekday",
+    "commit": "1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+    "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
+    "actor": "shthed",
+    "deployedAt": "2025-10-17T11:54:32+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0"
   }
 }
