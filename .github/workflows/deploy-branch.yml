@@ -245,6 +245,61 @@ jobs:
           MANIFEST=".branch-manifest"
           touch "$MANIFEST"
 
+          EXISTING_MANIFEST=()
+          if [ -s "$MANIFEST" ]; then
+            mapfile -t EXISTING_MANIFEST < "$MANIFEST"
+          fi
+
+          ACTIVE_SAFE_NAMES=()
+          if [ -f "../pr-branches.json" ]; then
+            mapfile -t ACTIVE_SAFE_NAMES < <(
+              jq -r '
+                map(select(.branch != null))
+                | map(.safeName // (.branch | gsub("[^A-Za-z0-9._-]"; "-")))
+                | map(select(length > 0))
+                | unique[]
+              ' ../pr-branches.json 2>/dev/null
+            ) || ACTIVE_SAFE_NAMES=()
+          fi
+
+          if [ -n "$SAFE_NAME" ]; then
+            ACTIVE_SAFE_NAMES+=("$SAFE_NAME")
+          fi
+
+          declare -A ACTIVE_SET=()
+          UNIQUE_SAFE_NAMES=()
+          for name in "${ACTIVE_SAFE_NAMES[@]}"; do
+            name="${name//$'\r'/}"
+            [ -n "$name" ] || continue
+            if [ -z "${ACTIVE_SET[$name]:-}" ]; then
+              UNIQUE_SAFE_NAMES+=("$name")
+              ACTIVE_SET[$name]=1
+            fi
+          done
+
+          for entry in "${EXISTING_MANIFEST[@]}"; do
+            entry="${entry//$'\r'/}"
+            [ -n "$entry" ] || continue
+            if [ -z "${ACTIVE_SET[$entry]:-}" ]; then
+              rm -rf "$entry"
+            fi
+          done
+
+          if [ "${#UNIQUE_SAFE_NAMES[@]}" -gt 0 ]; then
+            printf '%s\n' "${UNIQUE_SAFE_NAMES[@]}" > "$MANIFEST"
+            ACTIVE_JSON=$(printf '%s\n' "${UNIQUE_SAFE_NAMES[@]}" | python - <<'PY'
+import json
+import sys
+
+values = [line.strip() for line in sys.stdin if line.strip()]
+print(json.dumps(values))
+PY
+            ) || ACTIVE_JSON='[]'
+          else
+            : > "$MANIFEST"
+            ACTIVE_JSON='[]'
+          fi
+
           generate_readme_html() {
             local target_root="$1"
             local source_file="../README.md"
@@ -364,10 +419,10 @@ PY
 
           if [ "$TARGET_DIR" = "." ]; then
             EXTRA_EXCLUDES=()
-            while IFS= read -r entry; do
+            for entry in "${UNIQUE_SAFE_NAMES[@]}"; do
               [ -n "$entry" ] || continue
               EXTRA_EXCLUDES+=("--exclude=${entry}/")
-            done < "$MANIFEST"
+            done
 
             rsync -a --delete "${RSYNC_ARGS[@]}" "${EXTRA_EXCLUDES[@]}" ../ ./
             generate_readme_html "."
@@ -417,6 +472,7 @@ PY
              --arg actor "${GITHUB_ACTOR}" \
              --arg timestamp "$TIMESTAMP" \
              --arg url "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" \
+             --argjson active "$ACTIVE_JSON" \
              '.[$key] = {
                branch: $branch,
                safeName: $safe,
@@ -425,7 +481,8 @@ PY
                actor: $actor,
                deployedAt: $timestamp,
                commitUrl: $url
-             }' "$DEPLOY_DATA" > "$DEPLOY_DATA.tmp"
+             }
+             | with_entries(select(.key == "main" or ($active | index(.key))))' "$DEPLOY_DATA" > "$DEPLOY_DATA.tmp"
           mv "$DEPLOY_DATA.tmp" "$DEPLOY_DATA"
 
           cat > branch.html <<'HTML'
