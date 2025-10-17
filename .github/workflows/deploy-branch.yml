@@ -97,7 +97,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: 'main',
-              per_page: 3
+              per_page: 4
             });
 
             const commitsWithPRs = await Promise.all(commits.map(async (commit) => {
@@ -167,7 +167,7 @@ jobs:
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   sha: branchName,
-                  per_page: 3
+                  per_page: 4
                 });
 
                 const prInfo = {
@@ -674,6 +674,24 @@ jobs:
             return results;
           };
 
+          const normalizeSha = (value) => String(value ?? '').trim().toLowerCase();
+
+          const commitMatchesSha = (commit, target) => {
+            const normalizedTarget = normalizeSha(target);
+            if (!normalizedTarget) {
+              return false;
+            }
+
+            const candidates = [
+              normalizeSha(commit?.sha),
+              normalizeSha(commit?.shortSha)
+            ].filter(Boolean);
+
+            return candidates.some((candidate) => normalizedTarget.startsWith(candidate) || candidate.startsWith(normalizedTarget));
+          };
+
+          const excludeCommitBySha = (commits, target) => (Array.isArray(commits) ? commits : []).filter((commit) => !commitMatchesSha(commit, target));
+
           const joinSegments = (segments) => segments.filter(Boolean).join('<span class="commit-separator">·</span>');
 
           const commitItem = (commit) => {
@@ -722,7 +740,7 @@ jobs:
             const deployedDisplay = renderDate(data.deployed) || (data.deployed ? htmlEscape(data.deployed) : '');
             html += `<div class="meta">Last deployed ${deployedDisplay || htmlEscape('unknown')} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
 
-            const commits = uniqueCommits(mainData.commits).slice(0, 3);
+            const commits = excludeCommitBySha(uniqueCommits(mainData.commits), data.commit).slice(0, 3);
             if (commits.length > 0) {
               html += `<div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list">`;
               html += commits.map((commit) => commitItem(commit)).join('');
@@ -766,7 +784,7 @@ jobs:
             const deployedDisplay = renderDate(data.deployed) || (data.deployed ? htmlEscape(data.deployed) : '');
             html += `<div class="meta">Last deployed ${deployedDisplay || htmlEscape('unknown')} by ${htmlEscape(data.actor)} · <a href="${htmlEscape(data.url)}">${commitLinkText}</a></div>`;
 
-            const commits = uniqueCommits(branchCommitsFor(entry)).slice(0, 3);
+            const commits = excludeCommitBySha(uniqueCommits(branchCommitsFor(entry)), data.commit).slice(0, 3);
             if (commits.length > 0) {
               html += `<div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list">`;
               html += commits.map((commit) => commitItem(commit)).join('');
@@ -850,16 +868,13 @@ jobs:
                     const minute = find('minute');
                     const period = find('dayPeriod');
                     const weekday = find('weekday');
-                    const zone = find('timeZoneName');
-
                     if (!month || !day || !year || !hour || !minute || !period || !weekday) {
                       return null;
                     }
 
                     const time = `${hour}:${minute}${period.toLowerCase()}`;
                     const base = `${time} ${weekday} ${month} ${day}, ${year}`;
-                    const zoneSuffix = zone ? ` ${zone}` : '';
-                    return `${base}${zoneSuffix}`;
+                    return base;
                   } catch (error) {
                     return null;
                   }
@@ -934,5 +949,3 @@ jobs:
       - name: Preview URL
         if: steps.deployment-gate.outputs.eligible == 'true'
         run: echo "Preview available at ${{ steps.sync.outputs.preview_url }}"
-
-
