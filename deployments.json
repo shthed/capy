@@ -1,13 +1,4 @@
 {
-  "codex-review-deployment-workflow-for-updates": {
-    "branch": "codex/review-deployment-workflow-for-updates",
-    "safeName": "codex-review-deployment-workflow-for-updates",
-    "commit": "935a034ac23c20ca75a4ea11fe488ee82139e531",
-    "message": "Skip gh-pages branch in deployment workflow",
-    "actor": "shthed",
-    "deployedAt": "2025-10-15T09:10:05+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/935a034ac23c20ca75a4ea11fe488ee82139e531"
-  },
   "main": {
     "branch": "main",
     "safeName": "",
@@ -15,34 +6,8 @@
     "message": "Merge pull request #166 from shthed/codex/integrate-capy-documentation-into-help\n\nEmbed hosted README inside help panel",
     "actor": "shthed",
     "deployedAt": "2025-10-17T16:32:53+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/8a225825915231ccf2b77936a676eb857954baec"
-  },
-  "fix-jq-slurpfile-gh-pages": {
-    "branch": "fix/jq-slurpfile-gh-pages",
-    "safeName": "fix-jq-slurpfile-gh-pages",
-    "commit": "79a73cb5d8578526590182eef62b403686df148b",
-    "message": "Merge pull request #137 from shthed/codex/review-deployment-workflow-for-updates\n\nSimplify branch deployments",
-    "actor": "shthed",
-    "deployedAt": "2025-10-15T09:10:55+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/79a73cb5d8578526590182eef62b403686df148b"
-  },
-  "codex-remove-status-bar-and-confirm-import-settings": {
-    "branch": "codex/remove-status-bar-and-confirm-import-settings",
-    "safeName": "codex-remove-status-bar-and-confirm-import-settings",
-    "commit": "9652fd051dcbf60967b93ab8e4ba2960d941cf32",
-    "message": "Streamline onboarding controls",
-    "actor": "shthed",
-    "deployedAt": "2025-10-15T16:48:41+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/9652fd051dcbf60967b93ab8e4ba2960d941cf32"
-  },
-  "codex-update-deploy-branch.yml-to-link-prs": {
-    "branch": "codex/update-deploy-branch.yml-to-link-prs",
-    "safeName": "codex-update-deploy-branch.yml-to-link-prs",
-    "commit": "d94785a65b860ae490e99c0964b9bf41fe741181",
-    "message": "Merge pull request #139 from shthed/codex/hide-status-bar-by-default\n\nRemove idle Ready to paint status line",
-    "actor": "shthed",
-    "deployedAt": "2025-10-15T10:58:54+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/d94785a65b860ae490e99c0964b9bf41fe741181"
+    "commitUrl": "https://github.com/shthed/capy/commit/8a225825915231ccf2b77936a676eb857954baec",
+    "key": "main"
   },
   "codex-introduce-renderer-abstraction-for-webgl": {
     "branch": "codex/introduce-renderer-abstraction-for-webgl",
@@ -51,186 +16,17 @@
     "message": "Merge branch 'main' into work",
     "actor": "shthed",
     "deployedAt": "2025-10-16T03:32:54Z",
-    "commitUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180"
+    "commitUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
+    "key": "codex-introduce-renderer-abstraction-for-webgl"
   },
-  "codex-cherry-pick-changes-from-codex-resolve-issue-with-codex-7dz65v": {
-    "branch": "codex/cherry-pick-changes-from-codex/resolve-issue-with-codex-7dz65v",
-    "safeName": "codex-cherry-pick-changes-from-codex-resolve-issue-with-codex-7dz65v",
-    "commit": "aeab9b96df6313eb1d361abe4ef7d142c40df336",
-    "message": "Use jq argjson for branch index generation",
+  "codex-validate-yaml-syntax-in-deploy-branch.yml-jyity8": {
+    "key": "codex-validate-yaml-syntax-in-deploy-branch.yml-jyity8",
+    "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8",
+    "safeName": "codex-validate-yaml-syntax-in-deploy-branch.yml-jyity8",
+    "commit": "4bfe55ee13547fe135562564c3780d893adcc27b",
+    "message": "Improve deployment data handling",
     "actor": "shthed",
-    "deployedAt": "2025-10-16T11:38:28+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/aeab9b96df6313eb1d361abe4ef7d142c40df336"
-  },
-  "codex-cherry-pick-changes-from-codex-resolve-issue-with-codex-4krf96": {
-    "branch": "codex/cherry-pick-changes-from-codex/resolve-issue-with-codex-4krf96",
-    "safeName": "codex-cherry-pick-changes-from-codex-resolve-issue-with-codex-4krf96",
-    "commit": "78ec396cd4988b4650bc668fae40e166fd65637f",
-    "message": "Resolve branch deployment jq merge conflict",
-    "actor": "shthed",
-    "deployedAt": "2025-10-16T13:58:48+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/78ec396cd4988b4650bc668fae40e166fd65637f"
-  },
-  "codex-fix-yaml-syntax-error-in-deploy-branch.yml": {
-    "branch": "codex/fix-yaml-syntax-error-in-deploy-branch.yml",
-    "safeName": "codex-fix-yaml-syntax-error-in-deploy-branch.yml",
-    "commit": "bf513a450478217347b5d0255ab9f94e1edfab32",
-    "message": "Fix heredoc indentation in deploy workflow",
-    "actor": "shthed",
-    "deployedAt": "2025-10-16T19:40:50+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/bf513a450478217347b5d0255ab9f94e1edfab32"
-  },
-  "codex-revise-deploy-branch.yml-for-commit-display": {
-    "branch": "codex/revise-deploy-branch.yml-for-commit-display",
-    "safeName": "codex-revise-deploy-branch.yml-for-commit-display",
-    "commit": "9adf8f29042dd9d438970ad721b4d9ce12743633",
-    "message": "Merge branch 'main' into codex/revise-deploy-branch.yml-for-commit-display",
-    "actor": "shthed",
-    "deployedAt": "2025-10-16T21:34:43+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/9adf8f29042dd9d438970ad721b4d9ce12743633"
-  },
-  "codex-review-starthint-dialog-and-first-run-process": {
-    "branch": "codex/review-starthint-dialog-and-first-run-process",
-    "safeName": "codex-review-starthint-dialog-and-first-run-process",
-    "commit": "9fbf57cd70f370027b78b96eda0aa359b5c1b0df",
-    "message": "Allow sample reload without artwork",
-    "actor": "shthed",
-    "deployedAt": "2025-10-16T21:37:19+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/9fbf57cd70f370027b78b96eda0aa359b5c1b0df"
-  },
-  "codex-revise-deploy-branch.yml-for-commit-display-o3qaeu": {
-    "branch": "codex/revise-deploy-branch.yml-for-commit-display-o3qaeu",
-    "safeName": "codex-revise-deploy-branch.yml-for-commit-display-o3qaeu",
-    "commit": "1195e89dd27a784fabbcb7baf9b4aafe42f76e6c",
-    "message": "Merge branch 'main' into codex/revise-deploy-branch.yml-for-commit-display-o3qaeu",
-    "actor": "shthed",
-    "deployedAt": "2025-10-16T21:44:24+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/1195e89dd27a784fabbcb7baf9b4aafe42f76e6c"
-  },
-  "codex-review-.github-workflows-deploy-branch.yml-change": {
-    "branch": "codex/review-.github/workflows/deploy-branch.yml-change",
-    "safeName": "codex-review-.github-workflows-deploy-branch.yml-change",
-    "commit": "5dd583c4f72aa41148b0602c890b12d1f59b4057",
-    "message": "Refine branch deployment index layout",
-    "actor": "shthed",
-    "deployedAt": "2025-10-16T22:26:52+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/5dd583c4f72aa41148b0602c890b12d1f59b4057"
-  },
-  "codex-review-.github-workflows-deploy-branch.yml-change-fc82xt": {
-    "branch": "codex/review-.github/workflows/deploy-branch.yml-change-fc82xt",
-    "safeName": "codex-review-.github-workflows-deploy-branch.yml-change-fc82xt",
-    "commit": "7b94136c0a8f3af95381a7b3592c791d0e69390e",
-    "message": "Merge branch 'main' into codex/review-.github/workflows/deploy-branch.yml-change-fc82xt",
-    "actor": "shthed",
-    "deployedAt": "2025-10-17T00:00:12+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/7b94136c0a8f3af95381a7b3592c791d0e69390e"
-  },
-  "codex-review-starthint-dialog-and-first-run-process-tlj5hg": {
-    "branch": "codex/review-starthint-dialog-and-first-run-process-tlj5hg",
-    "safeName": "codex-review-starthint-dialog-and-first-run-process-tlj5hg",
-    "commit": "6b80d6c9682b909b0b428ad549f70c848e165e91",
-    "message": "Merge branch 'main' into codex/review-starthint-dialog-and-first-run-process-tlj5hg",
-    "actor": "shthed",
-    "deployedAt": "2025-10-16T23:50:54+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/6b80d6c9682b909b0b428ad549f70c848e165e91"
-  },
-  "codex-improve-game-performance-for-mobile": {
-    "branch": "codex/improve-game-performance-for-mobile",
-    "safeName": "codex-improve-game-performance-for-mobile",
-    "commit": "0b31593b5ee6f3341cc4bc5892d983cf3dd7f4f1",
-    "message": "Optimize mobile pan responsiveness",
-    "actor": "shthed",
-    "deployedAt": "2025-10-16T16:31:05Z",
-    "commitUrl": "https://github.com/shthed/capy/commit/0b31593b5ee6f3341cc4bc5892d983cf3dd7f4f1"
-  },
-  "codex-modify-file-save-and-progress-features": {
-    "branch": "codex/modify-file-save-and-progress-features",
-    "safeName": "codex-modify-file-save-and-progress-features",
-    "commit": "5cd98eadc02a269409978c9f6015cf9b5c7c51c5",
-    "message": "Fix Capybara sample reload button",
-    "actor": "shthed",
-    "deployedAt": "2025-10-17T09:47:29+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/5cd98eadc02a269409978c9f6015cf9b5c7c51c5"
-  },
-  "codex-update-manage-saves-page-features": {
-    "branch": "codex/update-manage-saves-page-features",
-    "safeName": "codex-update-manage-saves-page-features",
-    "commit": "aef52b965810682bf2f8018675c2f6784626c902",
-    "message": "Improve save management autosave experience",
-    "actor": "shthed",
-    "deployedAt": "2025-10-17T11:26:01+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902"
-  },
-  "codex-add-chatgpt-link-and-image-description-field": {
-    "branch": "codex/add-chatgpt-link-and-image-description-field",
-    "safeName": "codex-add-chatgpt-link-and-image-description-field",
-    "commit": "e13041e701ca5ad376914ac46693cf82291e81df",
-    "message": "Move generator prompt helper to advanced options",
-    "actor": "shthed",
-    "deployedAt": "2025-10-17T15:08:48+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/e13041e701ca5ad376914ac46693cf82291e81df"
-  },
-  "codex-explain-system-prompt-and-tools-accessibility": {
-    "branch": "codex/explain-system-prompt-and-tools-accessibility",
-    "safeName": "codex-explain-system-prompt-and-tools-accessibility",
-    "commit": "ef41274c6b4430c8c639c5a10becb57c7efcd14b",
-    "message": "Add npm metadata and placeholder test harness",
-    "actor": "shthed",
-    "deployedAt": "2025-10-17T15:44:38+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/ef41274c6b4430c8c639c5a10becb57c7efcd14b"
-  },
-  "codex-update-date-format-to-include-weekday": {
-    "branch": "codex/update-date-format-to-include-weekday",
-    "safeName": "codex-update-date-format-to-include-weekday",
-    "commit": "de98f7b5a8a4e587763b0b989d0365d11a6035a7",
-    "message": "Include weekday in branch index timestamps",
-    "actor": "shthed",
-    "deployedAt": "2025-10-17T15:47:04+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/de98f7b5a8a4e587763b0b989d0365d11a6035a7"
-  },
-  "codex-update-date-format-to-include-weekday-xlcy99": {
-    "branch": "codex/update-date-format-to-include-weekday-xlcy99",
-    "safeName": "codex-update-date-format-to-include-weekday-xlcy99",
-    "commit": "569ad861f7c40dd12ade068ecfad37d3fb39fb2c",
-    "message": "Revamp branch index timeline layout",
-    "actor": "shthed",
-    "deployedAt": "2025-10-17T16:07:01+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/569ad861f7c40dd12ade068ecfad37d3fb39fb2c"
-  },
-  "codex-integrate-capy-documentation-into-help": {
-    "branch": "codex/integrate-capy-documentation-into-help",
-    "safeName": "codex-integrate-capy-documentation-into-help",
-    "commit": "a24f86e5561ee47ad67027e67a31488577aa78e7",
-    "message": "Embed hosted README inside help sheet",
-    "actor": "shthed",
-    "deployedAt": "2025-10-17T16:26:00+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/a24f86e5561ee47ad67027e67a31488577aa78e7"
-  },
-  "codex-update-branch-deployments-for-game-files": {
-    "branch": "codex/update-branch-deployments-for-game-files",
-    "safeName": "codex-update-branch-deployments-for-game-files",
-    "commit": "a8edd488164892836174d2e5e48d33bd4d077a6e",
-    "message": "Limit branch deployments to runtime assets",
-    "actor": "shthed",
-    "deployedAt": "2025-10-17T16:27:55+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/a8edd488164892836174d2e5e48d33bd4d077a6e"
-  },
-  "codex-update-branch-deployment-for-html-version": {
-    "branch": "codex/update-branch-deployment-for-html-version",
-    "safeName": "codex-update-branch-deployment-for-html-version",
-    "commit": "7cacdaf53c8b283f320c1b34d06c3a6fc1301b39",
-    "message": "Merge pull request #167 from shthed/codex/update-branch-deployments-for-game-files\n\nLimit branch previews to runtime assets",
-    "actor": "shthed",
-    "deployedAt": "2025-10-17T16:29:27+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/7cacdaf53c8b283f320c1b34d06c3a6fc1301b39"
-  },
-  "codex-update-readme-for-core-application-files": {
-    "branch": "codex/update-readme-for-core-application-files",
-    "safeName": "codex-update-readme-for-core-application-files",
-    "commit": "a65053f31cff64824abb484207f86abfcaf064dc",
-    "message": "Correct core asset reference",
-    "actor": "shthed",
-    "deployedAt": "2025-10-17T17:34:19+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/a65053f31cff64824abb484207f86abfcaf064dc"
+    "deployedAt": "2025-10-18T07:04:48+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/4bfe55ee13547fe135562564c3780d893adcc27b"
   }
 }

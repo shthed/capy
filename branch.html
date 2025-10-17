@@ -1,269 +1,200 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Capy Branch Deployments</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", sans-serif;
-      max-width: 960px;
-      margin: 40px auto;
-      padding: 0 20px 40px;
-      line-height: 1.6;
-      color: #24292e;
-      background: #f6f8fa;
-    }
-    h1 {
-      margin-bottom: 16px;
-    }
-    ul.deployments {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      display: grid;
-      gap: 16px;
-    }
-    li.card {
-      background: #fff;
-      border: 1px solid #d0d7de;
-      border-radius: 8px;
-      padding: 16px;
-      box-shadow: 0 1px 0 rgba(31,35,40,0.04);
-    }
-    li.card.main {
-      border-color: #4c8eda;
-      box-shadow: 0 4px 12px rgba(76,142,218,0.12);
-    }
-    .card-header {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 12px;
-    }
-    .branch-title {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 8px;
-    }
-    .branch-name {
-      font-size: 1.1em;
-      font-weight: 600;
-      color: #1f2328;
-    }
-    .commit-section {
-      margin-top: 16px;
-      padding-top: 12px;
-      border-top: 1px solid #d0d7de;
-    }
-    .commit-title {
-      font-size: 0.95em;
-      font-weight: 600;
-      margin-bottom: 8px;
-      color: #24292e;
-    }
-    .commit-list {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      display: grid;
-      gap: 6px;
-    }
-    .commit-item {
-      font-size: 0.9em;
-      color: #24292e;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 6px;
-    }
-    .commit-date {
-      color: #57606a;
-      font-weight: 500;
-    }
-    .commit-separator {
-      color: #8c959f;
-      margin: 0 4px;
-    }
-    .commit-message {
-      font-weight: 500;
-      color: #24292e;
-    }
-    .commit-sha {
-      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
-      font-size: 0.9em;
-      font-weight: 600;
-      color: #0969da;
-      text-decoration: none;
-    }
-    .commit-sha:hover {
-      text-decoration: underline;
-    }
-    .card-links {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 12px;
-      font-size: 0.85em;
-    }
-    .card-link {
-      color: #0969da;
-      font-weight: 600;
-      text-decoration: none;
-    }
-    .card-link:hover {
-      text-decoration: underline;
-    }
-    .card-actions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 12px;
-      font-size: 0.85em;
-    }
-    .card-actions a {
-      color: #57606a;
-      font-weight: 600;
-      text-decoration: none;
-    }
-    .card-actions a:hover {
-      color: #24292e;
-      text-decoration: underline;
-    }
-    .card-actions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 12px;
-      font-size: 0.85em;
-    }
-    .card-actions a {
-      color: #57606a;
-      font-weight: 600;
-      text-decoration: none;
-    }
-    .card-actions a:hover {
-      color: #24292e;
-      text-decoration: underline;
-    }
-    span.badge {
-      display: inline-block;
-      margin-left: 4px;
-      padding: 2px 8px;
-      font-size: 12px;
-      font-weight: 600;
-      color: #0f5132;
-      background: #d1e7dd;
-      border-radius: 999px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    .meta {
-      margin-top: 8px;
-      font-size: 0.9em;
-      color: #57606a;
-    }
-    .meta a {
-      color: #57606a;
-      font-weight: 600;
-    }
-    .pr-meta {
-      margin-top: 6px;
-      font-size: 0.85em;
-      color: #57606a;
-    }
-    .pr-link {
-      color: #8250df;
-      font-weight: 600;
-      text-decoration: none;
-    }
-    .pr-link:hover {
-      text-decoration: underline;
-    }
-  </style>
-</head>
-<body>
-  <h1>Capy Branch Deployments</h1>
-  <ul class="deployments">
-<li class="card main"><div class="card-header"><div class="branch-title"><span class="branch-name">main</span><span class="badge">production</span></div><div class="card-links"><a class="card-link" href="./">Preview</a><a class="card-link" href="https://github.com/shthed/capy/tree/main">GitHub</a></div></div><div class="meta">Last deployed <time class="commit-date" datetime="2025-10-17T08:32:53.000Z" data-local-datetime="2025-10-17T08:32:53.000Z">8:32am Fri Oct 17, 2025</time> by shthed · <a href="https://github.com/shthed/capy/commit/8a225825915231ccf2b77936a676eb857954baec">8a22582</a></div><div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list"><li class="commit-item"><time class="commit-date" datetime="2025-10-17T09:28:28.000Z" data-local-datetime="2025-10-17T09:28:28.000Z">9:28am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #168 from shthed/codex/update-branch-deployment-for-html-version</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/2ae2da978423b003c7aa7ac4ac1a158bda02dfee">2ae2da9</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T08:35:32.000Z" data-local-datetime="2025-10-17T08:35:32.000Z">8:35am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Generate README HTML in branch deployments</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/67e1a3bcea1283d5b129d6bad2825fd6976c51c5">67e1a3b</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T08:29:27.000Z" data-local-datetime="2025-10-17T08:29:27.000Z">8:29am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #167 from shthed/codex/update-branch-deployments-for-game-files</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/7cacdaf53c8b283f320c1b34d06c3a6fc1301b39">7cacdaf</a></li></ul></div></li>
-<li class="card"><div class="card-header"><div class="branch-title"><span class="branch-name">codex/update-readme-for-core-application-files</span></div><div class="card-links"><a class="card-link" href="./codex-update-readme-for-core-application-files/">Preview</a><a class="card-link" href="https://github.com/shthed/capy/tree/codex%2Fupdate-readme-for-core-application-files">GitHub</a></div></div><div class="pr-meta"><a class="pr-link" href="https://github.com/shthed/capy/pull/169">PR #169 — Fix README core asset reference</a></div><div class="meta">Last deployed <time class="commit-date" datetime="2025-10-17T09:34:19.000Z" data-local-datetime="2025-10-17T09:34:19.000Z">9:34am Fri Oct 17, 2025</time> by shthed · <a href="https://github.com/shthed/capy/commit/a65053f31cff64824abb484207f86abfcaf064dc">a65053f</a></div><div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list"><li class="commit-item"><time class="commit-date" datetime="2025-10-17T08:32:53.000Z" data-local-datetime="2025-10-17T08:32:53.000Z">8:32am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #166 from shthed/codex/integrate-capy-documentation-into-help</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/8a225825915231ccf2b77936a676eb857954baec">8a22582</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T08:29:27.000Z" data-local-datetime="2025-10-17T08:29:27.000Z">8:29am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #167 from shthed/codex/update-branch-deployments-for-game-files</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/7cacdaf53c8b283f320c1b34d06c3a6fc1301b39">7cacdaf</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T08:27:55.000Z" data-local-datetime="2025-10-17T08:27:55.000Z">8:27am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Limit branch deployments to runtime assets</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/a8edd488164892836174d2e5e48d33bd4d077a6e">a8edd48</a></li></ul></div></li>
-<li class="card"><div class="card-header"><div class="branch-title"><span class="branch-name">codex/update-date-format-to-include-weekday-xlcy99</span></div><div class="card-links"><a class="card-link" href="./codex-update-date-format-to-include-weekday-xlcy99/">Preview</a><a class="card-link" href="https://github.com/shthed/capy/tree/codex%2Fupdate-date-format-to-include-weekday-xlcy99">GitHub</a></div></div><div class="pr-meta"><a class="pr-link" href="https://github.com/shthed/capy/pull/165">PR #165 — Revamp branch deployment index layout</a></div><div class="meta">Last deployed <time class="commit-date" datetime="2025-10-17T08:07:01.000Z" data-local-datetime="2025-10-17T08:07:01.000Z">8:07am Fri Oct 17, 2025</time> by shthed · <a href="https://github.com/shthed/capy/commit/569ad861f7c40dd12ade068ecfad37d3fb39fb2c">569ad86</a></div><div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list"><li class="commit-item"><time class="commit-date" datetime="2025-10-17T03:54:32.000Z" data-local-datetime="2025-10-17T03:54:32.000Z">3:54am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #161 from shthed/codex/update-manage-saves-page-features</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0">1be83c6</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T03:26:01.000Z" data-local-datetime="2025-10-17T03:26:01.000Z">3:26am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Improve save management autosave experience</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902">aef52b9</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T02:03:42.000Z" data-local-datetime="2025-10-17T02:03:42.000Z">2:03am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #160 from shthed/codex/modify-file-save-and-progress-features</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/f5b4be820b1b667ec79d8fd03b0118673d14cc20">f5b4be8</a></li></ul></div></li>
-<li class="card"><div class="card-header"><div class="branch-title"><span class="branch-name">codex/add-chatgpt-link-and-image-description-field</span></div><div class="card-links"><a class="card-link" href="./codex-add-chatgpt-link-and-image-description-field/">Preview</a><a class="card-link" href="https://github.com/shthed/capy/tree/codex%2Fadd-chatgpt-link-and-image-description-field">GitHub</a></div></div><div class="pr-meta"><a class="pr-link" href="https://github.com/shthed/capy/pull/162">PR #162 — Add ChatGPT image prompt helper to generator tab</a></div><div class="meta">Last deployed <time class="commit-date" datetime="2025-10-17T07:08:48.000Z" data-local-datetime="2025-10-17T07:08:48.000Z">7:08am Fri Oct 17, 2025</time> by shthed · <a href="https://github.com/shthed/capy/commit/e13041e701ca5ad376914ac46693cf82291e81df">e13041e</a></div><div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list"><li class="commit-item"><time class="commit-date" datetime="2025-10-17T06:23:28.000Z" data-local-datetime="2025-10-17T06:23:28.000Z">6:23am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Add ChatGPT link and description field to generator</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/b3f705bd4e71e3cb917a76dc456941a4d7c2e419">b3f705b</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T03:54:32.000Z" data-local-datetime="2025-10-17T03:54:32.000Z">3:54am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #161 from shthed/codex/update-manage-saves-page-features</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0">1be83c6</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T03:26:01.000Z" data-local-datetime="2025-10-17T03:26:01.000Z">3:26am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Improve save management autosave experience</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902">aef52b9</a></li></ul></div></li>
-<li class="card"><div class="card-header"><div class="branch-title"><span class="branch-name">codex/introduce-renderer-abstraction-for-webgl</span></div><div class="card-links"><a class="card-link" href="./codex-introduce-renderer-abstraction-for-webgl/">Preview</a><a class="card-link" href="https://github.com/shthed/capy/tree/codex%2Fintroduce-renderer-abstraction-for-webgl">GitHub</a></div></div><div class="pr-meta"><a class="pr-link" href="https://github.com/shthed/capy/pull/124">PR #124 — WebGL renderer</a></div><div class="meta">Last deployed <time class="commit-date" datetime="2025-10-16T03:32:54.000Z" data-local-datetime="2025-10-16T03:32:54.000Z">3:32am Thu Oct 16, 2025</time> by shthed · <a href="https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180">fedcafb</a></div><div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list"><li class="commit-item"><time class="commit-date" datetime="2025-10-14T18:06:23.000Z" data-local-datetime="2025-10-14T18:06:23.000Z">6:06pm Tue Oct 14, 2025</time><span class="commit-separator">·</span><span class="commit-message">Fix renderer init ordering to restore interactions</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075">15fadfe</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-14T13:22:10.000Z" data-local-datetime="2025-10-14T13:22:10.000Z">1:22pm Tue Oct 14, 2025</time><span class="commit-separator">·</span><span class="commit-message">Refactor renderer scaffolding with overlay canvas</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/a348b080a3acc872518a5b8b9cbe79d6f5be611b">a348b08</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-13T10:47:53.000Z" data-local-datetime="2025-10-13T10:47:53.000Z">10:47am Mon Oct 13, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #100 from shthed/codex/add-show/hide-option-for-status-bar</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/3085e55ee56be41320edf9d2da0f320dc583631e">3085e55</a></li></ul></div></li>
-  </ul>
-  <script>
-    (() => {
-      const baseOptions = {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      };
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Capy Branch Deployments</title>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", sans-serif;
+                max-width: 960px;
+                margin: 40px auto;
+                padding: 0 20px 40px;
+                line-height: 1.6;
+                color: #24292e;
+                background: #f6f8fa;
+              }
+              h1 {
+                margin-bottom: 16px;
+              }
+              ul.deployments {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+                display: grid;
+                gap: 16px;
+              }
+              li.card {
+                background: #fff;
+                border: 1px solid #d0d7de;
+                border-radius: 8px;
+                padding: 16px;
+                box-shadow: 0 1px 0 rgba(31,35,40,0.04);
+              }
+              li.card.main {
+                border-color: #4c8eda;
+                box-shadow: 0 4px 12px rgba(76,142,218,0.12);
+              }
+              .branch-title {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 8px;
+                margin-bottom: 12px;
+              }
+              .branch-name {
+                font-size: 1.1em;
+                font-weight: 600;
+                color: #1f2328;
+              }
+              .branch-name a {
+                color: inherit;
+                text-decoration: none;
+              }
+              .branch-name a:hover {
+                text-decoration: underline;
+              }
+              .commit-list {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                display: grid;
+                gap: 10px;
+              }
+              .commit-item {
+                font-size: 0.95em;
+                color: #1f2328;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 10px;
+              }
+              .commit-item > * {
+                flex-shrink: 0;
+              }
+              .commit-time {
+                color: #57606a;
+                font-weight: 600;
+                font-variant-numeric: tabular-nums;
+              }
+              .commit-time time {
+                color: inherit;
+              }
+              .commit-pr,
+              .commit-branch,
+              .commit-sha {
+                font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 0.9em;
+                font-weight: 600;
+                text-decoration: none;
+              }
+              .commit-pr {
+                color: #8250df;
+              }
+              .commit-pr:hover {
+                text-decoration: underline;
+              }
+              .commit-branch {
+                color: #1f2328;
+              }
+              .commit-branch:hover {
+                text-decoration: underline;
+              }
+              .commit-sha {
+                color: #0969da;
+              }
+              .commit-sha:hover {
+                text-decoration: underline;
+              }
+              .commit-message {
+                font-weight: 500;
+                color: #1f2328;
+                flex: 1 1 220px;
+                min-width: 200px;
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Capy Branch Deployments</h1>
+            <ul class="deployments">
+<li class="card main"><div class="branch-title"><span class="branch-name"><a href="./">main</a></span></div><ul class="commit-list"><li class="commit-item"><time class="commit-time" datetime="2025-10-17T08:32:53.000Z" data-local-datetime="2025-10-17T08:32:53.000Z">8:32am Fri Oct 17, 2025</time> <a class="commit-sha" href="https://github.com/shthed/capy/commit/8a225825915231ccf2b77936a676eb857954baec">8a22582</a> <span class="commit-message">Merge pull request #166 from shthed/codex/integrate-capy-documentation-into-help</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-17T22:58:11.000Z" data-local-datetime="2025-10-17T22:58:11.000Z">10:58pm Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/177">#177</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fvalidate-yaml-syntax-in-deploy-branch.yml">codex/validate-yaml-syntax-in-deploy-branch.yml</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/e4800333508485f0ed32cc26f477769d65ebced8">e480033</a> <span class="commit-message">Merge pull request #177 from shthed/codex/validate-yaml-syntax-in-deploy-branch.yml</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-17T22:57:14.000Z" data-local-datetime="2025-10-17T22:57:14.000Z">10:57pm Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/177">#177</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fvalidate-yaml-syntax-in-deploy-branch.yml">codex/validate-yaml-syntax-in-deploy-branch.yml</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/0cbc835bc5a898b6a449551929dbd98c6a6dfbba">0cbc835</a> <span class="commit-message">Fix branch deploy workflow YAML by externalizing scripts</span></li></ul></li>
+<li class="card"><div class="branch-title"><span class="branch-name"><a href="./codex-validate-yaml-syntax-in-deploy-branch.yml-jyity8/">codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8</a></span></div><ul class="commit-list"><li class="commit-item"><time class="commit-time" datetime="2025-10-17T23:04:48.000Z" data-local-datetime="2025-10-17T23:04:48.000Z">11:04pm Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/178">#178</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fvalidate-yaml-syntax-in-deploy-branch.yml-jyity8">codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/4bfe55ee13547fe135562564c3780d893adcc27b">4bfe55e</a> <span class="commit-message">Improve deployment data handling</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-17T23:04:48.000Z" data-local-datetime="2025-10-17T23:04:48.000Z">11:04pm Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/178">#178</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fvalidate-yaml-syntax-in-deploy-branch.yml-jyity8">codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/4bfe55ee13547fe135562564c3780d893adcc27b">4bfe55e</a> <span class="commit-message">Improve deployment data handling</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-17T22:31:24.000Z" data-local-datetime="2025-10-17T22:31:24.000Z">10:31pm Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/178">#178</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fvalidate-yaml-syntax-in-deploy-branch.yml-jyity8">codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/0bb469f5d5607f9ce83e34b150ce087a9691546b">0bb469f</a> <span class="commit-message">Merge pull request #176 from shthed/codex/fix-syntax-error-in-deploy-script</span></li></ul></li>
+<li class="card"><div class="branch-title"><span class="branch-name"><a href="./codex-introduce-renderer-abstraction-for-webgl/">codex/introduce-renderer-abstraction-for-webgl</a></span></div><ul class="commit-list"><li class="commit-item"><time class="commit-time" datetime="2025-10-16T03:32:54.000Z" data-local-datetime="2025-10-16T03:32:54.000Z">3:32am Thu Oct 16, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/124">#124</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fintroduce-renderer-abstraction-for-webgl">codex/introduce-renderer-abstraction-for-webgl</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180">fedcafb</a> <span class="commit-message">Merge branch &#39;main&#39; into work</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-16T01:37:27.000Z" data-local-datetime="2025-10-16T01:37:27.000Z">1:37am Thu Oct 16, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/124">#124</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fintroduce-renderer-abstraction-for-webgl">codex/introduce-renderer-abstraction-for-webgl</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180">fedcafb</a> <span class="commit-message">Merge branch &#39;main&#39; into work</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-14T18:06:23.000Z" data-local-datetime="2025-10-14T18:06:23.000Z">6:06pm Tue Oct 14, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/124">#124</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fintroduce-renderer-abstraction-for-webgl">codex/introduce-renderer-abstraction-for-webgl</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075">15fadfe</a> <span class="commit-message">Fix renderer init ordering to restore interactions</span></li></ul></li>
+            </ul>
+            <script>
+              (() => {
+                const baseOptions = {
+                  weekday: 'short',
+                  year: 'numeric',
+                  month: 'short',
+                  day: '2-digit',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true
+                };
 
-      let zoneFormatter = null;
-      try {
-        zoneFormatter = new Intl.DateTimeFormat(undefined, { ...baseOptions, timeZoneName: 'short' });
-      } catch (error) {
-        zoneFormatter = null;
-      }
+                let zoneFormatter = null;
+                try {
+                  zoneFormatter = new Intl.DateTimeFormat(undefined, { ...baseOptions, timeZoneName: 'short' });
+                } catch (error) {
+                  zoneFormatter = null;
+                }
 
-      const fallbackFormatter = new Intl.DateTimeFormat(undefined, baseOptions);
+                const fallbackFormatter = new Intl.DateTimeFormat(undefined, baseOptions);
 
-      const formatParts = (formatter, date) => {
-        if (!formatter) {
-          return null;
-        }
+                const formatParts = (formatter, date) => {
+                  if (!formatter) {
+                    return null;
+                  }
 
-        try {
-          const parts = formatter.formatToParts(date);
-          const find = (type) => {
-            const entry = parts.find((part) => part.type === type);
-            return entry ? entry.value : '';
-          };
+                  try {
+                    const parts = formatter.formatToParts(date);
+                    const find = (type) => {
+                      const entry = parts.find((part) => part.type === type);
+                      return entry ? entry.value : '';
+                    };
 
-          const month = find('month');
-          const rawDay = find('day');
-          const day = rawDay ? rawDay.padStart(2, '0') : '';
-          const year = find('year');
-          const hour = find('hour');
-          const minute = find('minute');
-          const period = find('dayPeriod');
-          const weekday = find('weekday');
-          if (!month || !day || !year || !hour || !minute || !period || !weekday) {
-            return null;
-          }
+                    const month = find('month');
+                    const rawDay = find('day');
+                    const day = rawDay ? rawDay.padStart(2, '0') : '';
+                    const year = find('year');
+                    const hour = find('hour');
+                    const minute = find('minute');
+                    const period = find('dayPeriod');
+                    const weekday = find('weekday');
+                    const zone = find('timeZoneName');
 
-          const time = `${hour}:${minute}${period.toLowerCase()}`;
-          const base = `${time} ${weekday} ${month} ${day}, ${year}`;
-          return base;
-        } catch (error) {
-          return null;
-        }
-      };
+                    if (!month || !day || !year || !hour || !minute || !period || !weekday) {
+                      return null;
+                    }
 
-      const elements = document.querySelectorAll('[data-local-datetime]');
-      for (const element of elements) {
-        const iso = element.getAttribute('data-local-datetime');
-        if (!iso) {
-          continue;
-        }
+                    const time = `${hour}:${minute}${period.toLowerCase()}`;
+                    const base = `${time} ${weekday} ${month} ${day}, ${year}`;
+                    const zoneSuffix = zone ? ` ${zone}` : '';
+                    return `${base}${zoneSuffix}`;
+                  } catch (error) {
+                    return null;
+                  }
+                };
 
-        const date = new Date(iso);
-        if (Number.isNaN(date.getTime())) {
-          continue;
-        }
+                const elements = document.querySelectorAll('[data-local-datetime]');
+                for (const element of elements) {
+                  const iso = element.getAttribute('data-local-datetime');
+                  if (!iso) {
+                    continue;
+                  }
 
-        const display = formatParts(zoneFormatter, date) ?? formatParts(fallbackFormatter, date);
-        if (display) {
-          element.textContent = display;
-        }
-      }
-    })();
-  </script>
-</body>
-</html>
+                  const date = new Date(iso);
+                  if (Number.isNaN(date.getTime())) {
+                    continue;
+                  }
+
+                  const display = formatParts(zoneFormatter, date) ?? formatParts(fallbackFormatter, date);
+                  if (display) {
+                    element.textContent = display;
+                  }
+                }
+              })();
+            </script>
+          </body>
+          </html>
