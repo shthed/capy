@@ -514,7 +514,7 @@ PY
               .commit-pr,
               .commit-branch,
               .commit-sha {
-                font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+                font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
                 font-size: 0.9em;
                 font-weight: 600;
                 text-decoration: none;
@@ -874,7 +874,7 @@ PY
 
             let remaining = commits;
             if (matchingCommit) {
-              remaining = commits.filter((commit) => commit !== matchingCommit && commit?.sha !== matchingCommit.sha);
+              remaining = commits.filter((commit) => commit?.sha !== matchingCommit.sha);
             }
 
             for (const commit of remaining) {
