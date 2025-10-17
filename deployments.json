@@ -160,5 +160,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-17T11:26:01+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902"
+  },
+  "codex-add-chatgpt-link-and-image-description-field": {
+    "branch": "codex/add-chatgpt-link-and-image-description-field",
+    "safeName": "codex-add-chatgpt-link-and-image-description-field",
+    "commit": "b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
+    "message": "Add ChatGPT link and description field to generator",
+    "actor": "shthed",
+    "deployedAt": "2025-10-17T14:23:28+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/b3f705bd4e71e3cb917a76dc456941a4d7c2e419"
   }
 }

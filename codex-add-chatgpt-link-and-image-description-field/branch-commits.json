@@ -1,0 +1,178 @@
+{
+  "codex/add-chatgpt-link-and-image-description-field": [
+    {
+      "sha": "b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
+      "shortSha": "b3f705b",
+      "message": "Add ChatGPT link and description field to generator",
+      "date": "2025-10-17T06:23:28Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
+      "sha": "1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "shortSha": "1be83c6",
+      "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
+      "date": "2025-10-17T03:54:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
+      "sha": "aef52b965810682bf2f8018675c2f6784626c902",
+      "shortSha": "aef52b9",
+      "message": "Improve save management autosave experience",
+      "date": "2025-10-17T03:26:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    }
+  ],
+  "codex-add-chatgpt-link-and-image-description-field": [
+    {
+      "sha": "b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
+      "shortSha": "b3f705b",
+      "message": "Add ChatGPT link and description field to generator",
+      "date": "2025-10-17T06:23:28Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
+      "sha": "1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "shortSha": "1be83c6",
+      "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
+      "date": "2025-10-17T03:54:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
+      "sha": "aef52b965810682bf2f8018675c2f6784626c902",
+      "shortSha": "aef52b9",
+      "message": "Improve save management autosave experience",
+      "date": "2025-10-17T03:26:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    }
+  ],
+  "codex/introduce-renderer-abstraction-for-webgl": [
+    {
+      "sha": "fedcafb678bac485449081f8a860a06f34ce0180",
+      "shortSha": "fedcafb",
+      "message": "Merge branch 'main' into work",
+      "date": "2025-10-16T01:37:27Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "shortSha": "15fadfe",
+      "message": "Fix renderer init ordering to restore interactions",
+      "date": "2025-10-14T18:06:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "shortSha": "a348b08",
+      "message": "Refactor renderer scaffolding with overlay canvas",
+      "date": "2025-10-14T13:22:10Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    }
+  ],
+  "codex-introduce-renderer-abstraction-for-webgl": [
+    {
+      "sha": "fedcafb678bac485449081f8a860a06f34ce0180",
+      "shortSha": "fedcafb",
+      "message": "Merge branch 'main' into work",
+      "date": "2025-10-16T01:37:27Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "shortSha": "15fadfe",
+      "message": "Fix renderer init ordering to restore interactions",
+      "date": "2025-10-14T18:06:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "shortSha": "a348b08",
+      "message": "Refactor renderer scaffolding with overlay canvas",
+      "date": "2025-10-14T13:22:10Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    }
+  ]
+}
