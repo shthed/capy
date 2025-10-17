@@ -1,0 +1,582 @@
+{
+  "codex/update-branch-deployments-for-game-files": [
+    {
+      "sha": "a8edd488164892836174d2e5e48d33bd4d077a6e",
+      "shortSha": "a8edd48",
+      "message": "Limit branch deployments to runtime assets",
+      "date": "2025-10-17T08:27:55Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a8edd488164892836174d2e5e48d33bd4d077a6e",
+      "prs": [
+        {
+          "number": 167,
+          "title": "Limit branch previews to runtime assets",
+          "url": "https://github.com/shthed/capy/pull/167"
+        }
+      ]
+    },
+    {
+      "sha": "2cff9f77852d9e58973fc5c28dbf64f7f5452bdc",
+      "shortSha": "2cff9f7",
+      "message": "Increase the number of commits fetched for PRs and exclude specific commits from the recent commits list",
+      "date": "2025-10-17T08:09:36Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2cff9f77852d9e58973fc5c28dbf64f7f5452bdc",
+      "prs": [
+        {
+          "number": 167,
+          "title": "Limit branch previews to runtime assets",
+          "url": "https://github.com/shthed/capy/pull/167"
+        }
+      ]
+    },
+    {
+      "sha": "2e8a09b2b994ae02a52dcd8de9fc49021a90c514",
+      "shortSha": "2e8a09b",
+      "message": "Merge pull request #164 from shthed/codex/update-date-format-to-include-weekday\n\nInclude weekday in branch deployment timestamps",
+      "date": "2025-10-17T07:49:05Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2e8a09b2b994ae02a52dcd8de9fc49021a90c514",
+      "prs": [
+        {
+          "number": 167,
+          "title": "Limit branch previews to runtime assets",
+          "url": "https://github.com/shthed/capy/pull/167"
+        }
+      ]
+    },
+    {
+      "sha": "de98f7b5a8a4e587763b0b989d0365d11a6035a7",
+      "shortSha": "de98f7b",
+      "message": "Include weekday in branch index timestamps",
+      "date": "2025-10-17T07:47:04Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/de98f7b5a8a4e587763b0b989d0365d11a6035a7",
+      "prs": [
+        {
+          "number": 167,
+          "title": "Limit branch previews to runtime assets",
+          "url": "https://github.com/shthed/capy/pull/167"
+        }
+      ]
+    }
+  ],
+  "codex-update-branch-deployments-for-game-files": [
+    {
+      "sha": "a8edd488164892836174d2e5e48d33bd4d077a6e",
+      "shortSha": "a8edd48",
+      "message": "Limit branch deployments to runtime assets",
+      "date": "2025-10-17T08:27:55Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a8edd488164892836174d2e5e48d33bd4d077a6e",
+      "prs": [
+        {
+          "number": 167,
+          "title": "Limit branch previews to runtime assets",
+          "url": "https://github.com/shthed/capy/pull/167"
+        }
+      ]
+    },
+    {
+      "sha": "2cff9f77852d9e58973fc5c28dbf64f7f5452bdc",
+      "shortSha": "2cff9f7",
+      "message": "Increase the number of commits fetched for PRs and exclude specific commits from the recent commits list",
+      "date": "2025-10-17T08:09:36Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2cff9f77852d9e58973fc5c28dbf64f7f5452bdc",
+      "prs": [
+        {
+          "number": 167,
+          "title": "Limit branch previews to runtime assets",
+          "url": "https://github.com/shthed/capy/pull/167"
+        }
+      ]
+    },
+    {
+      "sha": "2e8a09b2b994ae02a52dcd8de9fc49021a90c514",
+      "shortSha": "2e8a09b",
+      "message": "Merge pull request #164 from shthed/codex/update-date-format-to-include-weekday\n\nInclude weekday in branch deployment timestamps",
+      "date": "2025-10-17T07:49:05Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2e8a09b2b994ae02a52dcd8de9fc49021a90c514",
+      "prs": [
+        {
+          "number": 167,
+          "title": "Limit branch previews to runtime assets",
+          "url": "https://github.com/shthed/capy/pull/167"
+        }
+      ]
+    },
+    {
+      "sha": "de98f7b5a8a4e587763b0b989d0365d11a6035a7",
+      "shortSha": "de98f7b",
+      "message": "Include weekday in branch index timestamps",
+      "date": "2025-10-17T07:47:04Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/de98f7b5a8a4e587763b0b989d0365d11a6035a7",
+      "prs": [
+        {
+          "number": 167,
+          "title": "Limit branch previews to runtime assets",
+          "url": "https://github.com/shthed/capy/pull/167"
+        }
+      ]
+    }
+  ],
+  "codex/integrate-capy-documentation-into-help": [
+    {
+      "sha": "a24f86e5561ee47ad67027e67a31488577aa78e7",
+      "shortSha": "a24f86e",
+      "message": "Embed hosted README inside help sheet",
+      "date": "2025-10-17T08:26:00Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a24f86e5561ee47ad67027e67a31488577aa78e7",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "70f7b728ccaf16400753853bec6238814561da3c",
+      "shortSha": "70f7b72",
+      "message": "Merge pull request #163 from shthed/codex/explain-system-prompt-and-tools-accessibility\n\nAdd npm scaffolding and placeholder test runner",
+      "date": "2025-10-17T07:45:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/70f7b728ccaf16400753853bec6238814561da3c",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "ef41274c6b4430c8c639c5a10becb57c7efcd14b",
+      "shortSha": "ef41274",
+      "message": "Add npm metadata and placeholder test harness",
+      "date": "2025-10-17T07:44:38Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ef41274c6b4430c8c639c5a10becb57c7efcd14b",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "shortSha": "1be83c6",
+      "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
+      "date": "2025-10-17T03:54:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    }
+  ],
+  "codex-integrate-capy-documentation-into-help": [
+    {
+      "sha": "a24f86e5561ee47ad67027e67a31488577aa78e7",
+      "shortSha": "a24f86e",
+      "message": "Embed hosted README inside help sheet",
+      "date": "2025-10-17T08:26:00Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a24f86e5561ee47ad67027e67a31488577aa78e7",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "70f7b728ccaf16400753853bec6238814561da3c",
+      "shortSha": "70f7b72",
+      "message": "Merge pull request #163 from shthed/codex/explain-system-prompt-and-tools-accessibility\n\nAdd npm scaffolding and placeholder test runner",
+      "date": "2025-10-17T07:45:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/70f7b728ccaf16400753853bec6238814561da3c",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "ef41274c6b4430c8c639c5a10becb57c7efcd14b",
+      "shortSha": "ef41274",
+      "message": "Add npm metadata and placeholder test harness",
+      "date": "2025-10-17T07:44:38Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ef41274c6b4430c8c639c5a10becb57c7efcd14b",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    },
+    {
+      "sha": "1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "shortSha": "1be83c6",
+      "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
+      "date": "2025-10-17T03:54:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "prs": [
+        {
+          "number": 166,
+          "title": "Embed hosted README inside help panel",
+          "url": "https://github.com/shthed/capy/pull/166"
+        }
+      ]
+    }
+  ],
+  "codex/update-date-format-to-include-weekday-xlcy99": [
+    {
+      "sha": "569ad861f7c40dd12ade068ecfad37d3fb39fb2c",
+      "shortSha": "569ad86",
+      "message": "Revamp branch index timeline layout",
+      "date": "2025-10-17T08:07:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/569ad861f7c40dd12ade068ecfad37d3fb39fb2c",
+      "prs": [
+        {
+          "number": 165,
+          "title": "Revamp branch deployment index layout",
+          "url": "https://github.com/shthed/capy/pull/165"
+        }
+      ]
+    },
+    {
+      "sha": "1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "shortSha": "1be83c6",
+      "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
+      "date": "2025-10-17T03:54:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "prs": [
+        {
+          "number": 165,
+          "title": "Revamp branch deployment index layout",
+          "url": "https://github.com/shthed/capy/pull/165"
+        }
+      ]
+    },
+    {
+      "sha": "aef52b965810682bf2f8018675c2f6784626c902",
+      "shortSha": "aef52b9",
+      "message": "Improve save management autosave experience",
+      "date": "2025-10-17T03:26:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902",
+      "prs": [
+        {
+          "number": 165,
+          "title": "Revamp branch deployment index layout",
+          "url": "https://github.com/shthed/capy/pull/165"
+        }
+      ]
+    },
+    {
+      "sha": "f5b4be820b1b667ec79d8fd03b0118673d14cc20",
+      "shortSha": "f5b4be8",
+      "message": "Merge pull request #160 from shthed/codex/modify-file-save-and-progress-features\n\nAuto-start generation and relocate saves export",
+      "date": "2025-10-17T02:03:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f5b4be820b1b667ec79d8fd03b0118673d14cc20",
+      "prs": [
+        {
+          "number": 165,
+          "title": "Revamp branch deployment index layout",
+          "url": "https://github.com/shthed/capy/pull/165"
+        }
+      ]
+    }
+  ],
+  "codex-update-date-format-to-include-weekday-xlcy99": [
+    {
+      "sha": "569ad861f7c40dd12ade068ecfad37d3fb39fb2c",
+      "shortSha": "569ad86",
+      "message": "Revamp branch index timeline layout",
+      "date": "2025-10-17T08:07:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/569ad861f7c40dd12ade068ecfad37d3fb39fb2c",
+      "prs": [
+        {
+          "number": 165,
+          "title": "Revamp branch deployment index layout",
+          "url": "https://github.com/shthed/capy/pull/165"
+        }
+      ]
+    },
+    {
+      "sha": "1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "shortSha": "1be83c6",
+      "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
+      "date": "2025-10-17T03:54:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "prs": [
+        {
+          "number": 165,
+          "title": "Revamp branch deployment index layout",
+          "url": "https://github.com/shthed/capy/pull/165"
+        }
+      ]
+    },
+    {
+      "sha": "aef52b965810682bf2f8018675c2f6784626c902",
+      "shortSha": "aef52b9",
+      "message": "Improve save management autosave experience",
+      "date": "2025-10-17T03:26:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902",
+      "prs": [
+        {
+          "number": 165,
+          "title": "Revamp branch deployment index layout",
+          "url": "https://github.com/shthed/capy/pull/165"
+        }
+      ]
+    },
+    {
+      "sha": "f5b4be820b1b667ec79d8fd03b0118673d14cc20",
+      "shortSha": "f5b4be8",
+      "message": "Merge pull request #160 from shthed/codex/modify-file-save-and-progress-features\n\nAuto-start generation and relocate saves export",
+      "date": "2025-10-17T02:03:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f5b4be820b1b667ec79d8fd03b0118673d14cc20",
+      "prs": [
+        {
+          "number": 165,
+          "title": "Revamp branch deployment index layout",
+          "url": "https://github.com/shthed/capy/pull/165"
+        }
+      ]
+    }
+  ],
+  "codex/add-chatgpt-link-and-image-description-field": [
+    {
+      "sha": "e13041e701ca5ad376914ac46693cf82291e81df",
+      "shortSha": "e13041e",
+      "message": "Move generator prompt helper to advanced options",
+      "date": "2025-10-17T07:08:48Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/e13041e701ca5ad376914ac46693cf82291e81df",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
+      "sha": "b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
+      "shortSha": "b3f705b",
+      "message": "Add ChatGPT link and description field to generator",
+      "date": "2025-10-17T06:23:28Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
+      "sha": "1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "shortSha": "1be83c6",
+      "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
+      "date": "2025-10-17T03:54:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
+      "sha": "aef52b965810682bf2f8018675c2f6784626c902",
+      "shortSha": "aef52b9",
+      "message": "Improve save management autosave experience",
+      "date": "2025-10-17T03:26:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    }
+  ],
+  "codex-add-chatgpt-link-and-image-description-field": [
+    {
+      "sha": "e13041e701ca5ad376914ac46693cf82291e81df",
+      "shortSha": "e13041e",
+      "message": "Move generator prompt helper to advanced options",
+      "date": "2025-10-17T07:08:48Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/e13041e701ca5ad376914ac46693cf82291e81df",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
+      "sha": "b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
+      "shortSha": "b3f705b",
+      "message": "Add ChatGPT link and description field to generator",
+      "date": "2025-10-17T06:23:28Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b3f705bd4e71e3cb917a76dc456941a4d7c2e419",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
+      "sha": "1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "shortSha": "1be83c6",
+      "message": "Merge pull request #161 from shthed/codex/update-manage-saves-page-features\n\nImprove save management autosave experience",
+      "date": "2025-10-17T03:54:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    },
+    {
+      "sha": "aef52b965810682bf2f8018675c2f6784626c902",
+      "shortSha": "aef52b9",
+      "message": "Improve save management autosave experience",
+      "date": "2025-10-17T03:26:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902",
+      "prs": [
+        {
+          "number": 162,
+          "title": "Add ChatGPT image prompt helper to generator tab",
+          "url": "https://github.com/shthed/capy/pull/162"
+        }
+      ]
+    }
+  ],
+  "codex/introduce-renderer-abstraction-for-webgl": [
+    {
+      "sha": "fedcafb678bac485449081f8a860a06f34ce0180",
+      "shortSha": "fedcafb",
+      "message": "Merge branch 'main' into work",
+      "date": "2025-10-16T01:37:27Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "shortSha": "15fadfe",
+      "message": "Fix renderer init ordering to restore interactions",
+      "date": "2025-10-14T18:06:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "shortSha": "a348b08",
+      "message": "Refactor renderer scaffolding with overlay canvas",
+      "date": "2025-10-14T13:22:10Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "3085e55ee56be41320edf9d2da0f320dc583631e",
+      "shortSha": "3085e55",
+      "message": "Merge pull request #100 from shthed/codex/add-show/hide-option-for-status-bar\n\nAdd toggle to control status bar visibility",
+      "date": "2025-10-13T10:47:53Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3085e55ee56be41320edf9d2da0f320dc583631e",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    }
+  ],
+  "codex-introduce-renderer-abstraction-for-webgl": [
+    {
+      "sha": "fedcafb678bac485449081f8a860a06f34ce0180",
+      "shortSha": "fedcafb",
+      "message": "Merge branch 'main' into work",
+      "date": "2025-10-16T01:37:27Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "shortSha": "15fadfe",
+      "message": "Fix renderer init ordering to restore interactions",
+      "date": "2025-10-14T18:06:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "shortSha": "a348b08",
+      "message": "Refactor renderer scaffolding with overlay canvas",
+      "date": "2025-10-14T13:22:10Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a348b080a3acc872518a5b8b9cbe79d6f5be611b",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    },
+    {
+      "sha": "3085e55ee56be41320edf9d2da0f320dc583631e",
+      "shortSha": "3085e55",
+      "message": "Merge pull request #100 from shthed/codex/add-show/hide-option-for-status-bar\n\nAdd toggle to control status bar visibility",
+      "date": "2025-10-13T10:47:53Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3085e55ee56be41320edf9d2da0f320dc583631e",
+      "prs": [
+        {
+          "number": 124,
+          "title": "WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/124"
+        }
+      ]
+    }
+  ]
+}
