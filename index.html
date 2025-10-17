@@ -703,7 +703,7 @@
         transform: rotate(180deg);
       }
 
-      #artPrompt {
+      #imageDescription {
         width: 100%;
         min-height: calc(120px * var(--ui-scale));
         padding: calc(10px * var(--ui-scale));
@@ -715,14 +715,30 @@
         resize: vertical;
       }
 
-      #artPrompt:focus {
+      #imageDescription:focus {
         outline: none;
         border-color: rgba(96, 165, 250, 0.7);
         box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
       }
 
-      #artPrompt::placeholder {
+      #imageDescription::placeholder {
         color: rgba(148, 163, 184, 0.7);
+      }
+
+      .chatgpt-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35em;
+        font-weight: 600;
+        color: rgba(96, 165, 250, 0.95);
+        text-decoration: none;
+      }
+
+      .chatgpt-link:hover,
+      .chatgpt-link:focus-visible {
+        color: rgba(147, 197, 253, 0.95);
+        text-decoration: underline;
+        outline: none;
       }
 
       input[type="range"] {
@@ -1694,15 +1710,26 @@
           <details class="advanced-options" id="generatorAdvanced">
             <summary>Advanced options</summary>
             <label class="control">
-              <span>Art prompt</span>
+              <span>Image description</span>
               <textarea
-                id="artPrompt"
+                id="imageDescription"
                 rows="3"
-                placeholder="Describe the scene you want to reinterpret"
+                placeholder="Describe the image you want to generate"
               ></textarea>
             </label>
             <p class="control-note">
               Stored with saves and exports so you can revisit the inspiration later.
+            </p>
+            <p class="control-note">
+              <a
+                id="chatGptLink"
+                class="chatgpt-link"
+                href="https://chat.openai.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open ChatGPT to craft an image prompt <span aria-hidden="true">↗</span>
+              </a>
             </p>
           </details>
         </section>
@@ -1889,6 +1916,8 @@
       const kmeansItersEl = document.getElementById("kmeansIters");
       const smoothingEl = document.getElementById("smoothingPasses");
       const artPromptInput = document.getElementById("artPrompt");
+      const imageDescriptionInput = document.getElementById("imageDescription");
+      const chatGptLink = document.getElementById("chatGptLink");
       const applyBtn = document.getElementById("applyOptions");
       const downloadBtn = document.getElementById("downloadJson");
       const saveSnapshotButtons = Array.from(document.querySelectorAll("[data-save-snapshot]"));
@@ -2934,6 +2963,7 @@
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
+          imageDescription: "",
           showRegionLabels: true,
           theme: DEFAULT_UI_THEME,
         },
@@ -3248,6 +3278,16 @@
         if (typeof settings.artPrompt === "string") {
           applyArtPrompt(settings.artPrompt, { skipLog: true, skipAutosave: true });
         }
+        if (typeof settings.imageDescription === "string") {
+          applyImageDescription(settings.imageDescription, { skipLog: true, skipAutosave: true });
+        } else if (state.settings.imageDescription != null) {
+          applyImageDescription(state.settings.imageDescription, {
+            skipLog: true,
+            skipAutosave: true,
+          });
+        } else {
+          applyImageDescription("", { skipLog: true, skipAutosave: true });
+        }
         updateOptionOutputs();
       }
 
@@ -3292,6 +3332,9 @@
           },
           setArtPrompt(promptText) {
             applyArtPrompt(promptText);
+          },
+          setImageDescription(description) {
+            applyImageDescription(description);
           },
           setRegionLabelsVisible(visible) {
             if (typeof visible === "boolean") {
@@ -3608,6 +3651,14 @@
         });
         artPromptInput.addEventListener("change", (event) => {
           applyArtPrompt(event.target.value);
+        });
+      }
+      if (imageDescriptionInput) {
+        imageDescriptionInput.addEventListener("input", (event) => {
+          applyImageDescription(event.target.value, { skipLog: true, skipAutosave: true });
+        });
+        imageDescriptionInput.addEventListener("change", (event) => {
+          applyImageDescription(event.target.value);
         });
       }
 
@@ -4608,6 +4659,43 @@
           scheduleAutosave("settings-ui-scale");
         }
         return resolved;
+      }
+
+      function updateChatGptLink(description) {
+        if (!chatGptLink) {
+          return;
+        }
+        const trimmed = typeof description === "string" ? description.trim() : "";
+        const prompt = trimmed
+          ? `You help craft vivid prompts for image generators. Based on the description below, write a polished prompt ready for DALLE or similar tools.\n\nDescription:\n${trimmed}\n\nReturn only the improved prompt.`
+          : "You help craft vivid prompts for image generators. Suggest a playful capybara-themed scene prompt suitable for DALLE or similar tools.";
+        const params = new URLSearchParams({ q: prompt });
+        chatGptLink.href = `https://chat.openai.com/?${params.toString()}`;
+      }
+
+      function applyImageDescription(text, options = {}) {
+        const { skipLog = false, skipAutosave = false } = options;
+        const normalized = typeof text === "string" ? text : "";
+        const previous = state.settings.imageDescription ?? "";
+        state.settings.imageDescription = normalized;
+        if (imageDescriptionInput && imageDescriptionInput.value !== normalized) {
+          imageDescriptionInput.value = normalized;
+        }
+        updateChatGptLink(normalized);
+        if (normalized !== previous) {
+          if (!skipLog) {
+            const trimmed = normalized.trim();
+            logDebug(
+              trimmed
+                ? `Image description updated (${trimmed.length} characters)`
+                : "Image description cleared"
+            );
+          }
+          if (!skipAutosave) {
+            scheduleAutosave("settings-image-description");
+          }
+        }
+        return normalized;
       }
 
       function applyArtPrompt(text, options = {}) {
@@ -7359,6 +7447,10 @@
               : DEFAULT_UI_SCALE,
           artPrompt:
             typeof settingsSource.artPrompt === "string" ? settingsSource.artPrompt : "",
+          imageDescription:
+            typeof settingsSource.imageDescription === "string"
+              ? settingsSource.imageDescription
+              : state.settings.imageDescription || "",
         };
         return payload;
       }
@@ -7465,6 +7557,7 @@
                 ? clamp(state.settings.uiScale, 0.6, 1.35)
                 : DEFAULT_UI_SCALE,
             artPrompt: state.settings.artPrompt || "",
+            imageDescription: state.settings.imageDescription || "",
             showRegionLabels: state.settings.showRegionLabels !== false,
             theme: state.settings.theme || DEFAULT_UI_THEME,
           },
