@@ -214,5 +214,14 @@
     "actor": "shthed",
     "deployedAt": "2025-10-17T16:27:55+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/a8edd488164892836174d2e5e48d33bd4d077a6e"
+  },
+  "codex-update-branch-deployment-for-html-version": {
+    "branch": "codex/update-branch-deployment-for-html-version",
+    "safeName": "codex-update-branch-deployment-for-html-version",
+    "commit": "7cacdaf53c8b283f320c1b34d06c3a6fc1301b39",
+    "message": "Merge pull request #167 from shthed/codex/update-branch-deployments-for-game-files\n\nLimit branch previews to runtime assets",
+    "actor": "shthed",
+    "deployedAt": "2025-10-17T16:29:27+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/7cacdaf53c8b283f320c1b34d06c3a6fc1301b39"
   }
 }
