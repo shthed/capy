@@ -35,92 +35,162 @@
       border-color: #4c8eda;
       box-shadow: 0 4px 12px rgba(76,142,218,0.12);
     }
+    .card-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+    }
     .branch-title {
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
       gap: 8px;
-      margin-bottom: 12px;
     }
     .branch-name {
       font-size: 1.1em;
       font-weight: 600;
       color: #1f2328;
     }
-    .branch-name a {
-      color: inherit;
-      text-decoration: none;
+    .commit-section {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid #d0d7de;
     }
-    .branch-name a:hover {
-      text-decoration: underline;
+    .commit-title {
+      font-size: 0.95em;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #24292e;
     }
     .commit-list {
       list-style: none;
       margin: 0;
       padding: 0;
       display: grid;
-      gap: 10px;
+      gap: 6px;
     }
     .commit-item {
-      font-size: 0.95em;
-      color: #1f2328;
+      font-size: 0.9em;
+      color: #24292e;
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
-      gap: 10px;
+      gap: 6px;
     }
-    .commit-item > * {
-      flex-shrink: 0;
-    }
-    .commit-time {
+    .commit-date {
       color: #57606a;
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
+      font-weight: 500;
     }
-    .commit-time time {
-      color: inherit;
+    .commit-separator {
+      color: #8c959f;
+      margin: 0 4px;
     }
-    .commit-pr,
-    .commit-branch,
+    .commit-message {
+      font-weight: 500;
+      color: #24292e;
+    }
     .commit-sha {
-      font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
       font-size: 0.9em;
       font-weight: 600;
-      text-decoration: none;
-    }
-    .commit-pr {
-      color: #8250df;
-    }
-    .commit-pr:hover {
-      text-decoration: underline;
-    }
-    .commit-branch {
-      color: #1f2328;
-    }
-    .commit-branch:hover {
-      text-decoration: underline;
-    }
-    .commit-sha {
       color: #0969da;
+      text-decoration: none;
     }
     .commit-sha:hover {
       text-decoration: underline;
     }
-    .commit-message {
-      font-weight: 500;
-      color: #1f2328;
-      flex: 1 1 220px;
-      min-width: 200px;
+    .card-links {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.85em;
+    }
+    .card-link {
+      color: #0969da;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .card-link:hover {
+      text-decoration: underline;
+    }
+    .card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.85em;
+    }
+    .card-actions a {
+      color: #57606a;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .card-actions a:hover {
+      color: #24292e;
+      text-decoration: underline;
+    }
+    .card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.85em;
+    }
+    .card-actions a {
+      color: #57606a;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .card-actions a:hover {
+      color: #24292e;
+      text-decoration: underline;
+    }
+    span.badge {
+      display: inline-block;
+      margin-left: 4px;
+      padding: 2px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #0f5132;
+      background: #d1e7dd;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .meta {
+      margin-top: 8px;
+      font-size: 0.9em;
+      color: #57606a;
+    }
+    .meta a {
+      color: #57606a;
+      font-weight: 600;
+    }
+    .pr-meta {
+      margin-top: 6px;
+      font-size: 0.85em;
+      color: #57606a;
+    }
+    .pr-link {
+      color: #8250df;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .pr-link:hover {
+      text-decoration: underline;
     }
   </style>
 </head>
 <body>
   <h1>Capy Branch Deployments</h1>
   <ul class="deployments">
-<li class="card main"><div class="branch-title"><span class="branch-name"><a href="./">main</a></span></div><ul class="commit-list"><li class="commit-item"><time class="commit-time" datetime="2025-10-17T07:52:53.000Z" data-local-datetime="2025-10-17T07:52:53.000Z">7:52am Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/164">#164</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fupdate-date-format-to-include-weekday">codex/update-date-format-to-include-weekday</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/2e8a09b2b994ae02a52dcd8de9fc49021a90c514">2e8a09b</a> <span class="commit-message">Merge pull request #164 from shthed/codex/update-date-format-to-include-weekday</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-17T07:47:04.000Z" data-local-datetime="2025-10-17T07:47:04.000Z">7:47am Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/164">#164</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fupdate-date-format-to-include-weekday">codex/update-date-format-to-include-weekday</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/de98f7b5a8a4e587763b0b989d0365d11a6035a7">de98f7b</a> <span class="commit-message">Include weekday in branch index timestamps</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-17T07:45:57.000Z" data-local-datetime="2025-10-17T07:45:57.000Z">7:45am Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/163">#163</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fexplain-system-prompt-and-tools-accessibility">codex/explain-system-prompt-and-tools-accessibility</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/70f7b728ccaf16400753853bec6238814561da3c">70f7b72</a> <span class="commit-message">Merge pull request #163 from shthed/codex/explain-system-prompt-and-tools-accessibility</span></li></ul></li>
-<li class="card"><div class="branch-title"><span class="branch-name"><a href="./codex-update-date-format-to-include-weekday-xlcy99/">codex/update-date-format-to-include-weekday-xlcy99</a></span></div><ul class="commit-list"><li class="commit-item"><time class="commit-time" datetime="2025-10-17T08:07:01.000Z" data-local-datetime="2025-10-17T08:07:01.000Z">8:07am Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/165">#165</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fupdate-date-format-to-include-weekday-xlcy99">codex/update-date-format-to-include-weekday-xlcy99</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/569ad861f7c40dd12ade068ecfad37d3fb39fb2c">569ad86</a> <span class="commit-message">Revamp branch index timeline layout</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-17T08:07:01.000Z" data-local-datetime="2025-10-17T08:07:01.000Z">8:07am Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/165">#165</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fupdate-date-format-to-include-weekday-xlcy99">codex/update-date-format-to-include-weekday-xlcy99</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/569ad861f7c40dd12ade068ecfad37d3fb39fb2c">569ad86</a> <span class="commit-message">Revamp branch index timeline layout</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-17T03:54:32.000Z" data-local-datetime="2025-10-17T03:54:32.000Z">3:54am Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/165">#165</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fupdate-date-format-to-include-weekday-xlcy99">codex/update-date-format-to-include-weekday-xlcy99</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0">1be83c6</a> <span class="commit-message">Merge pull request #161 from shthed/codex/update-manage-saves-page-features</span></li></ul></li>
-<li class="card"><div class="branch-title"><span class="branch-name"><a href="./codex-add-chatgpt-link-and-image-description-field/">codex/add-chatgpt-link-and-image-description-field</a></span></div><ul class="commit-list"><li class="commit-item"><time class="commit-time" datetime="2025-10-17T07:08:48.000Z" data-local-datetime="2025-10-17T07:08:48.000Z">7:08am Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/162">#162</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fadd-chatgpt-link-and-image-description-field">codex/add-chatgpt-link-and-image-description-field</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/e13041e701ca5ad376914ac46693cf82291e81df">e13041e</a> <span class="commit-message">Move generator prompt helper to advanced options</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-17T07:08:48.000Z" data-local-datetime="2025-10-17T07:08:48.000Z">7:08am Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/162">#162</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fadd-chatgpt-link-and-image-description-field">codex/add-chatgpt-link-and-image-description-field</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/e13041e701ca5ad376914ac46693cf82291e81df">e13041e</a> <span class="commit-message">Move generator prompt helper to advanced options</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-17T06:23:28.000Z" data-local-datetime="2025-10-17T06:23:28.000Z">6:23am Fri Oct 17, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/162">#162</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fadd-chatgpt-link-and-image-description-field">codex/add-chatgpt-link-and-image-description-field</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/b3f705bd4e71e3cb917a76dc456941a4d7c2e419">b3f705b</a> <span class="commit-message">Add ChatGPT link and description field to generator</span></li></ul></li>
-<li class="card"><div class="branch-title"><span class="branch-name"><a href="./codex-introduce-renderer-abstraction-for-webgl/">codex/introduce-renderer-abstraction-for-webgl</a></span></div><ul class="commit-list"><li class="commit-item"><time class="commit-time" datetime="2025-10-16T03:32:54.000Z" data-local-datetime="2025-10-16T03:32:54.000Z">3:32am Thu Oct 16, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/124">#124</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fintroduce-renderer-abstraction-for-webgl">codex/introduce-renderer-abstraction-for-webgl</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180">fedcafb</a> <span class="commit-message">Merge branch &#39;main&#39; into work</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-16T01:37:27.000Z" data-local-datetime="2025-10-16T01:37:27.000Z">1:37am Thu Oct 16, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/124">#124</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fintroduce-renderer-abstraction-for-webgl">codex/introduce-renderer-abstraction-for-webgl</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180">fedcafb</a> <span class="commit-message">Merge branch &#39;main&#39; into work</span></li><li class="commit-item"><time class="commit-time" datetime="2025-10-14T18:06:23.000Z" data-local-datetime="2025-10-14T18:06:23.000Z">6:06pm Tue Oct 14, 2025</time> <a class="commit-pr" href="https://github.com/shthed/capy/pull/124">#124</a> <a class="commit-branch" href="https://github.com/shthed/capy/tree/codex%2Fintroduce-renderer-abstraction-for-webgl">codex/introduce-renderer-abstraction-for-webgl</a> <a class="commit-sha" href="https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075">15fadfe</a> <span class="commit-message">Fix renderer init ordering to restore interactions</span></li></ul></li>
+<li class="card main"><div class="card-header"><div class="branch-title"><span class="branch-name">main</span><span class="badge">production</span></div><div class="card-links"><a class="card-link" href="./">Preview</a><a class="card-link" href="https://github.com/shthed/capy/tree/main">GitHub</a></div></div><div class="meta">Last deployed <time class="commit-date" datetime="2025-10-17T08:09:36.000Z" data-local-datetime="2025-10-17T08:09:36.000Z">8:09am Fri Oct 17, 2025</time> by shthed · <a href="https://github.com/shthed/capy/commit/2cff9f77852d9e58973fc5c28dbf64f7f5452bdc">2cff9f7</a></div><div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list"><li class="commit-item"><time class="commit-date" datetime="2025-10-17T07:49:05.000Z" data-local-datetime="2025-10-17T07:49:05.000Z">7:49am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #164 from shthed/codex/update-date-format-to-include-weekday</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/2e8a09b2b994ae02a52dcd8de9fc49021a90c514">2e8a09b</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T07:47:04.000Z" data-local-datetime="2025-10-17T07:47:04.000Z">7:47am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Include weekday in branch index timestamps</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/de98f7b5a8a4e587763b0b989d0365d11a6035a7">de98f7b</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T07:45:57.000Z" data-local-datetime="2025-10-17T07:45:57.000Z">7:45am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #163 from shthed/codex/explain-system-prompt-and-tools-accessibility</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/70f7b728ccaf16400753853bec6238814561da3c">70f7b72</a></li></ul></div></li>
+<li class="card"><div class="card-header"><div class="branch-title"><span class="branch-name">codex/update-date-format-to-include-weekday-xlcy99</span></div><div class="card-links"><a class="card-link" href="./codex-update-date-format-to-include-weekday-xlcy99/">Preview</a><a class="card-link" href="https://github.com/shthed/capy/tree/codex%2Fupdate-date-format-to-include-weekday-xlcy99">GitHub</a></div></div><div class="pr-meta"><a class="pr-link" href="https://github.com/shthed/capy/pull/165">PR #165 — Revamp branch deployment index layout</a></div><div class="meta">Last deployed <time class="commit-date" datetime="2025-10-17T08:07:01.000Z" data-local-datetime="2025-10-17T08:07:01.000Z">8:07am Fri Oct 17, 2025</time> by shthed · <a href="https://github.com/shthed/capy/commit/569ad861f7c40dd12ade068ecfad37d3fb39fb2c">569ad86</a></div><div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list"><li class="commit-item"><time class="commit-date" datetime="2025-10-17T03:54:32.000Z" data-local-datetime="2025-10-17T03:54:32.000Z">3:54am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #161 from shthed/codex/update-manage-saves-page-features</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0">1be83c6</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T03:26:01.000Z" data-local-datetime="2025-10-17T03:26:01.000Z">3:26am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Improve save management autosave experience</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902">aef52b9</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T02:03:42.000Z" data-local-datetime="2025-10-17T02:03:42.000Z">2:03am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #160 from shthed/codex/modify-file-save-and-progress-features</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/f5b4be820b1b667ec79d8fd03b0118673d14cc20">f5b4be8</a></li></ul></div></li>
+<li class="card"><div class="card-header"><div class="branch-title"><span class="branch-name">codex/add-chatgpt-link-and-image-description-field</span></div><div class="card-links"><a class="card-link" href="./codex-add-chatgpt-link-and-image-description-field/">Preview</a><a class="card-link" href="https://github.com/shthed/capy/tree/codex%2Fadd-chatgpt-link-and-image-description-field">GitHub</a></div></div><div class="pr-meta"><a class="pr-link" href="https://github.com/shthed/capy/pull/162">PR #162 — Add ChatGPT image prompt helper to generator tab</a></div><div class="meta">Last deployed <time class="commit-date" datetime="2025-10-17T07:08:48.000Z" data-local-datetime="2025-10-17T07:08:48.000Z">7:08am Fri Oct 17, 2025</time> by shthed · <a href="https://github.com/shthed/capy/commit/e13041e701ca5ad376914ac46693cf82291e81df">e13041e</a></div><div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list"><li class="commit-item"><time class="commit-date" datetime="2025-10-17T06:23:28.000Z" data-local-datetime="2025-10-17T06:23:28.000Z">6:23am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Add ChatGPT link and description field to generator</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/b3f705bd4e71e3cb917a76dc456941a4d7c2e419">b3f705b</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T03:54:32.000Z" data-local-datetime="2025-10-17T03:54:32.000Z">3:54am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #161 from shthed/codex/update-manage-saves-page-features</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/1be83c6e87bfb78ef70bade56cb3f98c565d55a0">1be83c6</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-17T03:26:01.000Z" data-local-datetime="2025-10-17T03:26:01.000Z">3:26am Fri Oct 17, 2025</time><span class="commit-separator">·</span><span class="commit-message">Improve save management autosave experience</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902">aef52b9</a></li></ul></div></li>
+<li class="card"><div class="card-header"><div class="branch-title"><span class="branch-name">codex/introduce-renderer-abstraction-for-webgl</span></div><div class="card-links"><a class="card-link" href="./codex-introduce-renderer-abstraction-for-webgl/">Preview</a><a class="card-link" href="https://github.com/shthed/capy/tree/codex%2Fintroduce-renderer-abstraction-for-webgl">GitHub</a></div></div><div class="pr-meta"><a class="pr-link" href="https://github.com/shthed/capy/pull/124">PR #124 — WebGL renderer</a></div><div class="meta">Last deployed <time class="commit-date" datetime="2025-10-16T03:32:54.000Z" data-local-datetime="2025-10-16T03:32:54.000Z">3:32am Thu Oct 16, 2025</time> by shthed · <a href="https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180">fedcafb</a></div><div class="commit-section"><div class="commit-title">Recent commits</div><ul class="commit-list"><li class="commit-item"><time class="commit-date" datetime="2025-10-14T18:06:23.000Z" data-local-datetime="2025-10-14T18:06:23.000Z">6:06pm Tue Oct 14, 2025</time><span class="commit-separator">·</span><span class="commit-message">Fix renderer init ordering to restore interactions</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/15fadfe89ca32327ac1be6e88772ec750b9e9075">15fadfe</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-14T13:22:10.000Z" data-local-datetime="2025-10-14T13:22:10.000Z">1:22pm Tue Oct 14, 2025</time><span class="commit-separator">·</span><span class="commit-message">Refactor renderer scaffolding with overlay canvas</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/a348b080a3acc872518a5b8b9cbe79d6f5be611b">a348b08</a></li><li class="commit-item"><time class="commit-date" datetime="2025-10-13T10:47:53.000Z" data-local-datetime="2025-10-13T10:47:53.000Z">10:47am Mon Oct 13, 2025</time><span class="commit-separator">·</span><span class="commit-message">Merge pull request #100 from shthed/codex/add-show/hide-option-for-status-bar</span><span class="commit-separator">·</span><a class="commit-sha" href="https://github.com/shthed/capy/commit/3085e55ee56be41320edf9d2da0f320dc583631e">3085e55</a></li></ul></div></li>
   </ul>
   <script>
     (() => {
@@ -163,16 +233,13 @@
           const minute = find('minute');
           const period = find('dayPeriod');
           const weekday = find('weekday');
-          const zone = find('timeZoneName');
-
           if (!month || !day || !year || !hour || !minute || !period || !weekday) {
             return null;
           }
 
           const time = `${hour}:${minute}${period.toLowerCase()}`;
           const base = `${time} ${weekday} ${month} ${day}, ${year}`;
-          const zoneSuffix = zone ? ` ${zone}` : '';
-          return `${base}${zoneSuffix}`;
+          return base;
         } catch (error) {
           return null;
         }

@@ -1,6 +1,15 @@
 {
   "commits": [
     {
+      "sha": "2cff9f77852d9e58973fc5c28dbf64f7f5452bdc",
+      "shortSha": "2cff9f7",
+      "message": "Increase the number of commits fetched for PRs and exclude specific commits from the recent commits list",
+      "author": "shthed",
+      "date": "2025-10-17T08:09:36Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2cff9f77852d9e58973fc5c28dbf64f7f5452bdc",
+      "prs": []
+    },
+    {
       "sha": "2e8a09b2b994ae02a52dcd8de9fc49021a90c514",
       "shortSha": "2e8a09b",
       "message": "Merge pull request #164 from shthed/codex/update-date-format-to-include-weekday\n\nInclude weekday in branch deployment timestamps",
@@ -46,6 +55,6 @@
       ]
     }
   ],
-  "lastCommitDate": "2025-10-17T07:49:05Z",
-  "deploymentTimestamp": 1760687572395
+  "lastCommitDate": "2025-10-17T08:09:36Z",
+  "deploymentTimestamp": 1760688602780
 }
