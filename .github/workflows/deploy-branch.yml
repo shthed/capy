@@ -572,6 +572,7 @@ jobs:
             }
 
             const parts = new Intl.DateTimeFormat('en-US', {
+              weekday: 'short',
               year: 'numeric',
               month: 'short',
               day: '2-digit',
@@ -592,12 +593,14 @@ jobs:
             const hour = get('hour');
             const minute = get('minute');
             const period = get('dayPeriod');
+            const weekday = get('weekday');
 
-            if (!month || !day || !year || !hour || !minute || !period) {
+            if (!month || !day || !year || !hour || !minute || !period || !weekday) {
               return { text: '', iso: '' };
             }
 
-            const text = `${month} ${day}, ${year} ${hour}:${minute} ${period}`;
+            const time = `${hour}:${minute}${period.toLowerCase()}`;
+            const text = `${time} ${weekday} ${month} ${day}, ${year}`;
             return { text, iso: date.toISOString() };
           };
 
@@ -809,6 +812,7 @@ jobs:
             <script>
               (() => {
                 const baseOptions = {
+                  weekday: 'short',
                   year: 'numeric',
                   month: 'short',
                   day: '2-digit',
@@ -845,14 +849,17 @@ jobs:
                     const hour = find('hour');
                     const minute = find('minute');
                     const period = find('dayPeriod');
+                    const weekday = find('weekday');
                     const zone = find('timeZoneName');
 
-                    if (!month || !day || !year || !hour || !minute || !period) {
+                    if (!month || !day || !year || !hour || !minute || !period || !weekday) {
                       return null;
                     }
 
+                    const time = `${hour}:${minute}${period.toLowerCase()}`;
+                    const base = `${time} ${weekday} ${month} ${day}, ${year}`;
                     const zoneSuffix = zone ? ` ${zone}` : '';
-                    return `${month} ${day}, ${year} ${hour}:${minute} ${period}${zoneSuffix}`;
+                    return `${base}${zoneSuffix}`;
                   } catch (error) {
                     return null;
                   }
