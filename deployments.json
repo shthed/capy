@@ -2,11 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
-    "message": "Merge pull request #178 from shthed/codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8",
+    "commit": "4a49d2577844d9a20f656028f0a4bac212e6c609",
+    "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T23:10:21Z",
-    "commitUrl": "https://github.com/shthed/capy/commit/86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
+    "deployedAt": "2025-10-18T07:37:01+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609",
     "key": "main"
   },
   "codex-introduce-renderer-abstraction-for-webgl": {
@@ -18,15 +18,5 @@
     "deployedAt": "2025-10-16T03:32:54Z",
     "commitUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
     "key": "codex-introduce-renderer-abstraction-for-webgl"
-  },
-  "codex-remove-border-for-filled-regions": {
-    "key": "codex-remove-border-for-filled-regions",
-    "branch": "codex/remove-border-for-filled-regions",
-    "safeName": "codex-remove-border-for-filled-regions",
-    "commit": "895b96a23cf8b189eb84ffde93d906f220be97dd",
-    "message": "Hide outlines for filled regions",
-    "actor": "shthed",
-    "deployedAt": "2025-10-18T07:34:24+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/895b96a23cf8b189eb84ffde93d906f220be97dd"
   }
 }

@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "4a49d2577844d9a20f656028f0a4bac212e6c609",
+      "shortSha": "4a49d25",
+      "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-17T23:37:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609",
+      "prs": [
+        {
+          "number": 179,
+          "title": "Hide puzzle outlines for filled regions",
+          "url": "https://github.com/shthed/capy/pull/179",
+          "branch": "codex/remove-border-for-filled-regions"
+        }
+      ]
+    },
+    {
+      "sha": "895b96a23cf8b189eb84ffde93d906f220be97dd",
+      "shortSha": "895b96a",
+      "message": "Hide outlines for filled regions",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-17T23:34:24Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/895b96a23cf8b189eb84ffde93d906f220be97dd",
+      "prs": [
+        {
+          "number": 179,
+          "title": "Hide puzzle outlines for filled regions",
+          "url": "https://github.com/shthed/capy/pull/179",
+          "branch": "codex/remove-border-for-filled-regions"
+        }
+      ]
+    },
+    {
       "sha": "86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
       "shortSha": "86bb3b5",
       "message": "Merge pull request #178 from shthed/codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8\n\nHarden branch deployment workflow data handling",
@@ -31,40 +63,8 @@
           "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8"
         }
       ]
-    },
-    {
-      "sha": "4bfe55ee13547fe135562564c3780d893adcc27b",
-      "shortSha": "4bfe55e",
-      "message": "Improve deployment data handling",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T23:04:48Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4bfe55ee13547fe135562564c3780d893adcc27b",
-      "prs": [
-        {
-          "number": 178,
-          "title": "Harden branch deployment workflow data handling",
-          "url": "https://github.com/shthed/capy/pull/178",
-          "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8"
-        }
-      ]
-    },
-    {
-      "sha": "e4800333508485f0ed32cc26f477769d65ebced8",
-      "shortSha": "e480033",
-      "message": "Merge pull request #177 from shthed/codex/validate-yaml-syntax-in-deploy-branch.yml\n\nFix deploy workflow by moving inline scripts to dedicated files",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T22:58:11Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/e4800333508485f0ed32cc26f477769d65ebced8",
-      "prs": [
-        {
-          "number": 177,
-          "title": "Fix deploy workflow by moving inline scripts to dedicated files",
-          "url": "https://github.com/shthed/capy/pull/177",
-          "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-17T23:09:24Z",
-  "deploymentTimestamp": 1760742608389
+  "lastCommitDate": "2025-10-17T23:37:01Z",
+  "deploymentTimestamp": 1760744231109
 }
