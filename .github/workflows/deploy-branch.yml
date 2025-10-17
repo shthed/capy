@@ -342,7 +342,7 @@ jobs:
               EXTRA_EXCLUDES+=("--exclude=${entry}/")
             done
 
-            rsync -a --delete "${RSYNC_ARGS[@]}" "${EXTRA_EXCLUDES[@]}" ../ ./
+            rsync -a --delete --force "${RSYNC_ARGS[@]}" "${EXTRA_EXCLUDES[@]}" ../ ./
             generate_readme_html "."
           else
             rm -rf "$TARGET_DIR"
@@ -382,26 +382,17 @@ jobs:
             TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
           fi
 
-          jq --arg key "$TARGET_KEY" \
-             --arg branch "$BRANCH_NAME" \
-             --arg safe "$SAFE_NAME" \
-             --arg commit "${GITHUB_SHA}" \
-             --arg message "$MESSAGE" \
-             --arg actor "${GITHUB_ACTOR}" \
-             --arg timestamp "$TIMESTAMP" \
-             --arg url "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" \
-             --argjson active "$ACTIVE_JSON" \
-             '.[$key] = {
-               branch: $branch,
-               safeName: $safe,
-               commit: $commit,
-               message: $message,
-               actor: $actor,
-               deployedAt: $timestamp,
-               commitUrl: $url
-             }
-             | with_entries(select(.key == "main" or ($active | index(.key))))' "$DEPLOY_DATA" > "$DEPLOY_DATA.tmp"
-          mv "$DEPLOY_DATA.tmp" "$DEPLOY_DATA"
+          DEPLOY_DATA_PATH="$DEPLOY_DATA" \
+          DEPLOY_BRANCH="$BRANCH_NAME" \
+          DEPLOY_SAFE_NAME="$SAFE_NAME" \
+          DEPLOY_COMMIT="${GITHUB_SHA}" \
+          DEPLOY_MESSAGE="$MESSAGE" \
+          DEPLOY_ACTOR="${GITHUB_ACTOR}" \
+          DEPLOY_TIMESTAMP="$TIMESTAMP" \
+          DEPLOY_URL="https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" \
+          DEPLOY_TARGET_KEY="$TARGET_KEY" \
+          DEPLOY_ACTIVE="$ACTIVE_JSON" \
+          node ../scripts/update-deployments.mjs
 
           PR_DATA_FILE="../pr-branches.json"
           MAIN_DATA_FILE="../main-branch-data.json"

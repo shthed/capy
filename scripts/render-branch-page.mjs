@@ -210,7 +210,64 @@ const readJson = (path, fallback) => {
   }
 };
 
-const deployments = readJson(process.env.DEPLOY_DATA_PATH, {});
+const toKey = (value) => {
+  const text = String(value ?? '').trim();
+  return text;
+};
+
+const deriveDeploymentKey = (entry) => {
+  if (!entry || typeof entry !== 'object') {
+    return '';
+  }
+
+  const candidates = [entry.key, entry.safeName, entry.branch];
+  for (const candidate of candidates) {
+    const key = toKey(candidate);
+    if (key) {
+      return key;
+    }
+  }
+
+  return '';
+};
+
+const normaliseDeployments = (value) => {
+  if (!value) {
+    return {};
+  }
+
+  const result = {};
+  const addEntry = (key, entry) => {
+    const trimmed = toKey(key);
+    if (!trimmed || !entry || typeof entry !== 'object') {
+      return;
+    }
+    result[trimmed] = {
+      ...entry,
+      key: entry.key ?? trimmed,
+    };
+  };
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const key = deriveDeploymentKey(entry);
+      addEntry(key, entry);
+    }
+    return result;
+  }
+
+  if (typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value)) {
+      addEntry(key, entry);
+    }
+    return result;
+  }
+
+  return {};
+};
+
+const deploymentsRaw = readJson(process.env.DEPLOY_DATA_PATH, {});
+const deployments = normaliseDeployments(deploymentsRaw);
 const prList = readJson(process.env.PR_DATA_PATH, []);
 const mainData = readJson(process.env.MAIN_DATA_PATH, { commits: [] });
 const branchCommits = readJson(process.env.BRANCH_COMMITS_PATH, {});
