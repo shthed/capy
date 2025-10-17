@@ -209,10 +209,10 @@
   "codex-update-branch-deployments-for-game-files": {
     "branch": "codex/update-branch-deployments-for-game-files",
     "safeName": "codex-update-branch-deployments-for-game-files",
-    "commit": "2cff9f77852d9e58973fc5c28dbf64f7f5452bdc",
-    "message": "Increase the number of commits fetched for PRs and exclude specific commits from the recent commits list",
+    "commit": "a8edd488164892836174d2e5e48d33bd4d077a6e",
+    "message": "Limit branch deployments to runtime assets",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T16:09:36+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/2cff9f77852d9e58973fc5c28dbf64f7f5452bdc"
+    "deployedAt": "2025-10-17T16:27:55+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/a8edd488164892836174d2e5e48d33bd4d077a6e"
   }
 }
