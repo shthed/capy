@@ -155,10 +155,10 @@
   "codex-update-manage-saves-page-features": {
     "branch": "codex/update-manage-saves-page-features",
     "safeName": "codex-update-manage-saves-page-features",
-    "commit": "f5b4be820b1b667ec79d8fd03b0118673d14cc20",
-    "message": "Merge pull request #160 from shthed/codex/modify-file-save-and-progress-features\n\nAuto-start generation and relocate saves export",
+    "commit": "aef52b965810682bf2f8018675c2f6784626c902",
+    "message": "Improve save management autosave experience",
     "actor": "shthed",
-    "deployedAt": "2025-10-17T10:03:42+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/f5b4be820b1b667ec79d8fd03b0118673d14cc20"
+    "deployedAt": "2025-10-17T11:26:01+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/aef52b965810682bf2f8018675c2f6784626c902"
   }
 }
