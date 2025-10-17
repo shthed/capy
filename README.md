@@ -18,6 +18,7 @@ single `index.html` document—no build tools or extra runtime required.
   - `README.md` – Usage guide and architecture reference for contributors.
 - **Testing & QA**
   - Automated Playwright smoke tests have been retired for now. Run quick manual passes in desktop and mobile browsers before pushing.
+  - `npm test --silent` prints a skip notice while the Playwright suite is offline so CI still tracks the placeholder hook.
 - **Tooling & metadata**
   - `package.json` – npm scripts plus the http-server dependency required to run the app locally.
   - `package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
