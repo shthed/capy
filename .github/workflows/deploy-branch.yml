@@ -287,14 +287,7 @@ jobs:
 
           if [ "${#UNIQUE_SAFE_NAMES[@]}" -gt 0 ]; then
             printf '%s\n' "${UNIQUE_SAFE_NAMES[@]}" > "$MANIFEST"
-            ACTIVE_JSON=$(printf '%s\n' "${UNIQUE_SAFE_NAMES[@]}" | python - <<'PY'
-import json
-import sys
-
-values = [line.strip() for line in sys.stdin if line.strip()]
-print(json.dumps(values))
-PY
-            ) || ACTIVE_JSON='[]'
+            ACTIVE_JSON=$(printf '%s\n' "${UNIQUE_SAFE_NAMES[@]}" | python -c 'import json, sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))') || ACTIVE_JSON='[]'
           else
             : > "$MANIFEST"
             ACTIVE_JSON='[]'
