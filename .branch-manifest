@@ -1,5 +1,4 @@
 codex-add-mouse-control-options
 codex-introduce-renderer-abstraction-for-webgl
-codex-link-view-deployment-button-to-branch
 codex-refactor-canvas-rendering-to-use-controller
 codex-render-region-number-labels

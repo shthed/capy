@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "261f400c8cb4c66b133c10f2cf7ed0afb176f66a",
+      "shortSha": "261f400",
+      "message": "Merge pull request #185 from shthed/codex/link-view-deployment-button-to-branch\n\nPoint deployment environment URL to branch preview",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-18T11:32:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/261f400c8cb4c66b133c10f2cf7ed0afb176f66a",
+      "prs": [
+        {
+          "number": 185,
+          "title": "Point deployment environment URL to branch preview",
+          "url": "https://github.com/shthed/capy/pull/185",
+          "branch": "codex/link-view-deployment-button-to-branch"
+        }
+      ]
+    },
+    {
+      "sha": "a33c159bd69845c74cccaf3af20da1fc6703e35d",
+      "shortSha": "a33c159",
+      "message": "Point deployment environment URL to branch preview",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-18T11:32:21Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a33c159bd69845c74cccaf3af20da1fc6703e35d",
+      "prs": [
+        {
+          "number": 185,
+          "title": "Point deployment environment URL to branch preview",
+          "url": "https://github.com/shthed/capy/pull/185",
+          "branch": "codex/link-view-deployment-button-to-branch"
+        }
+      ]
+    },
+    {
       "sha": "2b8c4ee993c1913e0e2cbadf6ddf39c0a794023a",
       "shortSha": "2b8c4ee",
       "message": "Merge pull request #183 from shthed/codex/replace-marked-with-github-api-for-readme\n\nUse GitHub Markdown API for README builds",
@@ -31,40 +63,8 @@
           "branch": "codex/replace-marked-with-github-api-for-readme"
         }
       ]
-    },
-    {
-      "sha": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
-      "shortSha": "420993f",
-      "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md\n\nRewrite README for player-focused guidance",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-18T04:15:22Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/420993f5ae5ea27e6d530494ac2e43858f91d26b",
-      "prs": [
-        {
-          "number": 180,
-          "title": "Rewrite README for player-focused guidance",
-          "url": "https://github.com/shthed/capy/pull/180",
-          "branch": "codex/move-development-notes-to-agents.md"
-        }
-      ]
-    },
-    {
-      "sha": "8f11153e5bf68fd39e1b304a119769ef46e29466",
-      "shortSha": "8f11153",
-      "message": "Consolidate workflow docs into AGENTS and TECH",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-18T01:48:39Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/8f11153e5bf68fd39e1b304a119769ef46e29466",
-      "prs": [
-        {
-          "number": 180,
-          "title": "Rewrite README for player-focused guidance",
-          "url": "https://github.com/shthed/capy/pull/180",
-          "branch": "codex/move-development-notes-to-agents.md"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-18T08:47:45Z",
-  "deploymentTimestamp": 1760777380360
+  "lastCommitDate": "2025-10-18T11:32:42Z",
+  "deploymentTimestamp": 1760787188855
 }

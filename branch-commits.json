@@ -1,124 +1,124 @@
 {
-  "codex/render-region-number-labels": [
+  "codex/add-mouse-control-options": [
     {
-      "sha": "2a84f83ebafa70fee6df0374c808d68476832b76",
-      "shortSha": "2a84f83",
-      "message": "Restore region number measurement context",
-      "date": "2025-10-18T06:10:20Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/2a84f83ebafa70fee6df0374c808d68476832b76",
+      "sha": "9b5089f2363e627af4e9820bbe211f4345a8f028",
+      "shortSha": "9b5089f",
+      "message": "Add select-and-fill mouse mapping",
+      "date": "2025-10-18T11:31:10Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9b5089f2363e627af4e9820bbe211f4345a8f028",
       "prs": [
         {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
+          "number": 184,
+          "title": "Allow pan and zoom gestures from viewport margins",
+          "url": "https://github.com/shthed/capy/pull/184",
+          "branch": "codex/add-mouse-control-options"
         }
       ]
     },
     {
-      "sha": "2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
-      "shortSha": "2fb6c00",
-      "message": "Fix label metrics under canvas transforms",
-      "date": "2025-10-18T04:27:53Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
+      "sha": "841e9093c0b41f547e416c0f6f2fbbb90d348e2a",
+      "shortSha": "841e909",
+      "message": "Clamp pan to keep puzzle partially visible",
+      "date": "2025-10-18T11:22:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/841e9093c0b41f547e416c0f6f2fbbb90d348e2a",
       "prs": [
         {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
+          "number": 184,
+          "title": "Allow pan and zoom gestures from viewport margins",
+          "url": "https://github.com/shthed/capy/pull/184",
+          "branch": "codex/add-mouse-control-options"
         }
       ]
     },
     {
-      "sha": "4a49d2577844d9a20f656028f0a4bac212e6c609",
-      "shortSha": "4a49d25",
-      "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
-      "date": "2025-10-17T23:37:01Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609",
+      "sha": "5ea053c01ebed6980aca65ef5abe7d362f416be1",
+      "shortSha": "5ea053c",
+      "message": "Enable pan gestures from the viewport",
+      "date": "2025-10-18T10:45:16Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/5ea053c01ebed6980aca65ef5abe7d362f416be1",
       "prs": [
         {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
+          "number": 184,
+          "title": "Allow pan and zoom gestures from viewport margins",
+          "url": "https://github.com/shthed/capy/pull/184",
+          "branch": "codex/add-mouse-control-options"
         }
       ]
     },
     {
-      "sha": "895b96a23cf8b189eb84ffde93d906f220be97dd",
-      "shortSha": "895b96a",
-      "message": "Hide outlines for filled regions",
-      "date": "2025-10-17T23:34:24Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/895b96a23cf8b189eb84ffde93d906f220be97dd",
+      "sha": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
+      "shortSha": "420993f",
+      "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md\n\nRewrite README for player-focused guidance",
+      "date": "2025-10-18T04:15:22Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/420993f5ae5ea27e6d530494ac2e43858f91d26b",
       "prs": [
         {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
+          "number": 184,
+          "title": "Allow pan and zoom gestures from viewport margins",
+          "url": "https://github.com/shthed/capy/pull/184",
+          "branch": "codex/add-mouse-control-options"
         }
       ]
     }
   ],
-  "codex-render-region-number-labels": [
+  "codex-add-mouse-control-options": [
     {
-      "sha": "2a84f83ebafa70fee6df0374c808d68476832b76",
-      "shortSha": "2a84f83",
-      "message": "Restore region number measurement context",
-      "date": "2025-10-18T06:10:20Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/2a84f83ebafa70fee6df0374c808d68476832b76",
+      "sha": "9b5089f2363e627af4e9820bbe211f4345a8f028",
+      "shortSha": "9b5089f",
+      "message": "Add select-and-fill mouse mapping",
+      "date": "2025-10-18T11:31:10Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9b5089f2363e627af4e9820bbe211f4345a8f028",
       "prs": [
         {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
+          "number": 184,
+          "title": "Allow pan and zoom gestures from viewport margins",
+          "url": "https://github.com/shthed/capy/pull/184",
+          "branch": "codex/add-mouse-control-options"
         }
       ]
     },
     {
-      "sha": "2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
-      "shortSha": "2fb6c00",
-      "message": "Fix label metrics under canvas transforms",
-      "date": "2025-10-18T04:27:53Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
+      "sha": "841e9093c0b41f547e416c0f6f2fbbb90d348e2a",
+      "shortSha": "841e909",
+      "message": "Clamp pan to keep puzzle partially visible",
+      "date": "2025-10-18T11:22:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/841e9093c0b41f547e416c0f6f2fbbb90d348e2a",
       "prs": [
         {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
+          "number": 184,
+          "title": "Allow pan and zoom gestures from viewport margins",
+          "url": "https://github.com/shthed/capy/pull/184",
+          "branch": "codex/add-mouse-control-options"
         }
       ]
     },
     {
-      "sha": "4a49d2577844d9a20f656028f0a4bac212e6c609",
-      "shortSha": "4a49d25",
-      "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
-      "date": "2025-10-17T23:37:01Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609",
+      "sha": "5ea053c01ebed6980aca65ef5abe7d362f416be1",
+      "shortSha": "5ea053c",
+      "message": "Enable pan gestures from the viewport",
+      "date": "2025-10-18T10:45:16Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/5ea053c01ebed6980aca65ef5abe7d362f416be1",
       "prs": [
         {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
+          "number": 184,
+          "title": "Allow pan and zoom gestures from viewport margins",
+          "url": "https://github.com/shthed/capy/pull/184",
+          "branch": "codex/add-mouse-control-options"
         }
       ]
     },
     {
-      "sha": "895b96a23cf8b189eb84ffde93d906f220be97dd",
-      "shortSha": "895b96a",
-      "message": "Hide outlines for filled regions",
-      "date": "2025-10-17T23:34:24Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/895b96a23cf8b189eb84ffde93d906f220be97dd",
+      "sha": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
+      "shortSha": "420993f",
+      "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md\n\nRewrite README for player-focused guidance",
+      "date": "2025-10-18T04:15:22Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/420993f5ae5ea27e6d530494ac2e43858f91d26b",
       "prs": [
         {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
+          "number": 184,
+          "title": "Allow pan and zoom gestures from viewport margins",
+          "url": "https://github.com/shthed/capy/pull/184",
+          "branch": "codex/add-mouse-control-options"
         }
       ]
     }
@@ -243,6 +243,130 @@
           "title": "Modularize puzzle renderer via controller abstraction",
           "url": "https://github.com/shthed/capy/pull/181",
           "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    }
+  ],
+  "codex/render-region-number-labels": [
+    {
+      "sha": "2a84f83ebafa70fee6df0374c808d68476832b76",
+      "shortSha": "2a84f83",
+      "message": "Restore region number measurement context",
+      "date": "2025-10-18T06:10:20Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2a84f83ebafa70fee6df0374c808d68476832b76",
+      "prs": [
+        {
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
+        }
+      ]
+    },
+    {
+      "sha": "2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
+      "shortSha": "2fb6c00",
+      "message": "Fix label metrics under canvas transforms",
+      "date": "2025-10-18T04:27:53Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
+      "prs": [
+        {
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
+        }
+      ]
+    },
+    {
+      "sha": "4a49d2577844d9a20f656028f0a4bac212e6c609",
+      "shortSha": "4a49d25",
+      "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
+      "date": "2025-10-17T23:37:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609",
+      "prs": [
+        {
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
+        }
+      ]
+    },
+    {
+      "sha": "895b96a23cf8b189eb84ffde93d906f220be97dd",
+      "shortSha": "895b96a",
+      "message": "Hide outlines for filled regions",
+      "date": "2025-10-17T23:34:24Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/895b96a23cf8b189eb84ffde93d906f220be97dd",
+      "prs": [
+        {
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
+        }
+      ]
+    }
+  ],
+  "codex-render-region-number-labels": [
+    {
+      "sha": "2a84f83ebafa70fee6df0374c808d68476832b76",
+      "shortSha": "2a84f83",
+      "message": "Restore region number measurement context",
+      "date": "2025-10-18T06:10:20Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2a84f83ebafa70fee6df0374c808d68476832b76",
+      "prs": [
+        {
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
+        }
+      ]
+    },
+    {
+      "sha": "2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
+      "shortSha": "2fb6c00",
+      "message": "Fix label metrics under canvas transforms",
+      "date": "2025-10-18T04:27:53Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
+      "prs": [
+        {
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
+        }
+      ]
+    },
+    {
+      "sha": "4a49d2577844d9a20f656028f0a4bac212e6c609",
+      "shortSha": "4a49d25",
+      "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
+      "date": "2025-10-17T23:37:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609",
+      "prs": [
+        {
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
+        }
+      ]
+    },
+    {
+      "sha": "895b96a23cf8b189eb84ffde93d906f220be97dd",
+      "shortSha": "895b96a",
+      "message": "Hide outlines for filled regions",
+      "date": "2025-10-17T23:34:24Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/895b96a23cf8b189eb84ffde93d906f220be97dd",
+      "prs": [
+        {
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
         }
       ]
     }

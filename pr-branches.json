@@ -1,19 +1,27 @@
 [
   {
-    "branch": "codex/render-region-number-labels",
-    "safeName": "codex-render-region-number-labels",
-    "title": "Ensure region number labels render correctly",
-    "number": 182,
-    "updatedAt": "2025-10-18T06:10:23Z",
-    "url": "https://github.com/shthed/capy/pull/182"
+    "branch": "codex/add-mouse-control-options",
+    "safeName": "codex-add-mouse-control-options",
+    "title": "Allow pan and zoom gestures from viewport margins",
+    "number": 184,
+    "updatedAt": "2025-10-18T11:31:12Z",
+    "url": "https://github.com/shthed/capy/pull/184"
   },
   {
     "branch": "codex/refactor-canvas-rendering-to-use-controller",
     "safeName": "codex-refactor-canvas-rendering-to-use-controller",
     "title": "Modularize puzzle renderer via controller abstraction",
     "number": 181,
-    "updatedAt": "2025-10-18T04:25:00Z",
+    "updatedAt": "2025-10-18T08:51:38Z",
     "url": "https://github.com/shthed/capy/pull/181"
+  },
+  {
+    "branch": "codex/render-region-number-labels",
+    "safeName": "codex-render-region-number-labels",
+    "title": "Ensure region number labels render correctly",
+    "number": 182,
+    "updatedAt": "2025-10-18T06:10:23Z",
+    "url": "https://github.com/shthed/capy/pull/182"
   },
   {
     "branch": "codex/introduce-renderer-abstraction-for-webgl",
