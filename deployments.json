@@ -23,10 +23,10 @@
     "key": "codex-render-region-number-labels",
     "branch": "codex/render-region-number-labels",
     "safeName": "codex-render-region-number-labels",
-    "commit": "2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
-    "message": "Fix label metrics under canvas transforms",
+    "commit": "2a84f83ebafa70fee6df0374c808d68476832b76",
+    "message": "Restore region number measurement context",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T12:27:53+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/2fb6c0054da3c39b957a3c9f2354fc8227c9699a"
+    "deployedAt": "2025-10-18T14:10:20+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/2a84f83ebafa70fee6df0374c808d68476832b76"
   }
 }
