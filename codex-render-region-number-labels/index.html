@@ -5652,8 +5652,11 @@
       function measureLabelMetrics(text, size) {
         if (!text || size <= 0) return null;
         const font = `${size}px "Inter", "Segoe UI", sans-serif`;
+        puzzleCtx.save();
+        puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
         puzzleCtx.font = font;
         const metrics = puzzleCtx.measureText(text);
+        puzzleCtx.restore();
         const textWidth = metrics.width || size;
         const ascent = metrics.actualBoundingBoxAscent || size * 0.78;
         const descent = metrics.actualBoundingBoxDescent || size * 0.22;
