@@ -1821,6 +1821,7 @@
             <span>Left button &mdash; click</span>
             <select id="mouseLeftClick">
               <option value="fill" selected>Fill region</option>
+              <option value="select-fill">Select and fill region</option>
               <option value="select">Select colour</option>
               <option value="zoom-in">Zoom in</option>
               <option value="zoom-out">Zoom out</option>
@@ -1840,6 +1841,7 @@
             <span>Middle button &mdash; click</span>
             <select id="mouseMiddleClick">
               <option value="fill">Fill region</option>
+              <option value="select-fill">Select and fill region</option>
               <option value="select">Select colour</option>
               <option value="zoom-in">Zoom in</option>
               <option value="zoom-out">Zoom out</option>
@@ -1859,6 +1861,7 @@
             <span>Right button &mdash; click</span>
             <select id="mouseRightClick">
               <option value="fill">Fill region</option>
+              <option value="select-fill">Select and fill region</option>
               <option value="select" selected>Select colour</option>
               <option value="zoom-in">Zoom in</option>
               <option value="zoom-out">Zoom out</option>
@@ -2082,6 +2085,7 @@
       };
       const VALID_MOUSE_CLICK_ACTIONS = new Set([
         "fill",
+        "select-fill",
         "select",
         "zoom-in",
         "zoom-out",
@@ -2165,6 +2169,8 @@
         switch (action) {
           case "fill":
             return "Fill region";
+          case "select-fill":
+            return "Select and fill region";
           case "select":
             return "Select colour";
           case "zoom-in":
@@ -6790,6 +6796,16 @@
           } else {
             logDebug("No region under pointer to select a colour");
           }
+          return;
+        }
+        if (action === "select-fill") {
+          const hit = getRegionFromEvent(event);
+          if (!hit || !hit.region) {
+            logDebug("No region under pointer to select and fill");
+            return;
+          }
+          activateColor(hit.region.colorId, { flash: false });
+          attemptFillRegion(hit, { label: "click" });
           return;
         }
         if (action === "zoom-in" || action === "zoom-out") {
