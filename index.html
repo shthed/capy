@@ -1952,6 +1952,10 @@
       const previewCanvas = document.createElement("canvas");
       const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
+      const measurementCanvas = document.createElement("canvas");
+      measurementCanvas.width = 2;
+      measurementCanvas.height = 2;
+      const measurementCtx = measurementCanvas.getContext("2d");
 
       // Sheet output mirrors we update while users drag sliders.
       const generatorOutputs = generatorSheet
@@ -5652,11 +5656,22 @@
       function measureLabelMetrics(text, size) {
         if (!text || size <= 0) return null;
         const font = `${size}px "Inter", "Segoe UI", sans-serif`;
-        puzzleCtx.save();
-        puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
-        puzzleCtx.font = font;
-        const metrics = puzzleCtx.measureText(text);
-        puzzleCtx.restore();
+        const ctx = measurementCtx || puzzleCtx;
+        if (!ctx || typeof ctx.measureText !== "function") {
+          return null;
+        }
+        const hasStateStack = typeof ctx.save === "function" && typeof ctx.restore === "function";
+        if (hasStateStack) {
+          ctx.save();
+        }
+        if (typeof ctx.setTransform === "function") {
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+        }
+        ctx.font = font;
+        const metrics = ctx.measureText(text);
+        if (hasStateStack) {
+          ctx.restore();
+        }
         const textWidth = metrics.width || size;
         const ascent = metrics.actualBoundingBoxAscent || size * 0.78;
         const descent = metrics.actualBoundingBoxDescent || size * 0.22;
