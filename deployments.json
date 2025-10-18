@@ -23,10 +23,10 @@
     "key": "codex-move-development-notes-to-agents.md",
     "branch": "codex/move-development-notes-to-agents.md",
     "safeName": "codex-move-development-notes-to-agents.md",
-    "commit": "4a49d2577844d9a20f656028f0a4bac212e6c609",
-    "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
+    "commit": "5ea38830555702a156d3f68aa934ab4adbb3d9ff",
+    "message": "Rewrite README for players",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T07:37:01+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609"
+    "deployedAt": "2025-10-18T09:45:23+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/5ea38830555702a156d3f68aa934ab4adbb3d9ff"
   }
 }
