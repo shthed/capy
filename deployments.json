@@ -33,10 +33,10 @@
     "key": "codex-replace-marked-with-github-api-for-readme",
     "branch": "codex/replace-marked-with-github-api-for-readme",
     "safeName": "codex-replace-marked-with-github-api-for-readme",
-    "commit": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
-    "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md\n\nRewrite README for player-focused guidance",
+    "commit": "2e9bcf3de34fb1f8c2223b22f642c12847b36d9a",
+    "message": "Use GitHub Markdown API for README builds",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T12:15:22+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/420993f5ae5ea27e6d530494ac2e43858f91d26b"
+    "deployedAt": "2025-10-18T14:15:18+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/2e9bcf3de34fb1f8c2223b22f642c12847b36d9a"
   }
 }
