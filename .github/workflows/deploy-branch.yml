@@ -302,23 +302,15 @@ jobs:
               return 0
             fi
 
-            local tmp_html
-            tmp_html=$(mktemp)
-
-            if ! npx --yes marked@9.1.3 --gfm --breaks "$source_file" > "$tmp_html"; then
-              echo "Warning: README markdown to HTML conversion failed" >&2
-              rm -f "$tmp_html"
-              return 0
-            fi
-
             local output_dir="$target_root/README"
             local output_file="$output_dir/index.html"
             rm -rf "$output_dir"
             mkdir -p "$output_dir"
 
-            python ../scripts/generate_readme_html.py "$tmp_html" "$output_file"
-
-            rm -f "$tmp_html"
+            if ! node ../scripts/build-pages-site.mjs --source "$source_file" --output "$output_file" --mode gfm --context "${GITHUB_REPOSITORY}"; then
+              echo "Warning: README markdown to HTML conversion failed" >&2
+              return 0
+            fi
           }
 
           RSYNC_ARGS=(
