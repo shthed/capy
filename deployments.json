@@ -29,6 +29,16 @@
     "commitUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
     "key": "codex-introduce-renderer-abstraction-for-webgl"
   },
+  "codex-link-view-deployment-button-to-branch": {
+    "key": "codex-link-view-deployment-button-to-branch",
+    "branch": "codex/link-view-deployment-button-to-branch",
+    "safeName": "codex-link-view-deployment-button-to-branch",
+    "commit": "4a49d2577844d9a20f656028f0a4bac212e6c609",
+    "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
+    "actor": "shthed",
+    "deployedAt": "2025-10-18T07:37:01+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609"
+  },
   "codex-render-region-number-labels": {
     "key": "codex-render-region-number-labels",
     "branch": "codex/render-region-number-labels",
