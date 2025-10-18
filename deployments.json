@@ -9,6 +9,16 @@
     "commitUrl": "https://github.com/shthed/capy/commit/2b8c4ee993c1913e0e2cbadf6ddf39c0a794023a",
     "key": "main"
   },
+  "codex-add-mouse-control-options": {
+    "key": "codex-add-mouse-control-options",
+    "branch": "codex/add-mouse-control-options",
+    "safeName": "codex-add-mouse-control-options",
+    "commit": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
+    "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md\n\nRewrite README for player-focused guidance",
+    "actor": "shthed",
+    "deployedAt": "2025-10-18T12:15:22+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/420993f5ae5ea27e6d530494ac2e43858f91d26b"
+  },
   "codex-introduce-renderer-abstraction-for-webgl": {
     "branch": "codex/introduce-renderer-abstraction-for-webgl",
     "safeName": "codex-introduce-renderer-abstraction-for-webgl",
