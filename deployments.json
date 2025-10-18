@@ -3,9 +3,9 @@
     "branch": "main",
     "safeName": "",
     "commit": "2b8c4ee993c1913e0e2cbadf6ddf39c0a794023a",
-    "message": "Merge pull request #183 from shthed/codex/replace-marked-with-github-api-for-readme\n\nUse GitHub Markdown API for README builds",
+    "message": "Merge pull request #183 from shthed/codex/replace-marked-with-github-api-for-readme",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T16:47:45+08:00",
+    "deployedAt": "2025-10-18T08:49:42Z",
     "commitUrl": "https://github.com/shthed/capy/commit/2b8c4ee993c1913e0e2cbadf6ddf39c0a794023a",
     "key": "main"
   },
