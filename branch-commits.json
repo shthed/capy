@@ -1,4 +1,128 @@
 {
+  "codex/refactor-canvas-rendering-to-use-controller": [
+    {
+      "sha": "121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
+      "shortSha": "121e8a5",
+      "message": "Refactor puzzle renderer through controller",
+      "date": "2025-10-18T04:24:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    },
+    {
+      "sha": "1d67f36f273f41e5ecb5036cfe38a9fc7cd719a2",
+      "shortSha": "1d67f36",
+      "message": "Merge pull request #162 from shthed/codex/add-chatgpt-link-and-image-description-field\n\nAdd ChatGPT image prompt helper to generator tab",
+      "date": "2025-10-17T09:39:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1d67f36f273f41e5ecb5036cfe38a9fc7cd719a2",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    },
+    {
+      "sha": "ca4ca9fa951953f60c7fa7d2332e84c7d032d74f",
+      "shortSha": "ca4ca9f",
+      "message": "Merge pull request #169 from shthed/codex/update-readme-for-core-application-files\n\nFix README core asset reference",
+      "date": "2025-10-17T09:37:08Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ca4ca9fa951953f60c7fa7d2332e84c7d032d74f",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    },
+    {
+      "sha": "a65053f31cff64824abb484207f86abfcaf064dc",
+      "shortSha": "a65053f",
+      "message": "Correct core asset reference",
+      "date": "2025-10-17T09:34:19Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a65053f31cff64824abb484207f86abfcaf064dc",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    }
+  ],
+  "codex-refactor-canvas-rendering-to-use-controller": [
+    {
+      "sha": "121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
+      "shortSha": "121e8a5",
+      "message": "Refactor puzzle renderer through controller",
+      "date": "2025-10-18T04:24:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    },
+    {
+      "sha": "1d67f36f273f41e5ecb5036cfe38a9fc7cd719a2",
+      "shortSha": "1d67f36",
+      "message": "Merge pull request #162 from shthed/codex/add-chatgpt-link-and-image-description-field\n\nAdd ChatGPT image prompt helper to generator tab",
+      "date": "2025-10-17T09:39:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/1d67f36f273f41e5ecb5036cfe38a9fc7cd719a2",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    },
+    {
+      "sha": "ca4ca9fa951953f60c7fa7d2332e84c7d032d74f",
+      "shortSha": "ca4ca9f",
+      "message": "Merge pull request #169 from shthed/codex/update-readme-for-core-application-files\n\nFix README core asset reference",
+      "date": "2025-10-17T09:37:08Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ca4ca9fa951953f60c7fa7d2332e84c7d032d74f",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    },
+    {
+      "sha": "a65053f31cff64824abb484207f86abfcaf064dc",
+      "shortSha": "a65053f",
+      "message": "Correct core asset reference",
+      "date": "2025-10-17T09:34:19Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a65053f31cff64824abb484207f86abfcaf064dc",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    }
+  ],
   "codex/introduce-renderer-abstraction-for-webgl": [
     {
       "sha": "fedcafb678bac485449081f8a860a06f34ce0180",
