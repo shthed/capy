@@ -1697,6 +1697,16 @@
           </label>
           <p class="control-note">Controls the longest edge used when resizing the source image.</p>
           <label class="control">
+            <span>Algorithm</span>
+            <select id="generationAlgorithm">
+              <option value="local-kmeans">Local palette clustering (k-means)</option>
+              <option value="local-posterize">Local posterize &amp; merge</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Choose between local clustering pipelines now, with space for hosted services to appear as they become available.
+          </p>
+          <label class="control">
             <span>Sample rate <output data-for="sampleRate">65%</output></span>
             <input id="sampleRate" type="range" min="25" max="100" step="5" value="65" />
           </label>
@@ -1705,10 +1715,16 @@
             <span>Iterations <output data-for="kmeansIters">12</output></span>
             <input id="kmeansIters" type="range" min="4" max="32" step="1" value="12" />
           </label>
+          <p class="control-note">
+            Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process.
+          </p>
           <label class="control">
             <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
             <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
           </label>
+          <p class="control-note">
+            Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source.
+          </p>
           <details class="advanced-options" id="generatorAdvanced">
             <summary>Advanced options</summary>
             <label class="control">
@@ -1998,6 +2014,7 @@
       const colorCountEl = document.getElementById("colorCount");
       const minRegionEl = document.getElementById("minRegion");
       const detailEl = document.getElementById("detailLevel");
+      const algorithmEl = document.getElementById("generationAlgorithm");
       const sampleRateEl = document.getElementById("sampleRate");
       const kmeansItersEl = document.getElementById("kmeansIters");
       const smoothingEl = document.getElementById("smoothingPasses");
@@ -2063,6 +2080,8 @@
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       const DEFAULT_UI_SCALE = 0.9;
       const DEFAULT_UI_THEME = "dark";
+      const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
+      const VALID_GENERATION_ALGORITHMS = new Set(["local-kmeans", "local-posterize"]);
       const VALID_UI_THEMES = new Set(["dark", "light", "colorful"]);
       const DEFAULT_HINT_FADE_DURATION = 1200;
       const MIN_HINT_FADE_DURATION = 400;
@@ -2373,6 +2392,7 @@
             sampleRate: 90,
             kmeansIters: 20,
             smoothingPasses: 1,
+            algorithm: DEFAULT_GENERATION_ALGORITHM,
           },
         },
         medium: {
@@ -2391,6 +2411,7 @@
             sampleRate: 95,
             kmeansIters: 24,
             smoothingPasses: 1,
+            algorithm: DEFAULT_GENERATION_ALGORITHM,
           },
         },
         high: {
@@ -2409,6 +2430,7 @@
             sampleRate: 100,
             kmeansIters: 28,
             smoothingPasses: 1,
+            algorithm: DEFAULT_GENERATION_ALGORITHM,
           },
         },
       };
@@ -3232,6 +3254,7 @@
       let pendingImportAutoStart = false;
       updateImportNotice();
       let shouldAutoLoadSample = false;
+      let algorithmOptionsHydrated = false;
       updateMouseControlInputs();
 
       function disableSampleAutoload() {
@@ -4015,6 +4038,9 @@
       colorCountEl.addEventListener("change", markOptionsDirty);
       minRegionEl.addEventListener("change", markOptionsDirty);
       detailEl.addEventListener("change", markOptionsDirty);
+      if (algorithmEl) {
+        algorithmEl.addEventListener("change", markOptionsDirty);
+      }
       sampleRateEl.addEventListener("change", markOptionsDirty);
       kmeansItersEl.addEventListener("change", markOptionsDirty);
       smoothingEl.addEventListener("change", markOptionsDirty);
@@ -4745,6 +4771,16 @@
           if (smoothingEl && typeof settings.smoothingPasses === "number") {
             smoothingEl.value = String(settings.smoothingPasses);
           }
+          if (algorithmEl && typeof settings.algorithm === "string") {
+            const normalizedAlgorithm = normalizeGenerationAlgorithm(settings.algorithm);
+            if (algorithmEl.value !== normalizedAlgorithm) {
+              algorithmEl.value = normalizedAlgorithm;
+            }
+          } else if (algorithmEl && !settings.algorithm) {
+            if (algorithmEl.value !== DEFAULT_GENERATION_ALGORITHM) {
+              algorithmEl.value = DEFAULT_GENERATION_ALGORITHM;
+            }
+          }
           updateOptionOutputs();
           markOptionsDirty();
         }
@@ -5127,6 +5163,71 @@
         }
       }
 
+      function normalizeGenerationAlgorithm(value) {
+        if (typeof value === "string") {
+          const key = value.trim();
+          if (VALID_GENERATION_ALGORITHMS.has(key)) {
+            return key;
+          }
+        }
+        return DEFAULT_GENERATION_ALGORITHM;
+      }
+
+      function hydrateAlgorithmOptions(catalog) {
+        if (!algorithmEl || algorithmOptionsHydrated) {
+          return;
+        }
+        if (!Array.isArray(catalog) || catalog.length === 0) {
+          return;
+        }
+        const options = [];
+        for (const entry of catalog) {
+          if (!entry || typeof entry.id !== "string") {
+            continue;
+          }
+          const id = entry.id.trim();
+          if (!id) {
+            continue;
+          }
+          const baseLabel = typeof entry.label === "string" && entry.label.trim()
+            ? entry.label.trim()
+            : id;
+          const modeSuffix = entry.mode && entry.mode !== "local" ? ` (${entry.mode})` : "";
+          options.push({ id, label: `${baseLabel}${modeSuffix}`.trim() });
+        }
+        if (options.length === 0) {
+          return;
+        }
+        const previousValue = normalizeGenerationAlgorithm(algorithmEl.value);
+        algorithmEl.innerHTML = "";
+        const seen = new Set();
+        for (const option of options) {
+          if (seen.has(option.id)) {
+            continue;
+          }
+          seen.add(option.id);
+          VALID_GENERATION_ALGORITHMS.add(option.id);
+          const opt = document.createElement("option");
+          opt.value = option.id;
+          opt.textContent = option.label;
+          algorithmEl.appendChild(opt);
+        }
+        if (!seen.has(DEFAULT_GENERATION_ALGORITHM)) {
+          const fallbackOption = document.createElement("option");
+          fallbackOption.value = DEFAULT_GENERATION_ALGORITHM;
+          fallbackOption.textContent = "Local palette clustering (k-means)";
+          algorithmEl.appendChild(fallbackOption);
+          VALID_GENERATION_ALGORITHMS.add(DEFAULT_GENERATION_ALGORITHM);
+          seen.add(DEFAULT_GENERATION_ALGORITHM);
+        }
+        const targetAlgorithm = seen.has(previousValue)
+          ? previousValue
+          : DEFAULT_GENERATION_ALGORITHM;
+        algorithmEl.value = targetAlgorithm;
+        algorithmOptionsHydrated = true;
+        markOptionsDirty();
+      }
+
       function markOptionsDirty() {
         if (!state.puzzle || !state.sourceUrl) {
           applyBtn.disabled = true;
@@ -5134,6 +5235,7 @@
         }
         const current = getCurrentOptions();
         const last = state.lastOptions;
+        const lastAlgorithm = last ? normalizeGenerationAlgorithm(last.algorithm) : DEFAULT_GENERATION_ALGORITHM;
         const dirty =
           !last ||
           current.targetColors !== last.targetColors ||
@@ -5141,7 +5243,8 @@
           current.maxSize !== last.maxSize ||
           current.sampleRate !== last.sampleRate ||
           current.kmeansIters !== last.kmeansIters ||
-          current.smoothingPasses !== last.smoothingPasses;
+          current.smoothingPasses !== last.smoothingPasses ||
+          current.algorithm !== lastAlgorithm;
         applyBtn.disabled = !dirty;
       }
 
@@ -5153,6 +5256,7 @@
           sampleRate: clamp(Number(sampleRateEl.value) || 65, 10, 100) / 100,
           kmeansIters: clamp(Number(kmeansItersEl.value) || 12, 1, 64),
           smoothingPasses: clamp(Number(smoothingEl.value) || 1, 0, 6),
+          algorithm: normalizeGenerationAlgorithm(algorithmEl ? algorithmEl.value : DEFAULT_GENERATION_ALGORITHM),
         };
       }
 
@@ -5432,10 +5536,30 @@
 
       function loadPuzzleGenerationModule() {
         if (!puzzleGenerationModulePromise) {
-          puzzleGenerationModulePromise = import("./puzzle-generation.js").catch((error) => {
-            puzzleGenerationModulePromise = null;
-            throw error;
-          });
+          puzzleGenerationModulePromise = import("./puzzle-generation.js")
+            .then((module) => {
+              try {
+                if (module && Array.isArray(module.GENERATION_ALGORITHM_CATALOG)) {
+                  hydrateAlgorithmOptions(module.GENERATION_ALGORITHM_CATALOG);
+                }
+                if (
+                  module &&
+                  typeof module.DEFAULT_GENERATION_ALGORITHM_ID === "string" &&
+                  module.DEFAULT_GENERATION_ALGORITHM_ID.trim()
+                ) {
+                  VALID_GENERATION_ALGORITHMS.add(
+                    module.DEFAULT_GENERATION_ALGORITHM_ID.trim()
+                  );
+                }
+              } catch (hydrationError) {
+                console.warn("Unable to hydrate generator algorithms", hydrationError);
+              }
+              return module;
+            })
+            .catch((error) => {
+              puzzleGenerationModulePromise = null;
+              throw error;
+            });
         }
         return puzzleGenerationModulePromise;
       }
@@ -5584,7 +5708,19 @@
             : palette[0]?.id ?? null;
         state.filled = new Set(metadata.filled ?? []);
         markFilledLayerDirty();
-        state.lastOptions = metadata.options ?? getCurrentOptions();
+        const lastOptionsRaw = metadata.options ?? getCurrentOptions();
+        const normalizedOptions = {
+          ...lastOptionsRaw,
+          algorithm: normalizeGenerationAlgorithm(lastOptionsRaw?.algorithm),
+        };
+        state.lastOptions = normalizedOptions;
+        if (algorithmEl) {
+          const currentAlgorithm = normalizeGenerationAlgorithm(algorithmEl.value);
+          const targetAlgorithm = normalizedOptions.algorithm || DEFAULT_GENERATION_ALGORITHM;
+          if (currentAlgorithm !== targetAlgorithm) {
+            algorithmEl.value = targetAlgorithm;
+          }
+        }
         const resolvedSettings = metadata.settings ?? data.settings;
         if (resolvedSettings) {
           applyGameplaySettings(resolvedSettings);

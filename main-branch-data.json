@@ -1,6 +1,54 @@
 {
   "commits": [
     {
+      "sha": "b7b56f98e87f2e0c33b51d2c014cb555a5102b50",
+      "shortSha": "b7b56f9",
+      "message": "Merge pull request #186 from shthed/codex/explain-iterations-and-smoothing-passes\n\nAdd multiple puzzle generation algorithms and documentation updates",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-18T13:50:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b7b56f98e87f2e0c33b51d2c014cb555a5102b50",
+      "prs": [
+        {
+          "number": 186,
+          "title": "Add multiple puzzle generation algorithms and documentation updates",
+          "url": "https://github.com/shthed/capy/pull/186",
+          "branch": "codex/explain-iterations-and-smoothing-passes"
+        }
+      ]
+    },
+    {
+      "sha": "e7c750957181037bd0a75a6aa261f08d100670c6",
+      "shortSha": "e7c7509",
+      "message": "Merge branch 'main' into codex/explain-iterations-and-smoothing-passes",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-18T13:03:37Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/e7c750957181037bd0a75a6aa261f08d100670c6",
+      "prs": [
+        {
+          "number": 186,
+          "title": "Add multiple puzzle generation algorithms and documentation updates",
+          "url": "https://github.com/shthed/capy/pull/186",
+          "branch": "codex/explain-iterations-and-smoothing-passes"
+        }
+      ]
+    },
+    {
+      "sha": "4dec81a183661033453c2c51d83385df22aa7fdf",
+      "shortSha": "4dec81a",
+      "message": "Add posterize generator option and explain tuning controls",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-18T12:57:37Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4dec81a183661033453c2c51d83385df22aa7fdf",
+      "prs": [
+        {
+          "number": 186,
+          "title": "Add multiple puzzle generation algorithms and documentation updates",
+          "url": "https://github.com/shthed/capy/pull/186",
+          "branch": "codex/explain-iterations-and-smoothing-passes"
+        }
+      ]
+    },
+    {
       "sha": "c33a83d15afbe24457018042686cb4d3689171bd",
       "shortSha": "c33a83d",
       "message": "Merge pull request #184 from shthed/codex/add-mouse-control-options\n\nAllow pan and zoom gestures from viewport margins",
@@ -15,56 +63,8 @@
           "branch": "codex/add-mouse-control-options"
         }
       ]
-    },
-    {
-      "sha": "261f400c8cb4c66b133c10f2cf7ed0afb176f66a",
-      "shortSha": "261f400",
-      "message": "Merge pull request #185 from shthed/codex/link-view-deployment-button-to-branch\n\nPoint deployment environment URL to branch preview",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-18T11:32:42Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/261f400c8cb4c66b133c10f2cf7ed0afb176f66a",
-      "prs": [
-        {
-          "number": 185,
-          "title": "Point deployment environment URL to branch preview",
-          "url": "https://github.com/shthed/capy/pull/185",
-          "branch": "codex/link-view-deployment-button-to-branch"
-        }
-      ]
-    },
-    {
-      "sha": "a33c159bd69845c74cccaf3af20da1fc6703e35d",
-      "shortSha": "a33c159",
-      "message": "Point deployment environment URL to branch preview",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-18T11:32:21Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/a33c159bd69845c74cccaf3af20da1fc6703e35d",
-      "prs": [
-        {
-          "number": 185,
-          "title": "Point deployment environment URL to branch preview",
-          "url": "https://github.com/shthed/capy/pull/185",
-          "branch": "codex/link-view-deployment-button-to-branch"
-        }
-      ]
-    },
-    {
-      "sha": "9b5089f2363e627af4e9820bbe211f4345a8f028",
-      "shortSha": "9b5089f",
-      "message": "Add select-and-fill mouse mapping",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-18T11:31:10Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9b5089f2363e627af4e9820bbe211f4345a8f028",
-      "prs": [
-        {
-          "number": 184,
-          "title": "Allow pan and zoom gestures from viewport margins",
-          "url": "https://github.com/shthed/capy/pull/184",
-          "branch": "codex/add-mouse-control-options"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-18T12:20:11Z",
-  "deploymentTimestamp": 1760790021466
+  "lastCommitDate": "2025-10-18T13:50:01Z",
+  "deploymentTimestamp": 1760795411752
 }
