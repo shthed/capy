@@ -1,5 +1,13 @@
 [
   {
+    "branch": "codex/render-region-number-labels",
+    "safeName": "codex-render-region-number-labels",
+    "title": "Ensure region number labels render correctly",
+    "number": 182,
+    "updatedAt": "2025-10-18T06:10:23Z",
+    "url": "https://github.com/shthed/capy/pull/182"
+  },
+  {
     "branch": "codex/refactor-canvas-rendering-to-use-controller",
     "safeName": "codex-refactor-canvas-rendering-to-use-controller",
     "title": "Modularize puzzle renderer via controller abstraction",

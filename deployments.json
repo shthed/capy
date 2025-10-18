@@ -2,11 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
-    "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md",
+    "commit": "2b8c4ee993c1913e0e2cbadf6ddf39c0a794023a",
+    "message": "Merge pull request #183 from shthed/codex/replace-marked-with-github-api-for-readme\n\nUse GitHub Markdown API for README builds",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T04:27:31Z",
-    "commitUrl": "https://github.com/shthed/capy/commit/420993f5ae5ea27e6d530494ac2e43858f91d26b",
+    "deployedAt": "2025-10-18T16:47:45+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/2b8c4ee993c1913e0e2cbadf6ddf39c0a794023a",
     "key": "main"
   },
   "codex-introduce-renderer-abstraction-for-webgl": {
@@ -28,15 +28,5 @@
     "actor": "shthed",
     "deployedAt": "2025-10-18T14:10:20+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/2a84f83ebafa70fee6df0374c808d68476832b76"
-  },
-  "codex-replace-marked-with-github-api-for-readme": {
-    "key": "codex-replace-marked-with-github-api-for-readme",
-    "branch": "codex/replace-marked-with-github-api-for-readme",
-    "safeName": "codex-replace-marked-with-github-api-for-readme",
-    "commit": "2e9bcf3de34fb1f8c2223b22f642c12847b36d9a",
-    "message": "Use GitHub Markdown API for README builds",
-    "actor": "shthed",
-    "deployedAt": "2025-10-18T14:15:18+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/2e9bcf3de34fb1f8c2223b22f642c12847b36d9a"
   }
 }

@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "2b8c4ee993c1913e0e2cbadf6ddf39c0a794023a",
+      "shortSha": "2b8c4ee",
+      "message": "Merge pull request #183 from shthed/codex/replace-marked-with-github-api-for-readme\n\nUse GitHub Markdown API for README builds",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-18T08:47:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2b8c4ee993c1913e0e2cbadf6ddf39c0a794023a",
+      "prs": [
+        {
+          "number": 183,
+          "title": "Use GitHub Markdown API for README builds",
+          "url": "https://github.com/shthed/capy/pull/183",
+          "branch": "codex/replace-marked-with-github-api-for-readme"
+        }
+      ]
+    },
+    {
+      "sha": "2e9bcf3de34fb1f8c2223b22f642c12847b36d9a",
+      "shortSha": "2e9bcf3",
+      "message": "Use GitHub Markdown API for README builds",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-18T06:15:18Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2e9bcf3de34fb1f8c2223b22f642c12847b36d9a",
+      "prs": [
+        {
+          "number": 183,
+          "title": "Use GitHub Markdown API for README builds",
+          "url": "https://github.com/shthed/capy/pull/183",
+          "branch": "codex/replace-marked-with-github-api-for-readme"
+        }
+      ]
+    },
+    {
       "sha": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
       "shortSha": "420993f",
       "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md\n\nRewrite README for player-focused guidance",
@@ -31,40 +63,8 @@
           "branch": "codex/move-development-notes-to-agents.md"
         }
       ]
-    },
-    {
-      "sha": "0806f1435a44d30c24d679c62fc734adfaf5e0e5",
-      "shortSha": "0806f14",
-      "message": "Document technical guide and streamline agent instructions",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-18T01:48:32Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/0806f1435a44d30c24d679c62fc734adfaf5e0e5",
-      "prs": [
-        {
-          "number": 180,
-          "title": "Rewrite README for player-focused guidance",
-          "url": "https://github.com/shthed/capy/pull/180",
-          "branch": "codex/move-development-notes-to-agents.md"
-        }
-      ]
-    },
-    {
-      "sha": "5ea38830555702a156d3f68aa934ab4adbb3d9ff",
-      "shortSha": "5ea3883",
-      "message": "Rewrite README for players",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-18T01:45:23Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/5ea38830555702a156d3f68aa934ab4adbb3d9ff",
-      "prs": [
-        {
-          "number": 180,
-          "title": "Rewrite README for player-focused guidance",
-          "url": "https://github.com/shthed/capy/pull/180",
-          "branch": "codex/move-development-notes-to-agents.md"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-18T04:15:22Z",
-  "deploymentTimestamp": 1760761635720
+  "lastCommitDate": "2025-10-18T08:47:45Z",
+  "deploymentTimestamp": 1760777277774
 }
