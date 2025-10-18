@@ -2,22 +2,12 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "261f400c8cb4c66b133c10f2cf7ed0afb176f66a",
-    "message": "Merge pull request #185 from shthed/codex/link-view-deployment-button-to-branch\n\nPoint deployment environment URL to branch preview",
+    "commit": "c33a83d15afbe24457018042686cb4d3689171bd",
+    "message": "Merge pull request #184 from shthed/codex/add-mouse-control-options\n\nAllow pan and zoom gestures from viewport margins",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T19:32:42+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/261f400c8cb4c66b133c10f2cf7ed0afb176f66a",
+    "deployedAt": "2025-10-18T20:20:11+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/c33a83d15afbe24457018042686cb4d3689171bd",
     "key": "main"
-  },
-  "codex-add-mouse-control-options": {
-    "key": "codex-add-mouse-control-options",
-    "branch": "codex/add-mouse-control-options",
-    "safeName": "codex-add-mouse-control-options",
-    "commit": "9b5089f2363e627af4e9820bbe211f4345a8f028",
-    "message": "Add select-and-fill mouse mapping",
-    "actor": "shthed",
-    "deployedAt": "2025-10-18T19:31:10+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/9b5089f2363e627af4e9820bbe211f4345a8f028"
   },
   "codex-introduce-renderer-abstraction-for-webgl": {
     "branch": "codex/introduce-renderer-abstraction-for-webgl",

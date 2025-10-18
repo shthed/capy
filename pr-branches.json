@@ -1,13 +1,5 @@
 [
   {
-    "branch": "codex/add-mouse-control-options",
-    "safeName": "codex-add-mouse-control-options",
-    "title": "Allow pan and zoom gestures from viewport margins",
-    "number": 184,
-    "updatedAt": "2025-10-18T11:31:12Z",
-    "url": "https://github.com/shthed/capy/pull/184"
-  },
-  {
     "branch": "codex/refactor-canvas-rendering-to-use-controller",
     "safeName": "codex-refactor-canvas-rendering-to-use-controller",
     "title": "Modularize puzzle renderer via controller abstraction",

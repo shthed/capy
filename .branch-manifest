@@ -1,4 +1,3 @@
-codex-add-mouse-control-options
 codex-introduce-renderer-abstraction-for-webgl
 codex-refactor-canvas-rendering-to-use-controller
 codex-render-region-number-labels
