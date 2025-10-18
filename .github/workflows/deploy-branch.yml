@@ -20,7 +20,7 @@ jobs:
       cancel-in-progress: false
     environment:
       name: github-pages
-      url: ${{ steps.deploy-pages.outputs.page_url }}
+      url: ${{ steps.sync.outputs.preview_url || steps.deploy-pages.outputs.page_url }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
