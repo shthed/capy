@@ -8,6 +8,27 @@ const GENERATION_STAGE_MESSAGES = {
   complete: "Generation complete",
 };
 
+const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
+
+const GENERATION_ALGORITHMS = {
+  "local-kmeans": {
+    id: "local-kmeans",
+    label: "Local palette clustering (k-means)",
+    mode: "local",
+  },
+  "local-posterize": {
+    id: "local-posterize",
+    label: "Local posterize & merge",
+    mode: "local",
+  },
+};
+
+export const GENERATION_ALGORITHM_CATALOG = Object.freeze(
+  Object.values(GENERATION_ALGORITHMS).map(({ id, label, mode }) => ({ id, label, mode }))
+);
+
+export const DEFAULT_GENERATION_ALGORITHM_ID = DEFAULT_GENERATION_ALGORITHM;
+
 let generationWorkerInstance = null;
 let generationWorkerUrl = null;
 
@@ -21,6 +42,20 @@ function clamp(value, min, max) {
   if (value < min) return min;
   if (value > max) return max;
   return value;
+}
+
+function normalizeAlgorithm(value) {
+  if (typeof value === "string") {
+    const key = value.trim();
+    switch (key) {
+      case "local-kmeans":
+      case "local-posterize":
+        return key;
+      default:
+        break;
+    }
+  }
+  return DEFAULT_GENERATION_ALGORITHM;
 }
 
 function toHex(value) {
@@ -240,6 +275,110 @@ function kmeansQuantize(pixels, width, height, targetColors, iterations, sampleR
   return { centroids: rounded, assignments };
 }
 
+function posterizeQuantize(pixels, width, height, targetColors) {
+  const totalPixels = Math.max(1, width * height);
+  const quantizedKeys = new Uint32Array(totalPixels);
+  const buckets = new Map();
+  const normalizedTarget = Math.max(1, Math.floor(targetColors));
+  const levels = Math.max(1, Math.round(Math.cbrt(normalizedTarget)));
+
+  const quantizeChannel = (value) => {
+    if (levels <= 1) {
+      return clamp(value, 0, 255);
+    }
+    const steps = levels - 1;
+    const scaled = Math.round((clamp(value, 0, 255) / 255) * steps);
+    return clamp(Math.round((scaled / steps) * 255), 0, 255);
+  };
+
+  for (let i = 0; i < totalPixels; i++) {
+    const base = i * 4;
+    const r = quantizeChannel(pixels[base]);
+    const g = quantizeChannel(pixels[base + 1]);
+    const b = quantizeChannel(pixels[base + 2]);
+    const key = (r << 16) | (g << 8) | b;
+    quantizedKeys[i] = key;
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { r: 0, g: 0, b: 0, count: 0 };
+      buckets.set(key, bucket);
+    }
+    bucket.r += pixels[base];
+    bucket.g += pixels[base + 1];
+    bucket.b += pixels[base + 2];
+    bucket.count += 1;
+  }
+
+  const entries = Array.from(buckets.entries()).map(([key, bucket]) => ({
+    key,
+    count: bucket.count,
+    color: [
+      Math.round(bucket.r / bucket.count),
+      Math.round(bucket.g / bucket.count),
+      Math.round(bucket.b / bucket.count),
+    ],
+  }));
+
+  entries.sort((a, b) => b.count - a.count);
+  const paletteLimit = Math.max(1, Math.min(normalizedTarget, entries.length));
+  const selected = entries.slice(0, paletteLimit);
+  const centroids = selected.map((entry) => entry.color);
+
+  if (centroids.length === 0) {
+    centroids.push([0, 0, 0]);
+  }
+
+  const assignments = new Uint16Array(totalPixels);
+  const keyToIndex = new Map();
+  for (let idx = 0; idx < selected.length; idx++) {
+    keyToIndex.set(selected[idx].key, idx);
+  }
+
+  for (let i = 0; i < totalPixels; i++) {
+    const key = quantizedKeys[i];
+    let paletteIndex = keyToIndex.get(key);
+    if (paletteIndex == null) {
+      const base = i * 4;
+      let best = 0;
+      let bestDist = Infinity;
+      for (let c = 0; c < centroids.length; c++) {
+        const centroid = centroids[c];
+        const dr = pixels[base] - centroid[0];
+        const dg = pixels[base + 1] - centroid[1];
+        const db = pixels[base + 2] - centroid[2];
+        const dist = dr * dr + dg * dg + db * db;
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = c;
+        }
+      }
+      paletteIndex = best;
+      keyToIndex.set(key, paletteIndex);
+    }
+    assignments[i] = paletteIndex;
+  }
+
+  return { centroids, assignments };
+}
+
+function performQuantization(algorithm, pixels, width, height, options) {
+  const resolved = normalizeAlgorithm(algorithm);
+  switch (resolved) {
+    case "local-posterize":
+      return posterizeQuantize(pixels, width, height, options.targetColors);
+    case "local-kmeans":
+    default:
+      return kmeansQuantize(
+        pixels,
+        width,
+        height,
+        options.targetColors,
+        options.kmeansIters,
+        options.sampleRate
+      );
+  }
+}
+
 function smoothAssignments(assignments, width, height, passes) {
   let current = new Uint16Array(assignments);
   for (let pass = 0; pass < passes; pass++) {
@@ -273,6 +412,7 @@ function smoothAssignments(assignments, width, height, passes) {
 function buildGenerationWorkerSource() {
   const stageMessages = JSON.stringify(GENERATION_STAGE_MESSAGES);
   return `const STAGE_MESSAGES = ${stageMessages};
+const DEFAULT_GENERATION_ALGORITHM = "${DEFAULT_GENERATION_ALGORITHM}";
 const now = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
 ${clamp.toString()}
 ${accumulate.toString()}
@@ -282,6 +422,9 @@ ${segmentRegions.toString()}
 ${finalizeGeneratedRegions.toString()}
 ${serializeAssignments.toString()}
 ${kmeansQuantize.toString()}
+${posterizeQuantize.toString()}
+${normalizeAlgorithm.toString()}
+${performQuantization.toString()}
 ${smoothAssignments.toString()}
 function normalizeOptions(options) {
   const targetColors = Math.max(1, Number(options?.targetColors) || 16);
@@ -289,7 +432,8 @@ function normalizeOptions(options) {
   const sampleRate = typeof options?.sampleRate === "number" ? options.sampleRate : 1;
   const kmeansIters = Math.max(1, Number(options?.kmeansIters) || 1);
   const smoothingPasses = Math.max(0, Number(options?.smoothingPasses) || 0);
-  return { targetColors, minRegion, sampleRate, kmeansIters, smoothingPasses };
+  const algorithm = normalizeAlgorithm(options?.algorithm);
+  return { targetColors, minRegion, sampleRate, kmeansIters, smoothingPasses, algorithm };
 }
 function postProgress(id, stage, progress, message) {
   self.postMessage({ type: "progress", id, stage, progress, message: message || STAGE_MESSAGES[stage] || "" });
@@ -315,13 +459,12 @@ self.onmessage = (event) => {
     const totalStart = now();
     postProgress(id, "quantize", 0.15, STAGE_MESSAGES.quantize);
     const quantStart = now();
-    const { centroids, assignments } = kmeansQuantize(
+    const { centroids, assignments } = performQuantization(
+      options.algorithm,
       pixels,
       width,
       height,
-      options.targetColors,
-      options.kmeansIters,
-      options.sampleRate
+      options
     );
     timings.quantize = now() - quantStart;
     let workingAssignments = assignments;
@@ -493,17 +636,20 @@ function runGenerationSynchronously(jobId, payload, hooks = {}) {
     reportStage(jobId, 0.15, GENERATION_STAGE_MESSAGES.quantize);
   }
   const quantStart = now();
-  const { centroids, assignments } = kmeansQuantize(
+  const normalizedOptions = {
+    ...options,
+    algorithm: normalizeAlgorithm(options.algorithm),
+  };
+  const { centroids, assignments } = performQuantization(
+    normalizedOptions.algorithm,
     pixels,
     width,
     height,
-    options.targetColors,
-    options.kmeansIters,
-    options.sampleRate
+    normalizedOptions
   );
   timings.quantize = now() - quantStart;
   let workingAssignments = assignments;
-  if (options.smoothingPasses > 0) {
+  if (normalizedOptions.smoothingPasses > 0) {
     if (typeof reportStage === "function") {
       reportStage(jobId, 0.45, GENERATION_STAGE_MESSAGES.smooth);
     }
@@ -512,7 +658,7 @@ function runGenerationSynchronously(jobId, payload, hooks = {}) {
       assignments,
       width,
       height,
-      options.smoothingPasses
+      normalizedOptions.smoothingPasses
     );
     timings.smoothing = now() - smoothStart;
   } else {
@@ -529,7 +675,7 @@ function runGenerationSynchronously(jobId, payload, hooks = {}) {
     width,
     height,
     workingAssignments,
-    options.minRegion
+    normalizedOptions.minRegion
   );
   timings.segment = now() - segmentStart;
   if (typeof reportStage === "function") {
@@ -564,6 +710,7 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
     sampleRate = 1,
     kmeansIters = 1,
     smoothingPasses = 0,
+    algorithm = DEFAULT_GENERATION_ALGORITHM,
   } = options;
 
   const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
@@ -579,13 +726,21 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
   ctx.drawImage(image, 0, 0, width, height);
   const imageData = ctx.getImageData(0, 0, width, height);
   const pixels = imageData.data;
+  const normalizedAlgorithm = normalizeAlgorithm(algorithm);
+  const provider = GENERATION_ALGORITHMS[normalizedAlgorithm];
   const payloadOptions = {
     targetColors,
     minRegion,
     sampleRate,
     kmeansIters,
     smoothingPasses,
+    algorithm: normalizedAlgorithm,
   };
+  if (provider) {
+    debug(`Using ${provider.label} generator (${provider.mode})`);
+  } else {
+    debug(`Using ${normalizedAlgorithm} generator`);
+  }
   const workerMessage = {
     id: jobId,
     width,
