@@ -25,7 +25,7 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 ## Controls & Gestures
 
 ### Painting
-- **Mouse / Trackpad:** The defaults keep left-click for filling, right-click as an eyedropper, and click-drag to pan (or hold <kbd>Space</kbd> to pan from anywhere). Customize left, middle, and right clicks—and their click+drag actions—under **Settings → Mouse controls**, including drag-to-zoom mappings.
+- **Mouse / Trackpad:** The defaults keep left-click for filling, right-click as an eyedropper, and click-drag to pan (or hold <kbd>Space</kbd> to pan from anywhere). Customize left, middle, and right clicks—and their click+drag actions—under **Settings → Mouse controls**, including drag-to-zoom or select-and-fill mappings.
 - **Touch:** Tap to paint, pinch to zoom, and drag with two fingers to pan. Double-tap gestures stay inside the canvas so the browser UI remains steady.
 - **Keyboard:** Use the arrow keys or <kbd>Tab</kbd> to move focus between palette colours, press <kbd>Enter</kbd> or <kbd>Space</kbd> to select, and tap <kbd>+</kbd>/<kbd>-</kbd> (or <kbd>Shift</kbd> + <kbd>=</kbd>/<kbd>-</kbd>) to zoom.
 
