@@ -2911,6 +2911,45 @@
       let viewTransformFrame = null;
       let cancelViewTransformFrame = null;
 
+      function clampViewPanToPuzzleBounds() {
+        let changed = false;
+        if (!state.puzzle) {
+          if (Math.abs(viewState.panX) > 0.0001) {
+            viewState.panX = 0;
+            changed = true;
+          }
+          if (Math.abs(viewState.panY) > 0.0001) {
+            viewState.panY = 0;
+            changed = true;
+          }
+          return changed;
+        }
+        const displayScale = computeDisplayScale();
+        const stageHalfWidth = Math.max(0, (state.puzzle.width || 0) * displayScale * 0.5);
+        const stageHalfHeight = Math.max(0, (state.puzzle.height || 0) * displayScale * 0.5);
+        if (Number.isFinite(stageHalfWidth)) {
+          const nextPanX = clamp(viewState.panX, -stageHalfWidth, stageHalfWidth);
+          if (Math.abs(nextPanX - viewState.panX) > 0.0001) {
+            viewState.panX = nextPanX;
+            changed = true;
+          }
+        } else if (Math.abs(viewState.panX) > 0.0001) {
+          viewState.panX = 0;
+          changed = true;
+        }
+        if (Number.isFinite(stageHalfHeight)) {
+          const nextPanY = clamp(viewState.panY, -stageHalfHeight, stageHalfHeight);
+          if (Math.abs(nextPanY - viewState.panY) > 0.0001) {
+            viewState.panY = nextPanY;
+            changed = true;
+          }
+        } else if (Math.abs(viewState.panY) > 0.0001) {
+          viewState.panY = 0;
+          changed = true;
+        }
+        return changed;
+      }
+
       function invalidateCanvasRect() {
         cachedCanvasRect = null;
       }
@@ -6971,6 +7010,7 @@
               if (Math.abs(deltaX) > 0.0001 || Math.abs(deltaY) > 0.0001) {
                 viewState.panX += deltaX;
                 viewState.panY += deltaY;
+                clampViewPanToPuzzleBounds();
                 pinchSession.hasChanged = true;
                 scheduleViewTransform({ skipSizing: true });
               }
@@ -6997,6 +7037,7 @@
           const dy = event.clientY - panOrigin.y;
           viewState.panX = panOrigin.panX + dx;
           viewState.panY = panOrigin.panY + dy;
+          clampViewPanToPuzzleBounds();
           if (session) {
             session.dragStarted = true;
             session.panActive = true;
@@ -7268,6 +7309,7 @@
         const offsetY = anchorY - centerY - viewState.panY;
         viewState.panX += offsetX - offsetX * change;
         viewState.panY += offsetY - offsetY * change;
+        clampViewPanToPuzzleBounds();
         const nextZoom = normalizeZoomValue(targetScale / baseScale, currentZoom);
         const significant = Math.abs(targetScale - currentScale) >= Math.max(0.01, currentScale * 0.001);
         viewState.zoom = nextZoom;
@@ -7296,6 +7338,7 @@
           cancelViewTransformFrame = null;
           pendingViewTransform = null;
         }
+        clampViewPanToPuzzleBounds();
         if (canvasStage) {
           canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
           canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
@@ -7401,6 +7444,7 @@
           viewState.zoom = normalizeZoomValue(1);
         }
         viewState.baseScale = nextBase;
+        clampViewPanToPuzzleBounds();
         applyViewTransform();
       }
 
@@ -7426,6 +7470,7 @@
         viewState.zoom = normalizeZoomValue(targetZoom, savedZoom);
         viewState.panX = hasPanX && Number.isFinite(viewport.panX) ? viewport.panX * scaleRatio : 0;
         viewState.panY = hasPanY && Number.isFinite(viewport.panY) ? viewport.panY * scaleRatio : 0;
+        clampViewPanToPuzzleBounds();
         applyViewTransform();
         return true;
       }

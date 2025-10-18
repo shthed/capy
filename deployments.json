@@ -13,11 +13,11 @@
     "key": "codex-add-mouse-control-options",
     "branch": "codex/add-mouse-control-options",
     "safeName": "codex-add-mouse-control-options",
-    "commit": "5ea053c01ebed6980aca65ef5abe7d362f416be1",
-    "message": "Enable pan gestures from the viewport",
+    "commit": "841e9093c0b41f547e416c0f6f2fbbb90d348e2a",
+    "message": "Clamp pan to keep puzzle partially visible",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T18:45:16+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/5ea053c01ebed6980aca65ef5abe7d362f416be1"
+    "deployedAt": "2025-10-18T19:22:01+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/841e9093c0b41f547e416c0f6f2fbbb90d348e2a"
   },
   "codex-introduce-renderer-abstraction-for-webgl": {
     "branch": "codex/introduce-renderer-abstraction-for-webgl",
