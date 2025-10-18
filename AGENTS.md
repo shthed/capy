@@ -11,6 +11,37 @@ sample), let the k-means pipeline quantize colours, and immediately paint. The
 repository intentionally avoids build tooling: npm is only used to install the
 Playwright test runner and a lightweight `http-server` for local previews.
 
+## Repository Report
+
+- **Core application**
+  - `index.html` – Single-file UI, styles, and generator logic powering the coloring experience.
+  - `README.md` – Usage guide and architecture reference for contributors.
+  - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the single-page runtime.
+  - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, and metadata assembly off the main thread.
+- **Testing & QA**
+  - Automated Playwright smoke tests have been retired for now. Run quick manual passes in desktop and mobile browsers before pushing.
+  - `npm test --silent` prints a skip notice while the Playwright suite is offline so CI still tracks the placeholder hook.
+- **Tooling & metadata**
+  - `package.json` – npm scripts plus the http-server dependency required to run the app locally.
+  - `package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
+  - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
+- **CI & Deployment**
+  - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
+  - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
+- **Process notes**
+  - `AGENTS.md` – Repository guidelines covering style, testing expectations, and contribution workflow.
+  - `docs/automation-loop.md` – Blueprint for the automated branching, testing, merging, and feedback loop.
+  - `docs/branch-deployments.md` – Detailed guide to the multi-branch GitHub Pages deployment system.
+
+## Development Workflow
+
+- **Automation branches.** Create short-lived branches named `automation/<change>` so QA notes and preview URLs map directly to the experiment under review.
+- **Branch deployments.** Every push to a branch with an open PR automatically deploys to GitHub Pages under a subfolder named after the branch (e.g., `automation/feature` deploys to `/automation-feature/`). This lets reviewers preview changes in a live environment without local setup. The `main` branch always deploys to the root path.
+- **Manual smoke tests.** Exercise the puzzle load, palette selection, painting, and save/load flows in at least one desktop and one mobile browser before requesting review.
+- **Fast-forward merges.** Rebase onto `main`, repeat the quick manual checks, and merge with `--ff-only` to preserve a linear history that keeps bisects practical for the single-file runtime.
+- **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up work in a standing Friday issue so the team has a shared backlog of automation improvements.
+- **Close the loop.** Update PR descriptions and linked issues with branch names, CI run URLs, artifact locations, and live preview URLs so the automation history remains searchable.
+
 ## Repository Map
 - `index.html` – Single-page application containing DOM structure, inline styles,
   generator code, autosave helpers, and developer-map comments segmenting the
