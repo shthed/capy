@@ -62,4 +62,4 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 
 ## Want to Contribute?
 
-Capy is open source! If you’d like to help shape new features, fix bugs, or expand the documentation, check out the development guide in [`AGENTS.md`](./AGENTS.md).
+Capy is open source! If you’d like to help shape new features, fix bugs, or expand the documentation, start with the development guide in [`AGENTS.md`](./AGENTS.md) and dive into the technical deep-dive in [`TECH.md`](./TECH.md).
