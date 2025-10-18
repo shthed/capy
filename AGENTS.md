@@ -10,19 +10,23 @@ any feature or workflow changes you ship.
 
 - **Branch naming.** Create short-lived branches named `automation/<change>` so
   QA notes and preview URLs map directly to the experiment under review.
+- **Draft PRs early.** Open a draft PR as soon as you push. CI logs, manual QA
+  notes, and preview links stay centralised, which matters once the automation
+  suite returns.
 - **Branch deployments.** Branches with open PRs deploy automatically to GitHub
-  Pages under `/automation-<slug>/`; `main` deploys to the root.
+  Pages under `/automation-<slug>/`; `main` deploys to the root. See "Branch
+  Deployments" below for the full workflow and maintenance details.
 - **Manual smoke tests.** Exercise puzzle load, palette selection, painting, and
   save/load flows in at least one desktop and one mobile browser before
   requesting review.
-- **Fast-forward merges.** Rebase onto `main`, re-run the quick manual checks,
+- **Automation discipline.** Record which tests ran, link the latest preview,
+  and attach Playwright artifacts (when available) before handing off for
+  review. Capture outcomes in the PR description so history remains searchable.
+- **Fast-forward merges.** Rebase onto `main`, rerun the quick manual checks,
   and merge with `--ff-only` so history stays linear for the single-file
   runtime.
 - **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up
   work in the standing Friday issue to keep the automation backlog visible.
-- **Close the loop.** Update PR descriptions and linked issues with branch
-  names, CI run URLs, artifact locations, and live preview URLs so automation
-  history remains searchable.
 
 ## Environment Setup
 
@@ -44,20 +48,20 @@ any feature or workflow changes you ship.
 - UI verification: Keep Playwright expectations aligned with UI markup, palette
   labels, and README imagery when making visual changes.
 - Artifacts: Capture Playwright reports under `artifacts/ui-review/` for major
-  UI updates and surface them in PRs.
+  UI updates and surface them in PRs once the automated suite is reinstated.
 - Manual QA: `window.capyGenerator` exposes helpers (e.g.
   `loadPuzzleFixture`, `togglePreview`). Document any new helpers in `TECH.md`
   plus relevant tests.
+- Merge gates: Until automation returns, block merges on a recorded manual
+  smoke run. Once the suite is live again, require the automated check to pass
+  before landing.
 
 ## Documentation Hygiene
 
-- Update `TECH.md`, `docs/automation-loop.md`, and `docs/branch-deployments.md`
-  alongside changes that affect gameplay, tooling, or release workflows.
-- Note responsive header or palette adjustments in `TECH.md` and
-  `docs/gameplay-session.md` (create if missing) so contributors understand the
-  current UX expectations.
-- Keep screenshots, segmentation guides, and UI walkthroughs current when you
-  alter major flows.
+- Update `TECH.md` alongside changes that affect gameplay, tooling, or release
+  workflows.
+- Add or refresh screenshots, segmentation guides, and UI walkthroughs when
+  you alter major flows.
 
 ## Automation & Git Preferences
 
@@ -100,3 +104,18 @@ any feature or workflow changes you ship.
   message.
 - Follow repository-wide and nested `AGENTS.md` guidance for any files you
   touch.
+
+## Branch Deployments
+
+- Workflow: `.github/workflows/deploy-branch.yml` builds from every push.
+  Branches without open PRs exit early; `main` always deploys.
+- Destinations: `main` publishes to the root of GitHub Pages. Other branches
+  land in `/automation-<slug>/` directories using sanitised branch names (e.g.,
+  `automation/feature` → `/automation-feature/`).
+- Contents: Each deployment ships `index.html`, `puzzle-generation.js`,
+  `capy.json`, and a generated `/README/index.html` so documentation mirrors the
+  branch.
+- Index: `branch.html` lists `main` plus every deployed branch with preview,
+  PR, commit, and timestamp metadata rendered in the viewer’s local timezone.
+- Cleanup: When a PR closes, the workflow prunes its corresponding deployment on
+  the next run—manual intervention is rarely needed.

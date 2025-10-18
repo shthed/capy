@@ -25,8 +25,6 @@ single `index.html` document—no build tools or extra runtime required.
 - **Documentation**
   - `README.md` – Player-facing quick start and gameplay overview.
   - `TECH.md` – This technical reference.
-  - `docs/automation-loop.md` – Blueprint for the automated branching, testing, merging, and feedback loop.
-  - `docs/branch-deployments.md` – Guide to the multi-branch GitHub Pages deployment system.
 - **Testing & QA**
   - `tests/ui-review.spec.js` – (Currently paused) Playwright smoke test covering onboarding, palette interactions, and save reload flows across desktop & mobile viewports.
   - `artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
@@ -37,6 +35,42 @@ single `index.html` document—no build tools or extra runtime required.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
+
+## Deployment & Branch Previews
+
+Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs on
+every push and optional manual dispatches:
+
+1. **PR gate.** The workflow exits early unless the branch has an open PR.
+   `main` is the exception—it always deploys.
+2. **Checkout & sanitise.** The action checks out the source branch and the
+   `gh-pages` deployment branch, converts branch names into URL-safe slugs
+   (e.g., `automation/feature` → `automation-feature`), and creates a matching
+   directory for non-`main` deployments.
+3. **Content sync.**
+   - `main` copies the full runtime (minus excluded directories like
+     `node_modules`, Playwright reports, and other transient artifacts) straight
+     to the root of `gh-pages` and regenerates `/README/index.html` so
+     https://shthed.github.io/capy/README/ always mirrors the handbook.
+   - Other branches ship the files required to run the app (`index.html`,
+     `puzzle-generation.js`, `capy.json`) plus a branch-scoped README mirror at
+     `/README/index.html`.
+4. **Index generation.** The workflow rebuilds `branch.html`, surfacing the main
+   deployment first followed by each active branch with preview links, PR data,
+   and the three most recent commits (timestamps render in the viewer’s local
+   timezone).
+5. **Cleanup.** Branch directories without open PRs are deleted on each run so
+   deployments disappear automatically once work merges or closes.
+
+Tweaking the deployment:
+
+- Adjust exclusion patterns or published files inside the `rsync` steps.
+- Change the slug format in the sanitisation helper if branch naming needs to
+  support additional characters.
+- Modify the GitHub API pagination values in the index-building script to show
+  more or fewer commits.
+- Swap the publish branch from `gh-pages` if you need a different hosting
+  target.
 
 ## UI & Feature Tour
 
