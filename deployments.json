@@ -23,10 +23,10 @@
     "key": "codex-move-development-notes-to-agents.md",
     "branch": "codex/move-development-notes-to-agents.md",
     "safeName": "codex-move-development-notes-to-agents.md",
-    "commit": "5ea38830555702a156d3f68aa934ab4adbb3d9ff",
-    "message": "Rewrite README for players",
+    "commit": "0806f1435a44d30c24d679c62fc734adfaf5e0e5",
+    "message": "Document technical guide and streamline agent instructions",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T09:45:23+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/5ea38830555702a156d3f68aa934ab4adbb3d9ff"
+    "deployedAt": "2025-10-18T09:48:32+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/0806f1435a44d30c24d679c62fc734adfaf5e0e5"
   }
 }
