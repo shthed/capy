@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Capy README</title>
+          <style>
+            :root {
+              color-scheme: light dark;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", sans-serif;
+              margin: 0 auto;
+              padding: 32px 16px 48px;
+              max-width: 920px;
+              line-height: 1.6;
+              background: #f6f8fa;
+              color: #1f2328;
+            }
+            a {
+              color: #0969da;
+            }
+            .markdown-body {
+              background: #fff;
+              border-radius: 12px;
+              padding: 32px;
+              box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+              border: 1px solid #d0d7de;
+            }
+            .page-meta {
+              margin-top: 24px;
+              font-size: 0.85em;
+              color: #57606a;
+              text-align: center;
+            }
+            pre {
+              background: #0d1117;
+              color: #f0f6fc;
+              padding: 16px;
+              border-radius: 8px;
+              overflow-x: auto;
+            }
+            code {
+              font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+            }
+            @media (max-width: 720px) {
+              .markdown-body {
+                padding: 24px 20px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <main class="markdown-body">
+            <h1>Capy: Color-By-Number Playground</h1>
+    <p>Bring any image to life as a paint-by-numbers puzzle directly in your browser. Capy runs entirely client-side, so you can drag in artwork, explore the bundled Capybara Springs scene, and relax into a colouring session without installing anything.</p>
+    <p><a href="https://shthed.github.io/capy/">Play Capy in your browser</a></p>
+    <h2>Quick Start</h2>
+    <ol>
+    <li>Open the app and wait for the Capybara Springs sample to finish loading.</li>
+    <li>Tap a colour tile along the bottom palette to make it active.</li>
+    <li>Fill matching regions on the canvas by clicking, tapping, or using a stylus.</li>
+    <li>Watch finished areas reveal the clustered illustration as you progress.</li>
+    </ol>
+    <p>Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on the page or choose <strong>Import</strong> from the command rail. Capy immediately rebuilds the puzzle using that artwork.</p>
+    <h2>Game Highlights</h2>
+    <ul>
+    <li><strong>Instant puzzle import</strong> – Drag-and-drop images or previously exported Capy puzzles to start colouring right away.</li>
+    <li><strong>Three detail presets</strong> – Low, Medium, and High detail buttons instantly reload the sample with tuned colour counts and region sizes so you can pick a breezy warm-up or a meticulous challenge.</li>
+    <li><strong>Palette guidance</strong> – Selecting a swatch briefly highlights every matching region and flashes when a colour is complete, making it obvious where to paint next.</li>
+    <li><strong>Helpful hints</strong> – Trigger hints to spotlight the smallest unfinished region when you need a nudge, or toggle the preview overlay to compare progress with the finished artwork.</li>
+    <li><strong>Progress that sticks</strong> – Capy autosaves after every stroke. Manual saves let you bookmark milestones, rename snapshots, export JSON files, and reload them later.</li>
+    <li><strong>Play your way</strong> – Adjust zoom, pan with the mouse, touch, or keyboard, hide region numbers for a clean canvas, and customise the background colour for better contrast.</li>
+    </ul>
+    <h2>Controls &amp; Gestures</h2>
+    <h3>Painting</h3>
+    <ul>
+    <li><strong>Mouse / Trackpad:</strong> Click to fill regions. Right-click selects the colour under the pointer. Click-drag to pan, or hold <kbd>Space</kbd> and drag from anywhere.</li>
+    <li><strong>Touch:</strong> Tap to paint, pinch to zoom, and drag with two fingers to pan. Double-tap gestures stay inside the canvas so the browser UI remains steady.</li>
+    <li><strong>Keyboard:</strong> Use the arrow keys or <kbd>Tab</kbd> to move focus between palette colours, press <kbd>Enter</kbd> or <kbd>Space</kbd> to select, and tap <kbd>+</kbd>/<kbd>-</kbd> (or <kbd>Shift</kbd> + <kbd>=</kbd>/<kbd>-</kbd>) to zoom.</li>
+    </ul>
+    <h3>Command Rail</h3>
+    <ul>
+    <li><strong>Preview</strong> – Temporarily shows the finished clustered artwork on the canvas.</li>
+    <li><strong>Generator</strong> – Opens tuning controls for palette size, smoothing, and detail if you want to experiment with custom imports.</li>
+    <li><strong>Fullscreen</strong> – Expands the play surface edge-to-edge.</li>
+    <li><strong>Import</strong> – Choose a new image or Capy puzzle from disk.</li>
+    <li><strong>Saves</strong> – Manage autosaves and manual snapshots, reset the current board, or reload the Capybara Springs sample.</li>
+    <li><strong>Help</strong> – See an in-app manual, live activity log, and handy shortcuts.</li>
+    <li><strong>Settings</strong> – Toggle region numbers, adjust hint animations, choose palette sorting, and tweak accessibility preferences.</li>
+    </ul>
+    <h2>Saving, Sharing, and Reloading</h2>
+    <ul>
+    <li><strong>Autosaves:</strong> Capy restores your most recent puzzle automatically the next time you visit, even if you close the tab.</li>
+    <li><strong>Manual saves:</strong> Open <strong>Saves</strong> → <strong>Snapshot current puzzle</strong> to capture your progress. You can rename, duplicate, export, or delete saves at any time.</li>
+    <li><strong>Exports:</strong> Use <strong>Export JSON</strong> (inside Settings) to download a portable puzzle file you can share or re-import later.</li>
+    <li><strong>Resetting:</strong> The <strong>Reset puzzle progress</strong> button clears the board while keeping your save list intact.</li>
+    </ul>
+    <h2>Accessibility &amp; Comfort Options</h2>
+    <ul>
+    <li><strong>Palette sorting:</strong> Arrange swatches by number, remaining regions, hue, or brightness to suit your workflow.</li>
+    <li><strong>Contrast-aware labels:</strong> Numbers automatically flip between light and dark treatments so every swatch stays legible.</li>
+    <li><strong>Hint tuning:</strong> Adjust animation fade and highlight intensity to keep guidance subtle or pronounced.</li>
+    <li><strong>Background colour:</strong> Pick a backdrop that makes outlines and numbers easy to read, whether you prefer light or dark themes.</li>
+    <li><strong>Keyboard-friendly UI:</strong> Command buttons expose descriptive labels and predictable focus order, and the help log uses polite announcements for assistive technology.</li>
+    </ul>
+    <h2>Troubleshooting Tips</h2>
+    <ul>
+    <li><strong>Image looks blocky?</strong> Reload with a higher detail preset or increase palette size in the Generator panel.</li>
+    <li><strong>Too many tiny regions?</strong> Try the Low detail preset or raise the minimum region size slider before regenerating the puzzle.</li>
+    <li><strong>Running out of storage?</strong> Delete older saves from the Saves panel or export them to JSON before clearing.</li>
+    <li><strong>Canvas won’t move?</strong> Hold <kbd>Space</kbd> while dragging, or switch to a two-finger pan on touch devices.</li>
+    </ul>
+    <h2>Want to Contribute?</h2>
+    <p>Capy is open source! If you’d like to help shape new features, fix bugs, or expand the documentation, start with the development guide in <a href="./AGENTS.md"><code>AGENTS.md</code></a> and dive into the technical deep-dive in <a href="./TECH.md"><code>TECH.md</code></a>.</p>
+
+          </main>
+          <footer class="page-meta">Generated from README.md · 2025-10-18 05:55 UTC</footer>
+        </body>
+        </html>
