@@ -13,11 +13,11 @@
     "key": "codex-explain-iterations-and-smoothing-passes",
     "branch": "codex/explain-iterations-and-smoothing-passes",
     "safeName": "codex-explain-iterations-and-smoothing-passes",
-    "commit": "4dec81a183661033453c2c51d83385df22aa7fdf",
-    "message": "Add posterize generator option and explain tuning controls",
+    "commit": "e7c750957181037bd0a75a6aa261f08d100670c6",
+    "message": "Merge branch 'main' into codex/explain-iterations-and-smoothing-passes",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T20:57:37+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/4dec81a183661033453c2c51d83385df22aa7fdf"
+    "deployedAt": "2025-10-18T21:03:37+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/e7c750957181037bd0a75a6aa261f08d100670c6"
   },
   "codex-introduce-renderer-abstraction-for-webgl": {
     "branch": "codex/introduce-renderer-abstraction-for-webgl",

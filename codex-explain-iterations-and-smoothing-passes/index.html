@@ -397,6 +397,8 @@
         padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
         overflow: hidden;
         background: none;
+        touch-action: none;
+        cursor: grab;
       }
 
       body[data-orientation="portrait"] #viewport {
@@ -1825,6 +1827,76 @@
           </label>
           <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
         </section>
+        <section class="sheet-section" aria-labelledby="mouseControlsHeading">
+          <h3 id="mouseControlsHeading">Mouse controls</h3>
+          <p class="control-note">
+            Assign actions to each mouse button when clicking or click-dragging on the
+            canvas.
+          </p>
+          <label class="control">
+            <span>Left button &mdash; click</span>
+            <select id="mouseLeftClick">
+              <option value="fill" selected>Fill region</option>
+              <option value="select-fill">Select and fill region</option>
+              <option value="select">Select colour</option>
+              <option value="zoom-in">Zoom in</option>
+              <option value="zoom-out">Zoom out</option>
+              <option value="none">No action</option>
+            </select>
+          </label>
+          <label class="control">
+            <span>Left button &mdash; click + drag</span>
+            <select id="mouseLeftDrag">
+              <option value="pan" selected>Pan view</option>
+              <option value="fill">Fill while dragging</option>
+              <option value="zoom">Zoom</option>
+              <option value="none">No action</option>
+            </select>
+          </label>
+          <label class="control">
+            <span>Middle button &mdash; click</span>
+            <select id="mouseMiddleClick">
+              <option value="fill">Fill region</option>
+              <option value="select-fill">Select and fill region</option>
+              <option value="select">Select colour</option>
+              <option value="zoom-in">Zoom in</option>
+              <option value="zoom-out">Zoom out</option>
+              <option value="none" selected>No action</option>
+            </select>
+          </label>
+          <label class="control">
+            <span>Middle button &mdash; click + drag</span>
+            <select id="mouseMiddleDrag">
+              <option value="pan" selected>Pan view</option>
+              <option value="fill">Fill while dragging</option>
+              <option value="zoom">Zoom</option>
+              <option value="none">No action</option>
+            </select>
+          </label>
+          <label class="control">
+            <span>Right button &mdash; click</span>
+            <select id="mouseRightClick">
+              <option value="fill">Fill region</option>
+              <option value="select-fill">Select and fill region</option>
+              <option value="select" selected>Select colour</option>
+              <option value="zoom-in">Zoom in</option>
+              <option value="zoom-out">Zoom out</option>
+              <option value="none">No action</option>
+            </select>
+          </label>
+          <label class="control">
+            <span>Right button &mdash; click + drag</span>
+            <select id="mouseRightDrag">
+              <option value="pan" selected>Pan view</option>
+              <option value="fill">Fill while dragging</option>
+              <option value="zoom">Zoom</option>
+              <option value="none">No action</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out.
+          </p>
+        </section>
         <section class="sheet-section" aria-labelledby="paletteHeading">
           <h3 id="paletteHeading">Palette</h3>
           <label class="control">
@@ -1921,6 +1993,20 @@
       const hintFadeDurationInput = document.getElementById("hintFadeDuration");
       const hintIntensityInput = document.getElementById("hintIntensity");
       const difficultySelect = document.getElementById("difficultySelect");
+      const mouseControlInputs = {
+        left: {
+          click: document.getElementById("mouseLeftClick"),
+          drag: document.getElementById("mouseLeftDrag"),
+        },
+        middle: {
+          click: document.getElementById("mouseMiddleClick"),
+          drag: document.getElementById("mouseMiddleDrag"),
+        },
+        right: {
+          click: document.getElementById("mouseRightClick"),
+          drag: document.getElementById("mouseRightDrag"),
+        },
+      };
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
       const backgroundColorInput = document.getElementById("backgroundColor");
@@ -2005,6 +2091,26 @@
       const MAX_HINT_INTENSITY = 0.9;
       const DEFAULT_DIFFICULTY = "normal";
       const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
+      const MOUSE_BUTTON_KEYS = ["left", "middle", "right"];
+      const MOUSE_BUTTON_LABELS = {
+        left: "Left mouse button",
+        middle: "Middle mouse button",
+        right: "Right mouse button",
+      };
+      const DEFAULT_MOUSE_CONTROLS = {
+        left: { click: "fill", drag: "pan" },
+        middle: { click: "none", drag: "pan" },
+        right: { click: "select", drag: "pan" },
+      };
+      const VALID_MOUSE_CLICK_ACTIONS = new Set([
+        "fill",
+        "select-fill",
+        "select",
+        "zoom-in",
+        "zoom-out",
+        "none",
+      ]);
+      const VALID_MOUSE_DRAG_ACTIONS = new Set(["pan", "fill", "zoom", "none"]);
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
@@ -2012,6 +2118,103 @@
       let storageSummaryUpdateToken = 0;
       let preventingBrowserZoom = false;
       const DOUBLE_TAP_GUARD_MS = 350;
+
+      function normalizeMouseClickAction(value, fallback = DEFAULT_MOUSE_CONTROLS.left.click) {
+        if (typeof value === "string" && VALID_MOUSE_CLICK_ACTIONS.has(value)) {
+          return value;
+        }
+        if (typeof fallback === "string" && VALID_MOUSE_CLICK_ACTIONS.has(fallback)) {
+          return fallback;
+        }
+        return DEFAULT_MOUSE_CONTROLS.left.click;
+      }
+
+      function normalizeMouseDragAction(value, fallback = DEFAULT_MOUSE_CONTROLS.left.drag) {
+        if (typeof value === "string" && VALID_MOUSE_DRAG_ACTIONS.has(value)) {
+          return value;
+        }
+        if (typeof fallback === "string" && VALID_MOUSE_DRAG_ACTIONS.has(fallback)) {
+          return fallback;
+        }
+        return DEFAULT_MOUSE_CONTROLS.left.drag;
+      }
+
+      function normalizeMouseControls(input, fallback = DEFAULT_MOUSE_CONTROLS) {
+        const base = fallback && typeof fallback === "object" ? fallback : DEFAULT_MOUSE_CONTROLS;
+        const normalized = {};
+        for (const key of MOUSE_BUTTON_KEYS) {
+          const entry = input && typeof input === "object" ? input[key] : null;
+          const baseEntry = base[key] || DEFAULT_MOUSE_CONTROLS[key];
+          normalized[key] = {
+            click: normalizeMouseClickAction(entry?.click, baseEntry?.click),
+            drag: normalizeMouseDragAction(entry?.drag, baseEntry?.drag),
+          };
+        }
+        return normalized;
+      }
+
+      function cloneMouseControls(source = DEFAULT_MOUSE_CONTROLS) {
+        const normalized = normalizeMouseControls(source);
+        return {
+          left: { ...normalized.left },
+          middle: { ...normalized.middle },
+          right: { ...normalized.right },
+        };
+      }
+
+      function getMouseControls() {
+        return normalizeMouseControls(state.settings?.mouseControls, DEFAULT_MOUSE_CONTROLS);
+      }
+
+      function getMouseControlsForButton(button) {
+        const controls = getMouseControls();
+        if (controls[button]) {
+          return controls[button];
+        }
+        return cloneMouseControls(DEFAULT_MOUSE_CONTROLS)[button];
+      }
+
+      function getMouseButtonName(buttonIndex) {
+        if (buttonIndex === 1) return "middle";
+        if (buttonIndex === 2) return "right";
+        return "left";
+      }
+
+      function describeMouseButton(button) {
+        return MOUSE_BUTTON_LABELS[button] || "Mouse button";
+      }
+
+      function describeMouseClickAction(action) {
+        switch (action) {
+          case "fill":
+            return "Fill region";
+          case "select-fill":
+            return "Select and fill region";
+          case "select":
+            return "Select colour";
+          case "zoom-in":
+            return "Zoom in";
+          case "zoom-out":
+            return "Zoom out";
+          case "none":
+          default:
+            return "No action";
+        }
+      }
+
+      function describeMouseDragAction(action) {
+        switch (action) {
+          case "pan":
+            return "Pan view";
+          case "fill":
+            return "Fill while dragging";
+          case "zoom":
+            return "Drag to zoom";
+          case "none":
+          default:
+            return "No action";
+        }
+      }
 
       function isInteractiveElementForZoomGuard(node) {
         return (
@@ -2736,6 +2939,45 @@
       let viewTransformFrame = null;
       let cancelViewTransformFrame = null;
 
+      function clampViewPanToPuzzleBounds() {
+        let changed = false;
+        if (!state.puzzle) {
+          if (Math.abs(viewState.panX) > 0.0001) {
+            viewState.panX = 0;
+            changed = true;
+          }
+          if (Math.abs(viewState.panY) > 0.0001) {
+            viewState.panY = 0;
+            changed = true;
+          }
+          return changed;
+        }
+        const displayScale = computeDisplayScale();
+        const stageHalfWidth = Math.max(0, (state.puzzle.width || 0) * displayScale * 0.5);
+        const stageHalfHeight = Math.max(0, (state.puzzle.height || 0) * displayScale * 0.5);
+        if (Number.isFinite(stageHalfWidth)) {
+          const nextPanX = clamp(viewState.panX, -stageHalfWidth, stageHalfWidth);
+          if (Math.abs(nextPanX - viewState.panX) > 0.0001) {
+            viewState.panX = nextPanX;
+            changed = true;
+          }
+        } else if (Math.abs(viewState.panX) > 0.0001) {
+          viewState.panX = 0;
+          changed = true;
+        }
+        if (Number.isFinite(stageHalfHeight)) {
+          const nextPanY = clamp(viewState.panY, -stageHalfHeight, stageHalfHeight);
+          if (Math.abs(nextPanY - viewState.panY) > 0.0001) {
+            viewState.panY = nextPanY;
+            changed = true;
+          }
+        } else if (Math.abs(viewState.panY) > 0.0001) {
+          viewState.panY = 0;
+          changed = true;
+        }
+        return changed;
+      }
+
       function invalidateCanvasRect() {
         cachedCanvasRect = null;
       }
@@ -2910,6 +3152,7 @@
       let panCaptureTarget = null;
       let panHasPointerCapture = false;
       let panGlobalListenersAttached = false;
+      const pointerSessions = new Map();
       const globalPanListenerOptions = { capture: true };
       let spacePressed = false;
       const overlayAnimations = new Map();
@@ -2988,6 +3231,7 @@
           imageDescription: "",
           showRegionLabels: true,
           theme: DEFAULT_UI_THEME,
+          mouseControls: cloneMouseControls(DEFAULT_MOUSE_CONTROLS),
         },
         previewVisible: false,
         saves: gameSaveManager.hydrate(),
@@ -3011,6 +3255,7 @@
       updateImportNotice();
       let shouldAutoLoadSample = false;
       let algorithmOptionsHydrated = false;
+      updateMouseControlInputs();
 
       function disableSampleAutoload() {
         shouldAutoLoadSample = false;
@@ -3311,6 +3556,11 @@
         } else {
           applyImageDescription("", { skipLog: true, skipAutosave: true });
         }
+        if (settings.mouseControls) {
+          applyMouseControls(settings.mouseControls, { skipLog: true, skipAutosave: true });
+        } else {
+          applyMouseControls(state.settings.mouseControls, { skipLog: true, skipAutosave: true });
+        }
         updateOptionOutputs();
       }
 
@@ -3605,6 +3855,21 @@
         });
       }
 
+      for (const button of MOUSE_BUTTON_KEYS) {
+        const inputs = mouseControlInputs[button];
+        if (!inputs) continue;
+        if (inputs.click) {
+          inputs.click.addEventListener("change", () => {
+            setMouseControl(button, "click", inputs.click.value);
+          });
+        }
+        if (inputs.drag) {
+          inputs.drag.addEventListener("change", () => {
+            setMouseControl(button, "drag", inputs.drag.value);
+          });
+        }
+      }
+
       if (hintFadeDurationInput) {
         hintFadeDurationInput.value = String(normalizeHintFadeDuration(hintFadeDurationInput.value));
         hintFadeDurationInput.addEventListener("input", () => {
@@ -3832,7 +4097,7 @@
       //   once it travels ~4px, then continuously applies deltas via handlePanMove.
       // - pointerup/pointercancel tear down the session and restore the grab cursor. We also listen
       //   for lostpointercapture so releasing the mouse outside the stage still resets state.
-      const pointerSurface = canvasStage || puzzleCanvas;
+      const pointerSurface = viewportEl || canvasStage || puzzleCanvas;
       if (pointerSurface) {
         const pointerOptions = { capture: true };
         pointerSurface.addEventListener("pointerdown", handlePanStart, pointerOptions);
@@ -3934,6 +4199,7 @@
           isPanning = false;
         }
         hideCustomCursor();
+        pointerSessions.clear();
       });
 
       if (window.screen?.orientation && typeof window.screen.orientation.addEventListener === "function") {
@@ -4060,6 +4326,10 @@
 
       // Puzzle fill interaction: click to paint if the region matches the active colour.
       puzzleCanvas.addEventListener("click", (event) => {
+        const leftClickAction = getMouseControlsForButton("left").click;
+        if (leftClickAction !== "fill") {
+          return;
+        }
         if (suppressNextCanvasClickUntil && Date.now() <= suppressNextCanvasClickUntil) {
           suppressNextCanvasClickUntil = 0;
           event.preventDefault?.();
@@ -6334,6 +6604,86 @@
         }
       }
 
+      function updateMouseControlInputs() {
+        const controls = getMouseControls();
+        for (const button of MOUSE_BUTTON_KEYS) {
+          const inputs = mouseControlInputs[button];
+          if (!inputs) continue;
+          const clickEl = inputs.click;
+          const dragEl = inputs.drag;
+          const buttonControls = controls[button];
+          if (clickEl && buttonControls && clickEl.value !== buttonControls.click) {
+            clickEl.value = buttonControls.click;
+          }
+          if (dragEl && buttonControls && dragEl.value !== buttonControls.drag) {
+            dragEl.value = buttonControls.drag;
+          }
+        }
+      }
+
+      function applyMouseControls(next, options = {}) {
+        const { skipLog = false, skipAutosave = true } = options;
+        const previous = state.settings?.mouseControls
+          ? normalizeMouseControls(state.settings.mouseControls, DEFAULT_MOUSE_CONTROLS)
+          : cloneMouseControls(DEFAULT_MOUSE_CONTROLS);
+        const normalizedSource =
+          next && typeof next === "object"
+            ? normalizeMouseControls(next, previous)
+            : previous;
+        const normalized = cloneMouseControls(normalizedSource);
+        state.settings.mouseControls = normalized;
+        updateMouseControlInputs();
+        if (!skipLog) {
+          const changes = [];
+          for (const button of MOUSE_BUTTON_KEYS) {
+            const prev = previous[button];
+            const curr = normalized[button];
+            if (prev.click !== curr.click) {
+              changes.push(
+                `${describeMouseButton(button)} click → ${describeMouseClickAction(curr.click)}`
+              );
+            }
+            if (prev.drag !== curr.drag) {
+              changes.push(
+                `${describeMouseButton(button)} click + drag → ${describeMouseDragAction(curr.drag)}`
+              );
+            }
+          }
+          if (changes.length > 0) {
+            logDebug(`Mouse controls updated: ${changes.join("; ")}`);
+          }
+        }
+        if (!skipAutosave) {
+          scheduleAutosave("settings-mouse-controls");
+        }
+      }
+
+      function setMouseControl(button, type, rawValue) {
+        if (!MOUSE_BUTTON_KEYS.includes(button)) {
+          return;
+        }
+        const current = getMouseControls();
+        const nextValue =
+          type === "click"
+            ? normalizeMouseClickAction(rawValue, current[button]?.click)
+            : normalizeMouseDragAction(rawValue, current[button]?.drag);
+        if (current[button] && current[button][type] === nextValue) {
+          updateMouseControlInputs();
+          return;
+        }
+        const nextControls = cloneMouseControls(current);
+        if (!nextControls[button]) {
+          const fallback = DEFAULT_MOUSE_CONTROLS[button] || DEFAULT_MOUSE_CONTROLS.left;
+          nextControls[button] = { click: fallback.click, drag: fallback.drag };
+        }
+        nextControls[button][type] = nextValue;
+        applyMouseControls(nextControls, { skipLog: true, skipAutosave: true });
+        const actionLabel =
+          type === "click" ? describeMouseClickAction(nextValue) : describeMouseDragAction(nextValue);
+        logDebug(`${describeMouseButton(button)} ${type === "click" ? "click" : "click + drag"} set to ${actionLabel}`);
+        scheduleAutosave("settings-mouse-controls");
+      }
+
       function applyPaletteSort(sort, { skipLog } = {}) {
         const allowed = new Set(["region", "hue", "remaining", "name", "brightness"]);
         const next = allowed.has(sort) ? sort : "region";
@@ -6463,6 +6813,144 @@
         attachGlobalPanListeners();
       }
 
+      function handleMouseDragFill(event, session) {
+        if (!session) return;
+        session.lastX = event.clientX;
+        session.lastY = event.clientY;
+        const dx = event.clientX - session.startX;
+        const dy = event.clientY - session.startY;
+        const distance = Math.hypot(dx, dy);
+        const threshold = 4;
+        if (!session.dragStarted && distance >= threshold) {
+          session.dragStarted = true;
+          session.preventClick = true;
+          suppressNextCanvasClickUntil = Date.now() + POINTER_CLICK_SUPPRESSION_MS;
+        }
+        if (!session.dragStarted) {
+          return;
+        }
+        event.preventDefault();
+        if (!state.puzzle || state.previewVisible) {
+          return;
+        }
+        const hit = getRegionFromEvent(event);
+        if (!hit) {
+          session.lastRegionId = null;
+          return;
+        }
+        if (session.lastRegionId === hit.regionId) {
+          return;
+        }
+        session.lastRegionId = hit.regionId;
+        attemptFillRegion(hit, { label: "drag" });
+      }
+
+      function handleMouseDragZoom(event, session) {
+        if (!session) return;
+        const previousY = session.lastY ?? session.startY;
+        session.lastX = event.clientX;
+        session.lastY = event.clientY;
+        const dx = event.clientX - session.startX;
+        const dy = event.clientY - session.startY;
+        const distance = Math.hypot(dx, dy);
+        const threshold = 4;
+        if (!session.dragStarted && distance >= threshold) {
+          session.dragStarted = true;
+          session.preventClick = true;
+          suppressNextCanvasClickUntil = Date.now() + POINTER_CLICK_SUPPRESSION_MS;
+        }
+        if (!session.dragStarted) {
+          return;
+        }
+        event.preventDefault();
+        const deltaY = event.clientY - previousY;
+        if (!Number.isFinite(deltaY) || Math.abs(deltaY) < 0.5) {
+          return;
+        }
+        const multiplier = Math.exp(-deltaY / 200);
+        if (!Number.isFinite(multiplier) || Math.abs(multiplier - 1) < 0.001) {
+          return;
+        }
+        applyZoom(multiplier, event.clientX, event.clientY, { skipLog: true });
+        session.zoomChanged = true;
+      }
+
+      function finalizeMouseSession(session, event) {
+        if (!session) return;
+        pointerSessions.delete(session.pointerId);
+        const now = Date.now();
+        const buttonName = session.buttonName;
+        if (session.dragAction === "fill" && session.dragStarted) {
+          suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+          return;
+        }
+        if (session.dragAction === "zoom" && session.dragStarted) {
+          suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+          if (session.zoomChanged) {
+            const currentScale = clamp(
+              viewState.baseScale * Math.max(viewState.zoom, MIN_VIEWPORT_ZOOM),
+              MIN_RENDER_SCALE,
+              MAX_RENDER_SCALE
+            );
+            logDebug(
+              `${describeMouseButton(buttonName)} drag zoom ended at ${(currentScale * 100).toFixed(0)}%`
+            );
+          }
+          return;
+        }
+        if (session.dragAction === "pan" && (session.dragStarted || session.panActive)) {
+          if (buttonName === "left") {
+            suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+          }
+          return;
+        }
+        const action = session.clickAction;
+        if (action === "fill") {
+          if (buttonName !== "left") {
+            const hit = getRegionFromEvent(event);
+            if (hit) {
+              const result = attemptFillRegion(hit, { label: "click" });
+              if (result !== "ignored") {
+                suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+              }
+            }
+          }
+          return;
+        }
+        suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+        if (action === "select") {
+          const hit = getRegionFromEvent(event);
+          if (hit && hit.region) {
+            const remaining = getRegionsByColor(hit.region.colorId, { includeFilled: false });
+            if (remaining.length > 0) {
+              activateColor(hit.region.colorId);
+            } else {
+              logDebug(
+                `Colour #${hit.region.colorId} already complete; ${describeMouseButton(buttonName)} click ignored`
+              );
+            }
+          } else {
+            logDebug("No region under pointer to select a colour");
+          }
+          return;
+        }
+        if (action === "select-fill") {
+          const hit = getRegionFromEvent(event);
+          if (!hit || !hit.region) {
+            logDebug("No region under pointer to select and fill");
+            return;
+          }
+          activateColor(hit.region.colorId, { flash: false });
+          attemptFillRegion(hit, { label: "click" });
+          return;
+        }
+        if (action === "zoom-in" || action === "zoom-out") {
+          const multiplier = action === "zoom-in" ? 1.15 : 0.85;
+          applyZoom(multiplier, event.clientX, event.clientY);
+          return;
+        }
+      }
+
       function beginPanSession(
         pointerId,
         originX,
@@ -6472,6 +6960,7 @@
         captureTarget,
         pointerType
       ) {
+        const session = pointerSessions.get(pointerId);
         panPointerId = pointerId;
         panOrigin.x = originX;
         panOrigin.y = originY;
@@ -6485,6 +6974,11 @@
         const fallbackTarget = defaultPanCaptureTarget();
         panCaptureTarget = captureTarget || fallbackTarget;
         panPointerType = typeof pointerType === "string" ? pointerType : null;
+        if (session) {
+          session.dragStarted = true;
+          session.panActive = true;
+          session.preventClick = true;
+        }
         let captured = false;
         if (panCaptureTarget && typeof panCaptureTarget.setPointerCapture === "function") {
           try {
@@ -6554,46 +7048,73 @@
           return;
         }
         const usesModifier = spacePressed || event.altKey || event.ctrlKey || event.metaKey;
-        const wantsRightClickSelect =
-          event.pointerType === "mouse" &&
-          event.button === 2 &&
-          !usesModifier &&
-          !state.previewVisible;
-        if (wantsRightClickSelect) {
-          const hit = getRegionFromEvent(event);
-          if (hit && hit.region) {
-            const remaining = getRegionsByColor(hit.region.colorId, { includeFilled: false });
-            if (remaining.length > 0) {
-              event.preventDefault();
-              activateColor(hit.region.colorId);
-              return;
-            }
-          }
-        }
-        const auxButton = event.button === 1 || event.button === 2;
-        if (auxButton || usesModifier) {
-          event.preventDefault();
-          beginPanSession(
-            event.pointerId,
-            event.clientX,
-            event.clientY,
-            viewState.panX,
-            viewState.panY,
-            captureTarget,
-            event.pointerType
-          );
+        const pointerType = event.pointerType;
+        if (pointerType !== "mouse" && pointerType !== "pen") {
           return;
         }
-        if (event.button === 0) {
+        pointerSessions.delete(event.pointerId);
+        const buttonName = getMouseButtonName(event.button);
+        const controls = getMouseControlsForButton(buttonName);
+        let clickAction = controls.click;
+        let dragAction = controls.drag;
+        if (usesModifier) {
+          dragAction = "pan";
+          clickAction = "none";
+        }
+        const session = {
+          pointerId: event.pointerId,
+          pointerType,
+          button: event.button,
+          buttonName,
+          clickAction,
+          dragAction,
+          startX: event.clientX,
+          startY: event.clientY,
+          lastX: event.clientX,
+          lastY: event.clientY,
+          captureTarget,
+          dragStarted: false,
+          panActive: false,
+          zoomChanged: false,
+          lastRegionId: null,
+        };
+        pointerSessions.set(event.pointerId, session);
+        if (dragAction === "pan") {
+          session.panStartX = viewState.panX;
+          session.panStartY = viewState.panY;
+          const immediatePan = usesModifier || buttonName !== "left";
+          if (immediatePan) {
+            event.preventDefault();
+            beginPanSession(
+              event.pointerId,
+              event.clientX,
+              event.clientY,
+              viewState.panX,
+              viewState.panY,
+              captureTarget,
+              event.pointerType
+            );
+            return;
+          }
           panCandidate = {
             pointerId: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
             panX: viewState.panX,
             panY: viewState.panY,
-            pointerType: "mouse",
+            pointerType: event.pointerType,
             captureTarget,
+            session,
           };
+          return;
+        }
+        if (dragAction === "fill") {
+          session.lastRegionId = null;
+          return;
+        }
+        if (dragAction === "zoom") {
+          session.zoomStart = viewState.zoom;
+          return;
         }
       }
 
@@ -6641,6 +7162,7 @@
               if (Math.abs(deltaX) > 0.0001 || Math.abs(deltaY) > 0.0001) {
                 viewState.panX += deltaX;
                 viewState.panY += deltaY;
+                clampViewPanToPuzzleBounds();
                 pinchSession.hasChanged = true;
                 scheduleViewTransform({ skipSizing: true });
               }
@@ -6650,12 +7172,30 @@
             return;
           }
         }
+        const session = pointerSessions.get(event.pointerId);
+        if (session && session.pointerType !== "touch") {
+          if (session.dragAction === "fill") {
+            handleMouseDragFill(event, session);
+            return;
+          }
+          if (session.dragAction === "zoom") {
+            handleMouseDragZoom(event, session);
+            return;
+          }
+        }
         if (panPointerId === event.pointerId && isPanning) {
           event.preventDefault();
           const dx = event.clientX - panOrigin.x;
           const dy = event.clientY - panOrigin.y;
           viewState.panX = panOrigin.panX + dx;
           viewState.panY = panOrigin.panY + dy;
+          clampViewPanToPuzzleBounds();
+          if (session) {
+            session.dragStarted = true;
+            session.panActive = true;
+            session.lastX = event.clientX;
+            session.lastY = event.clientY;
+          }
           scheduleViewTransform({ skipSizing: true });
           return;
         }
@@ -6680,6 +7220,7 @@
       }
 
       function handlePanEnd(event) {
+        const session = pointerSessions.get(event.pointerId);
         if (event.pointerType === "touch") {
           activeTouches.delete(event.pointerId);
           if (pinchSession && !pinchSession.ids.every((id) => activeTouches.has(id))) {
@@ -6713,7 +7254,12 @@
         if (panCandidate && panCandidate.pointerId === event.pointerId) {
           panCandidate = null;
         }
-        if (event.pointerId !== panPointerId) return;
+        if (event.pointerId !== panPointerId) {
+          if (session && session.pointerType !== "touch") {
+            finalizeMouseSession(session, event);
+          }
+          return;
+        }
         panPointerId = null;
         panPointerType = null;
         if (isPanning) {
@@ -6733,6 +7279,9 @@
         panCaptureTarget = null;
         panHasPointerCapture = false;
         detachGlobalPanListeners();
+        if (session && session.pointerType !== "touch") {
+          finalizeMouseSession(session, event);
+        }
         if (event.pointerType === "touch") {
           hideCustomCursor();
         } else {
@@ -6912,6 +7461,7 @@
         const offsetY = anchorY - centerY - viewState.panY;
         viewState.panX += offsetX - offsetX * change;
         viewState.panY += offsetY - offsetY * change;
+        clampViewPanToPuzzleBounds();
         const nextZoom = normalizeZoomValue(targetScale / baseScale, currentZoom);
         const significant = Math.abs(targetScale - currentScale) >= Math.max(0.01, currentScale * 0.001);
         viewState.zoom = nextZoom;
@@ -6940,6 +7490,7 @@
           cancelViewTransformFrame = null;
           pendingViewTransform = null;
         }
+        clampViewPanToPuzzleBounds();
         if (canvasStage) {
           canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
           canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
@@ -7045,6 +7596,7 @@
           viewState.zoom = normalizeZoomValue(1);
         }
         viewState.baseScale = nextBase;
+        clampViewPanToPuzzleBounds();
         applyViewTransform();
       }
 
@@ -7070,6 +7622,7 @@
         viewState.zoom = normalizeZoomValue(targetZoom, savedZoom);
         viewState.panX = hasPanX && Number.isFinite(viewport.panX) ? viewport.panX * scaleRatio : 0;
         viewState.panY = hasPanY && Number.isFinite(viewport.panY) ? viewport.panY * scaleRatio : 0;
+        clampViewPanToPuzzleBounds();
         applyViewTransform();
         return true;
       }
@@ -7696,6 +8249,7 @@
             imageDescription: state.settings.imageDescription || "",
             showRegionLabels: state.settings.showRegionLabels !== false,
             theme: state.settings.theme || DEFAULT_UI_THEME,
+            mouseControls: cloneMouseControls(state.settings.mouseControls),
           },
         };
         if (regionMapPacked) {
