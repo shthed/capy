@@ -1,70 +1,70 @@
 {
   "commits": [
     {
-      "sha": "4a49d2577844d9a20f656028f0a4bac212e6c609",
-      "shortSha": "4a49d25",
-      "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
+      "sha": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
+      "shortSha": "420993f",
+      "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md\n\nRewrite README for player-focused guidance",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T23:37:01Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609",
+      "date": "2025-10-18T04:15:22Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/420993f5ae5ea27e6d530494ac2e43858f91d26b",
       "prs": [
         {
-          "number": 179,
-          "title": "Hide puzzle outlines for filled regions",
-          "url": "https://github.com/shthed/capy/pull/179",
-          "branch": "codex/remove-border-for-filled-regions"
+          "number": 180,
+          "title": "Rewrite README for player-focused guidance",
+          "url": "https://github.com/shthed/capy/pull/180",
+          "branch": "codex/move-development-notes-to-agents.md"
         }
       ]
     },
     {
-      "sha": "895b96a23cf8b189eb84ffde93d906f220be97dd",
-      "shortSha": "895b96a",
-      "message": "Hide outlines for filled regions",
+      "sha": "8f11153e5bf68fd39e1b304a119769ef46e29466",
+      "shortSha": "8f11153",
+      "message": "Consolidate workflow docs into AGENTS and TECH",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T23:34:24Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/895b96a23cf8b189eb84ffde93d906f220be97dd",
+      "date": "2025-10-18T01:48:39Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8f11153e5bf68fd39e1b304a119769ef46e29466",
       "prs": [
         {
-          "number": 179,
-          "title": "Hide puzzle outlines for filled regions",
-          "url": "https://github.com/shthed/capy/pull/179",
-          "branch": "codex/remove-border-for-filled-regions"
+          "number": 180,
+          "title": "Rewrite README for player-focused guidance",
+          "url": "https://github.com/shthed/capy/pull/180",
+          "branch": "codex/move-development-notes-to-agents.md"
         }
       ]
     },
     {
-      "sha": "86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
-      "shortSha": "86bb3b5",
-      "message": "Merge pull request #178 from shthed/codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8\n\nHarden branch deployment workflow data handling",
+      "sha": "0806f1435a44d30c24d679c62fc734adfaf5e0e5",
+      "shortSha": "0806f14",
+      "message": "Document technical guide and streamline agent instructions",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T23:09:24Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/86bb3b58568cfd0df5e150b8425e77ebfd2d96bc",
+      "date": "2025-10-18T01:48:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0806f1435a44d30c24d679c62fc734adfaf5e0e5",
       "prs": [
         {
-          "number": 178,
-          "title": "Harden branch deployment workflow data handling",
-          "url": "https://github.com/shthed/capy/pull/178",
-          "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8"
+          "number": 180,
+          "title": "Rewrite README for player-focused guidance",
+          "url": "https://github.com/shthed/capy/pull/180",
+          "branch": "codex/move-development-notes-to-agents.md"
         }
       ]
     },
     {
-      "sha": "caf523af31899c4d83b6d0eb796f02bd24c6d770",
-      "shortSha": "caf523a",
-      "message": "Merge branch 'main' into codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8",
+      "sha": "5ea38830555702a156d3f68aa934ab4adbb3d9ff",
+      "shortSha": "5ea3883",
+      "message": "Rewrite README for players",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-17T23:06:19Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/caf523af31899c4d83b6d0eb796f02bd24c6d770",
+      "date": "2025-10-18T01:45:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/5ea38830555702a156d3f68aa934ab4adbb3d9ff",
       "prs": [
         {
-          "number": 178,
-          "title": "Harden branch deployment workflow data handling",
-          "url": "https://github.com/shthed/capy/pull/178",
-          "branch": "codex/validate-yaml-syntax-in-deploy-branch.yml-jyity8"
+          "number": 180,
+          "title": "Rewrite README for player-focused guidance",
+          "url": "https://github.com/shthed/capy/pull/180",
+          "branch": "codex/move-development-notes-to-agents.md"
         }
       ]
     }
   ],
-  "lastCommitDate": "2025-10-17T23:37:01Z",
-  "deploymentTimestamp": 1760744231109
+  "lastCommitDate": "2025-10-18T04:15:22Z",
+  "deploymentTimestamp": 1760760933158
 }
