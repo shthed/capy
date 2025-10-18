@@ -23,10 +23,10 @@
     "key": "codex-move-development-notes-to-agents.md",
     "branch": "codex/move-development-notes-to-agents.md",
     "safeName": "codex-move-development-notes-to-agents.md",
-    "commit": "0806f1435a44d30c24d679c62fc734adfaf5e0e5",
-    "message": "Document technical guide and streamline agent instructions",
+    "commit": "8f11153e5bf68fd39e1b304a119769ef46e29466",
+    "message": "Consolidate workflow docs into AGENTS and TECH",
     "actor": "shthed",
-    "deployedAt": "2025-10-18T09:48:32+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/0806f1435a44d30c24d679c62fc734adfaf5e0e5"
+    "deployedAt": "2025-10-18T09:48:39+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/8f11153e5bf68fd39e1b304a119769ef46e29466"
   }
 }
