@@ -119,3 +119,7 @@ any feature or workflow changes you ship.
   PR, commit, and timestamp metadata rendered in the viewer’s local timezone.
 - Cleanup: When a PR closes, the workflow prunes its corresponding deployment on
   the next run—manual intervention is rarely needed.
+- Post-deploy smoke tests: `.github/workflows/post-deploy-tests.yml` waits for a
+  successful deployment, reruns the Playwright smoke script against the hosted
+  preview, uploads any UI review artifacts, and comments on the PR with the
+  results and screenshot links.
