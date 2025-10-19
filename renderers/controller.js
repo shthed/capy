@@ -5,9 +5,21 @@ export function createRendererController(canvas, options = {}) {
     renderers = {},
   } = options || {};
 
+  const normalizedRenderers = {};
+  if (renderers && typeof renderers === "object") {
+    for (const [type, factory] of Object.entries(renderers)) {
+      if (!type) continue;
+      if (typeof factory === "function") {
+        normalizedRenderers[type] = () => factory(canvas, hooks);
+      } else if (factory && typeof factory === "object") {
+        normalizedRenderers[type] = () => factory;
+      }
+    }
+  }
+
   const rendererFactories = {
     canvas2d: () => createCanvas2dRenderer(canvas, hooks),
-    ...renderers,
+    ...normalizedRenderers,
   };
 
   let activeRenderer = null;
