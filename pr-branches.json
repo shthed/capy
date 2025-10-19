@@ -1,10 +1,18 @@
 [
   {
+    "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage",
+    "safeName": "codex-refactor-prepare-deploy-metadata-for-fetch-usage",
+    "title": "Use fetch to build deployment metadata",
+    "number": 187,
+    "updatedAt": "2025-10-19T09:44:13Z",
+    "url": "https://github.com/shthed/capy/pull/187"
+  },
+  {
     "branch": "codex/refactor-canvas-rendering-to-use-controller",
     "safeName": "codex-refactor-canvas-rendering-to-use-controller",
     "title": "Modularize puzzle renderer via controller abstraction",
     "number": 181,
-    "updatedAt": "2025-10-18T08:51:38Z",
+    "updatedAt": "2025-10-19T08:46:15Z",
     "url": "https://github.com/shthed/capy/pull/181"
   },
   {

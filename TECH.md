@@ -73,6 +73,27 @@ Tweaking the deployment:
 - Swap the publish branch from `gh-pages` if you need a different hosting
   target.
 
+### Post-deploy branch smoke tests
+
+- **Trigger.** The `Post-deploy branch tests` workflow listens for successful
+  runs of the deployment job. It only proceeds for push-triggered runs so manual
+  dispatches and `gh-pages` updates do not double-trigger Playwright.
+- **Preview discovery.** Each run sanitises the branch name the same way the
+  deployment workflow does (`automation/feature` → `/automation-feature/`) to
+  reconstruct the GitHub Pages preview URL. The computed link feeds both
+  Playwright and the PR comment that lands at the end of the job.
+- **Playwright smoke rerun.** Once the preview URL is known, the workflow
+  installs dependencies and reuses `npm test --silent`, pointing Playwright at
+  the hosted branch preview via `PLAYWRIGHT_BASE_URL` so reviewers see the live
+  build rather than a local server.
+- **Artifacts.** Any files dropped under `artifacts/ui-review/` (screenshots,
+  traces, reports) are uploaded automatically. The PR comment links directly to
+  the workflow run so reviewers can download them without re-running the suite.
+- **PR update.** After the test finishes (pass or fail), the workflow posts a
+  comment on every associated PR summarising the preview URL, test outcome, and
+  whether UI review artifacts were captured. This keeps the automation loop
+  self-serve even while the primary Playwright suite remains paused in CI.
+
 ## UI & Feature Tour
 
 ### Headline Features

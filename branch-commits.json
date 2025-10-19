@@ -1,5 +1,144 @@
 {
+  "codex/refactor-prepare-deploy-metadata-for-fetch-usage": [
+    {
+      "sha": "cc83ae8299745b909bcfa28f03deb429efecf828",
+      "shortSha": "cc83ae8",
+      "message": "Use fetch for deployment metadata script",
+      "date": "2025-10-19T09:42:29Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/cc83ae8299745b909bcfa28f03deb429efecf828",
+      "prs": [
+        {
+          "number": 187,
+          "title": "Use fetch to build deployment metadata",
+          "url": "https://github.com/shthed/capy/pull/187",
+          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
+        }
+      ]
+    },
+    {
+      "sha": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
+      "shortSha": "420993f",
+      "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md\n\nRewrite README for player-focused guidance",
+      "date": "2025-10-18T04:15:22Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/420993f5ae5ea27e6d530494ac2e43858f91d26b",
+      "prs": [
+        {
+          "number": 187,
+          "title": "Use fetch to build deployment metadata",
+          "url": "https://github.com/shthed/capy/pull/187",
+          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
+        }
+      ]
+    },
+    {
+      "sha": "8f11153e5bf68fd39e1b304a119769ef46e29466",
+      "shortSha": "8f11153",
+      "message": "Consolidate workflow docs into AGENTS and TECH",
+      "date": "2025-10-18T01:48:39Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8f11153e5bf68fd39e1b304a119769ef46e29466",
+      "prs": [
+        {
+          "number": 187,
+          "title": "Use fetch to build deployment metadata",
+          "url": "https://github.com/shthed/capy/pull/187",
+          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
+        }
+      ]
+    },
+    {
+      "sha": "0806f1435a44d30c24d679c62fc734adfaf5e0e5",
+      "shortSha": "0806f14",
+      "message": "Document technical guide and streamline agent instructions",
+      "date": "2025-10-18T01:48:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0806f1435a44d30c24d679c62fc734adfaf5e0e5",
+      "prs": [
+        {
+          "number": 187,
+          "title": "Use fetch to build deployment metadata",
+          "url": "https://github.com/shthed/capy/pull/187",
+          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
+        }
+      ]
+    }
+  ],
+  "codex-refactor-prepare-deploy-metadata-for-fetch-usage": [
+    {
+      "sha": "cc83ae8299745b909bcfa28f03deb429efecf828",
+      "shortSha": "cc83ae8",
+      "message": "Use fetch for deployment metadata script",
+      "date": "2025-10-19T09:42:29Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/cc83ae8299745b909bcfa28f03deb429efecf828",
+      "prs": [
+        {
+          "number": 187,
+          "title": "Use fetch to build deployment metadata",
+          "url": "https://github.com/shthed/capy/pull/187",
+          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
+        }
+      ]
+    },
+    {
+      "sha": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
+      "shortSha": "420993f",
+      "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md\n\nRewrite README for player-focused guidance",
+      "date": "2025-10-18T04:15:22Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/420993f5ae5ea27e6d530494ac2e43858f91d26b",
+      "prs": [
+        {
+          "number": 187,
+          "title": "Use fetch to build deployment metadata",
+          "url": "https://github.com/shthed/capy/pull/187",
+          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
+        }
+      ]
+    },
+    {
+      "sha": "8f11153e5bf68fd39e1b304a119769ef46e29466",
+      "shortSha": "8f11153",
+      "message": "Consolidate workflow docs into AGENTS and TECH",
+      "date": "2025-10-18T01:48:39Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8f11153e5bf68fd39e1b304a119769ef46e29466",
+      "prs": [
+        {
+          "number": 187,
+          "title": "Use fetch to build deployment metadata",
+          "url": "https://github.com/shthed/capy/pull/187",
+          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
+        }
+      ]
+    },
+    {
+      "sha": "0806f1435a44d30c24d679c62fc734adfaf5e0e5",
+      "shortSha": "0806f14",
+      "message": "Document technical guide and streamline agent instructions",
+      "date": "2025-10-18T01:48:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0806f1435a44d30c24d679c62fc734adfaf5e0e5",
+      "prs": [
+        {
+          "number": 187,
+          "title": "Use fetch to build deployment metadata",
+          "url": "https://github.com/shthed/capy/pull/187",
+          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
+        }
+      ]
+    }
+  ],
   "codex/refactor-canvas-rendering-to-use-controller": [
+    {
+      "sha": "06b9c12ae94c0199a9c179f98f75e332c8ee6881",
+      "shortSha": "06b9c12",
+      "message": "Normalize renderer controller factories",
+      "date": "2025-10-19T08:46:12Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/06b9c12ae94c0199a9c179f98f75e332c8ee6881",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    },
     {
       "sha": "121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
       "shortSha": "121e8a5",
@@ -36,21 +175,6 @@
       "message": "Merge pull request #169 from shthed/codex/update-readme-for-core-application-files\n\nFix README core asset reference",
       "date": "2025-10-17T09:37:08Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/ca4ca9fa951953f60c7fa7d2332e84c7d032d74f",
-      "prs": [
-        {
-          "number": 181,
-          "title": "Modularize puzzle renderer via controller abstraction",
-          "url": "https://github.com/shthed/capy/pull/181",
-          "branch": "codex/refactor-canvas-rendering-to-use-controller"
-        }
-      ]
-    },
-    {
-      "sha": "a65053f31cff64824abb484207f86abfcaf064dc",
-      "shortSha": "a65053f",
-      "message": "Correct core asset reference",
-      "date": "2025-10-17T09:34:19Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/a65053f31cff64824abb484207f86abfcaf064dc",
       "prs": [
         {
           "number": 181,
@@ -63,6 +187,21 @@
   ],
   "codex-refactor-canvas-rendering-to-use-controller": [
     {
+      "sha": "06b9c12ae94c0199a9c179f98f75e332c8ee6881",
+      "shortSha": "06b9c12",
+      "message": "Normalize renderer controller factories",
+      "date": "2025-10-19T08:46:12Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/06b9c12ae94c0199a9c179f98f75e332c8ee6881",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    },
+    {
       "sha": "121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
       "shortSha": "121e8a5",
       "message": "Refactor puzzle renderer through controller",
@@ -98,21 +237,6 @@
       "message": "Merge pull request #169 from shthed/codex/update-readme-for-core-application-files\n\nFix README core asset reference",
       "date": "2025-10-17T09:37:08Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/ca4ca9fa951953f60c7fa7d2332e84c7d032d74f",
-      "prs": [
-        {
-          "number": 181,
-          "title": "Modularize puzzle renderer via controller abstraction",
-          "url": "https://github.com/shthed/capy/pull/181",
-          "branch": "codex/refactor-canvas-rendering-to-use-controller"
-        }
-      ]
-    },
-    {
-      "sha": "a65053f31cff64824abb484207f86abfcaf064dc",
-      "shortSha": "a65053f",
-      "message": "Correct core asset reference",
-      "date": "2025-10-17T09:34:19Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/a65053f31cff64824abb484207f86abfcaf064dc",
       "prs": [
         {
           "number": 181,
