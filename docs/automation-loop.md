@@ -20,6 +20,10 @@ merging, and feedback collection so that single-file updates stay trustworthy.
    deploys to GitHub Pages under a subfolder named after the branch (e.g.,
    `automation/feature` → `/automation-feature/`), letting reviewers test the live
    app without cloning the repository. The `main` branch always deploys to the root.
+5. **Post-deploy smoke tests.** Once a deployment finishes, the `Post-deploy
+   branch tests` workflow reruns the Playwright smoke suite against the live
+   preview URL and drops a pull-request comment that links to the deployment and
+   any captured screenshots.
 
 ## Testing cadence
 
