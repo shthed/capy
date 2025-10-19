@@ -13,11 +13,11 @@
     "key": "codex-create-workflow-for-post-deployment-tests",
     "branch": "codex/create-workflow-for-post-deployment-tests",
     "safeName": "codex-create-workflow-for-post-deployment-tests",
-    "commit": "f2d902eb504b940a64dd63392dd4ea200fb14ccc",
-    "message": "Add post-deploy branch smoke tests workflow",
+    "commit": "8e2c3349caa2b56688e8291360852f7bff03fb2f",
+    "message": "Merge remote-tracking branch 'origin/main'",
     "actor": "shthed",
-    "deployedAt": "2025-10-19T17:43:00+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/f2d902eb504b940a64dd63392dd4ea200fb14ccc"
+    "deployedAt": "2025-10-20T06:28:43+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/8e2c3349caa2b56688e8291360852f7bff03fb2f"
   },
   "codex-introduce-renderer-abstraction-for-webgl": {
     "branch": "codex/introduce-renderer-abstraction-for-webgl",
