@@ -1,92 +1,86 @@
 # Agent Instructions
 
-game: https://shthed.github.io/capy/
-repo: https://github.com/shthed/capy
+Capy lives at https://shthed.github.io/capy/ (repo: https://github.com/shthed/capy).
 
-## Project Overview
-Capybooper is a static, browser-based color-by-number playground. Everything —
-markup, styles, generator logic, fixtures, and onboarding copy — lives inside
-`index.html`. Users can drop images (or load the bundled Capybara Springs
-sample), let the k-means pipeline quantize colours, and immediately paint. The
-repository intentionally avoids build tooling: npm is only used to install the
-Playwright test runner and a lightweight `http-server` for local previews.
+This file focuses on how we work. For technical architecture, UI behaviour, and
+file-by-file references, consult [`TECH.md`](./TECH.md) and keep it in sync with
+any feature or workflow changes you ship.
 
-## Repository Map
-- `index.html` – Single-page application containing DOM structure, inline styles,
-  generator code, autosave helpers, and developer-map comments segmenting the
-  script.
-- `README.md` – Contributor handbook that documents UX features, presets, and
-  architecture details; keep it synchronized with meaningful UI or workflow
-  changes.
-- `tests/ui-review.spec.js` – Playwright smoke test that boots the app, exercises
-  onboarding, palette interactions, and sample reload flows across desktop &
-  mobile viewports.
-- `playwright.config.js` – Spins up `http-server` on port 8000 for tests and
-  reuses any running instance to speed up local iterations.
-- `docs/automation-loop.md` & `docs/branch-deployments.md` – Deep dives on the
-  CI/deployment expectations referenced below.
-- `package.json` – npm scripts for local preview (`npm run dev`), Playwright test
-  variants, and automatic dependency provisioning via `postinstall`.
-- `artifacts/ui-review/` – Expected location for Playwright reports and
-  screenshots when you capture them locally; include relevant artifacts with major
-  UI updates.
+## Development Workflow
+
+- **Branch naming.** Create short-lived branches named `automation/<change>` so
+  QA notes and preview URLs map directly to the experiment under review.
+- **Draft PRs early.** Open a draft PR as soon as you push. CI logs, manual QA
+  notes, and preview links stay centralised, which matters once the automation
+  suite returns.
+- **Branch deployments.** Branches with open PRs deploy automatically to GitHub
+  Pages under `/automation-<slug>/`; `main` deploys to the root. See "Branch
+  Deployments" below for the full workflow and maintenance details.
+- **Manual smoke tests.** Exercise puzzle load, palette selection, painting, and
+  save/load flows in at least one desktop and one mobile browser before
+  requesting review.
+- **Automation discipline.** Record which tests ran, link the latest preview,
+  and attach Playwright artifacts (when available) before handing off for
+  review. Capture outcomes in the PR description so history remains searchable.
+- **Fast-forward merges.** Rebase onto `main`, rerun the quick manual checks,
+  and merge with `--ff-only` so history stays linear for the single-file
+  runtime.
+- **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up
+  work in the standing Friday issue to keep the automation backlog visible.
 
 ## Environment Setup
+
 1. Install Node.js 18 LTS or newer.
-2. Run `npm install` once; this triggers Playwright's `postinstall` hook to fetch
-   browsers and dependencies.
-3. Launch a local preview with `npm run dev` (serves the repo root at
-   http://localhost:8000 via `http-server`).
-4. Tests and docs assume the app is reachable at port 8000; update
-   `playwright.config.js` if you change this, and reflect the change in the
-   README plus this guide.
+2. Run `npm install` once to provision Playwright browsers and the lightweight
+   `http-server` used by local previews.
+3. Launch the site with `npm run dev` (serves the repo root at
+   http://localhost:8000).
+4. Tests and docs assume the app is reachable at port 8000; if you change it,
+   update configuration files plus `TECH.md`.
 
-## Development & Testing
-- Primary test command: `npm test --silent` (Playwright suite across desktop &
-  mobile viewports). Mention in the final response if you cannot run it.
-- Targeted smoke run: `npm run test:smoke` for quick iterations on
+## Testing Expectations
+
+- Primary test command: `npm test --silent` (currently prints a skip notice
+  while the Playwright suite is offline). Mention in the final response if you
+  cannot run it.
+- Targeted smoke run: `npm run test:smoke` for iterating on
   `tests/ui-review.spec.js`.
-- UI verification: Keep the Playwright expectations aligned with UI markup,
-  palette labels, and README imagery when making visual changes.
-- Artifacts: When validating significant UI updates, capture the generated
-  Playwright report under `artifacts/ui-review/` and surface the location or
-  attach files for reviewers.
-- Manual QA: The app exposes `window.capyGenerator` helpers (`loadPuzzleFixture`,
-  `togglePreview`, etc.) for ad-hoc scripting in DevTools; note any new helpers
-  in the README and tests.
+- UI verification: Keep Playwright expectations aligned with UI markup, palette
+  labels, and README imagery when making visual changes.
+- Artifacts: Capture Playwright reports under `artifacts/ui-review/` for major
+  UI updates and surface them in PRs once the automated suite is reinstated.
+- Manual QA: `window.capyGenerator` exposes helpers (e.g.
+  `loadPuzzleFixture`, `togglePreview`). Document any new helpers in `TECH.md`
+  plus relevant tests.
+- Merge gates: Until automation returns, block merges on a recorded manual
+  smoke run. Once the suite is live again, require the automated check to pass
+  before landing.
 
-## Tooling
-- Use the repository ripgrep defaults (`.ripgreprc` and `.rgignore`) so large fixture dumps do not overflow the terminal. Pass `--no-ignore` or `--max-columns` overrides explicitly if you need raw output.
+## Documentation Hygiene
 
-## Documentation & Notes
-- Update `SEGMENTATION_GUIDE.md`, `ui-review.md`, or other relevant docs whenever the workflow or UI meaningfully changes.
-- When adjusting the UI review harness, also refresh README/test docs to mention new metadata captured (e.g., header button ARIA labels or library controls).
-- Note responsive header or palette adjustments in `README.md` and `docs/gameplay-session.md` so contributors understand current UX expectations.
+- Update `TECH.md` alongside changes that affect gameplay, tooling, or release
+  workflows.
+- Add or refresh screenshots, segmentation guides, and UI walkthroughs when
+  you alter major flows.
 
-## Automation Workflow
-- Sync with the latest `main` (fetch + merge or rebase) before starting work so local changes incorporate upstream automation updates.
-- Capture any conflict resolutions in commit messages and PR summaries, especially when guidance files such as `AGENTS.md` or `README.md` change.
-- Run `npm test --silent` after resolving conflicts to confirm the workflow still passes the automation checks before pushing.
+## Automation & Git Preferences
 
-## Git Preferences
-- Configure git before committing: `git config user.name "Codex"` and
-  `git config user.email "codex@openai.com"`.
-- Keep `core.pager` set to `cat` for consistent command output.
-- Start work with `git fetch --all --prune` to align local refs with remote.
-- After each commit, push the branch so remote history mirrors local progress.
-- Add the upstream remote if missing: `git remote add origin https://github.com/shthed/capy.git`.
-
-### Branch Update Procedure
-- Prefer rebasing feature branches onto the latest `origin/main` to preserve a
-  linear history. Merging is acceptable only when you intentionally avoid
-  rewriting history.
-- Recommended one-time git configuration:
+- Sync with `main` (`git fetch --all --prune`) before starting work.
+- Configure git identity locally if needed:
+  ```bash
+  git config user.name "Codex"
+  git config user.email "codex@openai.com"
+  ```
+- Keep `core.pager` set to `cat` for predictable output.
+- Push after each commit so remote history mirrors local progress.
+- Prefer rebasing feature branches onto `origin/main`; merge only when you must
+  avoid rewriting history. Recommended one-time configuration:
   ```bash
   git config --global pull.rebase true
   git config --global rebase.autoStash true
   git config --global rerere.enabled true
   ```
-- Standard rebase workflow:
+- Standard rebase flow:
   ```bash
   git fetch --all --prune
   git switch <feature-branch>
@@ -94,26 +88,38 @@ Playwright test runner and a lightweight `http-server` for local previews.
   # resolve conflicts
   git push --force-with-lease
   ```
-- If you must merge instead, follow the same fetch/switch cadence, run
-  `git merge origin/main`, resolve conflicts, and finish with a regular
-  `git push`.
-- During rebases, remember `ours` = the commit being replayed (your feature
-  work) and `theirs` = upstream (`origin/main`). For merges, `ours` = your
-  feature branch and `theirs` = the target branch.
-- Common conflict shortcuts:
+- Conflict shortcuts:
   ```bash
   git checkout --theirs package-lock.json yarn.lock pnpm-lock.yaml
   git checkout --ours .editorconfig .eslintrc.* .prettierrc*
   git add -A && git rebase --continue   # or: git merge --continue
   ```
 - Abort a bad resolution with `git rebase --abort` (or `git merge --abort`).
-- After rebasing, always push with `--force-with-lease` to avoid clobbering
-  collaborators.
 
 ## Final Response & PR Expectations
-- Summaries should highlight UI and workflow changes, noting live preview URLs if
-  applicable.
-- Explicitly state which tests were run (or why they were skipped) in the final
+
+- Summaries should spotlight UI and workflow changes plus live preview URLs when
+  available.
+- Explicitly list which tests ran (or why they were skipped) in the final
   message.
-- Capture and link Playwright artifacts for major UI adjustments.
-- Follow repository-wide and nested `AGENTS.md` guidance for any files you touch.
+- Follow repository-wide and nested `AGENTS.md` guidance for any files you
+  touch.
+
+## Branch Deployments
+
+- Workflow: `.github/workflows/deploy-branch.yml` builds from every push.
+  Branches without open PRs exit early; `main` always deploys.
+- Destinations: `main` publishes to the root of GitHub Pages. Other branches
+  land in `/automation-<slug>/` directories using sanitised branch names (e.g.,
+  `automation/feature` → `/automation-feature/`).
+- Contents: Each deployment ships `index.html`, `puzzle-generation.js`,
+  `capy.json`, and a generated `/README/index.html` so documentation mirrors the
+  branch.
+- Index: `branch.html` lists `main` plus every deployed branch with preview,
+  PR, commit, and timestamp metadata rendered in the viewer’s local timezone.
+- Cleanup: When a PR closes, the workflow prunes its corresponding deployment on
+  the next run—manual intervention is rarely needed.
+- Post-deploy smoke tests: `.github/workflows/post-deploy-tests.yml` waits for a
+  successful deployment, reruns the Playwright smoke script against the hosted
+  preview, uploads any UI review artifacts, and comments on the PR with the
+  results and screenshot links.
