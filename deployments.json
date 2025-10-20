@@ -13,10 +13,10 @@
     "key": "codex-fix-invalid-syntax-in-deploy-branch.yml-40srvq",
     "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq",
     "safeName": "codex-fix-invalid-syntax-in-deploy-branch.yml-40srvq",
-    "commit": "f4511c94ff70ee9d96b355e1c3ee3732a2896305",
-    "message": "Clarify workflow env defaults and lint guidance",
+    "commit": "dc7c804fffb11d37e7dee0e08c71c0b637c3a93f",
+    "message": "Merge branch 'main' into codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T06:13:28+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/f4511c94ff70ee9d96b355e1c3ee3732a2896305"
+    "deployedAt": "2025-10-21T06:14:45+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/dc7c804fffb11d37e7dee0e08c71c0b637c3a93f"
   }
 }
