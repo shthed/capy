@@ -2992,6 +2992,7 @@
       let pendingImportAutoStart = false;
       updateImportNotice();
       let shouldAutoLoadSample = false;
+      let labelLayoutRetryHandle = null;
 
       function disableSampleAutoload() {
         shouldAutoLoadSample = false;
@@ -5507,6 +5508,34 @@
         });
       }
 
+      function scheduleLabelLayoutRetry(delay = 0) {
+        if (labelLayoutRetryHandle != null) {
+          return;
+        }
+        const normalizedDelay = Number.isFinite(delay) && delay > 0 ? Math.round(delay) : 0;
+        if (normalizedDelay <= 20 && typeof window?.requestAnimationFrame === "function") {
+          labelLayoutRetryHandle = window.requestAnimationFrame(() => {
+            labelLayoutRetryHandle = null;
+            renderPuzzle();
+          });
+          return;
+        }
+        const timeout = normalizedDelay > 0 ? normalizedDelay : 32;
+        if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+          labelLayoutRetryHandle = window.setTimeout(() => {
+            labelLayoutRetryHandle = null;
+            renderPuzzle();
+          }, timeout);
+          return;
+        }
+        if (typeof setTimeout === "function") {
+          labelLayoutRetryHandle = setTimeout(() => {
+            labelLayoutRetryHandle = null;
+            renderPuzzle();
+          }, timeout);
+        }
+      }
+
       function getRegionLabelText(region) {
         if (!region) return "";
         const normalize = (value) => {
@@ -5532,13 +5561,43 @@
         if (!region || !state.puzzle) return null;
         const text = getRegionLabelText(region);
         if (!text) return null;
-        if (region.labelLayoutText === text) {
-          return region.labelLayout || null;
+        if (region.labelLayoutText === text && region.labelLayout) {
+          return region.labelLayout;
+        }
+        if (region.labelLayoutText !== text) {
+          region.labelLayout = null;
+          region.labelLayoutRetryCount = 0;
+          region.labelLayoutFailureText = null;
+          region.labelLayoutFailureTime = 0;
+        }
+        const now = typeof Date.now === "function" ? Date.now() : new Date().getTime();
+        if (
+          region.labelLayoutFailureText === text &&
+          Number.isFinite(region.labelLayoutFailureTime) &&
+          now - region.labelLayoutFailureTime < 60
+        ) {
+          return null;
         }
         const layout = computeRegionLabelLayout(region, text);
-        region.labelLayout = layout;
-        region.labelLayoutText = text;
-        return layout;
+        if (layout) {
+          region.labelLayout = layout;
+          region.labelLayoutText = text;
+          region.labelLayoutRetryCount = 0;
+          region.labelLayoutFailureText = null;
+          region.labelLayoutFailureTime = 0;
+          return layout;
+        }
+        region.labelLayout = null;
+        region.labelLayoutText = null;
+        region.labelLayoutFailureText = text;
+        region.labelLayoutFailureTime = now;
+        const attempts = (region.labelLayoutRetryCount || 0) + 1;
+        region.labelLayoutRetryCount = attempts;
+        if (attempts <= 3) {
+          const retryDelay = Math.min(360, attempts * 120);
+          scheduleLabelLayoutRetry(retryDelay);
+        }
+        return null;
       }
 
       function computeRegionLabelLayout(region, rawText) {
