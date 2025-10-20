@@ -23,10 +23,10 @@
     "key": "codex-update-deploy-branch-to-include-.js-files",
     "branch": "codex/update-deploy-branch-to-include-.js-files",
     "safeName": "codex-update-deploy-branch-to-include-.js-files",
-    "commit": "b6128fc398a01b88ae7b493e1bdb3fb678137637",
-    "message": "Merge pull request #202 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq\n\nEnsure allow_without_pr input is evaluated correctly",
+    "commit": "cd8eb50b7bad2cb77fd4887c2613bbf22b3d9b92",
+    "message": "Include renderer scripts in branch deploys",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T06:15:39+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/b6128fc398a01b88ae7b493e1bdb3fb678137637"
+    "deployedAt": "2025-10-21T06:54:31+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/cd8eb50b7bad2cb77fd4887c2613bbf22b3d9b92"
   }
 }
