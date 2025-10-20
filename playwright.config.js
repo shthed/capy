@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
@@ -8,16 +8,27 @@ export default defineConfig({
     timeout: 5_000,
   },
   use: {
-    baseURL: 'http://localhost:8000',
-    viewport: { width: 1280, height: 720 },
-    video: 'on',
+    baseURL: 'http://127.0.0.1:8000/index.html',
     trace: 'retain-on-failure',
+    video: 'on-first-retry',
   },
   webServer: {
-    command: 'npx http-server -c-1 . -p 8000',
-    url: 'http://localhost:8000',
+    command: 'npm run dev',
+    url: 'http://127.0.0.1:8000/index.html',
     reuseExistingServer: !process.env.CI,
-    stdout: 'pipe',
-    stderr: 'pipe',
   },
+  projects: [
+    {
+      name: 'chromium-desktop',
+      use: {
+        ...devices['Desktop Chromium'],
+      },
+    },
+    {
+      name: 'webkit-mobile',
+      use: {
+        ...devices['iPhone 12'],
+      },
+    },
+  ],
 });

@@ -1,70 +1,70 @@
 {
   "commits": [
     {
-      "sha": "472db746a90d9ccab58d2ed756ae8fdd76b24977",
-      "shortSha": "472db74",
-      "message": "Merge pull request #193 from shthed/codex/add-tests-for-game-loading-and-completing\n\nAdd Playwright tests for painting and save completion",
+      "sha": "fe33216e51a4b14037ec9569e666fc2fe52a1f8a",
+      "shortSha": "fe33216",
+      "message": "Merge pull request #201 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml\n\nFix deploy workflow expressions for manual inputs",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T10:35:08Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/472db746a90d9ccab58d2ed756ae8fdd76b24977",
+      "date": "2025-10-20T22:06:08Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/fe33216e51a4b14037ec9569e666fc2fe52a1f8a",
       "prs": [
         {
-          "number": 193,
-          "title": "Add Playwright tests for painting and save completion",
-          "url": "https://github.com/shthed/capy/pull/193",
-          "branch": "codex/add-tests-for-game-loading-and-completing"
+          "number": 201,
+          "title": "Fix deploy workflow expressions for manual inputs",
+          "url": "https://github.com/shthed/capy/pull/201",
+          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml"
         }
       ]
     },
     {
-      "sha": "6e9e31d31fec298365618c8189dbfc75b7e3dadb",
-      "shortSha": "6e9e31d",
-      "message": "Add Playwright tests for painting and save completion",
+      "sha": "08b702804bb5329748fbabb752884faebe5bbe17",
+      "shortSha": "08b7028",
+      "message": "Fix ternary expressions in deploy workflow",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T10:34:43Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/6e9e31d31fec298365618c8189dbfc75b7e3dadb",
+      "date": "2025-10-20T22:04:44Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/08b702804bb5329748fbabb752884faebe5bbe17",
       "prs": [
         {
-          "number": 193,
-          "title": "Add Playwright tests for painting and save completion",
-          "url": "https://github.com/shthed/capy/pull/193",
-          "branch": "codex/add-tests-for-game-loading-and-completing"
+          "number": 201,
+          "title": "Fix deploy workflow expressions for manual inputs",
+          "url": "https://github.com/shthed/capy/pull/201",
+          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml"
         }
       ]
     },
     {
-      "sha": "b538d36e97087e7f7f1e1cfc1328959bac3eb017",
-      "shortSha": "b538d36",
-      "message": "Merge pull request #187 from shthed/codex/refactor-prepare-deploy-metadata-for-fetch-usage\n\nUse fetch to build deployment metadata",
+      "sha": "9472c8cb36a62415631e6c8cf8bdf912925b7a21",
+      "shortSha": "9472c8c",
+      "message": "Merge pull request #200 from shthed/codex/fix-deploy-branch.yml-workflow\n\nFix branch deploy workflow env quoting",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T10:34:14Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/b538d36e97087e7f7f1e1cfc1328959bac3eb017",
+      "date": "2025-10-20T22:01:27Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9472c8cb36a62415631e6c8cf8bdf912925b7a21",
       "prs": [
         {
-          "number": 187,
-          "title": "Use fetch to build deployment metadata",
-          "url": "https://github.com/shthed/capy/pull/187",
-          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
+          "number": 200,
+          "title": "Fix branch deploy workflow env quoting",
+          "url": "https://github.com/shthed/capy/pull/200",
+          "branch": "codex/fix-deploy-branch.yml-workflow"
         }
       ]
     },
     {
-      "sha": "72bfa577407750b0bd13ad7b145422846110dc7f",
-      "shortSha": "72bfa57",
-      "message": "Merge pull request #181 from shthed/codex/refactor-canvas-rendering-to-use-controller\n\nModularize puzzle renderer via controller abstraction",
+      "sha": "ccc529aafa76d1b26f06772a7e541e0a5645f469",
+      "shortSha": "ccc529a",
+      "message": "Quote workflow env expressions",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T10:10:11Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/72bfa577407750b0bd13ad7b145422846110dc7f",
+      "date": "2025-10-20T22:01:06Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ccc529aafa76d1b26f06772a7e541e0a5645f469",
       "prs": [
         {
-          "number": 181,
-          "title": "Modularize puzzle renderer via controller abstraction",
-          "url": "https://github.com/shthed/capy/pull/181",
-          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+          "number": 200,
+          "title": "Fix branch deploy workflow env quoting",
+          "url": "https://github.com/shthed/capy/pull/200",
+          "branch": "codex/fix-deploy-branch.yml-workflow"
         }
       ]
     }
   ],
-  "lastCommitDate": "2025-10-20T10:35:08Z",
-  "deploymentTimestamp": 1760957427151
+  "lastCommitDate": "2025-10-20T22:06:08Z",
+  "deploymentTimestamp": 1760997998525
 }

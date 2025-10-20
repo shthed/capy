@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "472db746a90d9ccab58d2ed756ae8fdd76b24977",
-    "message": "Merge pull request #193 from shthed/codex/add-tests-for-game-loading-and-completing",
+    "commit": "fe33216e51a4b14037ec9569e666fc2fe52a1f8a",
+    "message": "Merge pull request #201 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml\n\nFix deploy workflow expressions for manual inputs",
     "actor": "shthed",
-    "deployedAt": "2025-10-20T10:50:29Z",
-    "commitUrl": "https://github.com/shthed/capy/commit/472db746a90d9ccab58d2ed756ae8fdd76b24977",
+    "deployedAt": "2025-10-21T06:06:08+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/fe33216e51a4b14037ec9569e666fc2fe52a1f8a",
     "key": "main"
-  },
-  "codex-fix-invalid-syntax-in-deploy-branch.yml": {
-    "key": "codex-fix-invalid-syntax-in-deploy-branch.yml",
-    "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml",
-    "safeName": "codex-fix-invalid-syntax-in-deploy-branch.yml",
-    "commit": "08b702804bb5329748fbabb752884faebe5bbe17",
-    "message": "Fix ternary expressions in deploy workflow",
-    "actor": "shthed",
-    "deployedAt": "2025-10-21T06:04:44+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/08b702804bb5329748fbabb752884faebe5bbe17"
   }
 }
