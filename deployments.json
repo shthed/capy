@@ -19,14 +19,14 @@
     "deployedAt": "2025-10-20T19:37:49+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/5d73b1ace8b2e02fff9c7acff6534fe859554e3f"
   },
-  "codex-add-hints-toggle-option-and-types-section": {
-    "key": "codex-add-hints-toggle-option-and-types-section",
-    "branch": "codex/add-hints-toggle-option-and-types-section",
-    "safeName": "codex-add-hints-toggle-option-and-types-section",
-    "commit": "724cd91ab0810f2b611936a378bd7902d5338c17",
-    "message": "Add controls to configure hint types",
+  "codex-review-recent-commits-for-correctness": {
+    "key": "codex-review-recent-commits-for-correctness",
+    "branch": "codex/review-recent-commits-for-correctness",
+    "safeName": "codex-review-recent-commits-for-correctness",
+    "commit": "472db746a90d9ccab58d2ed756ae8fdd76b24977",
+    "message": "Merge pull request #193 from shthed/codex/add-tests-for-game-loading-and-completing\n\nAdd Playwright tests for painting and save completion",
     "actor": "shthed",
-    "deployedAt": "2025-10-20T19:49:03+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/724cd91ab0810f2b611936a378bd7902d5338c17"
+    "deployedAt": "2025-10-20T18:35:08+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/472db746a90d9ccab58d2ed756ae8fdd76b24977"
   }
 }
