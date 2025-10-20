@@ -43,11 +43,11 @@
     "key": "codex-pull-and-merge-from-origin-main",
     "branch": "codex/pull-and-merge-from-origin-main",
     "safeName": "codex-pull-and-merge-from-origin-main",
-    "commit": "71e8a8c1b4d79f0807769f33d219ae5df2911c6c",
-    "message": "Merge remote-tracking branch 'origin/main' into work",
+    "commit": "8170c606ed2d4b3f62ebc5858246d6082e275857",
+    "message": "Add local Markdown fallback for README HTML",
     "actor": "shthed",
-    "deployedAt": "2025-10-20T18:11:38+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/71e8a8c1b4d79f0807769f33d219ae5df2911c6c"
+    "deployedAt": "2025-10-20T18:33:08+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/8170c606ed2d4b3f62ebc5858246d6082e275857"
   },
   "codex-refactor-prepare-deploy-metadata-for-fetch-usage": {
     "key": "codex-refactor-prepare-deploy-metadata-for-fetch-usage",
