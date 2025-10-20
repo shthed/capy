@@ -1,5 +1,12 @@
 # Fix for PR #181 Deployment Issue
 
+## Quick Start (Automated)
+Run this script to automatically fix and deploy PR #181:
+```bash
+chmod +x apply-pr-181-fix.sh
+./apply-pr-181-fix.sh
+```
+
 ## Problem
 PR #181 (branch: `codex/refactor-canvas-rendering-to-use-controller`) has not been deployed because it contains an **outdated version** of the `.github/workflows/deploy-branch.yml` workflow file and is missing required deployment scripts.
 
