@@ -48,37 +48,6 @@ async function waitForPuzzleReady(page) {
   });
 }
 
-async function clickRegionCenter(page, regionId) {
-  const target = await page.evaluate((targetRegionId) => {
-    const state = window.capyGenerator?.getState?.();
-    if (!state?.puzzle) return null;
-    const region = state.puzzle.regions.find((entry) => entry.id === targetRegionId);
-    if (!region) return null;
-    const canvas = document.getElementById('puzzleCanvas');
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const width = state.puzzle.width || 1;
-    const scaleX = rect.width / width;
-    const scaleY = rect.height / (state.puzzle.height || 1);
-    const firstPixel = Array.isArray(region.pixels) && region.pixels.length > 0 ? region.pixels[0] : null;
-    if (firstPixel == null) {
-      return null;
-    }
-    const pixelX = firstPixel % width;
-    const pixelY = Math.floor(firstPixel / width);
-    return {
-      x: rect.left + (pixelX + 0.5) * scaleX,
-      y: rect.top + (pixelY + 0.5) * scaleY,
-    };
-  }, regionId);
-
-  if (!target) {
-    throw new Error(`Unable to resolve click target for region ${regionId}`);
-  }
-
-  await page.mouse.click(target.x, target.y);
-}
-
 async function nextUnfilledRegion(page) {
   return page.evaluate(() => {
     const state = window.capyGenerator?.getState?.();
@@ -90,6 +59,20 @@ async function nextUnfilledRegion(page) {
     }
     return null;
   });
+}
+
+async function fillRegion(page, regionId, options = {}) {
+  const status = await page.evaluate((payload) => {
+    const generator = window.capyGenerator;
+    if (!generator?.fillRegion) {
+      return 'missing-helper';
+    }
+    return generator.fillRegion(payload.regionId, payload.options);
+  }, { regionId, options });
+
+  if (status !== 'filled') {
+    throw new Error(`Unable to fill region ${regionId}; received status: ${status}`);
+  }
 }
 
 test.describe('capy colour-by-number', () => {
@@ -106,7 +89,7 @@ test.describe('capy colour-by-number', () => {
     const swatch = page.locator(`[data-testid="palette-swatch"][data-color-id="${region.colorId}"]`);
     await swatch.click();
 
-    await clickRegionCenter(page, region.id);
+    await fillRegion(page, region.id, { ensureColor: false, label: 'ui-review-first-stroke' });
 
     await page.waitForFunction((regionId) => {
       const state = window.capyGenerator?.getState?.();
@@ -151,13 +134,7 @@ test.describe('capy colour-by-number', () => {
       if (!region) {
         break;
       }
-      const swatch = page.locator(`[data-testid="palette-swatch"][data-color-id="${region.colorId}"]`);
-      await swatch.click();
-      await clickRegionCenter(page, region.id);
-      await page.waitForFunction((regionId) => {
-        const state = window.capyGenerator?.getState?.();
-        return state?.filled?.has?.(regionId);
-      }, region.id);
+      await fillRegion(page, region.id, { label: 'ui-review-finish-puzzle' });
     }
 
     await page.waitForFunction(() => {
