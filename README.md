@@ -60,6 +60,15 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 - **Running out of storage?** Delete older saves from the Saves panel or export them to JSON before clearing.
 - **Canvas won’t move?** Hold <kbd>Space</kbd> while dragging, or switch to a two-finger pan on touch devices.
 
+## Testing & QA
+
+Automated UI coverage now runs through Playwright so you can validate the end-to-end flow without manual setup. Install dependencies once with `npm install`, then use the scripts below depending on the depth of feedback you need:
+
+- `npm test` – launches the local dev server and executes the full Playwright suite (Chromium desktop plus a WebKit mobile viewport) using `playwright.config.js`.
+- `npm run test:smoke` – targets the Chromium desktop project for faster iteration when you're focused on a single scenario.
+
+Playwright stores its reports under `playwright-report/` by default. After any run you can open the latest results with `npx playwright show-report` to review traces, screenshots, and console output.
+
 ## Want to Contribute?
 
 Capy is open source! If you’d like to help shape new features, fix bugs, or expand the documentation, start with the development guide in [`AGENTS.md`](./AGENTS.md) and dive into the technical deep-dive in [`TECH.md`](./TECH.md).
