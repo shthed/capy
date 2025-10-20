@@ -16,6 +16,10 @@ any feature or workflow changes you ship.
 - **Branch deployments.** Branches with open PRs deploy automatically to GitHub
   Pages under `/automation-<slug>/`; `main` deploys to the root. See "Branch
   Deployments" below for the full workflow and maintenance details.
+- **Manual deploy overrides.** When triggering `Deploy GitHub Pages previews`
+  by hand, run the workflow from `main`, set the `target_branch` input to the
+  branch you need, and tick `allow_without_pr` only if you intentionally want to
+  publish a branch without an open review.
 - **Manual smoke tests.** Exercise puzzle load, palette selection, painting, and
   save/load flows in at least one desktop and one mobile browser before
   requesting review.
@@ -25,6 +29,9 @@ any feature or workflow changes you ship.
 - **Fast-forward merges.** Rebase onto `main`, rerun the quick manual checks,
   and merge with `--ff-only` so history stays linear for the single-file
   runtime.
+- **Keep branches fresh.** Before starting work—or dispatching any workflow—make
+  sure your branch has the latest `.github/workflows` files by rebasing or
+  pulling from `origin/main`.
 - **Weekly automation sync.** Summarise flaky runs, TODO updates, and follow-up
   work in the standing Friday issue to keep the automation backlog visible.
 

@@ -21,19 +21,21 @@ single `index.html` document—no build tools or extra runtime required.
 
 - **Core application**
   - `index.html` – Single-file UI, styles, and generator logic powering the colouring experience.
+  - `renderers/controller.js` – Renderer controller that manages the active drawing backend (Canvas 2D today) and exposes hooks for swapping or extending renderers at runtime.
   - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the single-page runtime.
   - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, and metadata assembly off the main thread.
 - **Documentation**
   - `README.md` – Player-facing quick start and gameplay overview.
   - `TECH.md` – This technical reference.
 - **Testing & QA**
-  - `tests/ui-review.spec.js` – (Currently paused) Playwright smoke test covering onboarding, palette interactions, and save reload flows across desktop & mobile viewports.
+  - `tests/ui-review.spec.js` – Playwright smoke tests that load the bundled puzzle, record a first stroke, and exercise the save manager by restoring and completing an almost-finished board.
   - `artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
   - **Playwright local setup** – Run `npx playwright install` plus `npx playwright install-deps` after `npm install` when provisioning a new machine so the bundled Chromium/Firefox/WebKit binaries and their shared library dependencies are ready for UI review runs.
 - **Tooling & metadata**
   - `package.json` – npm scripts plus the `http-server` dependency required to run the app locally.
   - `package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
+  - `scripts/prepare-deploy-metadata.mjs` – Fetches recent pull requests and commits via the GitHub API to regenerate the deployment metadata consumed by branch previews.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
@@ -41,10 +43,13 @@ single `index.html` document—no build tools or extra runtime required.
 ## Deployment & Branch Previews
 
 Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs on
-every push and optional manual dispatches:
+every push and optional manual dispatches (trigger the manual run from `main`
+and provide the `target_branch` input so the workflow checks out the right
+source):
 
 1. **PR gate.** The workflow exits early unless the branch has an open PR.
-   `main` is the exception—it always deploys.
+   `main` is the exception—it always deploys. Manual runs can opt-in to deploy
+   without an open review by setting the `allow_without_pr` input.
 2. **Checkout & sanitise.** The action checks out the source branch and the
    `gh-pages` deployment branch, converts branch names into URL-safe slugs
    (e.g., `automation/feature` → `automation-feature`), and creates a matching
@@ -110,7 +115,7 @@ Tweaking the deployment:
   passes before rebuilding the scene. Iterations rerun the clustering stage for tighter centroids; smoothing passes perform
   majority blending to fold stray pixels into their neighbours ahead of segmentation.
 - **Responsive command rail.** Header icons clamp to the viewport, wrap when space runs short, respect safe-area insets, and stay pinned to the top edge so controls remain reachable.
-- **Palette guidance.** Choosing a swatch pulses every matching region, flashing when a colour is complete so it is obvious where to paint next.
+- **Palette guidance.** Choosing a swatch pulses every matching region, flashing when a colour is complete so it is obvious where to paint next. Players can disable the matching-region hint in Settings if they prefer to scout manually.
 - **Customisable background.** Settings lets you pick a backdrop colour; outlines and numbers flip contrast automatically.
 - **Progress persistence.** Every stroke updates a rolling autosave; manual snapshots live in the Saves manager with rename/export/delete controls. Storage quota usage is surfaced in the Help panel.
 
@@ -143,7 +148,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 - **Command rail** – Right-aligned header exposing Preview, Generator, Fullscreen, Import, Save manager, Help, and Settings buttons through icon-only controls. Preview reveals the clustered artwork, Generator opens clustering sliders, Fullscreen pushes the stage edge-to-edge, Import accepts images or JSON puzzles, the Save manager hosts manual snapshots plus onboarding, Help opens an in-app manual and debug log, and Settings reveals gameplay, palette, and accessibility options.
 - **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`). Renders outlines, numbers, and filled regions; supports smooth pan + zoom and respects auto-advance and hint animation toggles. Drag to reposition, scroll/pinch/double-tap to zoom; mobile gestures feed directly into the stage.
 - **Preview mode** – Temporarily renders every region in its target colour for quick comparisons.
-- **Settings panel** – Slides in beside the playfield so you can keep painting while adjusting sliders. Controls include palette size, minimum region size, resize detail, sample rate, k-means iterations, smoothing passes, interface theme, background colour, interface scale, auto-advance, difficulty, hint animations, overlay intensity, palette sorting, and mouse button mappings. Houses JSON export and detail preset chips plus an **Advanced options** accordion for art prompt metadata.
+- **Settings panel** – Slides in beside the playfield so you can keep painting while adjusting sliders. Controls include palette size, minimum region size, resize detail, sample rate, k-means iterations, smoothing passes, interface theme, background colour, interface scale, auto-advance, difficulty, hint animations, hint type toggles, overlay intensity, palette sorting, and mouse button mappings. Houses JSON export and detail preset chips plus an **Advanced options** accordion for art prompt metadata.
 - **Detail presets** – Onboarding hints and Settings surface the active preset with live captions describing colours, min region size, resize edge, and approximate region counts.
 - **Start & save screen** – Launch puzzles, reload the sample, and manage manual snapshots. **Choose an image** leads the overlay; manual snapshots can be renamed, exported, or deleted; **Reset puzzle progress** clears the active board.
 - **Help panel** – Lists command buttons, summarises gestures, and surfaces the live debug log for telemetry.
@@ -164,7 +169,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 ### Code Architecture Tour
 
 - **Single-file app shell.** `index.html` owns markup, styles, and logic. The inline script is segmented into DOM caches, global state, event wiring, puzzle rendering, generation helpers, and persistence utilities—each called out in a developer-map comment.
-- **Public testing surface.** `window.capyGenerator` exposes helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so automation and manual experiments can orchestrate the app without touching internals. UI review flows now rely on `setActiveColor` plus `fillRegion`, which wrap the palette selection and `attemptFillRegion` logic without requiring pointer events.
+- **Public testing surface.** `window.capyGenerator` exposes helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so automation and manual experiments can orchestrate the app without touching internals. Recent renderer work also surfaced `getRendererType()`, `listRenderers()`, `setRenderer(type)`, `registerRenderer(type, factory)`, and `unregisterRenderer(type)` so tests can assert the active backend or load experimental renderers without patching private state.
 - **Pan/zoom subsystem.** `viewState` tracks transforms for `#canvasStage` and `#canvasTransform`; helpers like `applyZoom`, `resetView`, and `applyViewTransform` keep navigation smooth across wheel, keyboard, and drag gestures.
 - **Puzzle rendering pipeline.** `renderPuzzle` composites the current canvas from the Path2D-backed geometry cache generated by `ensureRenderCache`. Filled regions stream into an offscreen `filledLayer` via `paintRegionToFilledLayer`, outlines blit from a cached stroke layer, and `drawNumbers` overlays remaining labels. Visual feedback leverages `flashColorRegions` and `paintRegions` to tint regions without rebuilding masks.
 - **Generation & segmentation.** `createPuzzleData` looks up the requested generator in `GENERATION_ALGORITHM_CATALOG`, runs the matching quantizer via `performQuantization` (k-means or the posterize-and-merge pipeline today, with scaffolding for future services), smooths assignments, and then calls `segmentRegions` before handing data to `applyPuzzleResult`. Regeneration and fixtures reuse the same entry point.
@@ -173,7 +178,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 ## Gameplay Loop Walkthrough
 
 1. **Resume or load an image.** Autosaves restore on boot; otherwise the bundled sample loads in the high preset. Drag a bitmap, pick a file, or press the 🐹 button to reload the vignette. Adjust sliders first if you want different clustering before regenerating.
-2. **Tune generation & appearance.** Use Settings to tweak palette size, minimum region area, resize detail, sample rate, iteration count, smoothing passes, auto-advance, difficulty, hint animations, fade timing, overlay intensity, interface theme, background colour, interface scale, palette sorting, and mouse button mappings. Advanced options capture art prompt metadata for exports.
+2. **Tune generation & appearance.** Use Settings to tweak palette size, minimum region area, resize detail, sample rate, iteration count, smoothing passes, auto-advance, difficulty, hint animations, hint type toggles, fade timing, overlay intensity, interface theme, background colour, interface scale, palette sorting, and mouse button mappings. Advanced options capture art prompt metadata for exports.
 3. **Explore the puzzle.** The canvas shows outlines and numbers; Preview floods the viewport with the finished artwork for comparison.
 4. **Fill regions.** Pick a colour and click/tap cells. Easy difficulty can auto-select the tapped colour before painting; auto-advance hops to the next incomplete colour when enabled.
 5. **Save or export.** The save manager stores snapshots (progress, generator options, source metadata) in localStorage using a compact schema. Export active puzzles as JSON, rename manual saves for organisation, and use **Reset puzzle progress** for a fresh attempt without deleting saves.
@@ -203,7 +208,9 @@ Packing the region map trims payloads by more than half, avoiding `QuotaExceeded
 
 ## Testing & QA Checklist
 
-With Playwright automated tests paused, rely on these manual passes before merging:
+Playwright smoke coverage now exercises the bundled puzzle, first-paint interaction, and save/load completion flow. Run `npm test --silent` locally (it wraps `npx playwright test --config=playwright.config.js`) before merging. The first run may require `npx playwright install` plus the system dependencies listed in the Playwright output (`npx playwright install-deps` on Debian/Ubuntu) so Chromium can launch headlessly.
+
+Supplement the automated run with these manual checks when you change gameplay, rendering, or onboarding flows:
 
 - **Boot and sample load.** Refresh to confirm onboarding hints, command rail, palette dock, and sample puzzle appear without errors.
 - **Palette readability.** Scrub swatches to ensure labels remain legible across bright/dark paints on desktop and mobile viewports.
@@ -217,10 +224,10 @@ npm install
 npm run dev
 ```
 
-Run the preview at http://localhost:8000 and exercise the checks above across multiple viewport sizes. Use `npm test --silent` to keep CI hooks green even though the suite currently reports skipped tests.
+Run the preview at http://localhost:8000 and exercise the checks above across multiple viewport sizes. The Playwright suite expects the app at the same origin, so keep the dev server on port 8000 when iterating.
 
 ## Open Follow-Ups
 
 - [ ] Restore artwork documentation once a new segmentation pipeline is ready for publication.
-- [ ] Rebuild an automated smoke test suite once the palette refactor settles.
+- [ ] Expand the automated smoke test suite as new renderer types or UI flows ship.
 - [ ] Draft a GitHub issue template for the weekly Automation Sync summary and link it from the contributor guide.
