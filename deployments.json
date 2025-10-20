@@ -13,10 +13,10 @@
     "key": "codex-fix-invalid-syntax-in-deploy-branch.yml-40srvq",
     "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq",
     "safeName": "codex-fix-invalid-syntax-in-deploy-branch.yml-40srvq",
-    "commit": "270af17118af6c02928b958eaebe8528664b994c",
-    "message": "Fix allow_without_pr evaluation in deploy workflow",
+    "commit": "f4511c94ff70ee9d96b355e1c3ee3732a2896305",
+    "message": "Clarify workflow env defaults and lint guidance",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T06:08:32+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/270af17118af6c02928b958eaebe8528664b994c"
+    "deployedAt": "2025-10-21T06:13:28+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/f4511c94ff70ee9d96b355e1c3ee3732a2896305"
   }
 }
