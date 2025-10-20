@@ -1,3 +1,1 @@
-codex-add-playwright-configuration-and-tests
-codex-add-webgl-renderer-implementation
-codex-review-and-run-post-deploy-tests
+codex-fix-invalid-syntax-in-deploy-branch.yml
