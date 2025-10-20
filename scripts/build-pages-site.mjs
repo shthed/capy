@@ -2,6 +2,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { marked } from 'marked';
+
 const DEFAULT_ENDPOINT = 'https://api.github.com/markdown';
 
 const getAuthToken = () => {
@@ -42,20 +44,27 @@ export const renderMarkdownWithGitHub = async (
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
 
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(
-      `GitHub markdown rendering failed with ${response.status} ${response.statusText}: ${message}`
-    );
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(
+        `GitHub markdown rendering failed with ${response.status} ${response.statusText}: ${message}`
+      );
+    }
+
+    return response.text();
+  } catch (error) {
+    const originalMessage = error?.message || 'Unknown error';
+    const enhanced = new Error(`GitHub markdown rendering request failed: ${originalMessage}`);
+    enhanced.cause = error;
+    throw enhanced;
   }
-
-  return response.text();
 };
 
 const indentHtml = (html) => {
@@ -78,6 +87,25 @@ const formatUtcTimestamp = (date = new Date()) => {
   const datePart = iso.slice(0, 10);
   const timePart = iso.slice(11, 16);
   return `${datePart} ${timePart} UTC`;
+};
+
+const renderMarkdownLocally = async (markdown) => {
+  marked.setOptions({
+    gfm: true,
+    breaks: false,
+    mangle: false,
+    headerIds: true,
+  });
+  return marked.parse(String(markdown ?? ''));
+};
+
+export const renderMarkdownToHtml = async (markdown, options = {}) => {
+  try {
+    return await renderMarkdownWithGitHub(markdown, options);
+  } catch (error) {
+    console.warn('[build-pages-site] Falling back to local Markdown renderer:', error.message);
+    return renderMarkdownLocally(markdown);
+  }
 };
 
 export const generateReadmeHtml = (
@@ -219,12 +247,12 @@ const main = async () => {
 
   let rendered;
   try {
-    rendered = await renderMarkdownWithGitHub(markdown, {
+    rendered = await renderMarkdownToHtml(markdown, {
       mode: argv.mode || 'gfm',
       context: argv.context || process.env.GITHUB_REPOSITORY || undefined,
     });
   } catch (error) {
-    console.error(error.message);
+    console.error('Failed to render README markdown:', error.message);
     process.exitCode = 1;
     return;
   }

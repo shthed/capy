@@ -72,6 +72,10 @@ Tweaking the deployment:
   more or fewer commits.
 - Swap the publish branch from `gh-pages` if you need a different hosting
   target.
+- README mirrors rely on `scripts/build-pages-site.mjs`. The script hits
+  GitHub's Markdown API when available and automatically falls back to the
+  bundled `marked` renderer when network access is blocked so branch
+  deployments keep shipping HTML.
 
 ### Post-deploy branch smoke tests
 
