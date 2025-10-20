@@ -10,7 +10,7 @@
     - Viewport + stage: #viewport, #canvasStage, and #canvasTransform cooperate with viewState for
       pan/zoom. Pointer handlers (handlePanStart/Move/End) and applyZoom feed navigation updates.
     - Puzzle state & rendering: state holds palette, fills, and metadata. renderPuzzle →
-      drawOutlines/drawNumbers use ensureRenderCache to hydrate canvases and labels.
+      Canvas2D renderer draws fills/labels via ensureRenderCache-backed geometry.
     - Generation pipeline: loadImage → createPuzzleData orchestrates quantization, segmentation,
       and palette prep. Regeneration, fixture loading, and saves all call applyPuzzleResult.
     - Persistence + exports: createGameSaveManager backs the Saves sheet. Autosave,
@@ -1856,7 +1856,14 @@
         </section>
       </div>
     </div>
-        <script>
+        <script type="module">
+          import {
+            createCanvas2DRenderer,
+            createRenderCache,
+            rebuildRenderCache,
+            syncCacheMetrics,
+            paintRegionToFilledLayer as paintCacheRegion,
+          } from "./renderers/canvas2d.js";
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
       const commandRail = document.getElementById("commandRail");
@@ -1950,7 +1957,6 @@
       };
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.createElement("canvas");
-      const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
 
       // Sheet output mirrors we update while users drag sliders.
@@ -1986,7 +1992,18 @@
       const MAX_HINT_INTENSITY = 0.9;
       const DEFAULT_DIFFICULTY = "normal";
       const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
+      const canvasMetrics = {
+        displayScale: 1,
+        pixelRatio: 1,
+        renderScale: 1,
+        displayWidth: 0,
+        displayHeight: 0,
+        pixelWidth: 0,
+        pixelHeight: 0,
+      };
+
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
+      const backgroundInkRef = { current: backgroundInk };
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
       let pendingAutosaveReason = null;
@@ -2211,29 +2228,6 @@
       };
       const DEFAULT_SAMPLE_DETAIL = "high";
 
-      function drawOutlines() {
-        if (!state.puzzle) return;
-        const cache = ensureRenderCache();
-        if (!cache.ready) return;
-        const filledRegions = state.filled || new Set();
-        const hideCompleted = filledRegions.size > 0;
-        const geometries = hideCompleted
-          ? cache.regions.filter((geometry) => !filledRegions.has(geometry.id))
-          : cache.regions;
-        if (geometries.length === 0) {
-          return;
-        }
-        if (!hideCompleted && cache.outlineLayer && cache.outlineLayerCtx) {
-          if (cache.outlineLayerDirty && !rasterizeOutlineLayer(cache)) {
-            strokeOutlinesDirect(cache, geometries);
-            return;
-          }
-          puzzleCtx.drawImage(cache.outlineLayer, 0, 0);
-          return;
-        }
-        strokeOutlinesDirect(cache, geometries);
-      }
-
       function createRenderCache() {
         return {
           width: 0,
@@ -2255,110 +2249,6 @@
         };
       }
 
-      function strokeOutlinesDirect(cache, geometries) {
-        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        withRenderScale(puzzleCtx, scale, () => {
-          puzzleCtx.strokeStyle = backgroundInk.outline;
-          puzzleCtx.lineWidth = cache.strokeWidth;
-          puzzleCtx.lineJoin = "round";
-          puzzleCtx.lineCap = "round";
-          strokeGeometries(puzzleCtx, Array.isArray(geometries) ? geometries : cache.regions);
-        });
-      }
-
-      function rasterizeOutlineLayer(cache) {
-        const ctx = cache.outlineLayerCtx;
-        if (!ctx || !cache.outlineLayer) {
-          cache.outlineLayerDirty = true;
-          return false;
-        }
-        clearContext(ctx);
-        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        withRenderScale(ctx, scale, () => {
-          ctx.strokeStyle = backgroundInk.outline;
-          ctx.lineWidth = cache.strokeWidth;
-          ctx.lineJoin = "round";
-          ctx.lineCap = "round";
-          strokeGeometries(ctx, cache.regions);
-        });
-        cache.outlineLayerDirty = false;
-        return true;
-      }
-
-      function createLayerCanvas(width, height) {
-        if (SUPPORTS_OFFSCREEN_CANVAS) {
-          try {
-            return new OffscreenCanvas(width, height);
-          } catch (error) {}
-        }
-        if (typeof document === "undefined") {
-          return null;
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        canvas.hidden = true;
-        return canvas;
-      }
-
-      function getLayerContext(layer) {
-        if (!layer) return null;
-        try {
-          const ctx = layer.getContext("2d");
-          if (ctx) {
-            ctx.imageSmoothingEnabled = false;
-          }
-          return ctx;
-        } catch (error) {
-          return null;
-        }
-      }
-
-      function appendContoursToPath(ctx, contours) {
-        for (const contour of contours || []) {
-          if (!contour || contour.length === 0) continue;
-          const first = contour[0];
-          ctx.moveTo(first[0], first[1]);
-          for (let i = 1; i < contour.length; i++) {
-            const point = contour[i];
-            ctx.lineTo(point[0], point[1]);
-          }
-          ctx.closePath();
-        }
-      }
-
-      function fillGeometries(ctx, geometries) {
-        if (SUPPORTS_PATH2D) {
-          for (const geometry of geometries) {
-            if (!geometry?.path) continue;
-            ctx.fill(geometry.path);
-          }
-          return;
-        }
-        ctx.beginPath();
-        for (const geometry of geometries) {
-          if (!geometry?.contours) continue;
-          appendContoursToPath(ctx, geometry.contours);
-        }
-        ctx.fill();
-      }
-
-      function strokeGeometries(ctx, geometries) {
-        if (SUPPORTS_PATH2D) {
-          for (const geometry of geometries) {
-            if (!geometry?.path) continue;
-            ctx.stroke(geometry.path);
-          }
-          return;
-        }
-        ctx.beginPath();
-        for (const geometry of geometries) {
-          if (!geometry?.contours) continue;
-          appendContoursToPath(ctx, geometry.contours);
-        }
-        ctx.stroke();
-      }
-
       function ensureRenderCache(options = {}) {
         if (!state.puzzle) {
           state.renderCache = createRenderCache();
@@ -2376,129 +2266,32 @@
           cache.height !== expectedHeight ||
           cache.version !== expectedVersion;
         if (needsRebuild) {
-          rebuildRenderCache(cache);
+          rebuildRenderCache(cache, {
+            puzzle: state.puzzle,
+            canvasMetrics,
+            computeOutlineStrokeWidth,
+            buildRegionGeometry,
+            supportsOffscreenCanvas: SUPPORTS_OFFSCREEN_CANVAS,
+          });
         }
-        syncCacheMetrics(cache);
+        syncCacheMetrics(cache, {
+          canvasMetrics,
+          computeOutlineStrokeWidth,
+        });
         state.renderCache = cache;
         return cache;
-      }
-
-      function rebuildRenderCache(cache) {
-        if (!state.puzzle) {
-          cache.width = 0;
-          cache.height = 0;
-          cache.version = 0;
-          cache.strokeWidth = 1;
-          cache.regions = [];
-          cache.regionsById = new Map();
-          cache.filledLayer = null;
-          cache.filledLayerCtx = null;
-          cache.filledLayerDirty = true;
-          cache.outlineLayer = null;
-          cache.outlineLayerCtx = null;
-          cache.outlineLayerDirty = true;
-          cache.ready = false;
-          return cache;
-        }
-        cache.width = state.puzzle.width;
-        cache.height = state.puzzle.height;
-        cache.version = state.puzzle.regions.length;
-        cache.strokeWidth = computeOutlineStrokeWidth(cache.width, cache.height, {
-          displayScale: canvasMetrics.displayScale,
-          pixelRatio: canvasMetrics.pixelRatio,
-          deviceWidth: 1,
-        });
-        cache.regions = [];
-        cache.regionsById = new Map();
-        for (const region of state.puzzle.regions) {
-          const geometry = buildRegionGeometry(region, cache.width, cache.height);
-          cache.regions.push(geometry);
-          cache.regionsById.set(region.id, geometry);
-        }
-        const pixelWidth = Math.max(1, canvasMetrics.pixelWidth || cache.width);
-        const pixelHeight = Math.max(1, canvasMetrics.pixelHeight || cache.height);
-        cache.filledLayer = createLayerCanvas(pixelWidth, pixelHeight);
-        cache.filledLayerCtx = getLayerContext(cache.filledLayer);
-        cache.filledLayerDirty = true;
-        cache.outlineLayer = createLayerCanvas(pixelWidth, pixelHeight);
-        cache.outlineLayerCtx = getLayerContext(cache.outlineLayer);
-        cache.outlineLayerDirty = true;
-        cache.ready = true;
-        syncCacheMetrics(cache);
-        return cache;
-      }
-
-      function rebuildFilledLayer(cache) {
-        const ctx = cache.filledLayerCtx;
-        if (!ctx || !cache.filledLayer) {
-          cache.filledLayerDirty = true;
-          return false;
-        }
-        clearContext(ctx);
-        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        withRenderScale(ctx, scale, () => {
-          ctx.globalCompositeOperation = "source-over";
-          const fillsByColor = new Map();
-          for (const regionId of state.filled) {
-            const geometry = cache.regionsById.get(regionId);
-            if (!geometry) continue;
-            const colorEntry = getPaletteEntry(geometry.colorId);
-            if (!colorEntry?.hex) continue;
-            if (!fillsByColor.has(colorEntry.hex)) {
-              fillsByColor.set(colorEntry.hex, []);
-            }
-            fillsByColor.get(colorEntry.hex).push(geometry);
-          }
-          for (const [hex, entries] of fillsByColor) {
-            ctx.fillStyle = hex;
-            fillGeometries(ctx, entries);
-          }
-        });
-        cache.filledLayerDirty = false;
-        return true;
-      }
-
-      function compositeFilledRegionsDirect(ctx, cache) {
-        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        withRenderScale(ctx, scale, () => {
-          const fillsByColor = new Map();
-          for (const regionId of state.filled) {
-            const geometry = cache.regionsById.get(regionId);
-            if (!geometry) continue;
-            const colorEntry = getPaletteEntry(geometry.colorId);
-            if (!colorEntry?.hex) continue;
-            if (!fillsByColor.has(colorEntry.hex)) {
-              fillsByColor.set(colorEntry.hex, []);
-            }
-            fillsByColor.get(colorEntry.hex).push(geometry);
-          }
-          for (const [hex, entries] of fillsByColor) {
-            ctx.fillStyle = hex;
-            fillGeometries(ctx, entries);
-          }
-        });
       }
 
       function paintRegionToFilledLayer(regionId) {
         const cache = ensureRenderCache();
         if (!cache.ready) return;
-        if (!cache.filledLayer || !cache.filledLayerCtx) {
-          cache.filledLayerDirty = true;
-          return;
-        }
-        if (cache.filledLayerDirty) {
-          return;
-        }
-        const geometry = cache.regionsById.get(regionId);
-        if (!geometry) return;
-        const colorEntry = getPaletteEntry(geometry.colorId);
-        if (!colorEntry?.hex) return;
-        const ctx = cache.filledLayerCtx;
-        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        withRenderScale(ctx, scale, () => {
-          ctx.fillStyle = colorEntry.hex;
-          fillGeometries(ctx, [geometry]);
+        const painted = paintCacheRegion(cache, regionId, {
+          getPaletteEntry,
+          shared: rendererSharedOptions,
         });
+        if (!painted) {
+          cache.filledLayerDirty = true;
+        }
       }
 
       function markFilledLayerDirty() {
@@ -2692,21 +2485,19 @@
       const MAX_RENDER_SCALE = MAX_VIEWPORT_ZOOM;
       const SUPPORTS_PATH2D = typeof Path2D === "function";
       const SUPPORTS_OFFSCREEN_CANVAS = typeof OffscreenCanvas === "function";
+      const rendererSharedOptions = {
+        canvasMetrics,
+        backgroundInkRef,
+        supportsPath2D: SUPPORTS_PATH2D,
+        supportsOffscreenCanvas: SUPPORTS_OFFSCREEN_CANVAS,
+      };
+      let canvasRenderer = createCanvas2DRenderer(puzzleCanvas, rendererSharedOptions);
+      let fallbackMeasureCtx = null;
       const viewState = {
         panX: 0,
         panY: 0,
         zoom: 1,
         baseScale: 1,
-      };
-
-      const canvasMetrics = {
-        displayScale: 1,
-        pixelRatio: 1,
-        renderScale: 1,
-        displayWidth: 0,
-        displayHeight: 0,
-        pixelWidth: 0,
-        pixelHeight: 0,
       };
 
       let cachedCanvasRect = null;
@@ -2788,14 +2579,19 @@
           canvasTransform.style.width = `${canvasMetrics.displayWidth}px`;
           canvasTransform.style.height = `${canvasMetrics.displayHeight}px`;
         }
-        if (puzzleCanvas.width !== canvasMetrics.pixelWidth) {
-          puzzleCanvas.width = canvasMetrics.pixelWidth;
+        if (canvasRenderer && typeof canvasRenderer.resize === "function") {
+          canvasRenderer.resize({
+            pixelWidth: canvasMetrics.pixelWidth,
+            pixelHeight: canvasMetrics.pixelHeight,
+          });
+        } else {
+          if (puzzleCanvas.width !== canvasMetrics.pixelWidth) {
+            puzzleCanvas.width = canvasMetrics.pixelWidth;
+          }
+          if (puzzleCanvas.height !== canvasMetrics.pixelHeight) {
+            puzzleCanvas.height = canvasMetrics.pixelHeight;
+          }
         }
-        if (puzzleCanvas.height !== canvasMetrics.pixelHeight) {
-          puzzleCanvas.height = canvasMetrics.pixelHeight;
-        }
-        puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
-        puzzleCtx.imageSmoothingEnabled = false;
         invalidateCanvasRect();
         return metricsChanged;
       }
@@ -2805,79 +2601,6 @@
         if (canvasMetrics.pixelWidth <= 0 || canvasMetrics.pixelHeight <= 0) {
           applyCanvasSizing();
         }
-      }
-
-      function withRenderScale(ctx, scale, callback) {
-        ctx.save();
-        ctx.setTransform(scale, 0, 0, scale, 0, 0);
-        ctx.imageSmoothingEnabled = false;
-        try {
-          callback(scale);
-        } finally {
-          ctx.restore();
-        }
-      }
-
-      function clearContext(ctx) {
-        if (!ctx) return;
-        ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        ctx.restore();
-      }
-
-      function syncCacheMetrics(cache) {
-        if (!cache) return false;
-        const fallbackWidth = Math.max(1, cache.width || 1);
-        const fallbackHeight = Math.max(1, cache.height || 1);
-        const pixelWidth = Math.max(1, canvasMetrics.pixelWidth || fallbackWidth);
-        const pixelHeight = Math.max(1, canvasMetrics.pixelHeight || fallbackHeight);
-        const renderScale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
-        const changed =
-          cache.pixelWidth !== pixelWidth ||
-          cache.pixelHeight !== pixelHeight ||
-          Math.abs((cache.renderScale || 0) - renderScale) > 0.0001;
-        cache.pixelWidth = pixelWidth;
-        cache.pixelHeight = pixelHeight;
-        cache.renderScale = renderScale;
-        cache.strokeWidth = computeOutlineStrokeWidth(cache.width, cache.height, {
-          displayScale: canvasMetrics.displayScale,
-          pixelRatio: canvasMetrics.pixelRatio,
-          deviceWidth: 1,
-        });
-        if (cache.filledLayer) {
-          let resized = false;
-          if (cache.filledLayer.width !== pixelWidth) {
-            cache.filledLayer.width = pixelWidth;
-            resized = true;
-          }
-          if (cache.filledLayer.height !== pixelHeight) {
-            cache.filledLayer.height = pixelHeight;
-            resized = true;
-          }
-          if (resized || !cache.filledLayerCtx) {
-            cache.filledLayerCtx = getLayerContext(cache.filledLayer);
-          }
-        }
-        if (cache.outlineLayer) {
-          let resized = false;
-          if (cache.outlineLayer.width !== pixelWidth) {
-            cache.outlineLayer.width = pixelWidth;
-            resized = true;
-          }
-          if (cache.outlineLayer.height !== pixelHeight) {
-            cache.outlineLayer.height = pixelHeight;
-            resized = true;
-          }
-          if (resized || !cache.outlineLayerCtx) {
-            cache.outlineLayerCtx = getLayerContext(cache.outlineLayer);
-          }
-        }
-        if (changed) {
-          cache.filledLayerDirty = true;
-          cache.outlineLayerDirty = true;
-        }
-        return changed;
       }
 
       let panPointerId = null;
@@ -4777,6 +4500,7 @@
         const changed = force || normalized !== current;
         state.settings.backgroundColor = normalized;
         backgroundInk = computeInkStyles(normalized);
+        backgroundInkRef.current = backgroundInk;
         if (state.renderCache) {
           state.renderCache.strokeWidth = computeOutlineStrokeWidth(
             state.renderCache.width,
@@ -4798,14 +4522,11 @@
         if (!skipRender) {
           if (state.puzzle) {
             renderPuzzle();
-          } else {
-            puzzleCtx.save();
-            puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
-            puzzleCtx.fillStyle = normalized;
-            const width = puzzleCanvas.width || canvasMetrics.pixelWidth || 0;
-            const height = puzzleCanvas.height || canvasMetrics.pixelHeight || 0;
-            puzzleCtx.fillRect(0, 0, width, height);
-            puzzleCtx.restore();
+          } else if (canvasRenderer && typeof canvasRenderer.fillBackground === "function") {
+            canvasRenderer.fillBackground(normalized, {
+              pixelWidth: puzzleCanvas?.width || canvasMetrics.pixelWidth || 0,
+              pixelHeight: puzzleCanvas?.height || canvasMetrics.pixelHeight || 0,
+            });
           }
         }
         if (changed && !skipLog) {
@@ -5139,7 +4860,12 @@
           }
         }
         setProgressMessage("loading");
-        clearContext(puzzleCtx);
+        if (canvasRenderer && typeof canvasRenderer.fillBackground === "function") {
+          canvasRenderer.fillBackground(null, {
+            pixelWidth: puzzleCanvas?.width || canvasMetrics.pixelWidth || 0,
+            pixelHeight: puzzleCanvas?.height || canvasMetrics.pixelHeight || 0,
+          });
+        }
         if (previewCtx) {
           previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         }
@@ -5380,127 +5106,39 @@
 
       function renderPreview() {
         if (!state.puzzle) return;
-        const { width, height, regions, palette } = state.puzzle;
-        if (previewCanvas) {
-          previewCanvas.width = width;
-          previewCanvas.height = height;
-        }
-        let imageData = null;
-        if (previewCtx && typeof previewCtx.createImageData === "function") {
-          imageData = previewCtx.createImageData(width, height);
-        } else if (typeof ImageData === "function") {
-          imageData = new ImageData(width, height);
-        }
-        if (!imageData) {
-          state.previewImageData = null;
+        if (canvasRenderer && typeof canvasRenderer.renderPreview === "function") {
+          const imageData = canvasRenderer.renderPreview({
+            puzzle: state.puzzle,
+            previewCanvas,
+            previewCtx,
+          });
+          state.previewImageData = imageData;
           return;
         }
-        const data = imageData.data;
-        for (const region of regions) {
-          const color = palette[region.colorId - 1];
-          if (!color) continue;
-          const rgba = color.rgba;
-          for (const idx of region.pixels) {
-            const base = idx * 4;
-            data[base] = rgba[0];
-            data[base + 1] = rgba[1];
-            data[base + 2] = rgba[2];
-            data[base + 3] = 255;
-          }
-        }
-        if (previewCtx && typeof previewCtx.putImageData === "function") {
-          previewCtx.putImageData(imageData, 0, 0);
-        }
-        state.previewImageData = imageData;
+        state.previewImageData = null;
       }
 
       function renderPuzzle() {
         if (!state.puzzle) return;
         ensureCanvasMetricsInitialized();
         const cache = ensureRenderCache();
-        const pixelWidth = puzzleCanvas.width;
-        const pixelHeight = puzzleCanvas.height;
-        puzzleCtx.save();
-        puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
-        puzzleCtx.clearRect(0, 0, pixelWidth, pixelHeight);
-        puzzleCtx.fillStyle = state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX;
-        puzzleCtx.fillRect(0, 0, pixelWidth, pixelHeight);
-        if (state.previewVisible) {
-          if (!state.previewImageData) {
-            renderPreview();
-          }
-          if (state.previewImageData) {
-            if (previewCanvas && previewCanvas.width && previewCanvas.height) {
-              const sourceWidth = previewCanvas.width;
-              const sourceHeight = previewCanvas.height;
-              const targetWidth = canvasMetrics.pixelWidth || pixelWidth;
-              const targetHeight = canvasMetrics.pixelHeight || pixelHeight;
-              puzzleCtx.imageSmoothingEnabled = false;
-              puzzleCtx.drawImage(
-                previewCanvas,
-                0,
-                0,
-                sourceWidth,
-                sourceHeight,
-                0,
-                0,
-                targetWidth,
-                targetHeight
-              );
-            } else if (typeof puzzleCtx.putImageData === "function") {
-              puzzleCtx.putImageData(state.previewImageData, 0, 0);
-            }
-          }
-          puzzleCtx.restore();
-          return;
+        if (state.previewVisible && !state.previewImageData) {
+          renderPreview();
         }
-        if (cache.ready) {
-          let drewFromLayer = false;
-          if (cache.filledLayer && cache.filledLayerCtx) {
-            drewFromLayer = cache.filledLayerDirty ? rebuildFilledLayer(cache) : true;
-            if (drewFromLayer) {
-              puzzleCtx.drawImage(cache.filledLayer, 0, 0);
-            }
-          }
-          if (!drewFromLayer) {
-            compositeFilledRegionsDirect(puzzleCtx, cache);
-          }
+        if (canvasRenderer && typeof canvasRenderer.renderFrame === "function") {
+          canvasRenderer.renderFrame({
+            puzzle: state.puzzle,
+            filledRegions: state.filled,
+            settings: state.settings,
+            backgroundColor: state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX,
+            previewVisible: state.previewVisible,
+            previewCanvas,
+            previewImageData: state.previewImageData,
+            cache,
+            getPaletteEntry,
+            getRegionLabelLayout,
+          });
         }
-        puzzleCtx.restore();
-        drawOutlines();
-        drawNumbers();
-      }
-
-      function drawNumbers() {
-        if (!state.puzzle) return;
-        if (state.settings.showRegionLabels === false) return;
-        const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
-        withRenderScale(puzzleCtx, scale, () => {
-          const fallbackNumberInk = backgroundInk.number;
-          const fallbackOutlineInk = backgroundInk.outline;
-          puzzleCtx.textAlign = "center";
-          puzzleCtx.textBaseline = "middle";
-          puzzleCtx.strokeStyle = fallbackOutlineInk;
-          puzzleCtx.lineJoin = "round";
-          puzzleCtx.lineCap = "round";
-          for (const region of state.puzzle.regions) {
-            if (state.filled.has(region.id)) continue;
-            const layout = getRegionLabelLayout(region);
-            if (!layout) continue;
-            const paletteColor = getPaletteEntry(region.colorId);
-            const regionInk =
-              paletteColor?.hex && typeof paletteColor.hex === "string"
-                ? rgbaFromHex(paletteColor.hex, 1)
-                : fallbackNumberInk;
-            puzzleCtx.fillStyle = regionInk;
-            puzzleCtx.font = layout.font;
-            if (layout.strokeWidth) {
-              puzzleCtx.lineWidth = layout.strokeWidth;
-              puzzleCtx.strokeText(layout.text, layout.x, layout.y);
-            }
-            puzzleCtx.fillText(layout.text, layout.x, layout.y);
-          }
-        });
       }
 
       function getRegionLabelText(region) {
@@ -5652,11 +5290,23 @@
       function measureLabelMetrics(text, size) {
         if (!text || size <= 0) return null;
         const font = `${size}px "Inter", "Segoe UI", sans-serif`;
-        puzzleCtx.font = font;
-        const metrics = puzzleCtx.measureText(text);
-        const textWidth = metrics.width || size;
-        const ascent = metrics.actualBoundingBoxAscent || size * 0.78;
-        const descent = metrics.actualBoundingBoxDescent || size * 0.22;
+        let metrics = null;
+        if (canvasRenderer && typeof canvasRenderer.measureText === "function") {
+          metrics = canvasRenderer.measureText(font, text);
+        }
+        if (!metrics && typeof document !== "undefined") {
+          if (!fallbackMeasureCtx) {
+            const canvas = document.createElement("canvas");
+            fallbackMeasureCtx = canvas.getContext("2d");
+          }
+          if (fallbackMeasureCtx) {
+            fallbackMeasureCtx.font = font;
+            metrics = fallbackMeasureCtx.measureText(text);
+          }
+        }
+        const textWidth = metrics?.width || size;
+        const ascent = metrics?.actualBoundingBoxAscent || size * 0.78;
+        const descent = metrics?.actualBoundingBoxDescent || size * 0.22;
         const textHeight = ascent + descent;
         const strokeWidth = clamp(size * 0.18, 0.65, Math.max(2.6, size * 0.24));
         const paddingX = clamp(
@@ -7112,8 +6762,12 @@
           }
         });
         renderPuzzle();
+        const cache = ensureRenderCache();
         overlaysByTint.forEach((regions, tint) => {
-          paintRegions(regions, tint);
+          if (!cache?.ready) return;
+          if (canvasRenderer && typeof canvasRenderer.flashRegions === "function") {
+            canvasRenderer.flashRegions({ regions, fillStyle: tint, cache });
+          }
         });
         if (overlayAnimations.size > 0) {
           scheduleOverlayFrame();
@@ -7245,47 +6899,6 @@
       }
 
       // Shared renderer for flashing overlays (hints + colour selection pulses).
-      function paintRegions(regions, fillStyle) {
-        if (!state.puzzle || regions.length === 0) return;
-        const cache = ensureRenderCache();
-        if (!cache.ready) return;
-        const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
-        const strokeWidth = cache.strokeWidth > 0 ? cache.strokeWidth : 1;
-        withRenderScale(puzzleCtx, scale, () => {
-          puzzleCtx.fillStyle = fillStyle;
-          puzzleCtx.strokeStyle = fillStyle;
-          puzzleCtx.lineWidth = strokeWidth;
-          puzzleCtx.lineJoin = "round";
-          puzzleCtx.lineCap = "round";
-          if (SUPPORTS_PATH2D) {
-            for (const region of regions) {
-              const geometry = cache.regionsById.get(region.id);
-              if (!geometry?.path) continue;
-              puzzleCtx.fill(geometry.path);
-              puzzleCtx.stroke(geometry.path);
-            }
-            return;
-          }
-          for (const region of regions) {
-            const geometry = cache.regionsById.get(region.id);
-            if (!geometry?.contours) continue;
-            puzzleCtx.beginPath();
-            for (const contour of geometry.contours) {
-              if (contour.length === 0) continue;
-              const first = contour[0];
-              puzzleCtx.moveTo(first[0], first[1]);
-              for (let i = 1; i < contour.length; i++) {
-                const point = contour[i];
-                puzzleCtx.lineTo(point[0], point[1]);
-              }
-              puzzleCtx.closePath();
-            }
-            puzzleCtx.fill();
-            puzzleCtx.stroke();
-          }
-        });
-      }
-
       function flashPaletteSwatch(colorId, options = {}) {
         if (!paletteEl) return;
         const swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
