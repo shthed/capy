@@ -144,16 +144,16 @@ function createRenderTargetFactory(
       height: 0,
       resize(width, height) {
         if (!gl) {
-          return;
+          return false;
         }
         const w = Math.max(1, Math.floor(width));
         const h = Math.max(1, Math.floor(height));
         if (w === this.width && h === this.height) {
-          return;
+          return true;
         }
-        this.width = w;
-        this.height = h;
-        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+
+        const previousWidth = this.width;
+        const previousHeight = this.height;
         const {
           internalFormat,
           format,
@@ -163,6 +163,7 @@ function createRenderTargetFactory(
           wrapS = gl.CLAMP_TO_EDGE,
           wrapT = gl.CLAMP_TO_EDGE,
         } = this.options || {};
+
         const resolvedInternalFormat =
           typeof internalFormat === "number" && Number.isFinite(internalFormat)
             ? internalFormat
@@ -171,31 +172,50 @@ function createRenderTargetFactory(
           typeof format === "number" && Number.isFinite(format) ? format : gl.RGBA;
         const resolvedType =
           typeof type === "number" && Number.isFinite(type) ? type : gl.UNSIGNED_BYTE;
+
+        gl.bindTexture(gl.TEXTURE_2D, this.texture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magFilter);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapS);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapT);
-        gl.texImage2D(
-          gl.TEXTURE_2D,
-          0,
-          resolvedInternalFormat,
-          w,
-          h,
-          0,
-          resolvedFormat,
-          resolvedType,
-          null
-        );
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
-        gl.framebufferTexture2D(
-          gl.FRAMEBUFFER,
-          gl.COLOR_ATTACHMENT0,
-          gl.TEXTURE_2D,
-          this.texture,
-          0
-        );
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        try {
+          gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            resolvedInternalFormat,
+            w,
+            h,
+            0,
+            resolvedFormat,
+            resolvedType,
+            null
+          );
+          gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+          gl.framebufferTexture2D(
+            gl.FRAMEBUFFER,
+            gl.COLOR_ATTACHMENT0,
+            gl.TEXTURE_2D,
+            this.texture,
+            0
+          );
+          const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+          if (status !== gl.FRAMEBUFFER_COMPLETE) {
+            const hexStatus = `0x${status.toString(16)}`;
+            throw new Error(`Framebuffer incomplete (${hexStatus})`);
+          }
+          this.width = w;
+          this.height = h;
+          return true;
+        } catch (error) {
+          console.warn("Render target resize failed", error);
+          this.width = previousWidth;
+          this.height = previousHeight;
+          return false;
+        } finally {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.bindTexture(gl.TEXTURE_2D, null);
+        }
       },
       dispose() {
         if (!gl) {
@@ -213,7 +233,11 @@ function createRenderTargetFactory(
     resizeQueue.add(target);
     const size = typeof getSize === "function" ? getSize() : null;
     if (size && Number.isFinite(size.width) && Number.isFinite(size.height)) {
-      target.resize(size.width, size.height);
+      const resized = target.resize(size.width, size.height);
+      if (!resized) {
+        target.dispose();
+        return null;
+      }
     }
     return target;
   };
@@ -408,7 +432,13 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     if (pixelWidth !== currentPixelWidth || pixelHeight !== currentPixelHeight) {
       currentPixelWidth = pixelWidth;
       currentPixelHeight = pixelHeight;
-      resizeTargets.forEach((target) => target.resize(pixelWidth, pixelHeight));
+      resizeTargets.forEach((target) => {
+        try {
+          target.resize(pixelWidth, pixelHeight);
+        } catch (error) {
+          console.warn("Render target resize hook failed", error);
+        }
+      });
     }
     gl.viewport(0, 0, pixelWidth, pixelHeight);
     if (typeof hooks.onResize === "function") {
