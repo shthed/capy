@@ -13,11 +13,11 @@
     "key": "codex-add-canvas2d-renderer-implementation",
     "branch": "codex/add-canvas2d-renderer-implementation",
     "safeName": "codex-add-canvas2d-renderer-implementation",
-    "commit": "3cb675476d1527cff0dc119806ff6d9949644e49",
-    "message": "Refactor Canvas2D rendering into module",
+    "commit": "5d73b1ace8b2e02fff9c7acff6534fe859554e3f",
+    "message": "Extract Canvas2D flash and fill helpers",
     "actor": "shthed",
-    "deployedAt": "2025-10-20T12:07:54+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/3cb675476d1527cff0dc119806ff6d9949644e49"
+    "deployedAt": "2025-10-20T19:37:49+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/5d73b1ace8b2e02fff9c7acff6534fe859554e3f"
   },
   "codex-add-workflow_dispatch-trigger-to-branch": {
     "key": "codex-add-workflow_dispatch-trigger-to-branch",
