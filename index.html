@@ -3614,6 +3614,13 @@
         // Public hooks for tests and manual loading. Keep backwards compatible.
         window.capyGenerator = {
           getState: () => state,
+          setActiveColor(colorId, options = {}) {
+            if (colorId == null) {
+              return false;
+            }
+            const { flash = false, redraw = true } = options;
+            return activateColor(colorId, { flash, redraw });
+          },
           getRendererType() {
             return state.rendering?.controller?.getRendererType?.() || null;
           },
@@ -3733,6 +3740,28 @@
           openSettings: () => openSheet(settingsSheet),
           openSaves: () => openSheet(saveManagerSheet),
           resetProgress: () => resetCurrentProgress(),
+          fillRegion(regionId, options = {}) {
+            if (!state.puzzle) {
+              return "ignored";
+            }
+            if (regionId == null) {
+              return "invalid-region";
+            }
+            const {
+              ensureColor = true,
+              flash = false,
+              redraw = true,
+              label = "automation-fill",
+            } = options || {};
+            const region = state.puzzle.regions.find((entry) => entry?.id === regionId) || null;
+            if (!region) {
+              return "missing-region";
+            }
+            if (ensureColor && state.activeColor !== region.colorId) {
+              activateColor(region.colorId, { flash, redraw });
+            }
+            return attemptFillRegion({ region, regionId: region.id }, { label });
+          },
         };
       }
 
