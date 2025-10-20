@@ -3282,6 +3282,14 @@
           renderPreview: renderPreviewImage,
           flashRegions: flashRegionsWithContext,
           fillBackground: fillBackgroundLayer,
+          rebuildFilledLayer: ({ cache }) => rebuildFilledLayer(cache),
+          rasterizeOutlineLayer: ({ cache }) => rasterizeOutlineLayer(cache),
+          drawNumbersLayer: ({ context }) => {
+            if (context) {
+              drawNumbers(context);
+            }
+          },
+          clearContext: ({ context }) => clearContext(context),
         },
       });
       state.rendering.controller = rendererController;
