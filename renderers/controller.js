@@ -1,69 +1,159 @@
 export function createRendererController(canvas, options = {}) {
-  const {
-    initialRenderer = "canvas2d",
-    hooks = {},
-    renderers = {},
-  } = options || {};
+  const { initialRenderer = "canvas2d", hooks = {}, renderers = {} } = options || {};
 
-  const normalizedRenderers = {};
-  if (renderers && typeof renderers === "object") {
-    for (const [type, factory] of Object.entries(renderers)) {
-      if (!type) continue;
-      if (typeof factory === "function") {
-        normalizedRenderers[type] = () => factory(canvas, hooks);
-      } else if (factory && typeof factory === "object") {
-        normalizedRenderers[type] = () => factory;
-      }
-    }
-  }
-
-  const rendererFactories = {
-    canvas2d: () => createCanvas2dRenderer(canvas, hooks),
-    ...normalizedRenderers,
-  };
-
+  const factories = new Map();
   let activeRenderer = null;
   let activeType = null;
   let lastMetrics = null;
+  let controllerApi = null;
 
-  function setRenderer(type) {
-    const nextType = type || initialRenderer;
-    if (!nextType) {
-      return null;
+  function selectInitialType() {
+    if (initialRenderer && factories.has(initialRenderer)) {
+      return initialRenderer;
     }
-    if (activeRenderer && activeType === nextType) {
-      return activeRenderer;
+    if (factories.has("canvas2d")) {
+      return "canvas2d";
     }
-    if (activeRenderer && typeof activeRenderer.dispose === "function") {
-      try {
-        activeRenderer.dispose();
-      } catch (error) {}
+    const first = factories.keys().next();
+    return first.done ? null : first.value;
+  }
+
+  function normalizeRendererFactory(type, factory) {
+    const payload = () => ({
+      canvas,
+      hooks,
+      type,
+      metrics: lastMetrics ? { ...lastMetrics } : null,
+      controller: controllerApi,
+    });
+    if (typeof factory === "function") {
+      return () => factory(canvas, hooks, payload());
     }
-    const factory = rendererFactories[nextType];
-    if (typeof factory !== "function") {
-      throw new Error(`Unknown renderer type: ${nextType}`);
+    if (factory && typeof factory === "object") {
+      if (typeof factory.create === "function") {
+        return () => factory.create(canvas, hooks, payload());
+      }
+      if (typeof factory.factory === "function") {
+        return () => factory.factory(canvas, hooks, payload());
+      }
+      return () => factory;
     }
-    const renderer = factory();
-    if (!renderer || typeof renderer !== "object") {
-      throw new Error(`Renderer factory for ${nextType} did not return an object`);
+    return null;
+  }
+
+  function registerRenderer(type, factory) {
+    const normalizedType = typeof type === "string" ? type.trim() : "";
+    if (!normalizedType) {
+      return false;
     }
-    activeRenderer = renderer;
-    activeType = nextType;
-    if (lastMetrics && typeof activeRenderer.resize === "function") {
-      activeRenderer.resize(lastMetrics);
+    const normalizedFactory = normalizeRendererFactory(normalizedType, factory);
+    if (!normalizedFactory) {
+      return false;
     }
-    return activeRenderer;
+    factories.set(normalizedType, normalizedFactory);
+    if (activeType === normalizedType) {
+      setRenderer(normalizedType, { force: true, quiet: true });
+    } else if (!activeRenderer && selectInitialType() === normalizedType) {
+      ensureRenderer();
+    } else if (initialRenderer === normalizedType && activeType !== normalizedType) {
+      setRenderer(normalizedType, { quiet: true });
+    }
+    return true;
+  }
+
+  function unregisterRenderer(type) {
+    const normalizedType = typeof type === "string" ? type.trim() : "";
+    if (!normalizedType || !factories.has(normalizedType)) {
+      return false;
+    }
+    const wasActive = activeType === normalizedType;
+    factories.delete(normalizedType);
+    if (wasActive) {
+      dispose();
+      ensureRenderer();
+    }
+    return true;
   }
 
   function ensureRenderer() {
-    if (!activeRenderer) {
-      return setRenderer(initialRenderer);
+    if (activeRenderer) {
+      return activeRenderer;
+    }
+    const fallbackType = selectInitialType();
+    if (!fallbackType) {
+      return null;
+    }
+    return setRenderer(fallbackType, { quiet: true });
+  }
+
+  function setRenderer(type, options = {}) {
+    const { force = false, quiet = false } = options || {};
+    const targetType = type || selectInitialType();
+    if (!targetType) {
+      if (quiet) {
+        return null;
+      }
+      throw new Error("Renderer type not available");
+    }
+    if (!force && activeRenderer && activeType === targetType) {
+      return activeRenderer;
+    }
+    const factory = factories.get(targetType);
+    if (typeof factory !== "function") {
+      if (quiet) {
+        return null;
+      }
+      throw new Error(`Unknown renderer type: ${targetType}`);
+    }
+    let renderer;
+    try {
+      renderer = factory();
+    } catch (error) {
+      if (!quiet) {
+        throw error;
+      }
+      return null;
+    }
+    if (!renderer || typeof renderer !== "object") {
+      if (!quiet) {
+        throw new Error(`Renderer factory for ${targetType} did not return an object`);
+      }
+      return null;
+    }
+    const previousRenderer = activeRenderer;
+    const previousType = activeType;
+    if (
+      previousRenderer &&
+      previousRenderer !== renderer &&
+      typeof previousRenderer.dispose === "function"
+    ) {
+      try {
+        previousRenderer.dispose();
+      } catch (error) {
+        console.warn("Renderer disposal failed", error);
+      }
+    }
+    activeRenderer = renderer;
+    activeType = targetType;
+    if (lastMetrics && typeof activeRenderer.resize === "function") {
+      activeRenderer.resize({ ...lastMetrics });
+    }
+    if (typeof hooks.onRendererChange === "function") {
+      try {
+        hooks.onRendererChange({ type: activeType, previousType });
+      } catch (error) {
+        console.warn("Renderer change hook failed", error);
+      }
     }
     return activeRenderer;
   }
 
   function getRendererType() {
     return activeType;
+  }
+
+  function listRenderers() {
+    return Array.from(factories.keys());
   }
 
   function resize(metrics) {
@@ -95,6 +185,9 @@ export function createRendererController(canvas, options = {}) {
     if (renderer && typeof renderer.flashRegions === "function") {
       return renderer.flashRegions(args);
     }
+    if (typeof hooks.flashRegions === "function") {
+      return hooks.flashRegions(args);
+    }
     return null;
   }
 
@@ -103,15 +196,10 @@ export function createRendererController(canvas, options = {}) {
     if (renderer && typeof renderer.fillBackground === "function") {
       return renderer.fillBackground(args);
     }
-    return null;
-  }
-
-  function dispose() {
-    if (activeRenderer && typeof activeRenderer.dispose === "function") {
-      activeRenderer.dispose();
+    if (typeof hooks.fillBackground === "function") {
+      return hooks.fillBackground(args);
     }
-    activeRenderer = null;
-    activeType = null;
+    return null;
   }
 
   function getContext() {
@@ -122,11 +210,34 @@ export function createRendererController(canvas, options = {}) {
     return null;
   }
 
-  setRenderer(initialRenderer);
+  function dispose({ resetMetrics = false } = {}) {
+    if (activeRenderer && typeof activeRenderer.dispose === "function") {
+      try {
+        activeRenderer.dispose();
+      } catch (error) {
+        console.warn("Renderer disposal failed", error);
+      }
+    }
+    if (typeof hooks.onRendererChange === "function" && activeType) {
+      try {
+        hooks.onRendererChange({ type: null, previousType: activeType });
+      } catch (error) {
+        console.warn("Renderer change hook failed", error);
+      }
+    }
+    activeRenderer = null;
+    activeType = null;
+    if (resetMetrics) {
+      lastMetrics = null;
+    }
+  }
 
-  return {
+  const api = {
     setRenderer,
     getRendererType,
+    listRenderers,
+    registerRenderer,
+    unregisterRenderer,
     resize,
     renderFrame,
     renderPreview,
@@ -135,9 +246,25 @@ export function createRendererController(canvas, options = {}) {
     dispose,
     getContext,
   };
+
+  controllerApi = api;
+
+  registerRenderer("canvas2d", (currentCanvas, currentHooks) =>
+    createCanvas2dRenderer(currentCanvas, currentHooks)
+  );
+
+  if (renderers && typeof renderers === "object") {
+    for (const [type, factory] of Object.entries(renderers)) {
+      registerRenderer(type, factory);
+    }
+  }
+
+  ensureRenderer();
+
+  return api;
 }
 
-function createCanvas2dRenderer(canvas, hooks = {}) {
+export function createCanvas2dRenderer(canvas, hooks = {}) {
   let context = null;
 
   function ensureContext() {
