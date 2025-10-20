@@ -19,34 +19,14 @@
     "deployedAt": "2025-10-20T19:37:49+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/5d73b1ace8b2e02fff9c7acff6534fe859554e3f"
   },
-  "codex-add-workflow_dispatch-trigger-to-branch": {
-    "key": "codex-add-workflow_dispatch-trigger-to-branch",
-    "branch": "codex/add-workflow_dispatch-trigger-to-branch",
-    "safeName": "codex-add-workflow_dispatch-trigger-to-branch",
-    "commit": "72bfa577407750b0bd13ad7b145422846110dc7f",
-    "message": "Merge pull request #181 from shthed/codex/refactor-canvas-rendering-to-use-controller\n\nModularize puzzle renderer via controller abstraction",
+  "codex-add-hints-toggle-option-and-types-section": {
+    "key": "codex-add-hints-toggle-option-and-types-section",
+    "branch": "codex/add-hints-toggle-option-and-types-section",
+    "safeName": "codex-add-hints-toggle-option-and-types-section",
+    "commit": "472db746a90d9ccab58d2ed756ae8fdd76b24977",
+    "message": "Merge pull request #193 from shthed/codex/add-tests-for-game-loading-and-completing\n\nAdd Playwright tests for painting and save completion",
     "actor": "shthed",
-    "deployedAt": "2025-10-20T18:10:11+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/72bfa577407750b0bd13ad7b145422846110dc7f"
-  },
-  "codex-introduce-renderer-abstraction-for-webgl": {
-    "branch": "codex/introduce-renderer-abstraction-for-webgl",
-    "safeName": "codex-introduce-renderer-abstraction-for-webgl",
-    "commit": "fedcafb678bac485449081f8a860a06f34ce0180",
-    "message": "Merge branch 'main' into work",
-    "actor": "shthed",
-    "deployedAt": "2025-10-16T03:32:54Z",
-    "commitUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
-    "key": "codex-introduce-renderer-abstraction-for-webgl"
-  },
-  "codex-render-region-number-labels": {
-    "key": "codex-render-region-number-labels",
-    "branch": "codex/render-region-number-labels",
-    "safeName": "codex-render-region-number-labels",
-    "commit": "2a84f83ebafa70fee6df0374c808d68476832b76",
-    "message": "Restore region number measurement context",
-    "actor": "shthed",
-    "deployedAt": "2025-10-18T14:10:20+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/2a84f83ebafa70fee6df0374c808d68476832b76"
+    "deployedAt": "2025-10-20T18:35:08+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/472db746a90d9ccab58d2ed756ae8fdd76b24977"
   }
 }
