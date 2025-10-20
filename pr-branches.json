@@ -1,19 +1,27 @@
 [
   {
+    "branch": "codex/add-canvas2d-renderer-implementation",
+    "safeName": "codex-add-canvas2d-renderer-implementation",
+    "title": "Modularize Canvas2D rendering pipeline",
+    "number": 190,
+    "updatedAt": "2025-10-20T04:11:23Z",
+    "url": "https://github.com/shthed/capy/pull/190"
+  },
+  {
+    "branch": "copilot/deploy-capy-pull-181",
+    "safeName": "copilot-deploy-capy-pull-181",
+    "title": "Fix PR #181 deployment by updating workflow and adding missing scripts",
+    "number": 189,
+    "updatedAt": "2025-10-20T01:20:01Z",
+    "url": "https://github.com/shthed/capy/pull/189"
+  },
+  {
     "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage",
     "safeName": "codex-refactor-prepare-deploy-metadata-for-fetch-usage",
     "title": "Use fetch to build deployment metadata",
     "number": 187,
     "updatedAt": "2025-10-19T09:44:13Z",
     "url": "https://github.com/shthed/capy/pull/187"
-  },
-  {
-    "branch": "codex/refactor-canvas-rendering-to-use-controller",
-    "safeName": "codex-refactor-canvas-rendering-to-use-controller",
-    "title": "Modularize puzzle renderer via controller abstraction",
-    "number": 181,
-    "updatedAt": "2025-10-19T08:46:15Z",
-    "url": "https://github.com/shthed/capy/pull/181"
   },
   {
     "branch": "codex/render-region-number-labels",

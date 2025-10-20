@@ -2,11 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "7876f1b0c63c85ed37299b012ff95319582c0216",
-    "message": "Merge pull request #188 from shthed/codex/create-workflow-for-post-deployment-tests\n\nAdd post-deploy branch smoke tests workflow",
+    "commit": "72bfa577407750b0bd13ad7b145422846110dc7f",
+    "message": "Merge pull request #181 from shthed/codex/refactor-canvas-rendering-to-use-controller\n\nModularize puzzle renderer via controller abstraction",
     "actor": "shthed",
-    "deployedAt": "2025-10-20T06:31:11+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/7876f1b0c63c85ed37299b012ff95319582c0216",
+    "deployedAt": "2025-10-20T18:10:11+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/72bfa577407750b0bd13ad7b145422846110dc7f",
     "key": "main"
   },
   "codex-add-canvas2d-renderer-implementation": {

@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "72bfa577407750b0bd13ad7b145422846110dc7f",
+      "shortSha": "72bfa57",
+      "message": "Merge pull request #181 from shthed/codex/refactor-canvas-rendering-to-use-controller\n\nModularize puzzle renderer via controller abstraction",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-20T10:10:11Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/72bfa577407750b0bd13ad7b145422846110dc7f",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    },
+    {
+      "sha": "df4669961c294e02b3a01c710b984f8b7f85351f",
+      "shortSha": "df46699",
+      "message": "Improve renderer controller extensibility",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-20T04:08:16Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/df4669961c294e02b3a01c710b984f8b7f85351f",
+      "prs": [
+        {
+          "number": 181,
+          "title": "Modularize puzzle renderer via controller abstraction",
+          "url": "https://github.com/shthed/capy/pull/181",
+          "branch": "codex/refactor-canvas-rendering-to-use-controller"
+        }
+      ]
+    },
+    {
       "sha": "7876f1b0c63c85ed37299b012ff95319582c0216",
       "shortSha": "7876f1b",
       "message": "Merge pull request #188 from shthed/codex/create-workflow-for-post-deployment-tests\n\nAdd post-deploy branch smoke tests workflow",
@@ -31,40 +63,8 @@
           "branch": "codex/create-workflow-for-post-deployment-tests"
         }
       ]
-    },
-    {
-      "sha": "8e2c3349caa2b56688e8291360852f7bff03fb2f",
-      "shortSha": "8e2c334",
-      "message": "Merge remote-tracking branch 'origin/main'",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-19T22:28:43Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/8e2c3349caa2b56688e8291360852f7bff03fb2f",
-      "prs": [
-        {
-          "number": 188,
-          "title": "Add post-deploy branch smoke tests workflow",
-          "url": "https://github.com/shthed/capy/pull/188",
-          "branch": "codex/create-workflow-for-post-deployment-tests"
-        }
-      ]
-    },
-    {
-      "sha": "f2d902eb504b940a64dd63392dd4ea200fb14ccc",
-      "shortSha": "f2d902e",
-      "message": "Add post-deploy branch smoke tests workflow",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-19T09:43:00Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/f2d902eb504b940a64dd63392dd4ea200fb14ccc",
-      "prs": [
-        {
-          "number": 188,
-          "title": "Add post-deploy branch smoke tests workflow",
-          "url": "https://github.com/shthed/capy/pull/188",
-          "branch": "codex/create-workflow-for-post-deployment-tests"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-19T22:31:11Z",
-  "deploymentTimestamp": 1760913083026
+  "lastCommitDate": "2025-10-20T10:10:11Z",
+  "deploymentTimestamp": 1760955028552
 }
