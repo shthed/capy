@@ -26,9 +26,9 @@ jobs:
     if: github.ref != 'refs/heads/gh-pages'
     runs-on: ubuntu-latest
     env:
-      EFFECTIVE_BRANCH: "${{ github.event_name == 'workflow_dispatch' && inputs.target_branch != '' ? inputs.target_branch : github.ref_name }}"
-      EFFECTIVE_REF: "${{ github.event_name == 'workflow_dispatch' && inputs.target_branch != '' ? format('refs/heads/{0}', inputs.target_branch) : github.ref }}"
-      ALLOW_WITHOUT_PR: "${{ github.event_name == 'workflow_dispatch' && inputs.allow_without_pr == 'true' ? 'true' : 'false' }}"
+      EFFECTIVE_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.target_branch != '' && inputs.target_branch || github.ref_name }}
+      EFFECTIVE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.target_branch != '' && format('refs/heads/{0}', inputs.target_branch) || github.ref }}
+      ALLOW_WITHOUT_PR: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_without_pr && 'true' || 'false' }}
     concurrency:
       group: pages-deployments
       cancel-in-progress: false
