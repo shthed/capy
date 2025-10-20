@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-21T06:06:08+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/fe33216e51a4b14037ec9569e666fc2fe52a1f8a",
     "key": "main"
+  },
+  "codex-fix-invalid-syntax-in-deploy-branch.yml-40srvq": {
+    "key": "codex-fix-invalid-syntax-in-deploy-branch.yml-40srvq",
+    "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq",
+    "safeName": "codex-fix-invalid-syntax-in-deploy-branch.yml-40srvq",
+    "commit": "270af17118af6c02928b958eaebe8528664b994c",
+    "message": "Fix allow_without_pr evaluation in deploy workflow",
+    "actor": "shthed",
+    "deployedAt": "2025-10-21T06:08:32+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/270af17118af6c02928b958eaebe8528664b994c"
   }
 }
