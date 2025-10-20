@@ -23,10 +23,10 @@
     "key": "codex-run-ui-tests",
     "branch": "codex/run-ui-tests",
     "safeName": "codex-run-ui-tests",
-    "commit": "472db746a90d9ccab58d2ed756ae8fdd76b24977",
-    "message": "Merge pull request #193 from shthed/codex/add-tests-for-game-loading-and-completing\n\nAdd Playwright tests for painting and save completion",
+    "commit": "37685f47c5ef2625a0154ccacf2d576ac487673c",
+    "message": "Stabilize UI smoke tests with automation helpers",
     "actor": "shthed",
-    "deployedAt": "2025-10-20T18:35:08+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/472db746a90d9ccab58d2ed756ae8fdd76b24977"
+    "deployedAt": "2025-10-20T21:08:37+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/37685f47c5ef2625a0154ccacf2d576ac487673c"
   }
 }
