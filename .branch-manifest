@@ -1,4 +1,6 @@
+codex-add-canvas2d-renderer-implementation
 codex-introduce-renderer-abstraction-for-webgl
 codex-refactor-canvas-rendering-to-use-controller
 codex-refactor-prepare-deploy-metadata-for-fetch-usage
 codex-render-region-number-labels
+copilot-deploy-capy-pull-181
