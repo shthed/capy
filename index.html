@@ -1944,7 +1944,8 @@
         </section>
       </div>
     </div>
-        <script>
+        <script type="module">
+      import { createRendererController } from "./renderers/controller.js";
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
       const commandRail = document.getElementById("commandRail");
@@ -2053,8 +2054,10 @@
       };
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.createElement("canvas");
-      const puzzleCtx = puzzleCanvas.getContext("2d");
       const previewCtx = previewCanvas.getContext("2d");
+      let rendererController = null;
+      let scratchMeasureCanvas = null;
+      let scratchMeasureCtx = null;
 
       // Sheet output mirrors we update while users drag sliders.
       const generatorOutputs = generatorSheet
@@ -2436,8 +2439,8 @@
       };
       const DEFAULT_SAMPLE_DETAIL = "high";
 
-      function drawOutlines() {
-        if (!state.puzzle) return;
+      function drawOutlines(ctx) {
+        if (!state.puzzle || !ctx) return;
         const cache = ensureRenderCache();
         if (!cache.ready) return;
         const filledRegions = state.filled || new Set();
@@ -2450,13 +2453,13 @@
         }
         if (!hideCompleted && cache.outlineLayer && cache.outlineLayerCtx) {
           if (cache.outlineLayerDirty && !rasterizeOutlineLayer(cache)) {
-            strokeOutlinesDirect(cache, geometries);
+            strokeOutlinesDirect(ctx, cache, geometries);
             return;
           }
-          puzzleCtx.drawImage(cache.outlineLayer, 0, 0);
+          ctx.drawImage(cache.outlineLayer, 0, 0);
           return;
         }
-        strokeOutlinesDirect(cache, geometries);
+        strokeOutlinesDirect(ctx, cache, geometries);
       }
 
       function createRenderCache() {
@@ -2480,14 +2483,14 @@
         };
       }
 
-      function strokeOutlinesDirect(cache, geometries) {
+      function strokeOutlinesDirect(ctx, cache, geometries) {
         const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        withRenderScale(puzzleCtx, scale, () => {
-          puzzleCtx.strokeStyle = backgroundInk.outline;
-          puzzleCtx.lineWidth = cache.strokeWidth;
-          puzzleCtx.lineJoin = "round";
-          puzzleCtx.lineCap = "round";
-          strokeGeometries(puzzleCtx, Array.isArray(geometries) ? geometries : cache.regions);
+        withRenderScale(ctx, scale, () => {
+          ctx.strokeStyle = backgroundInk.outline;
+          ctx.lineWidth = cache.strokeWidth;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          strokeGeometries(ctx, Array.isArray(geometries) ? geometries : cache.regions);
         });
       }
 
@@ -3052,14 +3055,16 @@
           canvasTransform.style.width = `${canvasMetrics.displayWidth}px`;
           canvasTransform.style.height = `${canvasMetrics.displayHeight}px`;
         }
-        if (puzzleCanvas.width !== canvasMetrics.pixelWidth) {
-          puzzleCanvas.width = canvasMetrics.pixelWidth;
+        if (state.rendering?.controller) {
+          state.rendering.controller.resize({ ...canvasMetrics });
+        } else {
+          if (puzzleCanvas.width !== canvasMetrics.pixelWidth) {
+            puzzleCanvas.width = canvasMetrics.pixelWidth;
+          }
+          if (puzzleCanvas.height !== canvasMetrics.pixelHeight) {
+            puzzleCanvas.height = canvasMetrics.pixelHeight;
+          }
         }
-        if (puzzleCanvas.height !== canvasMetrics.pixelHeight) {
-          puzzleCanvas.height = canvasMetrics.pixelHeight;
-        }
-        puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
-        puzzleCtx.imageSmoothingEnabled = false;
         invalidateCanvasRect();
         return metricsChanged;
       }
@@ -3238,6 +3243,7 @@
         loadedSaveId: null,
         previewImageData: null,
         renderCache: createRenderCache(),
+        rendering: { controller: null },
         defaultGame: {
           id: DEFAULT_GAME_SOURCE.id,
           path: DEFAULT_GAME_SOURCE.path,
@@ -3246,6 +3252,17 @@
         },
         sampleArtwork: null,
       };
+
+      rendererController = createRendererController(puzzleCanvas, {
+        initialRenderer: "canvas2d",
+        hooks: {
+          renderFrame: renderPuzzleFrame,
+          renderPreview: renderPreviewImage,
+          flashRegions: flashRegionsWithContext,
+          fillBackground: fillBackgroundLayer,
+        },
+      });
+      state.rendering.controller = rendererController;
 
       let generationJobCounter = 0;
       let latestGenerationJobId = 0;
@@ -3572,6 +3589,66 @@
         // Public hooks for tests and manual loading. Keep backwards compatible.
         window.capyGenerator = {
           getState: () => state,
+          getRendererType() {
+            return state.rendering?.controller?.getRendererType?.() || null;
+          },
+          listRenderers() {
+            const controller = state.rendering?.controller;
+            if (!controller?.listRenderers) {
+              return [];
+            }
+            try {
+              return controller.listRenderers();
+            } catch (error) {
+              console.error("Unable to list renderers", error);
+              return [];
+            }
+          },
+          setRenderer(type) {
+            const controller = state.rendering?.controller;
+            if (!controller?.setRenderer) {
+              return null;
+            }
+            try {
+              const result = controller.setRenderer(type);
+              if (result) {
+                applyCanvasSizing();
+                renderPuzzle();
+              }
+            } catch (error) {
+              console.error(`Failed to activate renderer: ${type}`, error);
+            }
+            return controller.getRendererType?.() || null;
+          },
+          registerRenderer(type, factory) {
+            const controller = state.rendering?.controller;
+            if (!controller?.registerRenderer) {
+              return false;
+            }
+            try {
+              const registered = controller.registerRenderer(type, factory);
+              if (registered && controller.getRendererType?.() === type) {
+                applyCanvasSizing();
+                renderPuzzle();
+              }
+              return registered;
+            } catch (error) {
+              console.error(`Failed to register renderer: ${type}`, error);
+              return false;
+            }
+          },
+          unregisterRenderer(type) {
+            const controller = state.rendering?.controller;
+            if (!controller?.unregisterRenderer) {
+              return false;
+            }
+            try {
+              return controller.unregisterRenderer(type);
+            } catch (error) {
+              console.error(`Failed to unregister renderer: ${type}`, error);
+              return false;
+            }
+          },
           loadFromDataUrl(dataUrl, metadata) {
             if (typeof dataUrl !== "string" || dataUrl.length === 0) {
               return;
@@ -5105,13 +5182,23 @@
           if (state.puzzle) {
             renderPuzzle();
           } else {
-            puzzleCtx.save();
-            puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
-            puzzleCtx.fillStyle = normalized;
-            const width = puzzleCanvas.width || canvasMetrics.pixelWidth || 0;
-            const height = puzzleCanvas.height || canvasMetrics.pixelHeight || 0;
-            puzzleCtx.fillRect(0, 0, width, height);
-            puzzleCtx.restore();
+            if (state.rendering?.controller) {
+              state.rendering.controller.fillBackground({
+                color: normalized,
+                metrics: { ...canvasMetrics },
+              });
+            } else {
+              const fallbackCtx = puzzleCanvas?.getContext?.("2d") || null;
+              if (fallbackCtx) {
+                fallbackCtx.save();
+                fallbackCtx.setTransform(1, 0, 0, 1, 0, 0);
+                fallbackCtx.fillStyle = normalized;
+                const width = puzzleCanvas.width || canvasMetrics.pixelWidth || 0;
+                const height = puzzleCanvas.height || canvasMetrics.pixelHeight || 0;
+                fallbackCtx.fillRect(0, 0, width, height);
+                fallbackCtx.restore();
+              }
+            }
           }
         }
         if (changed && !skipLog) {
@@ -5513,7 +5600,10 @@
           }
         }
         setProgressMessage("loading");
-        clearContext(puzzleCtx);
+        const resetCtx = state.rendering?.controller?.getContext?.() || puzzleCanvas?.getContext?.("2d");
+        if (resetCtx) {
+          clearContext(resetCtx);
+        }
         if (previewCtx) {
           previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         }
@@ -5785,7 +5875,20 @@
       }
 
       function renderPreview() {
-        if (!state.puzzle) return;
+        if (!state.puzzle) {
+          state.previewImageData = null;
+          return null;
+        }
+        const controller = state.rendering?.controller;
+        const imageData = controller
+          ? controller.renderPreview({ state, previewCanvas, previewCtx })
+          : renderPreviewImage({ state, previewCanvas, previewCtx });
+        state.previewImageData = imageData || null;
+        return imageData || null;
+      }
+
+      function renderPreviewImage({ state, previewCanvas, previewCtx }) {
+        if (!state?.puzzle) return null;
         const { width, height, regions, palette } = state.puzzle;
         if (previewCanvas) {
           previewCanvas.width = width;
@@ -5798,8 +5901,7 @@
           imageData = new ImageData(width, height);
         }
         if (!imageData) {
-          state.previewImageData = null;
-          return;
+          return null;
         }
         const data = imageData.data;
         for (const region of regions) {
@@ -5817,32 +5919,72 @@
         if (previewCtx && typeof previewCtx.putImageData === "function") {
           previewCtx.putImageData(imageData, 0, 0);
         }
-        state.previewImageData = imageData;
+        return imageData;
       }
 
       function renderPuzzle() {
         if (!state.puzzle) return;
         ensureCanvasMetricsInitialized();
         const cache = ensureRenderCache();
-        const pixelWidth = puzzleCanvas.width;
-        const pixelHeight = puzzleCanvas.height;
-        puzzleCtx.save();
-        puzzleCtx.setTransform(1, 0, 0, 1, 0, 0);
-        puzzleCtx.clearRect(0, 0, pixelWidth, pixelHeight);
-        puzzleCtx.fillStyle = state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX;
-        puzzleCtx.fillRect(0, 0, pixelWidth, pixelHeight);
-        if (state.previewVisible) {
-          if (!state.previewImageData) {
-            renderPreview();
+        const controller = state.rendering?.controller;
+        if (!controller) return;
+        controller.renderFrame({
+          state,
+          cache,
+          metrics: { ...canvasMetrics },
+          previewCanvas,
+          previewCtx,
+          previewImageData: state.previewImageData,
+          previewVisible: state.previewVisible === true,
+          backgroundColor: state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX,
+          defaultBackgroundColor: DEFAULT_BACKGROUND_HEX,
+          renderPreview: () =>
+            controller.renderPreview({ state, previewCanvas, previewCtx }) || state.previewImageData,
+          setPreviewImageData: (imageData) => {
+            state.previewImageData = imageData || null;
+          },
+        });
+      }
+
+      function renderPuzzleFrame({
+        context,
+        state,
+        cache,
+        metrics,
+        previewCanvas,
+        previewCtx,
+        previewImageData,
+        previewVisible,
+        backgroundColor,
+        defaultBackgroundColor,
+        renderPreview,
+        setPreviewImageData,
+      }) {
+        if (!context || !state?.puzzle) return;
+        const pixelWidth = metrics?.pixelWidth ?? context.canvas?.width ?? 0;
+        const pixelHeight = metrics?.pixelHeight ?? context.canvas?.height ?? 0;
+        context.save();
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.clearRect(0, 0, pixelWidth, pixelHeight);
+        const fill = backgroundColor || defaultBackgroundColor;
+        context.fillStyle = fill;
+        context.fillRect(0, 0, pixelWidth, pixelHeight);
+        if (previewVisible) {
+          let imageData = previewImageData || null;
+          if (!imageData && typeof renderPreview === "function") {
+            imageData = renderPreview() || null;
+            if (imageData && typeof setPreviewImageData === "function") {
+              setPreviewImageData(imageData);
+            }
           }
-          if (state.previewImageData) {
+          if (imageData) {
             if (previewCanvas && previewCanvas.width && previewCanvas.height) {
               const sourceWidth = previewCanvas.width;
               const sourceHeight = previewCanvas.height;
-              const targetWidth = canvasMetrics.pixelWidth || pixelWidth;
-              const targetHeight = canvasMetrics.pixelHeight || pixelHeight;
-              puzzleCtx.imageSmoothingEnabled = false;
-              puzzleCtx.drawImage(
+              const targetWidth = metrics?.pixelWidth || pixelWidth;
+              const targetHeight = metrics?.pixelHeight || pixelHeight;
+              context.imageSmoothingEnabled = false;
+              context.drawImage(
                 previewCanvas,
                 0,
                 0,
@@ -5853,42 +5995,53 @@
                 targetWidth,
                 targetHeight
               );
-            } else if (typeof puzzleCtx.putImageData === "function") {
-              puzzleCtx.putImageData(state.previewImageData, 0, 0);
+            } else if (typeof context.putImageData === "function") {
+              context.putImageData(imageData, 0, 0);
             }
           }
-          puzzleCtx.restore();
+          context.restore();
           return;
         }
-        if (cache.ready) {
+        if (cache?.ready) {
           let drewFromLayer = false;
           if (cache.filledLayer && cache.filledLayerCtx) {
             drewFromLayer = cache.filledLayerDirty ? rebuildFilledLayer(cache) : true;
-            if (drewFromLayer) {
-              puzzleCtx.drawImage(cache.filledLayer, 0, 0);
+            if (drewFromLayer && cache.filledLayer) {
+              context.drawImage(cache.filledLayer, 0, 0);
             }
           }
           if (!drewFromLayer) {
-            compositeFilledRegionsDirect(puzzleCtx, cache);
+            compositeFilledRegionsDirect(context, cache);
           }
         }
-        puzzleCtx.restore();
-        drawOutlines();
-        drawNumbers();
+        context.restore();
+        drawOutlines(context);
+        drawNumbers(context);
       }
 
-      function drawNumbers() {
-        if (!state.puzzle) return;
+      function fillBackgroundLayer({ context, color, metrics }) {
+        if (!context) return;
+        const width = metrics?.pixelWidth ?? context.canvas?.width ?? 0;
+        const height = metrics?.pixelHeight ?? context.canvas?.height ?? 0;
+        context.save();
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.fillStyle = color || DEFAULT_BACKGROUND_HEX;
+        context.fillRect(0, 0, width, height);
+        context.restore();
+      }
+
+      function drawNumbers(ctx) {
+        if (!state.puzzle || !ctx) return;
         if (state.settings.showRegionLabels === false) return;
         const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
-        withRenderScale(puzzleCtx, scale, () => {
+        withRenderScale(ctx, scale, () => {
           const fallbackNumberInk = backgroundInk.number;
           const fallbackOutlineInk = backgroundInk.outline;
-          puzzleCtx.textAlign = "center";
-          puzzleCtx.textBaseline = "middle";
-          puzzleCtx.strokeStyle = fallbackOutlineInk;
-          puzzleCtx.lineJoin = "round";
-          puzzleCtx.lineCap = "round";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.strokeStyle = fallbackOutlineInk;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
           for (const region of state.puzzle.regions) {
             if (state.filled.has(region.id)) continue;
             const layout = getRegionLabelLayout(region);
@@ -5898,13 +6051,13 @@
               paletteColor?.hex && typeof paletteColor.hex === "string"
                 ? rgbaFromHex(paletteColor.hex, 1)
                 : fallbackNumberInk;
-            puzzleCtx.fillStyle = regionInk;
-            puzzleCtx.font = layout.font;
+            ctx.fillStyle = regionInk;
+            ctx.font = layout.font;
             if (layout.strokeWidth) {
-              puzzleCtx.lineWidth = layout.strokeWidth;
-              puzzleCtx.strokeText(layout.text, layout.x, layout.y);
+              ctx.lineWidth = layout.strokeWidth;
+              ctx.strokeText(layout.text, layout.x, layout.y);
             }
-            puzzleCtx.fillText(layout.text, layout.x, layout.y);
+            ctx.fillText(layout.text, layout.x, layout.y);
           }
         });
       }
@@ -6057,9 +6210,14 @@
 
       function measureLabelMetrics(text, size) {
         if (!text || size <= 0) return null;
+        const ctx = getMeasurementContext();
+        if (!ctx) return null;
         const font = `${size}px "Inter", "Segoe UI", sans-serif`;
-        puzzleCtx.font = font;
-        const metrics = puzzleCtx.measureText(text);
+        if (typeof ctx.save === "function") {
+          ctx.save();
+        }
+        ctx.font = font;
+        const metrics = ctx.measureText(text);
         const textWidth = metrics.width || size;
         const ascent = metrics.actualBoundingBoxAscent || size * 0.78;
         const descent = metrics.actualBoundingBoxDescent || size * 0.22;
@@ -6077,6 +6235,9 @@
         );
         const paddedWidth = textWidth + paddingX * 2 + strokeWidth;
         const paddedHeight = textHeight + paddingY * 2 + strokeWidth;
+        if (typeof ctx.restore === "function") {
+          ctx.restore();
+        }
         return {
           font,
           paddedWidth,
@@ -6085,6 +6246,35 @@
           halfHeight: paddedHeight / 2,
           strokeWidth,
         };
+      }
+
+      function getMeasurementContext() {
+        const controller = state.rendering?.controller;
+        if (controller && typeof controller.getContext === "function") {
+          const ctx = controller.getContext();
+          if (ctx) {
+            return ctx;
+          }
+        }
+        if (previewCtx) {
+          return previewCtx;
+        }
+        if (!scratchMeasureCtx) {
+          if (typeof OffscreenCanvas === "function") {
+            try {
+              scratchMeasureCanvas = new OffscreenCanvas(1, 1);
+              scratchMeasureCtx = scratchMeasureCanvas.getContext("2d");
+            } catch (error) {
+              scratchMeasureCanvas = null;
+              scratchMeasureCtx = null;
+            }
+          }
+          if (!scratchMeasureCtx && typeof document !== "undefined") {
+            scratchMeasureCanvas = document.createElement("canvas");
+            scratchMeasureCtx = scratchMeasureCanvas.getContext("2d");
+          }
+        }
+        return scratchMeasureCtx;
       }
 
       function findRegionLabelAnchor(region, halfWidth, halfHeight, bounds, width, height, regionMap) {
@@ -7938,39 +8128,48 @@
         if (!state.puzzle || regions.length === 0) return;
         const cache = ensureRenderCache();
         if (!cache.ready) return;
+        const controller = state.rendering?.controller;
+        if (!controller) return;
+        controller.flashRegions({ state, cache, regions, fillStyle, metrics: { ...canvasMetrics } });
+      }
+
+      function flashRegionsWithContext({ context, state, cache, regions, fillStyle }) {
+        if (!context || !state?.puzzle || !Array.isArray(regions) || regions.length === 0) {
+          return;
+        }
         const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
-        const strokeWidth = cache.strokeWidth > 0 ? cache.strokeWidth : 1;
-        withRenderScale(puzzleCtx, scale, () => {
-          puzzleCtx.fillStyle = fillStyle;
-          puzzleCtx.strokeStyle = fillStyle;
-          puzzleCtx.lineWidth = strokeWidth;
-          puzzleCtx.lineJoin = "round";
-          puzzleCtx.lineCap = "round";
+        const strokeWidth = cache?.strokeWidth > 0 ? cache.strokeWidth : 1;
+        withRenderScale(context, scale, () => {
+          context.fillStyle = fillStyle;
+          context.strokeStyle = fillStyle;
+          context.lineWidth = strokeWidth;
+          context.lineJoin = "round";
+          context.lineCap = "round";
           if (SUPPORTS_PATH2D) {
             for (const region of regions) {
-              const geometry = cache.regionsById.get(region.id);
+              const geometry = cache?.regionsById?.get(region.id);
               if (!geometry?.path) continue;
-              puzzleCtx.fill(geometry.path);
-              puzzleCtx.stroke(geometry.path);
+              context.fill(geometry.path);
+              context.stroke(geometry.path);
             }
             return;
           }
           for (const region of regions) {
-            const geometry = cache.regionsById.get(region.id);
+            const geometry = cache?.regionsById?.get(region.id);
             if (!geometry?.contours) continue;
-            puzzleCtx.beginPath();
+            context.beginPath();
             for (const contour of geometry.contours) {
               if (contour.length === 0) continue;
               const first = contour[0];
-              puzzleCtx.moveTo(first[0], first[1]);
+              context.moveTo(first[0], first[1]);
               for (let i = 1; i < contour.length; i++) {
                 const point = contour[i];
-                puzzleCtx.lineTo(point[0], point[1]);
+                context.lineTo(point[0], point[1]);
               }
-              puzzleCtx.closePath();
+              context.closePath();
             }
-            puzzleCtx.fill();
-            puzzleCtx.stroke();
+            context.fill();
+            context.stroke();
           }
         });
       }
