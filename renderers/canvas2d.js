@@ -104,6 +104,61 @@ function strokeOutlinesDirect(ctx, cache, shared, geometries) {
   });
 }
 
+function fillCanvasBackground(ctx, color, metrics = {}) {
+  if (!ctx) return;
+  const pixelWidth = Math.max(1, Math.round(metrics.pixelWidth ?? ctx.canvas?.width ?? 1));
+  const pixelHeight = Math.max(1, Math.round(metrics.pixelHeight ?? ctx.canvas?.height ?? 1));
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (!color) {
+    ctx.clearRect(0, 0, pixelWidth, pixelHeight);
+  } else {
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, pixelWidth, pixelHeight);
+  }
+  ctx.restore();
+}
+
+function renderFlashRegions(ctx, { cache, regions, fillStyle, renderScale, strokeWidth, supportsPath2D } = {}) {
+  if (!ctx || !cache?.ready || !Array.isArray(regions) || regions.length === 0) return;
+  const scale = renderScale > 0 ? renderScale : cache.renderScale > 0 ? cache.renderScale : 1;
+  const outlineWidth = strokeWidth > 0 ? strokeWidth : cache.strokeWidth > 0 ? cache.strokeWidth : 1;
+  withRenderScale(ctx, scale, () => {
+    ctx.fillStyle = fillStyle;
+    ctx.strokeStyle = fillStyle;
+    ctx.lineWidth = outlineWidth;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    if (supportsPath2D) {
+      for (const region of regions) {
+        const geometry = cache.regionsById.get(region.id);
+        if (!geometry?.path) continue;
+        ctx.fill(geometry.path);
+        ctx.stroke(geometry.path);
+      }
+      return;
+    }
+    for (const region of regions) {
+      const geometry = cache.regionsById.get(region.id);
+      const contours = geometry?.contours;
+      if (!contours) continue;
+      ctx.beginPath();
+      for (const contour of contours) {
+        if (!Array.isArray(contour) || contour.length === 0) continue;
+        const first = contour[0];
+        ctx.moveTo(first[0], first[1]);
+        for (let i = 1; i < contour.length; i++) {
+          const point = contour[i];
+          ctx.lineTo(point[0], point[1]);
+        }
+        ctx.closePath();
+      }
+      ctx.fill();
+      ctx.stroke();
+    }
+  });
+}
+
 function rasterizeOutlineLayer(cache, shared) {
   const ctx = cache?.outlineLayerCtx;
   if (!cache || !ctx || !cache.outlineLayer) {
@@ -507,21 +562,6 @@ function createCanvas2DRenderer(canvas, shared = {}) {
     ctx.imageSmoothingEnabled = false;
   }
 
-  function fillBackground(color, options = {}) {
-    if (!ctx || !canvas) return;
-    const width = Math.max(1, options.pixelWidth || canvas.width || 1);
-    const height = Math.max(1, options.pixelHeight || canvas.height || 1);
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (!color) {
-      ctx.clearRect(0, 0, width, height);
-    } else {
-      ctx.fillStyle = color;
-      ctx.fillRect(0, 0, width, height);
-    }
-    ctx.restore();
-  }
-
   function renderPreview(options = {}) {
     const { puzzle, previewCanvas, previewCtx } = options;
     if (!puzzle) return null;
@@ -620,47 +660,6 @@ function createCanvas2DRenderer(canvas, shared = {}) {
     });
   }
 
-  function flashRegions(options = {}) {
-    const { regions, fillStyle, cache } = options;
-    if (!ctx || !cache?.ready || !Array.isArray(regions) || regions.length === 0) return;
-    const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-    const strokeWidth = cache.strokeWidth > 0 ? cache.strokeWidth : 1;
-    withRenderScale(ctx, scale, () => {
-      ctx.fillStyle = fillStyle;
-      ctx.strokeStyle = fillStyle;
-      ctx.lineWidth = strokeWidth;
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      if (shared?.supportsPath2D) {
-        for (const region of regions) {
-          const geometry = cache.regionsById.get(region.id);
-          if (!geometry?.path) continue;
-          ctx.fill(geometry.path);
-          ctx.stroke(geometry.path);
-        }
-        return;
-      }
-      for (const region of regions) {
-        const geometry = cache.regionsById.get(region.id);
-        const contours = geometry?.contours;
-        if (!contours) continue;
-        ctx.beginPath();
-        for (const contour of contours) {
-          if (!Array.isArray(contour) || contour.length === 0) continue;
-          const first = contour[0];
-          ctx.moveTo(first[0], first[1]);
-          for (let i = 1; i < contour.length; i++) {
-            const point = contour[i];
-            ctx.lineTo(point[0], point[1]);
-          }
-          ctx.closePath();
-        }
-        ctx.fill();
-        ctx.stroke();
-      }
-    });
-  }
-
   function measureText(font, text) {
     if (!measurementCtx) {
       return null;
@@ -681,8 +680,25 @@ function createCanvas2DRenderer(canvas, shared = {}) {
     resize,
     renderFrame,
     renderPreview,
-    flashRegions,
-    fillBackground,
+    flashRegions(options = {}) {
+      if (!ctx) return;
+      renderFlashRegions(ctx, {
+        cache: options.cache,
+        regions: options.regions,
+        fillStyle: options.fillStyle,
+        renderScale:
+          options.renderScale ?? options.metrics?.renderScale ?? shared?.canvasMetrics?.renderScale,
+        strokeWidth: options.strokeWidth,
+        supportsPath2D: shared?.supportsPath2D,
+      });
+    },
+    fillBackground(color, options = {}) {
+      if (!ctx) return;
+      fillCanvasBackground(ctx, color, {
+        pixelWidth: options.pixelWidth ?? options.metrics?.pixelWidth ?? canvas?.width,
+        pixelHeight: options.pixelHeight ?? options.metrics?.pixelHeight ?? canvas?.height,
+      });
+    },
     dispose,
     measureText,
   };
@@ -696,6 +712,8 @@ export {
   rebuildFilledLayer,
   rasterizeOutlineLayer,
   paintRegionToFilledLayer,
+  fillCanvasBackground,
+  renderFlashRegions,
 };
 
 export default createCanvas2DRenderer;
