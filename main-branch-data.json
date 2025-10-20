@@ -1,70 +1,70 @@
 {
   "commits": [
     {
-      "sha": "fe33216e51a4b14037ec9569e666fc2fe52a1f8a",
-      "shortSha": "fe33216",
-      "message": "Merge pull request #201 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml\n\nFix deploy workflow expressions for manual inputs",
+      "sha": "b6128fc398a01b88ae7b493e1bdb3fb678137637",
+      "shortSha": "b6128fc",
+      "message": "Merge pull request #202 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq\n\nEnsure allow_without_pr input is evaluated correctly",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T22:06:08Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/fe33216e51a4b14037ec9569e666fc2fe52a1f8a",
+      "date": "2025-10-20T22:15:39Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b6128fc398a01b88ae7b493e1bdb3fb678137637",
       "prs": [
         {
-          "number": 201,
-          "title": "Fix deploy workflow expressions for manual inputs",
-          "url": "https://github.com/shthed/capy/pull/201",
-          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml"
+          "number": 202,
+          "title": "Ensure allow_without_pr input is evaluated correctly",
+          "url": "https://github.com/shthed/capy/pull/202",
+          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq"
         }
       ]
     },
     {
-      "sha": "08b702804bb5329748fbabb752884faebe5bbe17",
-      "shortSha": "08b7028",
-      "message": "Fix ternary expressions in deploy workflow",
+      "sha": "dc7c804fffb11d37e7dee0e08c71c0b637c3a93f",
+      "shortSha": "dc7c804",
+      "message": "Merge branch 'main' into codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T22:04:44Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/08b702804bb5329748fbabb752884faebe5bbe17",
+      "date": "2025-10-20T22:14:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/dc7c804fffb11d37e7dee0e08c71c0b637c3a93f",
       "prs": [
         {
-          "number": 201,
-          "title": "Fix deploy workflow expressions for manual inputs",
-          "url": "https://github.com/shthed/capy/pull/201",
-          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml"
+          "number": 202,
+          "title": "Ensure allow_without_pr input is evaluated correctly",
+          "url": "https://github.com/shthed/capy/pull/202",
+          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq"
         }
       ]
     },
     {
-      "sha": "9472c8cb36a62415631e6c8cf8bdf912925b7a21",
-      "shortSha": "9472c8c",
-      "message": "Merge pull request #200 from shthed/codex/fix-deploy-branch.yml-workflow\n\nFix branch deploy workflow env quoting",
+      "sha": "f4511c94ff70ee9d96b355e1c3ee3732a2896305",
+      "shortSha": "f4511c9",
+      "message": "Clarify workflow env defaults and lint guidance",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T22:01:27Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9472c8cb36a62415631e6c8cf8bdf912925b7a21",
+      "date": "2025-10-20T22:13:28Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f4511c94ff70ee9d96b355e1c3ee3732a2896305",
       "prs": [
         {
-          "number": 200,
-          "title": "Fix branch deploy workflow env quoting",
-          "url": "https://github.com/shthed/capy/pull/200",
-          "branch": "codex/fix-deploy-branch.yml-workflow"
+          "number": 202,
+          "title": "Ensure allow_without_pr input is evaluated correctly",
+          "url": "https://github.com/shthed/capy/pull/202",
+          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq"
         }
       ]
     },
     {
-      "sha": "ccc529aafa76d1b26f06772a7e541e0a5645f469",
-      "shortSha": "ccc529a",
-      "message": "Quote workflow env expressions",
+      "sha": "270af17118af6c02928b958eaebe8528664b994c",
+      "shortSha": "270af17",
+      "message": "Fix allow_without_pr evaluation in deploy workflow",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T22:01:06Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/ccc529aafa76d1b26f06772a7e541e0a5645f469",
+      "date": "2025-10-20T22:08:32Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/270af17118af6c02928b958eaebe8528664b994c",
       "prs": [
         {
-          "number": 200,
-          "title": "Fix branch deploy workflow env quoting",
-          "url": "https://github.com/shthed/capy/pull/200",
-          "branch": "codex/fix-deploy-branch.yml-workflow"
+          "number": 202,
+          "title": "Ensure allow_without_pr input is evaluated correctly",
+          "url": "https://github.com/shthed/capy/pull/202",
+          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq"
         }
       ]
     }
   ],
-  "lastCommitDate": "2025-10-20T22:06:08Z",
-  "deploymentTimestamp": 1760997998525
+  "lastCommitDate": "2025-10-20T22:15:39Z",
+  "deploymentTimestamp": 1760998558551
 }

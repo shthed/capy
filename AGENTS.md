@@ -52,6 +52,8 @@ any feature or workflow changes you ship.
   cannot run it.
 - Targeted smoke run: `npm run test:smoke` for iterating on
   `tests/ui-review.spec.js`.
+- Workflow hygiene: When editing files under `.github/workflows/`, validate the
+  YAML with `npx yaml-lint <file>` before committing.
 - UI verification: Keep Playwright expectations aligned with UI markup, palette
   labels, and README imagery when making visual changes.
 - Artifacts: Capture Playwright reports under `artifacts/ui-review/` for major

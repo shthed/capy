@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "fe33216e51a4b14037ec9569e666fc2fe52a1f8a",
-    "message": "Merge pull request #201 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml\n\nFix deploy workflow expressions for manual inputs",
+    "commit": "b6128fc398a01b88ae7b493e1bdb3fb678137637",
+    "message": "Merge pull request #202 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq\n\nEnsure allow_without_pr input is evaluated correctly",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T06:06:08+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/fe33216e51a4b14037ec9569e666fc2fe52a1f8a",
+    "deployedAt": "2025-10-21T06:15:39+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/b6128fc398a01b88ae7b493e1bdb3fb678137637",
     "key": "main"
-  },
-  "codex-fix-invalid-syntax-in-deploy-branch.yml-40srvq": {
-    "key": "codex-fix-invalid-syntax-in-deploy-branch.yml-40srvq",
-    "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq",
-    "safeName": "codex-fix-invalid-syntax-in-deploy-branch.yml-40srvq",
-    "commit": "dc7c804fffb11d37e7dee0e08c71c0b637c3a93f",
-    "message": "Merge branch 'main' into codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq",
-    "actor": "shthed",
-    "deployedAt": "2025-10-21T06:14:45+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/dc7c804fffb11d37e7dee0e08c71c0b637c3a93f"
   }
 }
