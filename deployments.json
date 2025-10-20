@@ -29,6 +29,16 @@
     "commitUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
     "key": "codex-introduce-renderer-abstraction-for-webgl"
   },
+  "codex-pull-and-merge-from-origin-main": {
+    "key": "codex-pull-and-merge-from-origin-main",
+    "branch": "codex/pull-and-merge-from-origin-main",
+    "safeName": "codex-pull-and-merge-from-origin-main",
+    "commit": "71e8a8c1b4d79f0807769f33d219ae5df2911c6c",
+    "message": "Merge remote-tracking branch 'origin/main' into work",
+    "actor": "shthed",
+    "deployedAt": "2025-10-20T18:11:38+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/71e8a8c1b4d79f0807769f33d219ae5df2911c6c"
+  },
   "codex-refactor-prepare-deploy-metadata-for-fetch-usage": {
     "key": "codex-refactor-prepare-deploy-metadata-for-fetch-usage",
     "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage",
