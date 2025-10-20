@@ -19,6 +19,16 @@
     "deployedAt": "2025-10-20T12:07:54+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/3cb675476d1527cff0dc119806ff6d9949644e49"
   },
+  "codex-add-workflow_dispatch-trigger-to-branch": {
+    "key": "codex-add-workflow_dispatch-trigger-to-branch",
+    "branch": "codex/add-workflow_dispatch-trigger-to-branch",
+    "safeName": "codex-add-workflow_dispatch-trigger-to-branch",
+    "commit": "72bfa577407750b0bd13ad7b145422846110dc7f",
+    "message": "Merge pull request #181 from shthed/codex/refactor-canvas-rendering-to-use-controller\n\nModularize puzzle renderer via controller abstraction",
+    "actor": "shthed",
+    "deployedAt": "2025-10-20T18:10:11+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/72bfa577407750b0bd13ad7b145422846110dc7f"
+  },
   "codex-introduce-renderer-abstraction-for-webgl": {
     "branch": "codex/introduce-renderer-abstraction-for-webgl",
     "safeName": "codex-introduce-renderer-abstraction-for-webgl",
