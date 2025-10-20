@@ -3316,6 +3316,66 @@
         // Public hooks for tests and manual loading. Keep backwards compatible.
         window.capyGenerator = {
           getState: () => state,
+          getRendererType() {
+            return state.rendering?.controller?.getRendererType?.() || null;
+          },
+          listRenderers() {
+            const controller = state.rendering?.controller;
+            if (!controller?.listRenderers) {
+              return [];
+            }
+            try {
+              return controller.listRenderers();
+            } catch (error) {
+              console.error("Unable to list renderers", error);
+              return [];
+            }
+          },
+          setRenderer(type) {
+            const controller = state.rendering?.controller;
+            if (!controller?.setRenderer) {
+              return null;
+            }
+            try {
+              const result = controller.setRenderer(type);
+              if (result) {
+                applyCanvasSizing();
+                renderPuzzle();
+              }
+            } catch (error) {
+              console.error(`Failed to activate renderer: ${type}`, error);
+            }
+            return controller.getRendererType?.() || null;
+          },
+          registerRenderer(type, factory) {
+            const controller = state.rendering?.controller;
+            if (!controller?.registerRenderer) {
+              return false;
+            }
+            try {
+              const registered = controller.registerRenderer(type, factory);
+              if (registered && controller.getRendererType?.() === type) {
+                applyCanvasSizing();
+                renderPuzzle();
+              }
+              return registered;
+            } catch (error) {
+              console.error(`Failed to register renderer: ${type}`, error);
+              return false;
+            }
+          },
+          unregisterRenderer(type) {
+            const controller = state.rendering?.controller;
+            if (!controller?.unregisterRenderer) {
+              return false;
+            }
+            try {
+              return controller.unregisterRenderer(type);
+            } catch (error) {
+              console.error(`Failed to unregister renderer: ${type}`, error);
+              return false;
+            }
+          },
           loadFromDataUrl(dataUrl, metadata) {
             if (typeof dataUrl !== "string" || dataUrl.length === 0) {
               return;
