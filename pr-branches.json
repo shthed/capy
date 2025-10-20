@@ -1,11 +1,11 @@
 [
   {
-    "branch": "codex/pull-and-merge-from-origin-main",
-    "safeName": "codex-pull-and-merge-from-origin-main",
-    "title": "Merge origin/main into work",
-    "number": 191,
-    "updatedAt": "2025-10-20T10:33:11Z",
-    "url": "https://github.com/shthed/capy/pull/191"
+    "branch": "codex/render-region-number-labels",
+    "safeName": "codex-render-region-number-labels",
+    "title": "Ensure region number labels render correctly",
+    "number": 182,
+    "updatedAt": "2025-10-20T10:38:22Z",
+    "url": "https://github.com/shthed/capy/pull/182"
   },
   {
     "branch": "codex/add-workflow_dispatch-trigger-to-branch",
@@ -30,14 +30,6 @@
     "number": 189,
     "updatedAt": "2025-10-20T01:20:01Z",
     "url": "https://github.com/shthed/capy/pull/189"
-  },
-  {
-    "branch": "codex/render-region-number-labels",
-    "safeName": "codex-render-region-number-labels",
-    "title": "Ensure region number labels render correctly",
-    "number": 182,
-    "updatedAt": "2025-10-18T06:10:23Z",
-    "url": "https://github.com/shthed/capy/pull/182"
   },
   {
     "branch": "codex/introduce-renderer-abstraction-for-webgl",

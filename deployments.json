@@ -2,11 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "b538d36e97087e7f7f1e1cfc1328959bac3eb017",
-    "message": "Merge pull request #187 from shthed/codex/refactor-prepare-deploy-metadata-for-fetch-usage\n\nUse fetch to build deployment metadata",
+    "commit": "472db746a90d9ccab58d2ed756ae8fdd76b24977",
+    "message": "Merge pull request #193 from shthed/codex/add-tests-for-game-loading-and-completing",
     "actor": "shthed",
-    "deployedAt": "2025-10-20T18:34:14+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/b538d36e97087e7f7f1e1cfc1328959bac3eb017",
+    "deployedAt": "2025-10-20T10:50:29Z",
+    "commitUrl": "https://github.com/shthed/capy/commit/472db746a90d9ccab58d2ed756ae8fdd76b24977",
     "key": "main"
   },
   "codex-add-canvas2d-renderer-implementation": {
@@ -18,16 +18,6 @@
     "actor": "shthed",
     "deployedAt": "2025-10-20T12:07:54+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/3cb675476d1527cff0dc119806ff6d9949644e49"
-  },
-  "codex-add-tests-for-game-loading-and-completing": {
-    "key": "codex-add-tests-for-game-loading-and-completing",
-    "branch": "codex/add-tests-for-game-loading-and-completing",
-    "safeName": "codex-add-tests-for-game-loading-and-completing",
-    "commit": "4a49d2577844d9a20f656028f0a4bac212e6c609",
-    "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
-    "actor": "shthed",
-    "deployedAt": "2025-10-18T07:37:01+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609"
   },
   "codex-add-workflow_dispatch-trigger-to-branch": {
     "key": "codex-add-workflow_dispatch-trigger-to-branch",
@@ -48,16 +38,6 @@
     "deployedAt": "2025-10-16T03:32:54Z",
     "commitUrl": "https://github.com/shthed/capy/commit/fedcafb678bac485449081f8a860a06f34ce0180",
     "key": "codex-introduce-renderer-abstraction-for-webgl"
-  },
-  "codex-pull-and-merge-from-origin-main": {
-    "key": "codex-pull-and-merge-from-origin-main",
-    "branch": "codex/pull-and-merge-from-origin-main",
-    "safeName": "codex-pull-and-merge-from-origin-main",
-    "commit": "8170c606ed2d4b3f62ebc5858246d6082e275857",
-    "message": "Add local Markdown fallback for README HTML",
-    "actor": "shthed",
-    "deployedAt": "2025-10-20T18:33:08+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/8170c606ed2d4b3f62ebc5858246d6082e275857"
   },
   "codex-render-region-number-labels": {
     "key": "codex-render-region-number-labels",

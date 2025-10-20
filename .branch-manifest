@@ -1,7 +1,5 @@
 codex-add-canvas2d-renderer-implementation
-codex-add-tests-for-game-loading-and-completing
 codex-add-workflow_dispatch-trigger-to-branch
 codex-introduce-renderer-abstraction-for-webgl
-codex-pull-and-merge-from-origin-main
 codex-render-region-number-labels
 copilot-deploy-capy-pull-181

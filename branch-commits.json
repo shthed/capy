@@ -1,124 +1,124 @@
 {
-  "codex/pull-and-merge-from-origin-main": [
+  "codex/render-region-number-labels": [
     {
-      "sha": "8170c606ed2d4b3f62ebc5858246d6082e275857",
-      "shortSha": "8170c60",
-      "message": "Add local Markdown fallback for README HTML",
-      "date": "2025-10-20T10:33:08Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/8170c606ed2d4b3f62ebc5858246d6082e275857",
+      "sha": "c4e0a8a69a355af98bd1733ee3e8919592966640",
+      "shortSha": "c4e0a8a",
+      "message": "Retry region label layout when measurement fails",
+      "date": "2025-10-20T10:38:19Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/c4e0a8a69a355af98bd1733ee3e8919592966640",
       "prs": [
         {
-          "number": 191,
-          "title": "Merge origin/main into work",
-          "url": "https://github.com/shthed/capy/pull/191",
-          "branch": "codex/pull-and-merge-from-origin-main"
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
         }
       ]
     },
     {
-      "sha": "71e8a8c1b4d79f0807769f33d219ae5df2911c6c",
-      "shortSha": "71e8a8c",
-      "message": "Merge remote-tracking branch 'origin/main' into work",
-      "date": "2025-10-20T10:11:38Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/71e8a8c1b4d79f0807769f33d219ae5df2911c6c",
+      "sha": "2a84f83ebafa70fee6df0374c808d68476832b76",
+      "shortSha": "2a84f83",
+      "message": "Restore region number measurement context",
+      "date": "2025-10-18T06:10:20Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2a84f83ebafa70fee6df0374c808d68476832b76",
       "prs": [
         {
-          "number": 191,
-          "title": "Merge origin/main into work",
-          "url": "https://github.com/shthed/capy/pull/191",
-          "branch": "codex/pull-and-merge-from-origin-main"
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
         }
       ]
     },
     {
-      "sha": "06b9c12ae94c0199a9c179f98f75e332c8ee6881",
-      "shortSha": "06b9c12",
-      "message": "Normalize renderer controller factories",
-      "date": "2025-10-19T08:46:12Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/06b9c12ae94c0199a9c179f98f75e332c8ee6881",
+      "sha": "2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
+      "shortSha": "2fb6c00",
+      "message": "Fix label metrics under canvas transforms",
+      "date": "2025-10-18T04:27:53Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
       "prs": [
         {
-          "number": 191,
-          "title": "Merge origin/main into work",
-          "url": "https://github.com/shthed/capy/pull/191",
-          "branch": "codex/pull-and-merge-from-origin-main"
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
         }
       ]
     },
     {
-      "sha": "121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
-      "shortSha": "121e8a5",
-      "message": "Refactor puzzle renderer through controller",
-      "date": "2025-10-18T04:24:57Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
+      "sha": "4a49d2577844d9a20f656028f0a4bac212e6c609",
+      "shortSha": "4a49d25",
+      "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
+      "date": "2025-10-17T23:37:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609",
       "prs": [
         {
-          "number": 191,
-          "title": "Merge origin/main into work",
-          "url": "https://github.com/shthed/capy/pull/191",
-          "branch": "codex/pull-and-merge-from-origin-main"
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
         }
       ]
     }
   ],
-  "codex-pull-and-merge-from-origin-main": [
+  "codex-render-region-number-labels": [
     {
-      "sha": "8170c606ed2d4b3f62ebc5858246d6082e275857",
-      "shortSha": "8170c60",
-      "message": "Add local Markdown fallback for README HTML",
-      "date": "2025-10-20T10:33:08Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/8170c606ed2d4b3f62ebc5858246d6082e275857",
+      "sha": "c4e0a8a69a355af98bd1733ee3e8919592966640",
+      "shortSha": "c4e0a8a",
+      "message": "Retry region label layout when measurement fails",
+      "date": "2025-10-20T10:38:19Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/c4e0a8a69a355af98bd1733ee3e8919592966640",
       "prs": [
         {
-          "number": 191,
-          "title": "Merge origin/main into work",
-          "url": "https://github.com/shthed/capy/pull/191",
-          "branch": "codex/pull-and-merge-from-origin-main"
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
         }
       ]
     },
     {
-      "sha": "71e8a8c1b4d79f0807769f33d219ae5df2911c6c",
-      "shortSha": "71e8a8c",
-      "message": "Merge remote-tracking branch 'origin/main' into work",
-      "date": "2025-10-20T10:11:38Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/71e8a8c1b4d79f0807769f33d219ae5df2911c6c",
+      "sha": "2a84f83ebafa70fee6df0374c808d68476832b76",
+      "shortSha": "2a84f83",
+      "message": "Restore region number measurement context",
+      "date": "2025-10-18T06:10:20Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2a84f83ebafa70fee6df0374c808d68476832b76",
       "prs": [
         {
-          "number": 191,
-          "title": "Merge origin/main into work",
-          "url": "https://github.com/shthed/capy/pull/191",
-          "branch": "codex/pull-and-merge-from-origin-main"
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
         }
       ]
     },
     {
-      "sha": "06b9c12ae94c0199a9c179f98f75e332c8ee6881",
-      "shortSha": "06b9c12",
-      "message": "Normalize renderer controller factories",
-      "date": "2025-10-19T08:46:12Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/06b9c12ae94c0199a9c179f98f75e332c8ee6881",
+      "sha": "2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
+      "shortSha": "2fb6c00",
+      "message": "Fix label metrics under canvas transforms",
+      "date": "2025-10-18T04:27:53Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
       "prs": [
         {
-          "number": 191,
-          "title": "Merge origin/main into work",
-          "url": "https://github.com/shthed/capy/pull/191",
-          "branch": "codex/pull-and-merge-from-origin-main"
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
         }
       ]
     },
     {
-      "sha": "121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
-      "shortSha": "121e8a5",
-      "message": "Refactor puzzle renderer through controller",
-      "date": "2025-10-18T04:24:57Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
+      "sha": "4a49d2577844d9a20f656028f0a4bac212e6c609",
+      "shortSha": "4a49d25",
+      "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
+      "date": "2025-10-17T23:37:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609",
       "prs": [
         {
-          "number": 191,
-          "title": "Merge origin/main into work",
-          "url": "https://github.com/shthed/capy/pull/191",
-          "branch": "codex/pull-and-merge-from-origin-main"
+          "number": 182,
+          "title": "Ensure region number labels render correctly",
+          "url": "https://github.com/shthed/capy/pull/182",
+          "branch": "codex/render-region-number-labels"
         }
       ]
     }
@@ -491,130 +491,6 @@
           "title": "Fix PR #181 deployment by updating workflow and adding missing scripts",
           "url": "https://github.com/shthed/capy/pull/189",
           "branch": "copilot/deploy-capy-pull-181"
-        }
-      ]
-    }
-  ],
-  "codex/render-region-number-labels": [
-    {
-      "sha": "2a84f83ebafa70fee6df0374c808d68476832b76",
-      "shortSha": "2a84f83",
-      "message": "Restore region number measurement context",
-      "date": "2025-10-18T06:10:20Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/2a84f83ebafa70fee6df0374c808d68476832b76",
-      "prs": [
-        {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
-        }
-      ]
-    },
-    {
-      "sha": "2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
-      "shortSha": "2fb6c00",
-      "message": "Fix label metrics under canvas transforms",
-      "date": "2025-10-18T04:27:53Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
-      "prs": [
-        {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
-        }
-      ]
-    },
-    {
-      "sha": "4a49d2577844d9a20f656028f0a4bac212e6c609",
-      "shortSha": "4a49d25",
-      "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
-      "date": "2025-10-17T23:37:01Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609",
-      "prs": [
-        {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
-        }
-      ]
-    },
-    {
-      "sha": "895b96a23cf8b189eb84ffde93d906f220be97dd",
-      "shortSha": "895b96a",
-      "message": "Hide outlines for filled regions",
-      "date": "2025-10-17T23:34:24Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/895b96a23cf8b189eb84ffde93d906f220be97dd",
-      "prs": [
-        {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
-        }
-      ]
-    }
-  ],
-  "codex-render-region-number-labels": [
-    {
-      "sha": "2a84f83ebafa70fee6df0374c808d68476832b76",
-      "shortSha": "2a84f83",
-      "message": "Restore region number measurement context",
-      "date": "2025-10-18T06:10:20Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/2a84f83ebafa70fee6df0374c808d68476832b76",
-      "prs": [
-        {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
-        }
-      ]
-    },
-    {
-      "sha": "2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
-      "shortSha": "2fb6c00",
-      "message": "Fix label metrics under canvas transforms",
-      "date": "2025-10-18T04:27:53Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/2fb6c0054da3c39b957a3c9f2354fc8227c9699a",
-      "prs": [
-        {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
-        }
-      ]
-    },
-    {
-      "sha": "4a49d2577844d9a20f656028f0a4bac212e6c609",
-      "shortSha": "4a49d25",
-      "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
-      "date": "2025-10-17T23:37:01Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609",
-      "prs": [
-        {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
-        }
-      ]
-    },
-    {
-      "sha": "895b96a23cf8b189eb84ffde93d906f220be97dd",
-      "shortSha": "895b96a",
-      "message": "Hide outlines for filled regions",
-      "date": "2025-10-17T23:34:24Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/895b96a23cf8b189eb84ffde93d906f220be97dd",
-      "prs": [
-        {
-          "number": 182,
-          "title": "Ensure region number labels render correctly",
-          "url": "https://github.com/shthed/capy/pull/182",
-          "branch": "codex/render-region-number-labels"
         }
       ]
     }
