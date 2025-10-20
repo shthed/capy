@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "http-server -c-1 . -p 8000",
-    "test": "node ./scripts/run-tests.js"
+    "test": "node ./scripts/run-tests.js",
+    "test:smoke": "playwright test --config=playwright.config.js --project=chromium-desktop"
   },
   "devDependencies": {
     "@playwright/test": "^1.43.1",
