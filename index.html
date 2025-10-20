@@ -1827,6 +1827,20 @@
           </label>
           <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
         </section>
+        <section class="sheet-section" aria-labelledby="hintTypesHeading">
+          <h3 id="hintTypesHeading">Hint types</h3>
+          <p class="control-note">Pick which guidance effects appear while you play.</p>
+          <label class="toggle">
+            <input id="hintMatchingToggle" type="checkbox" checked />
+            <span>Highlight every region for the active colour</span>
+          </label>
+          <p class="control-note">Toggle the pulse that flashes all remaining regions sharing the selected colour.</p>
+          <label class="toggle">
+            <input id="hintHoverToggle" type="checkbox" checked />
+            <span>Spotlight hovered regions</span>
+          </label>
+          <p class="control-note">Show a focused hint when you pause the pointer over a region.</p>
+        </section>
         <section class="sheet-section" aria-labelledby="mouseControlsHeading">
           <h3 id="mouseControlsHeading">Mouse controls</h3>
           <p class="control-note">
@@ -1991,6 +2005,8 @@
       const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
+      const hintMatchingToggle = document.getElementById("hintMatchingToggle");
+      const hintHoverToggle = document.getElementById("hintHoverToggle");
       const hintFadeDurationInput = document.getElementById("hintFadeDuration");
       const hintIntensityInput = document.getElementById("hintIntensity");
       const difficultySelect = document.getElementById("difficultySelect");
@@ -2092,6 +2108,11 @@
       const DEFAULT_HINT_INTENSITY = 0.65;
       const MIN_HINT_INTENSITY = 0.2;
       const MAX_HINT_INTENSITY = 0.9;
+      const DEFAULT_HINT_TYPES = {
+        matchingRegions: true,
+        hoverRegions: true,
+      };
+      const HINT_TYPE_KEYS = ["matchingRegions", "hoverRegions"];
       const DEFAULT_DIFFICULTY = "normal";
       const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
       const MOUSE_BUTTON_KEYS = ["left", "middle", "right"];
@@ -3229,6 +3250,7 @@
           animateHints: true,
           hintFadeDuration: DEFAULT_HINT_FADE_DURATION,
           hintIntensity: DEFAULT_HINT_INTENSITY,
+          hintTypes: { ...DEFAULT_HINT_TYPES },
           difficulty: DEFAULT_DIFFICULTY,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
@@ -3511,6 +3533,9 @@
             hintFlashToggle.checked = settings.animateHints;
           }
         }
+        const hintTypes = normalizeHintTypes(settings.hintTypes, state.settings.hintTypes);
+        state.settings.hintTypes = hintTypes;
+        syncHintTypeToggles();
         if (settings.hintFadeDuration != null) {
           const duration = normalizeHintFadeDuration(settings.hintFadeDuration);
           state.settings.hintFadeDuration = duration;
@@ -3942,9 +3967,42 @@
         if (!hintFlashToggle.checked) {
           clearOverlayAnimations();
         }
+        syncHintTypeToggles();
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
         scheduleAutosave("settings-hint-animations");
       });
+
+      if (hintMatchingToggle) {
+        hintMatchingToggle.addEventListener("change", () => {
+          const next = normalizeHintTypes(
+            { ...state.settings.hintTypes, matchingRegions: hintMatchingToggle.checked },
+            state.settings.hintTypes
+          );
+          state.settings.hintTypes = next;
+          if (!next.matchingRegions) {
+            clearOverlayAnimations();
+          } else if (state.settings.animateHints && state.activeColor != null) {
+            flashColorRegions(state.activeColor);
+          }
+          logDebug(`Matching colour hints ${next.matchingRegions ? "enabled" : "disabled"}`);
+          scheduleAutosave("settings-hint-matching");
+        });
+      }
+
+      if (hintHoverToggle) {
+        hintHoverToggle.addEventListener("change", () => {
+          const next = normalizeHintTypes(
+            { ...state.settings.hintTypes, hoverRegions: hintHoverToggle.checked },
+            state.settings.hintTypes
+          );
+          state.settings.hintTypes = next;
+          if (!next.hoverRegions) {
+            clearOverlayAnimations();
+          }
+          logDebug(`Hover hints ${next.hoverRegions ? "enabled" : "disabled"}`);
+          scheduleAutosave("settings-hint-hover");
+        });
+      }
 
       if (difficultySelect) {
         difficultySelect.value = resolveDifficulty(difficultySelect.value);
@@ -4331,6 +4389,12 @@
         if (state.previewVisible) return;
         if (!region) return;
         const { trigger = "hover", flashSwatch = false } = options;
+        if (!isHintTypeEnabled("hoverRegions")) {
+          if (flashSwatch) {
+            flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+          }
+          return;
+        }
         const now = Date.now();
         const delay = trigger === "press" ? REGION_HINT_PRESS_DELAY_MS : REGION_HINT_HOVER_DELAY_MS;
         if (lastRegionHintId === region.id && now - lastRegionHintTime < delay) {
@@ -4372,10 +4436,18 @@
         if (state.filled.has(regionId)) {
           const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
           if (remaining.length > 0) {
-            flashColorRegions(region.colorId, { paletteColor: getPaletteEntry(region.colorId), onlyUnfilled: true });
+            const matchingHintsEnabled = isHintTypeEnabled("matchingRegions");
+            if (matchingHintsEnabled) {
+              flashColorRegions(region.colorId, {
+                paletteColor: getPaletteEntry(region.colorId),
+                onlyUnfilled: true,
+              });
+            }
             const regionWord = remaining.length === 1 ? "region" : "regions";
             logDebug(
-              `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
+              matchingHintsEnabled
+                ? `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
+                : `Region ${region.id} already filled; ${remaining.length} ${regionWord} still remain for colour #${region.colorId}`
             );
           } else {
             logDebug(`Region ${region.id} already filled; ignoring ${label}`);
@@ -4391,11 +4463,13 @@
             const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
             if (state.settings.animateHints) {
               flashRegion(regionId, { paletteColor, tint: fallbackTint, includeFilled: false });
-              flashColorRegions(region.colorId, {
-                paletteColor,
-                tint: fallbackTint,
-                onlyUnfilled: true,
-              });
+              if (isHintTypeEnabled("matchingRegions")) {
+                flashColorRegions(region.colorId, {
+                  paletteColor,
+                  tint: fallbackTint,
+                  onlyUnfilled: true,
+                });
+              }
             }
             flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
             logDebug(
@@ -4415,7 +4489,9 @@
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
-          flashColorRegions(state.activeColor);
+          if (isHintTypeEnabled("matchingRegions")) {
+            flashColorRegions(state.activeColor);
+          }
         }
         updateProgress();
         updateCommandStates();
@@ -5853,7 +5929,9 @@
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
-          flashColorRegions(state.activeColor);
+          if (isHintTypeEnabled("matchingRegions")) {
+            flashColorRegions(state.activeColor);
+          }
         }
         updateProgress();
         updateCommandStates();
@@ -6492,7 +6570,7 @@
           renderPalette();
         }
         scrollPaletteToColor(colorId);
-        if (flash) {
+        if (flash && isHintTypeEnabled("matchingRegions")) {
           flashColorRegions(colorId);
         }
         const remaining = getRegionsByColor(colorId, { includeFilled: false }).length;
@@ -7863,7 +7941,9 @@
         if (state.settings.animateHints) {
           const paletteColor = getPaletteEntry(target.colorId);
           flashRegion(target.id, { paletteColor });
-          flashColorRegions(target.colorId, { paletteColor, onlyUnfilled: true });
+          if (isHintTypeEnabled("matchingRegions")) {
+            flashColorRegions(target.colorId, { paletteColor, onlyUnfilled: true });
+          }
         }
         logDebug(`Hint spotlighted region ${target.id} (colour #${target.colorId})`);
       }
@@ -7871,6 +7951,7 @@
       function flashColorRegions(colorId, options = {}) {
         if (!state.puzzle) return;
         if (colorId == null) return;
+        if (!isHintTypeEnabled("matchingRegions") && !options.force) return;
         const includeFilled = options.onlyUnfilled ? false : true;
         const targets = getRegionsByColor(colorId, { includeFilled });
         if (targets.length === 0) {
@@ -8095,6 +8176,47 @@
           candidate = DEFAULT_HINT_INTENSITY;
         }
         return clamp(candidate, MIN_HINT_INTENSITY, MAX_HINT_INTENSITY);
+      }
+
+      function normalizeHintTypes(source, fallback = DEFAULT_HINT_TYPES) {
+        const base = fallback && typeof fallback === "object" ? fallback : DEFAULT_HINT_TYPES;
+        const target = {};
+        for (const key of HINT_TYPE_KEYS) {
+          if (!Object.prototype.hasOwnProperty.call(base, key)) {
+            continue;
+          }
+          if (source && typeof source === "object" && key in source) {
+            target[key] = source[key] !== false;
+          } else {
+            target[key] = base[key] !== false;
+          }
+        }
+        return target;
+      }
+
+      function isHintTypeEnabled(key) {
+        if (state.settings.animateHints === false) {
+          return false;
+        }
+        if (!HINT_TYPE_KEYS.includes(key)) {
+          return true;
+        }
+        const source = state.settings?.hintTypes;
+        if (!source || typeof source !== "object") {
+          return DEFAULT_HINT_TYPES[key] !== false;
+        }
+        return source[key] !== false;
+      }
+
+      function syncHintTypeToggles() {
+        const normalized = normalizeHintTypes(state.settings?.hintTypes);
+        state.settings.hintTypes = normalized;
+        if (hintMatchingToggle) {
+          hintMatchingToggle.checked = normalized.matchingRegions !== false;
+        }
+        if (hintHoverToggle) {
+          hintHoverToggle.checked = normalized.hoverRegions !== false;
+        }
       }
 
       function resolveDifficulty(value) {
@@ -8353,6 +8475,7 @@
         payload.settings = {
           autoAdvance: Boolean(settingsSource.autoAdvance),
           animateHints: Boolean(settingsSource.animateHints),
+          hintTypes: normalizeHintTypes(settingsSource.hintTypes ?? state.settings.hintTypes),
           hintFadeDuration: normalizeHintFadeDuration(
             settingsSource.hintFadeDuration ?? state.settings.hintFadeDuration
           ),
@@ -8466,6 +8589,7 @@
           settings: {
             autoAdvance: Boolean(state.settings.autoAdvance),
             animateHints: Boolean(state.settings.animateHints),
+            hintTypes: normalizeHintTypes(state.settings.hintTypes),
             hintFadeDuration: normalizeHintFadeDuration(state.settings.hintFadeDuration),
             hintIntensity: normalizeHintIntensity(state.settings.hintIntensity),
             difficulty: resolveDifficulty(state.settings.difficulty),
