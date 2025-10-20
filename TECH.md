@@ -30,6 +30,7 @@ single `index.html` document—no build tools or extra runtime required.
 - **Testing & QA**
   - `tests/ui-review.spec.js` – Playwright smoke tests that load the bundled puzzle, record a first stroke, and exercise the save manager by restoring and completing an almost-finished board.
   - `artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
+  - **Playwright local setup** – Run `npx playwright install` plus `npx playwright install-deps` after `npm install` when provisioning a new machine so the bundled Chromium/Firefox/WebKit binaries and their shared library dependencies are ready for UI review runs.
 - **Tooling & metadata**
   - `package.json` – npm scripts plus the `http-server` dependency required to run the app locally.
   - `package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
