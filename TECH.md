@@ -40,10 +40,13 @@ single `index.html` document—no build tools or extra runtime required.
 ## Deployment & Branch Previews
 
 Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs on
-every push and optional manual dispatches:
+every push and optional manual dispatches (trigger the manual run from `main`
+and provide the `target_branch` input so the workflow checks out the right
+source):
 
 1. **PR gate.** The workflow exits early unless the branch has an open PR.
-   `main` is the exception—it always deploys.
+   `main` is the exception—it always deploys. Manual runs can opt-in to deploy
+   without an open review by setting the `allow_without_pr` input.
 2. **Checkout & sanitise.** The action checks out the source branch and the
    `gh-pages` deployment branch, converts branch names into URL-safe slugs
    (e.g., `automation/feature` → `automation-feature`), and creates a matching
