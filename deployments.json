@@ -19,6 +19,16 @@
     "deployedAt": "2025-10-20T12:07:54+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/3cb675476d1527cff0dc119806ff6d9949644e49"
   },
+  "codex-add-tests-for-game-loading-and-completing": {
+    "key": "codex-add-tests-for-game-loading-and-completing",
+    "branch": "codex/add-tests-for-game-loading-and-completing",
+    "safeName": "codex-add-tests-for-game-loading-and-completing",
+    "commit": "4a49d2577844d9a20f656028f0a4bac212e6c609",
+    "message": "Merge pull request #179 from shthed/codex/remove-border-for-filled-regions\n\nHide puzzle outlines for filled regions",
+    "actor": "shthed",
+    "deployedAt": "2025-10-18T07:37:01+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/4a49d2577844d9a20f656028f0a4bac212e6c609"
+  },
   "codex-add-workflow_dispatch-trigger-to-branch": {
     "key": "codex-add-workflow_dispatch-trigger-to-branch",
     "branch": "codex/add-workflow_dispatch-trigger-to-branch",
