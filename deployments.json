@@ -13,10 +13,10 @@
     "key": "codex-extend-webgl-renderer-for-textures-and-caching",
     "branch": "codex/extend-webgl-renderer-for-textures-and-caching",
     "safeName": "codex-extend-webgl-renderer-for-textures-and-caching",
-    "commit": "b6128fc398a01b88ae7b493e1bdb3fb678137637",
-    "message": "Merge pull request #202 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq\n\nEnsure allow_without_pr input is evaluated correctly",
+    "commit": "fc2292b48f53d2cc769f14e595e0b10b0b8647d0",
+    "message": "Add textured passes to WebGL renderer",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T06:15:39+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/b6128fc398a01b88ae7b493e1bdb3fb678137637"
+    "deployedAt": "2025-10-21T06:42:25+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/fc2292b48f53d2cc769f14e595e0b10b0b8647d0"
   }
 }
