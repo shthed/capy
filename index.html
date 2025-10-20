@@ -10,7 +10,7 @@
     - Viewport + stage: #viewport, #canvasStage, and #canvasTransform cooperate with viewState for
       pan/zoom. Pointer handlers (handlePanStart/Move/End) and applyZoom feed navigation updates.
     - Puzzle state & rendering: state holds palette, fills, and metadata. renderPuzzle →
-      Canvas2D renderer draws fills/labels via ensureRenderCache-backed geometry.
+      drawOutlines/drawNumbers use ensureRenderCache to hydrate canvases and labels.
     - Generation pipeline: loadImage → createPuzzleData orchestrates quantization, segmentation,
       and palette prep. Regeneration, fixture loading, and saves all call applyPuzzleResult.
     - Persistence + exports: createGameSaveManager backs the Saves sheet. Autosave,
@@ -397,6 +397,8 @@
         padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
         overflow: hidden;
         background: none;
+        touch-action: none;
+        cursor: grab;
       }
 
       body[data-orientation="portrait"] #viewport {
@@ -1695,6 +1697,16 @@
           </label>
           <p class="control-note">Controls the longest edge used when resizing the source image.</p>
           <label class="control">
+            <span>Algorithm</span>
+            <select id="generationAlgorithm">
+              <option value="local-kmeans">Local palette clustering (k-means)</option>
+              <option value="local-posterize">Local posterize &amp; merge</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Choose between local clustering pipelines now, with space for hosted services to appear as they become available.
+          </p>
+          <label class="control">
             <span>Sample rate <output data-for="sampleRate">65%</output></span>
             <input id="sampleRate" type="range" min="25" max="100" step="5" value="65" />
           </label>
@@ -1703,10 +1715,16 @@
             <span>Iterations <output data-for="kmeansIters">12</output></span>
             <input id="kmeansIters" type="range" min="4" max="32" step="1" value="12" />
           </label>
+          <p class="control-note">
+            Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process.
+          </p>
           <label class="control">
             <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
             <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
           </label>
+          <p class="control-note">
+            Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source.
+          </p>
           <details class="advanced-options" id="generatorAdvanced">
             <summary>Advanced options</summary>
             <label class="control">
@@ -1809,6 +1827,90 @@
           </label>
           <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
         </section>
+        <section class="sheet-section" aria-labelledby="hintTypesHeading">
+          <h3 id="hintTypesHeading">Hint types</h3>
+          <p class="control-note">Pick which guidance effects appear while you play.</p>
+          <label class="toggle">
+            <input id="hintMatchingToggle" type="checkbox" checked />
+            <span>Highlight every region for the active colour</span>
+          </label>
+          <p class="control-note">Toggle the pulse that flashes all remaining regions sharing the selected colour.</p>
+          <label class="toggle">
+            <input id="hintHoverToggle" type="checkbox" checked />
+            <span>Spotlight hovered regions</span>
+          </label>
+          <p class="control-note">Show a focused hint when you pause the pointer over a region.</p>
+        </section>
+        <section class="sheet-section" aria-labelledby="mouseControlsHeading">
+          <h3 id="mouseControlsHeading">Mouse controls</h3>
+          <p class="control-note">
+            Assign actions to each mouse button when clicking or click-dragging on the
+            canvas.
+          </p>
+          <label class="control">
+            <span>Left button &mdash; click</span>
+            <select id="mouseLeftClick">
+              <option value="fill" selected>Fill region</option>
+              <option value="select-fill">Select and fill region</option>
+              <option value="select">Select colour</option>
+              <option value="zoom-in">Zoom in</option>
+              <option value="zoom-out">Zoom out</option>
+              <option value="none">No action</option>
+            </select>
+          </label>
+          <label class="control">
+            <span>Left button &mdash; click + drag</span>
+            <select id="mouseLeftDrag">
+              <option value="pan" selected>Pan view</option>
+              <option value="fill">Fill while dragging</option>
+              <option value="zoom">Zoom</option>
+              <option value="none">No action</option>
+            </select>
+          </label>
+          <label class="control">
+            <span>Middle button &mdash; click</span>
+            <select id="mouseMiddleClick">
+              <option value="fill">Fill region</option>
+              <option value="select-fill">Select and fill region</option>
+              <option value="select">Select colour</option>
+              <option value="zoom-in">Zoom in</option>
+              <option value="zoom-out">Zoom out</option>
+              <option value="none" selected>No action</option>
+            </select>
+          </label>
+          <label class="control">
+            <span>Middle button &mdash; click + drag</span>
+            <select id="mouseMiddleDrag">
+              <option value="pan" selected>Pan view</option>
+              <option value="fill">Fill while dragging</option>
+              <option value="zoom">Zoom</option>
+              <option value="none">No action</option>
+            </select>
+          </label>
+          <label class="control">
+            <span>Right button &mdash; click</span>
+            <select id="mouseRightClick">
+              <option value="fill">Fill region</option>
+              <option value="select-fill">Select and fill region</option>
+              <option value="select" selected>Select colour</option>
+              <option value="zoom-in">Zoom in</option>
+              <option value="zoom-out">Zoom out</option>
+              <option value="none">No action</option>
+            </select>
+          </label>
+          <label class="control">
+            <span>Right button &mdash; click + drag</span>
+            <select id="mouseRightDrag">
+              <option value="pan" selected>Pan view</option>
+              <option value="fill">Fill while dragging</option>
+              <option value="zoom">Zoom</option>
+              <option value="none">No action</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out.
+          </p>
+        </section>
         <section class="sheet-section" aria-labelledby="paletteHeading">
           <h3 id="paletteHeading">Palette</h3>
           <label class="control">
@@ -1857,13 +1959,7 @@
       </div>
     </div>
         <script type="module">
-          import {
-            createCanvas2DRenderer,
-            createRenderCache,
-            rebuildRenderCache,
-            syncCacheMetrics,
-            paintRegionToFilledLayer as paintCacheRegion,
-          } from "./renderers/canvas2d.js";
+      import { createRendererController } from "./renderers/controller.js";
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
       const commandRail = document.getElementById("commandRail");
@@ -1909,9 +2005,25 @@
       const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
       const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
       const hintFlashToggle = document.getElementById("hintFlashToggle");
+      const hintMatchingToggle = document.getElementById("hintMatchingToggle");
+      const hintHoverToggle = document.getElementById("hintHoverToggle");
       const hintFadeDurationInput = document.getElementById("hintFadeDuration");
       const hintIntensityInput = document.getElementById("hintIntensity");
       const difficultySelect = document.getElementById("difficultySelect");
+      const mouseControlInputs = {
+        left: {
+          click: document.getElementById("mouseLeftClick"),
+          drag: document.getElementById("mouseLeftDrag"),
+        },
+        middle: {
+          click: document.getElementById("mouseMiddleClick"),
+          drag: document.getElementById("mouseMiddleDrag"),
+        },
+        right: {
+          click: document.getElementById("mouseRightClick"),
+          drag: document.getElementById("mouseRightDrag"),
+        },
+      };
       const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
       const uiThemeSelect = document.getElementById("uiTheme");
       const backgroundColorInput = document.getElementById("backgroundColor");
@@ -1919,6 +2031,7 @@
       const colorCountEl = document.getElementById("colorCount");
       const minRegionEl = document.getElementById("minRegion");
       const detailEl = document.getElementById("detailLevel");
+      const algorithmEl = document.getElementById("generationAlgorithm");
       const sampleRateEl = document.getElementById("sampleRate");
       const kmeansItersEl = document.getElementById("kmeansIters");
       const smoothingEl = document.getElementById("smoothingPasses");
@@ -1958,6 +2071,9 @@
       const puzzleCanvas = document.getElementById("puzzleCanvas");
       const previewCanvas = document.createElement("canvas");
       const previewCtx = previewCanvas.getContext("2d");
+      let rendererController = null;
+      let scratchMeasureCanvas = null;
+      let scratchMeasureCtx = null;
 
       // Sheet output mirrors we update while users drag sliders.
       const generatorOutputs = generatorSheet
@@ -1983,6 +2099,8 @@
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       const DEFAULT_UI_SCALE = 0.9;
       const DEFAULT_UI_THEME = "dark";
+      const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
+      const VALID_GENERATION_ALGORITHMS = new Set(["local-kmeans", "local-posterize"]);
       const VALID_UI_THEMES = new Set(["dark", "light", "colorful"]);
       const DEFAULT_HINT_FADE_DURATION = 1200;
       const MIN_HINT_FADE_DURATION = 400;
@@ -1990,26 +2108,137 @@
       const DEFAULT_HINT_INTENSITY = 0.65;
       const MIN_HINT_INTENSITY = 0.2;
       const MAX_HINT_INTENSITY = 0.9;
+      const DEFAULT_HINT_TYPES = {
+        matchingRegions: true,
+        hoverRegions: true,
+      };
+      const HINT_TYPE_KEYS = ["matchingRegions", "hoverRegions"];
       const DEFAULT_DIFFICULTY = "normal";
       const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
-      const canvasMetrics = {
-        displayScale: 1,
-        pixelRatio: 1,
-        renderScale: 1,
-        displayWidth: 0,
-        displayHeight: 0,
-        pixelWidth: 0,
-        pixelHeight: 0,
+      const MOUSE_BUTTON_KEYS = ["left", "middle", "right"];
+      const MOUSE_BUTTON_LABELS = {
+        left: "Left mouse button",
+        middle: "Middle mouse button",
+        right: "Right mouse button",
       };
-
+      const DEFAULT_MOUSE_CONTROLS = {
+        left: { click: "fill", drag: "pan" },
+        middle: { click: "none", drag: "pan" },
+        right: { click: "select", drag: "pan" },
+      };
+      const VALID_MOUSE_CLICK_ACTIONS = new Set([
+        "fill",
+        "select-fill",
+        "select",
+        "zoom-in",
+        "zoom-out",
+        "none",
+      ]);
+      const VALID_MOUSE_DRAG_ACTIONS = new Set(["pan", "fill", "zoom", "none"]);
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
-      const backgroundInkRef = { current: backgroundInk };
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
       let pendingAutosaveReason = null;
       let storageSummaryUpdateToken = 0;
       let preventingBrowserZoom = false;
       const DOUBLE_TAP_GUARD_MS = 350;
+
+      function normalizeMouseClickAction(value, fallback = DEFAULT_MOUSE_CONTROLS.left.click) {
+        if (typeof value === "string" && VALID_MOUSE_CLICK_ACTIONS.has(value)) {
+          return value;
+        }
+        if (typeof fallback === "string" && VALID_MOUSE_CLICK_ACTIONS.has(fallback)) {
+          return fallback;
+        }
+        return DEFAULT_MOUSE_CONTROLS.left.click;
+      }
+
+      function normalizeMouseDragAction(value, fallback = DEFAULT_MOUSE_CONTROLS.left.drag) {
+        if (typeof value === "string" && VALID_MOUSE_DRAG_ACTIONS.has(value)) {
+          return value;
+        }
+        if (typeof fallback === "string" && VALID_MOUSE_DRAG_ACTIONS.has(fallback)) {
+          return fallback;
+        }
+        return DEFAULT_MOUSE_CONTROLS.left.drag;
+      }
+
+      function normalizeMouseControls(input, fallback = DEFAULT_MOUSE_CONTROLS) {
+        const base = fallback && typeof fallback === "object" ? fallback : DEFAULT_MOUSE_CONTROLS;
+        const normalized = {};
+        for (const key of MOUSE_BUTTON_KEYS) {
+          const entry = input && typeof input === "object" ? input[key] : null;
+          const baseEntry = base[key] || DEFAULT_MOUSE_CONTROLS[key];
+          normalized[key] = {
+            click: normalizeMouseClickAction(entry?.click, baseEntry?.click),
+            drag: normalizeMouseDragAction(entry?.drag, baseEntry?.drag),
+          };
+        }
+        return normalized;
+      }
+
+      function cloneMouseControls(source = DEFAULT_MOUSE_CONTROLS) {
+        const normalized = normalizeMouseControls(source);
+        return {
+          left: { ...normalized.left },
+          middle: { ...normalized.middle },
+          right: { ...normalized.right },
+        };
+      }
+
+      function getMouseControls() {
+        return normalizeMouseControls(state.settings?.mouseControls, DEFAULT_MOUSE_CONTROLS);
+      }
+
+      function getMouseControlsForButton(button) {
+        const controls = getMouseControls();
+        if (controls[button]) {
+          return controls[button];
+        }
+        return cloneMouseControls(DEFAULT_MOUSE_CONTROLS)[button];
+      }
+
+      function getMouseButtonName(buttonIndex) {
+        if (buttonIndex === 1) return "middle";
+        if (buttonIndex === 2) return "right";
+        return "left";
+      }
+
+      function describeMouseButton(button) {
+        return MOUSE_BUTTON_LABELS[button] || "Mouse button";
+      }
+
+      function describeMouseClickAction(action) {
+        switch (action) {
+          case "fill":
+            return "Fill region";
+          case "select-fill":
+            return "Select and fill region";
+          case "select":
+            return "Select colour";
+          case "zoom-in":
+            return "Zoom in";
+          case "zoom-out":
+            return "Zoom out";
+          case "none":
+          default:
+            return "No action";
+        }
+      }
+
+      function describeMouseDragAction(action) {
+        switch (action) {
+          case "pan":
+            return "Pan view";
+          case "fill":
+            return "Fill while dragging";
+          case "zoom":
+            return "Drag to zoom";
+          case "none":
+          default:
+            return "No action";
+        }
+      }
 
       function isInteractiveElementForZoomGuard(node) {
         return (
@@ -2187,6 +2416,7 @@
             sampleRate: 90,
             kmeansIters: 20,
             smoothingPasses: 1,
+            algorithm: DEFAULT_GENERATION_ALGORITHM,
           },
         },
         medium: {
@@ -2205,6 +2435,7 @@
             sampleRate: 95,
             kmeansIters: 24,
             smoothingPasses: 1,
+            algorithm: DEFAULT_GENERATION_ALGORITHM,
           },
         },
         high: {
@@ -2223,10 +2454,34 @@
             sampleRate: 100,
             kmeansIters: 28,
             smoothingPasses: 1,
+            algorithm: DEFAULT_GENERATION_ALGORITHM,
           },
         },
       };
       const DEFAULT_SAMPLE_DETAIL = "high";
+
+      function drawOutlines(ctx) {
+        if (!state.puzzle || !ctx) return;
+        const cache = ensureRenderCache();
+        if (!cache.ready) return;
+        const filledRegions = state.filled || new Set();
+        const hideCompleted = filledRegions.size > 0;
+        const geometries = hideCompleted
+          ? cache.regions.filter((geometry) => !filledRegions.has(geometry.id))
+          : cache.regions;
+        if (geometries.length === 0) {
+          return;
+        }
+        if (!hideCompleted && cache.outlineLayer && cache.outlineLayerCtx) {
+          if (cache.outlineLayerDirty && !rasterizeOutlineLayer(cache)) {
+            strokeOutlinesDirect(ctx, cache, geometries);
+            return;
+          }
+          ctx.drawImage(cache.outlineLayer, 0, 0);
+          return;
+        }
+        strokeOutlinesDirect(ctx, cache, geometries);
+      }
 
       function createRenderCache() {
         return {
@@ -2249,6 +2504,110 @@
         };
       }
 
+      function strokeOutlinesDirect(ctx, cache, geometries) {
+        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
+        withRenderScale(ctx, scale, () => {
+          ctx.strokeStyle = backgroundInk.outline;
+          ctx.lineWidth = cache.strokeWidth;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          strokeGeometries(ctx, Array.isArray(geometries) ? geometries : cache.regions);
+        });
+      }
+
+      function rasterizeOutlineLayer(cache) {
+        const ctx = cache.outlineLayerCtx;
+        if (!ctx || !cache.outlineLayer) {
+          cache.outlineLayerDirty = true;
+          return false;
+        }
+        clearContext(ctx);
+        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
+        withRenderScale(ctx, scale, () => {
+          ctx.strokeStyle = backgroundInk.outline;
+          ctx.lineWidth = cache.strokeWidth;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          strokeGeometries(ctx, cache.regions);
+        });
+        cache.outlineLayerDirty = false;
+        return true;
+      }
+
+      function createLayerCanvas(width, height) {
+        if (SUPPORTS_OFFSCREEN_CANVAS) {
+          try {
+            return new OffscreenCanvas(width, height);
+          } catch (error) {}
+        }
+        if (typeof document === "undefined") {
+          return null;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.hidden = true;
+        return canvas;
+      }
+
+      function getLayerContext(layer) {
+        if (!layer) return null;
+        try {
+          const ctx = layer.getContext("2d");
+          if (ctx) {
+            ctx.imageSmoothingEnabled = false;
+          }
+          return ctx;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function appendContoursToPath(ctx, contours) {
+        for (const contour of contours || []) {
+          if (!contour || contour.length === 0) continue;
+          const first = contour[0];
+          ctx.moveTo(first[0], first[1]);
+          for (let i = 1; i < contour.length; i++) {
+            const point = contour[i];
+            ctx.lineTo(point[0], point[1]);
+          }
+          ctx.closePath();
+        }
+      }
+
+      function fillGeometries(ctx, geometries) {
+        if (SUPPORTS_PATH2D) {
+          for (const geometry of geometries) {
+            if (!geometry?.path) continue;
+            ctx.fill(geometry.path);
+          }
+          return;
+        }
+        ctx.beginPath();
+        for (const geometry of geometries) {
+          if (!geometry?.contours) continue;
+          appendContoursToPath(ctx, geometry.contours);
+        }
+        ctx.fill();
+      }
+
+      function strokeGeometries(ctx, geometries) {
+        if (SUPPORTS_PATH2D) {
+          for (const geometry of geometries) {
+            if (!geometry?.path) continue;
+            ctx.stroke(geometry.path);
+          }
+          return;
+        }
+        ctx.beginPath();
+        for (const geometry of geometries) {
+          if (!geometry?.contours) continue;
+          appendContoursToPath(ctx, geometry.contours);
+        }
+        ctx.stroke();
+      }
+
       function ensureRenderCache(options = {}) {
         if (!state.puzzle) {
           state.renderCache = createRenderCache();
@@ -2266,32 +2625,129 @@
           cache.height !== expectedHeight ||
           cache.version !== expectedVersion;
         if (needsRebuild) {
-          rebuildRenderCache(cache, {
-            puzzle: state.puzzle,
-            canvasMetrics,
-            computeOutlineStrokeWidth,
-            buildRegionGeometry,
-            supportsOffscreenCanvas: SUPPORTS_OFFSCREEN_CANVAS,
-          });
+          rebuildRenderCache(cache);
         }
-        syncCacheMetrics(cache, {
-          canvasMetrics,
-          computeOutlineStrokeWidth,
-        });
+        syncCacheMetrics(cache);
         state.renderCache = cache;
         return cache;
+      }
+
+      function rebuildRenderCache(cache) {
+        if (!state.puzzle) {
+          cache.width = 0;
+          cache.height = 0;
+          cache.version = 0;
+          cache.strokeWidth = 1;
+          cache.regions = [];
+          cache.regionsById = new Map();
+          cache.filledLayer = null;
+          cache.filledLayerCtx = null;
+          cache.filledLayerDirty = true;
+          cache.outlineLayer = null;
+          cache.outlineLayerCtx = null;
+          cache.outlineLayerDirty = true;
+          cache.ready = false;
+          return cache;
+        }
+        cache.width = state.puzzle.width;
+        cache.height = state.puzzle.height;
+        cache.version = state.puzzle.regions.length;
+        cache.strokeWidth = computeOutlineStrokeWidth(cache.width, cache.height, {
+          displayScale: canvasMetrics.displayScale,
+          pixelRatio: canvasMetrics.pixelRatio,
+          deviceWidth: 1,
+        });
+        cache.regions = [];
+        cache.regionsById = new Map();
+        for (const region of state.puzzle.regions) {
+          const geometry = buildRegionGeometry(region, cache.width, cache.height);
+          cache.regions.push(geometry);
+          cache.regionsById.set(region.id, geometry);
+        }
+        const pixelWidth = Math.max(1, canvasMetrics.pixelWidth || cache.width);
+        const pixelHeight = Math.max(1, canvasMetrics.pixelHeight || cache.height);
+        cache.filledLayer = createLayerCanvas(pixelWidth, pixelHeight);
+        cache.filledLayerCtx = getLayerContext(cache.filledLayer);
+        cache.filledLayerDirty = true;
+        cache.outlineLayer = createLayerCanvas(pixelWidth, pixelHeight);
+        cache.outlineLayerCtx = getLayerContext(cache.outlineLayer);
+        cache.outlineLayerDirty = true;
+        cache.ready = true;
+        syncCacheMetrics(cache);
+        return cache;
+      }
+
+      function rebuildFilledLayer(cache) {
+        const ctx = cache.filledLayerCtx;
+        if (!ctx || !cache.filledLayer) {
+          cache.filledLayerDirty = true;
+          return false;
+        }
+        clearContext(ctx);
+        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
+        withRenderScale(ctx, scale, () => {
+          ctx.globalCompositeOperation = "source-over";
+          const fillsByColor = new Map();
+          for (const regionId of state.filled) {
+            const geometry = cache.regionsById.get(regionId);
+            if (!geometry) continue;
+            const colorEntry = getPaletteEntry(geometry.colorId);
+            if (!colorEntry?.hex) continue;
+            if (!fillsByColor.has(colorEntry.hex)) {
+              fillsByColor.set(colorEntry.hex, []);
+            }
+            fillsByColor.get(colorEntry.hex).push(geometry);
+          }
+          for (const [hex, entries] of fillsByColor) {
+            ctx.fillStyle = hex;
+            fillGeometries(ctx, entries);
+          }
+        });
+        cache.filledLayerDirty = false;
+        return true;
+      }
+
+      function compositeFilledRegionsDirect(ctx, cache) {
+        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
+        withRenderScale(ctx, scale, () => {
+          const fillsByColor = new Map();
+          for (const regionId of state.filled) {
+            const geometry = cache.regionsById.get(regionId);
+            if (!geometry) continue;
+            const colorEntry = getPaletteEntry(geometry.colorId);
+            if (!colorEntry?.hex) continue;
+            if (!fillsByColor.has(colorEntry.hex)) {
+              fillsByColor.set(colorEntry.hex, []);
+            }
+            fillsByColor.get(colorEntry.hex).push(geometry);
+          }
+          for (const [hex, entries] of fillsByColor) {
+            ctx.fillStyle = hex;
+            fillGeometries(ctx, entries);
+          }
+        });
       }
 
       function paintRegionToFilledLayer(regionId) {
         const cache = ensureRenderCache();
         if (!cache.ready) return;
-        const painted = paintCacheRegion(cache, regionId, {
-          getPaletteEntry,
-          shared: rendererSharedOptions,
-        });
-        if (!painted) {
+        if (!cache.filledLayer || !cache.filledLayerCtx) {
           cache.filledLayerDirty = true;
+          return;
         }
+        if (cache.filledLayerDirty) {
+          return;
+        }
+        const geometry = cache.regionsById.get(regionId);
+        if (!geometry) return;
+        const colorEntry = getPaletteEntry(geometry.colorId);
+        if (!colorEntry?.hex) return;
+        const ctx = cache.filledLayerCtx;
+        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
+        withRenderScale(ctx, scale, () => {
+          ctx.fillStyle = colorEntry.hex;
+          fillGeometries(ctx, [geometry]);
+        });
       }
 
       function markFilledLayerDirty() {
@@ -2485,14 +2941,6 @@
       const MAX_RENDER_SCALE = MAX_VIEWPORT_ZOOM;
       const SUPPORTS_PATH2D = typeof Path2D === "function";
       const SUPPORTS_OFFSCREEN_CANVAS = typeof OffscreenCanvas === "function";
-      const rendererSharedOptions = {
-        canvasMetrics,
-        backgroundInkRef,
-        supportsPath2D: SUPPORTS_PATH2D,
-        supportsOffscreenCanvas: SUPPORTS_OFFSCREEN_CANVAS,
-      };
-      let canvasRenderer = createCanvas2DRenderer(puzzleCanvas, rendererSharedOptions);
-      let fallbackMeasureCtx = null;
       const viewState = {
         panX: 0,
         panY: 0,
@@ -2500,10 +2948,59 @@
         baseScale: 1,
       };
 
+      const canvasMetrics = {
+        displayScale: 1,
+        pixelRatio: 1,
+        renderScale: 1,
+        displayWidth: 0,
+        displayHeight: 0,
+        pixelWidth: 0,
+        pixelHeight: 0,
+      };
+
       let cachedCanvasRect = null;
       let pendingViewTransform = null;
       let viewTransformFrame = null;
       let cancelViewTransformFrame = null;
+
+      function clampViewPanToPuzzleBounds() {
+        let changed = false;
+        if (!state.puzzle) {
+          if (Math.abs(viewState.panX) > 0.0001) {
+            viewState.panX = 0;
+            changed = true;
+          }
+          if (Math.abs(viewState.panY) > 0.0001) {
+            viewState.panY = 0;
+            changed = true;
+          }
+          return changed;
+        }
+        const displayScale = computeDisplayScale();
+        const stageHalfWidth = Math.max(0, (state.puzzle.width || 0) * displayScale * 0.5);
+        const stageHalfHeight = Math.max(0, (state.puzzle.height || 0) * displayScale * 0.5);
+        if (Number.isFinite(stageHalfWidth)) {
+          const nextPanX = clamp(viewState.panX, -stageHalfWidth, stageHalfWidth);
+          if (Math.abs(nextPanX - viewState.panX) > 0.0001) {
+            viewState.panX = nextPanX;
+            changed = true;
+          }
+        } else if (Math.abs(viewState.panX) > 0.0001) {
+          viewState.panX = 0;
+          changed = true;
+        }
+        if (Number.isFinite(stageHalfHeight)) {
+          const nextPanY = clamp(viewState.panY, -stageHalfHeight, stageHalfHeight);
+          if (Math.abs(nextPanY - viewState.panY) > 0.0001) {
+            viewState.panY = nextPanY;
+            changed = true;
+          }
+        } else if (Math.abs(viewState.panY) > 0.0001) {
+          viewState.panY = 0;
+          changed = true;
+        }
+        return changed;
+      }
 
       function invalidateCanvasRect() {
         cachedCanvasRect = null;
@@ -2579,11 +3076,8 @@
           canvasTransform.style.width = `${canvasMetrics.displayWidth}px`;
           canvasTransform.style.height = `${canvasMetrics.displayHeight}px`;
         }
-        if (canvasRenderer && typeof canvasRenderer.resize === "function") {
-          canvasRenderer.resize({
-            pixelWidth: canvasMetrics.pixelWidth,
-            pixelHeight: canvasMetrics.pixelHeight,
-          });
+        if (state.rendering?.controller) {
+          state.rendering.controller.resize({ ...canvasMetrics });
         } else {
           if (puzzleCanvas.width !== canvasMetrics.pixelWidth) {
             puzzleCanvas.width = canvasMetrics.pixelWidth;
@@ -2603,6 +3097,79 @@
         }
       }
 
+      function withRenderScale(ctx, scale, callback) {
+        ctx.save();
+        ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        ctx.imageSmoothingEnabled = false;
+        try {
+          callback(scale);
+        } finally {
+          ctx.restore();
+        }
+      }
+
+      function clearContext(ctx) {
+        if (!ctx) return;
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.restore();
+      }
+
+      function syncCacheMetrics(cache) {
+        if (!cache) return false;
+        const fallbackWidth = Math.max(1, cache.width || 1);
+        const fallbackHeight = Math.max(1, cache.height || 1);
+        const pixelWidth = Math.max(1, canvasMetrics.pixelWidth || fallbackWidth);
+        const pixelHeight = Math.max(1, canvasMetrics.pixelHeight || fallbackHeight);
+        const renderScale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+        const changed =
+          cache.pixelWidth !== pixelWidth ||
+          cache.pixelHeight !== pixelHeight ||
+          Math.abs((cache.renderScale || 0) - renderScale) > 0.0001;
+        cache.pixelWidth = pixelWidth;
+        cache.pixelHeight = pixelHeight;
+        cache.renderScale = renderScale;
+        cache.strokeWidth = computeOutlineStrokeWidth(cache.width, cache.height, {
+          displayScale: canvasMetrics.displayScale,
+          pixelRatio: canvasMetrics.pixelRatio,
+          deviceWidth: 1,
+        });
+        if (cache.filledLayer) {
+          let resized = false;
+          if (cache.filledLayer.width !== pixelWidth) {
+            cache.filledLayer.width = pixelWidth;
+            resized = true;
+          }
+          if (cache.filledLayer.height !== pixelHeight) {
+            cache.filledLayer.height = pixelHeight;
+            resized = true;
+          }
+          if (resized || !cache.filledLayerCtx) {
+            cache.filledLayerCtx = getLayerContext(cache.filledLayer);
+          }
+        }
+        if (cache.outlineLayer) {
+          let resized = false;
+          if (cache.outlineLayer.width !== pixelWidth) {
+            cache.outlineLayer.width = pixelWidth;
+            resized = true;
+          }
+          if (cache.outlineLayer.height !== pixelHeight) {
+            cache.outlineLayer.height = pixelHeight;
+            resized = true;
+          }
+          if (resized || !cache.outlineLayerCtx) {
+            cache.outlineLayerCtx = getLayerContext(cache.outlineLayer);
+          }
+        }
+        if (changed) {
+          cache.filledLayerDirty = true;
+          cache.outlineLayerDirty = true;
+        }
+        return changed;
+      }
+
       let panPointerId = null;
       let panPointerType = null;
       const panOrigin = { x: 0, y: 0, panX: 0, panY: 0 };
@@ -2611,6 +3178,7 @@
       let panCaptureTarget = null;
       let panHasPointerCapture = false;
       let panGlobalListenersAttached = false;
+      const pointerSessions = new Map();
       const globalPanListenerOptions = { capture: true };
       let spacePressed = false;
       const overlayAnimations = new Map();
@@ -2682,6 +3250,7 @@
           animateHints: true,
           hintFadeDuration: DEFAULT_HINT_FADE_DURATION,
           hintIntensity: DEFAULT_HINT_INTENSITY,
+          hintTypes: { ...DEFAULT_HINT_TYPES },
           difficulty: DEFAULT_DIFFICULTY,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
@@ -2689,12 +3258,14 @@
           imageDescription: "",
           showRegionLabels: true,
           theme: DEFAULT_UI_THEME,
+          mouseControls: cloneMouseControls(DEFAULT_MOUSE_CONTROLS),
         },
         previewVisible: false,
         saves: gameSaveManager.hydrate(),
         loadedSaveId: null,
         previewImageData: null,
         renderCache: createRenderCache(),
+        rendering: { controller: null },
         defaultGame: {
           id: DEFAULT_GAME_SOURCE.id,
           path: DEFAULT_GAME_SOURCE.path,
@@ -2704,6 +3275,17 @@
         sampleArtwork: null,
       };
 
+      rendererController = createRendererController(puzzleCanvas, {
+        initialRenderer: "canvas2d",
+        hooks: {
+          renderFrame: renderPuzzleFrame,
+          renderPreview: renderPreviewImage,
+          flashRegions: flashRegionsWithContext,
+          fillBackground: fillBackgroundLayer,
+        },
+      });
+      state.rendering.controller = rendererController;
+
       let generationJobCounter = 0;
       let latestGenerationJobId = 0;
       let puzzleGenerationModulePromise = null;
@@ -2711,6 +3293,8 @@
       let pendingImportAutoStart = false;
       updateImportNotice();
       let shouldAutoLoadSample = false;
+      let algorithmOptionsHydrated = false;
+      updateMouseControlInputs();
 
       function disableSampleAutoload() {
         shouldAutoLoadSample = false;
@@ -2949,6 +3533,9 @@
             hintFlashToggle.checked = settings.animateHints;
           }
         }
+        const hintTypes = normalizeHintTypes(settings.hintTypes, state.settings.hintTypes);
+        state.settings.hintTypes = hintTypes;
+        syncHintTypeToggles();
         if (settings.hintFadeDuration != null) {
           const duration = normalizeHintFadeDuration(settings.hintFadeDuration);
           state.settings.hintFadeDuration = duration;
@@ -3011,6 +3598,11 @@
         } else {
           applyImageDescription("", { skipLog: true, skipAutosave: true });
         }
+        if (settings.mouseControls) {
+          applyMouseControls(settings.mouseControls, { skipLog: true, skipAutosave: true });
+        } else {
+          applyMouseControls(state.settings.mouseControls, { skipLog: true, skipAutosave: true });
+        }
         updateOptionOutputs();
       }
 
@@ -3022,6 +3614,66 @@
         // Public hooks for tests and manual loading. Keep backwards compatible.
         window.capyGenerator = {
           getState: () => state,
+          getRendererType() {
+            return state.rendering?.controller?.getRendererType?.() || null;
+          },
+          listRenderers() {
+            const controller = state.rendering?.controller;
+            if (!controller?.listRenderers) {
+              return [];
+            }
+            try {
+              return controller.listRenderers();
+            } catch (error) {
+              console.error("Unable to list renderers", error);
+              return [];
+            }
+          },
+          setRenderer(type) {
+            const controller = state.rendering?.controller;
+            if (!controller?.setRenderer) {
+              return null;
+            }
+            try {
+              const result = controller.setRenderer(type);
+              if (result) {
+                applyCanvasSizing();
+                renderPuzzle();
+              }
+            } catch (error) {
+              console.error(`Failed to activate renderer: ${type}`, error);
+            }
+            return controller.getRendererType?.() || null;
+          },
+          registerRenderer(type, factory) {
+            const controller = state.rendering?.controller;
+            if (!controller?.registerRenderer) {
+              return false;
+            }
+            try {
+              const registered = controller.registerRenderer(type, factory);
+              if (registered && controller.getRendererType?.() === type) {
+                applyCanvasSizing();
+                renderPuzzle();
+              }
+              return registered;
+            } catch (error) {
+              console.error(`Failed to register renderer: ${type}`, error);
+              return false;
+            }
+          },
+          unregisterRenderer(type) {
+            const controller = state.rendering?.controller;
+            if (!controller?.unregisterRenderer) {
+              return false;
+            }
+            try {
+              return controller.unregisterRenderer(type);
+            } catch (error) {
+              console.error(`Failed to unregister renderer: ${type}`, error);
+              return false;
+            }
+          },
           loadFromDataUrl(dataUrl, metadata) {
             if (typeof dataUrl !== "string" || dataUrl.length === 0) {
               return;
@@ -3286,9 +3938,42 @@
         if (!hintFlashToggle.checked) {
           clearOverlayAnimations();
         }
+        syncHintTypeToggles();
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
         scheduleAutosave("settings-hint-animations");
       });
+
+      if (hintMatchingToggle) {
+        hintMatchingToggle.addEventListener("change", () => {
+          const next = normalizeHintTypes(
+            { ...state.settings.hintTypes, matchingRegions: hintMatchingToggle.checked },
+            state.settings.hintTypes
+          );
+          state.settings.hintTypes = next;
+          if (!next.matchingRegions) {
+            clearOverlayAnimations();
+          } else if (state.settings.animateHints && state.activeColor != null) {
+            flashColorRegions(state.activeColor);
+          }
+          logDebug(`Matching colour hints ${next.matchingRegions ? "enabled" : "disabled"}`);
+          scheduleAutosave("settings-hint-matching");
+        });
+      }
+
+      if (hintHoverToggle) {
+        hintHoverToggle.addEventListener("change", () => {
+          const next = normalizeHintTypes(
+            { ...state.settings.hintTypes, hoverRegions: hintHoverToggle.checked },
+            state.settings.hintTypes
+          );
+          state.settings.hintTypes = next;
+          if (!next.hoverRegions) {
+            clearOverlayAnimations();
+          }
+          logDebug(`Hover hints ${next.hoverRegions ? "enabled" : "disabled"}`);
+          scheduleAutosave("settings-hint-hover");
+        });
+      }
 
       if (difficultySelect) {
         difficultySelect.value = resolveDifficulty(difficultySelect.value);
@@ -3303,6 +3988,21 @@
           );
           scheduleAutosave("settings-difficulty");
         });
+      }
+
+      for (const button of MOUSE_BUTTON_KEYS) {
+        const inputs = mouseControlInputs[button];
+        if (!inputs) continue;
+        if (inputs.click) {
+          inputs.click.addEventListener("change", () => {
+            setMouseControl(button, "click", inputs.click.value);
+          });
+        }
+        if (inputs.drag) {
+          inputs.drag.addEventListener("change", () => {
+            setMouseControl(button, "drag", inputs.drag.value);
+          });
+        }
       }
 
       if (hintFadeDurationInput) {
@@ -3473,6 +4173,9 @@
       colorCountEl.addEventListener("change", markOptionsDirty);
       minRegionEl.addEventListener("change", markOptionsDirty);
       detailEl.addEventListener("change", markOptionsDirty);
+      if (algorithmEl) {
+        algorithmEl.addEventListener("change", markOptionsDirty);
+      }
       sampleRateEl.addEventListener("change", markOptionsDirty);
       kmeansItersEl.addEventListener("change", markOptionsDirty);
       smoothingEl.addEventListener("change", markOptionsDirty);
@@ -3529,7 +4232,7 @@
       //   once it travels ~4px, then continuously applies deltas via handlePanMove.
       // - pointerup/pointercancel tear down the session and restore the grab cursor. We also listen
       //   for lostpointercapture so releasing the mouse outside the stage still resets state.
-      const pointerSurface = canvasStage || puzzleCanvas;
+      const pointerSurface = viewportEl || canvasStage || puzzleCanvas;
       if (pointerSurface) {
         const pointerOptions = { capture: true };
         pointerSurface.addEventListener("pointerdown", handlePanStart, pointerOptions);
@@ -3631,6 +4334,7 @@
           isPanning = false;
         }
         hideCustomCursor();
+        pointerSessions.clear();
       });
 
       if (window.screen?.orientation && typeof window.screen.orientation.addEventListener === "function") {
@@ -3656,6 +4360,12 @@
         if (state.previewVisible) return;
         if (!region) return;
         const { trigger = "hover", flashSwatch = false } = options;
+        if (!isHintTypeEnabled("hoverRegions")) {
+          if (flashSwatch) {
+            flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
+          }
+          return;
+        }
         const now = Date.now();
         const delay = trigger === "press" ? REGION_HINT_PRESS_DELAY_MS : REGION_HINT_HOVER_DELAY_MS;
         if (lastRegionHintId === region.id && now - lastRegionHintTime < delay) {
@@ -3697,10 +4407,18 @@
         if (state.filled.has(regionId)) {
           const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
           if (remaining.length > 0) {
-            flashColorRegions(region.colorId, { paletteColor: getPaletteEntry(region.colorId), onlyUnfilled: true });
+            const matchingHintsEnabled = isHintTypeEnabled("matchingRegions");
+            if (matchingHintsEnabled) {
+              flashColorRegions(region.colorId, {
+                paletteColor: getPaletteEntry(region.colorId),
+                onlyUnfilled: true,
+              });
+            }
             const regionWord = remaining.length === 1 ? "region" : "regions";
             logDebug(
-              `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
+              matchingHintsEnabled
+                ? `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
+                : `Region ${region.id} already filled; ${remaining.length} ${regionWord} still remain for colour #${region.colorId}`
             );
           } else {
             logDebug(`Region ${region.id} already filled; ignoring ${label}`);
@@ -3716,11 +4434,13 @@
             const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
             if (state.settings.animateHints) {
               flashRegion(regionId, { paletteColor, tint: fallbackTint, includeFilled: false });
-              flashColorRegions(region.colorId, {
-                paletteColor,
-                tint: fallbackTint,
-                onlyUnfilled: true,
-              });
+              if (isHintTypeEnabled("matchingRegions")) {
+                flashColorRegions(region.colorId, {
+                  paletteColor,
+                  tint: fallbackTint,
+                  onlyUnfilled: true,
+                });
+              }
             }
             flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
             logDebug(
@@ -3740,7 +4460,9 @@
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
-          flashColorRegions(state.activeColor);
+          if (isHintTypeEnabled("matchingRegions")) {
+            flashColorRegions(state.activeColor);
+          }
         }
         updateProgress();
         updateCommandStates();
@@ -3757,6 +4479,10 @@
 
       // Puzzle fill interaction: click to paint if the region matches the active colour.
       puzzleCanvas.addEventListener("click", (event) => {
+        const leftClickAction = getMouseControlsForButton("left").click;
+        if (leftClickAction !== "fill") {
+          return;
+        }
         if (suppressNextCanvasClickUntil && Date.now() <= suppressNextCanvasClickUntil) {
           suppressNextCanvasClickUntil = 0;
           event.preventDefault?.();
@@ -4198,6 +4924,16 @@
           if (smoothingEl && typeof settings.smoothingPasses === "number") {
             smoothingEl.value = String(settings.smoothingPasses);
           }
+          if (algorithmEl && typeof settings.algorithm === "string") {
+            const normalizedAlgorithm = normalizeGenerationAlgorithm(settings.algorithm);
+            if (algorithmEl.value !== normalizedAlgorithm) {
+              algorithmEl.value = normalizedAlgorithm;
+            }
+          } else if (algorithmEl && !settings.algorithm) {
+            if (algorithmEl.value !== DEFAULT_GENERATION_ALGORITHM) {
+              algorithmEl.value = DEFAULT_GENERATION_ALGORITHM;
+            }
+          }
           updateOptionOutputs();
           markOptionsDirty();
         }
@@ -4500,7 +5236,6 @@
         const changed = force || normalized !== current;
         state.settings.backgroundColor = normalized;
         backgroundInk = computeInkStyles(normalized);
-        backgroundInkRef.current = backgroundInk;
         if (state.renderCache) {
           state.renderCache.strokeWidth = computeOutlineStrokeWidth(
             state.renderCache.width,
@@ -4522,11 +5257,24 @@
         if (!skipRender) {
           if (state.puzzle) {
             renderPuzzle();
-          } else if (canvasRenderer && typeof canvasRenderer.fillBackground === "function") {
-            canvasRenderer.fillBackground(normalized, {
-              pixelWidth: puzzleCanvas?.width || canvasMetrics.pixelWidth || 0,
-              pixelHeight: puzzleCanvas?.height || canvasMetrics.pixelHeight || 0,
-            });
+          } else {
+            if (state.rendering?.controller) {
+              state.rendering.controller.fillBackground({
+                color: normalized,
+                metrics: { ...canvasMetrics },
+              });
+            } else {
+              const fallbackCtx = puzzleCanvas?.getContext?.("2d") || null;
+              if (fallbackCtx) {
+                fallbackCtx.save();
+                fallbackCtx.setTransform(1, 0, 0, 1, 0, 0);
+                fallbackCtx.fillStyle = normalized;
+                const width = puzzleCanvas.width || canvasMetrics.pixelWidth || 0;
+                const height = puzzleCanvas.height || canvasMetrics.pixelHeight || 0;
+                fallbackCtx.fillRect(0, 0, width, height);
+                fallbackCtx.restore();
+              }
+            }
           }
         }
         if (changed && !skipLog) {
@@ -4578,6 +5326,71 @@
         }
       }
 
+      function normalizeGenerationAlgorithm(value) {
+        if (typeof value === "string") {
+          const key = value.trim();
+          if (VALID_GENERATION_ALGORITHMS.has(key)) {
+            return key;
+          }
+        }
+        return DEFAULT_GENERATION_ALGORITHM;
+      }
+
+      function hydrateAlgorithmOptions(catalog) {
+        if (!algorithmEl || algorithmOptionsHydrated) {
+          return;
+        }
+        if (!Array.isArray(catalog) || catalog.length === 0) {
+          return;
+        }
+        const options = [];
+        for (const entry of catalog) {
+          if (!entry || typeof entry.id !== "string") {
+            continue;
+          }
+          const id = entry.id.trim();
+          if (!id) {
+            continue;
+          }
+          const baseLabel = typeof entry.label === "string" && entry.label.trim()
+            ? entry.label.trim()
+            : id;
+          const modeSuffix = entry.mode && entry.mode !== "local" ? ` (${entry.mode})` : "";
+          options.push({ id, label: `${baseLabel}${modeSuffix}`.trim() });
+        }
+        if (options.length === 0) {
+          return;
+        }
+        const previousValue = normalizeGenerationAlgorithm(algorithmEl.value);
+        algorithmEl.innerHTML = "";
+        const seen = new Set();
+        for (const option of options) {
+          if (seen.has(option.id)) {
+            continue;
+          }
+          seen.add(option.id);
+          VALID_GENERATION_ALGORITHMS.add(option.id);
+          const opt = document.createElement("option");
+          opt.value = option.id;
+          opt.textContent = option.label;
+          algorithmEl.appendChild(opt);
+        }
+        if (!seen.has(DEFAULT_GENERATION_ALGORITHM)) {
+          const fallbackOption = document.createElement("option");
+          fallbackOption.value = DEFAULT_GENERATION_ALGORITHM;
+          fallbackOption.textContent = "Local palette clustering (k-means)";
+          algorithmEl.appendChild(fallbackOption);
+          VALID_GENERATION_ALGORITHMS.add(DEFAULT_GENERATION_ALGORITHM);
+          seen.add(DEFAULT_GENERATION_ALGORITHM);
+        }
+        const targetAlgorithm = seen.has(previousValue)
+          ? previousValue
+          : DEFAULT_GENERATION_ALGORITHM;
+        algorithmEl.value = targetAlgorithm;
+        algorithmOptionsHydrated = true;
+        markOptionsDirty();
+      }
+
       function markOptionsDirty() {
         if (!state.puzzle || !state.sourceUrl) {
           applyBtn.disabled = true;
@@ -4585,6 +5398,7 @@
         }
         const current = getCurrentOptions();
         const last = state.lastOptions;
+        const lastAlgorithm = last ? normalizeGenerationAlgorithm(last.algorithm) : DEFAULT_GENERATION_ALGORITHM;
         const dirty =
           !last ||
           current.targetColors !== last.targetColors ||
@@ -4592,7 +5406,8 @@
           current.maxSize !== last.maxSize ||
           current.sampleRate !== last.sampleRate ||
           current.kmeansIters !== last.kmeansIters ||
-          current.smoothingPasses !== last.smoothingPasses;
+          current.smoothingPasses !== last.smoothingPasses ||
+          current.algorithm !== lastAlgorithm;
         applyBtn.disabled = !dirty;
       }
 
@@ -4604,6 +5419,7 @@
           sampleRate: clamp(Number(sampleRateEl.value) || 65, 10, 100) / 100,
           kmeansIters: clamp(Number(kmeansItersEl.value) || 12, 1, 64),
           smoothingPasses: clamp(Number(smoothingEl.value) || 1, 0, 6),
+          algorithm: normalizeGenerationAlgorithm(algorithmEl ? algorithmEl.value : DEFAULT_GENERATION_ALGORITHM),
         };
       }
 
@@ -4860,11 +5676,9 @@
           }
         }
         setProgressMessage("loading");
-        if (canvasRenderer && typeof canvasRenderer.fillBackground === "function") {
-          canvasRenderer.fillBackground(null, {
-            pixelWidth: puzzleCanvas?.width || canvasMetrics.pixelWidth || 0,
-            pixelHeight: puzzleCanvas?.height || canvasMetrics.pixelHeight || 0,
-          });
+        const resetCtx = state.rendering?.controller?.getContext?.() || puzzleCanvas?.getContext?.("2d");
+        if (resetCtx) {
+          clearContext(resetCtx);
         }
         if (previewCtx) {
           previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
@@ -4888,10 +5702,30 @@
 
       function loadPuzzleGenerationModule() {
         if (!puzzleGenerationModulePromise) {
-          puzzleGenerationModulePromise = import("./puzzle-generation.js").catch((error) => {
-            puzzleGenerationModulePromise = null;
-            throw error;
-          });
+          puzzleGenerationModulePromise = import("./puzzle-generation.js")
+            .then((module) => {
+              try {
+                if (module && Array.isArray(module.GENERATION_ALGORITHM_CATALOG)) {
+                  hydrateAlgorithmOptions(module.GENERATION_ALGORITHM_CATALOG);
+                }
+                if (
+                  module &&
+                  typeof module.DEFAULT_GENERATION_ALGORITHM_ID === "string" &&
+                  module.DEFAULT_GENERATION_ALGORITHM_ID.trim()
+                ) {
+                  VALID_GENERATION_ALGORITHMS.add(
+                    module.DEFAULT_GENERATION_ALGORITHM_ID.trim()
+                  );
+                }
+              } catch (hydrationError) {
+                console.warn("Unable to hydrate generator algorithms", hydrationError);
+              }
+              return module;
+            })
+            .catch((error) => {
+              puzzleGenerationModulePromise = null;
+              throw error;
+            });
         }
         return puzzleGenerationModulePromise;
       }
@@ -5040,7 +5874,19 @@
             : palette[0]?.id ?? null;
         state.filled = new Set(metadata.filled ?? []);
         markFilledLayerDirty();
-        state.lastOptions = metadata.options ?? getCurrentOptions();
+        const lastOptionsRaw = metadata.options ?? getCurrentOptions();
+        const normalizedOptions = {
+          ...lastOptionsRaw,
+          algorithm: normalizeGenerationAlgorithm(lastOptionsRaw?.algorithm),
+        };
+        state.lastOptions = normalizedOptions;
+        if (algorithmEl) {
+          const currentAlgorithm = normalizeGenerationAlgorithm(algorithmEl.value);
+          const targetAlgorithm = normalizedOptions.algorithm || DEFAULT_GENERATION_ALGORITHM;
+          if (currentAlgorithm !== targetAlgorithm) {
+            algorithmEl.value = targetAlgorithm;
+          }
+        }
         const resolvedSettings = metadata.settings ?? data.settings;
         if (resolvedSettings) {
           applyGameplaySettings(resolvedSettings);
@@ -5054,7 +5900,9 @@
         renderPuzzle();
         renderPalette();
         if (state.activeColor != null) {
-          flashColorRegions(state.activeColor);
+          if (isHintTypeEnabled("matchingRegions")) {
+            flashColorRegions(state.activeColor);
+          }
         }
         updateProgress();
         updateCommandStates();
@@ -5105,40 +5953,191 @@
       }
 
       function renderPreview() {
-        if (!state.puzzle) return;
-        if (canvasRenderer && typeof canvasRenderer.renderPreview === "function") {
-          const imageData = canvasRenderer.renderPreview({
-            puzzle: state.puzzle,
-            previewCanvas,
-            previewCtx,
-          });
-          state.previewImageData = imageData;
-          return;
+        if (!state.puzzle) {
+          state.previewImageData = null;
+          return null;
         }
-        state.previewImageData = null;
+        const controller = state.rendering?.controller;
+        const imageData = controller
+          ? controller.renderPreview({ state, previewCanvas, previewCtx })
+          : renderPreviewImage({ state, previewCanvas, previewCtx });
+        state.previewImageData = imageData || null;
+        return imageData || null;
+      }
+
+      function renderPreviewImage({ state, previewCanvas, previewCtx }) {
+        if (!state?.puzzle) return null;
+        const { width, height, regions, palette } = state.puzzle;
+        if (previewCanvas) {
+          previewCanvas.width = width;
+          previewCanvas.height = height;
+        }
+        let imageData = null;
+        if (previewCtx && typeof previewCtx.createImageData === "function") {
+          imageData = previewCtx.createImageData(width, height);
+        } else if (typeof ImageData === "function") {
+          imageData = new ImageData(width, height);
+        }
+        if (!imageData) {
+          return null;
+        }
+        const data = imageData.data;
+        for (const region of regions) {
+          const color = palette[region.colorId - 1];
+          if (!color) continue;
+          const rgba = color.rgba;
+          for (const idx of region.pixels) {
+            const base = idx * 4;
+            data[base] = rgba[0];
+            data[base + 1] = rgba[1];
+            data[base + 2] = rgba[2];
+            data[base + 3] = 255;
+          }
+        }
+        if (previewCtx && typeof previewCtx.putImageData === "function") {
+          previewCtx.putImageData(imageData, 0, 0);
+        }
+        return imageData;
       }
 
       function renderPuzzle() {
         if (!state.puzzle) return;
         ensureCanvasMetricsInitialized();
         const cache = ensureRenderCache();
-        if (state.previewVisible && !state.previewImageData) {
-          renderPreview();
+        const controller = state.rendering?.controller;
+        if (!controller) return;
+        controller.renderFrame({
+          state,
+          cache,
+          metrics: { ...canvasMetrics },
+          previewCanvas,
+          previewCtx,
+          previewImageData: state.previewImageData,
+          previewVisible: state.previewVisible === true,
+          backgroundColor: state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX,
+          defaultBackgroundColor: DEFAULT_BACKGROUND_HEX,
+          renderPreview: () =>
+            controller.renderPreview({ state, previewCanvas, previewCtx }) || state.previewImageData,
+          setPreviewImageData: (imageData) => {
+            state.previewImageData = imageData || null;
+          },
+        });
+      }
+
+      function renderPuzzleFrame({
+        context,
+        state,
+        cache,
+        metrics,
+        previewCanvas,
+        previewCtx,
+        previewImageData,
+        previewVisible,
+        backgroundColor,
+        defaultBackgroundColor,
+        renderPreview,
+        setPreviewImageData,
+      }) {
+        if (!context || !state?.puzzle) return;
+        const pixelWidth = metrics?.pixelWidth ?? context.canvas?.width ?? 0;
+        const pixelHeight = metrics?.pixelHeight ?? context.canvas?.height ?? 0;
+        context.save();
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.clearRect(0, 0, pixelWidth, pixelHeight);
+        const fill = backgroundColor || defaultBackgroundColor;
+        context.fillStyle = fill;
+        context.fillRect(0, 0, pixelWidth, pixelHeight);
+        if (previewVisible) {
+          let imageData = previewImageData || null;
+          if (!imageData && typeof renderPreview === "function") {
+            imageData = renderPreview() || null;
+            if (imageData && typeof setPreviewImageData === "function") {
+              setPreviewImageData(imageData);
+            }
+          }
+          if (imageData) {
+            if (previewCanvas && previewCanvas.width && previewCanvas.height) {
+              const sourceWidth = previewCanvas.width;
+              const sourceHeight = previewCanvas.height;
+              const targetWidth = metrics?.pixelWidth || pixelWidth;
+              const targetHeight = metrics?.pixelHeight || pixelHeight;
+              context.imageSmoothingEnabled = false;
+              context.drawImage(
+                previewCanvas,
+                0,
+                0,
+                sourceWidth,
+                sourceHeight,
+                0,
+                0,
+                targetWidth,
+                targetHeight
+              );
+            } else if (typeof context.putImageData === "function") {
+              context.putImageData(imageData, 0, 0);
+            }
+          }
+          context.restore();
+          return;
         }
-        if (canvasRenderer && typeof canvasRenderer.renderFrame === "function") {
-          canvasRenderer.renderFrame({
-            puzzle: state.puzzle,
-            filledRegions: state.filled,
-            settings: state.settings,
-            backgroundColor: state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX,
-            previewVisible: state.previewVisible,
-            previewCanvas,
-            previewImageData: state.previewImageData,
-            cache,
-            getPaletteEntry,
-            getRegionLabelLayout,
-          });
+        if (cache?.ready) {
+          let drewFromLayer = false;
+          if (cache.filledLayer && cache.filledLayerCtx) {
+            drewFromLayer = cache.filledLayerDirty ? rebuildFilledLayer(cache) : true;
+            if (drewFromLayer && cache.filledLayer) {
+              context.drawImage(cache.filledLayer, 0, 0);
+            }
+          }
+          if (!drewFromLayer) {
+            compositeFilledRegionsDirect(context, cache);
+          }
         }
+        context.restore();
+        drawOutlines(context);
+        drawNumbers(context);
+      }
+
+      function fillBackgroundLayer({ context, color, metrics }) {
+        if (!context) return;
+        const width = metrics?.pixelWidth ?? context.canvas?.width ?? 0;
+        const height = metrics?.pixelHeight ?? context.canvas?.height ?? 0;
+        context.save();
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.fillStyle = color || DEFAULT_BACKGROUND_HEX;
+        context.fillRect(0, 0, width, height);
+        context.restore();
+      }
+
+      function drawNumbers(ctx) {
+        if (!state.puzzle || !ctx) return;
+        if (state.settings.showRegionLabels === false) return;
+        const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+        withRenderScale(ctx, scale, () => {
+          const fallbackNumberInk = backgroundInk.number;
+          const fallbackOutlineInk = backgroundInk.outline;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.strokeStyle = fallbackOutlineInk;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          for (const region of state.puzzle.regions) {
+            if (state.filled.has(region.id)) continue;
+            const layout = getRegionLabelLayout(region);
+            if (!layout) continue;
+            const paletteColor = getPaletteEntry(region.colorId);
+            const regionInk =
+              paletteColor?.hex && typeof paletteColor.hex === "string"
+                ? rgbaFromHex(paletteColor.hex, 1)
+                : fallbackNumberInk;
+            ctx.fillStyle = regionInk;
+            ctx.font = layout.font;
+            if (layout.strokeWidth) {
+              ctx.lineWidth = layout.strokeWidth;
+              ctx.strokeText(layout.text, layout.x, layout.y);
+            }
+            ctx.fillText(layout.text, layout.x, layout.y);
+          }
+        });
       }
 
       function getRegionLabelText(region) {
@@ -5289,24 +6288,17 @@
 
       function measureLabelMetrics(text, size) {
         if (!text || size <= 0) return null;
+        const ctx = getMeasurementContext();
+        if (!ctx) return null;
         const font = `${size}px "Inter", "Segoe UI", sans-serif`;
-        let metrics = null;
-        if (canvasRenderer && typeof canvasRenderer.measureText === "function") {
-          metrics = canvasRenderer.measureText(font, text);
+        if (typeof ctx.save === "function") {
+          ctx.save();
         }
-        if (!metrics && typeof document !== "undefined") {
-          if (!fallbackMeasureCtx) {
-            const canvas = document.createElement("canvas");
-            fallbackMeasureCtx = canvas.getContext("2d");
-          }
-          if (fallbackMeasureCtx) {
-            fallbackMeasureCtx.font = font;
-            metrics = fallbackMeasureCtx.measureText(text);
-          }
-        }
-        const textWidth = metrics?.width || size;
-        const ascent = metrics?.actualBoundingBoxAscent || size * 0.78;
-        const descent = metrics?.actualBoundingBoxDescent || size * 0.22;
+        ctx.font = font;
+        const metrics = ctx.measureText(text);
+        const textWidth = metrics.width || size;
+        const ascent = metrics.actualBoundingBoxAscent || size * 0.78;
+        const descent = metrics.actualBoundingBoxDescent || size * 0.22;
         const textHeight = ascent + descent;
         const strokeWidth = clamp(size * 0.18, 0.65, Math.max(2.6, size * 0.24));
         const paddingX = clamp(
@@ -5321,6 +6313,9 @@
         );
         const paddedWidth = textWidth + paddingX * 2 + strokeWidth;
         const paddedHeight = textHeight + paddingY * 2 + strokeWidth;
+        if (typeof ctx.restore === "function") {
+          ctx.restore();
+        }
         return {
           font,
           paddedWidth,
@@ -5329,6 +6324,35 @@
           halfHeight: paddedHeight / 2,
           strokeWidth,
         };
+      }
+
+      function getMeasurementContext() {
+        const controller = state.rendering?.controller;
+        if (controller && typeof controller.getContext === "function") {
+          const ctx = controller.getContext();
+          if (ctx) {
+            return ctx;
+          }
+        }
+        if (previewCtx) {
+          return previewCtx;
+        }
+        if (!scratchMeasureCtx) {
+          if (typeof OffscreenCanvas === "function") {
+            try {
+              scratchMeasureCanvas = new OffscreenCanvas(1, 1);
+              scratchMeasureCtx = scratchMeasureCanvas.getContext("2d");
+            } catch (error) {
+              scratchMeasureCanvas = null;
+              scratchMeasureCtx = null;
+            }
+          }
+          if (!scratchMeasureCtx && typeof document !== "undefined") {
+            scratchMeasureCanvas = document.createElement("canvas");
+            scratchMeasureCtx = scratchMeasureCanvas.getContext("2d");
+          }
+        }
+        return scratchMeasureCtx;
       }
 
       function findRegionLabelAnchor(region, halfWidth, halfHeight, bounds, width, height, regionMap) {
@@ -5517,7 +6541,7 @@
           renderPalette();
         }
         scrollPaletteToColor(colorId);
-        if (flash) {
+        if (flash && isHintTypeEnabled("matchingRegions")) {
           flashColorRegions(colorId);
         }
         const remaining = getRegionsByColor(colorId, { includeFilled: false }).length;
@@ -5848,6 +6872,86 @@
         }
       }
 
+      function updateMouseControlInputs() {
+        const controls = getMouseControls();
+        for (const button of MOUSE_BUTTON_KEYS) {
+          const inputs = mouseControlInputs[button];
+          if (!inputs) continue;
+          const clickEl = inputs.click;
+          const dragEl = inputs.drag;
+          const buttonControls = controls[button];
+          if (clickEl && buttonControls && clickEl.value !== buttonControls.click) {
+            clickEl.value = buttonControls.click;
+          }
+          if (dragEl && buttonControls && dragEl.value !== buttonControls.drag) {
+            dragEl.value = buttonControls.drag;
+          }
+        }
+      }
+
+      function applyMouseControls(next, options = {}) {
+        const { skipLog = false, skipAutosave = true } = options;
+        const previous = state.settings?.mouseControls
+          ? normalizeMouseControls(state.settings.mouseControls, DEFAULT_MOUSE_CONTROLS)
+          : cloneMouseControls(DEFAULT_MOUSE_CONTROLS);
+        const normalizedSource =
+          next && typeof next === "object"
+            ? normalizeMouseControls(next, previous)
+            : previous;
+        const normalized = cloneMouseControls(normalizedSource);
+        state.settings.mouseControls = normalized;
+        updateMouseControlInputs();
+        if (!skipLog) {
+          const changes = [];
+          for (const button of MOUSE_BUTTON_KEYS) {
+            const prev = previous[button];
+            const curr = normalized[button];
+            if (prev.click !== curr.click) {
+              changes.push(
+                `${describeMouseButton(button)} click → ${describeMouseClickAction(curr.click)}`
+              );
+            }
+            if (prev.drag !== curr.drag) {
+              changes.push(
+                `${describeMouseButton(button)} click + drag → ${describeMouseDragAction(curr.drag)}`
+              );
+            }
+          }
+          if (changes.length > 0) {
+            logDebug(`Mouse controls updated: ${changes.join("; ")}`);
+          }
+        }
+        if (!skipAutosave) {
+          scheduleAutosave("settings-mouse-controls");
+        }
+      }
+
+      function setMouseControl(button, type, rawValue) {
+        if (!MOUSE_BUTTON_KEYS.includes(button)) {
+          return;
+        }
+        const current = getMouseControls();
+        const nextValue =
+          type === "click"
+            ? normalizeMouseClickAction(rawValue, current[button]?.click)
+            : normalizeMouseDragAction(rawValue, current[button]?.drag);
+        if (current[button] && current[button][type] === nextValue) {
+          updateMouseControlInputs();
+          return;
+        }
+        const nextControls = cloneMouseControls(current);
+        if (!nextControls[button]) {
+          const fallback = DEFAULT_MOUSE_CONTROLS[button] || DEFAULT_MOUSE_CONTROLS.left;
+          nextControls[button] = { click: fallback.click, drag: fallback.drag };
+        }
+        nextControls[button][type] = nextValue;
+        applyMouseControls(nextControls, { skipLog: true, skipAutosave: true });
+        const actionLabel =
+          type === "click" ? describeMouseClickAction(nextValue) : describeMouseDragAction(nextValue);
+        logDebug(`${describeMouseButton(button)} ${type === "click" ? "click" : "click + drag"} set to ${actionLabel}`);
+        scheduleAutosave("settings-mouse-controls");
+      }
+
       function applyPaletteSort(sort, { skipLog } = {}) {
         const allowed = new Set(["region", "hue", "remaining", "name", "brightness"]);
         const next = allowed.has(sort) ? sort : "region";
@@ -5977,6 +7081,144 @@
         attachGlobalPanListeners();
       }
 
+      function handleMouseDragFill(event, session) {
+        if (!session) return;
+        session.lastX = event.clientX;
+        session.lastY = event.clientY;
+        const dx = event.clientX - session.startX;
+        const dy = event.clientY - session.startY;
+        const distance = Math.hypot(dx, dy);
+        const threshold = 4;
+        if (!session.dragStarted && distance >= threshold) {
+          session.dragStarted = true;
+          session.preventClick = true;
+          suppressNextCanvasClickUntil = Date.now() + POINTER_CLICK_SUPPRESSION_MS;
+        }
+        if (!session.dragStarted) {
+          return;
+        }
+        event.preventDefault();
+        if (!state.puzzle || state.previewVisible) {
+          return;
+        }
+        const hit = getRegionFromEvent(event);
+        if (!hit) {
+          session.lastRegionId = null;
+          return;
+        }
+        if (session.lastRegionId === hit.regionId) {
+          return;
+        }
+        session.lastRegionId = hit.regionId;
+        attemptFillRegion(hit, { label: "drag" });
+      }
+
+      function handleMouseDragZoom(event, session) {
+        if (!session) return;
+        const previousY = session.lastY ?? session.startY;
+        session.lastX = event.clientX;
+        session.lastY = event.clientY;
+        const dx = event.clientX - session.startX;
+        const dy = event.clientY - session.startY;
+        const distance = Math.hypot(dx, dy);
+        const threshold = 4;
+        if (!session.dragStarted && distance >= threshold) {
+          session.dragStarted = true;
+          session.preventClick = true;
+          suppressNextCanvasClickUntil = Date.now() + POINTER_CLICK_SUPPRESSION_MS;
+        }
+        if (!session.dragStarted) {
+          return;
+        }
+        event.preventDefault();
+        const deltaY = event.clientY - previousY;
+        if (!Number.isFinite(deltaY) || Math.abs(deltaY) < 0.5) {
+          return;
+        }
+        const multiplier = Math.exp(-deltaY / 200);
+        if (!Number.isFinite(multiplier) || Math.abs(multiplier - 1) < 0.001) {
+          return;
+        }
+        applyZoom(multiplier, event.clientX, event.clientY, { skipLog: true });
+        session.zoomChanged = true;
+      }
+
+      function finalizeMouseSession(session, event) {
+        if (!session) return;
+        pointerSessions.delete(session.pointerId);
+        const now = Date.now();
+        const buttonName = session.buttonName;
+        if (session.dragAction === "fill" && session.dragStarted) {
+          suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+          return;
+        }
+        if (session.dragAction === "zoom" && session.dragStarted) {
+          suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+          if (session.zoomChanged) {
+            const currentScale = clamp(
+              viewState.baseScale * Math.max(viewState.zoom, MIN_VIEWPORT_ZOOM),
+              MIN_RENDER_SCALE,
+              MAX_RENDER_SCALE
+            );
+            logDebug(
+              `${describeMouseButton(buttonName)} drag zoom ended at ${(currentScale * 100).toFixed(0)}%`
+            );
+          }
+          return;
+        }
+        if (session.dragAction === "pan" && (session.dragStarted || session.panActive)) {
+          if (buttonName === "left") {
+            suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+          }
+          return;
+        }
+        const action = session.clickAction;
+        if (action === "fill") {
+          if (buttonName !== "left") {
+            const hit = getRegionFromEvent(event);
+            if (hit) {
+              const result = attemptFillRegion(hit, { label: "click" });
+              if (result !== "ignored") {
+                suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+              }
+            }
+          }
+          return;
+        }
+        suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+        if (action === "select") {
+          const hit = getRegionFromEvent(event);
+          if (hit && hit.region) {
+            const remaining = getRegionsByColor(hit.region.colorId, { includeFilled: false });
+            if (remaining.length > 0) {
+              activateColor(hit.region.colorId);
+            } else {
+              logDebug(
+                `Colour #${hit.region.colorId} already complete; ${describeMouseButton(buttonName)} click ignored`
+              );
+            }
+          } else {
+            logDebug("No region under pointer to select a colour");
+          }
+          return;
+        }
+        if (action === "select-fill") {
+          const hit = getRegionFromEvent(event);
+          if (!hit || !hit.region) {
+            logDebug("No region under pointer to select and fill");
+            return;
+          }
+          activateColor(hit.region.colorId, { flash: false });
+          attemptFillRegion(hit, { label: "click" });
+          return;
+        }
+        if (action === "zoom-in" || action === "zoom-out") {
+          const multiplier = action === "zoom-in" ? 1.15 : 0.85;
+          applyZoom(multiplier, event.clientX, event.clientY);
+          return;
+        }
+      }
+
       function beginPanSession(
         pointerId,
         originX,
@@ -5986,6 +7228,7 @@
         captureTarget,
         pointerType
       ) {
+        const session = pointerSessions.get(pointerId);
         panPointerId = pointerId;
         panOrigin.x = originX;
         panOrigin.y = originY;
@@ -5999,6 +7242,11 @@
         const fallbackTarget = defaultPanCaptureTarget();
         panCaptureTarget = captureTarget || fallbackTarget;
         panPointerType = typeof pointerType === "string" ? pointerType : null;
+        if (session) {
+          session.dragStarted = true;
+          session.panActive = true;
+          session.preventClick = true;
+        }
         let captured = false;
         if (panCaptureTarget && typeof panCaptureTarget.setPointerCapture === "function") {
           try {
@@ -6068,46 +7316,73 @@
           return;
         }
         const usesModifier = spacePressed || event.altKey || event.ctrlKey || event.metaKey;
-        const wantsRightClickSelect =
-          event.pointerType === "mouse" &&
-          event.button === 2 &&
-          !usesModifier &&
-          !state.previewVisible;
-        if (wantsRightClickSelect) {
-          const hit = getRegionFromEvent(event);
-          if (hit && hit.region) {
-            const remaining = getRegionsByColor(hit.region.colorId, { includeFilled: false });
-            if (remaining.length > 0) {
-              event.preventDefault();
-              activateColor(hit.region.colorId);
-              return;
-            }
-          }
-        }
-        const auxButton = event.button === 1 || event.button === 2;
-        if (auxButton || usesModifier) {
-          event.preventDefault();
-          beginPanSession(
-            event.pointerId,
-            event.clientX,
-            event.clientY,
-            viewState.panX,
-            viewState.panY,
-            captureTarget,
-            event.pointerType
-          );
+        const pointerType = event.pointerType;
+        if (pointerType !== "mouse" && pointerType !== "pen") {
           return;
         }
-        if (event.button === 0) {
+        pointerSessions.delete(event.pointerId);
+        const buttonName = getMouseButtonName(event.button);
+        const controls = getMouseControlsForButton(buttonName);
+        let clickAction = controls.click;
+        let dragAction = controls.drag;
+        if (usesModifier) {
+          dragAction = "pan";
+          clickAction = "none";
+        }
+        const session = {
+          pointerId: event.pointerId,
+          pointerType,
+          button: event.button,
+          buttonName,
+          clickAction,
+          dragAction,
+          startX: event.clientX,
+          startY: event.clientY,
+          lastX: event.clientX,
+          lastY: event.clientY,
+          captureTarget,
+          dragStarted: false,
+          panActive: false,
+          zoomChanged: false,
+          lastRegionId: null,
+        };
+        pointerSessions.set(event.pointerId, session);
+        if (dragAction === "pan") {
+          session.panStartX = viewState.panX;
+          session.panStartY = viewState.panY;
+          const immediatePan = usesModifier || buttonName !== "left";
+          if (immediatePan) {
+            event.preventDefault();
+            beginPanSession(
+              event.pointerId,
+              event.clientX,
+              event.clientY,
+              viewState.panX,
+              viewState.panY,
+              captureTarget,
+              event.pointerType
+            );
+            return;
+          }
           panCandidate = {
             pointerId: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
             panX: viewState.panX,
             panY: viewState.panY,
-            pointerType: "mouse",
+            pointerType: event.pointerType,
             captureTarget,
+            session,
           };
+          return;
+        }
+        if (dragAction === "fill") {
+          session.lastRegionId = null;
+          return;
+        }
+        if (dragAction === "zoom") {
+          session.zoomStart = viewState.zoom;
+          return;
         }
       }
 
@@ -6155,6 +7430,7 @@
               if (Math.abs(deltaX) > 0.0001 || Math.abs(deltaY) > 0.0001) {
                 viewState.panX += deltaX;
                 viewState.panY += deltaY;
+                clampViewPanToPuzzleBounds();
                 pinchSession.hasChanged = true;
                 scheduleViewTransform({ skipSizing: true });
               }
@@ -6164,12 +7440,30 @@
             return;
           }
         }
+        const session = pointerSessions.get(event.pointerId);
+        if (session && session.pointerType !== "touch") {
+          if (session.dragAction === "fill") {
+            handleMouseDragFill(event, session);
+            return;
+          }
+          if (session.dragAction === "zoom") {
+            handleMouseDragZoom(event, session);
+            return;
+          }
+        }
         if (panPointerId === event.pointerId && isPanning) {
           event.preventDefault();
           const dx = event.clientX - panOrigin.x;
           const dy = event.clientY - panOrigin.y;
           viewState.panX = panOrigin.panX + dx;
           viewState.panY = panOrigin.panY + dy;
+          clampViewPanToPuzzleBounds();
+          if (session) {
+            session.dragStarted = true;
+            session.panActive = true;
+            session.lastX = event.clientX;
+            session.lastY = event.clientY;
+          }
           scheduleViewTransform({ skipSizing: true });
           return;
         }
@@ -6194,6 +7488,7 @@
       }
 
       function handlePanEnd(event) {
+        const session = pointerSessions.get(event.pointerId);
         if (event.pointerType === "touch") {
           activeTouches.delete(event.pointerId);
           if (pinchSession && !pinchSession.ids.every((id) => activeTouches.has(id))) {
@@ -6227,7 +7522,12 @@
         if (panCandidate && panCandidate.pointerId === event.pointerId) {
           panCandidate = null;
         }
-        if (event.pointerId !== panPointerId) return;
+        if (event.pointerId !== panPointerId) {
+          if (session && session.pointerType !== "touch") {
+            finalizeMouseSession(session, event);
+          }
+          return;
+        }
         panPointerId = null;
         panPointerType = null;
         if (isPanning) {
@@ -6247,6 +7547,9 @@
         panCaptureTarget = null;
         panHasPointerCapture = false;
         detachGlobalPanListeners();
+        if (session && session.pointerType !== "touch") {
+          finalizeMouseSession(session, event);
+        }
         if (event.pointerType === "touch") {
           hideCustomCursor();
         } else {
@@ -6426,6 +7729,7 @@
         const offsetY = anchorY - centerY - viewState.panY;
         viewState.panX += offsetX - offsetX * change;
         viewState.panY += offsetY - offsetY * change;
+        clampViewPanToPuzzleBounds();
         const nextZoom = normalizeZoomValue(targetScale / baseScale, currentZoom);
         const significant = Math.abs(targetScale - currentScale) >= Math.max(0.01, currentScale * 0.001);
         viewState.zoom = nextZoom;
@@ -6454,6 +7758,7 @@
           cancelViewTransformFrame = null;
           pendingViewTransform = null;
         }
+        clampViewPanToPuzzleBounds();
         if (canvasStage) {
           canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
           canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
@@ -6559,6 +7864,7 @@
           viewState.zoom = normalizeZoomValue(1);
         }
         viewState.baseScale = nextBase;
+        clampViewPanToPuzzleBounds();
         applyViewTransform();
       }
 
@@ -6584,6 +7890,7 @@
         viewState.zoom = normalizeZoomValue(targetZoom, savedZoom);
         viewState.panX = hasPanX && Number.isFinite(viewport.panX) ? viewport.panX * scaleRatio : 0;
         viewState.panY = hasPanY && Number.isFinite(viewport.panY) ? viewport.panY * scaleRatio : 0;
+        clampViewPanToPuzzleBounds();
         applyViewTransform();
         return true;
       }
@@ -6605,7 +7912,9 @@
         if (state.settings.animateHints) {
           const paletteColor = getPaletteEntry(target.colorId);
           flashRegion(target.id, { paletteColor });
-          flashColorRegions(target.colorId, { paletteColor, onlyUnfilled: true });
+          if (isHintTypeEnabled("matchingRegions")) {
+            flashColorRegions(target.colorId, { paletteColor, onlyUnfilled: true });
+          }
         }
         logDebug(`Hint spotlighted region ${target.id} (colour #${target.colorId})`);
       }
@@ -6613,6 +7922,7 @@
       function flashColorRegions(colorId, options = {}) {
         if (!state.puzzle) return;
         if (colorId == null) return;
+        if (!isHintTypeEnabled("matchingRegions") && !options.force) return;
         const includeFilled = options.onlyUnfilled ? false : true;
         const targets = getRegionsByColor(colorId, { includeFilled });
         if (targets.length === 0) {
@@ -6762,12 +8072,8 @@
           }
         });
         renderPuzzle();
-        const cache = ensureRenderCache();
         overlaysByTint.forEach((regions, tint) => {
-          if (!cache?.ready) return;
-          if (canvasRenderer && typeof canvasRenderer.flashRegions === "function") {
-            canvasRenderer.flashRegions({ regions, fillStyle: tint, cache });
-          }
+          paintRegions(regions, tint);
         });
         if (overlayAnimations.size > 0) {
           scheduleOverlayFrame();
@@ -6843,6 +8149,47 @@
         return clamp(candidate, MIN_HINT_INTENSITY, MAX_HINT_INTENSITY);
       }
 
+      function normalizeHintTypes(source, fallback = DEFAULT_HINT_TYPES) {
+        const base = fallback && typeof fallback === "object" ? fallback : DEFAULT_HINT_TYPES;
+        const target = {};
+        for (const key of HINT_TYPE_KEYS) {
+          if (!Object.prototype.hasOwnProperty.call(base, key)) {
+            continue;
+          }
+          if (source && typeof source === "object" && key in source) {
+            target[key] = source[key] !== false;
+          } else {
+            target[key] = base[key] !== false;
+          }
+        }
+        return target;
+      }
+
+      function isHintTypeEnabled(key) {
+        if (state.settings.animateHints === false) {
+          return false;
+        }
+        if (!HINT_TYPE_KEYS.includes(key)) {
+          return true;
+        }
+        const source = state.settings?.hintTypes;
+        if (!source || typeof source !== "object") {
+          return DEFAULT_HINT_TYPES[key] !== false;
+        }
+        return source[key] !== false;
+      }
+
+      function syncHintTypeToggles() {
+        const normalized = normalizeHintTypes(state.settings?.hintTypes);
+        state.settings.hintTypes = normalized;
+        if (hintMatchingToggle) {
+          hintMatchingToggle.checked = normalized.matchingRegions !== false;
+        }
+        if (hintHoverToggle) {
+          hintHoverToggle.checked = normalized.hoverRegions !== false;
+        }
+      }
+
       function resolveDifficulty(value) {
         if (typeof value === "string") {
           const normalized = value.trim().toLowerCase();
@@ -6899,6 +8246,56 @@
       }
 
       // Shared renderer for flashing overlays (hints + colour selection pulses).
+      function paintRegions(regions, fillStyle) {
+        if (!state.puzzle || regions.length === 0) return;
+        const cache = ensureRenderCache();
+        if (!cache.ready) return;
+        const controller = state.rendering?.controller;
+        if (!controller) return;
+        controller.flashRegions({ state, cache, regions, fillStyle, metrics: { ...canvasMetrics } });
+      }
+
+      function flashRegionsWithContext({ context, state, cache, regions, fillStyle }) {
+        if (!context || !state?.puzzle || !Array.isArray(regions) || regions.length === 0) {
+          return;
+        }
+        const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+        const strokeWidth = cache?.strokeWidth > 0 ? cache.strokeWidth : 1;
+        withRenderScale(context, scale, () => {
+          context.fillStyle = fillStyle;
+          context.strokeStyle = fillStyle;
+          context.lineWidth = strokeWidth;
+          context.lineJoin = "round";
+          context.lineCap = "round";
+          if (SUPPORTS_PATH2D) {
+            for (const region of regions) {
+              const geometry = cache?.regionsById?.get(region.id);
+              if (!geometry?.path) continue;
+              context.fill(geometry.path);
+              context.stroke(geometry.path);
+            }
+            return;
+          }
+          for (const region of regions) {
+            const geometry = cache?.regionsById?.get(region.id);
+            if (!geometry?.contours) continue;
+            context.beginPath();
+            for (const contour of geometry.contours) {
+              if (contour.length === 0) continue;
+              const first = contour[0];
+              context.moveTo(first[0], first[1]);
+              for (let i = 1; i < contour.length; i++) {
+                const point = contour[i];
+                context.lineTo(point[0], point[1]);
+              }
+              context.closePath();
+            }
+            context.fill();
+            context.stroke();
+          }
+        });
+      }
+
       function flashPaletteSwatch(colorId, options = {}) {
         if (!paletteEl) return;
         const swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
@@ -7049,6 +8446,7 @@
         payload.settings = {
           autoAdvance: Boolean(settingsSource.autoAdvance),
           animateHints: Boolean(settingsSource.animateHints),
+          hintTypes: normalizeHintTypes(settingsSource.hintTypes ?? state.settings.hintTypes),
           hintFadeDuration: normalizeHintFadeDuration(
             settingsSource.hintFadeDuration ?? state.settings.hintFadeDuration
           ),
@@ -7162,6 +8560,7 @@
           settings: {
             autoAdvance: Boolean(state.settings.autoAdvance),
             animateHints: Boolean(state.settings.animateHints),
+            hintTypes: normalizeHintTypes(state.settings.hintTypes),
             hintFadeDuration: normalizeHintFadeDuration(state.settings.hintFadeDuration),
             hintIntensity: normalizeHintIntensity(state.settings.hintIntensity),
             difficulty: resolveDifficulty(state.settings.difficulty),
@@ -7173,6 +8572,7 @@
             imageDescription: state.settings.imageDescription || "",
             showRegionLabels: state.settings.showRegionLabels !== false,
             theme: state.settings.theme || DEFAULT_UI_THEME,
+            mouseControls: cloneMouseControls(state.settings.mouseControls),
           },
         };
         if (regionMapPacked) {
