@@ -26,9 +26,9 @@ jobs:
     if: github.ref != 'refs/heads/gh-pages'
     runs-on: ubuntu-latest
     env:
-      EFFECTIVE_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.target_branch != '' ? inputs.target_branch : github.ref_name }}
-      EFFECTIVE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.target_branch != '' ? format('refs/heads/{0}', inputs.target_branch) : github.ref }}
-      ALLOW_WITHOUT_PR: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_without_pr == 'true' ? 'true' : 'false' }}
+      EFFECTIVE_BRANCH: "${{ github.event_name == 'workflow_dispatch' && inputs.target_branch != '' ? inputs.target_branch : github.ref_name }}"
+      EFFECTIVE_REF: "${{ github.event_name == 'workflow_dispatch' && inputs.target_branch != '' ? format('refs/heads/{0}', inputs.target_branch) : github.ref }}"
+      ALLOW_WITHOUT_PR: "${{ github.event_name == 'workflow_dispatch' && inputs.allow_without_pr == 'true' ? 'true' : 'false' }}"
     concurrency:
       group: pages-deployments
       cancel-in-progress: false
@@ -315,7 +315,7 @@ jobs:
 
           if [ "${#UNIQUE_SAFE_NAMES[@]}" -gt 0 ]; then
             printf '%s\n' "${UNIQUE_SAFE_NAMES[@]}" > "$MANIFEST"
-            ACTIVE_JSON=$(printf '%s\n' "${UNIQUE_SAFE_NAMES[@]}" | python -c 'import json, sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))') || ACTIVE_JSON='[]'
+            ACTIVE_JSON=$(printf '%s\n' "${UNIQUE_SAFE_NAMES[@]}" | python3 -c 'import json, sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))') || ACTIVE_JSON='[]'
           else
             : > "$MANIFEST"
             ACTIVE_JSON='[]'
