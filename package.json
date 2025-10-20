@@ -10,7 +10,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.43.1",
-    "http-server": "^14.1.1"
+    "http-server": "^14.1.1",
+    "marked": "^12.0.2"
   },
   "engines": {
     "node": ">=18"
