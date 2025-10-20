@@ -9,24 +9,14 @@
     "commitUrl": "https://github.com/shthed/capy/commit/472db746a90d9ccab58d2ed756ae8fdd76b24977",
     "key": "main"
   },
-  "codex-add-canvas2d-renderer-implementation": {
-    "key": "codex-add-canvas2d-renderer-implementation",
-    "branch": "codex/add-canvas2d-renderer-implementation",
-    "safeName": "codex-add-canvas2d-renderer-implementation",
-    "commit": "5d73b1ace8b2e02fff9c7acff6534fe859554e3f",
-    "message": "Extract Canvas2D flash and fill helpers",
+  "codex-review-and-run-post-deploy-tests": {
+    "key": "codex-review-and-run-post-deploy-tests",
+    "branch": "codex/review-and-run-post-deploy-tests",
+    "safeName": "codex-review-and-run-post-deploy-tests",
+    "commit": "472db746a90d9ccab58d2ed756ae8fdd76b24977",
+    "message": "Merge pull request #193 from shthed/codex/add-tests-for-game-loading-and-completing\n\nAdd Playwright tests for painting and save completion",
     "actor": "shthed",
-    "deployedAt": "2025-10-20T19:37:49+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/5d73b1ace8b2e02fff9c7acff6534fe859554e3f"
-  },
-  "codex-run-ui-tests": {
-    "key": "codex-run-ui-tests",
-    "branch": "codex/run-ui-tests",
-    "safeName": "codex-run-ui-tests",
-    "commit": "37685f47c5ef2625a0154ccacf2d576ac487673c",
-    "message": "Stabilize UI smoke tests with automation helpers",
-    "actor": "shthed",
-    "deployedAt": "2025-10-20T21:08:37+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/37685f47c5ef2625a0154ccacf2d576ac487673c"
+    "deployedAt": "2025-10-20T18:35:08+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/472db746a90d9ccab58d2ed756ae8fdd76b24977"
   }
 }
