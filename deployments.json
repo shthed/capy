@@ -2,11 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "72bfa577407750b0bd13ad7b145422846110dc7f",
-    "message": "Merge pull request #181 from shthed/codex/refactor-canvas-rendering-to-use-controller\n\nModularize puzzle renderer via controller abstraction",
+    "commit": "b538d36e97087e7f7f1e1cfc1328959bac3eb017",
+    "message": "Merge pull request #187 from shthed/codex/refactor-prepare-deploy-metadata-for-fetch-usage\n\nUse fetch to build deployment metadata",
     "actor": "shthed",
-    "deployedAt": "2025-10-20T18:10:11+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/72bfa577407750b0bd13ad7b145422846110dc7f",
+    "deployedAt": "2025-10-20T18:34:14+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/b538d36e97087e7f7f1e1cfc1328959bac3eb017",
     "key": "main"
   },
   "codex-add-canvas2d-renderer-implementation": {
@@ -48,16 +48,6 @@
     "actor": "shthed",
     "deployedAt": "2025-10-20T18:33:08+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/8170c606ed2d4b3f62ebc5858246d6082e275857"
-  },
-  "codex-refactor-prepare-deploy-metadata-for-fetch-usage": {
-    "key": "codex-refactor-prepare-deploy-metadata-for-fetch-usage",
-    "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage",
-    "safeName": "codex-refactor-prepare-deploy-metadata-for-fetch-usage",
-    "commit": "cc83ae8299745b909bcfa28f03deb429efecf828",
-    "message": "Use fetch for deployment metadata script",
-    "actor": "shthed",
-    "deployedAt": "2025-10-19T17:42:29+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/cc83ae8299745b909bcfa28f03deb429efecf828"
   },
   "codex-render-region-number-labels": {
     "key": "codex-render-region-number-labels",

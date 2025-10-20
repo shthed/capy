@@ -1,6 +1,22 @@
 {
   "commits": [
     {
+      "sha": "b538d36e97087e7f7f1e1cfc1328959bac3eb017",
+      "shortSha": "b538d36",
+      "message": "Merge pull request #187 from shthed/codex/refactor-prepare-deploy-metadata-for-fetch-usage\n\nUse fetch to build deployment metadata",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-20T10:34:14Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b538d36e97087e7f7f1e1cfc1328959bac3eb017",
+      "prs": [
+        {
+          "number": 187,
+          "title": "Use fetch to build deployment metadata",
+          "url": "https://github.com/shthed/capy/pull/187",
+          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
+        }
+      ]
+    },
+    {
       "sha": "72bfa577407750b0bd13ad7b145422846110dc7f",
       "shortSha": "72bfa57",
       "message": "Merge pull request #181 from shthed/codex/refactor-canvas-rendering-to-use-controller\n\nModularize puzzle renderer via controller abstraction",
@@ -47,24 +63,8 @@
           "branch": "codex/create-workflow-for-post-deployment-tests"
         }
       ]
-    },
-    {
-      "sha": "639469b2db4c280ac135df76b665b9a88e0af481",
-      "shortSha": "639469b",
-      "message": "Merge branch 'main' into codex/create-workflow-for-post-deployment-tests",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-19T22:30:29Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/639469b2db4c280ac135df76b665b9a88e0af481",
-      "prs": [
-        {
-          "number": 188,
-          "title": "Add post-deploy branch smoke tests workflow",
-          "url": "https://github.com/shthed/capy/pull/188",
-          "branch": "codex/create-workflow-for-post-deployment-tests"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-20T10:10:11Z",
-  "deploymentTimestamp": 1760955028552
+  "lastCommitDate": "2025-10-20T10:34:14Z",
+  "deploymentTimestamp": 1760956468220
 }

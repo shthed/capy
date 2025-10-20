@@ -1,4 +1,252 @@
 {
+  "codex/pull-and-merge-from-origin-main": [
+    {
+      "sha": "8170c606ed2d4b3f62ebc5858246d6082e275857",
+      "shortSha": "8170c60",
+      "message": "Add local Markdown fallback for README HTML",
+      "date": "2025-10-20T10:33:08Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8170c606ed2d4b3f62ebc5858246d6082e275857",
+      "prs": [
+        {
+          "number": 191,
+          "title": "Merge origin/main into work",
+          "url": "https://github.com/shthed/capy/pull/191",
+          "branch": "codex/pull-and-merge-from-origin-main"
+        }
+      ]
+    },
+    {
+      "sha": "71e8a8c1b4d79f0807769f33d219ae5df2911c6c",
+      "shortSha": "71e8a8c",
+      "message": "Merge remote-tracking branch 'origin/main' into work",
+      "date": "2025-10-20T10:11:38Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/71e8a8c1b4d79f0807769f33d219ae5df2911c6c",
+      "prs": [
+        {
+          "number": 191,
+          "title": "Merge origin/main into work",
+          "url": "https://github.com/shthed/capy/pull/191",
+          "branch": "codex/pull-and-merge-from-origin-main"
+        }
+      ]
+    },
+    {
+      "sha": "06b9c12ae94c0199a9c179f98f75e332c8ee6881",
+      "shortSha": "06b9c12",
+      "message": "Normalize renderer controller factories",
+      "date": "2025-10-19T08:46:12Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/06b9c12ae94c0199a9c179f98f75e332c8ee6881",
+      "prs": [
+        {
+          "number": 191,
+          "title": "Merge origin/main into work",
+          "url": "https://github.com/shthed/capy/pull/191",
+          "branch": "codex/pull-and-merge-from-origin-main"
+        }
+      ]
+    },
+    {
+      "sha": "121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
+      "shortSha": "121e8a5",
+      "message": "Refactor puzzle renderer through controller",
+      "date": "2025-10-18T04:24:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
+      "prs": [
+        {
+          "number": 191,
+          "title": "Merge origin/main into work",
+          "url": "https://github.com/shthed/capy/pull/191",
+          "branch": "codex/pull-and-merge-from-origin-main"
+        }
+      ]
+    }
+  ],
+  "codex-pull-and-merge-from-origin-main": [
+    {
+      "sha": "8170c606ed2d4b3f62ebc5858246d6082e275857",
+      "shortSha": "8170c60",
+      "message": "Add local Markdown fallback for README HTML",
+      "date": "2025-10-20T10:33:08Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8170c606ed2d4b3f62ebc5858246d6082e275857",
+      "prs": [
+        {
+          "number": 191,
+          "title": "Merge origin/main into work",
+          "url": "https://github.com/shthed/capy/pull/191",
+          "branch": "codex/pull-and-merge-from-origin-main"
+        }
+      ]
+    },
+    {
+      "sha": "71e8a8c1b4d79f0807769f33d219ae5df2911c6c",
+      "shortSha": "71e8a8c",
+      "message": "Merge remote-tracking branch 'origin/main' into work",
+      "date": "2025-10-20T10:11:38Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/71e8a8c1b4d79f0807769f33d219ae5df2911c6c",
+      "prs": [
+        {
+          "number": 191,
+          "title": "Merge origin/main into work",
+          "url": "https://github.com/shthed/capy/pull/191",
+          "branch": "codex/pull-and-merge-from-origin-main"
+        }
+      ]
+    },
+    {
+      "sha": "06b9c12ae94c0199a9c179f98f75e332c8ee6881",
+      "shortSha": "06b9c12",
+      "message": "Normalize renderer controller factories",
+      "date": "2025-10-19T08:46:12Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/06b9c12ae94c0199a9c179f98f75e332c8ee6881",
+      "prs": [
+        {
+          "number": 191,
+          "title": "Merge origin/main into work",
+          "url": "https://github.com/shthed/capy/pull/191",
+          "branch": "codex/pull-and-merge-from-origin-main"
+        }
+      ]
+    },
+    {
+      "sha": "121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
+      "shortSha": "121e8a5",
+      "message": "Refactor puzzle renderer through controller",
+      "date": "2025-10-18T04:24:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/121e8a50231f4a7e085bc74ed08a226b1fa4ada8",
+      "prs": [
+        {
+          "number": 191,
+          "title": "Merge origin/main into work",
+          "url": "https://github.com/shthed/capy/pull/191",
+          "branch": "codex/pull-and-merge-from-origin-main"
+        }
+      ]
+    }
+  ],
+  "codex/add-workflow_dispatch-trigger-to-branch": [
+    {
+      "sha": "8c842bfe8bc75533bc6de96574b64942b0d4ef03",
+      "shortSha": "8c842bf",
+      "message": "Allow manual deploys to target any branch",
+      "date": "2025-10-20T10:32:39Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8c842bfe8bc75533bc6de96574b64942b0d4ef03",
+      "prs": [
+        {
+          "number": 192,
+          "title": "Allow manual deploys to target any branch",
+          "url": "https://github.com/shthed/capy/pull/192",
+          "branch": "codex/add-workflow_dispatch-trigger-to-branch"
+        }
+      ]
+    },
+    {
+      "sha": "72bfa577407750b0bd13ad7b145422846110dc7f",
+      "shortSha": "72bfa57",
+      "message": "Merge pull request #181 from shthed/codex/refactor-canvas-rendering-to-use-controller\n\nModularize puzzle renderer via controller abstraction",
+      "date": "2025-10-20T10:10:11Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/72bfa577407750b0bd13ad7b145422846110dc7f",
+      "prs": [
+        {
+          "number": 192,
+          "title": "Allow manual deploys to target any branch",
+          "url": "https://github.com/shthed/capy/pull/192",
+          "branch": "codex/add-workflow_dispatch-trigger-to-branch"
+        }
+      ]
+    },
+    {
+      "sha": "df4669961c294e02b3a01c710b984f8b7f85351f",
+      "shortSha": "df46699",
+      "message": "Improve renderer controller extensibility",
+      "date": "2025-10-20T04:08:16Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/df4669961c294e02b3a01c710b984f8b7f85351f",
+      "prs": [
+        {
+          "number": 192,
+          "title": "Allow manual deploys to target any branch",
+          "url": "https://github.com/shthed/capy/pull/192",
+          "branch": "codex/add-workflow_dispatch-trigger-to-branch"
+        }
+      ]
+    },
+    {
+      "sha": "7876f1b0c63c85ed37299b012ff95319582c0216",
+      "shortSha": "7876f1b",
+      "message": "Merge pull request #188 from shthed/codex/create-workflow-for-post-deployment-tests\n\nAdd post-deploy branch smoke tests workflow",
+      "date": "2025-10-19T22:31:11Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7876f1b0c63c85ed37299b012ff95319582c0216",
+      "prs": [
+        {
+          "number": 192,
+          "title": "Allow manual deploys to target any branch",
+          "url": "https://github.com/shthed/capy/pull/192",
+          "branch": "codex/add-workflow_dispatch-trigger-to-branch"
+        }
+      ]
+    }
+  ],
+  "codex-add-workflow_dispatch-trigger-to-branch": [
+    {
+      "sha": "8c842bfe8bc75533bc6de96574b64942b0d4ef03",
+      "shortSha": "8c842bf",
+      "message": "Allow manual deploys to target any branch",
+      "date": "2025-10-20T10:32:39Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8c842bfe8bc75533bc6de96574b64942b0d4ef03",
+      "prs": [
+        {
+          "number": 192,
+          "title": "Allow manual deploys to target any branch",
+          "url": "https://github.com/shthed/capy/pull/192",
+          "branch": "codex/add-workflow_dispatch-trigger-to-branch"
+        }
+      ]
+    },
+    {
+      "sha": "72bfa577407750b0bd13ad7b145422846110dc7f",
+      "shortSha": "72bfa57",
+      "message": "Merge pull request #181 from shthed/codex/refactor-canvas-rendering-to-use-controller\n\nModularize puzzle renderer via controller abstraction",
+      "date": "2025-10-20T10:10:11Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/72bfa577407750b0bd13ad7b145422846110dc7f",
+      "prs": [
+        {
+          "number": 192,
+          "title": "Allow manual deploys to target any branch",
+          "url": "https://github.com/shthed/capy/pull/192",
+          "branch": "codex/add-workflow_dispatch-trigger-to-branch"
+        }
+      ]
+    },
+    {
+      "sha": "df4669961c294e02b3a01c710b984f8b7f85351f",
+      "shortSha": "df46699",
+      "message": "Improve renderer controller extensibility",
+      "date": "2025-10-20T04:08:16Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/df4669961c294e02b3a01c710b984f8b7f85351f",
+      "prs": [
+        {
+          "number": 192,
+          "title": "Allow manual deploys to target any branch",
+          "url": "https://github.com/shthed/capy/pull/192",
+          "branch": "codex/add-workflow_dispatch-trigger-to-branch"
+        }
+      ]
+    },
+    {
+      "sha": "7876f1b0c63c85ed37299b012ff95319582c0216",
+      "shortSha": "7876f1b",
+      "message": "Merge pull request #188 from shthed/codex/create-workflow-for-post-deployment-tests\n\nAdd post-deploy branch smoke tests workflow",
+      "date": "2025-10-19T22:31:11Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7876f1b0c63c85ed37299b012ff95319582c0216",
+      "prs": [
+        {
+          "number": 192,
+          "title": "Allow manual deploys to target any branch",
+          "url": "https://github.com/shthed/capy/pull/192",
+          "branch": "codex/add-workflow_dispatch-trigger-to-branch"
+        }
+      ]
+    }
+  ],
   "codex/add-canvas2d-renderer-implementation": [
     {
       "sha": "3cb675476d1527cff0dc119806ff6d9949644e49",
@@ -243,130 +491,6 @@
           "title": "Fix PR #181 deployment by updating workflow and adding missing scripts",
           "url": "https://github.com/shthed/capy/pull/189",
           "branch": "copilot/deploy-capy-pull-181"
-        }
-      ]
-    }
-  ],
-  "codex/refactor-prepare-deploy-metadata-for-fetch-usage": [
-    {
-      "sha": "cc83ae8299745b909bcfa28f03deb429efecf828",
-      "shortSha": "cc83ae8",
-      "message": "Use fetch for deployment metadata script",
-      "date": "2025-10-19T09:42:29Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/cc83ae8299745b909bcfa28f03deb429efecf828",
-      "prs": [
-        {
-          "number": 187,
-          "title": "Use fetch to build deployment metadata",
-          "url": "https://github.com/shthed/capy/pull/187",
-          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
-        }
-      ]
-    },
-    {
-      "sha": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
-      "shortSha": "420993f",
-      "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md\n\nRewrite README for player-focused guidance",
-      "date": "2025-10-18T04:15:22Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/420993f5ae5ea27e6d530494ac2e43858f91d26b",
-      "prs": [
-        {
-          "number": 187,
-          "title": "Use fetch to build deployment metadata",
-          "url": "https://github.com/shthed/capy/pull/187",
-          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
-        }
-      ]
-    },
-    {
-      "sha": "8f11153e5bf68fd39e1b304a119769ef46e29466",
-      "shortSha": "8f11153",
-      "message": "Consolidate workflow docs into AGENTS and TECH",
-      "date": "2025-10-18T01:48:39Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/8f11153e5bf68fd39e1b304a119769ef46e29466",
-      "prs": [
-        {
-          "number": 187,
-          "title": "Use fetch to build deployment metadata",
-          "url": "https://github.com/shthed/capy/pull/187",
-          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
-        }
-      ]
-    },
-    {
-      "sha": "0806f1435a44d30c24d679c62fc734adfaf5e0e5",
-      "shortSha": "0806f14",
-      "message": "Document technical guide and streamline agent instructions",
-      "date": "2025-10-18T01:48:32Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/0806f1435a44d30c24d679c62fc734adfaf5e0e5",
-      "prs": [
-        {
-          "number": 187,
-          "title": "Use fetch to build deployment metadata",
-          "url": "https://github.com/shthed/capy/pull/187",
-          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
-        }
-      ]
-    }
-  ],
-  "codex-refactor-prepare-deploy-metadata-for-fetch-usage": [
-    {
-      "sha": "cc83ae8299745b909bcfa28f03deb429efecf828",
-      "shortSha": "cc83ae8",
-      "message": "Use fetch for deployment metadata script",
-      "date": "2025-10-19T09:42:29Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/cc83ae8299745b909bcfa28f03deb429efecf828",
-      "prs": [
-        {
-          "number": 187,
-          "title": "Use fetch to build deployment metadata",
-          "url": "https://github.com/shthed/capy/pull/187",
-          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
-        }
-      ]
-    },
-    {
-      "sha": "420993f5ae5ea27e6d530494ac2e43858f91d26b",
-      "shortSha": "420993f",
-      "message": "Merge pull request #180 from shthed/codex/move-development-notes-to-agents.md\n\nRewrite README for player-focused guidance",
-      "date": "2025-10-18T04:15:22Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/420993f5ae5ea27e6d530494ac2e43858f91d26b",
-      "prs": [
-        {
-          "number": 187,
-          "title": "Use fetch to build deployment metadata",
-          "url": "https://github.com/shthed/capy/pull/187",
-          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
-        }
-      ]
-    },
-    {
-      "sha": "8f11153e5bf68fd39e1b304a119769ef46e29466",
-      "shortSha": "8f11153",
-      "message": "Consolidate workflow docs into AGENTS and TECH",
-      "date": "2025-10-18T01:48:39Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/8f11153e5bf68fd39e1b304a119769ef46e29466",
-      "prs": [
-        {
-          "number": 187,
-          "title": "Use fetch to build deployment metadata",
-          "url": "https://github.com/shthed/capy/pull/187",
-          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
-        }
-      ]
-    },
-    {
-      "sha": "0806f1435a44d30c24d679c62fc734adfaf5e0e5",
-      "shortSha": "0806f14",
-      "message": "Document technical guide and streamline agent instructions",
-      "date": "2025-10-18T01:48:32Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/0806f1435a44d30c24d679c62fc734adfaf5e0e5",
-      "prs": [
-        {
-          "number": 187,
-          "title": "Use fetch to build deployment metadata",
-          "url": "https://github.com/shthed/capy/pull/187",
-          "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage"
         }
       ]
     }

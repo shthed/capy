@@ -1,5 +1,21 @@
 [
   {
+    "branch": "codex/pull-and-merge-from-origin-main",
+    "safeName": "codex-pull-and-merge-from-origin-main",
+    "title": "Merge origin/main into work",
+    "number": 191,
+    "updatedAt": "2025-10-20T10:33:11Z",
+    "url": "https://github.com/shthed/capy/pull/191"
+  },
+  {
+    "branch": "codex/add-workflow_dispatch-trigger-to-branch",
+    "safeName": "codex-add-workflow_dispatch-trigger-to-branch",
+    "title": "Allow manual deploys to target any branch",
+    "number": 192,
+    "updatedAt": "2025-10-20T10:32:43Z",
+    "url": "https://github.com/shthed/capy/pull/192"
+  },
+  {
     "branch": "codex/add-canvas2d-renderer-implementation",
     "safeName": "codex-add-canvas2d-renderer-implementation",
     "title": "Modularize Canvas2D rendering pipeline",
@@ -14,14 +30,6 @@
     "number": 189,
     "updatedAt": "2025-10-20T01:20:01Z",
     "url": "https://github.com/shthed/capy/pull/189"
-  },
-  {
-    "branch": "codex/refactor-prepare-deploy-metadata-for-fetch-usage",
-    "safeName": "codex-refactor-prepare-deploy-metadata-for-fetch-usage",
-    "title": "Use fetch to build deployment metadata",
-    "number": 187,
-    "updatedAt": "2025-10-19T09:44:13Z",
-    "url": "https://github.com/shthed/capy/pull/187"
   },
   {
     "branch": "codex/render-region-number-labels",
