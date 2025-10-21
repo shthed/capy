@@ -1288,7 +1288,13 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
         uploadState.overlayHasContent = false;
       }
       uploadState.numbersHasContent = false;
-      uploadState.numbersDirty = false;
+      uploadState.filledDirty = true;
+      uploadState.outlineDirty = true;
+      uploadState.numbersDirty = true;
+      uploadState.overlayDirty = true;
+      uploadState.overlayHasContent = false;
+      overlaySurface.hasContent = false;
+      overlaySurface.dirty = true;
       return null;
     }
 
