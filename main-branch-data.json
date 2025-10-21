@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "7be224b63b060469cf1e37a2b0a9dba2288f6379",
+      "shortSha": "7be224b",
+      "message": "Merge pull request #206 from shthed/codex/update-essential_files-in-deploy-branch.yml\n\nInclude all root JS assets in branch deploys",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-21T11:13:59Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7be224b63b060469cf1e37a2b0a9dba2288f6379",
+      "prs": [
+        {
+          "number": 206,
+          "title": "Include all root JS assets in branch deploys",
+          "url": "https://github.com/shthed/capy/pull/206",
+          "branch": "codex/update-essential_files-in-deploy-branch.yml"
+        }
+      ]
+    },
+    {
+      "sha": "2e7139e1e037584c60643d47101c9afcbe3bd32c",
+      "shortSha": "2e7139e",
+      "message": "Include all root JS assets in branch deploys",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-21T11:12:36Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2e7139e1e037584c60643d47101c9afcbe3bd32c",
+      "prs": [
+        {
+          "number": 206,
+          "title": "Include all root JS assets in branch deploys",
+          "url": "https://github.com/shthed/capy/pull/206",
+          "branch": "codex/update-essential_files-in-deploy-branch.yml"
+        }
+      ]
+    },
+    {
       "sha": "8ef009bb587ec8b2136d7e4c4262da78116a3cf1",
       "shortSha": "8ef009b",
       "message": "Merge pull request #205 from shthed/codex/update-interface-scale-settings\n\nExpand interface scale limits",
@@ -31,40 +63,8 @@
           "branch": "codex/update-interface-scale-settings"
         }
       ]
-    },
-    {
-      "sha": "de363ff1f98f962b7d3c32817b3273ed56056540",
-      "shortSha": "de363ff",
-      "message": "Merge pull request #204 from shthed/codex/update-deploy-branch-to-include-.js-files\n\nInclude JS assets in branch deployments",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-21T08:02:52Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/de363ff1f98f962b7d3c32817b3273ed56056540",
-      "prs": [
-        {
-          "number": 204,
-          "title": "Include JS assets in branch deployments",
-          "url": "https://github.com/shthed/capy/pull/204",
-          "branch": "codex/update-deploy-branch-to-include-.js-files"
-        }
-      ]
-    },
-    {
-      "sha": "cd8eb50b7bad2cb77fd4887c2613bbf22b3d9b92",
-      "shortSha": "cd8eb50",
-      "message": "Include renderer scripts in branch deploys",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T22:54:31Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/cd8eb50b7bad2cb77fd4887c2613bbf22b3d9b92",
-      "prs": [
-        {
-          "number": 204,
-          "title": "Include JS assets in branch deployments",
-          "url": "https://github.com/shthed/capy/pull/204",
-          "branch": "codex/update-deploy-branch-to-include-.js-files"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-21T10:24:44Z",
-  "deploymentTimestamp": 1761042302395
+  "lastCommitDate": "2025-10-21T11:13:59Z",
+  "deploymentTimestamp": 1761045256073
 }

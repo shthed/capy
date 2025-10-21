@@ -2,11 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "8ef009bb587ec8b2136d7e4c4262da78116a3cf1",
-    "message": "Merge pull request #205 from shthed/codex/update-interface-scale-settings\n\nExpand interface scale limits",
+    "commit": "7be224b63b060469cf1e37a2b0a9dba2288f6379",
+    "message": "Merge pull request #206 from shthed/codex/update-essential_files-in-deploy-branch.yml\n\nInclude all root JS assets in branch deploys",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T18:24:44+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/8ef009bb587ec8b2136d7e4c4262da78116a3cf1",
+    "deployedAt": "2025-10-21T19:13:59+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/7be224b63b060469cf1e37a2b0a9dba2288f6379",
     "key": "main"
   },
   "codex-extend-webgl-renderer-for-textures-and-caching": {
@@ -18,15 +18,5 @@
     "actor": "shthed",
     "deployedAt": "2025-10-21T18:58:19+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/aca0e30c1102019f8116ec110a128f96b2a92d1f"
-  },
-  "codex-update-essential_files-in-deploy-branch.yml": {
-    "key": "codex-update-essential_files-in-deploy-branch.yml",
-    "branch": "codex/update-essential_files-in-deploy-branch.yml",
-    "safeName": "codex-update-essential_files-in-deploy-branch.yml",
-    "commit": "2e7139e1e037584c60643d47101c9afcbe3bd32c",
-    "message": "Include all root JS assets in branch deploys",
-    "actor": "shthed",
-    "deployedAt": "2025-10-21T19:12:36+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/2e7139e1e037584c60643d47101c9afcbe3bd32c"
   }
 }
