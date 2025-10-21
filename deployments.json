@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "ff172dc984c2fa9e27cf90c339ba974fa31e829f",
-    "message": "Merge pull request #207 from shthed/codex/update-deploy-branch-for-capy.json\n\nEnsure branch deployments include JSON assets",
+    "commit": "b9c3bd2316f9d880b7be5b07a35dcb12b9b7464e",
+    "message": "Merge pull request #208 from shthed/codex/add-webgl-support-to-modular-renderer\n\nAdd renderer selector UI and SVG backend",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T19:33:04+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/ff172dc984c2fa9e27cf90c339ba974fa31e829f",
+    "deployedAt": "2025-10-22T06:11:26+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/b9c3bd2316f9d880b7be5b07a35dcb12b9b7464e",
     "key": "main"
-  },
-  "codex-add-webgl-support-to-modular-renderer": {
-    "key": "codex-add-webgl-support-to-modular-renderer",
-    "branch": "codex/add-webgl-support-to-modular-renderer",
-    "safeName": "codex-add-webgl-support-to-modular-renderer",
-    "commit": "60cdd458b32f0bd3348b765368760f724ca5f689",
-    "message": "Add renderer debug logs and restore WebGL option",
-    "actor": "shthed",
-    "deployedAt": "2025-10-22T06:02:15+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/60cdd458b32f0bd3348b765368760f724ca5f689"
   }
 }
