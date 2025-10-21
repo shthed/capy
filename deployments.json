@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "7be224b63b060469cf1e37a2b0a9dba2288f6379",
-    "message": "Merge pull request #206 from shthed/codex/update-essential_files-in-deploy-branch.yml\n\nInclude all root JS assets in branch deploys",
+    "commit": "7fbcdd1a6abca7f3888b20f3122d3e4480838eff",
+    "message": "Merge pull request #203 from shthed/codex/extend-webgl-renderer-for-textures-and-caching\n\nAdd textured passes to WebGL renderer",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T19:13:59+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/7be224b63b060469cf1e37a2b0a9dba2288f6379",
+    "deployedAt": "2025-10-21T19:21:12+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/7fbcdd1a6abca7f3888b20f3122d3e4480838eff",
     "key": "main"
-  },
-  "codex-extend-webgl-renderer-for-textures-and-caching": {
-    "key": "codex-extend-webgl-renderer-for-textures-and-caching",
-    "branch": "codex/extend-webgl-renderer-for-textures-and-caching",
-    "safeName": "codex-extend-webgl-renderer-for-textures-and-caching",
-    "commit": "4fd8d2814f2e2a1493a06794594e466a9c846ad4",
-    "message": "Merge origin/main",
-    "actor": "shthed",
-    "deployedAt": "2025-10-21T19:18:13+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/4fd8d2814f2e2a1493a06794594e466a9c846ad4"
   }
 }
