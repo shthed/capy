@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "8ef009bb587ec8b2136d7e4c4262da78116a3cf1",
+      "shortSha": "8ef009b",
+      "message": "Merge pull request #205 from shthed/codex/update-interface-scale-settings\n\nExpand interface scale limits",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-21T10:24:44Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8ef009bb587ec8b2136d7e4c4262da78116a3cf1",
+      "prs": [
+        {
+          "number": 205,
+          "title": "Expand interface scale limits",
+          "url": "https://github.com/shthed/capy/pull/205",
+          "branch": "codex/update-interface-scale-settings"
+        }
+      ]
+    },
+    {
+      "sha": "2edd085c007cdb8f16f11a46a728d504a1550fac",
+      "shortSha": "2edd085",
+      "message": "Broaden interface scale range",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-21T10:22:59Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2edd085c007cdb8f16f11a46a728d504a1550fac",
+      "prs": [
+        {
+          "number": 205,
+          "title": "Expand interface scale limits",
+          "url": "https://github.com/shthed/capy/pull/205",
+          "branch": "codex/update-interface-scale-settings"
+        }
+      ]
+    },
+    {
       "sha": "de363ff1f98f962b7d3c32817b3273ed56056540",
       "shortSha": "de363ff",
       "message": "Merge pull request #204 from shthed/codex/update-deploy-branch-to-include-.js-files\n\nInclude JS assets in branch deployments",
@@ -31,40 +63,8 @@
           "branch": "codex/update-deploy-branch-to-include-.js-files"
         }
       ]
-    },
-    {
-      "sha": "b6128fc398a01b88ae7b493e1bdb3fb678137637",
-      "shortSha": "b6128fc",
-      "message": "Merge pull request #202 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq\n\nEnsure allow_without_pr input is evaluated correctly",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T22:15:39Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/b6128fc398a01b88ae7b493e1bdb3fb678137637",
-      "prs": [
-        {
-          "number": 202,
-          "title": "Ensure allow_without_pr input is evaluated correctly",
-          "url": "https://github.com/shthed/capy/pull/202",
-          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq"
-        }
-      ]
-    },
-    {
-      "sha": "dc7c804fffb11d37e7dee0e08c71c0b637c3a93f",
-      "shortSha": "dc7c804",
-      "message": "Merge branch 'main' into codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T22:14:45Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/dc7c804fffb11d37e7dee0e08c71c0b637c3a93f",
-      "prs": [
-        {
-          "number": 202,
-          "title": "Ensure allow_without_pr input is evaluated correctly",
-          "url": "https://github.com/shthed/capy/pull/202",
-          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-21T08:02:52Z",
-  "deploymentTimestamp": 1761033796145
+  "lastCommitDate": "2025-10-21T10:24:44Z",
+  "deploymentTimestamp": 1761042302395
 }

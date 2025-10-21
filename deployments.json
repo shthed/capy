@@ -2,11 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "de363ff1f98f962b7d3c32817b3273ed56056540",
-    "message": "Merge pull request #204 from shthed/codex/update-deploy-branch-to-include-.js-files\n\nInclude JS assets in branch deployments",
+    "commit": "8ef009bb587ec8b2136d7e4c4262da78116a3cf1",
+    "message": "Merge pull request #205 from shthed/codex/update-interface-scale-settings\n\nExpand interface scale limits",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T16:02:52+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/de363ff1f98f962b7d3c32817b3273ed56056540",
+    "deployedAt": "2025-10-21T18:24:44+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/8ef009bb587ec8b2136d7e4c4262da78116a3cf1",
     "key": "main"
   },
   "codex-extend-webgl-renderer-for-textures-and-caching": {
@@ -18,15 +18,5 @@
     "actor": "shthed",
     "deployedAt": "2025-10-21T06:42:25+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/fc2292b48f53d2cc769f14e595e0b10b0b8647d0"
-  },
-  "codex-update-interface-scale-settings": {
-    "key": "codex-update-interface-scale-settings",
-    "branch": "codex/update-interface-scale-settings",
-    "safeName": "codex-update-interface-scale-settings",
-    "commit": "2edd085c007cdb8f16f11a46a728d504a1550fac",
-    "message": "Broaden interface scale range",
-    "actor": "shthed",
-    "deployedAt": "2025-10-21T18:22:59+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/2edd085c007cdb8f16f11a46a728d504a1550fac"
   }
 }
