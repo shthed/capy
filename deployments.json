@@ -13,10 +13,10 @@
     "key": "codex-fix-webgl-update-and-improve-zoom-performance",
     "branch": "codex/fix-webgl-update-and-improve-zoom-performance",
     "safeName": "codex-fix-webgl-update-and-improve-zoom-performance",
-    "commit": "b9c3bd2316f9d880b7be5b07a35dcb12b9b7464e",
-    "message": "Merge pull request #208 from shthed/codex/add-webgl-support-to-modular-renderer\n\nAdd renderer selector UI and SVG backend",
+    "commit": "aef6c80fa5a19386129ec6e73e6139a141deecea",
+    "message": "Improve WebGL fills and zoom responsiveness",
     "actor": "shthed",
-    "deployedAt": "2025-10-22T06:11:26+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/b9c3bd2316f9d880b7be5b07a35dcb12b9b7464e"
+    "deployedAt": "2025-10-22T06:27:34+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/aef6c80fa5a19386129ec6e73e6139a141deecea"
   }
 }
