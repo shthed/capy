@@ -1,6 +1,21 @@
 {
   "codex/add-webgl-support-to-modular-renderer": [
     {
+      "sha": "9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
+      "shortSha": "9dcfe8e",
+      "message": "Fix WebGL renderer preview restore",
+      "date": "2025-10-21T13:26:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
+      "prs": [
+        {
+          "number": 208,
+          "title": "Add renderer selector UI and SVG backend",
+          "url": "https://github.com/shthed/capy/pull/208",
+          "branch": "codex/add-webgl-support-to-modular-renderer"
+        }
+      ]
+    },
+    {
       "sha": "64283606a5c7f81685785c547afb662414c6bb7b",
       "shortSha": "6428360",
       "message": "Add SVG renderer option and selection UI",
@@ -36,21 +51,6 @@
       "message": "Include JSON files in branch deployments",
       "date": "2025-10-21T11:31:05Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/cf2aa1fe134bbaf3170e815d40f2fca5e72b1cb3",
-      "prs": [
-        {
-          "number": 208,
-          "title": "Add renderer selector UI and SVG backend",
-          "url": "https://github.com/shthed/capy/pull/208",
-          "branch": "codex/add-webgl-support-to-modular-renderer"
-        }
-      ]
-    },
-    {
-      "sha": "7fbcdd1a6abca7f3888b20f3122d3e4480838eff",
-      "shortSha": "7fbcdd1",
-      "message": "Merge pull request #203 from shthed/codex/extend-webgl-renderer-for-textures-and-caching\n\nAdd textured passes to WebGL renderer",
-      "date": "2025-10-21T11:21:12Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/7fbcdd1a6abca7f3888b20f3122d3e4480838eff",
       "prs": [
         {
           "number": 208,
@@ -63,6 +63,21 @@
   ],
   "codex-add-webgl-support-to-modular-renderer": [
     {
+      "sha": "9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
+      "shortSha": "9dcfe8e",
+      "message": "Fix WebGL renderer preview restore",
+      "date": "2025-10-21T13:26:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
+      "prs": [
+        {
+          "number": 208,
+          "title": "Add renderer selector UI and SVG backend",
+          "url": "https://github.com/shthed/capy/pull/208",
+          "branch": "codex/add-webgl-support-to-modular-renderer"
+        }
+      ]
+    },
+    {
       "sha": "64283606a5c7f81685785c547afb662414c6bb7b",
       "shortSha": "6428360",
       "message": "Add SVG renderer option and selection UI",
@@ -98,21 +113,6 @@
       "message": "Include JSON files in branch deployments",
       "date": "2025-10-21T11:31:05Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/cf2aa1fe134bbaf3170e815d40f2fca5e72b1cb3",
-      "prs": [
-        {
-          "number": 208,
-          "title": "Add renderer selector UI and SVG backend",
-          "url": "https://github.com/shthed/capy/pull/208",
-          "branch": "codex/add-webgl-support-to-modular-renderer"
-        }
-      ]
-    },
-    {
-      "sha": "7fbcdd1a6abca7f3888b20f3122d3e4480838eff",
-      "shortSha": "7fbcdd1",
-      "message": "Merge pull request #203 from shthed/codex/extend-webgl-renderer-for-textures-and-caching\n\nAdd textured passes to WebGL renderer",
-      "date": "2025-10-21T11:21:12Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/7fbcdd1a6abca7f3888b20f3122d3e4480838eff",
       "prs": [
         {
           "number": 208,
