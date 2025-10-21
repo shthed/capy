@@ -13,10 +13,10 @@
     "key": "codex-extend-webgl-renderer-for-textures-and-caching",
     "branch": "codex/extend-webgl-renderer-for-textures-and-caching",
     "safeName": "codex-extend-webgl-renderer-for-textures-and-caching",
-    "commit": "fc2292b48f53d2cc769f14e595e0b10b0b8647d0",
-    "message": "Add textured passes to WebGL renderer",
+    "commit": "e66bf321f5a3840f82e36ed682835768c258ec5e",
+    "message": "Consolidate renderer modules",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T06:42:25+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/fc2292b48f53d2cc769f14e595e0b10b0b8647d0"
+    "deployedAt": "2025-10-21T18:58:10+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/e66bf321f5a3840f82e36ed682835768c258ec5e"
   }
 }
