@@ -1,6 +1,54 @@
 {
   "commits": [
     {
+      "sha": "446d2b7ea4fb1f823f168ef4003b41cab7b9dccf",
+      "shortSha": "446d2b7",
+      "message": "Merge pull request #209 from shthed/codex/fix-webgl-update-and-improve-zoom-performance\n\nFix WebGL fill updates and refine zoom controls",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-21T23:26:18Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/446d2b7ea4fb1f823f168ef4003b41cab7b9dccf",
+      "prs": [
+        {
+          "number": 209,
+          "title": "Fix WebGL fill updates and refine zoom controls",
+          "url": "https://github.com/shthed/capy/pull/209",
+          "branch": "codex/fix-webgl-update-and-improve-zoom-performance"
+        }
+      ]
+    },
+    {
+      "sha": "7f780e45e85cca82b8c381a51fc6827333d2e2f3",
+      "shortSha": "7f780e4",
+      "message": "Handle WebGL filled texture upload failures without flashing",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-21T23:14:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7f780e45e85cca82b8c381a51fc6827333d2e2f3",
+      "prs": [
+        {
+          "number": 209,
+          "title": "Fix WebGL fill updates and refine zoom controls",
+          "url": "https://github.com/shthed/capy/pull/209",
+          "branch": "codex/fix-webgl-update-and-improve-zoom-performance"
+        }
+      ]
+    },
+    {
+      "sha": "aef6c80fa5a19386129ec6e73e6139a141deecea",
+      "shortSha": "aef6c80",
+      "message": "Improve WebGL fills and zoom responsiveness",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-21T22:27:34Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/aef6c80fa5a19386129ec6e73e6139a141deecea",
+      "prs": [
+        {
+          "number": 209,
+          "title": "Fix WebGL fill updates and refine zoom controls",
+          "url": "https://github.com/shthed/capy/pull/209",
+          "branch": "codex/fix-webgl-update-and-improve-zoom-performance"
+        }
+      ]
+    },
+    {
       "sha": "b9c3bd2316f9d880b7be5b07a35dcb12b9b7464e",
       "shortSha": "b9c3bd2",
       "message": "Merge pull request #208 from shthed/codex/add-webgl-support-to-modular-renderer\n\nAdd renderer selector UI and SVG backend",
@@ -15,56 +63,8 @@
           "branch": "codex/add-webgl-support-to-modular-renderer"
         }
       ]
-    },
-    {
-      "sha": "60cdd458b32f0bd3348b765368760f724ca5f689",
-      "shortSha": "60cdd45",
-      "message": "Add renderer debug logs and restore WebGL option",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-21T22:02:15Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/60cdd458b32f0bd3348b765368760f724ca5f689",
-      "prs": [
-        {
-          "number": 208,
-          "title": "Add renderer selector UI and SVG backend",
-          "url": "https://github.com/shthed/capy/pull/208",
-          "branch": "codex/add-webgl-support-to-modular-renderer"
-        }
-      ]
-    },
-    {
-      "sha": "9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
-      "shortSha": "9dcfe8e",
-      "message": "Fix WebGL renderer preview restore",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-21T13:26:31Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
-      "prs": [
-        {
-          "number": 208,
-          "title": "Add renderer selector UI and SVG backend",
-          "url": "https://github.com/shthed/capy/pull/208",
-          "branch": "codex/add-webgl-support-to-modular-renderer"
-        }
-      ]
-    },
-    {
-      "sha": "64283606a5c7f81685785c547afb662414c6bb7b",
-      "shortSha": "6428360",
-      "message": "Add SVG renderer option and selection UI",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-21T13:11:33Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/64283606a5c7f81685785c547afb662414c6bb7b",
-      "prs": [
-        {
-          "number": 208,
-          "title": "Add renderer selector UI and SVG backend",
-          "url": "https://github.com/shthed/capy/pull/208",
-          "branch": "codex/add-webgl-support-to-modular-renderer"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-21T22:11:26Z",
-  "deploymentTimestamp": 1761084704910
+  "lastCommitDate": "2025-10-21T23:26:18Z",
+  "deploymentTimestamp": 1761089198805
 }

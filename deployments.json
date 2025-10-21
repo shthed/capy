@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "b9c3bd2316f9d880b7be5b07a35dcb12b9b7464e",
-    "message": "Merge pull request #208 from shthed/codex/add-webgl-support-to-modular-renderer\n\nAdd renderer selector UI and SVG backend",
+    "commit": "446d2b7ea4fb1f823f168ef4003b41cab7b9dccf",
+    "message": "Merge pull request #209 from shthed/codex/fix-webgl-update-and-improve-zoom-performance\n\nFix WebGL fill updates and refine zoom controls",
     "actor": "shthed",
-    "deployedAt": "2025-10-22T06:11:26+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/b9c3bd2316f9d880b7be5b07a35dcb12b9b7464e",
+    "deployedAt": "2025-10-22T07:26:18+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/446d2b7ea4fb1f823f168ef4003b41cab7b9dccf",
     "key": "main"
-  },
-  "codex-fix-webgl-update-and-improve-zoom-performance": {
-    "key": "codex-fix-webgl-update-and-improve-zoom-performance",
-    "branch": "codex/fix-webgl-update-and-improve-zoom-performance",
-    "safeName": "codex-fix-webgl-update-and-improve-zoom-performance",
-    "commit": "7f780e45e85cca82b8c381a51fc6827333d2e2f3",
-    "message": "Handle WebGL filled texture upload failures without flashing",
-    "actor": "shthed",
-    "deployedAt": "2025-10-22T07:14:42+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/7f780e45e85cca82b8c381a51fc6827333d2e2f3"
   }
 }
