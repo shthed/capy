@@ -409,6 +409,7 @@ jobs:
             JS_INCLUDE_RULES=(
               "--include=*/"
               "--include=*.js"
+              "--include=*.json"
               "--exclude=*"
             )
 
