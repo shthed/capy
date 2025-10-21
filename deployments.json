@@ -13,10 +13,10 @@
     "key": "codex-add-webgl-support-to-modular-renderer",
     "branch": "codex/add-webgl-support-to-modular-renderer",
     "safeName": "codex-add-webgl-support-to-modular-renderer",
-    "commit": "9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
-    "message": "Fix WebGL renderer preview restore",
+    "commit": "60cdd458b32f0bd3348b765368760f724ca5f689",
+    "message": "Add renderer debug logs and restore WebGL option",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T21:26:31+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/9dcfe8eaa2dac9e770f13cde09155e8bd66379bf"
+    "deployedAt": "2025-10-22T06:02:15+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/60cdd458b32f0bd3348b765368760f724ca5f689"
   }
 }

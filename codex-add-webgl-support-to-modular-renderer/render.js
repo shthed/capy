@@ -1,6 +1,19 @@
 export function createRendererController(canvas, options = {}) {
   const { initialRenderer = "canvas2d", hooks = {}, renderers = {} } = options || {};
 
+  const logger = typeof hooks?.log === "function" ? hooks.log : null;
+
+  function emitLog(message, details) {
+    if (!logger) {
+      return;
+    }
+    try {
+      logger(message, details);
+    } catch (error) {
+      console.debug("Renderer log failed", error);
+    }
+  }
+
   const factories = new Map();
   let activeRenderer = null;
   let activeType = null;
@@ -50,6 +63,7 @@ export function createRendererController(canvas, options = {}) {
     if (!normalizedFactory) {
       return false;
     }
+    emitLog("Registering renderer", { type: normalizedType });
     factories.set(normalizedType, normalizedFactory);
     if (activeType === normalizedType) {
       setRenderer(normalizedType, { force: true, quiet: true });
@@ -67,6 +81,7 @@ export function createRendererController(canvas, options = {}) {
       return false;
     }
     const wasActive = activeType === normalizedType;
+    emitLog("Unregistering renderer", { type: normalizedType, wasActive });
     factories.delete(normalizedType);
     if (wasActive) {
       dispose();
@@ -83,6 +98,7 @@ export function createRendererController(canvas, options = {}) {
     if (!fallbackType) {
       return null;
     }
+    emitLog("Ensuring renderer", { type: fallbackType });
     return setRenderer(fallbackType, { quiet: true });
   }
 
@@ -98,8 +114,10 @@ export function createRendererController(canvas, options = {}) {
     if (!force && activeRenderer && activeType === targetType) {
       return activeRenderer;
     }
+    emitLog("Activating renderer", { type: targetType, force });
     const factory = factories.get(targetType);
     if (typeof factory !== "function") {
+      emitLog("Renderer activation failed", { type: targetType, reason: "missing-factory" });
       if (quiet) {
         return null;
       }
@@ -109,12 +127,17 @@ export function createRendererController(canvas, options = {}) {
     try {
       renderer = factory();
     } catch (error) {
+      emitLog("Renderer activation failed", {
+        type: targetType,
+        reason: error && error.message ? error.message : "exception",
+      });
       if (!quiet) {
         throw error;
       }
       return null;
     }
     if (!renderer || typeof renderer !== "object") {
+      emitLog("Renderer factory returned invalid value", { type: targetType });
       if (!quiet) {
         throw new Error(`Renderer factory for ${targetType} did not return an object`);
       }
@@ -135,6 +158,7 @@ export function createRendererController(canvas, options = {}) {
     }
     activeRenderer = renderer;
     activeType = targetType;
+    emitLog("Renderer activated", { type: activeType, previousType });
     if (lastMetrics && typeof activeRenderer.resize === "function") {
       activeRenderer.resize({ ...lastMetrics });
     }
@@ -218,6 +242,7 @@ export function createRendererController(canvas, options = {}) {
         console.warn("Renderer disposal failed", error);
       }
     }
+    emitLog("Renderer disposed", { type: activeType });
     if (typeof hooks.onRendererChange === "function" && activeType) {
       try {
         hooks.onRendererChange({ type: null, previousType: activeType });
@@ -267,6 +292,19 @@ export function createRendererController(canvas, options = {}) {
 export function createCanvas2dRenderer(canvas, hooks = {}) {
   let context = null;
 
+  const logger = typeof hooks?.log === "function" ? hooks.log : null;
+
+  function emitLog(message, details) {
+    if (!logger) {
+      return;
+    }
+    try {
+      logger(message, details);
+    } catch (error) {
+      console.debug("Renderer log failed", error);
+    }
+  }
+
   function ensureContext() {
     if (!context && canvas && typeof canvas.getContext === "function") {
       try {
@@ -276,6 +314,7 @@ export function createCanvas2dRenderer(canvas, hooks = {}) {
       }
       if (context) {
         context.imageSmoothingEnabled = false;
+        emitLog("Canvas2D context acquired", { type: "canvas2d" });
       }
     }
     return context;
@@ -340,6 +379,7 @@ export function createCanvas2dRenderer(canvas, hooks = {}) {
       if (typeof hooks.dispose === "function") {
         hooks.dispose();
       }
+      emitLog("Canvas2D renderer disposed", { type: "canvas2d" });
       context = null;
     },
   };
@@ -610,8 +650,24 @@ void main() {
 `;
 
 export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
+  const logger = typeof hooks?.log === "function" ? hooks.log : null;
+
+  function emitLog(message, details) {
+    if (!logger) {
+      return;
+    }
+    try {
+      logger(message, details);
+    } catch (error) {
+      console.debug("Renderer log failed", error);
+    }
+  }
+
+  emitLog("Requesting WebGL context", { type: "webgl" });
+
   const gl = requestContext(canvas);
   if (!gl) {
+    emitLog("WebGL context unavailable", { type: "webgl", reason: "context-null" });
     return null;
   }
 
@@ -628,17 +684,20 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
 
   const program = linkProgram(gl, VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE);
   if (!program) {
+    emitLog("WebGL shader program creation failed", { type: "webgl", stage: "program" });
     return null;
   }
 
   const quadBuffer = createFullscreenQuad(gl);
   if (!quadBuffer) {
+    emitLog("Failed to create WebGL quad buffer", { type: "webgl", stage: "buffer" });
     gl.deleteProgram(program);
     return null;
   }
 
   const fallbackTexture = createFallbackTexture(gl);
   if (!fallbackTexture) {
+    emitLog("Failed to create WebGL fallback texture", { type: "webgl", stage: "texture" });
     gl.deleteBuffer(quadBuffer);
     gl.deleteProgram(program);
     return null;
@@ -669,6 +728,7 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   };
 
   if (!layerTextures.filled || !layerTextures.outline || !layerTextures.numbers || !layerTextures.overlay) {
+    emitLog("Failed to allocate WebGL layer textures", { type: "webgl", stage: "layers" });
     Object.values(layerTextures).forEach((texture) => {
       if (texture && gl.isTexture(texture)) {
         gl.deleteTexture(texture);
@@ -708,6 +768,12 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   let currentMetrics = payload && payload.metrics ? { ...payload.metrics } : null;
   let currentPixelWidth = canvas.width || 1;
   let currentPixelHeight = canvas.height || 1;
+
+  emitLog("WebGL renderer ready", {
+    type: "webgl",
+    width: currentPixelWidth,
+    height: currentPixelHeight,
+  });
 
   if (currentMetrics) {
     if (Number.isFinite(currentMetrics.pixelWidth)) {
@@ -1543,6 +1609,7 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     if (typeof hooks.dispose === "function") {
       hooks.dispose({ gl, trackResource, untrackResource });
     }
+    emitLog("WebGL renderer disposed", { type: "webgl" });
   }
 
   return {

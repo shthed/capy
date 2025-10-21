@@ -521,6 +521,7 @@
       }
 
       #canvasTransform {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -542,6 +543,17 @@
         box-shadow: none;
         image-rendering: pixelated;
         touch-action: none;
+      }
+
+      canvas.renderer-surface {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        pointer-events: none;
+        user-select: none;
       }
 
 
@@ -3294,9 +3306,21 @@
 
       const unavailableRenderers = new Set();
 
+      function logRendererEvent(message, details = null) {
+        if (details && typeof details === "object") {
+          const suffix = Object.entries(details)
+            .map(([key, value]) => `${key}=${value}`)
+            .join(", ");
+          logDebug(`[Renderer] ${message}${suffix ? ` (${suffix})` : ""}`);
+        } else {
+          logDebug(`[Renderer] ${message}`);
+        }
+      }
+
       rendererController = createRendererController(puzzleCanvas, {
         initialRenderer: state.settings.renderer || "canvas2d",
         hooks: {
+          log: logRendererEvent,
           renderFrame: renderPuzzleFrame,
           renderPreview: renderPreviewImage,
           flashRegions: flashRegionsWithContext,
@@ -3313,11 +3337,66 @@
         },
         renderers: {
           webgl: (currentCanvas, currentHooks, payload) => {
-            const renderer = createWebGLRenderer(currentCanvas, currentHooks, payload);
-            if (!renderer) {
+            if (!currentCanvas) {
               throw new Error("WebGL renderer unavailable");
             }
-            return renderer;
+            const host = currentCanvas.parentElement;
+            if (!host) {
+              throw new Error("WebGL renderer unavailable");
+            }
+            const webglCanvas = document.createElement("canvas");
+            webglCanvas.classList.add("renderer-surface", "renderer-surface-webgl");
+            webglCanvas.setAttribute("aria-hidden", "true");
+            webglCanvas.style.position = "absolute";
+            webglCanvas.style.top = "0";
+            webglCanvas.style.left = "0";
+            webglCanvas.style.width = "100%";
+            webglCanvas.style.height = "100%";
+            webglCanvas.style.pointerEvents = "none";
+            webglCanvas.style.userSelect = "none";
+            host.insertBefore(webglCanvas, currentCanvas.nextSibling);
+            if (typeof currentHooks?.log === "function") {
+              try {
+                currentHooks.log("Attaching WebGL surface", { stage: "init" });
+              } catch (logError) {
+                console.debug("Renderer log failed", logError);
+              }
+            }
+            let renderer;
+            try {
+              renderer = createWebGLRenderer(webglCanvas, currentHooks, payload);
+            } catch (error) {
+              webglCanvas.remove();
+              throw error;
+            }
+            if (!renderer) {
+              webglCanvas.remove();
+              throw new Error("WebGL renderer unavailable");
+            }
+            if (typeof currentHooks?.log === "function") {
+              try {
+                currentHooks.log("WebGL renderer created", { stage: "ready" });
+              } catch (logError) {
+                console.debug("Renderer log failed", logError);
+              }
+            }
+            const baseDispose = typeof renderer.dispose === "function" ? renderer.dispose.bind(renderer) : null;
+            return {
+              ...renderer,
+              dispose() {
+                if (baseDispose) {
+                  baseDispose();
+                }
+                if (typeof currentHooks?.log === "function") {
+                  try {
+                    currentHooks.log("WebGL renderer disposed", { stage: "dispose" });
+                  } catch (logError) {
+                    console.debug("Renderer log failed", logError);
+                  }
+                }
+                webglCanvas.remove();
+              },
+            };
           },
           svg: (currentCanvas, currentHooks, payload) => {
             const renderer = createSvgRenderer(currentCanvas, currentHooks, payload);
@@ -3337,6 +3416,21 @@
           state.settings.renderer = nextType;
           if (rendererModeSelect && rendererModeSelect.value !== nextType) {
             rendererModeSelect.value = nextType;
+          }
+          unavailableRenderers.delete(nextType);
+        }
+        if (puzzleCanvas) {
+          if (nextType === "webgl") {
+            puzzleCanvas.style.opacity = "0";
+          } else {
+            puzzleCanvas.style.opacity = "";
+          }
+        }
+        if (canvasStage) {
+          if (nextType) {
+            canvasStage.dataset.renderer = nextType;
+          } else {
+            delete canvasStage.dataset.renderer;
           }
         }
         updateRendererModeAvailability();
@@ -3591,6 +3685,7 @@
       function markRendererUnavailable(type) {
         const normalized = normalizeRendererType(type);
         if (!normalized) return;
+        logRendererEvent(`Renderer unavailable`, { type: normalized });
         unavailableRenderers.add(normalized);
         if (rendererModeSelect) {
           for (const option of rendererModeSelect.options) {

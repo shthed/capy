@@ -1,6 +1,21 @@
 {
   "codex/add-webgl-support-to-modular-renderer": [
     {
+      "sha": "60cdd458b32f0bd3348b765368760f724ca5f689",
+      "shortSha": "60cdd45",
+      "message": "Add renderer debug logs and restore WebGL option",
+      "date": "2025-10-21T22:02:15Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/60cdd458b32f0bd3348b765368760f724ca5f689",
+      "prs": [
+        {
+          "number": 208,
+          "title": "Add renderer selector UI and SVG backend",
+          "url": "https://github.com/shthed/capy/pull/208",
+          "branch": "codex/add-webgl-support-to-modular-renderer"
+        }
+      ]
+    },
+    {
       "sha": "9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
       "shortSha": "9dcfe8e",
       "message": "Fix WebGL renderer preview restore",
@@ -36,21 +51,6 @@
       "message": "Merge pull request #207 from shthed/codex/update-deploy-branch-for-capy.json\n\nEnsure branch deployments include JSON assets",
       "date": "2025-10-21T11:33:04Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/ff172dc984c2fa9e27cf90c339ba974fa31e829f",
-      "prs": [
-        {
-          "number": 208,
-          "title": "Add renderer selector UI and SVG backend",
-          "url": "https://github.com/shthed/capy/pull/208",
-          "branch": "codex/add-webgl-support-to-modular-renderer"
-        }
-      ]
-    },
-    {
-      "sha": "cf2aa1fe134bbaf3170e815d40f2fca5e72b1cb3",
-      "shortSha": "cf2aa1f",
-      "message": "Include JSON files in branch deployments",
-      "date": "2025-10-21T11:31:05Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/cf2aa1fe134bbaf3170e815d40f2fca5e72b1cb3",
       "prs": [
         {
           "number": 208,
@@ -63,6 +63,21 @@
   ],
   "codex-add-webgl-support-to-modular-renderer": [
     {
+      "sha": "60cdd458b32f0bd3348b765368760f724ca5f689",
+      "shortSha": "60cdd45",
+      "message": "Add renderer debug logs and restore WebGL option",
+      "date": "2025-10-21T22:02:15Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/60cdd458b32f0bd3348b765368760f724ca5f689",
+      "prs": [
+        {
+          "number": 208,
+          "title": "Add renderer selector UI and SVG backend",
+          "url": "https://github.com/shthed/capy/pull/208",
+          "branch": "codex/add-webgl-support-to-modular-renderer"
+        }
+      ]
+    },
+    {
       "sha": "9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
       "shortSha": "9dcfe8e",
       "message": "Fix WebGL renderer preview restore",
@@ -98,21 +113,6 @@
       "message": "Merge pull request #207 from shthed/codex/update-deploy-branch-for-capy.json\n\nEnsure branch deployments include JSON assets",
       "date": "2025-10-21T11:33:04Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/ff172dc984c2fa9e27cf90c339ba974fa31e829f",
-      "prs": [
-        {
-          "number": 208,
-          "title": "Add renderer selector UI and SVG backend",
-          "url": "https://github.com/shthed/capy/pull/208",
-          "branch": "codex/add-webgl-support-to-modular-renderer"
-        }
-      ]
-    },
-    {
-      "sha": "cf2aa1fe134bbaf3170e815d40f2fca5e72b1cb3",
-      "shortSha": "cf2aa1f",
-      "message": "Include JSON files in branch deployments",
-      "date": "2025-10-21T11:31:05Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/cf2aa1fe134bbaf3170e815d40f2fca5e72b1cb3",
       "prs": [
         {
           "number": 208,
