@@ -1,0 +1,10 @@
+[
+  {
+    "branch": "codex/add-webgl-support-to-modular-renderer",
+    "safeName": "codex-add-webgl-support-to-modular-renderer",
+    "title": "Add renderer selector UI and SVG backend",
+    "number": 208,
+    "updatedAt": "2025-10-21T13:11:38Z",
+    "url": "https://github.com/shthed/capy/pull/208"
+  }
+]

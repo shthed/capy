@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-21T19:33:04+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/ff172dc984c2fa9e27cf90c339ba974fa31e829f",
     "key": "main"
+  },
+  "codex-add-webgl-support-to-modular-renderer": {
+    "key": "codex-add-webgl-support-to-modular-renderer",
+    "branch": "codex/add-webgl-support-to-modular-renderer",
+    "safeName": "codex-add-webgl-support-to-modular-renderer",
+    "commit": "ff172dc984c2fa9e27cf90c339ba974fa31e829f",
+    "message": "Merge pull request #207 from shthed/codex/update-deploy-branch-for-capy.json\n\nEnsure branch deployments include JSON assets",
+    "actor": "shthed",
+    "deployedAt": "2025-10-21T19:33:04+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/ff172dc984c2fa9e27cf90c339ba974fa31e829f"
   }
 }
