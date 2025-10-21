@@ -2526,6 +2526,7 @@
           filledLayer: null,
           filledLayerCtx: null,
           filledLayerDirty: true,
+          filledLayerNeedsUpload: false,
           outlineLayer: null,
           outlineLayerCtx: null,
           outlineLayerDirty: true,
@@ -2671,6 +2672,7 @@
           cache.filledLayer = null;
           cache.filledLayerCtx = null;
           cache.filledLayerDirty = true;
+          cache.filledLayerNeedsUpload = false;
           cache.outlineLayer = null;
           cache.outlineLayerCtx = null;
           cache.outlineLayerDirty = true;
@@ -2697,6 +2699,7 @@
         cache.filledLayer = createLayerCanvas(pixelWidth, pixelHeight);
         cache.filledLayerCtx = getLayerContext(cache.filledLayer);
         cache.filledLayerDirty = true;
+        cache.filledLayerNeedsUpload = true;
         cache.outlineLayer = createLayerCanvas(pixelWidth, pixelHeight);
         cache.outlineLayerCtx = getLayerContext(cache.outlineLayer);
         cache.outlineLayerDirty = true;
@@ -2732,6 +2735,7 @@
           }
         });
         cache.filledLayerDirty = false;
+        cache.filledLayerNeedsUpload = true;
         return true;
       }
 
@@ -2776,11 +2780,13 @@
           ctx.fillStyle = colorEntry.hex;
           fillGeometries(ctx, [geometry]);
         });
+        cache.filledLayerNeedsUpload = true;
       }
 
       function markFilledLayerDirty() {
         if (state.renderCache) {
           state.renderCache.filledLayerDirty = true;
+          state.renderCache.filledLayerNeedsUpload = true;
         }
       }
 
@@ -2963,10 +2969,10 @@
 
       // View state drives pan/zoom transforms. baseScale keeps the puzzle fit-to-screen while
       // zoom holds user-controlled scaling.
-      const MAX_VIEWPORT_ZOOM = 1048576;
-      const MIN_VIEWPORT_ZOOM = 1 / MAX_VIEWPORT_ZOOM;
-      const MIN_RENDER_SCALE = MIN_VIEWPORT_ZOOM;
-      const MAX_RENDER_SCALE = MAX_VIEWPORT_ZOOM;
+      const MAX_VIEWPORT_ZOOM = 3;
+      const MIN_VIEWPORT_ZOOM = 1 / 6;
+      const MIN_RENDER_SCALE = 1 / 1048576;
+      const MAX_RENDER_SCALE = 1048576;
       const SUPPORTS_PATH2D = typeof Path2D === "function";
       const SUPPORTS_OFFSCREEN_CANVAS = typeof OffscreenCanvas === "function";
       const viewState = {
@@ -3063,8 +3069,9 @@
 
       function computeDisplayScale() {
         const base = viewState.baseScale > 0 ? viewState.baseScale : 1;
-        const zoom = viewState.zoom > 0 ? viewState.zoom : 1;
-        return clamp(base * zoom, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+        const zoom = normalizeZoomValue(viewState.zoom > 0 ? viewState.zoom : 1, 1);
+        const { minScale, maxScale } = getScaleBounds(base);
+        return clamp(base * zoom, minScale, maxScale);
       }
 
       function updateCanvasMetrics() {
@@ -3176,6 +3183,9 @@
           if (resized || !cache.filledLayerCtx) {
             cache.filledLayerCtx = getLayerContext(cache.filledLayer);
           }
+          if (resized) {
+            cache.filledLayerNeedsUpload = true;
+          }
         }
         if (cache.outlineLayer) {
           let resized = false;
@@ -3193,6 +3203,7 @@
         }
         if (changed) {
           cache.filledLayerDirty = true;
+          cache.filledLayerNeedsUpload = true;
           cache.outlineLayerDirty = true;
         }
         return changed;
@@ -4591,6 +4602,10 @@
 
       const DOUBLE_TAP_WINDOW_MS = 320;
       const POINTER_CLICK_SUPPRESSION_MS = 360;
+      const WHEEL_ZOOM_BASE = 1.25;
+      const WHEEL_ZOOM_MAX_STEP = 8;
+      const WHEEL_LINE_HEIGHT = 32;
+      const WHEEL_PAGE_HEIGHT = 480;
       const REGION_HINT_HOVER_DELAY_MS = 280;
       const REGION_HINT_PRESS_DELAY_MS = 160;
 
@@ -7479,11 +7494,10 @@
         if (session.dragAction === "zoom" && session.dragStarted) {
           suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
           if (session.zoomChanged) {
-            const currentScale = clamp(
-              viewState.baseScale * Math.max(viewState.zoom, MIN_VIEWPORT_ZOOM),
-              MIN_RENDER_SCALE,
-              MAX_RENDER_SCALE
-            );
+            const baseScale = viewState.baseScale > 0 ? viewState.baseScale : 1;
+            const { minScale, maxScale } = getScaleBounds(baseScale);
+            const currentZoom = normalizeZoomValue(viewState.zoom, 1);
+            const currentScale = clamp(baseScale * currentZoom, minScale, maxScale);
             logDebug(
               `${describeMouseButton(buttonName)} drag zoom ended at ${(currentScale * 100).toFixed(0)}%`
             );
@@ -8036,12 +8050,20 @@
         return clamp(value, MIN_VIEWPORT_ZOOM, MAX_VIEWPORT_ZOOM);
       }
 
+      function getScaleBounds(baseScale = 1) {
+        const safeBase = Number.isFinite(baseScale) && baseScale > 0 ? baseScale : 1;
+        const minScale = clamp(safeBase * MIN_VIEWPORT_ZOOM, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+        const maxScale = clamp(safeBase * MAX_VIEWPORT_ZOOM, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+        return { minScale, maxScale };
+      }
+
       function applyZoom(multiplier, clientX, clientY, options = {}) {
         if (!state.puzzle) return;
         const baseScale = viewState.baseScale > 0 ? viewState.baseScale : 1;
-        const currentZoom = viewState.zoom > 0 ? viewState.zoom : 1;
-        const currentScale = clamp(baseScale * currentZoom, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
-        const targetScale = clamp(currentScale * multiplier, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+        const { minScale, maxScale } = getScaleBounds(baseScale);
+        const currentZoom = normalizeZoomValue(viewState.zoom > 0 ? viewState.zoom : 1, 1);
+        const currentScale = clamp(baseScale * currentZoom, minScale, maxScale);
+        const targetScale = clamp(currentScale * multiplier, minScale, maxScale);
         const change = targetScale / currentScale;
         if (!Number.isFinite(change) || Math.abs(change - 1) < 0.00001) return;
         const viewportRect = viewportEl.getBoundingClientRect();
@@ -8070,7 +8092,24 @@
       function handleWheel(event) {
         if (!state.puzzle) return;
         event.preventDefault();
-        const multiplier = event.deltaY > 0 ? 0.9 : 1.1;
+        let deltaY = event.deltaY;
+        if (!Number.isFinite(deltaY) || deltaY === 0) {
+          return;
+        }
+        if (event.deltaMode === 1) {
+          deltaY *= WHEEL_LINE_HEIGHT;
+        } else if (event.deltaMode === 2) {
+          const viewportHeight = viewportEl?.clientHeight || WHEEL_PAGE_HEIGHT;
+          deltaY *= viewportHeight;
+        }
+        const step = clamp(deltaY / 120, -WHEEL_ZOOM_MAX_STEP, WHEEL_ZOOM_MAX_STEP);
+        if (Math.abs(step) < 0.001) {
+          return;
+        }
+        const multiplier = Math.pow(WHEEL_ZOOM_BASE, -step);
+        if (!Number.isFinite(multiplier) || Math.abs(multiplier - 1) < 0.001) {
+          return;
+        }
         applyZoom(multiplier, event.clientX, event.clientY);
       }
 
@@ -8169,14 +8208,19 @@
         }
         const nextBase = computeFitScale();
         const previousBase = viewState.baseScale > 0 ? viewState.baseScale : 1;
-        const currentScale = clamp(previousBase * Math.max(viewState.zoom, MIN_VIEWPORT_ZOOM), MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+        const { minScale: prevMinScale, maxScale: prevMaxScale } = getScaleBounds(previousBase);
+        const currentZoom = normalizeZoomValue(Math.max(viewState.zoom, MIN_VIEWPORT_ZOOM), 1);
+        const currentScale = clamp(previousBase * currentZoom, prevMinScale, prevMaxScale);
         if (preserveZoom) {
           const ratio = Number.isFinite(previousBase) && previousBase > 0 ? nextBase / previousBase : 1;
           if (Number.isFinite(ratio)) {
             viewState.panX *= ratio;
             viewState.panY *= ratio;
           }
-          const targetZoom = nextBase > 0 ? currentScale / nextBase : 1;
+          const safeNextBase = nextBase > 0 ? nextBase : 1;
+          const { minScale: nextMinScale, maxScale: nextMaxScale } = getScaleBounds(safeNextBase);
+          const targetScale = clamp(currentScale, nextMinScale, nextMaxScale);
+          const targetZoom = safeNextBase > 0 ? targetScale / safeNextBase : 1;
           viewState.zoom = normalizeZoomValue(targetZoom, viewState.zoom);
           if (recenter) {
             viewState.panX = 0;

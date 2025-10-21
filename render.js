@@ -1366,15 +1366,31 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
 
     const hasCache = Boolean(cache && cache.ready);
 
+    if (cache?.filledLayerNeedsUpload) {
+      uploadState.filledDirty = true;
+    }
+
     if (uploadState.filledDirty) {
-      if (hasCache && cache?.filledLayer) {
-        if (!uploadTextureFromSource(layerTextures.filled, cache.filledLayer)) {
-          uploadTransparentTexture(layerTextures.filled);
+      const filledSourceAvailable = Boolean(hasCache && cache?.filledLayer);
+      let filledUploaded = false;
+
+      if (filledSourceAvailable) {
+        filledUploaded = uploadTextureFromSource(layerTextures.filled, cache.filledLayer);
+        if (!filledUploaded) {
+          emitLog("Filled layer upload failed", { stage: "filled-layer" });
+          console.warn("WebGL filled layer upload failed; retaining previous texture contents");
         }
       } else {
-        uploadTransparentTexture(layerTextures.filled);
+        filledUploaded = uploadTransparentTexture(layerTextures.filled);
       }
+
       uploadState.filledDirty = false;
+
+      if (cache) {
+        if (filledUploaded || !filledSourceAvailable) {
+          cache.filledLayerNeedsUpload = false;
+        }
+      }
     }
     if (hasCache && cache?.filledLayer) {
       drawQuad({ texture: layerTextures.filled });
