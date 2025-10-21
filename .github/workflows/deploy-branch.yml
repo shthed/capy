@@ -370,9 +370,27 @@ jobs:
 
             ESSENTIAL_FILES=(
               "index.html"
-              "puzzle-generation.js"
               "capy.json"
             )
+
+            ROOT_JS_FILES=()
+            while IFS= read -r -d '' js_path; do
+              js_file="${js_path#../}"
+              case "$js_file" in
+                "" | "playwright.config.js")
+                  continue
+                  ;;
+              esac
+              ROOT_JS_FILES+=("$js_file")
+            done < <(find .. -maxdepth 1 -mindepth 1 -type f -name '*.js' -print0)
+
+            if [ "${#ROOT_JS_FILES[@]}" -gt 0 ]; then
+              IFS=$'\n' ROOT_JS_FILES=($(printf '%s\n' "${ROOT_JS_FILES[@]}" | LC_ALL=C sort -u))
+              IFS=$' \t\n'
+              for js_file in "${ROOT_JS_FILES[@]}"; do
+                ESSENTIAL_FILES+=("$js_file")
+              done
+            fi
 
             for file in "${ESSENTIAL_FILES[@]}"; do
               if [ -e "../$file" ]; then
@@ -381,6 +399,20 @@ jobs:
                 echo "Warning: required file $file not found during branch deployment sync" >&2
               fi
             done
+
+            JS_SYNC_EXCLUDES=(
+              "--exclude=node_modules/"
+              "--exclude=pages/"
+              "--exclude=preview/"
+            )
+
+            JS_INCLUDE_RULES=(
+              "--include=*/"
+              "--include=*.js"
+              "--exclude=*"
+            )
+
+            rsync -a "${RSYNC_ARGS[@]}" "${JS_SYNC_EXCLUDES[@]}" "${JS_INCLUDE_RULES[@]}" ../ "$TARGET_DIR/"
             generate_readme_html "$TARGET_DIR"
             if ! grep -qxF "$TARGET_KEY" "$MANIFEST"; then
               echo "$TARGET_KEY" >> "$MANIFEST"
