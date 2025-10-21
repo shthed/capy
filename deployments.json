@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-21T19:21:12+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/7fbcdd1a6abca7f3888b20f3122d3e4480838eff",
     "key": "main"
+  },
+  "codex-update-deploy-branch-for-capy.json": {
+    "key": "codex-update-deploy-branch-for-capy.json",
+    "branch": "codex/update-deploy-branch-for-capy.json",
+    "safeName": "codex-update-deploy-branch-for-capy.json",
+    "commit": "7fbcdd1a6abca7f3888b20f3122d3e4480838eff",
+    "message": "Merge pull request #203 from shthed/codex/extend-webgl-renderer-for-textures-and-caching\n\nAdd textured passes to WebGL renderer",
+    "actor": "shthed",
+    "deployedAt": "2025-10-21T19:21:12+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/7fbcdd1a6abca7f3888b20f3122d3e4480838eff"
   }
 }
