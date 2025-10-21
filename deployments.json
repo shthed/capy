@@ -13,10 +13,10 @@
     "key": "codex-extend-webgl-renderer-for-textures-and-caching",
     "branch": "codex/extend-webgl-renderer-for-textures-and-caching",
     "safeName": "codex-extend-webgl-renderer-for-textures-and-caching",
-    "commit": "aca0e30c1102019f8116ec110a128f96b2a92d1f",
-    "message": "Relocate renderer bundle to root",
+    "commit": "4fd8d2814f2e2a1493a06794594e466a9c846ad4",
+    "message": "Merge origin/main",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T18:58:19+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/aca0e30c1102019f8116ec110a128f96b2a92d1f"
+    "deployedAt": "2025-10-21T19:18:13+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/4fd8d2814f2e2a1493a06794594e466a9c846ad4"
   }
 }

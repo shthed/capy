@@ -71,7 +71,7 @@
         color-scheme: light dark;
         font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui,
           sans-serif;
-        --ui-scale-user: 0.9;
+        --ui-scale-user: 0.85;
         --ui-scale-auto: 1;
         --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
         --app-width: 100vw;
@@ -1944,14 +1944,14 @@
             Applies to unfinished regions and adjusts outline contrast automatically.
           </p>
           <label class="control">
-            <span>Interface scale <output data-for="uiScale">90%</output></span>
+            <span>Interface scale <output data-for="uiScale">85%</output></span>
             <input
               id="uiScale"
               type="range"
-              min="0.6"
-              max="1.35"
+              min="0.2"
+              max="3"
               step="0.05"
-              value="0.9"
+              value="0.85"
             />
           </label>
           <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
@@ -2097,7 +2097,7 @@
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
-      const DEFAULT_UI_SCALE = 0.9;
+      const DEFAULT_UI_SCALE = 0.85;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
       const VALID_GENERATION_ALGORITHMS = new Set(["local-kmeans", "local-posterize"]);
@@ -4819,7 +4819,7 @@
             autoValue = inlineAuto;
           }
         }
-        const combined = clamp(userValue * autoValue, 0.6, 1.8);
+        const combined = clamp(userValue * autoValue, 0.5, 1.8);
         root.style.setProperty("--ui-scale", combined.toFixed(4));
         invalidateCanvasRect();
         return combined;
@@ -5135,8 +5135,8 @@
             : DEFAULT_UI_SCALE;
         const resolved = clamp(
           Number.isFinite(numeric) && numeric > 0 ? numeric : fallbackScale,
-          0.6,
-          1.35
+          0.2,
+          3
         );
         const current = fallbackScale;
         const changed = force || Math.abs(resolved - current) > 0.001;
@@ -8491,7 +8491,7 @@
           difficulty: resolveDifficulty(settingsSource.difficulty ?? state.settings.difficulty),
           uiScale:
             Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
-              ? clamp(settingsSource.uiScale, 0.6, 1.35)
+            ? clamp(settingsSource.uiScale, 0.2, 3)
               : DEFAULT_UI_SCALE,
           artPrompt:
             typeof settingsSource.artPrompt === "string" ? settingsSource.artPrompt : "",
@@ -8603,7 +8603,7 @@
             difficulty: resolveDifficulty(state.settings.difficulty),
             uiScale:
               Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
-                ? clamp(state.settings.uiScale, 0.6, 1.35)
+                ? clamp(state.settings.uiScale, 0.2, 3)
                 : DEFAULT_UI_SCALE,
             artPrompt: state.settings.artPrompt || "",
             imageDescription: state.settings.imageDescription || "",
