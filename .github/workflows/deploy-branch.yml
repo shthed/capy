@@ -381,6 +381,20 @@ jobs:
                 echo "Warning: required file $file not found during branch deployment sync" >&2
               fi
             done
+
+            JS_SYNC_EXCLUDES=(
+              "--exclude=node_modules/"
+              "--exclude=pages/"
+              "--exclude=preview/"
+            )
+
+            JS_INCLUDE_RULES=(
+              "--include=*/"
+              "--include=*.js"
+              "--exclude=*"
+            )
+
+            rsync -a "${RSYNC_ARGS[@]}" "${JS_SYNC_EXCLUDES[@]}" "${JS_INCLUDE_RULES[@]}" ../ "$TARGET_DIR/"
             generate_readme_html "$TARGET_DIR"
             if ! grep -qxF "$TARGET_KEY" "$MANIFEST"; then
               echo "$TARGET_KEY" >> "$MANIFEST"
