@@ -370,9 +370,27 @@ jobs:
 
             ESSENTIAL_FILES=(
               "index.html"
-              "puzzle-generation.js"
               "capy.json"
             )
+
+            ROOT_JS_FILES=()
+            while IFS= read -r -d '' js_path; do
+              js_file="${js_path#../}"
+              case "$js_file" in
+                "" | "playwright.config.js")
+                  continue
+                  ;;
+              esac
+              ROOT_JS_FILES+=("$js_file")
+            done < <(find .. -maxdepth 1 -mindepth 1 -type f -name '*.js' -print0)
+
+            if [ "${#ROOT_JS_FILES[@]}" -gt 0 ]; then
+              IFS=$'\n' ROOT_JS_FILES=($(printf '%s\n' "${ROOT_JS_FILES[@]}" | LC_ALL=C sort -u))
+              IFS=$' \t\n'
+              for js_file in "${ROOT_JS_FILES[@]}"; do
+                ESSENTIAL_FILES+=("$js_file")
+              done
+            fi
 
             for file in "${ESSENTIAL_FILES[@]}"; do
               if [ -e "../$file" ]; then
