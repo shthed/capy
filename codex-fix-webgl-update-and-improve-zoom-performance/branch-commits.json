@@ -1,6 +1,21 @@
 {
   "codex/fix-webgl-update-and-improve-zoom-performance": [
     {
+      "sha": "7f780e45e85cca82b8c381a51fc6827333d2e2f3",
+      "shortSha": "7f780e4",
+      "message": "Handle WebGL filled texture upload failures without flashing",
+      "date": "2025-10-21T23:14:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7f780e45e85cca82b8c381a51fc6827333d2e2f3",
+      "prs": [
+        {
+          "number": 209,
+          "title": "Fix WebGL fill updates and refine zoom controls",
+          "url": "https://github.com/shthed/capy/pull/209",
+          "branch": "codex/fix-webgl-update-and-improve-zoom-performance"
+        }
+      ]
+    },
+    {
       "sha": "aef6c80fa5a19386129ec6e73e6139a141deecea",
       "shortSha": "aef6c80",
       "message": "Improve WebGL fills and zoom responsiveness",
@@ -36,21 +51,6 @@
       "message": "Add renderer debug logs and restore WebGL option",
       "date": "2025-10-21T22:02:15Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/60cdd458b32f0bd3348b765368760f724ca5f689",
-      "prs": [
-        {
-          "number": 209,
-          "title": "Fix WebGL fill updates and refine zoom controls",
-          "url": "https://github.com/shthed/capy/pull/209",
-          "branch": "codex/fix-webgl-update-and-improve-zoom-performance"
-        }
-      ]
-    },
-    {
-      "sha": "9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
-      "shortSha": "9dcfe8e",
-      "message": "Fix WebGL renderer preview restore",
-      "date": "2025-10-21T13:26:31Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
       "prs": [
         {
           "number": 209,
@@ -63,6 +63,21 @@
   ],
   "codex-fix-webgl-update-and-improve-zoom-performance": [
     {
+      "sha": "7f780e45e85cca82b8c381a51fc6827333d2e2f3",
+      "shortSha": "7f780e4",
+      "message": "Handle WebGL filled texture upload failures without flashing",
+      "date": "2025-10-21T23:14:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7f780e45e85cca82b8c381a51fc6827333d2e2f3",
+      "prs": [
+        {
+          "number": 209,
+          "title": "Fix WebGL fill updates and refine zoom controls",
+          "url": "https://github.com/shthed/capy/pull/209",
+          "branch": "codex/fix-webgl-update-and-improve-zoom-performance"
+        }
+      ]
+    },
+    {
       "sha": "aef6c80fa5a19386129ec6e73e6139a141deecea",
       "shortSha": "aef6c80",
       "message": "Improve WebGL fills and zoom responsiveness",
@@ -98,21 +113,6 @@
       "message": "Add renderer debug logs and restore WebGL option",
       "date": "2025-10-21T22:02:15Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/60cdd458b32f0bd3348b765368760f724ca5f689",
-      "prs": [
-        {
-          "number": 209,
-          "title": "Fix WebGL fill updates and refine zoom controls",
-          "url": "https://github.com/shthed/capy/pull/209",
-          "branch": "codex/fix-webgl-update-and-improve-zoom-performance"
-        }
-      ]
-    },
-    {
-      "sha": "9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
-      "shortSha": "9dcfe8e",
-      "message": "Fix WebGL renderer preview restore",
-      "date": "2025-10-21T13:26:31Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9dcfe8eaa2dac9e770f13cde09155e8bd66379bf",
       "prs": [
         {
           "number": 209,
