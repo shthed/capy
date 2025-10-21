@@ -21,6 +21,7 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 - **Helpful hints** – Trigger hints to spotlight the smallest unfinished region when you need a nudge, or toggle the preview overlay to compare progress with the finished artwork.
 - **Progress that sticks** – Capy autosaves after every stroke. Manual saves let you bookmark milestones, rename snapshots, export JSON files, and reload them later.
 - **Play your way** – Adjust zoom, pan with the mouse, touch, or keyboard, hide region numbers for a clean canvas, and customise the background colour for better contrast.
+- **Three rendering backends** – Pick between Canvas 2D, WebGL, or SVG in Settings to prioritise compatibility, GPU acceleration, or scalable vector output.
 
 ## Controls & Gestures
 
@@ -51,6 +52,7 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 - **Contrast-aware labels:** Numbers automatically flip between light and dark treatments so every swatch stays legible.
 - **Hint tuning:** Adjust animation fade and highlight intensity to keep guidance subtle or pronounced.
 - **Background colour:** Pick a backdrop that makes outlines and numbers easy to read, whether you prefer light or dark themes.
+- **Renderer toggle:** Choose Canvas 2D for broad compatibility, WebGL for GPU-accelerated compositing, or SVG for crisp vector output under **Settings → Appearance**.
 - **Keyboard-friendly UI:** Command buttons expose descriptive labels and predictable focus order, and the help log uses polite announcements for assistive technology.
 
 ## Troubleshooting Tips
@@ -59,6 +61,7 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 - **Too many tiny regions?** Try the Low detail preset or raise the minimum region size slider before regenerating the puzzle.
 - **Running out of storage?** Delete older saves from the Saves panel or export them to JSON before clearing.
 - **Canvas won’t move?** Hold <kbd>Space</kbd> while dragging, or switch to a two-finger pan on touch devices.
+- **WebGL option disabled?** If the WebGL renderer fails to initialise, Capy automatically falls back to Canvas 2D and disables the option—try updating graphics drivers or stick with Canvas/SVG on that device.
 
 ## Testing & QA
 
