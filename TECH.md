@@ -21,7 +21,8 @@ single `index.html` document—no build tools or extra runtime required.
 
 - **Core application**
   - `index.html` – Single-file UI, styles, and generator logic powering the colouring experience.
-  - `renderers/controller.js` – Renderer controller that manages the active drawing backend (Canvas 2D today) and exposes hooks for swapping or extending renderers at runtime.
+  - `render.js` – Combined renderer controller and WebGL backend; manages the active drawing pipeline and exposes hooks for
+    swapping or extending renderers at runtime.
   - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the single-page runtime.
   - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, and metadata assembly off the main thread.
 - **Documentation**
