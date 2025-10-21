@@ -1371,18 +1371,25 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     }
 
     if (uploadState.filledDirty) {
+      const filledSourceAvailable = Boolean(hasCache && cache?.filledLayer);
       let filledUploaded = false;
-      if (hasCache && cache?.filledLayer) {
+
+      if (filledSourceAvailable) {
         filledUploaded = uploadTextureFromSource(layerTextures.filled, cache.filledLayer);
         if (!filledUploaded) {
-          uploadTransparentTexture(layerTextures.filled);
+          emitLog("Filled layer upload failed", { stage: "filled-layer" });
+          console.warn("WebGL filled layer upload failed; retaining previous texture contents");
         }
       } else {
         filledUploaded = uploadTransparentTexture(layerTextures.filled);
       }
+
       uploadState.filledDirty = false;
-      if (cache && filledUploaded) {
-        cache.filledLayerNeedsUpload = false;
+
+      if (cache) {
+        if (filledUploaded || !filledSourceAvailable) {
+          cache.filledLayerNeedsUpload = false;
+        }
       }
     }
     if (hasCache && cache?.filledLayer) {
