@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "de363ff1f98f962b7d3c32817b3273ed56056540",
+      "shortSha": "de363ff",
+      "message": "Merge pull request #204 from shthed/codex/update-deploy-branch-to-include-.js-files\n\nInclude JS assets in branch deployments",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-21T08:02:52Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/de363ff1f98f962b7d3c32817b3273ed56056540",
+      "prs": [
+        {
+          "number": 204,
+          "title": "Include JS assets in branch deployments",
+          "url": "https://github.com/shthed/capy/pull/204",
+          "branch": "codex/update-deploy-branch-to-include-.js-files"
+        }
+      ]
+    },
+    {
+      "sha": "cd8eb50b7bad2cb77fd4887c2613bbf22b3d9b92",
+      "shortSha": "cd8eb50",
+      "message": "Include renderer scripts in branch deploys",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-20T22:54:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/cd8eb50b7bad2cb77fd4887c2613bbf22b3d9b92",
+      "prs": [
+        {
+          "number": 204,
+          "title": "Include JS assets in branch deployments",
+          "url": "https://github.com/shthed/capy/pull/204",
+          "branch": "codex/update-deploy-branch-to-include-.js-files"
+        }
+      ]
+    },
+    {
       "sha": "b6128fc398a01b88ae7b493e1bdb3fb678137637",
       "shortSha": "b6128fc",
       "message": "Merge pull request #202 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq\n\nEnsure allow_without_pr input is evaluated correctly",
@@ -31,40 +63,8 @@
           "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq"
         }
       ]
-    },
-    {
-      "sha": "f4511c94ff70ee9d96b355e1c3ee3732a2896305",
-      "shortSha": "f4511c9",
-      "message": "Clarify workflow env defaults and lint guidance",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T22:13:28Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/f4511c94ff70ee9d96b355e1c3ee3732a2896305",
-      "prs": [
-        {
-          "number": 202,
-          "title": "Ensure allow_without_pr input is evaluated correctly",
-          "url": "https://github.com/shthed/capy/pull/202",
-          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq"
-        }
-      ]
-    },
-    {
-      "sha": "270af17118af6c02928b958eaebe8528664b994c",
-      "shortSha": "270af17",
-      "message": "Fix allow_without_pr evaluation in deploy workflow",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-20T22:08:32Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/270af17118af6c02928b958eaebe8528664b994c",
-      "prs": [
-        {
-          "number": 202,
-          "title": "Ensure allow_without_pr input is evaluated correctly",
-          "url": "https://github.com/shthed/capy/pull/202",
-          "branch": "codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-20T22:15:39Z",
-  "deploymentTimestamp": 1760998558551
+  "lastCommitDate": "2025-10-21T08:02:52Z",
+  "deploymentTimestamp": 1761033796145
 }

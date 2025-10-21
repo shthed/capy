@@ -1,1 +1,126 @@
-{}
+{
+  "codex/extend-webgl-renderer-for-textures-and-caching": [
+    {
+      "sha": "fc2292b48f53d2cc769f14e595e0b10b0b8647d0",
+      "shortSha": "fc2292b",
+      "message": "Add textured passes to WebGL renderer",
+      "date": "2025-10-20T22:42:25Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/fc2292b48f53d2cc769f14e595e0b10b0b8647d0",
+      "prs": [
+        {
+          "number": 203,
+          "title": "Add textured passes to WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/203",
+          "branch": "codex/extend-webgl-renderer-for-textures-and-caching"
+        }
+      ]
+    },
+    {
+      "sha": "b6128fc398a01b88ae7b493e1bdb3fb678137637",
+      "shortSha": "b6128fc",
+      "message": "Merge pull request #202 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq\n\nEnsure allow_without_pr input is evaluated correctly",
+      "date": "2025-10-20T22:15:39Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b6128fc398a01b88ae7b493e1bdb3fb678137637",
+      "prs": [
+        {
+          "number": 203,
+          "title": "Add textured passes to WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/203",
+          "branch": "codex/extend-webgl-renderer-for-textures-and-caching"
+        }
+      ]
+    },
+    {
+      "sha": "dc7c804fffb11d37e7dee0e08c71c0b637c3a93f",
+      "shortSha": "dc7c804",
+      "message": "Merge branch 'main' into codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq",
+      "date": "2025-10-20T22:14:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/dc7c804fffb11d37e7dee0e08c71c0b637c3a93f",
+      "prs": [
+        {
+          "number": 203,
+          "title": "Add textured passes to WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/203",
+          "branch": "codex/extend-webgl-renderer-for-textures-and-caching"
+        }
+      ]
+    },
+    {
+      "sha": "f4511c94ff70ee9d96b355e1c3ee3732a2896305",
+      "shortSha": "f4511c9",
+      "message": "Clarify workflow env defaults and lint guidance",
+      "date": "2025-10-20T22:13:28Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f4511c94ff70ee9d96b355e1c3ee3732a2896305",
+      "prs": [
+        {
+          "number": 203,
+          "title": "Add textured passes to WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/203",
+          "branch": "codex/extend-webgl-renderer-for-textures-and-caching"
+        }
+      ]
+    }
+  ],
+  "codex-extend-webgl-renderer-for-textures-and-caching": [
+    {
+      "sha": "fc2292b48f53d2cc769f14e595e0b10b0b8647d0",
+      "shortSha": "fc2292b",
+      "message": "Add textured passes to WebGL renderer",
+      "date": "2025-10-20T22:42:25Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/fc2292b48f53d2cc769f14e595e0b10b0b8647d0",
+      "prs": [
+        {
+          "number": 203,
+          "title": "Add textured passes to WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/203",
+          "branch": "codex/extend-webgl-renderer-for-textures-and-caching"
+        }
+      ]
+    },
+    {
+      "sha": "b6128fc398a01b88ae7b493e1bdb3fb678137637",
+      "shortSha": "b6128fc",
+      "message": "Merge pull request #202 from shthed/codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq\n\nEnsure allow_without_pr input is evaluated correctly",
+      "date": "2025-10-20T22:15:39Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b6128fc398a01b88ae7b493e1bdb3fb678137637",
+      "prs": [
+        {
+          "number": 203,
+          "title": "Add textured passes to WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/203",
+          "branch": "codex/extend-webgl-renderer-for-textures-and-caching"
+        }
+      ]
+    },
+    {
+      "sha": "dc7c804fffb11d37e7dee0e08c71c0b637c3a93f",
+      "shortSha": "dc7c804",
+      "message": "Merge branch 'main' into codex/fix-invalid-syntax-in-deploy-branch.yml-40srvq",
+      "date": "2025-10-20T22:14:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/dc7c804fffb11d37e7dee0e08c71c0b637c3a93f",
+      "prs": [
+        {
+          "number": 203,
+          "title": "Add textured passes to WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/203",
+          "branch": "codex/extend-webgl-renderer-for-textures-and-caching"
+        }
+      ]
+    },
+    {
+      "sha": "f4511c94ff70ee9d96b355e1c3ee3732a2896305",
+      "shortSha": "f4511c9",
+      "message": "Clarify workflow env defaults and lint guidance",
+      "date": "2025-10-20T22:13:28Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f4511c94ff70ee9d96b355e1c3ee3732a2896305",
+      "prs": [
+        {
+          "number": 203,
+          "title": "Add textured passes to WebGL renderer",
+          "url": "https://github.com/shthed/capy/pull/203",
+          "branch": "codex/extend-webgl-renderer-for-textures-and-caching"
+        }
+      ]
+    }
+  ]
+}
