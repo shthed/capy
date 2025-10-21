@@ -13,10 +13,10 @@
     "key": "codex-add-webgl-support-to-modular-renderer",
     "branch": "codex/add-webgl-support-to-modular-renderer",
     "safeName": "codex-add-webgl-support-to-modular-renderer",
-    "commit": "ff172dc984c2fa9e27cf90c339ba974fa31e829f",
-    "message": "Merge pull request #207 from shthed/codex/update-deploy-branch-for-capy.json\n\nEnsure branch deployments include JSON assets",
+    "commit": "64283606a5c7f81685785c547afb662414c6bb7b",
+    "message": "Add SVG renderer option and selection UI",
     "actor": "shthed",
-    "deployedAt": "2025-10-21T19:33:04+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/ff172dc984c2fa9e27cf90c339ba974fa31e829f"
+    "deployedAt": "2025-10-21T21:11:33+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/64283606a5c7f81685785c547afb662414c6bb7b"
   }
 }
