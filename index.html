@@ -71,7 +71,7 @@
         color-scheme: light dark;
         font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui,
           sans-serif;
-        --ui-scale-user: 0.85;
+        --ui-scale-user: 0.75;
         --ui-scale-auto: 1;
         --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
         --app-width: 100vw;
@@ -128,6 +128,7 @@
         --theme-palette-dock-border: rgba(15, 23, 42, 0.85);
         --command-rail-top: calc(env(safe-area-inset-top, 0px) + 12px);
         --command-rail-height: calc(40px * var(--ui-scale));
+        --stage-background: var(--theme-body-bg);
       }
 
       body[data-theme="dark"] {
@@ -260,7 +261,7 @@
         margin: 0;
         min-height: 100vh;
         min-height: 100dvh;
-        background: var(--theme-body-bg);
+        background: var(--stage-background);
         color: var(--theme-body-color);
         overflow: hidden;
         font-size: calc(16px * var(--ui-scale));
@@ -683,6 +684,30 @@
         color: rgba(148, 163, 184, 0.9);
       }
 
+      .mouse-control-group {
+        display: flex;
+        flex-direction: column;
+        gap: calc(8px * var(--ui-scale));
+      }
+
+      .mouse-control-title {
+        font-weight: 600;
+        font-size: 0.95rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .mouse-control-options {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(calc(180px * var(--ui-scale)), 1fr));
+        gap: calc(12px * var(--ui-scale));
+      }
+
+      .mouse-control-option {
+        flex: 1 1 auto;
+      }
+
       details.advanced-options {
         margin-top: calc(16px * var(--ui-scale));
         padding: calc(12px * var(--ui-scale));
@@ -998,6 +1023,53 @@
         gap: 22px;
         overflow-y: auto;
         padding-right: 4px;
+      }
+
+      .settings-body {
+        gap: 18px;
+      }
+
+      .settings-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: calc(8px * var(--ui-scale));
+      }
+
+      .settings-tab {
+        flex: 1 1 120px;
+        padding: calc(8px * var(--ui-scale)) calc(12px * var(--ui-scale));
+        border-radius: calc(12px * var(--ui-scale));
+        border: 1px solid var(--theme-sheet-button-border);
+        background: var(--theme-sheet-button-bg);
+        color: var(--theme-sheet-button-text);
+        font-size: 0.95rem;
+        letter-spacing: 0.01em;
+        transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+      }
+
+      body[data-theme="light"] .settings-tab {
+        background: rgba(226, 232, 240, 0.85);
+      }
+
+      .settings-tab[aria-selected="true"] {
+        background: var(--theme-command-active-bg);
+        border-color: var(--theme-command-active-border);
+        color: var(--theme-command-active-text);
+      }
+
+      .settings-tab:focus-visible {
+        outline: 2px solid rgba(96, 165, 250, 0.75);
+        outline-offset: 2px;
+      }
+
+      .settings-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+
+      .settings-panel[hidden] {
+        display: none;
       }
 
       .generator-import-notice,
@@ -1800,185 +1872,291 @@
         <h2 id="settingsTitle">Settings</h2>
         <button type="button" class="close-button" data-sheet-close="settings">Close</button>
       </div>
-      <div class="sheet-body">
-        <section class="sheet-section" aria-labelledby="gameplayHeading">
-          <h3 id="gameplayHeading">Gameplay</h3>
-          <label class="toggle">
-            <input id="autoAdvanceToggle" type="checkbox" checked />
-            <span>Auto-advance to the next colour when complete</span>
-          </label>
-          <label class="toggle">
-            <input id="hintFlashToggle" type="checkbox" checked />
-            <span>Animate hint highlights</span>
-          </label>
-          <label class="toggle">
-            <input id="showRegionLabelsToggle" type="checkbox" checked />
-            <span>Show region numbers</span>
-          </label>
-          <label class="control">
-            <span>Difficulty</span>
-            <select id="difficultySelect">
-              <option value="normal">Standard</option>
-              <option value="easy">Easy</option>
-            </select>
-          </label>
-          <p class="control-note">
-            Easy mode lets you click any region to auto-select its colour before filling it.
-          </p>
-        </section>
-        <section class="sheet-section" aria-labelledby="hintsControlsHeading">
-          <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
-          <label class="control">
-            <span>Hint fade duration <output data-for="hintFadeDuration">1.2 s</output></span>
-            <input id="hintFadeDuration" type="range" min="400" max="2400" step="100" value="1200" />
-          </label>
-          <p class="control-note">Set how long hint highlights linger before fading out.</p>
-          <label class="control">
-            <span>Hint intensity <output data-for="hintIntensity">65%</output></span>
-            <input id="hintIntensity" type="range" min="20" max="90" step="5" value="65" />
-          </label>
-          <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
-        </section>
-        <section class="sheet-section" aria-labelledby="hintTypesHeading">
-          <h3 id="hintTypesHeading">Hint types</h3>
-          <p class="control-note">Pick which guidance effects appear while you play.</p>
-          <label class="toggle">
-            <input id="hintMatchingToggle" type="checkbox" checked />
-            <span>Highlight every region for the active colour</span>
-          </label>
-          <p class="control-note">Toggle the pulse that flashes all remaining regions sharing the selected colour.</p>
-          <label class="toggle">
-            <input id="hintHoverToggle" type="checkbox" checked />
-            <span>Spotlight hovered regions</span>
-          </label>
-          <p class="control-note">Show a focused hint when you pause the pointer over a region.</p>
-        </section>
-        <section class="sheet-section" aria-labelledby="mouseControlsHeading">
-          <h3 id="mouseControlsHeading">Mouse controls</h3>
-          <p class="control-note">
-            Assign actions to each mouse button when clicking or click-dragging on the
-            canvas.
-          </p>
-          <label class="control">
-            <span>Left button &mdash; click</span>
-            <select id="mouseLeftClick">
-              <option value="fill" selected>Fill region</option>
-              <option value="select-fill">Select and fill region</option>
-              <option value="select">Select colour</option>
-              <option value="zoom-in">Zoom in</option>
-              <option value="zoom-out">Zoom out</option>
-              <option value="none">No action</option>
-            </select>
-          </label>
-          <label class="control">
-            <span>Left button &mdash; click + drag</span>
-            <select id="mouseLeftDrag">
-              <option value="pan" selected>Pan view</option>
-              <option value="fill">Fill while dragging</option>
-              <option value="zoom">Zoom</option>
-              <option value="none">No action</option>
-            </select>
-          </label>
-          <label class="control">
-            <span>Middle button &mdash; click</span>
-            <select id="mouseMiddleClick">
-              <option value="fill">Fill region</option>
-              <option value="select-fill">Select and fill region</option>
-              <option value="select">Select colour</option>
-              <option value="zoom-in">Zoom in</option>
-              <option value="zoom-out">Zoom out</option>
-              <option value="none" selected>No action</option>
-            </select>
-          </label>
-          <label class="control">
-            <span>Middle button &mdash; click + drag</span>
-            <select id="mouseMiddleDrag">
-              <option value="pan" selected>Pan view</option>
-              <option value="fill">Fill while dragging</option>
-              <option value="zoom">Zoom</option>
-              <option value="none">No action</option>
-            </select>
-          </label>
-          <label class="control">
-            <span>Right button &mdash; click</span>
-            <select id="mouseRightClick">
-              <option value="fill">Fill region</option>
-              <option value="select-fill">Select and fill region</option>
-              <option value="select" selected>Select colour</option>
-              <option value="zoom-in">Zoom in</option>
-              <option value="zoom-out">Zoom out</option>
-              <option value="none">No action</option>
-            </select>
-          </label>
-          <label class="control">
-            <span>Right button &mdash; click + drag</span>
-            <select id="mouseRightDrag">
-              <option value="pan" selected>Pan view</option>
-              <option value="fill">Fill while dragging</option>
-              <option value="zoom">Zoom</option>
-              <option value="none">No action</option>
-            </select>
-          </label>
-          <p class="control-note">
-            Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out.
-          </p>
-        </section>
-        <section class="sheet-section" aria-labelledby="paletteHeading">
-          <h3 id="paletteHeading">Palette</h3>
-          <label class="control">
-            <span>Sort swatches</span>
-            <select id="paletteSort" data-testid="palette-sort" disabled>
-              <option value="region">Number</option>
-              <option value="remaining">Remaining regions</option>
-              <option value="name">Colour name</option>
-              <option value="hue">Hue</option>
-              <option value="brightness">Brightness</option>
-            </select>
-          </label>
-          <p class="control-note">Choose how unfinished colours appear in the dock.</p>
-        </section>
-        <section class="sheet-section" aria-labelledby="appearanceHeading">
-          <h3 id="appearanceHeading">Appearance</h3>
-          <label class="control">
-            <span>Interface theme</span>
-            <select id="uiTheme">
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-              <option value="colorful">Colourful</option>
-            </select>
-          </label>
-          <p class="control-note">Switch between dark, light, or colourful chrome accents.</p>
-          <label class="control">
-            <span>Renderer</span>
-            <select id="rendererMode">
-              <option value="canvas2d">Canvas 2D</option>
-              <option value="webgl">WebGL</option>
-              <option value="svg">SVG</option>
-            </select>
-          </label>
-          <p class="control-note">
-            Choose between the classic Canvas pipeline, accelerated WebGL, or the SVG renderer.
-          </p>
-          <label class="control">
-            <span>Background colour</span>
-            <input id="backgroundColor" type="color" value="#f8fafc" />
-          </label>
-          <p class="control-note">
-            Applies to unfinished regions and adjusts outline contrast automatically.
-          </p>
-          <label class="control">
-            <span>Interface scale <output data-for="uiScale">85%</output></span>
-            <input
-              id="uiScale"
-              type="range"
-              min="0.2"
-              max="3"
-              step="0.05"
-              value="0.85"
-            />
-          </label>
-          <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
-        </section>
+      <div class="sheet-body settings-body">
+        <div class="settings-tabs" role="tablist" aria-label="Settings categories">
+          <button
+            type="button"
+            class="settings-tab"
+            id="settingsTab-gameplay"
+            data-settings-tab="gameplay"
+            data-settings-tab-default="true"
+            role="tab"
+            aria-controls="settingsPanel-gameplay"
+            aria-selected="true"
+            tabindex="0"
+          >
+            Gameplay
+          </button>
+          <button
+            type="button"
+            class="settings-tab"
+            id="settingsTab-hints"
+            data-settings-tab="hints"
+            role="tab"
+            aria-controls="settingsPanel-hints"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Hints
+          </button>
+          <button
+            type="button"
+            class="settings-tab"
+            id="settingsTab-controls"
+            data-settings-tab="controls"
+            role="tab"
+            aria-controls="settingsPanel-controls"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Controls
+          </button>
+          <button
+            type="button"
+            class="settings-tab"
+            id="settingsTab-appearance"
+            data-settings-tab="appearance"
+            role="tab"
+            aria-controls="settingsPanel-appearance"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Appearance
+          </button>
+        </div>
+        <div
+          class="settings-panel"
+          id="settingsPanel-gameplay"
+          role="tabpanel"
+          aria-labelledby="settingsTab-gameplay"
+          data-settings-panel="gameplay"
+        >
+          <section class="sheet-section" aria-labelledby="gameplayHeading">
+            <h3 id="gameplayHeading">Gameplay</h3>
+            <label class="toggle">
+              <input id="autoAdvanceToggle" type="checkbox" checked />
+              <span>Auto-advance to the next colour when complete</span>
+            </label>
+            <label class="toggle">
+              <input id="hintFlashToggle" type="checkbox" checked />
+              <span>Animate hint highlights</span>
+            </label>
+            <label class="toggle">
+              <input id="showRegionLabelsToggle" type="checkbox" checked />
+              <span>Show region numbers</span>
+            </label>
+            <label class="control">
+              <span>Difficulty</span>
+              <select id="difficultySelect">
+                <option value="normal">Standard</option>
+                <option value="easy">Easy</option>
+              </select>
+            </label>
+            <p class="control-note">
+              Easy mode lets you click any region to auto-select its colour before filling it.
+            </p>
+            <label class="control">
+              <span>Sort swatches</span>
+              <select id="paletteSort" data-testid="palette-sort" disabled>
+                <option value="region">Number</option>
+                <option value="remaining">Remaining regions</option>
+                <option value="name">Colour name</option>
+                <option value="hue">Hue</option>
+                <option value="brightness">Brightness</option>
+              </select>
+            </label>
+            <p class="control-note">Choose how unfinished colours appear in the dock.</p>
+          </section>
+        </div>
+        <div
+          class="settings-panel"
+          id="settingsPanel-hints"
+          role="tabpanel"
+          aria-labelledby="settingsTab-hints"
+          data-settings-panel="hints"
+          hidden
+          aria-hidden="true"
+        >
+          <section class="sheet-section" aria-labelledby="hintsControlsHeading">
+            <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
+            <label class="control">
+              <span>Hint fade duration <output data-for="hintFadeDuration">1.2 s</output></span>
+              <input id="hintFadeDuration" type="range" min="400" max="2400" step="100" value="1200" />
+            </label>
+            <p class="control-note">Set how long hint highlights linger before fading out.</p>
+            <label class="control">
+              <span>Hint intensity <output data-for="hintIntensity">65%</output></span>
+              <input id="hintIntensity" type="range" min="20" max="90" step="5" value="65" />
+            </label>
+            <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
+          </section>
+          <section class="sheet-section" aria-labelledby="hintTypesHeading">
+            <h3 id="hintTypesHeading">Hint types</h3>
+            <p class="control-note">Pick which guidance effects appear while you play.</p>
+            <label class="toggle">
+              <input id="hintMatchingToggle" type="checkbox" checked />
+              <span>Highlight every region for the active colour</span>
+            </label>
+            <p class="control-note">Toggle the pulse that flashes all remaining regions sharing the selected colour.</p>
+            <label class="toggle">
+              <input id="hintHoverToggle" type="checkbox" checked />
+              <span>Spotlight hovered regions</span>
+            </label>
+            <p class="control-note">Show a focused hint when you pause the pointer over a region.</p>
+          </section>
+        </div>
+        <div
+          class="settings-panel"
+          id="settingsPanel-controls"
+          role="tabpanel"
+          aria-labelledby="settingsTab-controls"
+          data-settings-panel="controls"
+          hidden
+          aria-hidden="true"
+        >
+          <section class="sheet-section" aria-labelledby="mouseControlsHeading">
+            <h3 id="mouseControlsHeading">Mouse controls</h3>
+            <p class="control-note">
+              Assign actions to each mouse button when clicking or click-dragging on the
+              canvas.
+            </p>
+            <div class="mouse-control-group">
+              <span class="mouse-control-title">Left button</span>
+              <div class="mouse-control-options">
+                <label class="control mouse-control-option">
+                  <span>Click</span>
+                  <select id="mouseLeftClick">
+                    <option value="fill" selected>Fill region</option>
+                    <option value="select-fill">Select and fill region</option>
+                    <option value="select">Select colour</option>
+                    <option value="zoom-in">Zoom in</option>
+                    <option value="zoom-out">Zoom out</option>
+                    <option value="none">No action</option>
+                  </select>
+                </label>
+                <label class="control mouse-control-option">
+                  <span>Click + drag</span>
+                  <select id="mouseLeftDrag">
+                    <option value="pan" selected>Pan view</option>
+                    <option value="fill">Fill while dragging</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="none">No action</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="mouse-control-group">
+              <span class="mouse-control-title">Middle button</span>
+              <div class="mouse-control-options">
+                <label class="control mouse-control-option">
+                  <span>Click</span>
+                  <select id="mouseMiddleClick">
+                    <option value="fill">Fill region</option>
+                    <option value="select-fill">Select and fill region</option>
+                    <option value="select">Select colour</option>
+                    <option value="zoom-in">Zoom in</option>
+                    <option value="zoom-out">Zoom out</option>
+                    <option value="none" selected>No action</option>
+                  </select>
+                </label>
+                <label class="control mouse-control-option">
+                  <span>Click + drag</span>
+                  <select id="mouseMiddleDrag">
+                    <option value="pan" selected>Pan view</option>
+                    <option value="fill">Fill while dragging</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="none">No action</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="mouse-control-group">
+              <span class="mouse-control-title">Right button</span>
+              <div class="mouse-control-options">
+                <label class="control mouse-control-option">
+                  <span>Click</span>
+                  <select id="mouseRightClick">
+                    <option value="fill">Fill region</option>
+                    <option value="select-fill">Select and fill region</option>
+                    <option value="select" selected>Select colour</option>
+                    <option value="zoom-in">Zoom in</option>
+                    <option value="zoom-out">Zoom out</option>
+                    <option value="none">No action</option>
+                  </select>
+                </label>
+                <label class="control mouse-control-option">
+                  <span>Click + drag</span>
+                  <select id="mouseRightDrag">
+                    <option value="pan" selected>Pan view</option>
+                    <option value="fill">Fill while dragging</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="none">No action</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <p class="control-note">
+              Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out.
+            </p>
+          </section>
+        </div>
+        <div
+          class="settings-panel"
+          id="settingsPanel-appearance"
+          role="tabpanel"
+          aria-labelledby="settingsTab-appearance"
+          data-settings-panel="appearance"
+          hidden
+          aria-hidden="true"
+        >
+          <section class="sheet-section" aria-labelledby="appearanceHeading">
+            <h3 id="appearanceHeading">Appearance</h3>
+            <label class="control">
+              <span>Interface scale <output data-for="uiScale">75%</output></span>
+              <input
+                id="uiScale"
+                type="range"
+                min="0.2"
+                max="3"
+                step="0.05"
+                value="0.75"
+              />
+            </label>
+            <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
+            <label class="control">
+              <span>Interface theme</span>
+              <select id="uiTheme">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+                <option value="colorful">Colourful</option>
+              </select>
+            </label>
+            <p class="control-note">Switch between dark, light, or colourful chrome accents.</p>
+            <label class="control">
+              <span>Renderer</span>
+              <select id="rendererMode">
+                <option value="canvas2d">Canvas 2D</option>
+                <option value="webgl">WebGL</option>
+                <option value="svg">SVG</option>
+              </select>
+            </label>
+            <p class="control-note">
+              Choose between the classic Canvas pipeline, accelerated WebGL, or the SVG renderer.
+            </p>
+            <label class="control">
+              <span>Unfilled region colour</span>
+              <input id="backgroundColor" type="color" value="#f8fafc" />
+            </label>
+            <p class="control-note">
+              Applies to unfinished regions and adjusts outline contrast automatically.
+            </p>
+            <label class="control">
+              <span>Background</span>
+              <input id="stageBackgroundColor" type="color" value="#000000" />
+            </label>
+            <p class="control-note">Adjust the area surrounding the puzzle canvas.</p>
+          </section>
+        </div>
       </div>
     </div>
         <script type="module">
@@ -2010,6 +2188,16 @@
       const helpButton = document.getElementById("helpButton");
       const generatorSheet = document.getElementById("generatorSheet");
       const settingsSheet = document.getElementById("settingsSheet");
+      const settingsBody = settingsSheet?.querySelector(".sheet-body") || null;
+      const settingsTabButtons = settingsSheet
+        ? Array.from(settingsSheet.querySelectorAll("[data-settings-tab]"))
+        : [];
+      const settingsPanels = settingsSheet
+        ? Array.from(settingsSheet.querySelectorAll("[data-settings-panel]"))
+        : [];
+      let activeSettingsTabId =
+        settingsTabButtons.find((button) => button?.hasAttribute("data-settings-tab-default"))
+          ?.dataset.settingsTab || (settingsTabButtons[0]?.dataset.settingsTab ?? null);
       const helpSheet = document.getElementById("helpSheet");
       const saveManagerSheet = document.getElementById("saveManagerSheet");
       const sheetRegistry = [generatorSheet, settingsSheet, helpSheet, saveManagerSheet].filter(
@@ -2055,6 +2243,7 @@
       const uiThemeSelect = document.getElementById("uiTheme");
       const rendererModeSelect = document.getElementById("rendererMode");
       const backgroundColorInput = document.getElementById("backgroundColor");
+      const stageBackgroundColorInput = document.getElementById("stageBackgroundColor");
       const uiScaleInput = document.getElementById("uiScale");
       const colorCountEl = document.getElementById("colorCount");
       const minRegionEl = document.getElementById("minRegion");
@@ -2121,11 +2310,15 @@
             hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
           }
         : {};
+      if (activeSettingsTabId) {
+        activateSettingsTab(activeSettingsTabId, { force: true });
+      }
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
-      const DEFAULT_UI_SCALE = 0.85;
+      const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
+      const DEFAULT_UI_SCALE = 0.75;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
       const VALID_GENERATION_ALGORITHMS = new Set(["local-kmeans", "local-posterize"]);
@@ -3292,6 +3485,7 @@
           hintTypes: { ...DEFAULT_HINT_TYPES },
           difficulty: DEFAULT_DIFFICULTY,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
+          stageBackgroundColor: DEFAULT_STAGE_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
           imageDescription: "",
@@ -3825,6 +4019,18 @@
         } else if (state.settings.theme) {
           applyTheme(state.settings.theme, { skipLog: true, skipAutosave: true });
         }
+        if (typeof settings.stageBackgroundColor === "string") {
+          applyStageBackgroundColor(settings.stageBackgroundColor, {
+            skipLog: true,
+            skipAutosave: true,
+          });
+        } else {
+          applyStageBackgroundColor(state.settings.stageBackgroundColor, {
+            skipLog: true,
+            skipAutosave: true,
+            force: true,
+          });
+        }
         if (typeof settings.autoAdvance === "boolean") {
           state.settings.autoAdvance = settings.autoAdvance;
           if (autoAdvanceToggle) {
@@ -4001,6 +4207,9 @@
           setBackgroundColor(hex) {
             applyBackgroundColor(hex);
           },
+          setStageBackgroundColor(hex) {
+            applyStageBackgroundColor(hex);
+          },
           setUiScale(scale) {
             applyUiScale(scale);
           },
@@ -4132,6 +4341,41 @@
         .catch((error) => {
           console.error("Failed to preload default puzzle metadata", error);
         });
+
+      if (settingsTabButtons.length > 0) {
+        settingsTabButtons.forEach((button, index) => {
+          button.addEventListener("click", () => {
+            const tabId = button.dataset.settingsTab;
+            if (tabId) {
+              activateSettingsTab(tabId, { resetScroll: true });
+            }
+          });
+          button.addEventListener("keydown", (event) => {
+            switch (event.key) {
+              case "ArrowRight":
+              case "ArrowDown":
+                event.preventDefault();
+                focusSettingsTabRelative(index, 1, { resetScroll: true });
+                break;
+              case "ArrowLeft":
+              case "ArrowUp":
+                event.preventDefault();
+                focusSettingsTabRelative(index, -1, { resetScroll: true });
+                break;
+              case "Home":
+                event.preventDefault();
+                focusSettingsTab(0, { resetScroll: true });
+                break;
+              case "End":
+                event.preventDefault();
+                focusSettingsTab(settingsTabButtons.length - 1, { resetScroll: true });
+                break;
+              default:
+                break;
+            }
+          });
+        });
+      }
 
       if (selectButton) {
         selectButton.addEventListener("click", () => {
@@ -4391,6 +4635,15 @@
         });
         backgroundColorInput.addEventListener("change", (event) => {
           applyBackgroundColor(event.target.value);
+        });
+      }
+
+      if (stageBackgroundColorInput) {
+        stageBackgroundColorInput.addEventListener("input", (event) => {
+          applyStageBackgroundColor(event.target.value, { skipLog: true, skipAutosave: true });
+        });
+        stageBackgroundColorInput.addEventListener("change", (event) => {
+          applyStageBackgroundColor(event.target.value);
         });
       }
 
@@ -5121,7 +5374,7 @@
             autoValue = inlineAuto;
           }
         }
-        const combined = clamp(userValue * autoValue, 0.5, 1.8);
+        const combined = clamp(userValue * autoValue, 0.35, 1.8);
         root.style.setProperty("--ui-scale", combined.toFixed(4));
         invalidateCanvasRect();
         return combined;
@@ -5145,7 +5398,7 @@
         const minSide = Math.max(1, Math.min(visualWidth, visualHeight));
         const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
         document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
-        const autoScale = clamp(minSide / 880, 0.7, 1.1);
+        const autoScale = clamp(minSide / 880, 0.6, 1.1);
         document.documentElement.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
         if (document.body) {
           document.body.dataset.orientation = orientation;
@@ -5339,6 +5592,7 @@
             filled: payload.filled,
             activeColor: payload.activeColor,
             backgroundColor: payload.backgroundColor,
+            stageBackgroundColor: payload.stageBackgroundColor,
             viewport: payload.viewport,
             settings: payload.settings,
             title: descriptorTitle || DEFAULT_GAME_SOURCE.path || "Puzzle",
@@ -5426,6 +5680,77 @@
           debugLogEntries.splice(0, debugLogEntries.length - DEBUG_LOG_LIMIT);
         }
         renderDebugLog();
+      }
+
+      function activateSettingsTab(tabId, options = {}) {
+        if (!tabId || settingsTabButtons.length === 0) {
+          return null;
+        }
+        const { focusTab = false, force = false, resetScroll = false } = options;
+        const button = settingsTabButtons.find(
+          (candidate) => candidate?.dataset.settingsTab === tabId
+        );
+        const panel = settingsPanels.find((candidate) => candidate?.dataset.settingsPanel === tabId);
+        if (!button || !panel) {
+          return null;
+        }
+        const previousTabId = activeSettingsTabId;
+        const changed = previousTabId !== tabId;
+        if (!force && !changed) {
+          if (resetScroll && settingsBody) {
+            settingsBody.scrollTop = 0;
+          }
+          if (focusTab) {
+            button.focus();
+          }
+          return tabId;
+        }
+        activeSettingsTabId = tabId;
+        for (const candidate of settingsTabButtons) {
+          const selected = candidate === button;
+          candidate.setAttribute("aria-selected", selected ? "true" : "false");
+          candidate.setAttribute("tabindex", selected ? "0" : "-1");
+        }
+        for (const candidate of settingsPanels) {
+          const isTarget = candidate === panel;
+          candidate.hidden = !isTarget;
+          candidate.setAttribute("aria-hidden", isTarget ? "false" : "true");
+        }
+        if (settingsBody && (resetScroll || changed)) {
+          settingsBody.scrollTop = 0;
+        }
+        if (focusTab) {
+          button.focus();
+        }
+        return tabId;
+      }
+
+      function focusSettingsTab(index, options = {}) {
+        if (settingsTabButtons.length === 0) {
+          return null;
+        }
+        const length = settingsTabButtons.length;
+        const normalized = ((index % length) + length) % length;
+        const button = settingsTabButtons[normalized];
+        if (!button) {
+          return null;
+        }
+        const tabId = button.dataset.settingsTab;
+        if (tabId) {
+          activateSettingsTab(tabId, {
+            focusTab: true,
+            resetScroll: options.resetScroll ?? true,
+            force: options.force ?? false,
+          });
+        }
+        return tabId;
+      }
+
+      function focusSettingsTabRelative(currentIndex, delta, options = {}) {
+        if (settingsTabButtons.length === 0) {
+          return null;
+        }
+        return focusSettingsTab(currentIndex + delta, options);
       }
 
       function applyUiScale(scale, options = {}) {
@@ -5617,10 +5942,35 @@
           }
         }
         if (changed && !skipLog) {
-          logDebug(`Background colour set to ${normalized.toUpperCase()}`);
+          logDebug(`Unfilled region colour set to ${normalized.toUpperCase()}`);
         }
         if (changed && !options.skipAutosave) {
           scheduleAutosave("background-colour");
+        }
+        return normalized;
+      }
+
+      function applyStageBackgroundColor(hex, options = {}) {
+        const { skipLog = false, skipAutosave = false, force = false } = options;
+        const current = state.settings.stageBackgroundColor ?? DEFAULT_STAGE_BACKGROUND_HEX;
+        const normalized = sanitizeHexColor(hex, current);
+        const changed = force || normalized !== current;
+        state.settings.stageBackgroundColor = normalized;
+        if (
+          stageBackgroundColorInput &&
+          typeof stageBackgroundColorInput.value === "string" &&
+          stageBackgroundColorInput.value !== normalized
+        ) {
+          stageBackgroundColorInput.value = normalized;
+        }
+        if (typeof document !== "undefined" && document.documentElement) {
+          document.documentElement.style.setProperty("--stage-background", normalized);
+        }
+        if (changed && !skipLog) {
+          logDebug(`Stage background set to ${normalized.toUpperCase()}`);
+        }
+        if (changed && !skipAutosave) {
+          scheduleAutosave("stage-background-colour");
         }
         return normalized;
       }
@@ -5916,6 +6266,7 @@
                 filled: payload.filled,
                 activeColor: payload.activeColor,
                 backgroundColor: payload.backgroundColor,
+                stageBackgroundColor: payload.stageBackgroundColor,
                 title: resolvedTitle,
               });
               if (applied) {
@@ -5978,6 +6329,7 @@
               options,
               title,
               backgroundColor: state.settings.backgroundColor,
+              stageBackgroundColor: state.settings.stageBackgroundColor,
               logMessage: completionMessage,
               skipDefaultLog,
             });
@@ -6198,6 +6550,13 @@
           metadata.backgroundColor ?? data.backgroundColor ?? state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX,
           state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX
         );
+        const stageBackgroundHex = sanitizeHexColor(
+          metadata.stageBackgroundColor ??
+            data.stageBackgroundColor ??
+            state.settings.stageBackgroundColor ??
+            DEFAULT_STAGE_BACKGROUND_HEX,
+          state.settings.stageBackgroundColor ?? DEFAULT_STAGE_BACKGROUND_HEX
+        );
         state.puzzle = {
           width: data.width,
           height: data.height,
@@ -6230,6 +6589,11 @@
         if (resolvedSettings) {
           applyGameplaySettings(resolvedSettings);
         }
+        applyStageBackgroundColor(stageBackgroundHex, {
+          skipLog: true,
+          skipAutosave: true,
+          force: true,
+        });
         applyBackgroundColor(backgroundHex, { skipRender: true, skipLog: true });
         applyCanvasSizing();
         previewCanvas.width = data.width;
@@ -6283,6 +6647,7 @@
           filled: puzzle.filled,
           activeColor: puzzle.activeColor,
           backgroundColor: puzzle.backgroundColor,
+          stageBackgroundColor: puzzle.stageBackgroundColor,
           title: resolvedTitle,
         });
         if (applied) {
@@ -8800,6 +9165,12 @@
         if (typeof snapshot.backgroundColor === "string" && snapshot.backgroundColor) {
           payload.backgroundColor = snapshot.backgroundColor;
         }
+        if (
+          typeof snapshot.stageBackgroundColor === "string" &&
+          snapshot.stageBackgroundColor
+        ) {
+          payload.stageBackgroundColor = snapshot.stageBackgroundColor;
+        }
         if (snapshot.viewport && typeof snapshot.viewport === "object") {
           const { panX, panY, zoom, baseScale } = snapshot.viewport;
           payload.viewport = {
@@ -8921,6 +9292,7 @@
           sourceUrl: state.sourceUrl,
           activeColor: state.activeColor,
           backgroundColor: state.settings.backgroundColor,
+          stageBackgroundColor: state.settings.stageBackgroundColor,
           viewport: {
             panX: viewState.panX,
             panY: viewState.panY,
@@ -8943,6 +9315,7 @@
             showRegionLabels: state.settings.showRegionLabels !== false,
             theme: state.settings.theme || DEFAULT_UI_THEME,
             renderer: state.settings.renderer || "canvas2d",
+            stageBackgroundColor: state.settings.stageBackgroundColor || DEFAULT_STAGE_BACKGROUND_HEX,
             mouseControls: cloneMouseControls(state.settings.mouseControls),
           },
         };
@@ -9254,6 +9627,7 @@
             filled: latest.data.filled,
             activeColor: latest.data.activeColor,
             backgroundColor: latest.data.backgroundColor,
+            stageBackgroundColor: latest.data.stageBackgroundColor,
             viewport: latest.data.viewport,
             settings: latest.data.settings,
             title: descriptor,
@@ -10063,6 +10437,7 @@
             filled: entry.data.filled,
             activeColor: entry.data.activeColor,
             backgroundColor: entry.data.backgroundColor,
+            stageBackgroundColor: entry.data.stageBackgroundColor,
             viewport: entry.data.viewport,
             settings: entry.data.settings,
             title: entry.title || entry.data.title,
