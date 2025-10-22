@@ -43,7 +43,7 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 
 - **Autosaves:** Capy restores your most recent puzzle automatically the next time you visit, even if you close the tab.
 - **Manual saves:** Open **Saves** → **Snapshot current puzzle** to capture your progress. You can rename, duplicate, export, or delete saves at any time.
-- **Exports:** Use **Export JSON** (inside Settings) to download a portable puzzle file you can share or re-import later.
+- **Exports:** Use **Export JSON** or **Export compact puzzle** (inside Settings) to download a portable puzzle file you can share or re-import later. Compact downloads save as `.capy` archives (`capy-export@2`) with trimmed metadata, varint-packed fill state, and LZ77 compression so they stay small even for large boards.
 - **Resetting:** The **Reset puzzle progress** button clears the board while keeping your save list intact.
 
 ## Accessibility & Comfort Options
