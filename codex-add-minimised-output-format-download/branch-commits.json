@@ -1,6 +1,21 @@
 {
   "codex/add-minimised-output-format-download": [
     {
+      "sha": "0e11c02ee83216b765af5dde2b110119d98294ec",
+      "shortSha": "0e11c02",
+      "message": "Improve compact export packing and compression",
+      "date": "2025-10-22T10:56:06Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0e11c02ee83216b765af5dde2b110119d98294ec",
+      "prs": [
+        {
+          "number": 211,
+          "title": "Add compact puzzle export option",
+          "url": "https://github.com/shthed/capy/pull/211",
+          "branch": "codex/add-minimised-output-format-download"
+        }
+      ]
+    },
+    {
       "sha": "c75b01c7e42c5f0f985110fd51466b2ef18b80a1",
       "shortSha": "c75b01c",
       "message": "Add compact puzzle export format",
@@ -36,21 +51,6 @@
       "message": "Refine settings layout and add background controls",
       "date": "2025-10-22T05:10:18Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/72c44a3e8d37c7b93393ff856cf15694e09612f4",
-      "prs": [
-        {
-          "number": 211,
-          "title": "Add compact puzzle export option",
-          "url": "https://github.com/shthed/capy/pull/211",
-          "branch": "codex/add-minimised-output-format-download"
-        }
-      ]
-    },
-    {
-      "sha": "9786f2048dc868672037772c430ec8fd7255e8ff",
-      "shortSha": "9786f20",
-      "message": "Reorganize settings tabs and adjust scale defaults",
-      "date": "2025-10-22T00:04:45Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9786f2048dc868672037772c430ec8fd7255e8ff",
       "prs": [
         {
           "number": 211,
@@ -63,6 +63,21 @@
   ],
   "codex-add-minimised-output-format-download": [
     {
+      "sha": "0e11c02ee83216b765af5dde2b110119d98294ec",
+      "shortSha": "0e11c02",
+      "message": "Improve compact export packing and compression",
+      "date": "2025-10-22T10:56:06Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0e11c02ee83216b765af5dde2b110119d98294ec",
+      "prs": [
+        {
+          "number": 211,
+          "title": "Add compact puzzle export option",
+          "url": "https://github.com/shthed/capy/pull/211",
+          "branch": "codex/add-minimised-output-format-download"
+        }
+      ]
+    },
+    {
       "sha": "c75b01c7e42c5f0f985110fd51466b2ef18b80a1",
       "shortSha": "c75b01c",
       "message": "Add compact puzzle export format",
@@ -98,21 +113,6 @@
       "message": "Refine settings layout and add background controls",
       "date": "2025-10-22T05:10:18Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/72c44a3e8d37c7b93393ff856cf15694e09612f4",
-      "prs": [
-        {
-          "number": 211,
-          "title": "Add compact puzzle export option",
-          "url": "https://github.com/shthed/capy/pull/211",
-          "branch": "codex/add-minimised-output-format-download"
-        }
-      ]
-    },
-    {
-      "sha": "9786f2048dc868672037772c430ec8fd7255e8ff",
-      "shortSha": "9786f20",
-      "message": "Reorganize settings tabs and adjust scale defaults",
-      "date": "2025-10-22T00:04:45Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9786f2048dc868672037772c430ec8fd7255e8ff",
       "prs": [
         {
           "number": 211,
