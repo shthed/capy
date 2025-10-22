@@ -128,6 +128,7 @@
         --theme-palette-dock-border: rgba(15, 23, 42, 0.85);
         --command-rail-top: calc(env(safe-area-inset-top, 0px) + 12px);
         --command-rail-height: calc(40px * var(--ui-scale));
+        --stage-background: var(--theme-body-bg);
       }
 
       body[data-theme="dark"] {
@@ -260,7 +261,7 @@
         margin: 0;
         min-height: 100vh;
         min-height: 100dvh;
-        background: var(--theme-body-bg);
+        background: var(--stage-background);
         color: var(--theme-body-color);
         overflow: hidden;
         font-size: calc(16px * var(--ui-scale));
@@ -681,6 +682,30 @@
       .control output {
         font-size: 0.85rem;
         color: rgba(148, 163, 184, 0.9);
+      }
+
+      .mouse-control-group {
+        display: flex;
+        flex-direction: column;
+        gap: calc(8px * var(--ui-scale));
+      }
+
+      .mouse-control-title {
+        font-weight: 600;
+        font-size: 0.95rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .mouse-control-options {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(calc(180px * var(--ui-scale)), 1fr));
+        gap: calc(12px * var(--ui-scale));
+      }
+
+      .mouse-control-option {
+        flex: 1 1 auto;
       }
 
       details.advanced-options {
@@ -1930,6 +1955,17 @@
             <p class="control-note">
               Easy mode lets you click any region to auto-select its colour before filling it.
             </p>
+            <label class="control">
+              <span>Sort swatches</span>
+              <select id="paletteSort" data-testid="palette-sort" disabled>
+                <option value="region">Number</option>
+                <option value="remaining">Remaining regions</option>
+                <option value="name">Colour name</option>
+                <option value="hue">Hue</option>
+                <option value="brightness">Brightness</option>
+              </select>
+            </label>
+            <p class="control-note">Choose how unfinished colours appear in the dock.</p>
           </section>
         </div>
         <div
@@ -1984,66 +2020,81 @@
               Assign actions to each mouse button when clicking or click-dragging on the
               canvas.
             </p>
-            <label class="control">
-              <span>Left button &mdash; click</span>
-              <select id="mouseLeftClick">
-                <option value="fill" selected>Fill region</option>
-                <option value="select-fill">Select and fill region</option>
-                <option value="select">Select colour</option>
-                <option value="zoom-in">Zoom in</option>
-                <option value="zoom-out">Zoom out</option>
-                <option value="none">No action</option>
-              </select>
-            </label>
-            <label class="control">
-              <span>Left button &mdash; click + drag</span>
-              <select id="mouseLeftDrag">
-                <option value="pan" selected>Pan view</option>
-                <option value="fill">Fill while dragging</option>
-                <option value="zoom">Zoom</option>
-                <option value="none">No action</option>
-              </select>
-            </label>
-            <label class="control">
-              <span>Middle button &mdash; click</span>
-              <select id="mouseMiddleClick">
-                <option value="fill">Fill region</option>
-                <option value="select-fill">Select and fill region</option>
-                <option value="select">Select colour</option>
-                <option value="zoom-in">Zoom in</option>
-                <option value="zoom-out">Zoom out</option>
-                <option value="none" selected>No action</option>
-              </select>
-            </label>
-            <label class="control">
-              <span>Middle button &mdash; click + drag</span>
-              <select id="mouseMiddleDrag">
-                <option value="pan" selected>Pan view</option>
-                <option value="fill">Fill while dragging</option>
-                <option value="zoom">Zoom</option>
-                <option value="none">No action</option>
-              </select>
-            </label>
-            <label class="control">
-              <span>Right button &mdash; click</span>
-              <select id="mouseRightClick">
-                <option value="fill">Fill region</option>
-                <option value="select-fill">Select and fill region</option>
-                <option value="select" selected>Select colour</option>
-                <option value="zoom-in">Zoom in</option>
-                <option value="zoom-out">Zoom out</option>
-                <option value="none">No action</option>
-              </select>
-            </label>
-            <label class="control">
-              <span>Right button &mdash; click + drag</span>
-              <select id="mouseRightDrag">
-                <option value="pan" selected>Pan view</option>
-                <option value="fill">Fill while dragging</option>
-                <option value="zoom">Zoom</option>
-                <option value="none">No action</option>
-              </select>
-            </label>
+            <div class="mouse-control-group">
+              <span class="mouse-control-title">Left button</span>
+              <div class="mouse-control-options">
+                <label class="control mouse-control-option">
+                  <span>Click</span>
+                  <select id="mouseLeftClick">
+                    <option value="fill" selected>Fill region</option>
+                    <option value="select-fill">Select and fill region</option>
+                    <option value="select">Select colour</option>
+                    <option value="zoom-in">Zoom in</option>
+                    <option value="zoom-out">Zoom out</option>
+                    <option value="none">No action</option>
+                  </select>
+                </label>
+                <label class="control mouse-control-option">
+                  <span>Click + drag</span>
+                  <select id="mouseLeftDrag">
+                    <option value="pan" selected>Pan view</option>
+                    <option value="fill">Fill while dragging</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="none">No action</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="mouse-control-group">
+              <span class="mouse-control-title">Middle button</span>
+              <div class="mouse-control-options">
+                <label class="control mouse-control-option">
+                  <span>Click</span>
+                  <select id="mouseMiddleClick">
+                    <option value="fill">Fill region</option>
+                    <option value="select-fill">Select and fill region</option>
+                    <option value="select">Select colour</option>
+                    <option value="zoom-in">Zoom in</option>
+                    <option value="zoom-out">Zoom out</option>
+                    <option value="none" selected>No action</option>
+                  </select>
+                </label>
+                <label class="control mouse-control-option">
+                  <span>Click + drag</span>
+                  <select id="mouseMiddleDrag">
+                    <option value="pan" selected>Pan view</option>
+                    <option value="fill">Fill while dragging</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="none">No action</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="mouse-control-group">
+              <span class="mouse-control-title">Right button</span>
+              <div class="mouse-control-options">
+                <label class="control mouse-control-option">
+                  <span>Click</span>
+                  <select id="mouseRightClick">
+                    <option value="fill">Fill region</option>
+                    <option value="select-fill">Select and fill region</option>
+                    <option value="select" selected>Select colour</option>
+                    <option value="zoom-in">Zoom in</option>
+                    <option value="zoom-out">Zoom out</option>
+                    <option value="none">No action</option>
+                  </select>
+                </label>
+                <label class="control mouse-control-option">
+                  <span>Click + drag</span>
+                  <select id="mouseRightDrag">
+                    <option value="pan" selected>Pan view</option>
+                    <option value="fill">Fill while dragging</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="none">No action</option>
+                  </select>
+                </label>
+              </div>
+            </div>
             <p class="control-note">
               Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out.
             </p>
@@ -2058,22 +2109,20 @@
           hidden
           aria-hidden="true"
         >
-          <section class="sheet-section" aria-labelledby="paletteHeading">
-            <h3 id="paletteHeading">Palette</h3>
-            <label class="control">
-              <span>Sort swatches</span>
-              <select id="paletteSort" data-testid="palette-sort" disabled>
-                <option value="region">Number</option>
-                <option value="remaining">Remaining regions</option>
-                <option value="name">Colour name</option>
-                <option value="hue">Hue</option>
-                <option value="brightness">Brightness</option>
-              </select>
-            </label>
-            <p class="control-note">Choose how unfinished colours appear in the dock.</p>
-          </section>
           <section class="sheet-section" aria-labelledby="appearanceHeading">
             <h3 id="appearanceHeading">Appearance</h3>
+            <label class="control">
+              <span>Interface scale <output data-for="uiScale">75%</output></span>
+              <input
+                id="uiScale"
+                type="range"
+                min="0.2"
+                max="3"
+                step="0.05"
+                value="0.75"
+              />
+            </label>
+            <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
             <label class="control">
               <span>Interface theme</span>
               <select id="uiTheme">
@@ -2095,24 +2144,17 @@
               Choose between the classic Canvas pipeline, accelerated WebGL, or the SVG renderer.
             </p>
             <label class="control">
-              <span>Background colour</span>
+              <span>Unfilled region colour</span>
               <input id="backgroundColor" type="color" value="#f8fafc" />
             </label>
             <p class="control-note">
               Applies to unfinished regions and adjusts outline contrast automatically.
             </p>
             <label class="control">
-              <span>Interface scale <output data-for="uiScale">75%</output></span>
-              <input
-                id="uiScale"
-                type="range"
-                min="0.2"
-                max="3"
-                step="0.05"
-                value="0.75"
-              />
+              <span>Background</span>
+              <input id="stageBackgroundColor" type="color" value="#000000" />
             </label>
-            <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
+            <p class="control-note">Adjust the area surrounding the puzzle canvas.</p>
           </section>
         </div>
       </div>
@@ -2201,6 +2243,7 @@
       const uiThemeSelect = document.getElementById("uiTheme");
       const rendererModeSelect = document.getElementById("rendererMode");
       const backgroundColorInput = document.getElementById("backgroundColor");
+      const stageBackgroundColorInput = document.getElementById("stageBackgroundColor");
       const uiScaleInput = document.getElementById("uiScale");
       const colorCountEl = document.getElementById("colorCount");
       const minRegionEl = document.getElementById("minRegion");
@@ -2274,6 +2317,7 @@
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
+      const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
       const DEFAULT_UI_SCALE = 0.75;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
@@ -3441,6 +3485,7 @@
           hintTypes: { ...DEFAULT_HINT_TYPES },
           difficulty: DEFAULT_DIFFICULTY,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
+          stageBackgroundColor: DEFAULT_STAGE_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
           artPrompt: "",
           imageDescription: "",
@@ -3974,6 +4019,18 @@
         } else if (state.settings.theme) {
           applyTheme(state.settings.theme, { skipLog: true, skipAutosave: true });
         }
+        if (typeof settings.stageBackgroundColor === "string") {
+          applyStageBackgroundColor(settings.stageBackgroundColor, {
+            skipLog: true,
+            skipAutosave: true,
+          });
+        } else {
+          applyStageBackgroundColor(state.settings.stageBackgroundColor, {
+            skipLog: true,
+            skipAutosave: true,
+            force: true,
+          });
+        }
         if (typeof settings.autoAdvance === "boolean") {
           state.settings.autoAdvance = settings.autoAdvance;
           if (autoAdvanceToggle) {
@@ -4149,6 +4206,9 @@
           },
           setBackgroundColor(hex) {
             applyBackgroundColor(hex);
+          },
+          setStageBackgroundColor(hex) {
+            applyStageBackgroundColor(hex);
           },
           setUiScale(scale) {
             applyUiScale(scale);
@@ -4575,6 +4635,15 @@
         });
         backgroundColorInput.addEventListener("change", (event) => {
           applyBackgroundColor(event.target.value);
+        });
+      }
+
+      if (stageBackgroundColorInput) {
+        stageBackgroundColorInput.addEventListener("input", (event) => {
+          applyStageBackgroundColor(event.target.value, { skipLog: true, skipAutosave: true });
+        });
+        stageBackgroundColorInput.addEventListener("change", (event) => {
+          applyStageBackgroundColor(event.target.value);
         });
       }
 
@@ -5523,6 +5592,7 @@
             filled: payload.filled,
             activeColor: payload.activeColor,
             backgroundColor: payload.backgroundColor,
+            stageBackgroundColor: payload.stageBackgroundColor,
             viewport: payload.viewport,
             settings: payload.settings,
             title: descriptorTitle || DEFAULT_GAME_SOURCE.path || "Puzzle",
@@ -5872,10 +5942,35 @@
           }
         }
         if (changed && !skipLog) {
-          logDebug(`Background colour set to ${normalized.toUpperCase()}`);
+          logDebug(`Unfilled region colour set to ${normalized.toUpperCase()}`);
         }
         if (changed && !options.skipAutosave) {
           scheduleAutosave("background-colour");
+        }
+        return normalized;
+      }
+
+      function applyStageBackgroundColor(hex, options = {}) {
+        const { skipLog = false, skipAutosave = false, force = false } = options;
+        const current = state.settings.stageBackgroundColor ?? DEFAULT_STAGE_BACKGROUND_HEX;
+        const normalized = sanitizeHexColor(hex, current);
+        const changed = force || normalized !== current;
+        state.settings.stageBackgroundColor = normalized;
+        if (
+          stageBackgroundColorInput &&
+          typeof stageBackgroundColorInput.value === "string" &&
+          stageBackgroundColorInput.value !== normalized
+        ) {
+          stageBackgroundColorInput.value = normalized;
+        }
+        if (typeof document !== "undefined" && document.documentElement) {
+          document.documentElement.style.setProperty("--stage-background", normalized);
+        }
+        if (changed && !skipLog) {
+          logDebug(`Stage background set to ${normalized.toUpperCase()}`);
+        }
+        if (changed && !skipAutosave) {
+          scheduleAutosave("stage-background-colour");
         }
         return normalized;
       }
@@ -6171,6 +6266,7 @@
                 filled: payload.filled,
                 activeColor: payload.activeColor,
                 backgroundColor: payload.backgroundColor,
+                stageBackgroundColor: payload.stageBackgroundColor,
                 title: resolvedTitle,
               });
               if (applied) {
@@ -6233,6 +6329,7 @@
               options,
               title,
               backgroundColor: state.settings.backgroundColor,
+              stageBackgroundColor: state.settings.stageBackgroundColor,
               logMessage: completionMessage,
               skipDefaultLog,
             });
@@ -6453,6 +6550,13 @@
           metadata.backgroundColor ?? data.backgroundColor ?? state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX,
           state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX
         );
+        const stageBackgroundHex = sanitizeHexColor(
+          metadata.stageBackgroundColor ??
+            data.stageBackgroundColor ??
+            state.settings.stageBackgroundColor ??
+            DEFAULT_STAGE_BACKGROUND_HEX,
+          state.settings.stageBackgroundColor ?? DEFAULT_STAGE_BACKGROUND_HEX
+        );
         state.puzzle = {
           width: data.width,
           height: data.height,
@@ -6485,6 +6589,11 @@
         if (resolvedSettings) {
           applyGameplaySettings(resolvedSettings);
         }
+        applyStageBackgroundColor(stageBackgroundHex, {
+          skipLog: true,
+          skipAutosave: true,
+          force: true,
+        });
         applyBackgroundColor(backgroundHex, { skipRender: true, skipLog: true });
         applyCanvasSizing();
         previewCanvas.width = data.width;
@@ -6538,6 +6647,7 @@
           filled: puzzle.filled,
           activeColor: puzzle.activeColor,
           backgroundColor: puzzle.backgroundColor,
+          stageBackgroundColor: puzzle.stageBackgroundColor,
           title: resolvedTitle,
         });
         if (applied) {
@@ -9055,6 +9165,12 @@
         if (typeof snapshot.backgroundColor === "string" && snapshot.backgroundColor) {
           payload.backgroundColor = snapshot.backgroundColor;
         }
+        if (
+          typeof snapshot.stageBackgroundColor === "string" &&
+          snapshot.stageBackgroundColor
+        ) {
+          payload.stageBackgroundColor = snapshot.stageBackgroundColor;
+        }
         if (snapshot.viewport && typeof snapshot.viewport === "object") {
           const { panX, panY, zoom, baseScale } = snapshot.viewport;
           payload.viewport = {
@@ -9176,6 +9292,7 @@
           sourceUrl: state.sourceUrl,
           activeColor: state.activeColor,
           backgroundColor: state.settings.backgroundColor,
+          stageBackgroundColor: state.settings.stageBackgroundColor,
           viewport: {
             panX: viewState.panX,
             panY: viewState.panY,
@@ -9198,6 +9315,7 @@
             showRegionLabels: state.settings.showRegionLabels !== false,
             theme: state.settings.theme || DEFAULT_UI_THEME,
             renderer: state.settings.renderer || "canvas2d",
+            stageBackgroundColor: state.settings.stageBackgroundColor || DEFAULT_STAGE_BACKGROUND_HEX,
             mouseControls: cloneMouseControls(state.settings.mouseControls),
           },
         };
@@ -9509,6 +9627,7 @@
             filled: latest.data.filled,
             activeColor: latest.data.activeColor,
             backgroundColor: latest.data.backgroundColor,
+            stageBackgroundColor: latest.data.stageBackgroundColor,
             viewport: latest.data.viewport,
             settings: latest.data.settings,
             title: descriptor,
@@ -10318,6 +10437,7 @@
             filled: entry.data.filled,
             activeColor: entry.data.activeColor,
             backgroundColor: entry.data.backgroundColor,
+            stageBackgroundColor: entry.data.stageBackgroundColor,
             viewport: entry.data.viewport,
             settings: entry.data.settings,
             title: entry.title || entry.data.title,

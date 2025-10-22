@@ -13,10 +13,10 @@
     "key": "codex-add-tabs-to-settings-page",
     "branch": "codex/add-tabs-to-settings-page",
     "safeName": "codex-add-tabs-to-settings-page",
-    "commit": "9786f2048dc868672037772c430ec8fd7255e8ff",
-    "message": "Reorganize settings tabs and adjust scale defaults",
+    "commit": "72c44a3e8d37c7b93393ff856cf15694e09612f4",
+    "message": "Refine settings layout and add background controls",
     "actor": "shthed",
-    "deployedAt": "2025-10-22T08:04:45+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/9786f2048dc868672037772c430ec8fd7255e8ff"
+    "deployedAt": "2025-10-22T13:10:18+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/72c44a3e8d37c7b93393ff856cf15694e09612f4"
   }
 }

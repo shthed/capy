@@ -1,6 +1,21 @@
 {
   "codex/add-tabs-to-settings-page": [
     {
+      "sha": "72c44a3e8d37c7b93393ff856cf15694e09612f4",
+      "shortSha": "72c44a3",
+      "message": "Refine settings layout and add background controls",
+      "date": "2025-10-22T05:10:18Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/72c44a3e8d37c7b93393ff856cf15694e09612f4",
+      "prs": [
+        {
+          "number": 210,
+          "title": "Add tabbed settings layout and refine UI scale defaults",
+          "url": "https://github.com/shthed/capy/pull/210",
+          "branch": "codex/add-tabs-to-settings-page"
+        }
+      ]
+    },
+    {
       "sha": "9786f2048dc868672037772c430ec8fd7255e8ff",
       "shortSha": "9786f20",
       "message": "Reorganize settings tabs and adjust scale defaults",
@@ -36,21 +51,6 @@
       "message": "Handle WebGL filled texture upload failures without flashing",
       "date": "2025-10-21T23:14:42Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/7f780e45e85cca82b8c381a51fc6827333d2e2f3",
-      "prs": [
-        {
-          "number": 210,
-          "title": "Add tabbed settings layout and refine UI scale defaults",
-          "url": "https://github.com/shthed/capy/pull/210",
-          "branch": "codex/add-tabs-to-settings-page"
-        }
-      ]
-    },
-    {
-      "sha": "aef6c80fa5a19386129ec6e73e6139a141deecea",
-      "shortSha": "aef6c80",
-      "message": "Improve WebGL fills and zoom responsiveness",
-      "date": "2025-10-21T22:27:34Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/aef6c80fa5a19386129ec6e73e6139a141deecea",
       "prs": [
         {
           "number": 210,
@@ -63,6 +63,21 @@
   ],
   "codex-add-tabs-to-settings-page": [
     {
+      "sha": "72c44a3e8d37c7b93393ff856cf15694e09612f4",
+      "shortSha": "72c44a3",
+      "message": "Refine settings layout and add background controls",
+      "date": "2025-10-22T05:10:18Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/72c44a3e8d37c7b93393ff856cf15694e09612f4",
+      "prs": [
+        {
+          "number": 210,
+          "title": "Add tabbed settings layout and refine UI scale defaults",
+          "url": "https://github.com/shthed/capy/pull/210",
+          "branch": "codex/add-tabs-to-settings-page"
+        }
+      ]
+    },
+    {
       "sha": "9786f2048dc868672037772c430ec8fd7255e8ff",
       "shortSha": "9786f20",
       "message": "Reorganize settings tabs and adjust scale defaults",
@@ -98,21 +113,6 @@
       "message": "Handle WebGL filled texture upload failures without flashing",
       "date": "2025-10-21T23:14:42Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/7f780e45e85cca82b8c381a51fc6827333d2e2f3",
-      "prs": [
-        {
-          "number": 210,
-          "title": "Add tabbed settings layout and refine UI scale defaults",
-          "url": "https://github.com/shthed/capy/pull/210",
-          "branch": "codex/add-tabs-to-settings-page"
-        }
-      ]
-    },
-    {
-      "sha": "aef6c80fa5a19386129ec6e73e6139a141deecea",
-      "shortSha": "aef6c80",
-      "message": "Improve WebGL fills and zoom responsiveness",
-      "date": "2025-10-21T22:27:34Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/aef6c80fa5a19386129ec6e73e6139a141deecea",
       "prs": [
         {
           "number": 210,
