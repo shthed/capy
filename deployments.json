@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "fb4f098174e3661ec746089794be9c543b9e34dc",
-    "message": "Merge pull request #210 from shthed/codex/add-tabs-to-settings-page\n\nAdd tabbed settings layout and refine UI scale defaults",
+    "commit": "04caee138dc3da127f6c4ee3f45e3b871f64e642",
+    "message": "Merge pull request #211 from shthed/codex/add-minimised-output-format-download\n\nAdd compact puzzle export option",
     "actor": "shthed",
-    "deployedAt": "2025-10-22T17:27:24+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/fb4f098174e3661ec746089794be9c543b9e34dc",
+    "deployedAt": "2025-10-22T18:59:06+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/04caee138dc3da127f6c4ee3f45e3b871f64e642",
     "key": "main"
-  },
-  "codex-add-minimised-output-format-download": {
-    "key": "codex-add-minimised-output-format-download",
-    "branch": "codex/add-minimised-output-format-download",
-    "safeName": "codex-add-minimised-output-format-download",
-    "commit": "0e11c02ee83216b765af5dde2b110119d98294ec",
-    "message": "Improve compact export packing and compression",
-    "actor": "shthed",
-    "deployedAt": "2025-10-22T18:56:06+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/0e11c02ee83216b765af5dde2b110119d98294ec"
   }
 }

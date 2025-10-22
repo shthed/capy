@@ -1,6 +1,54 @@
 {
   "commits": [
     {
+      "sha": "04caee138dc3da127f6c4ee3f45e3b871f64e642",
+      "shortSha": "04caee1",
+      "message": "Merge pull request #211 from shthed/codex/add-minimised-output-format-download\n\nAdd compact puzzle export option",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-22T10:59:06Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/04caee138dc3da127f6c4ee3f45e3b871f64e642",
+      "prs": [
+        {
+          "number": 211,
+          "title": "Add compact puzzle export option",
+          "url": "https://github.com/shthed/capy/pull/211",
+          "branch": "codex/add-minimised-output-format-download"
+        }
+      ]
+    },
+    {
+      "sha": "0e11c02ee83216b765af5dde2b110119d98294ec",
+      "shortSha": "0e11c02",
+      "message": "Improve compact export packing and compression",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-22T10:56:06Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0e11c02ee83216b765af5dde2b110119d98294ec",
+      "prs": [
+        {
+          "number": 211,
+          "title": "Add compact puzzle export option",
+          "url": "https://github.com/shthed/capy/pull/211",
+          "branch": "codex/add-minimised-output-format-download"
+        }
+      ]
+    },
+    {
+      "sha": "c75b01c7e42c5f0f985110fd51466b2ef18b80a1",
+      "shortSha": "c75b01c",
+      "message": "Add compact puzzle export format",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-22T10:29:30Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/c75b01c7e42c5f0f985110fd51466b2ef18b80a1",
+      "prs": [
+        {
+          "number": 211,
+          "title": "Add compact puzzle export option",
+          "url": "https://github.com/shthed/capy/pull/211",
+          "branch": "codex/add-minimised-output-format-download"
+        }
+      ]
+    },
+    {
       "sha": "fb4f098174e3661ec746089794be9c543b9e34dc",
       "shortSha": "fb4f098",
       "message": "Merge pull request #210 from shthed/codex/add-tabs-to-settings-page\n\nAdd tabbed settings layout and refine UI scale defaults",
@@ -15,56 +63,8 @@
           "branch": "codex/add-tabs-to-settings-page"
         }
       ]
-    },
-    {
-      "sha": "72c44a3e8d37c7b93393ff856cf15694e09612f4",
-      "shortSha": "72c44a3",
-      "message": "Refine settings layout and add background controls",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-22T05:10:18Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/72c44a3e8d37c7b93393ff856cf15694e09612f4",
-      "prs": [
-        {
-          "number": 210,
-          "title": "Add tabbed settings layout and refine UI scale defaults",
-          "url": "https://github.com/shthed/capy/pull/210",
-          "branch": "codex/add-tabs-to-settings-page"
-        }
-      ]
-    },
-    {
-      "sha": "9786f2048dc868672037772c430ec8fd7255e8ff",
-      "shortSha": "9786f20",
-      "message": "Reorganize settings tabs and adjust scale defaults",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-22T00:04:45Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9786f2048dc868672037772c430ec8fd7255e8ff",
-      "prs": [
-        {
-          "number": 210,
-          "title": "Add tabbed settings layout and refine UI scale defaults",
-          "url": "https://github.com/shthed/capy/pull/210",
-          "branch": "codex/add-tabs-to-settings-page"
-        }
-      ]
-    },
-    {
-      "sha": "446d2b7ea4fb1f823f168ef4003b41cab7b9dccf",
-      "shortSha": "446d2b7",
-      "message": "Merge pull request #209 from shthed/codex/fix-webgl-update-and-improve-zoom-performance\n\nFix WebGL fill updates and refine zoom controls",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-21T23:26:18Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/446d2b7ea4fb1f823f168ef4003b41cab7b9dccf",
-      "prs": [
-        {
-          "number": 209,
-          "title": "Fix WebGL fill updates and refine zoom controls",
-          "url": "https://github.com/shthed/capy/pull/209",
-          "branch": "codex/fix-webgl-update-and-improve-zoom-performance"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-22T09:27:24Z",
-  "deploymentTimestamp": 1761125272577
+  "lastCommitDate": "2025-10-22T10:59:06Z",
+  "deploymentTimestamp": 1761130763208
 }
