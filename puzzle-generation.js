@@ -9,6 +9,8 @@ const GENERATION_STAGE_MESSAGES = {
 };
 
 const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
+const DEFAULT_SOURCE_IMAGE_MAX_BYTES = 1048576;
+const SOURCE_IMAGE_VARIANT_ORIGINAL = "original";
 
 const GENERATION_ALGORITHMS = {
   "local-kmeans": {
@@ -409,6 +411,165 @@ function smoothAssignments(assignments, width, height, passes) {
   return current;
 }
 
+function canvasToBlob(canvas, type, quality) {
+  if (!canvas) {
+    return Promise.resolve(null);
+  }
+  if (typeof canvas.convertToBlob === "function") {
+    return canvas
+      .convertToBlob({ type, quality })
+      .catch(() => null);
+  }
+  if (typeof canvas.toBlob === "function") {
+    return new Promise((resolve) => {
+      try {
+        canvas.toBlob(
+          (blob) => {
+            resolve(blob || null);
+          },
+          type,
+          quality
+        );
+      } catch (error) {
+        resolve(null);
+      }
+    });
+  }
+  return Promise.resolve(null);
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    if (!blob) {
+      resolve(null);
+      return;
+    }
+    if (typeof FileReader !== "function") {
+      reject(new Error("FileReader unavailable"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve(typeof reader.result === "string" ? reader.result : null);
+    };
+    reader.onerror = () => {
+      reject(reader.error || new Error("Failed to read blob"));
+    };
+    try {
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function estimateDataUrlBytes(dataUrl) {
+  if (typeof dataUrl !== "string") {
+    return null;
+  }
+  const commaIndex = dataUrl.indexOf(",");
+  if (commaIndex === -1) {
+    return null;
+  }
+  const payload = dataUrl.slice(commaIndex + 1);
+  if (!payload) {
+    return 0;
+  }
+  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor(payload.length / 4) * 3 - padding);
+}
+
+function resizeCanvas(sourceCanvas, scale) {
+  if (!sourceCanvas || !Number.isFinite(scale) || scale <= 0) {
+    return sourceCanvas;
+  }
+  if (scale === 1) {
+    return sourceCanvas;
+  }
+  const width = Math.max(1, Math.round(sourceCanvas.width * scale));
+  const height = Math.max(1, Math.round(sourceCanvas.height * scale));
+  if (width === sourceCanvas.width && height === sourceCanvas.height) {
+    return sourceCanvas;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return sourceCanvas;
+  }
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(sourceCanvas, 0, 0, width, height);
+  return canvas;
+}
+
+async function compressCanvasImage(canvas, options = {}) {
+  if (!canvas) {
+    return null;
+  }
+  const maxBytes = Number.isFinite(options.maxBytes) && options.maxBytes > 0 ? options.maxBytes : null;
+  const qualityLevels = maxBytes
+    ? [0.92, 0.82, 0.72, 0.62, 0.52, 0.42, 0.32, 0.25, 0.18, 0.1]
+    : [0.92];
+  const scaleLevels = maxBytes ? [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4] : [1];
+  const formats = ["image/webp", "image/jpeg", "image/png"];
+  let best = null;
+  for (const scale of scaleLevels) {
+    const workingCanvas = scale === 1 ? canvas : resizeCanvas(canvas, scale);
+    if (!workingCanvas) {
+      continue;
+    }
+    for (const type of formats) {
+      for (const quality of qualityLevels) {
+        let dataUrl = null;
+        let blob = null;
+        try {
+          blob = await canvasToBlob(workingCanvas, type, quality);
+        } catch (error) {
+          blob = null;
+        }
+        if (blob) {
+          try {
+            dataUrl = await blobToDataUrl(blob);
+          } catch (error) {
+            dataUrl = null;
+          }
+        }
+        if (!dataUrl) {
+          try {
+            dataUrl = workingCanvas.toDataURL(type, quality);
+          } catch (error) {
+            dataUrl = null;
+          }
+        }
+        if (!dataUrl) {
+          continue;
+        }
+        const mimeType = blob?.type || (/^data:([^;,]+)[;,]/.exec(dataUrl)?.[1] || type);
+        const bytes = blob?.size ?? estimateDataUrlBytes(dataUrl);
+        const candidate = {
+          dataUrl,
+          mimeType: mimeType || type,
+          bytes: Number.isFinite(bytes) ? bytes : null,
+          width: workingCanvas.width,
+          height: workingCanvas.height,
+          scale,
+        };
+        if (!best || (candidate.bytes != null && (best.bytes == null || candidate.bytes < best.bytes))) {
+          best = candidate;
+        }
+        if (!maxBytes) {
+          return candidate;
+        }
+        if (candidate.bytes != null && candidate.bytes <= maxBytes) {
+          return candidate;
+        }
+      }
+    }
+  }
+  return best;
+}
+
 function buildGenerationWorkerSource() {
   const stageMessages = JSON.stringify(GENERATION_STAGE_MESSAGES);
   return `const STAGE_MESSAGES = ${stageMessages};
@@ -711,6 +872,7 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
     kmeansIters = 1,
     smoothingPasses = 0,
     algorithm = DEFAULT_GENERATION_ALGORITHM,
+    sourceImageMaxBytes = DEFAULT_SOURCE_IMAGE_MAX_BYTES,
   } = options;
 
   const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
@@ -820,12 +982,38 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
     `Segmented ${regions.length} regions (≥${minRegion}px²) in ${formatDuration(timings?.segment)}`
   );
   debug(`Generation pipeline finished in ${formatDuration(timings?.total)}`);
+  let sourceImage = null;
+  try {
+    const normalizedLimit =
+      Number.isFinite(sourceImageMaxBytes) && sourceImageMaxBytes >= 0
+        ? sourceImageMaxBytes
+        : 0;
+    const compressed = await compressCanvasImage(canvas, { maxBytes: normalizedLimit });
+    if (compressed && compressed.dataUrl) {
+      sourceImage = {
+        dataUrl: compressed.dataUrl,
+        mimeType: compressed.mimeType,
+        bytes: compressed.bytes,
+        width: compressed.width,
+        height: compressed.height,
+        originalWidth: image.width,
+        originalHeight: image.height,
+        scale: compressed.width && width > 0 ? compressed.width / width : 1,
+        variant: SOURCE_IMAGE_VARIANT_ORIGINAL,
+      };
+    }
+  } catch (error) {
+    debug(`Source image compression skipped: ${error?.message || error}`);
+  }
   return {
     width,
     height,
     palette,
     regions,
     regionMap: resolvedRegionMap,
+    sourceImage,
+    originalWidth: image.width,
+    originalHeight: image.height,
   };
 }
 
