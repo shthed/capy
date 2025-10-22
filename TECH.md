@@ -196,7 +196,7 @@ Autosaves and manual exports share the `capy-puzzle@2` payload with the followin
 - `filled` – Region ids already painted.
 - `backgroundColor`, `stageBackgroundColor`, `options`, `activeColor`, `viewport`, `settings`, `sourceUrl` – Appearance and generator state used to restore the session.
 
-Packing the region map trims payloads by more than half, avoiding `QuotaExceededError` when large puzzles previously overflowed localStorage. Compact exports wrap the same JSON snapshot in a `capy-export@1` envelope with an `encoding` (`identity` or `lzw16`) plus a Base64 `payload`; import paths hand the decoded string back through `compactPuzzleSnapshot` before calling `applyPuzzleResult`. If storage does fill up, the Help log prompts the user to clear old saves before retrying.
+Packing the region map trims payloads by more than half, avoiding `QuotaExceededError` when large puzzles previously overflowed localStorage. Compact exports now wrap the same data in a `capy-export@2` envelope with an `encoding` (`identity`, `lz77`, or legacy `lzw16`) and Base64 `payload`; imports hand the decoded string back through `compactPuzzleSnapshot` before calling `applyPuzzleResult`. The compactor rekeys palette entries to `{ i, h, n, r }`, regions to `{ i, c, p, x, y }`, stores the region map as `m`, and varint-packs filled region ids into the `f` string. If storage does fill up, the Help log prompts the user to clear old saves before retrying.
 
 ## Accessibility & Keyboard Notes
 
