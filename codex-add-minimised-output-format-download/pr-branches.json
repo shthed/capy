@@ -1,0 +1,10 @@
+[
+  {
+    "branch": "codex/add-minimised-output-format-download",
+    "safeName": "codex-add-minimised-output-format-download",
+    "title": "Add compact puzzle export option",
+    "number": 211,
+    "updatedAt": "2025-10-22T10:29:35Z",
+    "url": "https://github.com/shthed/capy/pull/211"
+  }
+]
