@@ -1572,7 +1572,7 @@
           <div id="palette" role="list"></div>
         </footer>
     </div>
-    <input id="fileInput" type="file" accept=".json,image/*" hidden />
+    <input id="fileInput" type="file" accept=".json,.capy,image/*" hidden />
     <div
       id="saveManagerSheet"
       class="sheet hidden"
@@ -1616,6 +1616,7 @@
           <button type="button" data-save-snapshot disabled>Save current puzzle</button>
           <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
           <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
+          <button id="downloadCompact" type="button" disabled>Export compact puzzle</button>
           <ul
             class="save-manager-list"
             data-save-list
@@ -2257,6 +2258,7 @@
       const chatGptLink = document.getElementById("chatGptLink");
       const applyBtn = document.getElementById("applyOptions");
       const downloadBtn = document.getElementById("downloadJson");
+      const downloadCompactBtn = document.getElementById("downloadCompact");
       const saveSnapshotButtons = Array.from(document.querySelectorAll("[data-save-snapshot]"));
       const resetProgressButtons = Array.from(document.querySelectorAll("[data-reset-progress]"));
       const saveListContainers = Array.from(document.querySelectorAll("[data-save-list]"));
@@ -4708,6 +4710,70 @@
         logDebug("Exported puzzle JSON");
       });
 
+      downloadCompactBtn.addEventListener("click", () => {
+        if (!state.puzzle) return;
+        const snapshot = serializeCurrentPuzzle();
+        const compact = compactPuzzleSnapshot(snapshot) || snapshot;
+        if (!compact) {
+          logDebug("Unable to export compact puzzle: no snapshot available");
+          return;
+        }
+        const baseTitle =
+          (typeof compact.title === "string" && compact.title.trim()) ||
+          (typeof state.sourceTitle === "string" && state.sourceTitle.trim()) ||
+          "color-by-number";
+        let exportPayload = compact;
+        let extension = "json";
+        let compressionStats = null;
+        try {
+          const json = JSON.stringify(compact);
+          const compressed = tryCompressString(json);
+          compressionStats = compressed;
+          exportPayload = {
+            format: "capy-export@2",
+            encoding: compressed.encoding,
+            payload: compressed.payload,
+          };
+          if (Number.isFinite(compact.width)) {
+            exportPayload.width = compact.width;
+          }
+          if (Number.isFinite(compact.height)) {
+            exportPayload.height = compact.height;
+          }
+          if (typeof compact.title === "string" && compact.title.trim()) {
+            exportPayload.title = compact.title.trim();
+          }
+          extension = "capy";
+        } catch (error) {
+          console.error("Failed to prepare compact export", error);
+          exportPayload = compact;
+          extension = "json";
+        }
+        const serialized = JSON.stringify(exportPayload);
+        const blob = new Blob([serialized], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${baseTitle}.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        requestAnimationFrame(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        });
+        if (compressionStats && compressionStats.compressed) {
+          logDebug(
+            `Exported compact puzzle (${formatBytes(compressionStats.compressedBytes)} from ${formatBytes(
+              compressionStats.originalBytes
+            )})`
+          );
+        } else if (compressionStats) {
+          logDebug(`Exported compact puzzle (${formatBytes(compressionStats.originalBytes)})`);
+        } else {
+          logDebug("Exported compact puzzle");
+        }
+      });
+
       for (const button of saveSnapshotButtons) {
         button.addEventListener("click", () => {
           if (!state.puzzle) return;
@@ -5589,7 +5655,6 @@
           }
           const applied = applyPuzzleResult(payload, {
             options: payload.options || getCurrentOptions(),
-            filled: payload.filled,
             activeColor: payload.activeColor,
             backgroundColor: payload.backgroundColor,
             stageBackgroundColor: payload.stageBackgroundColor,
@@ -5620,6 +5685,7 @@
         const hasPuzzle = Boolean(state.puzzle);
         previewToggle.disabled = !hasPuzzle;
         downloadBtn.disabled = !hasPuzzle;
+        downloadCompactBtn.disabled = !hasPuzzle;
         for (const button of saveSnapshotButtons) {
           button.disabled = !hasPuzzle;
         }
@@ -6125,7 +6191,7 @@
           return true;
         }
         const name = typeof file.name === "string" ? file.name.toLowerCase() : "";
-        return name.endsWith(".json");
+        return name.endsWith(".json") || name.endsWith(".capy");
       }
 
       function describeImportIntent(file) {
@@ -6143,7 +6209,7 @@
           return {
             name,
             description:
-              "Puzzle JSON imports will replace the current puzzle and do not use the generator settings.",
+              "Puzzle JSON or compact exports will replace the current puzzle and do not use the generator settings.",
             actionLabel: "Import puzzle",
           };
         }
@@ -6255,15 +6321,40 @@
           const reader = new FileReader();
           reader.onload = () => {
             try {
-              const payload = JSON.parse(reader.result);
-              const providedTitle =
-                typeof payload.title === "string" && payload.title.trim() ? payload.title.trim() : null;
+              let payload = JSON.parse(reader.result);
+              let formatLabel = "JSON";
+              let exportMetadata = null;
+              if (
+                payload &&
+                typeof payload === "object" &&
+                typeof payload.format === "string" &&
+                payload.format.startsWith("capy-export@") &&
+                typeof payload.payload === "string"
+              ) {
+                exportMetadata = payload;
+                formatLabel = "compact export";
+                const normalized = decodeCompactExportPayload(payload);
+                if (!normalized) {
+                  throw new Error("Unsupported compact export payload");
+                }
+                payload = normalized;
+              } else if (payload && typeof payload === "object" && payload.__compressed === true) {
+                const decoded = decodeStoredSnapshot(payload);
+                if (decoded) {
+                  payload = decoded;
+                  formatLabel = "compressed snapshot";
+                }
+              }
+              const providedTitleRaw =
+                (typeof payload?.title === "string" && payload.title.trim()) ||
+                (typeof exportMetadata?.title === "string" && exportMetadata.title.trim()) ||
+                null;
+              const providedTitle = providedTitleRaw;
               const fallbackTitle = file.name || "Imported puzzle";
               const resolvedTitle = providedTitle || fallbackTitle;
               state.sourceTitle = resolvedTitle;
               const applied = applyPuzzleResult(payload, {
                 options: payload.options || getCurrentOptions(),
-                filled: payload.filled,
                 activeColor: payload.activeColor,
                 backgroundColor: payload.backgroundColor,
                 stageBackgroundColor: payload.stageBackgroundColor,
@@ -6272,7 +6363,7 @@
               if (applied) {
                 hideStartScreen();
                 state.sourceUrl = payload.sourceUrl || null;
-                logDebug(`Imported puzzle from JSON: ${resolvedTitle}`);
+                logDebug(`Imported puzzle from ${formatLabel}: ${resolvedTitle}`);
               } else {
                 setProgressMessage("idle");
               }
@@ -6434,6 +6525,217 @@
         });
       }
 
+      function resolvePaletteEntrySnapshot(entry, index = 0) {
+        if (!entry) return null;
+        if (Array.isArray(entry)) {
+          const [idValue, hexValue, nameValue, r, g, b] = entry;
+          const rgbaValues = [r, g, b].filter((component) => component != null);
+          return resolvePaletteEntrySnapshot(
+            {
+              id: idValue,
+              hex: hexValue,
+              name: nameValue,
+              rgba: rgbaValues.length === 3 ? rgbaValues : undefined,
+            },
+            index
+          );
+        }
+        if (typeof entry !== "object") return null;
+        const idSource = Number.isFinite(entry.id)
+          ? entry.id
+          : Number.isFinite(entry.i)
+          ? entry.i
+          : null;
+        const id = idSource != null ? idSource : index + 1;
+        let hex = null;
+        if (typeof entry.hex === "string" && entry.hex.trim()) {
+          hex = entry.hex.trim();
+        } else if (typeof entry.h === "string" && entry.h.trim()) {
+          hex = entry.h.trim();
+        }
+        if (hex && !hex.startsWith("#") && hex.length === 6) {
+          hex = `#${hex}`;
+        }
+        const rgbaSource = Array.isArray(entry.rgba)
+          ? entry.rgba
+          : Array.isArray(entry.r)
+          ? entry.r
+          : null;
+        let rgba = null;
+        if (rgbaSource) {
+          rgba = rgbaSource.slice(0, 3).map((value) => {
+            const numeric = Math.round(Number(value) || 0);
+            return clamp(numeric, 0, 255);
+          });
+        }
+        const nameSource =
+          typeof entry.name === "string" && entry.name.trim()
+            ? entry.name.trim()
+            : typeof entry.n === "string" && entry.n.trim()
+            ? entry.n.trim()
+            : typeof entry.label === "string" && entry.label.trim()
+            ? entry.label.trim()
+            : typeof entry.title === "string" && entry.title.trim()
+            ? entry.title.trim()
+            : null;
+        return {
+          id,
+          hex,
+          rgba,
+          name: nameSource,
+        };
+      }
+
+      function encodeCompactPaletteEntry(entry) {
+        if (!entry) return null;
+        const record = { i: entry.id };
+        if (typeof entry.hex === "string" && entry.hex) {
+          record.h = entry.hex;
+        }
+        if (typeof entry.name === "string" && entry.name) {
+          record.n = entry.name;
+        }
+        if (Array.isArray(entry.rgba) && entry.rgba.length >= 3) {
+          const rgba = entry.rgba.slice(0, 3).map((value) => clamp(Math.round(Number(value) || 0), 0, 255));
+          if (record.h) {
+            const reference = hexToRgb(record.h);
+            const differs = reference.some((component, index) => component !== rgba[index]);
+            if (differs) {
+              record.r = rgba;
+            }
+          } else {
+            record.r = rgba;
+          }
+        }
+        return record;
+      }
+
+      function resolveRegionEntrySnapshot(entry, index = 0) {
+        if (!entry || typeof entry !== "object") return null;
+        const idSource = Number.isFinite(entry.id)
+          ? entry.id
+          : Number.isFinite(entry.i)
+          ? entry.i
+          : null;
+        const id = idSource != null ? idSource : index;
+        const colorIdSource = Number.isFinite(entry.colorId)
+          ? entry.colorId
+          : Number.isFinite(entry.c)
+          ? entry.c
+          : null;
+        const colorId = colorIdSource != null ? colorIdSource : 1;
+        let pixelCount = Number.isFinite(entry.pixelCount)
+          ? entry.pixelCount
+          : Number.isFinite(entry.p)
+          ? entry.p
+          : 0;
+        if (pixelCount === 0 && Array.isArray(entry.pixels)) {
+          pixelCount = entry.pixels.length;
+        }
+        let cx = null;
+        if (Number.isFinite(entry.cx)) {
+          cx = entry.cx;
+        } else if (Number.isFinite(entry.x)) {
+          cx = entry.x;
+        }
+        let cy = null;
+        if (Number.isFinite(entry.cy)) {
+          cy = entry.cy;
+        } else if (Number.isFinite(entry.y)) {
+          cy = entry.y;
+        }
+        return {
+          id,
+          colorId,
+          pixelCount,
+          cx,
+          cy,
+        };
+      }
+
+      function encodeCompactRegionEntry(entry) {
+        if (!entry) return null;
+        const record = {
+          i: entry.id,
+          c: entry.colorId,
+          p: entry.pixelCount,
+        };
+        if (Number.isFinite(entry.cx)) {
+          record.x = Math.round(entry.cx * 1000) / 1000;
+        }
+        if (Number.isFinite(entry.cy)) {
+          record.y = Math.round(entry.cy * 1000) / 1000;
+        }
+        return record;
+      }
+
+      function decodeFilledRegionList(source) {
+        if (source == null) return null;
+        if (source instanceof Set) {
+          return Array.from(source, (value) => {
+            const numeric = Math.round(Number(value) || 0);
+            return numeric >= 0 && Number.isFinite(numeric) ? numeric : null;
+          }).filter((value) => value != null);
+        }
+        if (Array.isArray(source)) {
+          return source
+            .map((value) => {
+              const numeric = Math.round(Number(value) || 0);
+              return numeric >= 0 && Number.isFinite(numeric) ? numeric : null;
+            })
+            .filter((value) => value != null);
+        }
+        if (typeof source === "string") {
+          const decoded = unpackFilledRegions(source);
+          if (Array.isArray(decoded)) {
+            return decoded;
+          }
+          return [];
+        }
+        if (ArrayBuffer.isView(source)) {
+          return Array.from(source, (value) => {
+            const numeric = Math.round(Number(value) || 0);
+            return numeric >= 0 && Number.isFinite(numeric) ? numeric : null;
+          }).filter((value) => value != null);
+        }
+        if (typeof source.length === "number" && source.length >= 0 && typeof source !== "string") {
+          const values = [];
+          for (let index = 0; index < source.length; index += 1) {
+            const numeric = Math.round(Number(source[index]) || 0);
+            if (numeric >= 0 && Number.isFinite(numeric)) {
+              values.push(numeric);
+            }
+          }
+          return values;
+        }
+        return null;
+      }
+
+      function resolveFilledRegions(metadataFilled, data) {
+        const sources = [];
+        if (metadataFilled != null) {
+          sources.push(metadataFilled);
+        }
+        if (data) {
+          if (data.filled != null) {
+            sources.push(data.filled);
+          }
+          if (typeof data.filledPacked === "string") {
+            sources.push(data.filledPacked);
+          }
+          if (typeof data.f === "string") {
+            sources.push(data.f);
+          }
+        }
+        for (const source of sources) {
+          const decoded = decodeFilledRegionList(source);
+          if (decoded != null) {
+            return decoded;
+          }
+        }
+        return [];
+      }
+
       function applyPuzzleResult(data, metadata = {}) {
         disableSampleAutoload();
         const loadedIdRaw =
@@ -6450,8 +6752,14 @@
           return false;
         }
         const expectedCells = data.width * data.height;
+        const regionMapPacked =
+          (typeof data.m === "string" && data.m)
+            ? data.m
+            : (typeof data.map === "string" && data.map)
+            ? data.map
+            : data.regionMapPacked;
         const regionMapSource =
-          unpackRegionMap(data.regionMapPacked, expectedCells) ||
+          unpackRegionMap(regionMapPacked, expectedCells) ||
           unpackRegionMap(data.regionMap, expectedCells);
         if (!regionMapSource || regionMapSource.length !== expectedCells) {
           console.error("Puzzle data is inconsistent.");
@@ -6480,36 +6788,50 @@
             }
           }
         }
-        const palette = data.palette.map((entry, index) => {
-          const hex = entry.hex ?? "#ffffff";
-          const rgba = Array.isArray(entry.rgba) ? entry.rgba.slice(0, 3) : hexToRgb(hex);
-          const providedName =
-            typeof entry.name === "string" && entry.name.trim()
-              ? entry.name.trim()
-              : typeof entry.label === "string" && entry.label.trim()
-              ? entry.label.trim()
-              : typeof entry.title === "string" && entry.title.trim()
-              ? entry.title.trim()
-              : null;
-          const id = entry.id ?? index + 1;
+        const paletteSource = Array.isArray(data.palette) ? data.palette : [];
+        const palette = [];
+        for (let index = 0; index < paletteSource.length; index += 1) {
+          const resolvedEntry = resolvePaletteEntrySnapshot(paletteSource[index], index);
+          if (!resolvedEntry) continue;
+          const hex = typeof resolvedEntry.hex === "string" && resolvedEntry.hex
+            ? resolvedEntry.hex
+            : "#ffffff";
+          const rgba = Array.isArray(resolvedEntry.rgba)
+            ? resolvedEntry.rgba.slice(0, 3)
+            : hexToRgb(hex);
+          const id = Number.isFinite(resolvedEntry.id) ? resolvedEntry.id : index + 1;
           const fallbackName = typeof hex === "string" ? hex.toUpperCase() : `Colour ${id}`;
-          return {
+          const providedName =
+            typeof resolvedEntry.name === "string" && resolvedEntry.name
+              ? resolvedEntry.name
+              : null;
+          palette.push({
             id,
             hex,
             rgba,
             name: providedName || fallbackName,
+          });
+        }
+        const regionSource = Array.isArray(data.regions) ? data.regions : [];
+        const regions = regionSource.map((region, index) => {
+          const resolved = resolveRegionEntrySnapshot(region, index) || {
+            id: index,
+            colorId: 1,
+            pixelCount: 0,
+            cx: null,
+            cy: null,
           };
-        });
-        const regions = data.regions.map((region, index) => {
-          const resolvedId = region.id != null ? region.id : index;
+          const resolvedId = resolved.id != null ? resolved.id : index;
           const pixelsSource =
             Array.isArray(region.pixels) && region.pixels.length > 0
               ? region.pixels
               : hydratedPixels?.get(resolvedId) || [];
           const pixels = Array.from(pixelsSource);
-          const pixelCount = region.pixelCount ?? pixels.length;
-          let cx = typeof region.cx === "number" ? region.cx : null;
-          let cy = typeof region.cy === "number" ? region.cy : null;
+          const pixelCount = Number.isFinite(resolved.pixelCount)
+            ? resolved.pixelCount
+            : pixels.length;
+          let cx = Number.isFinite(resolved.cx) ? resolved.cx : null;
+          let cy = Number.isFinite(resolved.cy) ? resolved.cy : null;
           if (pixels.length && (cx == null || cy == null)) {
             let sumX = 0;
             let sumY = 0;
@@ -6522,7 +6844,7 @@
           }
           return {
             id: resolvedId,
-            colorId: region.colorId ?? 1,
+            colorId: Number.isFinite(resolved.colorId) ? resolved.colorId : 1,
             pixels,
             pixelCount,
             cx: cx ?? 0,
@@ -6570,7 +6892,8 @@
           requestedColor != null && paletteIds.has(requestedColor)
             ? requestedColor
             : palette[0]?.id ?? null;
-        state.filled = new Set(metadata.filled ?? []);
+        const filledRegions = resolveFilledRegions(metadata.filled, data);
+        state.filled = new Set(filledRegions ?? []);
         markFilledLayerDirty();
         const lastOptionsRaw = metadata.options ?? getCurrentOptions();
         const normalizedOptions = {
@@ -9076,85 +9399,49 @@
           : Array.isArray(snapshot.colors)
           ? snapshot.colors
           : [];
-        payload.palette = paletteSource.map((entry, index) => {
-          const id =
-            entry && typeof entry.id === "number" && Number.isFinite(entry.id)
-              ? entry.id
-              : index + 1;
-          const paletteEntry = { id };
-          const hex = entry && typeof entry.hex === "string" && entry.hex ? entry.hex : null;
-          if (hex) {
-            paletteEntry.hex = hex;
+        const palette = [];
+        for (let index = 0; index < paletteSource.length; index += 1) {
+          const resolved = resolvePaletteEntrySnapshot(paletteSource[index], index);
+          if (!resolved) continue;
+          const encoded = encodeCompactPaletteEntry(resolved);
+          if (encoded) {
+            palette.push(encoded);
           }
-          if (entry && Array.isArray(entry.rgba)) {
-            paletteEntry.rgba = entry.rgba.slice(0, 3).map((value) => Number(value) || 0);
-          }
-          const label =
-            entry && typeof entry.name === "string" && entry.name.trim()
-              ? entry.name.trim()
-              : entry && typeof entry.label === "string" && entry.label.trim()
-              ? entry.label.trim()
-              : entry && typeof entry.title === "string" && entry.title.trim()
-              ? entry.title.trim()
-              : null;
-          if (label) {
-            paletteEntry.name = label;
-          }
-          return paletteEntry;
-        });
+        }
+        payload.palette = palette;
         const regionSource = Array.isArray(snapshot.regions) ? snapshot.regions : [];
-        payload.regions = regionSource.map((region, index) => {
-          const resolvedId =
-            region && typeof region.id === "number" && Number.isFinite(region.id)
-              ? region.id
-              : index;
-          let pixelCount =
-            region && typeof region.pixelCount === "number" && Number.isFinite(region.pixelCount)
-              ? region.pixelCount
-              : 0;
-          if (pixelCount === 0 && Array.isArray(region?.pixels)) {
-            pixelCount = region.pixels.length;
+        const regions = [];
+        for (let index = 0; index < regionSource.length; index += 1) {
+          const resolved = resolveRegionEntrySnapshot(regionSource[index], index);
+          if (!resolved) continue;
+          const encoded = encodeCompactRegionEntry(resolved);
+          if (encoded) {
+            regions.push(encoded);
           }
-          const entry = {
-            id: resolvedId,
-            colorId:
-              region && typeof region.colorId === "number" && Number.isFinite(region.colorId)
-                ? region.colorId
-                : 1,
-            pixelCount,
-          };
-          if (region && typeof region.cx === "number" && Number.isFinite(region.cx)) {
-            entry.cx = Math.round(region.cx * 1000) / 1000;
-          }
-          if (region && typeof region.cy === "number" && Number.isFinite(region.cy)) {
-            entry.cy = Math.round(region.cy * 1000) / 1000;
-          }
-          return entry;
-        });
+        }
+        payload.regions = regions;
         let packed = null;
-        if (typeof snapshot.regionMapPacked === "string" && snapshot.regionMapPacked) {
+        if (typeof snapshot.m === "string" && snapshot.m) {
+          packed = snapshot.m;
+        } else if (typeof snapshot.map === "string" && snapshot.map) {
+          packed = snapshot.map;
+        } else if (typeof snapshot.regionMapPacked === "string" && snapshot.regionMapPacked) {
           packed = snapshot.regionMapPacked;
-        } else {
+        } else if (snapshot.regionMap) {
           packed = packRegionMap(snapshot.regionMap);
         }
         if (packed) {
-          payload.regionMapPacked = packed;
+          payload.m = packed;
         }
-        if (snapshot.filled instanceof Set) {
-          payload.filled = Array.from(snapshot.filled);
-        } else if (Array.isArray(snapshot.filled)) {
-          payload.filled = snapshot.filled.slice();
-        } else if (
-          snapshot.filled &&
-          typeof snapshot.filled.length === "number" &&
-          typeof snapshot.filled !== "string"
-        ) {
-          payload.filled = Array.from(snapshot.filled);
-        } else {
-          payload.filled = [];
+        const filledPacked = packFilledRegions(snapshot.f ?? snapshot.filled ?? snapshot.filledPacked);
+        if (filledPacked) {
+          payload.f = filledPacked;
         }
         if (snapshot.options && typeof snapshot.options === "object") {
-          payload.options = { ...snapshot.options };
+          const options = { ...snapshot.options };
+          if (Object.keys(options).length > 0) {
+            payload.options = options;
+          }
         }
         if (typeof snapshot.sourceUrl === "string" && snapshot.sourceUrl) {
           payload.sourceUrl = snapshot.sourceUrl;
@@ -9624,7 +9911,6 @@
             "Puzzle";
           const applied = applyPuzzleResult(latest.data, {
             options: latest.data.options,
-            filled: latest.data.filled,
             activeColor: latest.data.activeColor,
             backgroundColor: latest.data.backgroundColor,
             stageBackgroundColor: latest.data.stageBackgroundColor,
@@ -9645,6 +9931,76 @@
           }
         }
         return false;
+      }
+
+      function packFilledRegions(source) {
+        const decoded = decodeFilledRegionList(source);
+        if (!Array.isArray(decoded) || decoded.length === 0) {
+          return "";
+        }
+        const normalized = decoded
+          .map((value) => Math.max(0, Math.round(Number(value) || 0)))
+          .filter((value) => Number.isFinite(value));
+        if (normalized.length === 0) {
+          return "";
+        }
+        normalized.sort((a, b) => a - b);
+        const bytes = [];
+        let previous = -1;
+        for (const value of normalized) {
+          if (value === previous) {
+            continue;
+          }
+          const delta = previous < 0 ? value : value - previous;
+          previous = value;
+          let remaining = delta >>> 0;
+          while (remaining >= 0x80) {
+            bytes.push((remaining & 0x7f) | 0x80);
+            remaining >>>= 7;
+          }
+          bytes.push(remaining & 0x7f);
+        }
+        if (bytes.length === 0) {
+          return "";
+        }
+        return encodeBytesToBase64(new Uint8Array(bytes));
+      }
+
+      function unpackFilledRegions(packed) {
+        if (typeof packed !== "string") {
+          return [];
+        }
+        if (packed.length === 0) {
+          return [];
+        }
+        try {
+          const bytes = decodeBase64ToBytes(packed);
+          const values = [];
+          let value = 0;
+          let shift = 0;
+          let delta = 0;
+          for (let index = 0; index < bytes.length; index += 1) {
+            const byte = bytes[index];
+            delta |= (byte & 0x7f) << shift;
+            if (byte & 0x80) {
+              shift += 7;
+              continue;
+            }
+            value += delta;
+            if (Number.isFinite(value) && value >= 0) {
+              values.push(value);
+            }
+            delta = 0;
+            shift = 0;
+          }
+          if (shift !== 0) {
+            return [];
+          }
+          return values;
+        } catch (error) {
+          console.error("Failed to unpack filled regions", error);
+          return [];
+        }
       }
 
       function packRegionMap(map) {
@@ -9710,6 +10066,194 @@
         return null;
       }
 
+      let cachedTextEncoder = null;
+      let cachedTextDecoder = null;
+
+      function encodeUtf8String(input) {
+        if (typeof input !== "string" || input.length === 0) {
+          return new Uint8Array(0);
+        }
+        if (typeof TextEncoder !== "undefined") {
+          if (!cachedTextEncoder) {
+            cachedTextEncoder = new TextEncoder();
+          }
+          return cachedTextEncoder.encode(input);
+        }
+        const bytes = new Uint8Array(input.length);
+        for (let index = 0; index < input.length; index += 1) {
+          bytes[index] = input.charCodeAt(index) & 0xff;
+        }
+        return bytes;
+      }
+
+      function decodeUtf8Bytes(bytes) {
+        if (!bytes || bytes.length === 0) {
+          return "";
+        }
+        if (typeof TextDecoder !== "undefined") {
+          if (!cachedTextDecoder) {
+            cachedTextDecoder = new TextDecoder();
+          }
+          return cachedTextDecoder.decode(bytes);
+        }
+        let result = "";
+        for (let index = 0; index < bytes.length; index += 1) {
+          result += String.fromCharCode(bytes[index]);
+        }
+        return result;
+      }
+
+      function simpleLZ77Compress(bytes) {
+        if (!bytes || bytes.length === 0) {
+          return new Uint8Array(0);
+        }
+        const WINDOW_SIZE = 0xfff;
+        const MIN_MATCH = 3;
+        const MAX_MATCH = 18;
+        const dictionary = new Map();
+        const output = [];
+        let controlIndex = -1;
+        let controlByte = 0;
+        let controlBit = 0;
+
+        function startControlBlock() {
+          controlIndex = output.length;
+          output.push(0);
+          controlByte = 0;
+          controlBit = 0;
+        }
+
+        function commitControlBlock() {
+          if (controlIndex >= 0) {
+            output[controlIndex] = controlByte;
+          }
+        }
+
+        function pushControlBit(isMatch) {
+          if (isMatch) {
+            controlByte |= 1 << controlBit;
+          }
+          controlBit += 1;
+          if (controlBit === 8) {
+            commitControlBlock();
+            startControlBlock();
+          }
+        }
+
+        function addToDictionary(position) {
+          if (position + (MIN_MATCH - 1) >= bytes.length) {
+            return;
+          }
+          const key =
+            (bytes[position] << 16) | (bytes[position + 1] << 8) | bytes[position + 2];
+          let bucket = dictionary.get(key);
+          if (!bucket) {
+            bucket = [];
+            dictionary.set(key, bucket);
+          }
+          bucket.push(position);
+          const windowStart = position - WINDOW_SIZE;
+          while (bucket.length > 0 && bucket[0] < windowStart) {
+            bucket.shift();
+          }
+          const MAX_BUCKET = 64;
+          if (bucket.length > MAX_BUCKET) {
+            bucket.splice(0, bucket.length - MAX_BUCKET);
+          }
+        }
+
+        startControlBlock();
+        let position = 0;
+        while (position < bytes.length) {
+          let bestLength = 0;
+          let bestOffset = 0;
+          if (position + MIN_MATCH <= bytes.length) {
+            const key =
+              (bytes[position] << 16) | (bytes[position + 1] << 8) | bytes[position + 2];
+            const bucket = dictionary.get(key);
+            if (bucket && bucket.length) {
+              for (let i = bucket.length - 1; i >= 0; i -= 1) {
+                const candidate = bucket[i];
+                const offset = position - candidate;
+                if (offset <= 0 || offset > WINDOW_SIZE) {
+                  if (position - candidate > WINDOW_SIZE) {
+                    bucket.splice(i, 1);
+                  }
+                  continue;
+                }
+                const maxLength = Math.min(MAX_MATCH, bytes.length - position);
+                let length = 0;
+                while (length < maxLength && bytes[candidate + length] === bytes[position + length]) {
+                  length += 1;
+                }
+                if (length >= MIN_MATCH && length > bestLength) {
+                  bestLength = length;
+                  bestOffset = offset;
+                  if (length === MAX_MATCH) {
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          if (bestLength >= MIN_MATCH) {
+            pushControlBit(true);
+            const adjustedLength = bestLength - MIN_MATCH;
+            const firstByte = (bestOffset >> 4) & 0xff;
+            const secondByte = ((bestOffset & 0x0f) << 4) | (adjustedLength & 0x0f);
+            output.push(firstByte, secondByte);
+            for (let i = 0; i < bestLength; i += 1) {
+              addToDictionary(position + i);
+            }
+            position += bestLength;
+          } else {
+            pushControlBit(false);
+            output.push(bytes[position]);
+            addToDictionary(position);
+            position += 1;
+          }
+        }
+        if (controlBit === 0) {
+          output.pop();
+        } else {
+          commitControlBlock();
+        }
+        return new Uint8Array(output);
+      }
+
+      function simpleLZ77Decompress(bytes) {
+        if (!bytes || bytes.length === 0) {
+          return new Uint8Array(0);
+        }
+        const output = [];
+        let index = 0;
+        while (index < bytes.length) {
+          const controlByte = bytes[index++];
+          for (let bit = 0; bit < 8 && index < bytes.length; bit += 1) {
+            const isMatch = (controlByte >> bit) & 1;
+            if (isMatch) {
+              if (index + 1 >= bytes.length) {
+                return null;
+              }
+              const first = bytes[index++];
+              const second = bytes[index++];
+              const offset = ((first << 4) | (second >> 4)) & 0xfff;
+              const length = (second & 0x0f) + 3;
+              if (offset === 0 || offset > output.length) {
+                return null;
+              }
+              const start = output.length - offset;
+              for (let i = 0; i < length; i += 1) {
+                output.push(output[start + i]);
+              }
+            } else {
+              output.push(bytes[index++]);
+            }
+          }
+        }
+        return new Uint8Array(output);
+      }
+
       function tryCompressString(input) {
         if (typeof input !== "string" || input.length === 0) {
           return {
@@ -9726,46 +10270,60 @@
         } catch (error) {
           console.error("Failed to inspect string size before compression", error);
         }
-        try {
-          const codes = lzwCompress(input);
-          if (!codes || codes.length === 0) {
-            return {
-              payload: input,
-              compressed: false,
-              encoding: "identity",
-              originalBytes,
-              compressedBytes: originalBytes,
-            };
-          }
-          const bytes = new Uint8Array(codes.buffer);
-          const payload = encodeBytesToBase64(bytes);
-          const compressedBytes = getStoredStringSize(payload);
-          if (compressedBytes >= originalBytes || !payload) {
-            return {
-              payload: input,
-              compressed: false,
-              encoding: "identity",
-              originalBytes,
-              compressedBytes: originalBytes,
-            };
-          }
-          return {
-            payload,
-            compressed: true,
-            encoding: "lzw16",
-            originalBytes,
-            compressedBytes,
-          };
-        } catch (error) {
-          console.error("Failed to compress save payload", error);
-        }
-        return {
+        const result = {
           payload: input,
           compressed: false,
           encoding: "identity",
           originalBytes,
           compressedBytes: originalBytes,
         };
+        try {
+          const utf8 = encodeUtf8String(input);
+          if (utf8.length > 0) {
+            const compressed = simpleLZ77Compress(utf8);
+            if (compressed.length > 0) {
+              const payload = encodeBytesToBase64(compressed);
+              if (payload) {
+                const storedSize = getStoredStringSize(payload);
+                if (storedSize < result.compressedBytes) {
+                  result.payload = payload;
+                  result.compressed = storedSize < originalBytes;
+                  result.encoding = result.compressed ? "lz77" : "identity";
+                  result.compressedBytes = result.compressed ? storedSize : originalBytes;
+                  if (!result.compressed) {
+                    result.payload = input;
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Failed to compress payload with LZ77", error);
+        }
+        try {
+          const codes = lzwCompress(input);
+          if (codes && codes.length > 0) {
+            const bytes = new Uint8Array(codes.buffer);
+            if (bytes.length > 0) {
+              const payload = encodeBytesToBase64(bytes);
+              if (payload) {
+                const storedSize = getStoredStringSize(payload);
+                if (storedSize < result.compressedBytes) {
+                  result.payload = payload;
+                  result.compressed = storedSize < originalBytes;
+                  result.encoding = result.compressed ? "lzw16" : "identity";
+                  result.compressedBytes = result.compressed ? storedSize : originalBytes;
+                  if (!result.compressed) {
+                    result.payload = input;
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Failed to compress save payload", error);
+        }
+        return result;
       }
 
       function encodeBytesToBase64(bytes) {
@@ -9790,6 +10348,63 @@
           bytes[index] = binary.charCodeAt(index);
         }
         return bytes;
+      }
+
+      function decompressSnapshotPayload(payload, encoding) {
+        if (typeof payload !== "string") {
+          return null;
+        }
+        const normalizedEncoding = typeof encoding === "string" ? encoding : "identity";
+        if (normalizedEncoding === "identity") {
+          return payload;
+        }
+        if (normalizedEncoding === "lz77") {
+          try {
+            const bytes = decodeBase64ToBytes(payload);
+            const decompressed = simpleLZ77Decompress(bytes);
+            if (!decompressed) {
+              return null;
+            }
+            return decodeUtf8Bytes(decompressed);
+          } catch (error) {
+            console.error("Failed to decompress LZ77 payload", error);
+            return null;
+          }
+        }
+        if (normalizedEncoding === "lzw16") {
+          try {
+            const bytes = decodeBase64ToBytes(payload);
+            if (bytes.byteLength === 0) {
+              return "";
+            }
+            const length = Math.floor(bytes.byteLength / 2);
+            const codes = new Uint16Array(bytes.buffer, bytes.byteOffset, length);
+            return lzwDecompress(codes);
+          } catch (error) {
+            console.error("Failed to decompress LZW payload", error);
+            return null;
+          }
+        }
+        console.error(`Unsupported snapshot encoding: ${normalizedEncoding}`);
+        return null;
+      }
+
+      function decodeCompactExportPayload(source) {
+        if (!source || typeof source !== "object") {
+          return null;
+        }
+        const encoding = typeof source.encoding === "string" ? source.encoding : "identity";
+        const text = decompressSnapshotPayload(source.payload, encoding);
+        if (typeof text !== "string") {
+          return null;
+        }
+        try {
+          const parsed = JSON.parse(text);
+          return compactPuzzleSnapshot(parsed) || parsed;
+        } catch (error) {
+          console.error("Failed to parse compact export payload", error);
+          return null;
+        }
       }
 
       function lzwCompress(input) {
@@ -9893,9 +10508,8 @@
           }
         } else if (typeof source === "object" && source.__compressed === true && typeof source.payload === "string") {
           try {
-            const bytes = decodeBase64ToBytes(source.payload);
-            const codes = new Uint16Array(bytes.buffer);
-            const text = lzwDecompress(codes);
+            const encoding = typeof source.encoding === "string" ? source.encoding : "identity";
+            const text = decompressSnapshotPayload(source.payload, encoding);
             if (typeof text !== "string") {
               return null;
             }
@@ -10434,7 +11048,6 @@
         if (
           applyPuzzleResult(entry.data, {
             options: entry.data.options,
-            filled: entry.data.filled,
             activeColor: entry.data.activeColor,
             backgroundColor: entry.data.backgroundColor,
             stageBackgroundColor: entry.data.stageBackgroundColor,
