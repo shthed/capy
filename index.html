@@ -1572,7 +1572,7 @@
           <div id="palette" role="list"></div>
         </footer>
     </div>
-    <input id="fileInput" type="file" accept=".json,image/*" hidden />
+    <input id="fileInput" type="file" accept=".json,.capy,image/*" hidden />
     <div
       id="saveManagerSheet"
       class="sheet hidden"
@@ -1616,6 +1616,7 @@
           <button type="button" data-save-snapshot disabled>Save current puzzle</button>
           <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
           <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
+          <button id="downloadCompact" type="button" disabled>Export compact puzzle</button>
           <ul
             class="save-manager-list"
             data-save-list
@@ -2257,6 +2258,7 @@
       const chatGptLink = document.getElementById("chatGptLink");
       const applyBtn = document.getElementById("applyOptions");
       const downloadBtn = document.getElementById("downloadJson");
+      const downloadCompactBtn = document.getElementById("downloadCompact");
       const saveSnapshotButtons = Array.from(document.querySelectorAll("[data-save-snapshot]"));
       const resetProgressButtons = Array.from(document.querySelectorAll("[data-reset-progress]"));
       const saveListContainers = Array.from(document.querySelectorAll("[data-save-list]"));
@@ -4708,6 +4710,70 @@
         logDebug("Exported puzzle JSON");
       });
 
+      downloadCompactBtn.addEventListener("click", () => {
+        if (!state.puzzle) return;
+        const snapshot = serializeCurrentPuzzle();
+        const compact = compactPuzzleSnapshot(snapshot) || snapshot;
+        if (!compact) {
+          logDebug("Unable to export compact puzzle: no snapshot available");
+          return;
+        }
+        const baseTitle =
+          (typeof compact.title === "string" && compact.title.trim()) ||
+          (typeof state.sourceTitle === "string" && state.sourceTitle.trim()) ||
+          "color-by-number";
+        let exportPayload = compact;
+        let extension = "json";
+        let compressionStats = null;
+        try {
+          const json = JSON.stringify(compact);
+          const compressed = tryCompressString(json);
+          compressionStats = compressed;
+          exportPayload = {
+            format: "capy-export@1",
+            encoding: compressed.encoding,
+            payload: compressed.payload,
+          };
+          if (Number.isFinite(compact.width)) {
+            exportPayload.width = compact.width;
+          }
+          if (Number.isFinite(compact.height)) {
+            exportPayload.height = compact.height;
+          }
+          if (typeof compact.title === "string" && compact.title.trim()) {
+            exportPayload.title = compact.title.trim();
+          }
+          extension = "capy";
+        } catch (error) {
+          console.error("Failed to prepare compact export", error);
+          exportPayload = compact;
+          extension = "json";
+        }
+        const serialized = JSON.stringify(exportPayload);
+        const blob = new Blob([serialized], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${baseTitle}.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        requestAnimationFrame(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        });
+        if (compressionStats && compressionStats.compressed) {
+          logDebug(
+            `Exported compact puzzle (${formatBytes(compressionStats.compressedBytes)} from ${formatBytes(
+              compressionStats.originalBytes
+            )})`
+          );
+        } else if (compressionStats) {
+          logDebug(`Exported compact puzzle (${formatBytes(compressionStats.originalBytes)})`);
+        } else {
+          logDebug("Exported compact puzzle");
+        }
+      });
+
       for (const button of saveSnapshotButtons) {
         button.addEventListener("click", () => {
           if (!state.puzzle) return;
@@ -5620,6 +5686,7 @@
         const hasPuzzle = Boolean(state.puzzle);
         previewToggle.disabled = !hasPuzzle;
         downloadBtn.disabled = !hasPuzzle;
+        downloadCompactBtn.disabled = !hasPuzzle;
         for (const button of saveSnapshotButtons) {
           button.disabled = !hasPuzzle;
         }
@@ -6125,7 +6192,7 @@
           return true;
         }
         const name = typeof file.name === "string" ? file.name.toLowerCase() : "";
-        return name.endsWith(".json");
+        return name.endsWith(".json") || name.endsWith(".capy");
       }
 
       function describeImportIntent(file) {
@@ -6143,7 +6210,7 @@
           return {
             name,
             description:
-              "Puzzle JSON imports will replace the current puzzle and do not use the generator settings.",
+              "Puzzle JSON or compact exports will replace the current puzzle and do not use the generator settings.",
             actionLabel: "Import puzzle",
           };
         }
@@ -6255,9 +6322,44 @@
           const reader = new FileReader();
           reader.onload = () => {
             try {
-              const payload = JSON.parse(reader.result);
-              const providedTitle =
-                typeof payload.title === "string" && payload.title.trim() ? payload.title.trim() : null;
+              let payload = JSON.parse(reader.result);
+              let formatLabel = "JSON";
+              let exportMetadata = null;
+              if (
+                payload &&
+                typeof payload === "object" &&
+                payload.format === "capy-export@1" &&
+                typeof payload.payload === "string"
+              ) {
+                exportMetadata = payload;
+                formatLabel = "compact export";
+                const encoding = typeof payload.encoding === "string" ? payload.encoding : "identity";
+                let textPayload = null;
+                if (encoding === "lzw16") {
+                  const bytes = decodeBase64ToBytes(payload.payload);
+                  const codes = new Uint16Array(bytes.buffer);
+                  textPayload = lzwDecompress(codes);
+                } else if (encoding === "identity") {
+                  textPayload = payload.payload;
+                }
+                if (typeof textPayload !== "string") {
+                  throw new Error("Unsupported compact export payload");
+                }
+                const parsed = JSON.parse(textPayload);
+                const normalized = compactPuzzleSnapshot(parsed) || parsed;
+                payload = normalized;
+              } else if (payload && typeof payload === "object" && payload.__compressed === true) {
+                const decoded = decodeStoredSnapshot(payload);
+                if (decoded) {
+                  payload = decoded;
+                  formatLabel = "compressed snapshot";
+                }
+              }
+              const providedTitleRaw =
+                (typeof payload?.title === "string" && payload.title.trim()) ||
+                (typeof exportMetadata?.title === "string" && exportMetadata.title.trim()) ||
+                null;
+              const providedTitle = providedTitleRaw;
               const fallbackTitle = file.name || "Imported puzzle";
               const resolvedTitle = providedTitle || fallbackTitle;
               state.sourceTitle = resolvedTitle;
@@ -6272,7 +6374,7 @@
               if (applied) {
                 hideStartScreen();
                 state.sourceUrl = payload.sourceUrl || null;
-                logDebug(`Imported puzzle from JSON: ${resolvedTitle}`);
+                logDebug(`Imported puzzle from ${formatLabel}: ${resolvedTitle}`);
               } else {
                 setProgressMessage("idle");
               }

@@ -182,7 +182,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 2. **Tune generation & appearance.** Use Settings to tweak palette size, minimum region area, resize detail, sample rate, iteration count, smoothing passes, auto-advance, difficulty, hint animations, hint type toggles, fade timing, overlay intensity, interface theme, unfilled region colour, stage background, interface scale, palette sorting, and mouse button mappings. Advanced options capture art prompt metadata for exports.
 3. **Explore the puzzle.** The canvas shows outlines and numbers; Preview floods the viewport with the finished artwork for comparison.
 4. **Fill regions.** Pick a colour and click/tap cells. Easy difficulty can auto-select the tapped colour before painting; auto-advance hops to the next incomplete colour when enabled.
-5. **Save or export.** The save manager stores snapshots (progress, generator options, source metadata) in localStorage using a compact schema. Export active puzzles as JSON, rename manual saves for organisation, and use **Reset puzzle progress** for a fresh attempt without deleting saves.
+5. **Save or export.** The save manager stores snapshots (progress, generator options, source metadata) in localStorage using a compact schema. Export active puzzles as human-readable JSON or a compressed `.capy` package, rename manual saves for organisation, and use **Reset puzzle progress** for a fresh attempt without deleting saves.
 
 ## Puzzle JSON Format
 
@@ -196,7 +196,7 @@ Autosaves and manual exports share the `capy-puzzle@2` payload with the followin
 - `filled` – Region ids already painted.
 - `backgroundColor`, `stageBackgroundColor`, `options`, `activeColor`, `viewport`, `settings`, `sourceUrl` – Appearance and generator state used to restore the session.
 
-Packing the region map trims payloads by more than half, avoiding `QuotaExceededError` when large puzzles previously overflowed localStorage. If storage does fill up, the Help log prompts the user to clear old saves before retrying.
+Packing the region map trims payloads by more than half, avoiding `QuotaExceededError` when large puzzles previously overflowed localStorage. Compact exports wrap the same JSON snapshot in a `capy-export@1` envelope with an `encoding` (`identity` or `lzw16`) plus a Base64 `payload`; import paths hand the decoded string back through `compactPuzzleSnapshot` before calling `applyPuzzleResult`. If storage does fill up, the Help log prompts the user to clear old saves before retrying.
 
 ## Accessibility & Keyboard Notes
 
