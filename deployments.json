@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-22T07:26:18+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/446d2b7ea4fb1f823f168ef4003b41cab7b9dccf",
     "key": "main"
+  },
+  "codex-add-tabs-to-settings-page": {
+    "key": "codex-add-tabs-to-settings-page",
+    "branch": "codex/add-tabs-to-settings-page",
+    "safeName": "codex-add-tabs-to-settings-page",
+    "commit": "446d2b7ea4fb1f823f168ef4003b41cab7b9dccf",
+    "message": "Merge pull request #209 from shthed/codex/fix-webgl-update-and-improve-zoom-performance\n\nFix WebGL fill updates and refine zoom controls",
+    "actor": "shthed",
+    "deployedAt": "2025-10-22T07:26:18+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/446d2b7ea4fb1f823f168ef4003b41cab7b9dccf"
   }
 }
