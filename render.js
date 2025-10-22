@@ -721,13 +721,20 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   const transparentPixel = new Uint8Array([0, 0, 0, 0]);
 
   const layerTextures = {
+    base: createLayerTexture(gl.LINEAR),
     filled: createLayerTexture(),
     outline: createLayerTexture(),
     numbers: createLayerTexture(),
     overlay: createLayerTexture(),
   };
 
-  if (!layerTextures.filled || !layerTextures.outline || !layerTextures.numbers || !layerTextures.overlay) {
+  if (
+    !layerTextures.base ||
+    !layerTextures.filled ||
+    !layerTextures.outline ||
+    !layerTextures.numbers ||
+    !layerTextures.overlay
+  ) {
     emitLog("Failed to allocate WebGL layer textures", { type: "webgl", stage: "layers" });
     Object.values(layerTextures).forEach((texture) => {
       if (texture && gl.isTexture(texture)) {
@@ -760,6 +767,10 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     numbersHasContent: false,
     overlayDirty: true,
     overlayHasContent: false,
+    baseDirty: true,
+    baseHasContent: false,
+    baseImageRef: null,
+    baseSnapshotKey: null,
     lastRenderScale: null,
     lastFilledCount: null,
     labelsVisible: null,
@@ -840,15 +851,15 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     return resource;
   }
 
-  function createLayerTexture() {
+  function createLayerTexture(filter = gl.NEAREST) {
     const texture = gl.createTexture();
     if (!texture) {
       return null;
     }
     trackResource("texture", texture);
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     try {
@@ -976,6 +987,7 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   }
 
   function markAllLayersDirty() {
+    uploadState.baseDirty = true;
     uploadState.filledDirty = true;
     uploadState.outlineDirty = true;
     uploadState.numbersDirty = true;
@@ -1261,6 +1273,10 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     const cacheVersion = cache && Number.isFinite(cache.version) ? cache.version : null;
     if (uploadState.cacheVersion !== cacheVersion) {
       uploadState.cacheVersion = cacheVersion;
+      uploadState.baseDirty = true;
+      uploadState.baseHasContent = false;
+      uploadState.baseImageRef = null;
+      uploadState.baseSnapshotKey = null;
       uploadState.filledDirty = true;
       uploadState.outlineDirty = true;
       uploadState.numbersDirty = true;
@@ -1275,6 +1291,20 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     );
     if (numbersResized) {
       uploadState.numbersDirty = true;
+    }
+
+    const puzzleImage = state?.puzzle?.sourceImage || null;
+    const baseImage = puzzleImage && puzzleImage.ready ? puzzleImage.image || null : null;
+    const snapshot = puzzleImage?.snapshot || puzzleImage || null;
+    const baseSnapshotKey =
+      typeof snapshot?.dataUrl === "string" && snapshot.dataUrl ? snapshot.dataUrl : null;
+    if (uploadState.baseImageRef !== baseImage) {
+      uploadState.baseImageRef = baseImage || null;
+      uploadState.baseDirty = true;
+    }
+    if (uploadState.baseSnapshotKey !== baseSnapshotKey) {
+      uploadState.baseSnapshotKey = baseSnapshotKey;
+      uploadState.baseDirty = true;
     }
 
     resetOverlaySurface(pixelWidth, pixelHeight);
@@ -1359,9 +1389,35 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       uploadState.numbersDirty = true;
       uploadState.overlayDirty = true;
       uploadState.overlayHasContent = false;
+      uploadState.baseDirty = true;
       overlaySurface.hasContent = false;
       overlaySurface.dirty = true;
       return null;
+    }
+
+    if (uploadState.baseDirty) {
+      let baseUploaded = false;
+      const hadContent = uploadState.baseHasContent === true;
+      if (baseImage) {
+        baseUploaded = uploadTextureFromSource(layerTextures.base, baseImage);
+        if (!baseUploaded) {
+          console.warn("WebGL base image upload failed; retaining previous texture contents");
+        }
+      }
+      if (baseUploaded) {
+        uploadState.baseHasContent = true;
+      } else if (!baseImage) {
+        uploadTransparentTexture(layerTextures.base);
+        uploadState.baseHasContent = false;
+      } else if (!hadContent) {
+        uploadTransparentTexture(layerTextures.base);
+        uploadState.baseHasContent = false;
+      }
+      uploadState.baseDirty = false;
+    }
+
+    if (uploadState.baseHasContent) {
+      drawQuad({ texture: layerTextures.base });
     }
 
     const hasCache = Boolean(cache && cache.ready);
@@ -1622,6 +1678,10 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     overlaySurface.dirty = true;
     uploadState.numbersHasContent = false;
     uploadState.overlayHasContent = false;
+    uploadState.baseHasContent = false;
+    uploadState.baseImageRef = null;
+    uploadState.baseSnapshotKey = null;
+    uploadState.baseDirty = true;
     if (typeof hooks.dispose === "function") {
       hooks.dispose({ gl, trackResource, untrackResource });
     }
@@ -1666,12 +1726,16 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   backgroundRect.setAttribute("y", "0");
   svg.appendChild(backgroundRect);
 
+  const baseImage = document.createElementNS(NS, "image");
   const filledGroup = document.createElementNS(NS, "g");
   const outlineGroup = document.createElementNS(NS, "g");
   const numbersImage = document.createElementNS(NS, "image");
   const overlayGroup = document.createElementNS(NS, "g");
   const previewImage = document.createElementNS(NS, "image");
 
+  baseImage.setAttribute("preserveAspectRatio", "none");
+  baseImage.style.display = "none";
+  baseImage.style.pointerEvents = "none";
   filledGroup.setAttribute("fill-rule", "nonzero");
   outlineGroup.setAttribute("fill", "none");
   numbersImage.setAttribute("preserveAspectRatio", "none");
@@ -1682,6 +1746,7 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   previewImage.style.display = "none";
   previewImage.style.pointerEvents = "none";
 
+  svg.appendChild(baseImage);
   svg.appendChild(filledGroup);
   svg.appendChild(outlineGroup);
   svg.appendChild(numbersImage);
@@ -1715,6 +1780,7 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   let geometryVersion = null;
   let lastOutlineColor = null;
   let lastStrokeWidth = null;
+  let baseImageHref = "";
 
   const regionElements = new Map();
 
@@ -1785,6 +1851,11 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
         previewImage.removeAttribute("href");
         previewImage.style.display = "none";
       }
+      if (baseImageHref) {
+        baseImage.removeAttribute("href");
+        baseImageHref = "";
+      }
+      baseImage.style.display = "none";
       filledGroup.style.display = "none";
       outlineGroup.style.display = "none";
       numbersImage.style.display = "none";
@@ -1793,8 +1864,28 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
 
     previewImage.removeAttribute("href");
     previewImage.style.display = "none";
+    baseImage.style.display = "none";
     filledGroup.style.display = "";
     outlineGroup.style.display = "";
+
+    const puzzleImage = state?.puzzle?.sourceImage || null;
+    const readyImage = puzzleImage && puzzleImage.ready ? puzzleImage.image || null : null;
+    const snapshot = puzzleImage?.snapshot || puzzleImage || null;
+    const sourceHref =
+      readyImage && typeof snapshot?.dataUrl === "string" && snapshot.dataUrl ? snapshot.dataUrl : "";
+    if (readyImage && sourceHref) {
+      if (baseImageHref !== sourceHref) {
+        baseImage.setAttribute("href", sourceHref);
+        baseImageHref = sourceHref;
+      }
+      baseImage.style.display = "";
+    } else {
+      if (baseImageHref) {
+        baseImage.removeAttribute("href");
+        baseImageHref = "";
+      }
+      baseImage.style.display = "none";
+    }
 
     if (!cache || !cache.ready) {
       numbersImage.removeAttribute("href");
@@ -1808,6 +1899,8 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
       svg.setAttribute("viewBox", `0 0 ${contentWidth} ${contentHeight}`);
       backgroundRect.setAttribute("width", String(contentWidth));
       backgroundRect.setAttribute("height", String(contentHeight));
+      baseImage.setAttribute("width", String(contentWidth));
+      baseImage.setAttribute("height", String(contentHeight));
       numbersImage.setAttribute("width", String(contentWidth));
       numbersImage.setAttribute("height", String(contentHeight));
       previewImage.setAttribute("width", String(contentWidth));
@@ -1820,9 +1913,12 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
       lastStrokeWidth = null;
     }
 
-    const paletteMap = createPaletteMap(state);
     const filledState = getFilledState(state?.filled);
-    updateFilledPaths(paletteMap, filledState);
+    const overlayFill =
+      typeof backgroundColor === "string" && backgroundColor
+        ? backgroundColor
+        : "rgba(248, 250, 252, 1)";
+    updateFilledPaths(filledState, overlayFill);
 
     const strokeColor = computeInkStyles(backgroundColor).outline;
     const strokeWidth = cache?.strokeWidth > 0 ? cache.strokeWidth : 1;
@@ -1889,6 +1985,9 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     numbersImage.style.display = "none";
     previewImage.removeAttribute("href");
     previewImage.style.display = "none";
+    baseImage.removeAttribute("href");
+    baseImage.style.display = "none";
+    baseImageHref = "";
     if (svg.parentNode) {
       svg.parentNode.removeChild(svg);
     }
@@ -2079,18 +2178,6 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     return rounded.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
   }
 
-  function createPaletteMap(state) {
-    const palette = state?.puzzle?.palette;
-    const map = new Map();
-    if (Array.isArray(palette)) {
-      for (const entry of palette) {
-        if (!entry || typeof entry.id !== "number") continue;
-        map.set(entry.id, entry);
-      }
-    }
-    return map;
-  }
-
   function getFilledState(source) {
     if (source instanceof Set) {
       return { set: source, ref: source, size: source.size, hash: null };
@@ -2107,18 +2194,17 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     return { set: new Set(), ref: null, size: 0, hash: null };
   }
 
-  function updateFilledPaths(paletteMap, filledState) {
+  function updateFilledPaths(filledState, overlayColor) {
+    const overlayFill =
+      typeof overlayColor === "string" && overlayColor ? overlayColor : "rgba(248, 250, 252, 1)";
     regionElements.forEach((entry, id) => {
       if (!entry?.fillPath) {
         return;
       }
-      const geometry = entry.geometry;
-      const paletteEntry = geometry ? paletteMap.get(geometry.colorId) : null;
-      const hex = paletteEntry && typeof paletteEntry.hex === "string" ? paletteEntry.hex : null;
-      if (hex && filledState.set.has(id)) {
-        entry.fillPath.setAttribute("fill", hex);
-      } else {
+      if (filledState.set.has(id)) {
         entry.fillPath.setAttribute("fill", "none");
+      } else {
+        entry.fillPath.setAttribute("fill", overlayFill);
       }
     });
   }
