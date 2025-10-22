@@ -13,10 +13,10 @@
     "key": "codex-add-minimised-output-format-download",
     "branch": "codex/add-minimised-output-format-download",
     "safeName": "codex-add-minimised-output-format-download",
-    "commit": "fb4f098174e3661ec746089794be9c543b9e34dc",
-    "message": "Merge pull request #210 from shthed/codex/add-tabs-to-settings-page\n\nAdd tabbed settings layout and refine UI scale defaults",
+    "commit": "c75b01c7e42c5f0f985110fd51466b2ef18b80a1",
+    "message": "Add compact puzzle export format",
     "actor": "shthed",
-    "deployedAt": "2025-10-22T17:27:24+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/fb4f098174e3661ec746089794be9c543b9e34dc"
+    "deployedAt": "2025-10-22T18:29:30+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/c75b01c7e42c5f0f985110fd51466b2ef18b80a1"
   }
 }
