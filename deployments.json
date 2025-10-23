@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-23T12:21:21+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
     "key": "main"
+  },
+  "codex-update-manage-saves-autosave-display": {
+    "key": "codex-update-manage-saves-autosave-display",
+    "branch": "codex/update-manage-saves-autosave-display",
+    "safeName": "codex-update-manage-saves-autosave-display",
+    "commit": "21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
+    "message": "Merge pull request #212 from shthed/codex/explain-the-rendering-system\n\nRender puzzles over stored base image",
+    "actor": "shthed",
+    "deployedAt": "2025-10-23T12:21:21+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/21d619e33f0ab8b91ab86a57fe64088a2f2fd900"
   }
 }
