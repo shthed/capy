@@ -1630,6 +1630,20 @@
         <section class="sheet-section" aria-labelledby="storageHeading">
           <h3 id="storageHeading">Save storage</h3>
           <p id="saveStorageSummary" class="control-note"></p>
+          <label class="control">
+            <span>Stored image size <output data-for="sourceImageLimit">1 MB</output></span>
+            <select id="sourceImageLimit">
+              <option value="262144">256 KB</option>
+              <option value="524288">512 KB</option>
+              <option value="1048576" selected>1 MB</option>
+              <option value="2097152">2 MB</option>
+              <option value="5242880">5 MB</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate
+            or import.
+          </p>
           <div class="log-actions">
             <button id="deleteAllSaves" type="button">Delete all saves</button>
           </div>
@@ -2255,6 +2269,7 @@
       const smoothingEl = document.getElementById("smoothingPasses");
       const artPromptInput = document.getElementById("artPrompt");
       const imageDescriptionInput = document.getElementById("imageDescription");
+      const sourceImageLimitSelect = document.getElementById("sourceImageLimit");
       const chatGptLink = document.getElementById("chatGptLink");
       const applyBtn = document.getElementById("applyOptions");
       const downloadBtn = document.getElementById("downloadJson");
@@ -2305,6 +2320,7 @@
             smoothing: generatorSheet.querySelector('output[data-for="smoothingPasses"]'),
           }
         : {};
+      const sourceImageLimitOutput = document.querySelector('output[data-for="sourceImageLimit"]');
       const settingsOutputs = settingsSheet
         ? {
             uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
@@ -2336,6 +2352,23 @@
         hoverRegions: true,
       };
       const HINT_TYPE_KEYS = ["matchingRegions", "hoverRegions"];
+      const DEFAULT_SOURCE_IMAGE_MAX_BYTES = 1048576;
+      const SOURCE_IMAGE_LIMIT_OPTIONS = [
+        { value: 262144, label: "256 KB" },
+        { value: 524288, label: "512 KB" },
+        { value: 1048576, label: "1 MB" },
+        { value: 2097152, label: "2 MB" },
+        { value: 5242880, label: "5 MB" },
+      ];
+      const MAX_SOURCE_IMAGE_LIMIT = SOURCE_IMAGE_LIMIT_OPTIONS.reduce((max, option) => {
+        const value = option?.value;
+        if (Number.isFinite(value) && value > max) {
+          return value;
+        }
+        return max;
+      }, DEFAULT_SOURCE_IMAGE_MAX_BYTES);
+      const SOURCE_IMAGE_VARIANT_ORIGINAL = "original";
+      const SOURCE_IMAGE_VARIANT_GENERATED = "generated";
       const DEFAULT_DIFFICULTY = "normal";
       const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
       const MOUSE_BUTTON_KEYS = ["left", "middle", "right"];
@@ -2640,6 +2673,7 @@
             kmeansIters: 20,
             smoothingPasses: 1,
             algorithm: DEFAULT_GENERATION_ALGORITHM,
+            sourceImageMaxBytes: 524288,
           },
         },
         medium: {
@@ -2659,6 +2693,7 @@
             kmeansIters: 24,
             smoothingPasses: 1,
             algorithm: DEFAULT_GENERATION_ALGORITHM,
+            sourceImageMaxBytes: 1048576,
           },
         },
         high: {
@@ -2678,6 +2713,7 @@
             kmeansIters: 28,
             smoothingPasses: 1,
             algorithm: DEFAULT_GENERATION_ALGORITHM,
+            sourceImageMaxBytes: 2097152,
           },
         },
       };
@@ -2911,23 +2947,20 @@
         }
         clearContext(ctx);
         const scale = cache.renderScale > 0 ? cache.renderScale : 1;
+        const overlayHex = sanitizeHexColor(
+          state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX,
+          DEFAULT_BACKGROUND_HEX
+        );
+        const pending = [];
+        for (const geometry of cache.regions) {
+          if (!geometry) continue;
+          if (state.filled.has(geometry.id)) continue;
+          pending.push(geometry);
+        }
         withRenderScale(ctx, scale, () => {
           ctx.globalCompositeOperation = "source-over";
-          const fillsByColor = new Map();
-          for (const regionId of state.filled) {
-            const geometry = cache.regionsById.get(regionId);
-            if (!geometry) continue;
-            const colorEntry = getPaletteEntry(geometry.colorId);
-            if (!colorEntry?.hex) continue;
-            if (!fillsByColor.has(colorEntry.hex)) {
-              fillsByColor.set(colorEntry.hex, []);
-            }
-            fillsByColor.get(colorEntry.hex).push(geometry);
-          }
-          for (const [hex, entries] of fillsByColor) {
-            ctx.fillStyle = hex;
-            fillGeometries(ctx, entries);
-          }
+          ctx.fillStyle = overlayHex;
+          fillGeometries(ctx, pending);
         });
         cache.filledLayerDirty = false;
         cache.filledLayerNeedsUpload = true;
@@ -2936,45 +2969,29 @@
 
       function compositeFilledRegionsDirect(ctx, cache) {
         const scale = cache.renderScale > 0 ? cache.renderScale : 1;
+        const overlayHex = sanitizeHexColor(
+          state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX,
+          DEFAULT_BACKGROUND_HEX
+        );
         withRenderScale(ctx, scale, () => {
-          const fillsByColor = new Map();
-          for (const regionId of state.filled) {
-            const geometry = cache.regionsById.get(regionId);
+          const pending = [];
+          for (const geometry of cache.regions) {
             if (!geometry) continue;
-            const colorEntry = getPaletteEntry(geometry.colorId);
-            if (!colorEntry?.hex) continue;
-            if (!fillsByColor.has(colorEntry.hex)) {
-              fillsByColor.set(colorEntry.hex, []);
-            }
-            fillsByColor.get(colorEntry.hex).push(geometry);
+            if (state.filled.has(geometry.id)) continue;
+            pending.push(geometry);
           }
-          for (const [hex, entries] of fillsByColor) {
-            ctx.fillStyle = hex;
-            fillGeometries(ctx, entries);
+          if (pending.length === 0) {
+            return;
           }
+          ctx.fillStyle = overlayHex;
+          fillGeometries(ctx, pending);
         });
       }
 
       function paintRegionToFilledLayer(regionId) {
         const cache = ensureRenderCache();
         if (!cache.ready) return;
-        if (!cache.filledLayer || !cache.filledLayerCtx) {
-          cache.filledLayerDirty = true;
-          return;
-        }
-        if (cache.filledLayerDirty) {
-          return;
-        }
-        const geometry = cache.regionsById.get(regionId);
-        if (!geometry) return;
-        const colorEntry = getPaletteEntry(geometry.colorId);
-        if (!colorEntry?.hex) return;
-        const ctx = cache.filledLayerCtx;
-        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        withRenderScale(ctx, scale, () => {
-          ctx.fillStyle = colorEntry.hex;
-          fillGeometries(ctx, [geometry]);
-        });
+        cache.filledLayerDirty = true;
         cache.filledLayerNeedsUpload = true;
       }
 
@@ -4823,6 +4840,12 @@
       sampleRateEl.addEventListener("input", updateOptionOutputs);
       kmeansItersEl.addEventListener("input", updateOptionOutputs);
       smoothingEl.addEventListener("input", updateOptionOutputs);
+      if (sourceImageLimitSelect) {
+        sourceImageLimitSelect.addEventListener("change", () => {
+          updateOptionOutputs();
+          markOptionsDirty();
+        });
+      }
 
       colorCountEl.addEventListener("change", markOptionsDirty);
       minRegionEl.addEventListener("change", markOptionsDirty);
@@ -5592,6 +5615,20 @@
               algorithmEl.value = DEFAULT_GENERATION_ALGORITHM;
             }
           }
+          if (sourceImageLimitSelect) {
+            if (typeof settings.sourceImageMaxBytes === "number") {
+              const limitValue = resolveSourceImageLimit(settings.sourceImageMaxBytes);
+              const limitText = String(limitValue);
+              if (sourceImageLimitSelect.value !== limitText) {
+                sourceImageLimitSelect.value = limitText;
+              }
+            } else {
+              const defaultLimit = String(DEFAULT_SOURCE_IMAGE_MAX_BYTES);
+              if (sourceImageLimitSelect.value !== defaultLimit) {
+                sourceImageLimitSelect.value = defaultLimit;
+              }
+            }
+          }
           updateOptionOutputs();
           markOptionsDirty();
         }
@@ -5984,6 +6021,7 @@
           return normalized;
         }
         markOutlineLayerDirty();
+        markFilledLayerDirty();
         if (!skipRender) {
           if (state.puzzle) {
             renderPuzzle();
@@ -6041,6 +6079,31 @@
         return normalized;
       }
 
+      function resolveSourceImageLimit(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+          return DEFAULT_SOURCE_IMAGE_MAX_BYTES;
+        }
+        if (numeric < 0) {
+          return DEFAULT_SOURCE_IMAGE_MAX_BYTES;
+        }
+        if (numeric === 0) {
+          return MAX_SOURCE_IMAGE_LIMIT;
+        }
+        return numeric;
+      }
+
+      function formatSourceImageLimitLabel(value) {
+        const resolved = resolveSourceImageLimit(value);
+        const matchedOption = SOURCE_IMAGE_LIMIT_OPTIONS.find(
+          (option) => option && option.value === resolved
+        );
+        if (matchedOption) {
+          return matchedOption.label;
+        }
+        return formatBytes(resolved);
+      }
+
       function updateOptionOutputs() {
         if (generatorOutputs.colorCount) {
           generatorOutputs.colorCount.textContent = String(colorCountEl.value);
@@ -6059,6 +6122,12 @@
         }
         if (generatorOutputs.smoothing) {
           generatorOutputs.smoothing.textContent = String(smoothingEl.value);
+        }
+        if (sourceImageLimitOutput) {
+          const limitSource = sourceImageLimitSelect
+            ? sourceImageLimitSelect.value
+            : DEFAULT_SOURCE_IMAGE_MAX_BYTES;
+          sourceImageLimitOutput.textContent = formatSourceImageLimitLabel(limitSource);
         }
         if (settingsOutputs.uiScale) {
           const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
@@ -6154,6 +6223,10 @@
         const current = getCurrentOptions();
         const last = state.lastOptions;
         const lastAlgorithm = last ? normalizeGenerationAlgorithm(last.algorithm) : DEFAULT_GENERATION_ALGORITHM;
+        const lastLimit =
+          last && Number.isFinite(last.sourceImageMaxBytes) && last.sourceImageMaxBytes >= 0
+            ? last.sourceImageMaxBytes
+            : DEFAULT_SOURCE_IMAGE_MAX_BYTES;
         const dirty =
           !last ||
           current.targetColors !== last.targetColors ||
@@ -6162,6 +6235,7 @@
           current.sampleRate !== last.sampleRate ||
           current.kmeansIters !== last.kmeansIters ||
           current.smoothingPasses !== last.smoothingPasses ||
+          current.sourceImageMaxBytes !== lastLimit ||
           current.algorithm !== lastAlgorithm;
         applyBtn.disabled = !dirty;
       }
@@ -6174,6 +6248,9 @@
           sampleRate: clamp(Number(sampleRateEl.value) || 65, 10, 100) / 100,
           kmeansIters: clamp(Number(kmeansItersEl.value) || 12, 1, 64),
           smoothingPasses: clamp(Number(smoothingEl.value) || 1, 0, 6),
+          sourceImageMaxBytes: resolveSourceImageLimit(
+            sourceImageLimitSelect ? sourceImageLimitSelect.value : DEFAULT_SOURCE_IMAGE_MAX_BYTES
+          ),
           algorithm: normalizeGenerationAlgorithm(algorithmEl ? algorithmEl.value : DEFAULT_GENERATION_ALGORITHM),
         };
       }
@@ -6736,6 +6813,221 @@
         return [];
       }
 
+      function estimateDataUrlBytes(dataUrl) {
+        if (typeof dataUrl !== "string") {
+          return null;
+        }
+        const commaIndex = dataUrl.indexOf(",");
+        if (commaIndex === -1) {
+          return null;
+        }
+        const payload = dataUrl.slice(commaIndex + 1);
+        if (!payload) {
+          return 0;
+        }
+        const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+        return Math.max(0, Math.floor(payload.length / 4) * 3 - padding);
+      }
+
+      function normalizeSourceImageSnapshot(snapshot, defaults = {}) {
+        if (!snapshot) {
+          return null;
+        }
+        const defaultWidth = Number.isFinite(defaults.width) ? defaults.width : null;
+        const defaultHeight = Number.isFinite(defaults.height) ? defaults.height : null;
+        const defaultOriginalWidth =
+          Number.isFinite(defaults.originalWidth) ? defaults.originalWidth : defaultWidth;
+        const defaultOriginalHeight =
+          Number.isFinite(defaults.originalHeight) ? defaults.originalHeight : defaultHeight;
+        let dataUrl = null;
+        let mimeType = null;
+        let bytes = null;
+        let width = defaultWidth;
+        let height = defaultHeight;
+        let originalWidth = defaultOriginalWidth;
+        let originalHeight = defaultOriginalHeight;
+        let scale = null;
+        let variant = SOURCE_IMAGE_VARIANT_ORIGINAL;
+        if (typeof snapshot === "string") {
+          dataUrl = snapshot;
+        } else if (snapshot && typeof snapshot === "object") {
+          dataUrl =
+            (typeof snapshot.dataUrl === "string" && snapshot.dataUrl) ||
+            (typeof snapshot.url === "string" && snapshot.url) ||
+            null;
+          mimeType = typeof snapshot.mimeType === "string" ? snapshot.mimeType : null;
+          bytes = Number.isFinite(snapshot.bytes) ? snapshot.bytes : null;
+          if (Number.isFinite(snapshot.width) && snapshot.width > 0) {
+            width = snapshot.width;
+          }
+          if (Number.isFinite(snapshot.height) && snapshot.height > 0) {
+            height = snapshot.height;
+          }
+          if (Number.isFinite(snapshot.originalWidth) && snapshot.originalWidth > 0) {
+            originalWidth = snapshot.originalWidth;
+          }
+          if (Number.isFinite(snapshot.originalHeight) && snapshot.originalHeight > 0) {
+            originalHeight = snapshot.originalHeight;
+          }
+          if (Number.isFinite(snapshot.scale) && snapshot.scale > 0) {
+            scale = snapshot.scale;
+          }
+          if (typeof snapshot.variant === "string" && snapshot.variant) {
+            variant = snapshot.variant;
+          } else if (snapshot.generated === true) {
+            variant = SOURCE_IMAGE_VARIANT_GENERATED;
+          }
+        }
+        if (typeof dataUrl !== "string" || dataUrl.length === 0) {
+          return null;
+        }
+        if (!mimeType) {
+          const match = /^data:([^;,]+)[;,]/.exec(dataUrl);
+          if (match) {
+            mimeType = match[1];
+          }
+        }
+        if (!Number.isFinite(bytes) || bytes <= 0) {
+          bytes = estimateDataUrlBytes(dataUrl);
+        }
+        if (!Number.isFinite(width) || width <= 0) {
+          width = defaultWidth || null;
+        }
+        if (!Number.isFinite(height) || height <= 0) {
+          height = defaultHeight || null;
+        }
+        if (!Number.isFinite(originalWidth) || originalWidth <= 0) {
+          originalWidth = width || defaultWidth || null;
+        }
+        if (!Number.isFinite(originalHeight) || originalHeight <= 0) {
+          originalHeight = height || defaultHeight || null;
+        }
+        const resolvedScale =
+          Number.isFinite(scale) && scale > 0
+            ? scale
+            : width && defaultWidth && defaultWidth > 0
+            ? width / defaultWidth
+            : 1;
+        return {
+          dataUrl,
+          mimeType: mimeType || "image/png",
+          bytes: Number.isFinite(bytes) && bytes > 0 ? bytes : null,
+          width: width || defaultWidth || originalWidth || null,
+          height: height || defaultHeight || originalHeight || null,
+          originalWidth: originalWidth || width || defaultWidth || null,
+          originalHeight: originalHeight || height || defaultHeight || null,
+          scale: resolvedScale,
+          variant:
+            variant === SOURCE_IMAGE_VARIANT_GENERATED
+              ? SOURCE_IMAGE_VARIANT_GENERATED
+              : SOURCE_IMAGE_VARIANT_ORIGINAL,
+        };
+      }
+
+      function hydrateSourceImageSnapshot(snapshot, defaults = {}, options = {}) {
+        const normalized = normalizeSourceImageSnapshot(snapshot, defaults);
+        if (!normalized) {
+          return null;
+        }
+        const image = new Image();
+        image.decoding = "async";
+        image.crossOrigin = "anonymous";
+        const record = {
+          ...normalized,
+          snapshot: normalized,
+          image,
+          ready: false,
+        };
+        const finalize = () => {
+          record.ready = true;
+          if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+            record.width = image.naturalWidth;
+            record.height = image.naturalHeight;
+          }
+          if (typeof options.onReady === "function") {
+            try {
+              options.onReady(record);
+            } catch (error) {
+              console.error("Source image onReady handler failed", error);
+            }
+          }
+        };
+        image.onload = finalize;
+        image.onerror = (error) => {
+          console.warn("Failed to load stored source image", error);
+        };
+        try {
+          image.src = normalized.dataUrl;
+        } catch (error) {
+          console.error("Unable to assign source image", error);
+        }
+        if (image.complete && image.naturalWidth > 0 && image.naturalHeight > 0) {
+          finalize();
+        }
+        return record;
+      }
+
+      function buildGeneratedSourceImageSnapshot(puzzle) {
+        if (!puzzle || !Number.isFinite(puzzle.width) || !Number.isFinite(puzzle.height)) {
+          return null;
+        }
+        const { width, height, regions, palette } = puzzle;
+        if (!Array.isArray(regions) || regions.length === 0) {
+          return null;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          return null;
+        }
+        const imageData = ctx.createImageData(width, height);
+        const data = imageData.data;
+        const paletteById = new Map();
+        for (const entry of palette || []) {
+          if (!entry || !Number.isFinite(entry.id)) continue;
+          let rgba = Array.isArray(entry.rgba) ? entry.rgba.slice(0, 3) : null;
+          if (!rgba && typeof entry.hex === "string" && entry.hex) {
+            rgba = hexToRgb(entry.hex);
+          }
+          if (!rgba) continue;
+          paletteById.set(entry.id, rgba);
+        }
+        for (const region of regions) {
+          if (!region || !Array.isArray(region.pixels)) continue;
+          const rgba = paletteById.get(region.colorId);
+          if (!rgba) continue;
+          for (const idx of region.pixels) {
+            const base = idx * 4;
+            data[base] = rgba[0];
+            data[base + 1] = rgba[1];
+            data[base + 2] = rgba[2];
+            data[base + 3] = 255;
+          }
+        }
+        ctx.putImageData(imageData, 0, 0);
+        let dataUrl = null;
+        try {
+          dataUrl = canvas.toDataURL("image/png");
+        } catch (error) {
+          console.warn("Failed to encode generated source image", error);
+          return null;
+        }
+        const bytes = estimateDataUrlBytes(dataUrl);
+        return {
+          dataUrl,
+          mimeType: "image/png",
+          bytes: Number.isFinite(bytes) && bytes > 0 ? bytes : null,
+          width,
+          height,
+          originalWidth: width,
+          originalHeight: height,
+          scale: 1,
+          variant: SOURCE_IMAGE_VARIANT_GENERATED,
+        };
+      }
+
       function applyPuzzleResult(data, metadata = {}) {
         disableSampleAutoload();
         const loadedIdRaw =
@@ -6854,6 +7146,12 @@
         const regionMap = regionMapSource instanceof Int32Array
           ? regionMapSource
           : new Int32Array(regionMapSource);
+        const sourceDefaults = {
+          width: data.width,
+          height: data.height,
+          originalWidth: Number.isFinite(data.originalWidth) ? data.originalWidth : data.width,
+          originalHeight: Number.isFinite(data.originalHeight) ? data.originalHeight : data.height,
+        };
         const metadataTitle =
           typeof metadata.title === "string" && metadata.title.trim() ? metadata.title.trim() : null;
         const completionLog =
@@ -6879,13 +7177,35 @@
             DEFAULT_STAGE_BACKGROUND_HEX,
           state.settings.stageBackgroundColor ?? DEFAULT_STAGE_BACKGROUND_HEX
         );
-        state.puzzle = {
+        const puzzle = {
           width: data.width,
           height: data.height,
           palette,
           regions,
           regionMap,
         };
+        state.puzzle = puzzle;
+        const sourceSnapshot = metadata.sourceImage ?? data.sourceImage;
+        let sourceImageRecord = hydrateSourceImageSnapshot(sourceSnapshot, sourceDefaults, {
+          onReady: () => {
+            if (state.puzzle === puzzle) {
+              renderPuzzle();
+            }
+          },
+        });
+        if (!sourceImageRecord) {
+          const fallbackSnapshot = buildGeneratedSourceImageSnapshot(puzzle);
+          if (fallbackSnapshot) {
+            sourceImageRecord = hydrateSourceImageSnapshot(fallbackSnapshot, sourceDefaults, {
+              onReady: () => {
+                if (state.puzzle === puzzle) {
+                  renderPuzzle();
+                }
+              },
+            });
+          }
+        }
+        puzzle.sourceImage = sourceImageRecord;
         state.renderCache = createRenderCache();
         state.puzzle.backgroundColor = backgroundHex;
         state.activeColor =
@@ -6898,6 +7218,7 @@
         const lastOptionsRaw = metadata.options ?? getCurrentOptions();
         const normalizedOptions = {
           ...lastOptionsRaw,
+          sourceImageMaxBytes: resolveSourceImageLimit(lastOptionsRaw?.sourceImageMaxBytes),
           algorithm: normalizeGenerationAlgorithm(lastOptionsRaw?.algorithm),
         };
         state.lastOptions = normalizedOptions;
@@ -6908,6 +7229,17 @@
             algorithmEl.value = targetAlgorithm;
           }
         }
+        if (sourceImageLimitSelect) {
+          const limitText = String(
+            Number.isFinite(normalizedOptions.sourceImageMaxBytes)
+              ? normalizedOptions.sourceImageMaxBytes
+              : DEFAULT_SOURCE_IMAGE_MAX_BYTES
+          );
+          if (sourceImageLimitSelect.value !== limitText) {
+            sourceImageLimitSelect.value = limitText;
+          }
+        }
+        updateOptionOutputs();
         const resolvedSettings = metadata.settings ?? data.settings;
         if (resolvedSettings) {
           applyGameplaySettings(resolvedSettings);
@@ -7106,6 +7438,23 @@
           }
           context.restore();
           return;
+        }
+        const renderScale = cache?.renderScale > 0 ? cache.renderScale : 1;
+        const puzzleImage = state.puzzle?.sourceImage;
+        if (puzzleImage?.image && puzzleImage.ready) {
+          const targetWidth = state.puzzle.width;
+          const targetHeight = state.puzzle.height;
+          if (targetWidth > 0 && targetHeight > 0) {
+            context.save();
+            context.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+            context.imageSmoothingEnabled = true;
+            try {
+              context.drawImage(puzzleImage.image, 0, 0, targetWidth, targetHeight);
+            } catch (error) {
+              console.warn("Failed to draw source image", error);
+            }
+            context.restore();
+          }
         }
         if (cache?.ready) {
           let drewFromLayer = false;
@@ -9446,6 +9795,15 @@
         if (typeof snapshot.sourceUrl === "string" && snapshot.sourceUrl) {
           payload.sourceUrl = snapshot.sourceUrl;
         }
+        const sourceImageSnapshot = normalizeSourceImageSnapshot(snapshot.sourceImage, {
+          width: payload.width,
+          height: payload.height,
+          originalWidth: payload.width,
+          originalHeight: payload.height,
+        });
+        if (sourceImageSnapshot) {
+          payload.sourceImage = sourceImageSnapshot;
+        }
         if (typeof snapshot.activeColor === "number" && Number.isFinite(snapshot.activeColor)) {
           payload.activeColor = snapshot.activeColor;
         }
@@ -9610,6 +9968,20 @@
           snapshot.regionMapPacked = regionMapPacked;
         } else if (puzzle.regionMap) {
           snapshot.regionMap = Array.from(puzzle.regionMap);
+        }
+        const sourceImageSnapshot = normalizeSourceImageSnapshot(
+          state.puzzle.sourceImage?.snapshot ?? state.puzzle.sourceImage,
+          {
+            width: puzzle.width,
+            height: puzzle.height,
+            originalWidth:
+              state.puzzle.sourceImage?.snapshot?.originalWidth ?? puzzle.width,
+            originalHeight:
+              state.puzzle.sourceImage?.snapshot?.originalHeight ?? puzzle.height,
+          }
+        );
+        if (sourceImageSnapshot) {
+          snapshot.sourceImage = sourceImageSnapshot;
         }
         return compactPuzzleSnapshot(snapshot) || snapshot;
       }
