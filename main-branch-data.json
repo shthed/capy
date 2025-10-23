@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "d15041c0cb5d055b81edfeb3fdaa5cd9aa05b1f9",
+      "shortSha": "d15041c",
+      "message": "Merge pull request #215 from shthed/codex/fix-default-quality-and-region-size\n\nDefault to medium detail with larger regions",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-23T10:40:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d15041c0cb5d055b81edfeb3fdaa5cd9aa05b1f9",
+      "prs": [
+        {
+          "number": 215,
+          "title": "Default to medium detail with larger regions",
+          "url": "https://github.com/shthed/capy/pull/215",
+          "branch": "codex/fix-default-quality-and-region-size"
+        }
+      ]
+    },
+    {
+      "sha": "f322c08728991e842035f7d4d8af7eec40793706",
+      "shortSha": "f322c08",
+      "message": "Default to medium detail with larger regions",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-23T10:17:08Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f322c08728991e842035f7d4d8af7eec40793706",
+      "prs": [
+        {
+          "number": 215,
+          "title": "Default to medium detail with larger regions",
+          "url": "https://github.com/shthed/capy/pull/215",
+          "branch": "codex/fix-default-quality-and-region-size"
+        }
+      ]
+    },
+    {
       "sha": "21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
       "shortSha": "21d619e",
       "message": "Merge pull request #212 from shthed/codex/explain-the-rendering-system\n\nRender puzzles over stored base image",
@@ -31,40 +63,8 @@
           "branch": "codex/explain-the-rendering-system"
         }
       ]
-    },
-    {
-      "sha": "ec8e1e27ed158a1478594b55b6e64fd7105c2486",
-      "shortSha": "ec8e1e2",
-      "message": "Integrate stored base image into WebGL and SVG renderers",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-22T13:41:39Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/ec8e1e27ed158a1478594b55b6e64fd7105c2486",
-      "prs": [
-        {
-          "number": 212,
-          "title": "Render puzzles over stored base image",
-          "url": "https://github.com/shthed/capy/pull/212",
-          "branch": "codex/explain-the-rendering-system"
-        }
-      ]
-    },
-    {
-      "sha": "04caee138dc3da127f6c4ee3f45e3b871f64e642",
-      "shortSha": "04caee1",
-      "message": "Merge pull request #211 from shthed/codex/add-minimised-output-format-download\n\nAdd compact puzzle export option",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-22T10:59:06Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/04caee138dc3da127f6c4ee3f45e3b871f64e642",
-      "prs": [
-        {
-          "number": 211,
-          "title": "Add compact puzzle export option",
-          "url": "https://github.com/shthed/capy/pull/211",
-          "branch": "codex/add-minimised-output-format-download"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-23T04:21:21Z",
-  "deploymentTimestamp": 1761193302505
+  "lastCommitDate": "2025-10-23T10:40:45Z",
+  "deploymentTimestamp": 1761216063096
 }

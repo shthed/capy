@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "branch": "codex/update-manage-saves-autosave-display",
+    "safeName": "codex-update-manage-saves-autosave-display",
+    "title": "Revamp Manage Saves autosave slot layout",
+    "number": 214,
+    "updatedAt": "2025-10-23T10:39:11Z",
+    "url": "https://github.com/shthed/capy/pull/214"
+  }
+]
