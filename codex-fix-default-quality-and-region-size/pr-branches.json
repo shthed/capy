@@ -1,0 +1,18 @@
+[
+  {
+    "branch": "codex/fix-default-quality-and-region-size",
+    "safeName": "codex-fix-default-quality-and-region-size",
+    "title": "Default to medium detail with larger regions",
+    "number": 215,
+    "updatedAt": "2025-10-23T10:17:23Z",
+    "url": "https://github.com/shthed/capy/pull/215"
+  },
+  {
+    "branch": "codex/update-manage-saves-autosave-display",
+    "safeName": "codex-update-manage-saves-autosave-display",
+    "title": "Revamp Manage Saves autosave slot layout",
+    "number": 214,
+    "updatedAt": "2025-10-23T05:22:06Z",
+    "url": "https://github.com/shthed/capy/pull/214"
+  }
+]

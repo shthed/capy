@@ -1,0 +1,250 @@
+{
+  "codex/fix-default-quality-and-region-size": [
+    {
+      "sha": "f322c08728991e842035f7d4d8af7eec40793706",
+      "shortSha": "f322c08",
+      "message": "Default to medium detail with larger regions",
+      "date": "2025-10-23T10:17:08Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f322c08728991e842035f7d4d8af7eec40793706",
+      "prs": [
+        {
+          "number": 215,
+          "title": "Default to medium detail with larger regions",
+          "url": "https://github.com/shthed/capy/pull/215",
+          "branch": "codex/fix-default-quality-and-region-size"
+        }
+      ]
+    },
+    {
+      "sha": "21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
+      "shortSha": "21d619e",
+      "message": "Merge pull request #212 from shthed/codex/explain-the-rendering-system\n\nRender puzzles over stored base image",
+      "date": "2025-10-23T04:21:21Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
+      "prs": [
+        {
+          "number": 215,
+          "title": "Default to medium detail with larger regions",
+          "url": "https://github.com/shthed/capy/pull/215",
+          "branch": "codex/fix-default-quality-and-region-size"
+        }
+      ]
+    },
+    {
+      "sha": "42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "shortSha": "42ddec0",
+      "message": "Relocate stored image size control",
+      "date": "2025-10-23T04:16:50Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "prs": [
+        {
+          "number": 215,
+          "title": "Default to medium detail with larger regions",
+          "url": "https://github.com/shthed/capy/pull/215",
+          "branch": "codex/fix-default-quality-and-region-size"
+        }
+      ]
+    },
+    {
+      "sha": "ec8e1e27ed158a1478594b55b6e64fd7105c2486",
+      "shortSha": "ec8e1e2",
+      "message": "Integrate stored base image into WebGL and SVG renderers",
+      "date": "2025-10-22T13:41:39Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ec8e1e27ed158a1478594b55b6e64fd7105c2486",
+      "prs": [
+        {
+          "number": 215,
+          "title": "Default to medium detail with larger regions",
+          "url": "https://github.com/shthed/capy/pull/215",
+          "branch": "codex/fix-default-quality-and-region-size"
+        }
+      ]
+    }
+  ],
+  "codex-fix-default-quality-and-region-size": [
+    {
+      "sha": "f322c08728991e842035f7d4d8af7eec40793706",
+      "shortSha": "f322c08",
+      "message": "Default to medium detail with larger regions",
+      "date": "2025-10-23T10:17:08Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f322c08728991e842035f7d4d8af7eec40793706",
+      "prs": [
+        {
+          "number": 215,
+          "title": "Default to medium detail with larger regions",
+          "url": "https://github.com/shthed/capy/pull/215",
+          "branch": "codex/fix-default-quality-and-region-size"
+        }
+      ]
+    },
+    {
+      "sha": "21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
+      "shortSha": "21d619e",
+      "message": "Merge pull request #212 from shthed/codex/explain-the-rendering-system\n\nRender puzzles over stored base image",
+      "date": "2025-10-23T04:21:21Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
+      "prs": [
+        {
+          "number": 215,
+          "title": "Default to medium detail with larger regions",
+          "url": "https://github.com/shthed/capy/pull/215",
+          "branch": "codex/fix-default-quality-and-region-size"
+        }
+      ]
+    },
+    {
+      "sha": "42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "shortSha": "42ddec0",
+      "message": "Relocate stored image size control",
+      "date": "2025-10-23T04:16:50Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "prs": [
+        {
+          "number": 215,
+          "title": "Default to medium detail with larger regions",
+          "url": "https://github.com/shthed/capy/pull/215",
+          "branch": "codex/fix-default-quality-and-region-size"
+        }
+      ]
+    },
+    {
+      "sha": "ec8e1e27ed158a1478594b55b6e64fd7105c2486",
+      "shortSha": "ec8e1e2",
+      "message": "Integrate stored base image into WebGL and SVG renderers",
+      "date": "2025-10-22T13:41:39Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ec8e1e27ed158a1478594b55b6e64fd7105c2486",
+      "prs": [
+        {
+          "number": 215,
+          "title": "Default to medium detail with larger regions",
+          "url": "https://github.com/shthed/capy/pull/215",
+          "branch": "codex/fix-default-quality-and-region-size"
+        }
+      ]
+    }
+  ],
+  "codex/update-manage-saves-autosave-display": [
+    {
+      "sha": "dae00a6b355bfa02e771809c2ca0ed9a5ff98573",
+      "shortSha": "dae00a6",
+      "message": "Streamline autosave slot and manual save cards",
+      "date": "2025-10-23T05:22:04Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/dae00a6b355bfa02e771809c2ca0ed9a5ff98573",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
+      "sha": "77af5a38e7a621f8bb804e92a7e9da2ad4c3cbca",
+      "shortSha": "77af5a3",
+      "message": "Highlight autosave slot in saves manager",
+      "date": "2025-10-23T04:44:25Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/77af5a38e7a621f8bb804e92a7e9da2ad4c3cbca",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
+      "sha": "21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
+      "shortSha": "21d619e",
+      "message": "Merge pull request #212 from shthed/codex/explain-the-rendering-system\n\nRender puzzles over stored base image",
+      "date": "2025-10-23T04:21:21Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
+      "sha": "42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "shortSha": "42ddec0",
+      "message": "Relocate stored image size control",
+      "date": "2025-10-23T04:16:50Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    }
+  ],
+  "codex-update-manage-saves-autosave-display": [
+    {
+      "sha": "dae00a6b355bfa02e771809c2ca0ed9a5ff98573",
+      "shortSha": "dae00a6",
+      "message": "Streamline autosave slot and manual save cards",
+      "date": "2025-10-23T05:22:04Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/dae00a6b355bfa02e771809c2ca0ed9a5ff98573",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
+      "sha": "77af5a38e7a621f8bb804e92a7e9da2ad4c3cbca",
+      "shortSha": "77af5a3",
+      "message": "Highlight autosave slot in saves manager",
+      "date": "2025-10-23T04:44:25Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/77af5a38e7a621f8bb804e92a7e9da2ad4c3cbca",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
+      "sha": "21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
+      "shortSha": "21d619e",
+      "message": "Merge pull request #212 from shthed/codex/explain-the-rendering-system\n\nRender puzzles over stored base image",
+      "date": "2025-10-23T04:21:21Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
+      "sha": "42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "shortSha": "42ddec0",
+      "message": "Relocate stored image size control",
+      "date": "2025-10-23T04:16:50Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    }
+  ]
+}
