@@ -11415,7 +11415,10 @@
             ? `${doneCount} regions filled`
             : "No progress yet";
         const timestampValue = Number(record?.timestamp);
-        const timestamp = Number.isFinite(timestampValue) && timestampValue > 0 ? new Date(timestampValue) : null;
+        const timestamp =
+          Number.isFinite(timestampValue) && timestampValue > 0
+            ? new Date(timestampValue)
+            : null;
         const storageBytes = estimateAutosaveBytes(record);
         const storageLabel = storageBytes > 0 ? formatBytes(storageBytes) : "";
         let trackedEntry = null;
@@ -11630,7 +11633,7 @@
                 loadedSaveId: null,
               })
             ) {
-              state.sourceUrl = record.data.sourceUrl ?? DEFAULT_GAME_SOURCE.path ?? state.sourceUrl ?? null;
+              state.sourceUrl = record.data.sourceUrl ?? null;
               state.sourceTitle = resolvedTitle;
               state.loadedSaveId = null;
               state.autosave = record;
