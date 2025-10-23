@@ -107,8 +107,8 @@ Tweaking the deployment:
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or previously exported JSON puzzles straight into the generator pipeline.
 - **Saves sheet quick start.** The Saves panel surfaces quick actions to import a new image or JSON puzzle and reload the bundled Capybara Springs board. A **Reset puzzle progress** control clears the board without touching autosaves or manual snapshots.
-- **Built-in capybara sample.** The "Capybara Springs" illustration loads automatically on boot (when no autosave exists) in the high detail preset so players can start painting immediately.
-- **Sample detail presets.** Low/Medium/High chips tune colour counts, resize targets, k-means iterations, and smoothing passes so QA can switch between breezy ≈26-region boards, balanced ≈42-region sessions, or high-fidelity ≈140-region runs.
+- **Built-in capybara sample.** The "Capybara Springs" illustration loads automatically on boot (when no autosave exists) in the medium detail preset so players can start painting immediately.
+- **Sample detail presets.** Low/Medium/High chips tune colour counts, resize targets, k-means iterations, and smoothing passes so QA can switch between breezy ≈26-region boards, balanced ≈20-region sessions, or high-fidelity ≈140-region runs.
 - **Detailed debug logging.** The Help panel’s live log announces sample loads, fills, hints, zooms, background tweaks, fullscreen toggles, and ignored clicks so QA can confirm the flow without DevTools.
 - **Embedded documentation.** The Help panel loads the hosted README (`https://shthed.github.io/capy/README`) for in-app gameplay and contributor notes.
 - **Configurable generator.** Choose between local algorithms (k-means clustering or the posterize-and-merge pass today, with
@@ -127,7 +127,7 @@ The Low/Medium/High chips in the Generator and Settings panels toggle tuned gene
 | Preset | Colours | Approx. regions | Min region | Resize edge | Sample rate | Iterations | Smoothing | Use it when… |
 | ------ | ------- | --------------- | ---------- | ----------- | ----------- | ---------- | --------- | ------------ |
 | Low detail | 18 | ≈26 | 15 px² | 1216 px | 90% | 20 | 1 | Quick demos that favour broad shapes while keeping characters readable. |
-| Medium detail | 26 | ≈42 | 8 px² | 1408 px | 95% | 24 | 1 | Balanced play sessions that capture lagoon reflections without overwhelming region counts. |
+| Medium detail | 26 | ≈20 | 100 px² | 1408 px | 95% | 24 | 1 | Balanced play sessions that capture lagoon reflections without overwhelming region counts. |
 | High detail | 32 | ≈140 | 3 px² | 1536 px | 100% | 28 | 1 | Showcase captures where fur bands, ripples, and foliage clusters should stay distinct. |
 
 Each preset reloads the sample immediately, updates generator sliders, and stamps the debug log. The remembered preset persists across sessions once you switch.
