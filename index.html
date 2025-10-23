@@ -2708,14 +2708,14 @@
           id: "medium",
           label: "Medium detail",
           shortLabel: "Medium",
-          summary: "Medium detail • 26 colours / 8 px² min regions / 1408 px resize • ≈42 regions",
+          summary: "Medium detail • 26 colours / 100 px² min regions / 1408 px resize • ≈20 regions",
           ariaLabel:
-            "Medium detail – 26 colours, 8 pixel minimum regions, 1408px resize target, about 42 regions",
+            "Medium detail – 26 colours, 100 pixel minimum regions, 1408px resize target, about 20 regions",
           logDescriptor: "medium detail",
-          approxRegions: 42,
+          approxRegions: 20,
           settings: {
             targetColors: 26,
-            minRegion: 8,
+            minRegion: 100,
             maxSize: 1408,
             sampleRate: 95,
             kmeansIters: 24,
@@ -2745,7 +2745,7 @@
           },
         },
       };
-      const DEFAULT_SAMPLE_DETAIL = "high";
+      const DEFAULT_SAMPLE_DETAIL = "medium";
 
       function drawOutlines(ctx) {
         if (!state.puzzle || !ctx) return;
