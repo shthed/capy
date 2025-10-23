@@ -1191,12 +1191,6 @@
         font-size: 1.1rem;
       }
 
-      .save-manager-description {
-        margin: 0;
-        color: var(--theme-muted-text);
-        font-size: 0.95rem;
-      }
-
       .save-manager-empty {
         margin: 0;
         font-size: 0.85rem;
@@ -1398,11 +1392,32 @@
         border: 1px solid rgba(59, 130, 246, 0.2);
       }
 
+      .save-entry--autosave {
+        border-color: rgba(250, 204, 21, 0.4);
+        box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.2);
+      }
+
+      .save-entry--autosave[data-autosave-ready="false"] {
+        opacity: 0.85;
+      }
+
       .save-entry header {
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 12px;
+      }
+
+      .save-entry-badge {
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(250, 204, 21, 0.2);
+        color: rgba(253, 224, 71, 0.9);
+        font-weight: 600;
+        white-space: nowrap;
       }
 
       .save-entry time {
@@ -1413,12 +1428,6 @@
       .save-entry[data-loaded="true"] {
         border-color: rgba(96, 165, 250, 0.6);
         box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35);
-      }
-
-      .save-manager-status {
-        margin: 0 0 8px;
-        font-size: 0.9rem;
-        color: rgba(148, 197, 255, 0.9);
       }
 
       .save-entry-meta {
@@ -1586,12 +1595,15 @@
       </div>
       <div class="sheet-body">
         <section class="sheet-section" aria-labelledby="saveStartHeading">
-          <h3 id="saveStartHeading">Start a puzzle</h3>
-          <p class="save-manager-description">
-            Import a new image or JSON puzzle, or reload the bundled Capybara Springs sample.
-          </p>
+          <h3 id="saveStartHeading" class="visually-hidden">Puzzle sources</h3>
           <div class="save-start-actions">
-            <button id="selectImage" type="button">Import image or JSON</button>
+            <button
+              id="selectImage"
+              type="button"
+              aria-label="Upload image or JSON puzzle"
+            >
+              Upload Image
+            </button>
             <button
               id="samplePuzzle"
               type="button"
@@ -1608,11 +1620,11 @@
           aria-labelledby="saveManagerTitle"
           data-save-section="dialog"
         >
-          <p class="save-manager-description">
-            Autosaves keep tracking progress in this browser. Load a snapshot to keep rewriting that slot, or capture a
-            manual save to bookmark a favourite moment without stopping play.
-          </p>
-          <p class="save-manager-status" data-save-autosave-status hidden></p>
+          <article
+            class="save-entry save-entry--autosave"
+            data-save-autosave-slot
+            data-save-id="autosave"
+          ></article>
           <button type="button" data-save-snapshot disabled>Save current puzzle</button>
           <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
           <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
@@ -2227,7 +2239,9 @@
       const clearDebugLogButton = document.getElementById("clearDebugLog");
       const saveStorageSummary = document.getElementById("saveStorageSummary");
       const deleteAllSavesButton = document.getElementById("deleteAllSaves");
-      const saveAutosaveStatus = document.querySelector("[data-save-autosave-status]");
+      const autosaveContainers = Array.from(
+        document.querySelectorAll("[data-save-autosave-slot]")
+      );
       const viewportEl = document.getElementById("viewport");
       const canvasStage = document.getElementById("canvasStage");
       const canvasTransform = document.getElementById("canvasTransform");
@@ -2333,6 +2347,7 @@
       }
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
+      const AUTOSAVE_MANAGEMENT_ID = "autosave";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
@@ -3515,6 +3530,7 @@
         },
         previewVisible: false,
         saves: gameSaveManager.hydrate(),
+        autosave: loadAutosave(),
         loadedSaveId: null,
         previewImageData: null,
         renderCache: createRenderCache(),
@@ -4833,6 +4849,12 @@
       for (const list of saveListContainers) {
         list.addEventListener("click", handleSaveListClick);
       }
+
+      for (const container of autosaveContainers) {
+        container.addEventListener("click", handleSaveListClick);
+      }
+
+      refreshAutosaveSlot();
 
       colorCountEl.addEventListener("input", updateOptionOutputs);
       minRegionEl.addEventListener("input", updateOptionOutputs);
@@ -7284,7 +7306,7 @@
             `Loaded ${descriptor} (${data.width}×${data.height}, ${paletteCount} colours, ${regionCount} regions)`
           );
         }
-        updateSaveAutosaveStatus();
+        refreshAutosaveSlot();
         scheduleAutosave("puzzle-load", { immediate: true });
         return true;
       }
@@ -10047,6 +10069,8 @@
             }
           }
         }
+        state.autosave = record;
+        refreshAutosaveSlot();
         updateStorageUsageSummary();
         return record;
       }
@@ -11320,6 +11344,143 @@
         return item;
       }
 
+      function resolveAutosaveRecord() {
+        if (state.autosave && state.autosave.data) {
+          return state.autosave;
+        }
+        const stored = loadAutosave();
+        if (stored && stored.data) {
+          state.autosave = stored;
+          return stored;
+        }
+        state.autosave = null;
+        return null;
+      }
+
+      function estimateAutosaveBytes(record) {
+        if (!record || !record.data) return 0;
+        try {
+          const encoded = encodeAutosaveStorageRecord(record);
+          if (!encoded) return 0;
+          return getStoredStringSize(JSON.stringify(encoded));
+        } catch (error) {
+          console.error("Failed to estimate autosave size", error);
+          return 0;
+        }
+      }
+
+      function describeAutosaveSlot() {
+        const record = resolveAutosaveRecord();
+        const data = record?.data ?? null;
+        const titleCandidates = [
+          typeof record?.title === "string" ? record.title.trim() : "",
+          typeof data?.title === "string" ? data.title.trim() : "",
+          typeof state.sourceTitle === "string" ? state.sourceTitle.trim() : "",
+          getDefaultGameTitle(),
+        ];
+        const resolvedTitle = titleCandidates.find((value) => value);
+        const title = resolvedTitle || "Autosave";
+        const doneCount = Array.isArray(data?.filled)
+          ? data.filled.length
+          : state.filled instanceof Set
+          ? state.filled.size
+          : 0;
+        const totalCount = Array.isArray(data?.regions)
+          ? data.regions.length
+          : Array.isArray(state.puzzle?.regions)
+          ? state.puzzle.regions.length
+          : 0;
+        const progressText =
+          totalCount > 0
+            ? `${doneCount} of ${totalCount} regions filled`
+            : doneCount > 0
+            ? `${doneCount} regions filled`
+            : "No progress yet";
+        const timestampValue = Number(record?.timestamp);
+        const timestamp = Number.isFinite(timestampValue) && timestampValue > 0 ? new Date(timestampValue) : null;
+        const storageBytes = estimateAutosaveBytes(record);
+        const storageLabel = storageBytes > 0 ? formatBytes(storageBytes) : "";
+        let statusText = record && record.data
+          ? "Updates automatically while you play."
+          : "Loads the demo puzzle until you create your own autosave.";
+        if (state.loadedSaveId) {
+          const loadedEntry = state.saves.find((item) => item.id === state.loadedSaveId);
+          if (loadedEntry) {
+            const loadedMetadata = describeSaveEntry(loadedEntry);
+            statusText = `Tracking manual save “${loadedMetadata.title}”.`;
+          }
+        }
+        const ariaLabelParts = [title, progressText];
+        if (timestamp) {
+          ariaLabelParts.push(`Saved ${timestamp.toLocaleString()}`);
+        }
+        if (storageLabel) {
+          ariaLabelParts.push(`Storage ${storageLabel}`);
+        }
+        return {
+          record,
+          title,
+          progressText,
+          timestamp,
+          storageLabel,
+          statusText,
+          ariaLabel: ariaLabelParts.join(" – "),
+          ready: Boolean(record && record.data),
+        };
+      }
+
+      function refreshAutosaveSlot() {
+        if (!Array.isArray(autosaveContainers) || autosaveContainers.length === 0) {
+          return;
+        }
+        const metadata = describeAutosaveSlot();
+        for (const container of autosaveContainers) {
+          if (!(container instanceof HTMLElement)) continue;
+          container.innerHTML = "";
+          container.dataset.saveId = AUTOSAVE_MANAGEMENT_ID;
+          container.dataset.autosaveReady = metadata.ready ? "true" : "false";
+          container.setAttribute("aria-label", metadata.ariaLabel);
+          const header = document.createElement("header");
+          const title = document.createElement("strong");
+          title.textContent = metadata.title;
+          header.appendChild(title);
+          const badge = document.createElement("span");
+          badge.className = "save-entry-badge";
+          badge.textContent = "Autosave";
+          header.appendChild(badge);
+          container.appendChild(header);
+          const meta = document.createElement("div");
+          meta.className = "save-entry-meta";
+          const progress = document.createElement("span");
+          progress.textContent = metadata.progressText;
+          meta.appendChild(progress);
+          const saved = document.createElement("span");
+          saved.textContent = metadata.timestamp
+            ? `Saved ${metadata.timestamp.toLocaleString()}`
+            : "Not yet saved";
+          meta.appendChild(saved);
+          if (metadata.storageLabel) {
+            const storage = document.createElement("span");
+            storage.className = "save-entry-storage";
+            storage.textContent = `Storage ${metadata.storageLabel}`;
+            meta.appendChild(storage);
+          }
+          container.appendChild(meta);
+          if (metadata.statusText) {
+            const status = document.createElement("div");
+            status.className = "save-entry-status";
+            status.textContent = metadata.statusText;
+            container.appendChild(status);
+          }
+          const actions = document.createElement("div");
+          actions.className = "save-actions";
+          const actionLabel = metadata.ready ? "Resume" : "Start demo puzzle";
+          const resume = createSaveActionButton("load", actionLabel);
+          actions.appendChild(resume);
+          container.appendChild(actions);
+        }
+      }
+
       function refreshGameSelection() {
         if (!gameSelectionList) return;
         gameSelectionList.innerHTML = "";
@@ -11367,13 +11528,15 @@
       }
 
       function refreshSaveList() {
-        const hasEntries = Array.isArray(state.saves) && state.saves.length > 0;
+        const manualEntries = Array.isArray(state.saves) ? state.saves : [];
+        const hasManualEntries = manualEntries.length > 0;
+        refreshAutosaveSlot();
         for (const list of saveListContainers) {
           if (!list) continue;
           list.innerHTML = "";
-          if (hasEntries) {
+          if (hasManualEntries) {
             const fragment = document.createDocumentFragment();
-            for (const entry of state.saves) {
+            for (const entry of manualEntries) {
               fragment.appendChild(createSaveManagementItem(entry));
             }
             list.appendChild(fragment);
@@ -11381,29 +11544,10 @@
         }
         for (const emptyState of saveListEmptyStates) {
           if (!emptyState) continue;
-          emptyState.hidden = hasEntries;
+          emptyState.hidden = hasManualEntries;
         }
         updateCommandStates();
-        updateSaveAutosaveStatus();
         refreshGameSelection();
-      }
-
-      function updateSaveAutosaveStatus() {
-        if (!saveAutosaveStatus) return;
-        const loadedId = typeof state.loadedSaveId === "string" ? state.loadedSaveId : null;
-        const saves = Array.isArray(state.saves) ? state.saves : [];
-        if (loadedId) {
-          const entry = saves.find((item) => item.id === loadedId);
-          if (entry) {
-            const metadata = describeSaveEntry(entry);
-            saveAutosaveStatus.hidden = false;
-            saveAutosaveStatus.textContent = `Currently autosaving “${metadata.title}”. Manual saves update this slot.`;
-            return;
-          }
-        }
-        saveAutosaveStatus.hidden = false;
-        saveAutosaveStatus.textContent =
-          "Autosave captures the active puzzle until you load or create a manual save.";
       }
 
       function persistSaves() {
@@ -11415,6 +11559,42 @@
       }
 
       function loadSaveEntry(id) {
+        if (id === AUTOSAVE_MANAGEMENT_ID) {
+          const record = resolveAutosaveRecord();
+          if (record && record.data) {
+            const resolvedTitle =
+              (typeof record.title === "string" && record.title.trim()) ||
+              (typeof record.data.title === "string" && record.data.title.trim()) ||
+              state.sourceTitle ||
+              getDefaultGameTitle();
+            if (
+              applyPuzzleResult(record.data, {
+                options: record.data.options,
+                activeColor: record.data.activeColor,
+                backgroundColor: record.data.backgroundColor,
+                stageBackgroundColor: record.data.stageBackgroundColor,
+                viewport: record.data.viewport,
+                settings: record.data.settings,
+                title: resolvedTitle,
+                loadedSaveId: null,
+              })
+            ) {
+              state.sourceUrl = record.data.sourceUrl ?? DEFAULT_GAME_SOURCE.path ?? state.sourceUrl ?? null;
+              state.sourceTitle = resolvedTitle;
+              state.loadedSaveId = null;
+              state.autosave = record;
+              hideStartScreen();
+              refreshSaveList();
+              logDebug(`Loaded autosave: ${resolvedTitle}`);
+            }
+            return;
+          }
+          loadSamplePuzzle({ announce: true });
+          state.loadedSaveId = null;
+          refreshSaveList();
+          logDebug("Loaded demo puzzle from autosave slot");
+          return;
+        }
         const entry = state.saves.find((item) => item.id === id);
         if (!entry) return;
         if (
@@ -11453,6 +11633,7 @@
         gameSaveManager.clear();
         state.saves = [];
         state.loadedSaveId = null;
+        state.autosave = null;
         refreshSaveList();
         try {
           localStorage.removeItem(AUTOSAVE_STORAGE_KEY);

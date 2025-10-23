@@ -106,7 +106,7 @@ Tweaking the deployment:
 ### Headline Features
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or previously exported JSON puzzles straight into the generator pipeline.
-- **Saves sheet quick start.** The Saves panel surfaces quick actions to import a new image or JSON puzzle and reload the bundled Capybara Springs board. A **Reset puzzle progress** control clears the board without touching autosaves or manual snapshots.
+- **Saves sheet quick start.** The Saves panel opens with an **Upload Image** button and a dedicated autosave slot that always reflects the current puzzle (falling back to the bundled Capybara Springs demo when no save exists). Manual snapshot tools and the **Reset puzzle progress** control sit just below so you can bookmark or rewind without digging through other menus.
 - **Built-in capybara sample.** The "Capybara Springs" illustration loads automatically on boot (when no autosave exists) in the high detail preset so players can start painting immediately.
 - **Sample detail presets.** Low/Medium/High chips tune colour counts, resize targets, k-means iterations, and smoothing passes so QA can switch between breezy ≈26-region boards, balanced ≈42-region sessions, or high-fidelity ≈140-region runs.
 - **Detailed debug logging.** The Help panel’s live log announces sample loads, fills, hints, zooms, background tweaks, fullscreen toggles, and ignored clicks so QA can confirm the flow without DevTools.
