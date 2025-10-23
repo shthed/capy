@@ -1,6 +1,54 @@
 {
   "commits": [
     {
+      "sha": "395afb36f53f63c568fe993f7e639e833963945b",
+      "shortSha": "395afb3",
+      "message": "Merge pull request #214 from shthed/codex/update-manage-saves-autosave-display\n\nRevamp Manage Saves autosave slot layout",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-23T23:23:03Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/395afb36f53f63c568fe993f7e639e833963945b",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
+      "sha": "63b8cc21a37509c8eda598a466605f1d56e8bd23",
+      "shortSha": "63b8cc2",
+      "message": "Merge branch 'main' into codex/update-manage-saves-autosave-display",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-23T23:22:49Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/63b8cc21a37509c8eda598a466605f1d56e8bd23",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
+      "sha": "bf212c6abbd387346455e505d3d938f4194a5d0e",
+      "shortSha": "bf212c6",
+      "message": "Align autosave source URL handling",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-23T23:13:22Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/bf212c6abbd387346455e505d3d938f4194a5d0e",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
       "sha": "d15041c0cb5d055b81edfeb3fdaa5cd9aa05b1f9",
       "shortSha": "d15041c",
       "message": "Merge pull request #215 from shthed/codex/fix-default-quality-and-region-size\n\nDefault to medium detail with larger regions",
@@ -15,56 +63,8 @@
           "branch": "codex/fix-default-quality-and-region-size"
         }
       ]
-    },
-    {
-      "sha": "f322c08728991e842035f7d4d8af7eec40793706",
-      "shortSha": "f322c08",
-      "message": "Default to medium detail with larger regions",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-23T10:17:08Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/f322c08728991e842035f7d4d8af7eec40793706",
-      "prs": [
-        {
-          "number": 215,
-          "title": "Default to medium detail with larger regions",
-          "url": "https://github.com/shthed/capy/pull/215",
-          "branch": "codex/fix-default-quality-and-region-size"
-        }
-      ]
-    },
-    {
-      "sha": "21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
-      "shortSha": "21d619e",
-      "message": "Merge pull request #212 from shthed/codex/explain-the-rendering-system\n\nRender puzzles over stored base image",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-23T04:21:21Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/21d619e33f0ab8b91ab86a57fe64088a2f2fd900",
-      "prs": [
-        {
-          "number": 212,
-          "title": "Render puzzles over stored base image",
-          "url": "https://github.com/shthed/capy/pull/212",
-          "branch": "codex/explain-the-rendering-system"
-        }
-      ]
-    },
-    {
-      "sha": "42ddec0a0b13a635d6362f1b2aad91fd2a057564",
-      "shortSha": "42ddec0",
-      "message": "Relocate stored image size control",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-23T04:16:50Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/42ddec0a0b13a635d6362f1b2aad91fd2a057564",
-      "prs": [
-        {
-          "number": 212,
-          "title": "Render puzzles over stored base image",
-          "url": "https://github.com/shthed/capy/pull/212",
-          "branch": "codex/explain-the-rendering-system"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-23T10:40:45Z",
-  "deploymentTimestamp": 1761216063096
+  "lastCommitDate": "2025-10-23T23:23:03Z",
+  "deploymentTimestamp": 1761261800231
 }

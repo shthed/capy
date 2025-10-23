@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "d15041c0cb5d055b81edfeb3fdaa5cd9aa05b1f9",
-    "message": "Merge pull request #215 from shthed/codex/fix-default-quality-and-region-size\n\nDefault to medium detail with larger regions",
+    "commit": "395afb36f53f63c568fe993f7e639e833963945b",
+    "message": "Merge pull request #214 from shthed/codex/update-manage-saves-autosave-display\n\nRevamp Manage Saves autosave slot layout",
     "actor": "shthed",
-    "deployedAt": "2025-10-23T18:40:45+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/d15041c0cb5d055b81edfeb3fdaa5cd9aa05b1f9",
+    "deployedAt": "2025-10-24T07:23:03+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/395afb36f53f63c568fe993f7e639e833963945b",
     "key": "main"
-  },
-  "codex-update-manage-saves-autosave-display": {
-    "key": "codex-update-manage-saves-autosave-display",
-    "branch": "codex/update-manage-saves-autosave-display",
-    "safeName": "codex-update-manage-saves-autosave-display",
-    "commit": "bf212c6abbd387346455e505d3d938f4194a5d0e",
-    "message": "Align autosave source URL handling",
-    "actor": "shthed",
-    "deployedAt": "2025-10-24T07:13:22+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/bf212c6abbd387346455e505d3d938f4194a5d0e"
   }
 }
