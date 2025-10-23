@@ -13,10 +13,10 @@
     "key": "codex-explain-the-rendering-system",
     "branch": "codex/explain-the-rendering-system",
     "safeName": "codex-explain-the-rendering-system",
-    "commit": "ec8e1e27ed158a1478594b55b6e64fd7105c2486",
-    "message": "Integrate stored base image into WebGL and SVG renderers",
+    "commit": "42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+    "message": "Relocate stored image size control",
     "actor": "shthed",
-    "deployedAt": "2025-10-22T21:41:39+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/ec8e1e27ed158a1478594b55b6e64fd7105c2486"
+    "deployedAt": "2025-10-23T12:16:50+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/42ddec0a0b13a635d6362f1b2aad91fd2a057564"
   }
 }

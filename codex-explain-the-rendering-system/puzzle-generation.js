@@ -512,7 +512,7 @@ async function compressCanvasImage(canvas, options = {}) {
     ? [0.92, 0.82, 0.72, 0.62, 0.52, 0.42, 0.32, 0.25, 0.18, 0.1]
     : [0.92];
   const scaleLevels = maxBytes ? [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4] : [1];
-  const formats = ["image/webp", "image/jpeg", "image/png"];
+  const formats = ["image/png", "image/webp", "image/jpeg"];
   let best = null;
   for (const scale of scaleLevels) {
     const workingCanvas = scale === 1 ? canvas : resizeCanvas(canvas, scale);
@@ -555,11 +555,21 @@ async function compressCanvasImage(canvas, options = {}) {
           height: workingCanvas.height,
           scale,
         };
-        if (!best || (candidate.bytes != null && (best.bytes == null || candidate.bytes < best.bytes))) {
-          best = candidate;
-        }
         if (!maxBytes) {
-          return candidate;
+          const candidateBytes = candidate.bytes;
+          const bestBytes = best?.bytes;
+          const candidateBeatsBest =
+            candidateBytes != null && (bestBytes == null || candidateBytes > bestBytes);
+          if (!best || candidateBeatsBest) {
+            best = candidate;
+          }
+          continue;
+        }
+        if (
+          !best ||
+          (candidate.bytes != null && (best.bytes == null || candidate.bytes < best.bytes))
+        ) {
+          best = candidate;
         }
         if (candidate.bytes != null && candidate.bytes <= maxBytes) {
           return candidate;

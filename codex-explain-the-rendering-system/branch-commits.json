@@ -1,6 +1,21 @@
 {
   "codex/explain-the-rendering-system": [
     {
+      "sha": "42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "shortSha": "42ddec0",
+      "message": "Relocate stored image size control",
+      "date": "2025-10-23T04:16:50Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "prs": [
+        {
+          "number": 212,
+          "title": "Render puzzles over stored base image",
+          "url": "https://github.com/shthed/capy/pull/212",
+          "branch": "codex/explain-the-rendering-system"
+        }
+      ]
+    },
+    {
       "sha": "ec8e1e27ed158a1478594b55b6e64fd7105c2486",
       "shortSha": "ec8e1e2",
       "message": "Integrate stored base image into WebGL and SVG renderers",
@@ -36,21 +51,6 @@
       "message": "Improve compact export packing and compression",
       "date": "2025-10-22T10:56:06Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/0e11c02ee83216b765af5dde2b110119d98294ec",
-      "prs": [
-        {
-          "number": 212,
-          "title": "Render puzzles over stored base image",
-          "url": "https://github.com/shthed/capy/pull/212",
-          "branch": "codex/explain-the-rendering-system"
-        }
-      ]
-    },
-    {
-      "sha": "c75b01c7e42c5f0f985110fd51466b2ef18b80a1",
-      "shortSha": "c75b01c",
-      "message": "Add compact puzzle export format",
-      "date": "2025-10-22T10:29:30Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/c75b01c7e42c5f0f985110fd51466b2ef18b80a1",
       "prs": [
         {
           "number": 212,
@@ -63,6 +63,21 @@
   ],
   "codex-explain-the-rendering-system": [
     {
+      "sha": "42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "shortSha": "42ddec0",
+      "message": "Relocate stored image size control",
+      "date": "2025-10-23T04:16:50Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/42ddec0a0b13a635d6362f1b2aad91fd2a057564",
+      "prs": [
+        {
+          "number": 212,
+          "title": "Render puzzles over stored base image",
+          "url": "https://github.com/shthed/capy/pull/212",
+          "branch": "codex/explain-the-rendering-system"
+        }
+      ]
+    },
+    {
       "sha": "ec8e1e27ed158a1478594b55b6e64fd7105c2486",
       "shortSha": "ec8e1e2",
       "message": "Integrate stored base image into WebGL and SVG renderers",
@@ -98,21 +113,6 @@
       "message": "Improve compact export packing and compression",
       "date": "2025-10-22T10:56:06Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/0e11c02ee83216b765af5dde2b110119d98294ec",
-      "prs": [
-        {
-          "number": 212,
-          "title": "Render puzzles over stored base image",
-          "url": "https://github.com/shthed/capy/pull/212",
-          "branch": "codex/explain-the-rendering-system"
-        }
-      ]
-    },
-    {
-      "sha": "c75b01c7e42c5f0f985110fd51466b2ef18b80a1",
-      "shortSha": "c75b01c",
-      "message": "Add compact puzzle export format",
-      "date": "2025-10-22T10:29:30Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/c75b01c7e42c5f0f985110fd51466b2ef18b80a1",
       "prs": [
         {
           "number": 212,
