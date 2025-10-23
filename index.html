@@ -1630,6 +1630,20 @@
         <section class="sheet-section" aria-labelledby="storageHeading">
           <h3 id="storageHeading">Save storage</h3>
           <p id="saveStorageSummary" class="control-note"></p>
+          <label class="control">
+            <span>Stored image size <output data-for="sourceImageLimit">1 MB</output></span>
+            <select id="sourceImageLimit">
+              <option value="262144">256 KB</option>
+              <option value="524288">512 KB</option>
+              <option value="1048576" selected>1 MB</option>
+              <option value="2097152">2 MB</option>
+              <option value="5242880">5 MB</option>
+            </select>
+          </label>
+          <p class="control-note">
+            Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate
+            or import.
+          </p>
           <div class="log-actions">
             <button id="deleteAllSaves" type="button">Delete all saves</button>
           </div>
@@ -1833,19 +1847,6 @@
               >
                 Open ChatGPT to craft an image prompt <span aria-hidden="true">↗</span>
               </a>
-            </p>
-            <label class="control">
-              <span>Stored image size <output data-for="sourceImageLimit">1 MB</output></span>
-              <select id="sourceImageLimit">
-                <option value="262144">256 KB</option>
-                <option value="524288">512 KB</option>
-                <option value="1048576" selected>1 MB</option>
-                <option value="2097152">2 MB</option>
-                <option value="0">Unlimited</option>
-              </select>
-            </label>
-            <p class="control-note">
-              Caps the compressed original image that ships with saves and exports.
             </p>
           </details>
         </section>
@@ -2317,9 +2318,9 @@
             sample: generatorSheet.querySelector('output[data-for="sampleRate"]'),
             iterations: generatorSheet.querySelector('output[data-for="kmeansIters"]'),
             smoothing: generatorSheet.querySelector('output[data-for="smoothingPasses"]'),
-            sourceImageLimit: generatorSheet.querySelector('output[data-for="sourceImageLimit"]'),
           }
         : {};
+      const sourceImageLimitOutput = document.querySelector('output[data-for="sourceImageLimit"]');
       const settingsOutputs = settingsSheet
         ? {
             uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
@@ -2357,8 +2358,15 @@
         { value: 524288, label: "512 KB" },
         { value: 1048576, label: "1 MB" },
         { value: 2097152, label: "2 MB" },
-        { value: 0, label: "Unlimited" },
+        { value: 5242880, label: "5 MB" },
       ];
+      const MAX_SOURCE_IMAGE_LIMIT = SOURCE_IMAGE_LIMIT_OPTIONS.reduce((max, option) => {
+        const value = option?.value;
+        if (Number.isFinite(value) && value > max) {
+          return value;
+        }
+        return max;
+      }, DEFAULT_SOURCE_IMAGE_MAX_BYTES);
       const SOURCE_IMAGE_VARIANT_ORIGINAL = "original";
       const SOURCE_IMAGE_VARIANT_GENERATED = "generated";
       const DEFAULT_DIFFICULTY = "normal";
@@ -6073,8 +6081,14 @@
 
       function resolveSourceImageLimit(value) {
         const numeric = Number(value);
-        if (!Number.isFinite(numeric) || numeric < 0) {
+        if (!Number.isFinite(numeric)) {
           return DEFAULT_SOURCE_IMAGE_MAX_BYTES;
+        }
+        if (numeric < 0) {
+          return DEFAULT_SOURCE_IMAGE_MAX_BYTES;
+        }
+        if (numeric === 0) {
+          return MAX_SOURCE_IMAGE_LIMIT;
         }
         return numeric;
       }
@@ -6086,9 +6100,6 @@
         );
         if (matchedOption) {
           return matchedOption.label;
-        }
-        if (resolved === 0) {
-          return "Unlimited";
         }
         return formatBytes(resolved);
       }
@@ -6112,11 +6123,11 @@
         if (generatorOutputs.smoothing) {
           generatorOutputs.smoothing.textContent = String(smoothingEl.value);
         }
-        if (generatorOutputs.sourceImageLimit) {
+        if (sourceImageLimitOutput) {
           const limitSource = sourceImageLimitSelect
             ? sourceImageLimitSelect.value
             : DEFAULT_SOURCE_IMAGE_MAX_BYTES;
-          generatorOutputs.sourceImageLimit.textContent = formatSourceImageLimitLabel(limitSource);
+          sourceImageLimitOutput.textContent = formatSourceImageLimitLabel(limitSource);
         }
         if (settingsOutputs.uiScale) {
           const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
