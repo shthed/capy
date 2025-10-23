@@ -1374,12 +1374,22 @@
       }
 
       .save-manager-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
         display: flex;
         flex-direction: column;
         gap: 12px;
+        margin: 12px 0 0;
+        padding: 0;
+      }
+
+      .save-manager-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      .save-manager-actions button {
+        width: 100%;
       }
 
       .save-entry {
@@ -1625,19 +1635,22 @@
             data-save-autosave-slot
             data-save-id="autosave"
           ></article>
-          <button type="button" data-save-snapshot disabled>Save current puzzle</button>
-          <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
-          <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
-          <button id="downloadCompact" type="button" disabled>Export compact puzzle</button>
-          <ul
+          <div
             class="save-manager-list"
             data-save-list
             aria-live="polite"
             aria-labelledby="saveManagerTitle"
-          ></ul>
+            role="list"
+          ></div>
           <p class="save-manager-empty" data-save-empty hidden>
             No manual saves yet. Create one above or keep playing to autosave progress.
           </p>
+          <div class="save-manager-actions">
+            <button type="button" data-save-snapshot disabled>Save current puzzle</button>
+            <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
+            <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
+            <button id="downloadCompact" type="button" disabled>Export compact puzzle</button>
+          </div>
         </section>
         <section class="sheet-section" aria-labelledby="storageHeading">
           <h3 id="storageHeading">Save storage</h3>
@@ -4831,9 +4844,13 @@
       function handleSaveListClick(event) {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
-        const entryEl = target.closest("[data-save-id]");
-        if (!entryEl) return;
-        const id = entryEl.getAttribute("data-save-id");
+        const explicitId = target.getAttribute("data-target-id");
+        let id = explicitId || null;
+        if (!id) {
+          const entryEl = target.closest("[data-save-id]");
+          if (!entryEl) return;
+          id = entryEl.getAttribute("data-save-id");
+        }
         if (!id) return;
         if (target.dataset.action === "load") {
           loadSaveEntry(id);
@@ -11298,8 +11315,9 @@
 
       function createSaveManagementItem(entry) {
         const metadata = describeSaveEntry(entry);
-        const item = document.createElement("li");
+        const item = document.createElement("article");
         item.className = "save-entry";
+        item.setAttribute("role", "listitem");
         item.dataset.saveId = metadata.id;
         const isLoaded = Boolean(state.loadedSaveId && metadata.id === state.loadedSaveId);
         if (isLoaded) {
@@ -11400,6 +11418,7 @@
         const timestamp = Number.isFinite(timestampValue) && timestampValue > 0 ? new Date(timestampValue) : null;
         const storageBytes = estimateAutosaveBytes(record);
         const storageLabel = storageBytes > 0 ? formatBytes(storageBytes) : "";
+        let trackedEntry = null;
         let statusText = record && record.data
           ? "Updates automatically while you play."
           : "Loads the demo puzzle until you create your own autosave.";
@@ -11408,6 +11427,10 @@
           if (loadedEntry) {
             const loadedMetadata = describeSaveEntry(loadedEntry);
             statusText = `Tracking manual save “${loadedMetadata.title}”.`;
+            trackedEntry = {
+              id: loadedMetadata.id,
+              title: loadedMetadata.title,
+            };
           }
         }
         const ariaLabelParts = [title, progressText];
@@ -11426,6 +11449,7 @@
           statusText,
           ariaLabel: ariaLabelParts.join(" – "),
           ready: Boolean(record && record.data),
+          trackedEntry,
         };
       }
 
@@ -11438,6 +11462,11 @@
           if (!(container instanceof HTMLElement)) continue;
           container.innerHTML = "";
           container.dataset.saveId = AUTOSAVE_MANAGEMENT_ID;
+          if (metadata.trackedEntry && metadata.trackedEntry.id) {
+            container.dataset.trackedSaveId = metadata.trackedEntry.id;
+          } else {
+            delete container.dataset.trackedSaveId;
+          }
           container.dataset.autosaveReady = metadata.ready ? "true" : "false";
           container.setAttribute("aria-label", metadata.ariaLabel);
           const header = document.createElement("header");
@@ -11477,6 +11506,15 @@
           const actionLabel = metadata.ready ? "Resume" : "Start demo puzzle";
           const resume = createSaveActionButton("load", actionLabel);
           actions.appendChild(resume);
+          if (metadata.trackedEntry && metadata.trackedEntry.id) {
+            const rename = createSaveActionButton("rename", "Rename");
+            rename.dataset.targetId = metadata.trackedEntry.id;
+            const exportButton = createSaveActionButton("export", "Export");
+            exportButton.dataset.targetId = metadata.trackedEntry.id;
+            const remove = createSaveActionButton("delete", "Delete");
+            remove.dataset.targetId = metadata.trackedEntry.id;
+            actions.append(rename, exportButton, remove);
+          }
           container.appendChild(actions);
         }
       }
@@ -11529,14 +11567,17 @@
 
       function refreshSaveList() {
         const manualEntries = Array.isArray(state.saves) ? state.saves : [];
-        const hasManualEntries = manualEntries.length > 0;
+        const visibleEntries = state.loadedSaveId
+          ? manualEntries.filter((entry) => entry.id !== state.loadedSaveId)
+          : manualEntries;
+        const hasVisibleEntries = visibleEntries.length > 0;
         refreshAutosaveSlot();
         for (const list of saveListContainers) {
           if (!list) continue;
           list.innerHTML = "";
-          if (hasManualEntries) {
+          if (hasVisibleEntries) {
             const fragment = document.createDocumentFragment();
-            for (const entry of manualEntries) {
+            for (const entry of visibleEntries) {
               fragment.appendChild(createSaveManagementItem(entry));
             }
             list.appendChild(fragment);
@@ -11544,7 +11585,17 @@
         }
         for (const emptyState of saveListEmptyStates) {
           if (!emptyState) continue;
-          emptyState.hidden = hasManualEntries;
+          if (hasVisibleEntries) {
+            emptyState.hidden = true;
+          } else {
+            emptyState.hidden = false;
+            if (manualEntries.length > 0) {
+              emptyState.textContent = "No other manual saves yet.";
+            } else {
+              emptyState.textContent =
+                "No manual saves yet. Create one above or keep playing to autosave progress.";
+            }
+          }
         }
         updateCommandStates();
         refreshGameSelection();
