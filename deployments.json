@@ -13,10 +13,10 @@
     "key": "codex-update-manage-saves-autosave-display",
     "branch": "codex/update-manage-saves-autosave-display",
     "safeName": "codex-update-manage-saves-autosave-display",
-    "commit": "77af5a38e7a621f8bb804e92a7e9da2ad4c3cbca",
-    "message": "Highlight autosave slot in saves manager",
+    "commit": "dae00a6b355bfa02e771809c2ca0ed9a5ff98573",
+    "message": "Streamline autosave slot and manual save cards",
     "actor": "shthed",
-    "deployedAt": "2025-10-23T12:44:25+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/77af5a38e7a621f8bb804e92a7e9da2ad4c3cbca"
+    "deployedAt": "2025-10-23T13:22:04+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/dae00a6b355bfa02e771809c2ca0ed9a5ff98573"
   }
 }
