@@ -4,15 +4,7 @@
     "safeName": "codex-add-url-image-loading-and-region-drawing-vqj4rt",
     "title": "Improve remote image URL workflow",
     "number": 222,
-    "updatedAt": "2025-10-24T13:35:25Z",
+    "updatedAt": "2025-10-24T13:44:45Z",
     "url": "https://github.com/shthed/capy/pull/222"
-  },
-  {
-    "branch": "codex/refactor-label-layout-for-zoom-scaling",
-    "safeName": "codex-refactor-label-layout-for-zoom-scaling",
-    "title": "Adjust region label layout to respect zoom ratio",
-    "number": 220,
-    "updatedAt": "2025-10-24T13:14:05Z",
-    "url": "https://github.com/shthed/capy/pull/220"
   }
 ]
