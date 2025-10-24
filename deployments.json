@@ -2,22 +2,12 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "84e393ef030b1435cbdc9c50b249c15c95796d35",
-    "message": "Merge pull request #219 from shthed/codex/update-label-layout-for-zoom-support-vg63zy\n\nSupport zoom-aware region label layout",
+    "commit": "758869f168f089a9de3240a1afd53b6b93d19587",
+    "message": "Merge pull request #221 from shthed/codex/add-url-image-loading-and-region-drawing\n\nAdd support for loading puzzles from external image URLs",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T19:56:53+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/84e393ef030b1435cbdc9c50b249c15c95796d35",
+    "deployedAt": "2025-10-24T21:33:41+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/758869f168f089a9de3240a1afd53b6b93d19587",
     "key": "main"
-  },
-  "codex-add-url-image-loading-and-region-drawing": {
-    "key": "codex-add-url-image-loading-and-region-drawing",
-    "branch": "codex/add-url-image-loading-and-region-drawing",
-    "safeName": "codex-add-url-image-loading-and-region-drawing",
-    "commit": "e9d45855b947fd275b77201fdb433fa30b14e068",
-    "message": "Update index.html\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
-    "actor": "shthed",
-    "deployedAt": "2025-10-24T21:18:25+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/e9d45855b947fd275b77201fdb433fa30b14e068"
   },
   "codex-refactor-label-layout-for-zoom-scaling": {
     "key": "codex-refactor-label-layout-for-zoom-scaling",

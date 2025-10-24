@@ -1,10 +1,10 @@
 [
   {
-    "branch": "codex/update-label-layout-for-zoom-support",
-    "safeName": "codex-update-label-layout-for-zoom-support",
-    "title": "Support zoom-aware region label layout",
-    "number": 218,
-    "updatedAt": "2025-10-24T11:32:11Z",
-    "url": "https://github.com/shthed/capy/pull/218"
+    "branch": "codex/refactor-label-layout-for-zoom-scaling",
+    "safeName": "codex-refactor-label-layout-for-zoom-scaling",
+    "title": "Adjust region label layout to respect zoom ratio",
+    "number": 220,
+    "updatedAt": "2025-10-24T13:14:05Z",
+    "url": "https://github.com/shthed/capy/pull/220"
   }
 ]
