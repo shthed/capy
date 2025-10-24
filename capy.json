@@ -4668,11 +4668,5 @@
     "panY": 160.17989402943593,
     "zoom": 1.688619113730517,
     "baseScale": 1.9754716981132077
-  },
-  "settings": {
-    "autoAdvance": true,
-    "animateHints": true,
-    "uiScale": 1,
-    "artPrompt": ""
   }
 }

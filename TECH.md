@@ -119,6 +119,7 @@ Tweaking the deployment:
 - **Palette guidance.** Choosing a swatch pulses every matching region, flashing when a colour is complete so it is obvious where to paint next. Players can disable the matching-region hint in Settings if they prefer to scout manually.
 - **Customisable background.** Settings lets you pick a backdrop colour; outlines and numbers flip contrast automatically.
 - **Progress persistence.** Every stroke updates a rolling autosave; manual snapshots live in the Saves manager with rename/export/delete controls. Storage quota usage is surfaced in the Help panel.
+- **Settings persistence.** Gameplay, hint, control, and appearance preferences now sync to `localStorage` (`capy.settings.v1`) so `capy.json` only ships puzzle data.
 
 ### Detail Presets
 
