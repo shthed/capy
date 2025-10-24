@@ -1,6 +1,54 @@
 {
   "commits": [
     {
+      "sha": "6b9100240418ee0803baf1455eab3b1016b43843",
+      "shortSha": "6b91002",
+      "message": "Merge pull request #216 from shthed/codex/fix-mouse-click-controls-for-color-selection\n\nFix right-click select colour when pan drag is configured",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-24T00:31:56Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/6b9100240418ee0803baf1455eab3b1016b43843",
+      "prs": [
+        {
+          "number": 216,
+          "title": "Fix right-click select colour when pan drag is configured",
+          "url": "https://github.com/shthed/capy/pull/216",
+          "branch": "codex/fix-mouse-click-controls-for-color-selection"
+        }
+      ]
+    },
+    {
+      "sha": "589a3f208a30dd61dd6394ea5d70ed8733c66676",
+      "shortSha": "589a3f2",
+      "message": "Update index.html\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-24T00:31:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/589a3f208a30dd61dd6394ea5d70ed8733c66676",
+      "prs": [
+        {
+          "number": 216,
+          "title": "Fix right-click select colour when pan drag is configured",
+          "url": "https://github.com/shthed/capy/pull/216",
+          "branch": "codex/fix-mouse-click-controls-for-color-selection"
+        }
+      ]
+    },
+    {
+      "sha": "ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad",
+      "shortSha": "ad7f71f",
+      "message": "Fix right-click colour selection with pan controls",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-24T00:28:02Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad",
+      "prs": [
+        {
+          "number": 216,
+          "title": "Fix right-click select colour when pan drag is configured",
+          "url": "https://github.com/shthed/capy/pull/216",
+          "branch": "codex/fix-mouse-click-controls-for-color-selection"
+        }
+      ]
+    },
+    {
       "sha": "395afb36f53f63c568fe993f7e639e833963945b",
       "shortSha": "395afb3",
       "message": "Merge pull request #214 from shthed/codex/update-manage-saves-autosave-display\n\nRevamp Manage Saves autosave slot layout",
@@ -15,56 +63,8 @@
           "branch": "codex/update-manage-saves-autosave-display"
         }
       ]
-    },
-    {
-      "sha": "63b8cc21a37509c8eda598a466605f1d56e8bd23",
-      "shortSha": "63b8cc2",
-      "message": "Merge branch 'main' into codex/update-manage-saves-autosave-display",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-23T23:22:49Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/63b8cc21a37509c8eda598a466605f1d56e8bd23",
-      "prs": [
-        {
-          "number": 214,
-          "title": "Revamp Manage Saves autosave slot layout",
-          "url": "https://github.com/shthed/capy/pull/214",
-          "branch": "codex/update-manage-saves-autosave-display"
-        }
-      ]
-    },
-    {
-      "sha": "bf212c6abbd387346455e505d3d938f4194a5d0e",
-      "shortSha": "bf212c6",
-      "message": "Align autosave source URL handling",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-23T23:13:22Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/bf212c6abbd387346455e505d3d938f4194a5d0e",
-      "prs": [
-        {
-          "number": 214,
-          "title": "Revamp Manage Saves autosave slot layout",
-          "url": "https://github.com/shthed/capy/pull/214",
-          "branch": "codex/update-manage-saves-autosave-display"
-        }
-      ]
-    },
-    {
-      "sha": "d15041c0cb5d055b81edfeb3fdaa5cd9aa05b1f9",
-      "shortSha": "d15041c",
-      "message": "Merge pull request #215 from shthed/codex/fix-default-quality-and-region-size\n\nDefault to medium detail with larger regions",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-23T10:40:45Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/d15041c0cb5d055b81edfeb3fdaa5cd9aa05b1f9",
-      "prs": [
-        {
-          "number": 215,
-          "title": "Default to medium detail with larger regions",
-          "url": "https://github.com/shthed/capy/pull/215",
-          "branch": "codex/fix-default-quality-and-region-size"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-23T23:23:03Z",
-  "deploymentTimestamp": 1761261800231
+  "lastCommitDate": "2025-10-24T00:31:56Z",
+  "deploymentTimestamp": 1761265940878
 }

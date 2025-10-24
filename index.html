@@ -8581,10 +8581,33 @@
           return;
         }
         if (session.dragAction === "pan" && (session.dragStarted || session.panActive)) {
+          let panMoved = session.panMoved === true;
+          if (!panMoved) {
+            const lastX =
+              typeof session.lastX === "number"
+                ? session.lastX
+                : typeof event?.clientX === "number"
+                ? event.clientX
+                : session.startX;
+            const lastY =
+              typeof session.lastY === "number"
+                ? session.lastY
+                : typeof event?.clientY === "number"
+                ? event.clientY
+                : session.startY;
+            const deltaX = lastX - session.startX;
+            const deltaY = lastY - session.startY;
+            const distance = Math.hypot(deltaX, deltaY);
+            const threshold = session.pointerType === "touch" ? 6 : 4;
+            panMoved = distance >= threshold;
+          }
+          if (panMoved) {
+            return;
+          }
           if (buttonName === "left") {
             suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
+            return;
           }
-          return;
         }
         const action = session.clickAction;
         if (action === "fill") {
@@ -8660,6 +8683,7 @@
           session.dragStarted = true;
           session.panActive = true;
           session.preventClick = true;
+          session.panMoved = false;
         }
         let captured = false;
         if (panCaptureTarget && typeof panCaptureTarget.setPointerCapture === "function") {
@@ -8759,6 +8783,7 @@
           panActive: false,
           zoomChanged: false,
           lastRegionId: null,
+          panMoved: false,
         };
         pointerSessions.set(event.pointerId, session);
         if (dragAction === "pan") {
@@ -8877,6 +8902,13 @@
             session.panActive = true;
             session.lastX = event.clientX;
             session.lastY = event.clientY;
+            const deltaX = event.clientX - session.startX;
+            const deltaY = event.clientY - session.startY;
+            const distance = Math.hypot(deltaX, deltaY);
+            const moveThreshold = session.pointerType === "touch" ? 6 : 4;
+            if (distance >= moveThreshold) {
+              session.panMoved = true;
+            }
           }
           scheduleViewTransform({ skipSizing: true });
           return;

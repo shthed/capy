@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "395afb36f53f63c568fe993f7e639e833963945b",
-    "message": "Merge pull request #214 from shthed/codex/update-manage-saves-autosave-display\n\nRevamp Manage Saves autosave slot layout",
+    "commit": "6b9100240418ee0803baf1455eab3b1016b43843",
+    "message": "Merge pull request #216 from shthed/codex/fix-mouse-click-controls-for-color-selection\n\nFix right-click select colour when pan drag is configured",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T07:23:03+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/395afb36f53f63c568fe993f7e639e833963945b",
+    "deployedAt": "2025-10-24T08:31:56+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/6b9100240418ee0803baf1455eab3b1016b43843",
     "key": "main"
-  },
-  "codex-fix-mouse-click-controls-for-color-selection": {
-    "key": "codex-fix-mouse-click-controls-for-color-selection",
-    "branch": "codex/fix-mouse-click-controls-for-color-selection",
-    "safeName": "codex-fix-mouse-click-controls-for-color-selection",
-    "commit": "589a3f208a30dd61dd6394ea5d70ed8733c66676",
-    "message": "Update index.html\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
-    "actor": "shthed",
-    "deployedAt": "2025-10-24T08:31:31+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/589a3f208a30dd61dd6394ea5d70ed8733c66676"
   }
 }
