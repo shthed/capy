@@ -7568,7 +7568,7 @@
           ctx.lineCap = "round";
           for (const region of state.puzzle.regions) {
             if (state.filled.has(region.id)) continue;
-            const layout = getRegionLabelLayout(region);
+            const layout = getRegionLabelLayout(region, scale);
             if (!layout) continue;
             const paletteColor = getPaletteEntry(region.colorId);
             const regionInk =
@@ -7607,20 +7607,23 @@
         return fallbackId;
       }
 
-      function getRegionLabelLayout(region) {
+      function getRegionLabelLayout(region, renderScale = 1) {
         if (!region || !state.puzzle) return null;
         const text = getRegionLabelText(region);
         if (!text) return null;
-        if (region.labelLayoutText === text) {
+        const normalizedScale = Number.isFinite(renderScale) && renderScale > 0 ? renderScale : 1;
+        const scaleKey = Math.round(normalizedScale * 100) / 100;
+        if (region.labelLayoutText === text && region.labelLayoutScaleKey === scaleKey) {
           return region.labelLayout || null;
         }
-        const layout = computeRegionLabelLayout(region, text);
+        const layout = computeRegionLabelLayout(region, text, normalizedScale);
         region.labelLayout = layout;
         region.labelLayoutText = text;
+        region.labelLayoutScaleKey = scaleKey;
         return layout;
       }
 
-      function computeRegionLabelLayout(region, rawText) {
+      function computeRegionLabelLayout(region, rawText, renderScale = 1) {
         if (!state.puzzle) return null;
         if (!Array.isArray(region.pixels) || region.pixels.length === 0) return null;
         const text = typeof rawText === "string" ? rawText.trim() : "";
@@ -7634,19 +7637,22 @@
         const safeWidth = Math.max(1, bounds.width - 0.75);
         const safeHeight = Math.max(1, bounds.height - 0.75);
         if (safeWidth <= 0 || safeHeight <= 0) return null;
+        const renderScaleForSizing = Number.isFinite(renderScale) && renderScale > 0 ? renderScale : 1;
+        const scaleForMin = Math.max(1, renderScaleForSizing);
+        const effectiveMinSize = MIN_LABEL_SIZE / scaleForMin;
         const approxCharacters = text.length <= 1 ? 1 : text.length * 0.62 + 0.4;
         const widthLimit = safeWidth / approxCharacters;
         const heightLimit = safeHeight * 0.92;
         const areaLimit = Math.sqrt(area) * 0.9;
         const theoreticalMax = Math.max(
-          MIN_LABEL_SIZE + 0.15,
+          effectiveMinSize + 0.15,
           Math.min(widthLimit, heightLimit, areaLimit, MAX_LABEL_SIZE)
         );
         const floorCandidate = Math.min(
           theoreticalMax,
-          Math.max(MIN_LABEL_SIZE, Math.min(widthLimit, heightLimit, areaLimit * 0.92))
+          Math.max(effectiveMinSize, Math.min(widthLimit, heightLimit, areaLimit * 0.92))
         );
-        const minAttemptSize = Math.max(MIN_LABEL_SIZE, Math.min(floorCandidate, theoreticalMax));
+        const minAttemptSize = Math.max(effectiveMinSize, Math.min(floorCandidate, theoreticalMax));
         const attempts = [];
         let nextSize = theoreticalMax;
         while (nextSize >= minAttemptSize && attempts.length < 9) {
@@ -7661,7 +7667,7 @@
             attempts.push(minAttemptSize);
           }
         }
-        const smallest = Math.max(MIN_LABEL_SIZE, minAttemptSize * 0.88);
+        const smallest = Math.max(effectiveMinSize, minAttemptSize * 0.88);
         if (attempts[attempts.length - 1] > smallest + 0.05) {
           attempts.push(smallest);
         }
