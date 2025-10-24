@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "ca881e7101d1eda0dc6e2dd7d3621302c847f11b",
+      "shortSha": "ca881e7",
+      "message": "Merge pull request #217 from shthed/codex/move-user-settings-to-browser-storage\n\nPersist user settings in browser storage",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-24T10:18:25Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ca881e7101d1eda0dc6e2dd7d3621302c847f11b",
+      "prs": [
+        {
+          "number": 217,
+          "title": "Persist user settings in browser storage",
+          "url": "https://github.com/shthed/capy/pull/217",
+          "branch": "codex/move-user-settings-to-browser-storage"
+        }
+      ]
+    },
+    {
+      "sha": "7fa95dfcf0ceb1ba03034609570b0a741da1ec8a",
+      "shortSha": "7fa95df",
+      "message": "Persist user settings in browser storage",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-24T06:41:11Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7fa95dfcf0ceb1ba03034609570b0a741da1ec8a",
+      "prs": [
+        {
+          "number": 217,
+          "title": "Persist user settings in browser storage",
+          "url": "https://github.com/shthed/capy/pull/217",
+          "branch": "codex/move-user-settings-to-browser-storage"
+        }
+      ]
+    },
+    {
       "sha": "6b9100240418ee0803baf1455eab3b1016b43843",
       "shortSha": "6b91002",
       "message": "Merge pull request #216 from shthed/codex/fix-mouse-click-controls-for-color-selection\n\nFix right-click select colour when pan drag is configured",
@@ -31,40 +63,8 @@
           "branch": "codex/fix-mouse-click-controls-for-color-selection"
         }
       ]
-    },
-    {
-      "sha": "ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad",
-      "shortSha": "ad7f71f",
-      "message": "Fix right-click colour selection with pan controls",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-24T00:28:02Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad",
-      "prs": [
-        {
-          "number": 216,
-          "title": "Fix right-click select colour when pan drag is configured",
-          "url": "https://github.com/shthed/capy/pull/216",
-          "branch": "codex/fix-mouse-click-controls-for-color-selection"
-        }
-      ]
-    },
-    {
-      "sha": "395afb36f53f63c568fe993f7e639e833963945b",
-      "shortSha": "395afb3",
-      "message": "Merge pull request #214 from shthed/codex/update-manage-saves-autosave-display\n\nRevamp Manage Saves autosave slot layout",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-23T23:23:03Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/395afb36f53f63c568fe993f7e639e833963945b",
-      "prs": [
-        {
-          "number": 214,
-          "title": "Revamp Manage Saves autosave slot layout",
-          "url": "https://github.com/shthed/capy/pull/214",
-          "branch": "codex/update-manage-saves-autosave-display"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-24T00:31:56Z",
-  "deploymentTimestamp": 1761265940878
+  "lastCommitDate": "2025-10-24T10:18:25Z",
+  "deploymentTimestamp": 1761301122982
 }
