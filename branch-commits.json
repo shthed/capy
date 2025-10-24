@@ -1,124 +1,124 @@
 {
-  "codex/refactor-label-layout-for-zoom-scaling": [
+  "codex/add-url-image-loading-and-region-drawing-vqj4rt": [
     {
-      "sha": "c093206996596167b9f314ab014a130cf61d670c",
-      "shortSha": "c093206",
-      "message": "Adjust label layout sizing to follow zoom ratio",
-      "date": "2025-10-24T13:13:18Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/c093206996596167b9f314ab014a130cf61d670c",
+      "sha": "d1a3c89d59f3467397fd6ba2ce99748d8d2e782a",
+      "shortSha": "d1a3c89",
+      "message": "Improve remote image URL workflow",
+      "date": "2025-10-24T13:35:21Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d1a3c89d59f3467397fd6ba2ce99748d8d2e782a",
       "prs": [
         {
-          "number": 220,
-          "title": "Adjust region label layout to respect zoom ratio",
-          "url": "https://github.com/shthed/capy/pull/220",
-          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     },
     {
-      "sha": "84e393ef030b1435cbdc9c50b249c15c95796d35",
-      "shortSha": "84e393e",
-      "message": "Merge pull request #219 from shthed/codex/update-label-layout-for-zoom-support-vg63zy\n\nSupport zoom-aware region label layout",
-      "date": "2025-10-24T11:56:53Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/84e393ef030b1435cbdc9c50b249c15c95796d35",
+      "sha": "6b9100240418ee0803baf1455eab3b1016b43843",
+      "shortSha": "6b91002",
+      "message": "Merge pull request #216 from shthed/codex/fix-mouse-click-controls-for-color-selection\n\nFix right-click select colour when pan drag is configured",
+      "date": "2025-10-24T00:31:56Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/6b9100240418ee0803baf1455eab3b1016b43843",
       "prs": [
         {
-          "number": 220,
-          "title": "Adjust region label layout to respect zoom ratio",
-          "url": "https://github.com/shthed/capy/pull/220",
-          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     },
     {
-      "sha": "03c5c2bc64d23492554d2df2f50b699b9f61885a",
-      "shortSha": "03c5c2b",
-      "message": "Adjust label attempts for zoom-aware layout",
-      "date": "2025-10-24T11:34:49Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/03c5c2bc64d23492554d2df2f50b699b9f61885a",
+      "sha": "589a3f208a30dd61dd6394ea5d70ed8733c66676",
+      "shortSha": "589a3f2",
+      "message": "Update index.html\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
+      "date": "2025-10-24T00:31:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/589a3f208a30dd61dd6394ea5d70ed8733c66676",
       "prs": [
         {
-          "number": 220,
-          "title": "Adjust region label layout to respect zoom ratio",
-          "url": "https://github.com/shthed/capy/pull/220",
-          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     },
     {
-      "sha": "d3ac430f8a2cc3bf8115a7108f68039fd878de71",
-      "shortSha": "d3ac430",
-      "message": "Support zoom-aware label layout",
-      "date": "2025-10-24T11:32:04Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/d3ac430f8a2cc3bf8115a7108f68039fd878de71",
+      "sha": "ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad",
+      "shortSha": "ad7f71f",
+      "message": "Fix right-click colour selection with pan controls",
+      "date": "2025-10-24T00:28:02Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad",
       "prs": [
         {
-          "number": 220,
-          "title": "Adjust region label layout to respect zoom ratio",
-          "url": "https://github.com/shthed/capy/pull/220",
-          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     }
   ],
-  "codex-refactor-label-layout-for-zoom-scaling": [
+  "codex-add-url-image-loading-and-region-drawing-vqj4rt": [
     {
-      "sha": "c093206996596167b9f314ab014a130cf61d670c",
-      "shortSha": "c093206",
-      "message": "Adjust label layout sizing to follow zoom ratio",
-      "date": "2025-10-24T13:13:18Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/c093206996596167b9f314ab014a130cf61d670c",
+      "sha": "d1a3c89d59f3467397fd6ba2ce99748d8d2e782a",
+      "shortSha": "d1a3c89",
+      "message": "Improve remote image URL workflow",
+      "date": "2025-10-24T13:35:21Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d1a3c89d59f3467397fd6ba2ce99748d8d2e782a",
       "prs": [
         {
-          "number": 220,
-          "title": "Adjust region label layout to respect zoom ratio",
-          "url": "https://github.com/shthed/capy/pull/220",
-          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     },
     {
-      "sha": "84e393ef030b1435cbdc9c50b249c15c95796d35",
-      "shortSha": "84e393e",
-      "message": "Merge pull request #219 from shthed/codex/update-label-layout-for-zoom-support-vg63zy\n\nSupport zoom-aware region label layout",
-      "date": "2025-10-24T11:56:53Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/84e393ef030b1435cbdc9c50b249c15c95796d35",
+      "sha": "6b9100240418ee0803baf1455eab3b1016b43843",
+      "shortSha": "6b91002",
+      "message": "Merge pull request #216 from shthed/codex/fix-mouse-click-controls-for-color-selection\n\nFix right-click select colour when pan drag is configured",
+      "date": "2025-10-24T00:31:56Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/6b9100240418ee0803baf1455eab3b1016b43843",
       "prs": [
         {
-          "number": 220,
-          "title": "Adjust region label layout to respect zoom ratio",
-          "url": "https://github.com/shthed/capy/pull/220",
-          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     },
     {
-      "sha": "03c5c2bc64d23492554d2df2f50b699b9f61885a",
-      "shortSha": "03c5c2b",
-      "message": "Adjust label attempts for zoom-aware layout",
-      "date": "2025-10-24T11:34:49Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/03c5c2bc64d23492554d2df2f50b699b9f61885a",
+      "sha": "589a3f208a30dd61dd6394ea5d70ed8733c66676",
+      "shortSha": "589a3f2",
+      "message": "Update index.html\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
+      "date": "2025-10-24T00:31:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/589a3f208a30dd61dd6394ea5d70ed8733c66676",
       "prs": [
         {
-          "number": 220,
-          "title": "Adjust region label layout to respect zoom ratio",
-          "url": "https://github.com/shthed/capy/pull/220",
-          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     },
     {
-      "sha": "d3ac430f8a2cc3bf8115a7108f68039fd878de71",
-      "shortSha": "d3ac430",
-      "message": "Support zoom-aware label layout",
-      "date": "2025-10-24T11:32:04Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/d3ac430f8a2cc3bf8115a7108f68039fd878de71",
+      "sha": "ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad",
+      "shortSha": "ad7f71f",
+      "message": "Fix right-click colour selection with pan controls",
+      "date": "2025-10-24T00:28:02Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad",
       "prs": [
         {
-          "number": 220,
-          "title": "Adjust region label layout to respect zoom ratio",
-          "url": "https://github.com/shthed/capy/pull/220",
-          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     }

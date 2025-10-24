@@ -2,11 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "758869f168f089a9de3240a1afd53b6b93d19587",
-    "message": "Merge pull request #221 from shthed/codex/add-url-image-loading-and-region-drawing\n\nAdd support for loading puzzles from external image URLs",
+    "commit": "597ca3d8c1e914989070a4c5c6e47c8f984ad4c1",
+    "message": "Merge pull request #220 from shthed/codex/refactor-label-layout-for-zoom-scaling\n\nAdjust region label layout to respect zoom ratio",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T21:33:41+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/758869f168f089a9de3240a1afd53b6b93d19587",
+    "deployedAt": "2025-10-24T21:42:21+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/597ca3d8c1e914989070a4c5c6e47c8f984ad4c1",
     "key": "main"
   },
   "codex-add-url-image-loading-and-region-drawing-vqj4rt": {
@@ -18,15 +18,5 @@
     "actor": "shthed",
     "deployedAt": "2025-10-24T21:35:21+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/d1a3c89d59f3467397fd6ba2ce99748d8d2e782a"
-  },
-  "codex-refactor-label-layout-for-zoom-scaling": {
-    "key": "codex-refactor-label-layout-for-zoom-scaling",
-    "branch": "codex/refactor-label-layout-for-zoom-scaling",
-    "safeName": "codex-refactor-label-layout-for-zoom-scaling",
-    "commit": "c093206996596167b9f314ab014a130cf61d670c",
-    "message": "Adjust label layout sizing to follow zoom ratio",
-    "actor": "shthed",
-    "deployedAt": "2025-10-24T21:13:18+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/c093206996596167b9f314ab014a130cf61d670c"
   }
 }

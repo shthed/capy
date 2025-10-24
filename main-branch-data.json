@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "597ca3d8c1e914989070a4c5c6e47c8f984ad4c1",
+      "shortSha": "597ca3d",
+      "message": "Merge pull request #220 from shthed/codex/refactor-label-layout-for-zoom-scaling\n\nAdjust region label layout to respect zoom ratio",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-24T13:42:21Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/597ca3d8c1e914989070a4c5c6e47c8f984ad4c1",
+      "prs": [
+        {
+          "number": 220,
+          "title": "Adjust region label layout to respect zoom ratio",
+          "url": "https://github.com/shthed/capy/pull/220",
+          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+        }
+      ]
+    },
+    {
+      "sha": "d93500b4a2c686822501d91d32fd8cf14988e277",
+      "shortSha": "d93500b",
+      "message": "Merge branch 'main' into codex/refactor-label-layout-for-zoom-scaling",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-24T13:42:07Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d93500b4a2c686822501d91d32fd8cf14988e277",
+      "prs": [
+        {
+          "number": 220,
+          "title": "Adjust region label layout to respect zoom ratio",
+          "url": "https://github.com/shthed/capy/pull/220",
+          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+        }
+      ]
+    },
+    {
       "sha": "758869f168f089a9de3240a1afd53b6b93d19587",
       "shortSha": "758869f",
       "message": "Merge pull request #221 from shthed/codex/add-url-image-loading-and-region-drawing\n\nAdd support for loading puzzles from external image URLs",
@@ -31,40 +63,8 @@
           "branch": "codex/add-url-image-loading-and-region-drawing"
         }
       ]
-    },
-    {
-      "sha": "6be2cd92a8e377f218f5431457b27e177ed40d2e",
-      "shortSha": "6be2cd9",
-      "message": "Merge branch 'main' into codex/add-url-image-loading-and-region-drawing",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-24T13:17:34Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/6be2cd92a8e377f218f5431457b27e177ed40d2e",
-      "prs": [
-        {
-          "number": 221,
-          "title": "Add support for loading puzzles from external image URLs",
-          "url": "https://github.com/shthed/capy/pull/221",
-          "branch": "codex/add-url-image-loading-and-region-drawing"
-        }
-      ]
-    },
-    {
-      "sha": "eef85248a5be8b0e92591f03859e6529d36d3c20",
-      "shortSha": "eef8524",
-      "message": "Add support for loading puzzles from external image URLs",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-24T13:14:17Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/eef85248a5be8b0e92591f03859e6529d36d3c20",
-      "prs": [
-        {
-          "number": 221,
-          "title": "Add support for loading puzzles from external image URLs",
-          "url": "https://github.com/shthed/capy/pull/221",
-          "branch": "codex/add-url-image-loading-and-region-drawing"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-24T13:33:41Z",
-  "deploymentTimestamp": 1761312840705
+  "lastCommitDate": "2025-10-24T13:42:21Z",
+  "deploymentTimestamp": 1761313363701
 }

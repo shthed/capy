@@ -7843,6 +7843,9 @@
         if (!state.puzzle || !ctx) return;
         if (state.settings.showRegionLabels === false) return;
         const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+        const baseScale = viewState.baseScale > 0 ? viewState.baseScale : 1;
+        const zoomRatioRaw = canvasMetrics.displayScale / Math.max(1e-6, baseScale);
+        const zoomRatio = Number.isFinite(zoomRatioRaw) && zoomRatioRaw > 0 ? zoomRatioRaw : 1;
         withRenderScale(ctx, scale, () => {
           const fallbackNumberInk = backgroundInk.number;
           const fallbackOutlineInk = backgroundInk.outline;
@@ -7853,7 +7856,7 @@
           ctx.lineCap = "round";
           for (const region of state.puzzle.regions) {
             if (state.filled.has(region.id)) continue;
-            const layout = getRegionLabelLayout(region, scale);
+            const layout = getRegionLabelLayout(region, scale, zoomRatio);
             if (!layout) continue;
             const paletteColor = getPaletteEntry(region.colorId);
             const regionInk =
@@ -7892,23 +7895,28 @@
         return fallbackId;
       }
 
-      function getRegionLabelLayout(region, renderScale = 1) {
+      function getRegionLabelLayout(region, _renderScale = 1, zoomRatio = 1) {
         if (!region || !state.puzzle) return null;
         const text = getRegionLabelText(region);
         if (!text) return null;
-        const normalizedScale = Number.isFinite(renderScale) && renderScale > 0 ? renderScale : 1;
-        const scaleKey = Math.round(normalizedScale * 100) / 100;
+        const normalizedZoomRatio =
+          Number.isFinite(zoomRatio) && zoomRatio > 0 ? zoomRatio : 1;
+        const scaleKey = Math.round(normalizedZoomRatio * 100) / 100;
         if (region.labelLayoutText === text && region.labelLayoutScaleKey === scaleKey) {
           return region.labelLayout || null;
         }
-        const layout = computeRegionLabelLayout(region, text, normalizedScale);
+        const layout = computeRegionLabelLayout(
+          region,
+          text,
+          normalizedZoomRatio
+        );
         region.labelLayout = layout;
         region.labelLayoutText = text;
         region.labelLayoutScaleKey = scaleKey;
         return layout;
       }
 
-      function computeRegionLabelLayout(region, rawText, renderScale = 1) {
+      function computeRegionLabelLayout(region, rawText, zoomRatio = 1) {
         if (!state.puzzle) return null;
         if (!Array.isArray(region.pixels) || region.pixels.length === 0) return null;
         const text = typeof rawText === "string" ? rawText.trim() : "";
@@ -7922,9 +7930,9 @@
         const safeWidth = Math.max(1, bounds.width - 0.75);
         const safeHeight = Math.max(1, bounds.height - 0.75);
         if (safeWidth <= 0 || safeHeight <= 0) return null;
-        const renderScaleForSizing = Number.isFinite(renderScale) && renderScale > 0 ? renderScale : 1;
-        const scaleForMin = Math.max(1, renderScaleForSizing);
-        const effectiveMinSize = MIN_LABEL_SIZE / scaleForMin;
+        const normalizedZoomRatio = Number.isFinite(zoomRatio) && zoomRatio > 0 ? zoomRatio : 1;
+        const zoomRatioForSizing = clamp(normalizedZoomRatio, 0.25, 16);
+        const effectiveMinSize = MIN_LABEL_SIZE / zoomRatioForSizing;
         const approxCharacters = text.length <= 1 ? 1 : text.length * 0.62 + 0.4;
         const widthLimit = safeWidth / approxCharacters;
         const heightLimit = safeHeight * 0.92;
@@ -7939,11 +7947,11 @@
         );
         const minAttemptSize = Math.max(effectiveMinSize, Math.min(floorCandidate, theoreticalMax));
         const attempts = [];
-        const scaleForAttempts = Math.max(1, Math.min(3, renderScaleForSizing));
+        const attemptZoomFactor = clamp(normalizedZoomRatio, 1, 4);
         const baseAttemptLimit = 9;
         const attemptLimit = Math.min(
           baseAttemptLimit + 6,
-          Math.max(baseAttemptLimit, Math.round(baseAttemptLimit * scaleForAttempts))
+          Math.max(baseAttemptLimit, Math.round(baseAttemptLimit * attemptZoomFactor))
         );
         let nextSize = theoreticalMax;
         while (nextSize >= minAttemptSize && attempts.length < attemptLimit) {
