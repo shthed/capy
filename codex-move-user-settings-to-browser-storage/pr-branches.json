@@ -1,0 +1,10 @@
+[
+  {
+    "branch": "codex/move-user-settings-to-browser-storage",
+    "safeName": "codex-move-user-settings-to-browser-storage",
+    "title": "Persist user settings in browser storage",
+    "number": 217,
+    "updatedAt": "2025-10-24T06:41:14Z",
+    "url": "https://github.com/shthed/capy/pull/217"
+  }
+]

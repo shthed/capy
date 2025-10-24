@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-24T08:31:56+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/6b9100240418ee0803baf1455eab3b1016b43843",
     "key": "main"
+  },
+  "codex-move-user-settings-to-browser-storage": {
+    "key": "codex-move-user-settings-to-browser-storage",
+    "branch": "codex/move-user-settings-to-browser-storage",
+    "safeName": "codex-move-user-settings-to-browser-storage",
+    "commit": "6b9100240418ee0803baf1455eab3b1016b43843",
+    "message": "Merge pull request #216 from shthed/codex/fix-mouse-click-controls-for-color-selection\n\nFix right-click select colour when pan drag is configured",
+    "actor": "shthed",
+    "deployedAt": "2025-10-24T08:31:56+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/6b9100240418ee0803baf1455eab3b1016b43843"
   }
 }
