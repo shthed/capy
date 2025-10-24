@@ -1,18 +1,18 @@
 [
   {
+    "branch": "codex/update-label-layout-for-zoom-support-vg63zy",
+    "safeName": "codex-update-label-layout-for-zoom-support-vg63zy",
+    "title": "Support zoom-aware region label layout",
+    "number": 219,
+    "updatedAt": "2025-10-24T11:32:41Z",
+    "url": "https://github.com/shthed/capy/pull/219"
+  },
+  {
     "branch": "codex/update-label-layout-for-zoom-support",
     "safeName": "codex-update-label-layout-for-zoom-support",
     "title": "Support zoom-aware region label layout",
     "number": 218,
     "updatedAt": "2025-10-24T11:32:11Z",
     "url": "https://github.com/shthed/capy/pull/218"
-  },
-  {
-    "branch": "codex/update-label-layout-for-zoom-support-vg63zy",
-    "safeName": "codex-update-label-layout-for-zoom-support-vg63zy",
-    "title": "Support zoom-aware region label layout",
-    "number": 219,
-    "updatedAt": "2025-10-24T11:32:07Z",
-    "url": "https://github.com/shthed/capy/pull/219"
   }
 ]
