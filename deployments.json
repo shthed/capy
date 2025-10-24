@@ -13,11 +13,11 @@
     "key": "codex-add-url-image-loading-and-region-drawing",
     "branch": "codex/add-url-image-loading-and-region-drawing",
     "safeName": "codex-add-url-image-loading-and-region-drawing",
-    "commit": "6be2cd92a8e377f218f5431457b27e177ed40d2e",
-    "message": "Merge branch 'main' into codex/add-url-image-loading-and-region-drawing",
+    "commit": "e9d45855b947fd275b77201fdb433fa30b14e068",
+    "message": "Update index.html\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T21:17:34+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/6be2cd92a8e377f218f5431457b27e177ed40d2e"
+    "deployedAt": "2025-10-24T21:18:25+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/e9d45855b947fd275b77201fdb433fa30b14e068"
   },
   "codex-refactor-label-layout-for-zoom-scaling": {
     "key": "codex-refactor-label-layout-for-zoom-scaling",

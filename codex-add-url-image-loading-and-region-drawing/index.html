@@ -6739,7 +6739,7 @@
               }
               return;
             }
-            if (typeof url === "string" && !url.trim().toLowerCase().startsWith("data:")) {
+            if (!isProbablyDataUrl(url)) {
               const originalWidth = Number.isFinite(data.originalWidth)
                 ? data.originalWidth
                 : Number.isFinite(img.naturalWidth) && img.naturalWidth > 0
