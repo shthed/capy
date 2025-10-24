@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-24T18:18:25+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/ca881e7101d1eda0dc6e2dd7d3621302c847f11b",
     "key": "main"
+  },
+  "codex-update-label-layout-for-zoom-support": {
+    "key": "codex-update-label-layout-for-zoom-support",
+    "branch": "codex/update-label-layout-for-zoom-support",
+    "safeName": "codex-update-label-layout-for-zoom-support",
+    "commit": "ca881e7101d1eda0dc6e2dd7d3621302c847f11b",
+    "message": "Merge pull request #217 from shthed/codex/move-user-settings-to-browser-storage\n\nPersist user settings in browser storage",
+    "actor": "shthed",
+    "deployedAt": "2025-10-24T18:18:25+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/ca881e7101d1eda0dc6e2dd7d3621302c847f11b"
   }
 }
