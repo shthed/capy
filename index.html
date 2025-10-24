@@ -8601,10 +8601,11 @@
             const threshold = session.pointerType === "touch" ? 6 : 4;
             panMoved = distance >= threshold;
           }
-          if (panMoved || buttonName === "left") {
-            if (buttonName === "left") {
-              suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
-            }
+          if (panMoved) {
+            return;
+          }
+          if (buttonName === "left") {
+            suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
             return;
           }
         }
