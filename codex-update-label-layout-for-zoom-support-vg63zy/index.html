@@ -7654,8 +7654,14 @@
         );
         const minAttemptSize = Math.max(effectiveMinSize, Math.min(floorCandidate, theoreticalMax));
         const attempts = [];
+        const scaleForAttempts = Math.max(1, Math.min(3, renderScaleForSizing));
+        const baseAttemptLimit = 9;
+        const attemptLimit = Math.min(
+          baseAttemptLimit + 6,
+          Math.max(baseAttemptLimit, Math.round(baseAttemptLimit * scaleForAttempts))
+        );
         let nextSize = theoreticalMax;
-        while (nextSize >= minAttemptSize && attempts.length < 9) {
+        while (nextSize >= minAttemptSize && attempts.length < attemptLimit) {
           attempts.push(nextSize);
           nextSize *= 0.86;
         }

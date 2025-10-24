@@ -23,10 +23,10 @@
     "key": "codex-update-label-layout-for-zoom-support-vg63zy",
     "branch": "codex/update-label-layout-for-zoom-support-vg63zy",
     "safeName": "codex-update-label-layout-for-zoom-support-vg63zy",
-    "commit": "d3ac430f8a2cc3bf8115a7108f68039fd878de71",
-    "message": "Support zoom-aware label layout",
+    "commit": "03c5c2bc64d23492554d2df2f50b699b9f61885a",
+    "message": "Adjust label attempts for zoom-aware layout",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T19:32:04+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/d3ac430f8a2cc3bf8115a7108f68039fd878de71"
+    "deployedAt": "2025-10-24T19:34:49+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/03c5c2bc64d23492554d2df2f50b699b9f61885a"
   }
 }
