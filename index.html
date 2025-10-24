@@ -1114,6 +1114,32 @@
         gap: 12px;
       }
 
+      .generator-url-form {
+        display: grid;
+        gap: calc(12px * var(--ui-scale));
+      }
+
+      .generator-url-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: calc(12px * var(--ui-scale));
+        align-items: center;
+      }
+
+      .generator-url-actions button[type="submit"] {
+        flex: 0 0 auto;
+      }
+
+      .generator-url-error {
+        margin: 0;
+        font-weight: 600;
+        color: #f87171;
+      }
+
+      body[data-theme="light"] .generator-url-error {
+        color: #dc2626;
+      }
+
       .generator-progress {
         border: 1px solid rgba(148, 163, 184, 0.35);
         background: rgba(15, 23, 42, 0.6);
@@ -1788,6 +1814,30 @@
             <button type="button" class="close-button" data-import-cancel>Cancel</button>
           </div>
         </div>
+        <section class="sheet-section" aria-labelledby="urlImportHeading">
+          <h3 id="urlImportHeading">Load from URL</h3>
+          <form class="generator-url-form" data-source-url-form>
+            <label class="control">
+              <span>Image address</span>
+              <input
+                type="url"
+                name="sourceImageUrl"
+                inputmode="url"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="https://example.com/image.jpg"
+                data-source-url-input
+              />
+            </label>
+            <div class="generator-url-actions">
+              <button type="submit" data-source-url-submit>Load image</button>
+              <p class="control-note" data-source-url-hint>
+                Paste a direct link to a PNG or JPEG image.
+              </p>
+              <p class="control-note generator-url-error" data-source-url-error hidden role="alert"></p>
+            </div>
+          </form>
+        </section>
         <section class="sheet-section" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Clustering &amp; detail</h3>
           <p class="control-note">
@@ -2314,6 +2364,11 @@
         generatorSheet?.querySelector("[data-import-description]") || null;
       const confirmImportBtn = document.getElementById("confirmImport");
       const cancelImportBtn = generatorSheet?.querySelector("[data-import-cancel]") || null;
+      const generatorUrlForm = generatorSheet?.querySelector("[data-source-url-form]") || null;
+      const generatorUrlInput = generatorSheet?.querySelector("[data-source-url-input]") || null;
+      const generatorUrlSubmit = generatorSheet?.querySelector("[data-source-url-submit]") || null;
+      const generatorUrlHint = generatorSheet?.querySelector("[data-source-url-hint]") || null;
+      const generatorUrlError = generatorSheet?.querySelector("[data-source-url-error]") || null;
       const generatorProgressEl = generatorSheet?.querySelector("[data-generator-progress]") || null;
       const generatorProgressMessageEl =
         generatorSheet?.querySelector("[data-generator-progress-message]") || null;
@@ -2335,6 +2390,7 @@
       let rendererController = null;
       let scratchMeasureCanvas = null;
       let scratchMeasureCtx = null;
+      let pendingSourceUrlLoad = false;
 
       // Sheet output mirrors we update while users drag sliders.
       const generatorOutputs = generatorSheet
@@ -4528,6 +4584,18 @@
         fileInput.value = "";
       });
 
+      if (generatorUrlForm && generatorUrlInput) {
+        generatorUrlForm.addEventListener("submit", (event) => {
+          event.preventDefault();
+          handleSourceImageUrl(generatorUrlInput.value || "");
+        });
+        generatorUrlInput.addEventListener("input", () => {
+          clearSourceUrlError();
+          updateSourceUrlSubmitState();
+        });
+        updateSourceUrlSubmitState();
+      }
+
       if (confirmImportBtn) {
         confirmImportBtn.hidden = true;
         confirmImportBtn.disabled = true;
@@ -5383,6 +5451,25 @@
         sheet.setAttribute("aria-hidden", "false");
         if (sheet === helpSheet) {
           void ensureHelpReadmeLoaded();
+        } else if (sheet === generatorSheet) {
+          requestAnimationFrame(() => {
+            if (!generatorUrlInput) {
+              return;
+            }
+            if (
+              (!generatorUrlInput.value || generatorUrlInput.value.trim().length === 0) &&
+              state.sourceUrl &&
+              !isProbablyDataUrl(state.sourceUrl)
+            ) {
+              generatorUrlInput.value = state.sourceUrl;
+            }
+            clearSourceUrlError();
+            updateSourceUrlSubmitState();
+            generatorUrlInput.focus();
+            if (typeof generatorUrlInput.select === "function") {
+              generatorUrlInput.select();
+            }
+          });
         }
       }
 
@@ -6396,6 +6483,122 @@
         updateImportNotice();
       }
 
+      function normalizeExternalImageUrl(value) {
+        if (typeof value !== "string") {
+          return null;
+        }
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return null;
+        }
+        try {
+          const parsed = new URL(trimmed, window.location.href);
+          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+            return null;
+          }
+          return parsed.href;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function deriveSourceTitleFromUrl(value) {
+        if (typeof value !== "string") {
+          return "Imported image";
+        }
+        try {
+          const parsed = new URL(value, window.location.href);
+          const segments = parsed.pathname.split("/").filter(Boolean);
+          const last = segments[segments.length - 1];
+          if (last) {
+            const decoded = decodeURIComponent(last);
+            const withoutExtension = decoded.replace(/\.[^.]+$/, "");
+            if (withoutExtension.trim()) {
+              return withoutExtension.trim();
+            }
+            if (decoded.trim()) {
+              return decoded.trim();
+            }
+          }
+          if (parsed.hostname) {
+            return parsed.hostname;
+          }
+          return parsed.href;
+        } catch (error) {
+          return value;
+        }
+      }
+
+      function clearSourceUrlError() {
+        if (generatorUrlError) {
+          generatorUrlError.hidden = true;
+          generatorUrlError.textContent = "";
+        }
+        if (generatorUrlHint) {
+          generatorUrlHint.hidden = false;
+        }
+      }
+
+      function showSourceUrlError(message) {
+        if (generatorUrlError) {
+          generatorUrlError.textContent = message;
+          generatorUrlError.hidden = false;
+        }
+        if (generatorUrlHint) {
+          generatorUrlHint.hidden = true;
+        }
+      }
+
+      function updateSourceUrlSubmitState() {
+        if (!generatorUrlSubmit) {
+          return;
+        }
+        const value = generatorUrlInput?.value?.trim() || "";
+        const busy = pendingSourceUrlLoad === true;
+        const shouldDisable = busy || value.length === 0;
+        generatorUrlSubmit.disabled = shouldDisable;
+        if (busy) {
+          generatorUrlSubmit.setAttribute("aria-busy", "true");
+        } else {
+          generatorUrlSubmit.removeAttribute("aria-busy");
+        }
+      }
+
+      function handleSourceImageUrl(rawUrl) {
+        const normalized = normalizeExternalImageUrl(rawUrl);
+        if (!normalized) {
+          showSourceUrlError("Enter a valid https:// image URL.");
+          updateSourceUrlSubmitState();
+          return;
+        }
+        clearSourceUrlError();
+        pendingSourceUrlLoad = true;
+        updateSourceUrlSubmitState();
+        disableSampleAutoload();
+        clearPendingImport();
+        resetPuzzleUI();
+        state.sourceUrl = normalized;
+        state.sourceTitle = deriveSourceTitleFromUrl(normalized) || "Imported image";
+        hideStartScreen();
+        logDebug(`Generating puzzle from image URL: ${state.sourceTitle}`);
+        loadImage(normalized, {
+          onError: () => {
+            pendingSourceUrlLoad = false;
+            showSourceUrlError("Unable to load image from that URL.");
+            state.sourceUrl = null;
+            state.sourceTitle = null;
+            updateSourceUrlSubmitState();
+          },
+          onSuccess: () => {
+            pendingSourceUrlLoad = false;
+            if (generatorUrlInput) {
+              generatorUrlInput.value = normalized;
+            }
+            updateSourceUrlSubmitState();
+          },
+        });
+      }
+
       function prepareImport(file) {
         if (!file) {
           return;
@@ -6518,7 +6721,7 @@
       }
 
       function loadImage(url, loadOptions = {}) {
-        const { logMessage, completionMessage, skipDefaultLog } = loadOptions;
+        const { logMessage, completionMessage, skipDefaultLog, onError, onSuccess } = loadOptions;
         if (logMessage) {
           logDebug(logMessage);
         }
@@ -6529,7 +6732,41 @@
             const options = getCurrentOptions();
             const data = await createPuzzleData(img, options);
             if (!data) {
+              if (typeof onError === "function") {
+                try {
+                  onError(new Error("Puzzle generation returned no data"));
+                } catch (handlerError) {
+                  console.error("Source image error handler failed", handlerError);
+                }
+              }
               return;
+            }
+            if (typeof url === "string" && !url.trim().toLowerCase().startsWith("data:")) {
+              const originalWidth = Number.isFinite(data.originalWidth)
+                ? data.originalWidth
+                : Number.isFinite(img.naturalWidth) && img.naturalWidth > 0
+                ? img.naturalWidth
+                : data.width;
+              const originalHeight = Number.isFinite(data.originalHeight)
+                ? data.originalHeight
+                : Number.isFinite(img.naturalHeight) && img.naturalHeight > 0
+                ? img.naturalHeight
+                : data.height;
+              const scale =
+                Number.isFinite(originalWidth) && originalWidth > 0 && Number.isFinite(data.width) && data.width > 0
+                  ? data.width / originalWidth
+                  : 1;
+              data.sourceImage = {
+                url,
+                bytes: null,
+                mimeType: null,
+                width: data.width,
+                height: data.height,
+                originalWidth,
+                originalHeight,
+                scale,
+                variant: SOURCE_IMAGE_VARIANT_ORIGINAL,
+              };
             }
             const title = state.sourceTitle || "Generated puzzle";
             const applied = applyPuzzleResult(data, {
@@ -6542,15 +6779,42 @@
             });
             if (!applied) {
               setProgressMessage("idle");
+              if (typeof onError === "function") {
+                try {
+                  onError(new Error("Failed to apply puzzle result"));
+                } catch (handlerError) {
+                  console.error("Source image error handler failed", handlerError);
+                }
+              }
+            } else if (typeof onSuccess === "function") {
+              try {
+                onSuccess(data);
+              } catch (handlerError) {
+                console.error("Source image success handler failed", handlerError);
+              }
             }
           } catch (error) {
             console.error("Failed to create puzzle", error);
             setProgressMessage("idle");
+            if (typeof onError === "function") {
+              try {
+                onError(error);
+              } catch (handlerError) {
+                console.error("Source image error handler failed", handlerError);
+              }
+            }
           }
         };
-        img.onerror = () => {
-          console.error("Unable to read that image.");
+        img.onerror = (error) => {
+          console.error("Unable to read that image.", error);
           setProgressMessage("idle");
+          if (typeof onError === "function") {
+            try {
+              onError(error instanceof Error ? error : new Error("Unable to read source image"));
+            } catch (handlerError) {
+              console.error("Source image error handler failed", handlerError);
+            }
+          }
         };
         img.src = url;
       }
@@ -6852,6 +7116,13 @@
         return [];
       }
 
+      function isProbablyDataUrl(value) {
+        if (typeof value !== "string") {
+          return false;
+        }
+        return value.trim().toLowerCase().startsWith("data:");
+      }
+
       function estimateDataUrlBytes(dataUrl) {
         if (typeof dataUrl !== "string") {
           return null;
@@ -6878,56 +7149,99 @@
           Number.isFinite(defaults.originalWidth) ? defaults.originalWidth : defaultWidth;
         const defaultOriginalHeight =
           Number.isFinite(defaults.originalHeight) ? defaults.originalHeight : defaultHeight;
+        const sourceObject = snapshot && typeof snapshot === "object" ? snapshot : null;
         let dataUrl = null;
-        let mimeType = null;
-        let bytes = null;
-        let width = defaultWidth;
-        let height = defaultHeight;
-        let originalWidth = defaultOriginalWidth;
-        let originalHeight = defaultOriginalHeight;
-        let scale = null;
-        let variant = SOURCE_IMAGE_VARIANT_ORIGINAL;
+        let url = null;
         if (typeof snapshot === "string") {
-          dataUrl = snapshot;
-        } else if (snapshot && typeof snapshot === "object") {
-          dataUrl =
-            (typeof snapshot.dataUrl === "string" && snapshot.dataUrl) ||
-            (typeof snapshot.url === "string" && snapshot.url) ||
-            null;
-          mimeType = typeof snapshot.mimeType === "string" ? snapshot.mimeType : null;
-          bytes = Number.isFinite(snapshot.bytes) ? snapshot.bytes : null;
-          if (Number.isFinite(snapshot.width) && snapshot.width > 0) {
-            width = snapshot.width;
+          const trimmed = snapshot.trim();
+          if (!trimmed) {
+            return null;
           }
-          if (Number.isFinite(snapshot.height) && snapshot.height > 0) {
-            height = snapshot.height;
+          if (isProbablyDataUrl(trimmed)) {
+            dataUrl = trimmed;
+          } else {
+            url = trimmed;
           }
-          if (Number.isFinite(snapshot.originalWidth) && snapshot.originalWidth > 0) {
-            originalWidth = snapshot.originalWidth;
+        } else if (sourceObject) {
+          const rawDataUrl =
+            typeof sourceObject.dataUrl === "string" && sourceObject.dataUrl
+              ? sourceObject.dataUrl.trim()
+              : "";
+          if (rawDataUrl) {
+            if (isProbablyDataUrl(rawDataUrl)) {
+              dataUrl = rawDataUrl;
+            } else {
+              url = rawDataUrl;
+            }
           }
-          if (Number.isFinite(snapshot.originalHeight) && snapshot.originalHeight > 0) {
-            originalHeight = snapshot.originalHeight;
-          }
-          if (Number.isFinite(snapshot.scale) && snapshot.scale > 0) {
-            scale = snapshot.scale;
-          }
-          if (typeof snapshot.variant === "string" && snapshot.variant) {
-            variant = snapshot.variant;
-          } else if (snapshot.generated === true) {
-            variant = SOURCE_IMAGE_VARIANT_GENERATED;
+          const rawUrl =
+            (typeof sourceObject.url === "string" && sourceObject.url.trim()) ||
+            (typeof sourceObject.href === "string" && sourceObject.href.trim()) ||
+            (typeof sourceObject.src === "string" && sourceObject.src.trim()) ||
+            "";
+          if (rawUrl) {
+            url = rawUrl;
           }
         }
-        if (typeof dataUrl !== "string" || dataUrl.length === 0) {
+        if (!dataUrl && !url) {
           return null;
         }
-        if (!mimeType) {
-          const match = /^data:([^;,]+)[;,]/.exec(dataUrl);
-          if (match) {
-            mimeType = match[1];
+        if (url) {
+          try {
+            const parsed = new URL(url, window.location.href);
+            url = parsed.href;
+          } catch (error) {
+            // leave url as-is if it can't be normalised
           }
         }
-        if (!Number.isFinite(bytes) || bytes <= 0) {
-          bytes = estimateDataUrlBytes(dataUrl);
+        let mimeType =
+          typeof sourceObject?.mimeType === "string" && sourceObject.mimeType
+            ? sourceObject.mimeType
+            : null;
+        let bytes = Number.isFinite(sourceObject?.bytes) ? sourceObject.bytes : null;
+        let width = Number.isFinite(sourceObject?.width) && sourceObject.width > 0
+          ? sourceObject.width
+          : defaultWidth;
+        let height = Number.isFinite(sourceObject?.height) && sourceObject.height > 0
+          ? sourceObject.height
+          : defaultHeight;
+        let originalWidth =
+          Number.isFinite(sourceObject?.originalWidth) && sourceObject.originalWidth > 0
+            ? sourceObject.originalWidth
+            : defaultOriginalWidth;
+        let originalHeight =
+          Number.isFinite(sourceObject?.originalHeight) && sourceObject.originalHeight > 0
+            ? sourceObject.originalHeight
+            : defaultOriginalHeight;
+        let scale = Number.isFinite(sourceObject?.scale) && sourceObject.scale > 0
+          ? sourceObject.scale
+          : null;
+        let variant = SOURCE_IMAGE_VARIANT_ORIGINAL;
+        if (typeof sourceObject?.variant === "string" && sourceObject.variant) {
+          variant = sourceObject.variant;
+        } else if (sourceObject?.generated === true) {
+          variant = SOURCE_IMAGE_VARIANT_GENERATED;
+        }
+        const resolvedDataUrl = dataUrl && dataUrl.length > 0 ? dataUrl : null;
+        const resolvedUrl = url && url.length > 0 ? url : null;
+        if (!resolvedDataUrl && !resolvedUrl) {
+          return null;
+        }
+        if (resolvedDataUrl) {
+          if (!mimeType) {
+            const match = /^data:([^;,]+)[;,]/.exec(resolvedDataUrl);
+            if (match) {
+              mimeType = match[1];
+            }
+          }
+          if (!Number.isFinite(bytes) || bytes <= 0) {
+            bytes = estimateDataUrlBytes(resolvedDataUrl);
+          }
+        } else {
+          mimeType = typeof sourceObject?.mimeType === "string" && sourceObject.mimeType
+            ? sourceObject.mimeType
+            : null;
+          bytes = null;
         }
         if (!Number.isFinite(width) || width <= 0) {
           width = defaultWidth || null;
@@ -6948,8 +7262,9 @@
             ? width / defaultWidth
             : 1;
         return {
-          dataUrl,
-          mimeType: mimeType || "image/png",
+          dataUrl: resolvedDataUrl,
+          url: resolvedUrl,
+          mimeType: resolvedDataUrl ? mimeType || "image/png" : mimeType,
           bytes: Number.isFinite(bytes) && bytes > 0 ? bytes : null,
           width: width || defaultWidth || originalWidth || null,
           height: height || defaultHeight || originalHeight || null,
@@ -6995,10 +7310,13 @@
         image.onerror = (error) => {
           console.warn("Failed to load stored source image", error);
         };
-        try {
-          image.src = normalized.dataUrl;
-        } catch (error) {
-          console.error("Unable to assign source image", error);
+        const source = normalized.dataUrl || normalized.url;
+        if (source) {
+          try {
+            image.src = source;
+          } catch (error) {
+            console.error("Unable to assign source image", error);
+          }
         }
         if (image.complete && image.naturalWidth > 0 && image.naturalHeight > 0) {
           finalize();
