@@ -13,11 +13,11 @@
     "key": "codex-add-url-image-loading-and-region-drawing",
     "branch": "codex/add-url-image-loading-and-region-drawing",
     "safeName": "codex-add-url-image-loading-and-region-drawing",
-    "commit": "6b9100240418ee0803baf1455eab3b1016b43843",
-    "message": "Merge pull request #216 from shthed/codex/fix-mouse-click-controls-for-color-selection\n\nFix right-click select colour when pan drag is configured",
+    "commit": "eef85248a5be8b0e92591f03859e6529d36d3c20",
+    "message": "Add support for loading puzzles from external image URLs",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T08:31:56+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/6b9100240418ee0803baf1455eab3b1016b43843"
+    "deployedAt": "2025-10-24T21:14:17+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/eef85248a5be8b0e92591f03859e6529d36d3c20"
   },
   "codex-refactor-label-layout-for-zoom-scaling": {
     "key": "codex-refactor-label-layout-for-zoom-scaling",
