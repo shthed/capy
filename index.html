@@ -2390,6 +2390,7 @@
       let rendererController = null;
       let scratchMeasureCanvas = null;
       let scratchMeasureCtx = null;
+      let pendingSourceUrlLoad = false;
 
       // Sheet output mirrors we update while users drag sliders.
       const generatorOutputs = generatorSheet
@@ -5481,6 +5482,25 @@
         sheet.setAttribute("aria-hidden", "false");
         if (sheet === helpSheet) {
           void ensureHelpReadmeLoaded();
+        } else if (sheet === generatorSheet) {
+          requestAnimationFrame(() => {
+            if (!generatorUrlInput) {
+              return;
+            }
+            if (
+              (!generatorUrlInput.value || generatorUrlInput.value.trim().length === 0) &&
+              state.sourceUrl &&
+              !isProbablyDataUrl(state.sourceUrl)
+            ) {
+              generatorUrlInput.value = state.sourceUrl;
+            }
+            clearSourceUrlError();
+            updateSourceUrlSubmitState();
+            generatorUrlInput.focus();
+            if (typeof generatorUrlInput.select === "function") {
+              generatorUrlInput.select();
+            }
+          });
         }
       }
 
@@ -6565,7 +6585,14 @@
           return;
         }
         const value = generatorUrlInput?.value?.trim() || "";
-        generatorUrlSubmit.disabled = value.length === 0;
+        const busy = pendingSourceUrlLoad === true;
+        const shouldDisable = busy || value.length === 0;
+        generatorUrlSubmit.disabled = shouldDisable;
+        if (busy) {
+          generatorUrlSubmit.setAttribute("aria-busy", "true");
+        } else {
+          generatorUrlSubmit.removeAttribute("aria-busy");
+        }
       }
 
       function handleSourceImageUrl(rawUrl) {
@@ -6576,6 +6603,8 @@
           return;
         }
         clearSourceUrlError();
+        pendingSourceUrlLoad = true;
+        updateSourceUrlSubmitState();
         disableSampleAutoload();
         clearPendingImport();
         resetPuzzleUI();
@@ -6584,11 +6613,20 @@
         hideStartScreen();
         logDebug(`Generating puzzle from image URL: ${state.sourceTitle}`);
         loadImage(normalized, {
-          onError: () => {
-            showSourceUrlError("Unable to load image from that URL.");
+          onError: (error) => {
+            pendingSourceUrlLoad = false;
+            const errorDetail = error instanceof Error && typeof error.message === "string" ? error.message.trim() : "";
+            const hint = "Double-check that the link is reachable, allows cross-origin image loading, and isn’t blocked by your network.";
+            const detailedMessage = errorDetail && errorDetail.toLowerCase() !== "unable to read source image"
+              ? `Unable to load image from that URL. (${errorDetail}) ${hint}`
+              : `Unable to load image from that URL. ${hint}`;
+            showSourceUrlError(detailedMessage);
+            state.sourceUrl = null;
+            state.sourceTitle = null;
             updateSourceUrlSubmitState();
           },
           onSuccess: () => {
+            pendingSourceUrlLoad = false;
             if (generatorUrlInput) {
               generatorUrlInput.value = normalized;
             }
