@@ -1,0 +1,70 @@
+{
+  "commits": [
+    {
+      "sha": "ca881e7101d1eda0dc6e2dd7d3621302c847f11b",
+      "shortSha": "ca881e7",
+      "message": "Merge pull request #217 from shthed/codex/move-user-settings-to-browser-storage\n\nPersist user settings in browser storage",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-24T10:18:25Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ca881e7101d1eda0dc6e2dd7d3621302c847f11b",
+      "prs": [
+        {
+          "number": 217,
+          "title": "Persist user settings in browser storage",
+          "url": "https://github.com/shthed/capy/pull/217",
+          "branch": "codex/move-user-settings-to-browser-storage"
+        }
+      ]
+    },
+    {
+      "sha": "7fa95dfcf0ceb1ba03034609570b0a741da1ec8a",
+      "shortSha": "7fa95df",
+      "message": "Persist user settings in browser storage",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-24T06:41:11Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7fa95dfcf0ceb1ba03034609570b0a741da1ec8a",
+      "prs": [
+        {
+          "number": 217,
+          "title": "Persist user settings in browser storage",
+          "url": "https://github.com/shthed/capy/pull/217",
+          "branch": "codex/move-user-settings-to-browser-storage"
+        }
+      ]
+    },
+    {
+      "sha": "6b9100240418ee0803baf1455eab3b1016b43843",
+      "shortSha": "6b91002",
+      "message": "Merge pull request #216 from shthed/codex/fix-mouse-click-controls-for-color-selection\n\nFix right-click select colour when pan drag is configured",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-24T00:31:56Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/6b9100240418ee0803baf1455eab3b1016b43843",
+      "prs": [
+        {
+          "number": 216,
+          "title": "Fix right-click select colour when pan drag is configured",
+          "url": "https://github.com/shthed/capy/pull/216",
+          "branch": "codex/fix-mouse-click-controls-for-color-selection"
+        }
+      ]
+    },
+    {
+      "sha": "589a3f208a30dd61dd6394ea5d70ed8733c66676",
+      "shortSha": "589a3f2",
+      "message": "Update index.html\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-24T00:31:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/589a3f208a30dd61dd6394ea5d70ed8733c66676",
+      "prs": [
+        {
+          "number": 216,
+          "title": "Fix right-click select colour when pan drag is configured",
+          "url": "https://github.com/shthed/capy/pull/216",
+          "branch": "codex/fix-mouse-click-controls-for-color-selection"
+        }
+      ]
+    }
+  ],
+  "lastCommitDate": "2025-10-24T10:18:25Z",
+  "deploymentTimestamp": 1761305543201
+}
