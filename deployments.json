@@ -13,10 +13,10 @@
     "key": "codex-fix-mouse-click-controls-for-color-selection",
     "branch": "codex/fix-mouse-click-controls-for-color-selection",
     "safeName": "codex-fix-mouse-click-controls-for-color-selection",
-    "commit": "395afb36f53f63c568fe993f7e639e833963945b",
-    "message": "Merge pull request #214 from shthed/codex/update-manage-saves-autosave-display\n\nRevamp Manage Saves autosave slot layout",
+    "commit": "ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad",
+    "message": "Fix right-click colour selection with pan controls",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T07:23:03+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/395afb36f53f63c568fe993f7e639e833963945b"
+    "deployedAt": "2025-10-24T08:28:02+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad"
   }
 }
