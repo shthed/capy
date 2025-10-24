@@ -1,0 +1,70 @@
+{
+  "commits": [
+    {
+      "sha": "395afb36f53f63c568fe993f7e639e833963945b",
+      "shortSha": "395afb3",
+      "message": "Merge pull request #214 from shthed/codex/update-manage-saves-autosave-display\n\nRevamp Manage Saves autosave slot layout",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-23T23:23:03Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/395afb36f53f63c568fe993f7e639e833963945b",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
+      "sha": "63b8cc21a37509c8eda598a466605f1d56e8bd23",
+      "shortSha": "63b8cc2",
+      "message": "Merge branch 'main' into codex/update-manage-saves-autosave-display",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-23T23:22:49Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/63b8cc21a37509c8eda598a466605f1d56e8bd23",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
+      "sha": "bf212c6abbd387346455e505d3d938f4194a5d0e",
+      "shortSha": "bf212c6",
+      "message": "Align autosave source URL handling",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-23T23:13:22Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/bf212c6abbd387346455e505d3d938f4194a5d0e",
+      "prs": [
+        {
+          "number": 214,
+          "title": "Revamp Manage Saves autosave slot layout",
+          "url": "https://github.com/shthed/capy/pull/214",
+          "branch": "codex/update-manage-saves-autosave-display"
+        }
+      ]
+    },
+    {
+      "sha": "d15041c0cb5d055b81edfeb3fdaa5cd9aa05b1f9",
+      "shortSha": "d15041c",
+      "message": "Merge pull request #215 from shthed/codex/fix-default-quality-and-region-size\n\nDefault to medium detail with larger regions",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-23T10:40:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d15041c0cb5d055b81edfeb3fdaa5cd9aa05b1f9",
+      "prs": [
+        {
+          "number": 215,
+          "title": "Default to medium detail with larger regions",
+          "url": "https://github.com/shthed/capy/pull/215",
+          "branch": "codex/fix-default-quality-and-region-size"
+        }
+      ]
+    }
+  ],
+  "lastCommitDate": "2025-10-23T23:23:03Z",
+  "deploymentTimestamp": 1761265696587
+}

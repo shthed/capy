@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-24T07:23:03+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/395afb36f53f63c568fe993f7e639e833963945b",
     "key": "main"
+  },
+  "codex-fix-mouse-click-controls-for-color-selection": {
+    "key": "codex-fix-mouse-click-controls-for-color-selection",
+    "branch": "codex/fix-mouse-click-controls-for-color-selection",
+    "safeName": "codex-fix-mouse-click-controls-for-color-selection",
+    "commit": "395afb36f53f63c568fe993f7e639e833963945b",
+    "message": "Merge pull request #214 from shthed/codex/update-manage-saves-autosave-display\n\nRevamp Manage Saves autosave slot layout",
+    "actor": "shthed",
+    "deployedAt": "2025-10-24T07:23:03+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/395afb36f53f63c568fe993f7e639e833963945b"
   }
 }
