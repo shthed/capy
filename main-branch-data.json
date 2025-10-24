@@ -1,70 +1,70 @@
 {
   "commits": [
     {
-      "sha": "597ca3d8c1e914989070a4c5c6e47c8f984ad4c1",
-      "shortSha": "597ca3d",
-      "message": "Merge pull request #220 from shthed/codex/refactor-label-layout-for-zoom-scaling\n\nAdjust region label layout to respect zoom ratio",
+      "sha": "3f6e7f201a032d9af2f1a2690775d0e95137ff3d",
+      "shortSha": "3f6e7f2",
+      "message": "Merge pull request #222 from shthed/codex/add-url-image-loading-and-region-drawing-vqj4rt\n\nImprove remote image URL workflow",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-24T13:42:21Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/597ca3d8c1e914989070a4c5c6e47c8f984ad4c1",
+      "date": "2025-10-24T23:40:40Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3f6e7f201a032d9af2f1a2690775d0e95137ff3d",
       "prs": [
         {
-          "number": 220,
-          "title": "Adjust region label layout to respect zoom ratio",
-          "url": "https://github.com/shthed/capy/pull/220",
-          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     },
     {
-      "sha": "d93500b4a2c686822501d91d32fd8cf14988e277",
-      "shortSha": "d93500b",
-      "message": "Merge branch 'main' into codex/refactor-label-layout-for-zoom-scaling",
+      "sha": "2937f7002fa32e9ab40ad00b2a530cc045eaf8fd",
+      "shortSha": "2937f70",
+      "message": "Merge branch 'main' into codex/add-url-image-loading-and-region-drawing-vqj4rt",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-24T13:42:07Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/d93500b4a2c686822501d91d32fd8cf14988e277",
+      "date": "2025-10-24T23:40:03Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2937f7002fa32e9ab40ad00b2a530cc045eaf8fd",
       "prs": [
         {
-          "number": 220,
-          "title": "Adjust region label layout to respect zoom ratio",
-          "url": "https://github.com/shthed/capy/pull/220",
-          "branch": "codex/refactor-label-layout-for-zoom-scaling"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     },
     {
-      "sha": "758869f168f089a9de3240a1afd53b6b93d19587",
-      "shortSha": "758869f",
-      "message": "Merge pull request #221 from shthed/codex/add-url-image-loading-and-region-drawing\n\nAdd support for loading puzzles from external image URLs",
+      "sha": "b479af019e5f2e318eea54b2074217240ada970f",
+      "shortSha": "b479af0",
+      "message": "Merge remote-tracking branch 'origin/main' into work",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-24T13:33:41Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/758869f168f089a9de3240a1afd53b6b93d19587",
+      "date": "2025-10-24T23:37:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b479af019e5f2e318eea54b2074217240ada970f",
       "prs": [
         {
-          "number": 221,
-          "title": "Add support for loading puzzles from external image URLs",
-          "url": "https://github.com/shthed/capy/pull/221",
-          "branch": "codex/add-url-image-loading-and-region-drawing"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     },
     {
-      "sha": "e9d45855b947fd275b77201fdb433fa30b14e068",
-      "shortSha": "e9d4585",
-      "message": "Update index.html\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
+      "sha": "386918d45ef6a19cc553e7e3edda69d05a0b04ac",
+      "shortSha": "386918d",
+      "message": "Clarify remote image load error message",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-24T13:18:25Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/e9d45855b947fd275b77201fdb433fa30b14e068",
+      "date": "2025-10-24T13:44:43Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/386918d45ef6a19cc553e7e3edda69d05a0b04ac",
       "prs": [
         {
-          "number": 221,
-          "title": "Add support for loading puzzles from external image URLs",
-          "url": "https://github.com/shthed/capy/pull/221",
-          "branch": "codex/add-url-image-loading-and-region-drawing"
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
     }
   ],
-  "lastCommitDate": "2025-10-24T13:42:21Z",
-  "deploymentTimestamp": 1761313363701
+  "lastCommitDate": "2025-10-24T23:40:40Z",
+  "deploymentTimestamp": 1761349259082
 }
