@@ -9,6 +9,16 @@
     "commitUrl": "https://github.com/shthed/capy/commit/758869f168f089a9de3240a1afd53b6b93d19587",
     "key": "main"
   },
+  "codex-add-url-image-loading-and-region-drawing-vqj4rt": {
+    "key": "codex-add-url-image-loading-and-region-drawing-vqj4rt",
+    "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt",
+    "safeName": "codex-add-url-image-loading-and-region-drawing-vqj4rt",
+    "commit": "6b9100240418ee0803baf1455eab3b1016b43843",
+    "message": "Merge pull request #216 from shthed/codex/fix-mouse-click-controls-for-color-selection\n\nFix right-click select colour when pan drag is configured",
+    "actor": "shthed",
+    "deployedAt": "2025-10-24T08:31:56+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/6b9100240418ee0803baf1455eab3b1016b43843"
+  },
   "codex-refactor-label-layout-for-zoom-scaling": {
     "key": "codex-refactor-label-layout-for-zoom-scaling",
     "branch": "codex/refactor-label-layout-for-zoom-scaling",
