@@ -13,10 +13,10 @@
     "key": "codex-fix-mouse-click-controls-for-color-selection",
     "branch": "codex/fix-mouse-click-controls-for-color-selection",
     "safeName": "codex-fix-mouse-click-controls-for-color-selection",
-    "commit": "ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad",
-    "message": "Fix right-click colour selection with pan controls",
+    "commit": "589a3f208a30dd61dd6394ea5d70ed8733c66676",
+    "message": "Update index.html\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T08:28:02+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/ad7f71f4b8abdcfb4d9f5e53e2e70eb615483fad"
+    "deployedAt": "2025-10-24T08:31:31+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/589a3f208a30dd61dd6394ea5d70ed8733c66676"
   }
 }
