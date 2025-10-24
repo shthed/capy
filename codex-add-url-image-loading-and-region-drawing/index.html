@@ -2417,6 +2417,25 @@
       const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const AUTOSAVE_MANAGEMENT_ID = "autosave";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
+      const SETTINGS_STORAGE_KEY = "capy.settings.v1";
+      const SETTINGS_AUTOSAVE_REASONS = new Set([
+        "settings-renderer",
+        "settings-auto-advance",
+        "settings-hint-animations",
+        "settings-hint-matching",
+        "settings-hint-hover",
+        "settings-difficulty",
+        "settings-hint-fade",
+        "settings-hint-intensity",
+        "settings-ui-scale",
+        "settings-image-description",
+        "settings-art-prompt",
+        "settings-region-labels",
+        "settings-theme",
+        "settings-mouse-controls",
+        "background-colour",
+        "stage-background-colour",
+      ]);
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
       const DEFAULT_UI_SCALE = 0.75;
@@ -2475,6 +2494,9 @@
       ]);
       const VALID_MOUSE_DRAG_ACTIONS = new Set(["pan", "fill", "zoom", "none"]);
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
+      let settingsPersistTimer = null;
+      let pendingSettingsPersistPayload = null;
+      let lastStoredSettingsJson = null;
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
       let pendingAutosaveReason = null;
@@ -3612,6 +3634,14 @@
         sampleArtwork: null,
       };
 
+      const storedUserSettings = loadUserSettings();
+      if (storedUserSettings) {
+        state.settings = {
+          ...state.settings,
+          ...storedUserSettings,
+        };
+      }
+
       const unavailableRenderers = new Set();
 
       function logRendererEvent(message, details = null) {
@@ -4216,6 +4246,7 @@
         } else {
           applyMouseControls(state.settings.mouseControls, { skipLog: true, skipAutosave: true });
         }
+        scheduleSettingsPersist({ delay: 0 });
         updateOptionOutputs();
       }
 
@@ -7822,7 +7853,7 @@
           ctx.lineCap = "round";
           for (const region of state.puzzle.regions) {
             if (state.filled.has(region.id)) continue;
-            const layout = getRegionLabelLayout(region);
+            const layout = getRegionLabelLayout(region, scale);
             if (!layout) continue;
             const paletteColor = getPaletteEntry(region.colorId);
             const regionInk =
@@ -7861,20 +7892,23 @@
         return fallbackId;
       }
 
-      function getRegionLabelLayout(region) {
+      function getRegionLabelLayout(region, renderScale = 1) {
         if (!region || !state.puzzle) return null;
         const text = getRegionLabelText(region);
         if (!text) return null;
-        if (region.labelLayoutText === text) {
+        const normalizedScale = Number.isFinite(renderScale) && renderScale > 0 ? renderScale : 1;
+        const scaleKey = Math.round(normalizedScale * 100) / 100;
+        if (region.labelLayoutText === text && region.labelLayoutScaleKey === scaleKey) {
           return region.labelLayout || null;
         }
-        const layout = computeRegionLabelLayout(region, text);
+        const layout = computeRegionLabelLayout(region, text, normalizedScale);
         region.labelLayout = layout;
         region.labelLayoutText = text;
+        region.labelLayoutScaleKey = scaleKey;
         return layout;
       }
 
-      function computeRegionLabelLayout(region, rawText) {
+      function computeRegionLabelLayout(region, rawText, renderScale = 1) {
         if (!state.puzzle) return null;
         if (!Array.isArray(region.pixels) || region.pixels.length === 0) return null;
         const text = typeof rawText === "string" ? rawText.trim() : "";
@@ -7888,22 +7922,31 @@
         const safeWidth = Math.max(1, bounds.width - 0.75);
         const safeHeight = Math.max(1, bounds.height - 0.75);
         if (safeWidth <= 0 || safeHeight <= 0) return null;
+        const renderScaleForSizing = Number.isFinite(renderScale) && renderScale > 0 ? renderScale : 1;
+        const scaleForMin = Math.max(1, renderScaleForSizing);
+        const effectiveMinSize = MIN_LABEL_SIZE / scaleForMin;
         const approxCharacters = text.length <= 1 ? 1 : text.length * 0.62 + 0.4;
         const widthLimit = safeWidth / approxCharacters;
         const heightLimit = safeHeight * 0.92;
         const areaLimit = Math.sqrt(area) * 0.9;
         const theoreticalMax = Math.max(
-          MIN_LABEL_SIZE + 0.15,
+          effectiveMinSize + 0.15,
           Math.min(widthLimit, heightLimit, areaLimit, MAX_LABEL_SIZE)
         );
         const floorCandidate = Math.min(
           theoreticalMax,
-          Math.max(MIN_LABEL_SIZE, Math.min(widthLimit, heightLimit, areaLimit * 0.92))
+          Math.max(effectiveMinSize, Math.min(widthLimit, heightLimit, areaLimit * 0.92))
         );
-        const minAttemptSize = Math.max(MIN_LABEL_SIZE, Math.min(floorCandidate, theoreticalMax));
+        const minAttemptSize = Math.max(effectiveMinSize, Math.min(floorCandidate, theoreticalMax));
         const attempts = [];
+        const scaleForAttempts = Math.max(1, Math.min(3, renderScaleForSizing));
+        const baseAttemptLimit = 9;
+        const attemptLimit = Math.min(
+          baseAttemptLimit + 6,
+          Math.max(baseAttemptLimit, Math.round(baseAttemptLimit * scaleForAttempts))
+        );
         let nextSize = theoreticalMax;
-        while (nextSize >= minAttemptSize && attempts.length < 9) {
+        while (nextSize >= minAttemptSize && attempts.length < attemptLimit) {
           attempts.push(nextSize);
           nextSize *= 0.86;
         }
@@ -7915,7 +7958,7 @@
             attempts.push(minAttemptSize);
           }
         }
-        const smallest = Math.max(MIN_LABEL_SIZE, minAttemptSize * 0.88);
+        const smallest = Math.max(effectiveMinSize, minAttemptSize * 0.88);
         if (attempts[attempts.length - 1] > smallest + 0.05) {
           attempts.push(smallest);
         }
@@ -10342,10 +10385,257 @@
         return compactPuzzleSnapshot(snapshot) || snapshot;
       }
 
+      function isSettingsAutosaveReason(reason) {
+        return typeof reason === "string" && SETTINGS_AUTOSAVE_REASONS.has(reason);
+      }
+
+      function getUserSettingsSnapshot(source = state?.settings) {
+        if (!source || typeof source !== "object") return null;
+        const base = source;
+        const hintTypes = normalizeHintTypes(base.hintTypes, DEFAULT_HINT_TYPES);
+        const hintFadeDuration = normalizeHintFadeDuration(base.hintFadeDuration);
+        const hintIntensity = normalizeHintIntensity(base.hintIntensity);
+        const difficulty = resolveDifficulty(base.difficulty);
+        const scaleCandidate = Number(base.uiScale);
+        const uiScale = Number.isFinite(scaleCandidate)
+          ? clamp(scaleCandidate, 0.2, 3)
+          : DEFAULT_UI_SCALE;
+        const renderer = normalizeRendererType(base.renderer) || "canvas2d";
+        const themeCandidate =
+          typeof base.theme === "string" ? base.theme.trim().toLowerCase() : "";
+        const theme = VALID_UI_THEMES.has(themeCandidate) ? themeCandidate : DEFAULT_UI_THEME;
+        const backgroundColor = sanitizeHexColor(
+          base.backgroundColor ?? DEFAULT_BACKGROUND_HEX,
+          DEFAULT_BACKGROUND_HEX
+        );
+        const stageBackgroundColor = sanitizeHexColor(
+          base.stageBackgroundColor ?? DEFAULT_STAGE_BACKGROUND_HEX,
+          DEFAULT_STAGE_BACKGROUND_HEX
+        );
+        const mouseControls = cloneMouseControls(
+          normalizeMouseControls(base.mouseControls, DEFAULT_MOUSE_CONTROLS)
+        );
+        const artPrompt = typeof base.artPrompt === "string" ? base.artPrompt : "";
+        const imageDescription =
+          typeof base.imageDescription === "string" ? base.imageDescription : "";
+        return {
+          autoAdvance: base.autoAdvance !== false,
+          animateHints: base.animateHints !== false,
+          hintTypes,
+          hintFadeDuration,
+          hintIntensity,
+          difficulty,
+          uiScale,
+          artPrompt,
+          imageDescription,
+          showRegionLabels: base.showRegionLabels !== false,
+          theme,
+          renderer,
+          backgroundColor,
+          stageBackgroundColor,
+          mouseControls,
+        };
+      }
+
+      function persistUserSettings(snapshot) {
+        if (!snapshot || typeof snapshot !== "object") return null;
+        if (typeof localStorage === "undefined") return null;
+        const record = { version: 1, settings: snapshot };
+        let serialized = null;
+        try {
+          serialized = JSON.stringify(record);
+        } catch (error) {
+          console.error("Failed to serialise settings", error);
+          return null;
+        }
+        if (serialized === lastStoredSettingsJson) {
+          return record;
+        }
+        try {
+          localStorage.setItem(SETTINGS_STORAGE_KEY, serialized);
+          lastStoredSettingsJson = serialized;
+        } catch (error) {
+          console.error("Failed to persist settings", error);
+        }
+        return record;
+      }
+
+      function scheduleSettingsPersist(options = {}) {
+        if (typeof localStorage === "undefined") return null;
+        if (!state || !state.settings) return null;
+        const { immediate = false, delay = 350 } = options || {};
+        const snapshot = getUserSettingsSnapshot(state.settings);
+        if (!snapshot) return null;
+        if (immediate) {
+          pendingSettingsPersistPayload = null;
+          if (
+            settingsPersistTimer != null &&
+            typeof window !== "undefined" &&
+            typeof window.clearTimeout === "function"
+          ) {
+            window.clearTimeout(settingsPersistTimer);
+          }
+          settingsPersistTimer = null;
+          return persistUserSettings(snapshot);
+        }
+        pendingSettingsPersistPayload = snapshot;
+        if (
+          settingsPersistTimer != null &&
+          typeof window !== "undefined" &&
+          typeof window.clearTimeout === "function"
+        ) {
+          window.clearTimeout(settingsPersistTimer);
+        }
+        const timeout = Math.max(120, Number.isFinite(delay) ? delay : 350);
+        if (typeof window === "undefined" || typeof window.setTimeout !== "function") {
+          return persistUserSettings(snapshot);
+        }
+        settingsPersistTimer = window.setTimeout(() => {
+          settingsPersistTimer = null;
+          const payload =
+            pendingSettingsPersistPayload || getUserSettingsSnapshot(state.settings);
+          pendingSettingsPersistPayload = null;
+          persistUserSettings(payload);
+        }, timeout);
+        return null;
+      }
+
+      function normalizeStoredUserSettings(source) {
+        if (!source || typeof source !== "object") return null;
+        const payload =
+          source.settings && typeof source.settings === "object"
+            ? source.settings
+            : source;
+        if (!payload || typeof payload !== "object") return null;
+        const normalized = {};
+        if (typeof payload.autoAdvance === "boolean") {
+          normalized.autoAdvance = payload.autoAdvance;
+        }
+        if (typeof payload.animateHints === "boolean") {
+          normalized.animateHints = payload.animateHints;
+        }
+        if (payload.hintTypes != null) {
+          normalized.hintTypes = normalizeHintTypes(payload.hintTypes, DEFAULT_HINT_TYPES);
+        }
+        if (payload.hintFadeDuration != null) {
+          const candidate = Number(payload.hintFadeDuration);
+          if (Number.isFinite(candidate) && candidate > 0) {
+            normalized.hintFadeDuration = clamp(
+              Math.round(candidate),
+              MIN_HINT_FADE_DURATION,
+              MAX_HINT_FADE_DURATION
+            );
+          }
+        }
+        if (payload.hintIntensity != null) {
+          let candidate = Number(payload.hintIntensity);
+          if (Number.isFinite(candidate)) {
+            if (candidate > 1) {
+              candidate /= 100;
+            }
+            normalized.hintIntensity = clamp(
+              candidate,
+              MIN_HINT_INTENSITY,
+              MAX_HINT_INTENSITY
+            );
+          }
+        }
+        if (payload.difficulty != null) {
+          normalized.difficulty = resolveDifficulty(payload.difficulty);
+        }
+        if (payload.uiScale != null) {
+          const candidate = Number(payload.uiScale);
+          if (Number.isFinite(candidate)) {
+            normalized.uiScale = clamp(candidate, 0.2, 3);
+          }
+        }
+        if (typeof payload.artPrompt === "string") {
+          normalized.artPrompt = payload.artPrompt;
+        }
+        if (typeof payload.imageDescription === "string") {
+          normalized.imageDescription = payload.imageDescription;
+        }
+        if (payload.showRegionLabels != null) {
+          normalized.showRegionLabels = payload.showRegionLabels !== false;
+        }
+        if (payload.theme != null) {
+          const themeCandidate =
+            typeof payload.theme === "string" ? payload.theme.trim().toLowerCase() : "";
+          if (VALID_UI_THEMES.has(themeCandidate)) {
+            normalized.theme = themeCandidate;
+          }
+        }
+        if (payload.renderer != null) {
+          const renderer = normalizeRendererType(payload.renderer);
+          if (renderer) {
+            normalized.renderer = renderer;
+          }
+        }
+        if (payload.backgroundColor != null) {
+          normalized.backgroundColor = sanitizeHexColor(
+            payload.backgroundColor,
+            DEFAULT_BACKGROUND_HEX
+          );
+        }
+        if (payload.stageBackgroundColor != null) {
+          normalized.stageBackgroundColor = sanitizeHexColor(
+            payload.stageBackgroundColor,
+            DEFAULT_STAGE_BACKGROUND_HEX
+          );
+        }
+        if (payload.mouseControls != null) {
+          normalized.mouseControls = cloneMouseControls(
+            normalizeMouseControls(payload.mouseControls, DEFAULT_MOUSE_CONTROLS)
+          );
+        }
+        return Object.keys(normalized).length > 0 ? normalized : null;
+      }
+
+      function loadUserSettings() {
+        if (typeof localStorage === "undefined") return null;
+        try {
+          const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          const normalized = normalizeStoredUserSettings(parsed);
+          if (!normalized) return null;
+          let rewritePayload = null;
+          try {
+            const snapshot = getUserSettingsSnapshot(normalized);
+            if (snapshot) {
+              const record = { version: 1, settings: snapshot };
+              const serialized = JSON.stringify(record);
+              if (serialized !== raw) {
+                rewritePayload = serialized;
+              } else {
+                lastStoredSettingsJson = serialized;
+              }
+            }
+          } catch (prepareError) {
+            console.error("Failed to prepare settings rewrite", prepareError);
+          }
+          if (rewritePayload) {
+            try {
+              localStorage.setItem(SETTINGS_STORAGE_KEY, rewritePayload);
+              lastStoredSettingsJson = rewritePayload;
+            } catch (persistError) {
+              console.error("Failed to rewrite stored settings", persistError);
+            }
+          }
+          return normalized;
+        } catch (error) {
+          console.error("Failed to load stored settings", error);
+        }
+        return null;
+      }
+
       function scheduleAutosave(reason, options = {}) {
         if (!state.puzzle) return null;
         const { immediate = false, delay = 350 } = options;
         const resolvedReason = reason || pendingAutosaveReason || "update";
+        if (isSettingsAutosaveReason(resolvedReason)) {
+          scheduleSettingsPersist({ immediate, delay });
+        }
         if (immediate) {
           pendingAutosaveReason = null;
           if (autosaveTimer) {

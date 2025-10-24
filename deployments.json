@@ -13,11 +13,11 @@
     "key": "codex-add-url-image-loading-and-region-drawing",
     "branch": "codex/add-url-image-loading-and-region-drawing",
     "safeName": "codex-add-url-image-loading-and-region-drawing",
-    "commit": "eef85248a5be8b0e92591f03859e6529d36d3c20",
-    "message": "Add support for loading puzzles from external image URLs",
+    "commit": "6be2cd92a8e377f218f5431457b27e177ed40d2e",
+    "message": "Merge branch 'main' into codex/add-url-image-loading-and-region-drawing",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T21:14:17+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/eef85248a5be8b0e92591f03859e6529d36d3c20"
+    "deployedAt": "2025-10-24T21:17:34+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/6be2cd92a8e377f218f5431457b27e177ed40d2e"
   },
   "codex-refactor-label-layout-for-zoom-scaling": {
     "key": "codex-refactor-label-layout-for-zoom-scaling",
