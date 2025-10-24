@@ -13,10 +13,10 @@
     "key": "codex-add-url-image-loading-and-region-drawing-vqj4rt",
     "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt",
     "safeName": "codex-add-url-image-loading-and-region-drawing-vqj4rt",
-    "commit": "386918d45ef6a19cc553e7e3edda69d05a0b04ac",
-    "message": "Clarify remote image load error message",
+    "commit": "b479af019e5f2e318eea54b2074217240ada970f",
+    "message": "Merge remote-tracking branch 'origin/main' into work",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T21:44:43+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/386918d45ef6a19cc553e7e3edda69d05a0b04ac"
+    "deployedAt": "2025-10-25T07:37:42+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/b479af019e5f2e318eea54b2074217240ada970f"
   }
 }

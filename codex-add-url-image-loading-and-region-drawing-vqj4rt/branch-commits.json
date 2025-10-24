@@ -1,6 +1,21 @@
 {
   "codex/add-url-image-loading-and-region-drawing-vqj4rt": [
     {
+      "sha": "b479af019e5f2e318eea54b2074217240ada970f",
+      "shortSha": "b479af0",
+      "message": "Merge remote-tracking branch 'origin/main' into work",
+      "date": "2025-10-24T23:37:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b479af019e5f2e318eea54b2074217240ada970f",
+      "prs": [
+        {
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
+        }
+      ]
+    },
+    {
       "sha": "386918d45ef6a19cc553e7e3edda69d05a0b04ac",
       "shortSha": "386918d",
       "message": "Clarify remote image load error message",
@@ -36,21 +51,6 @@
       "message": "Merge pull request #216 from shthed/codex/fix-mouse-click-controls-for-color-selection\n\nFix right-click select colour when pan drag is configured",
       "date": "2025-10-24T00:31:56Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/6b9100240418ee0803baf1455eab3b1016b43843",
-      "prs": [
-        {
-          "number": 222,
-          "title": "Improve remote image URL workflow",
-          "url": "https://github.com/shthed/capy/pull/222",
-          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
-        }
-      ]
-    },
-    {
-      "sha": "589a3f208a30dd61dd6394ea5d70ed8733c66676",
-      "shortSha": "589a3f2",
-      "message": "Update index.html\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
-      "date": "2025-10-24T00:31:31Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/589a3f208a30dd61dd6394ea5d70ed8733c66676",
       "prs": [
         {
           "number": 222,
@@ -63,6 +63,21 @@
   ],
   "codex-add-url-image-loading-and-region-drawing-vqj4rt": [
     {
+      "sha": "b479af019e5f2e318eea54b2074217240ada970f",
+      "shortSha": "b479af0",
+      "message": "Merge remote-tracking branch 'origin/main' into work",
+      "date": "2025-10-24T23:37:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b479af019e5f2e318eea54b2074217240ada970f",
+      "prs": [
+        {
+          "number": 222,
+          "title": "Improve remote image URL workflow",
+          "url": "https://github.com/shthed/capy/pull/222",
+          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
+        }
+      ]
+    },
+    {
       "sha": "386918d45ef6a19cc553e7e3edda69d05a0b04ac",
       "shortSha": "386918d",
       "message": "Clarify remote image load error message",
@@ -98,21 +113,6 @@
       "message": "Merge pull request #216 from shthed/codex/fix-mouse-click-controls-for-color-selection\n\nFix right-click select colour when pan drag is configured",
       "date": "2025-10-24T00:31:56Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/6b9100240418ee0803baf1455eab3b1016b43843",
-      "prs": [
-        {
-          "number": 222,
-          "title": "Improve remote image URL workflow",
-          "url": "https://github.com/shthed/capy/pull/222",
-          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
-        }
-      ]
-    },
-    {
-      "sha": "589a3f208a30dd61dd6394ea5d70ed8733c66676",
-      "shortSha": "589a3f2",
-      "message": "Update index.html\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
-      "date": "2025-10-24T00:31:31Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/589a3f208a30dd61dd6394ea5d70ed8733c66676",
       "prs": [
         {
           "number": 222,
