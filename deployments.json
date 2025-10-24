@@ -9,14 +9,14 @@
     "commitUrl": "https://github.com/shthed/capy/commit/84e393ef030b1435cbdc9c50b249c15c95796d35",
     "key": "main"
   },
-  "codex-update-label-layout-for-zoom-support": {
-    "key": "codex-update-label-layout-for-zoom-support",
-    "branch": "codex/update-label-layout-for-zoom-support",
-    "safeName": "codex-update-label-layout-for-zoom-support",
-    "commit": "7c43d1a75f36376a9413c9c80690cd2130d70047",
-    "message": "Support zoom-aware label layout",
+  "codex-refactor-label-layout-for-zoom-scaling": {
+    "key": "codex-refactor-label-layout-for-zoom-scaling",
+    "branch": "codex/refactor-label-layout-for-zoom-scaling",
+    "safeName": "codex-refactor-label-layout-for-zoom-scaling",
+    "commit": "84e393ef030b1435cbdc9c50b249c15c95796d35",
+    "message": "Merge pull request #219 from shthed/codex/update-label-layout-for-zoom-support-vg63zy\n\nSupport zoom-aware region label layout",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T19:28:50+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/7c43d1a75f36376a9413c9c80690cd2130d70047"
+    "deployedAt": "2025-10-24T19:56:53+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/84e393ef030b1435cbdc9c50b249c15c95796d35"
   }
 }
