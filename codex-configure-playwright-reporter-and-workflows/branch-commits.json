@@ -1,0 +1,126 @@
+{
+  "codex/configure-playwright-reporter-and-workflows": [
+    {
+      "sha": "f41e1efdf8318330640e36d0ddb21d1930e6ecde",
+      "shortSha": "f41e1ef",
+      "message": "Configure Playwright UI review artifacts",
+      "date": "2025-10-25T00:23:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f41e1efdf8318330640e36d0ddb21d1930e6ecde",
+      "prs": [
+        {
+          "number": 224,
+          "title": "Configure Playwright UI review artifacts",
+          "url": "https://github.com/shthed/capy/pull/224",
+          "branch": "codex/configure-playwright-reporter-and-workflows"
+        }
+      ]
+    },
+    {
+      "sha": "3f6e7f201a032d9af2f1a2690775d0e95137ff3d",
+      "shortSha": "3f6e7f2",
+      "message": "Merge pull request #222 from shthed/codex/add-url-image-loading-and-region-drawing-vqj4rt\n\nImprove remote image URL workflow",
+      "date": "2025-10-24T23:40:40Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3f6e7f201a032d9af2f1a2690775d0e95137ff3d",
+      "prs": [
+        {
+          "number": 224,
+          "title": "Configure Playwright UI review artifacts",
+          "url": "https://github.com/shthed/capy/pull/224",
+          "branch": "codex/configure-playwright-reporter-and-workflows"
+        }
+      ]
+    },
+    {
+      "sha": "2937f7002fa32e9ab40ad00b2a530cc045eaf8fd",
+      "shortSha": "2937f70",
+      "message": "Merge branch 'main' into codex/add-url-image-loading-and-region-drawing-vqj4rt",
+      "date": "2025-10-24T23:40:03Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2937f7002fa32e9ab40ad00b2a530cc045eaf8fd",
+      "prs": [
+        {
+          "number": 224,
+          "title": "Configure Playwright UI review artifacts",
+          "url": "https://github.com/shthed/capy/pull/224",
+          "branch": "codex/configure-playwright-reporter-and-workflows"
+        }
+      ]
+    },
+    {
+      "sha": "b479af019e5f2e318eea54b2074217240ada970f",
+      "shortSha": "b479af0",
+      "message": "Merge remote-tracking branch 'origin/main' into work",
+      "date": "2025-10-24T23:37:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b479af019e5f2e318eea54b2074217240ada970f",
+      "prs": [
+        {
+          "number": 224,
+          "title": "Configure Playwright UI review artifacts",
+          "url": "https://github.com/shthed/capy/pull/224",
+          "branch": "codex/configure-playwright-reporter-and-workflows"
+        }
+      ]
+    }
+  ],
+  "codex-configure-playwright-reporter-and-workflows": [
+    {
+      "sha": "f41e1efdf8318330640e36d0ddb21d1930e6ecde",
+      "shortSha": "f41e1ef",
+      "message": "Configure Playwright UI review artifacts",
+      "date": "2025-10-25T00:23:01Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f41e1efdf8318330640e36d0ddb21d1930e6ecde",
+      "prs": [
+        {
+          "number": 224,
+          "title": "Configure Playwright UI review artifacts",
+          "url": "https://github.com/shthed/capy/pull/224",
+          "branch": "codex/configure-playwright-reporter-and-workflows"
+        }
+      ]
+    },
+    {
+      "sha": "3f6e7f201a032d9af2f1a2690775d0e95137ff3d",
+      "shortSha": "3f6e7f2",
+      "message": "Merge pull request #222 from shthed/codex/add-url-image-loading-and-region-drawing-vqj4rt\n\nImprove remote image URL workflow",
+      "date": "2025-10-24T23:40:40Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3f6e7f201a032d9af2f1a2690775d0e95137ff3d",
+      "prs": [
+        {
+          "number": 224,
+          "title": "Configure Playwright UI review artifacts",
+          "url": "https://github.com/shthed/capy/pull/224",
+          "branch": "codex/configure-playwright-reporter-and-workflows"
+        }
+      ]
+    },
+    {
+      "sha": "2937f7002fa32e9ab40ad00b2a530cc045eaf8fd",
+      "shortSha": "2937f70",
+      "message": "Merge branch 'main' into codex/add-url-image-loading-and-region-drawing-vqj4rt",
+      "date": "2025-10-24T23:40:03Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/2937f7002fa32e9ab40ad00b2a530cc045eaf8fd",
+      "prs": [
+        {
+          "number": 224,
+          "title": "Configure Playwright UI review artifacts",
+          "url": "https://github.com/shthed/capy/pull/224",
+          "branch": "codex/configure-playwright-reporter-and-workflows"
+        }
+      ]
+    },
+    {
+      "sha": "b479af019e5f2e318eea54b2074217240ada970f",
+      "shortSha": "b479af0",
+      "message": "Merge remote-tracking branch 'origin/main' into work",
+      "date": "2025-10-24T23:37:42Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/b479af019e5f2e318eea54b2074217240ada970f",
+      "prs": [
+        {
+          "number": 224,
+          "title": "Configure Playwright UI review artifacts",
+          "url": "https://github.com/shthed/capy/pull/224",
+          "branch": "codex/configure-playwright-reporter-and-workflows"
+        }
+      ]
+    }
+  ]
+}
