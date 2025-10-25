@@ -1,0 +1,126 @@
+{
+  "codex/adjust-region-number-label-sizing": [
+    {
+      "sha": "3cfbf3c9a90c50f71f5c4251086017f018f65eb3",
+      "shortSha": "3cfbf3c",
+      "message": "Improve region label placement and sizing",
+      "date": "2025-10-25T10:59:44Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3cfbf3c9a90c50f71f5c4251086017f018f65eb3",
+      "prs": [
+        {
+          "number": 230,
+          "title": "Improve region label placement and sizing",
+          "url": "https://github.com/shthed/capy/pull/230",
+          "branch": "codex/adjust-region-number-label-sizing"
+        }
+      ]
+    },
+    {
+      "sha": "95ec4d203ea5d83921d7a4ca2a25810c913972e1",
+      "shortSha": "95ec4d2",
+      "message": "Merge pull request #228 from shthed/codex/fix-autosave-settings-not-persisting\n\nFix settings persistence when no puzzle is loaded",
+      "date": "2025-10-25T10:26:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/95ec4d203ea5d83921d7a4ca2a25810c913972e1",
+      "prs": [
+        {
+          "number": 230,
+          "title": "Improve region label placement and sizing",
+          "url": "https://github.com/shthed/capy/pull/230",
+          "branch": "codex/adjust-region-number-label-sizing"
+        }
+      ]
+    },
+    {
+      "sha": "53149c3629853d8db97024f904939ba24a7afacf",
+      "shortSha": "53149c3",
+      "message": "Ensure UI scale persists and lighten light-theme selects",
+      "date": "2025-10-25T10:24:41Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/53149c3629853d8db97024f904939ba24a7afacf",
+      "prs": [
+        {
+          "number": 230,
+          "title": "Improve region label placement and sizing",
+          "url": "https://github.com/shthed/capy/pull/230",
+          "branch": "codex/adjust-region-number-label-sizing"
+        }
+      ]
+    },
+    {
+      "sha": "0c5e3f9506c16bfe0e761c1735678da97c392228",
+      "shortSha": "0c5e3f9",
+      "message": "Merge pull request #229 from shthed/codex/choose-better-algorithm-for-label-placement\n\nImprove region label placement with polylabel",
+      "date": "2025-10-25T10:24:08Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0c5e3f9506c16bfe0e761c1735678da97c392228",
+      "prs": [
+        {
+          "number": 230,
+          "title": "Improve region label placement and sizing",
+          "url": "https://github.com/shthed/capy/pull/230",
+          "branch": "codex/adjust-region-number-label-sizing"
+        }
+      ]
+    }
+  ],
+  "codex-adjust-region-number-label-sizing": [
+    {
+      "sha": "3cfbf3c9a90c50f71f5c4251086017f018f65eb3",
+      "shortSha": "3cfbf3c",
+      "message": "Improve region label placement and sizing",
+      "date": "2025-10-25T10:59:44Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3cfbf3c9a90c50f71f5c4251086017f018f65eb3",
+      "prs": [
+        {
+          "number": 230,
+          "title": "Improve region label placement and sizing",
+          "url": "https://github.com/shthed/capy/pull/230",
+          "branch": "codex/adjust-region-number-label-sizing"
+        }
+      ]
+    },
+    {
+      "sha": "95ec4d203ea5d83921d7a4ca2a25810c913972e1",
+      "shortSha": "95ec4d2",
+      "message": "Merge pull request #228 from shthed/codex/fix-autosave-settings-not-persisting\n\nFix settings persistence when no puzzle is loaded",
+      "date": "2025-10-25T10:26:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/95ec4d203ea5d83921d7a4ca2a25810c913972e1",
+      "prs": [
+        {
+          "number": 230,
+          "title": "Improve region label placement and sizing",
+          "url": "https://github.com/shthed/capy/pull/230",
+          "branch": "codex/adjust-region-number-label-sizing"
+        }
+      ]
+    },
+    {
+      "sha": "53149c3629853d8db97024f904939ba24a7afacf",
+      "shortSha": "53149c3",
+      "message": "Ensure UI scale persists and lighten light-theme selects",
+      "date": "2025-10-25T10:24:41Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/53149c3629853d8db97024f904939ba24a7afacf",
+      "prs": [
+        {
+          "number": 230,
+          "title": "Improve region label placement and sizing",
+          "url": "https://github.com/shthed/capy/pull/230",
+          "branch": "codex/adjust-region-number-label-sizing"
+        }
+      ]
+    },
+    {
+      "sha": "0c5e3f9506c16bfe0e761c1735678da97c392228",
+      "shortSha": "0c5e3f9",
+      "message": "Merge pull request #229 from shthed/codex/choose-better-algorithm-for-label-placement\n\nImprove region label placement with polylabel",
+      "date": "2025-10-25T10:24:08Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0c5e3f9506c16bfe0e761c1735678da97c392228",
+      "prs": [
+        {
+          "number": 230,
+          "title": "Improve region label placement and sizing",
+          "url": "https://github.com/shthed/capy/pull/230",
+          "branch": "codex/adjust-region-number-label-sizing"
+        }
+      ]
+    }
+  ]
+}
