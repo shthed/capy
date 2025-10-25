@@ -60,6 +60,12 @@ jobs:
           echo "preview_url=${PREVIEW_URL}" >> "$GITHUB_OUTPUT"
           echo "Preview URL: ${PREVIEW_URL}"
 
+      - name: Prepare UI review artifacts directory
+        run: |
+          set -euo pipefail
+          rm -rf artifacts/ui-review
+          mkdir -p artifacts/ui-review
+
       - name: Run Playwright smoke tests
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
