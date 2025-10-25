@@ -1,0 +1,126 @@
+{
+  "codex/fix-autosave-settings-not-persisting": [
+    {
+      "sha": "9fcf3f9ea43b6f7d4de6b4ea451ce1cdf55840b3",
+      "shortSha": "9fcf3f9",
+      "message": "Fix settings persistence when puzzle not loaded",
+      "date": "2025-10-25T08:48:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9fcf3f9ea43b6f7d4de6b4ea451ce1cdf55840b3",
+      "prs": [
+        {
+          "number": 228,
+          "title": "Fix settings persistence when no puzzle is loaded",
+          "url": "https://github.com/shthed/capy/pull/228",
+          "branch": "codex/fix-autosave-settings-not-persisting"
+        }
+      ]
+    },
+    {
+      "sha": "4fb7e353c050b8e752af33406354dd026817fe45",
+      "shortSha": "4fb7e35",
+      "message": "Merge pull request #226 from shthed/codex/remove-user-settings-from-export\n\nRemove user settings from exported save files",
+      "date": "2025-10-25T05:24:59Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4fb7e353c050b8e752af33406354dd026817fe45",
+      "prs": [
+        {
+          "number": 228,
+          "title": "Fix settings persistence when no puzzle is loaded",
+          "url": "https://github.com/shthed/capy/pull/228",
+          "branch": "codex/fix-autosave-settings-not-persisting"
+        }
+      ]
+    },
+    {
+      "sha": "0aacb4fc1b82a052a8aecc4b595abfc6d0b8bc34",
+      "shortSha": "0aacb4f",
+      "message": "Separate user settings from puzzle snapshots",
+      "date": "2025-10-25T05:20:09Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0aacb4fc1b82a052a8aecc4b595abfc6d0b8bc34",
+      "prs": [
+        {
+          "number": 228,
+          "title": "Fix settings persistence when no puzzle is loaded",
+          "url": "https://github.com/shthed/capy/pull/228",
+          "branch": "codex/fix-autosave-settings-not-persisting"
+        }
+      ]
+    },
+    {
+      "sha": "412e12fc2192e1b8964918e88f141d91c97e770c",
+      "shortSha": "412e12f",
+      "message": "Remove user settings from exported save files",
+      "date": "2025-10-25T02:58:02Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/412e12fc2192e1b8964918e88f141d91c97e770c",
+      "prs": [
+        {
+          "number": 228,
+          "title": "Fix settings persistence when no puzzle is loaded",
+          "url": "https://github.com/shthed/capy/pull/228",
+          "branch": "codex/fix-autosave-settings-not-persisting"
+        }
+      ]
+    }
+  ],
+  "codex-fix-autosave-settings-not-persisting": [
+    {
+      "sha": "9fcf3f9ea43b6f7d4de6b4ea451ce1cdf55840b3",
+      "shortSha": "9fcf3f9",
+      "message": "Fix settings persistence when puzzle not loaded",
+      "date": "2025-10-25T08:48:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9fcf3f9ea43b6f7d4de6b4ea451ce1cdf55840b3",
+      "prs": [
+        {
+          "number": 228,
+          "title": "Fix settings persistence when no puzzle is loaded",
+          "url": "https://github.com/shthed/capy/pull/228",
+          "branch": "codex/fix-autosave-settings-not-persisting"
+        }
+      ]
+    },
+    {
+      "sha": "4fb7e353c050b8e752af33406354dd026817fe45",
+      "shortSha": "4fb7e35",
+      "message": "Merge pull request #226 from shthed/codex/remove-user-settings-from-export\n\nRemove user settings from exported save files",
+      "date": "2025-10-25T05:24:59Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4fb7e353c050b8e752af33406354dd026817fe45",
+      "prs": [
+        {
+          "number": 228,
+          "title": "Fix settings persistence when no puzzle is loaded",
+          "url": "https://github.com/shthed/capy/pull/228",
+          "branch": "codex/fix-autosave-settings-not-persisting"
+        }
+      ]
+    },
+    {
+      "sha": "0aacb4fc1b82a052a8aecc4b595abfc6d0b8bc34",
+      "shortSha": "0aacb4f",
+      "message": "Separate user settings from puzzle snapshots",
+      "date": "2025-10-25T05:20:09Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0aacb4fc1b82a052a8aecc4b595abfc6d0b8bc34",
+      "prs": [
+        {
+          "number": 228,
+          "title": "Fix settings persistence when no puzzle is loaded",
+          "url": "https://github.com/shthed/capy/pull/228",
+          "branch": "codex/fix-autosave-settings-not-persisting"
+        }
+      ]
+    },
+    {
+      "sha": "412e12fc2192e1b8964918e88f141d91c97e770c",
+      "shortSha": "412e12f",
+      "message": "Remove user settings from exported save files",
+      "date": "2025-10-25T02:58:02Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/412e12fc2192e1b8964918e88f141d91c97e770c",
+      "prs": [
+        {
+          "number": 228,
+          "title": "Fix settings persistence when no puzzle is loaded",
+          "url": "https://github.com/shthed/capy/pull/228",
+          "branch": "codex/fix-autosave-settings-not-persisting"
+        }
+      ]
+    }
+  ]
+}

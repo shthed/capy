@@ -1,0 +1,70 @@
+{
+  "commits": [
+    {
+      "sha": "9e64725b32cbb137963f7c74911de69ee4e54324",
+      "shortSha": "9e64725",
+      "message": "Merge pull request #227 from shthed/codex/remove-and-redo-region-numbers-implementation\n\nAlways render region numbers",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T08:48:04Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/9e64725b32cbb137963f7c74911de69ee4e54324",
+      "prs": [
+        {
+          "number": 227,
+          "title": "Always render region numbers",
+          "url": "https://github.com/shthed/capy/pull/227",
+          "branch": "codex/remove-and-redo-region-numbers-implementation"
+        }
+      ]
+    },
+    {
+      "sha": "d38c1af4fbb3302e782d30dafc97d6ee68fb2cb3",
+      "shortSha": "d38c1af",
+      "message": "Merge branch 'main' into codex/remove-and-redo-region-numbers-implementation",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T08:47:14Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d38c1af4fbb3302e782d30dafc97d6ee68fb2cb3",
+      "prs": [
+        {
+          "number": 227,
+          "title": "Always render region numbers",
+          "url": "https://github.com/shthed/capy/pull/227",
+          "branch": "codex/remove-and-redo-region-numbers-implementation"
+        }
+      ]
+    },
+    {
+      "sha": "cc136723984ec697e69a9c5b3d340d94f2b26ac1",
+      "shortSha": "cc13672",
+      "message": "Add label size control and refine region labels",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T08:35:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/cc136723984ec697e69a9c5b3d340d94f2b26ac1",
+      "prs": [
+        {
+          "number": 227,
+          "title": "Always render region numbers",
+          "url": "https://github.com/shthed/capy/pull/227",
+          "branch": "codex/remove-and-redo-region-numbers-implementation"
+        }
+      ]
+    },
+    {
+      "sha": "339cfb43536143a788612f5b6915a204b18c385d",
+      "shortSha": "339cfb4",
+      "message": "Shrink region labels to half-height cap",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T08:08:30Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/339cfb43536143a788612f5b6915a204b18c385d",
+      "prs": [
+        {
+          "number": 227,
+          "title": "Always render region numbers",
+          "url": "https://github.com/shthed/capy/pull/227",
+          "branch": "codex/remove-and-redo-region-numbers-implementation"
+        }
+      ]
+    }
+  ],
+  "lastCommitDate": "2025-10-25T08:48:04Z",
+  "deploymentTimestamp": 1761382145630
+}

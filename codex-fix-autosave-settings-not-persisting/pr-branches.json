@@ -1,0 +1,10 @@
+[
+  {
+    "branch": "codex/fix-autosave-settings-not-persisting",
+    "safeName": "codex-fix-autosave-settings-not-persisting",
+    "title": "Fix settings persistence when no puzzle is loaded",
+    "number": 228,
+    "updatedAt": "2025-10-25T08:48:45Z",
+    "url": "https://github.com/shthed/capy/pull/228"
+  }
+]
