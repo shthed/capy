@@ -1,6 +1,21 @@
 {
   "codex/configure-playwright-reporter-and-workflows": [
     {
+      "sha": "32a01b235c989f02dc92a528f76d7726b3a2a7b9",
+      "shortSha": "32a01b2",
+      "message": "Update .github/workflows/post-deploy-tests.yml\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
+      "date": "2025-10-25T00:24:13Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/32a01b235c989f02dc92a528f76d7726b3a2a7b9",
+      "prs": [
+        {
+          "number": 224,
+          "title": "Configure Playwright UI review artifacts",
+          "url": "https://github.com/shthed/capy/pull/224",
+          "branch": "codex/configure-playwright-reporter-and-workflows"
+        }
+      ]
+    },
+    {
       "sha": "f41e1efdf8318330640e36d0ddb21d1930e6ecde",
       "shortSha": "f41e1ef",
       "message": "Configure Playwright UI review artifacts",
@@ -36,21 +51,6 @@
       "message": "Merge branch 'main' into codex/add-url-image-loading-and-region-drawing-vqj4rt",
       "date": "2025-10-24T23:40:03Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/2937f7002fa32e9ab40ad00b2a530cc045eaf8fd",
-      "prs": [
-        {
-          "number": 224,
-          "title": "Configure Playwright UI review artifacts",
-          "url": "https://github.com/shthed/capy/pull/224",
-          "branch": "codex/configure-playwright-reporter-and-workflows"
-        }
-      ]
-    },
-    {
-      "sha": "b479af019e5f2e318eea54b2074217240ada970f",
-      "shortSha": "b479af0",
-      "message": "Merge remote-tracking branch 'origin/main' into work",
-      "date": "2025-10-24T23:37:42Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/b479af019e5f2e318eea54b2074217240ada970f",
       "prs": [
         {
           "number": 224,
@@ -63,6 +63,21 @@
   ],
   "codex-configure-playwright-reporter-and-workflows": [
     {
+      "sha": "32a01b235c989f02dc92a528f76d7726b3a2a7b9",
+      "shortSha": "32a01b2",
+      "message": "Update .github/workflows/post-deploy-tests.yml\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
+      "date": "2025-10-25T00:24:13Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/32a01b235c989f02dc92a528f76d7726b3a2a7b9",
+      "prs": [
+        {
+          "number": 224,
+          "title": "Configure Playwright UI review artifacts",
+          "url": "https://github.com/shthed/capy/pull/224",
+          "branch": "codex/configure-playwright-reporter-and-workflows"
+        }
+      ]
+    },
+    {
       "sha": "f41e1efdf8318330640e36d0ddb21d1930e6ecde",
       "shortSha": "f41e1ef",
       "message": "Configure Playwright UI review artifacts",
@@ -98,21 +113,6 @@
       "message": "Merge branch 'main' into codex/add-url-image-loading-and-region-drawing-vqj4rt",
       "date": "2025-10-24T23:40:03Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/2937f7002fa32e9ab40ad00b2a530cc045eaf8fd",
-      "prs": [
-        {
-          "number": 224,
-          "title": "Configure Playwright UI review artifacts",
-          "url": "https://github.com/shthed/capy/pull/224",
-          "branch": "codex/configure-playwright-reporter-and-workflows"
-        }
-      ]
-    },
-    {
-      "sha": "b479af019e5f2e318eea54b2074217240ada970f",
-      "shortSha": "b479af0",
-      "message": "Merge remote-tracking branch 'origin/main' into work",
-      "date": "2025-10-24T23:37:42Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/b479af019e5f2e318eea54b2074217240ada970f",
       "prs": [
         {
           "number": 224,
