@@ -13,10 +13,10 @@
     "key": "codex-remove-and-redo-region-numbers-implementation",
     "branch": "codex/remove-and-redo-region-numbers-implementation",
     "safeName": "codex-remove-and-redo-region-numbers-implementation",
-    "commit": "a2cf502550b6a96950d19633441042addf8cc198",
-    "message": "Delete preview directory",
+    "commit": "3c0b25e08196e5eba762c415bd2aa5493a94729c",
+    "message": "Always render region numbers",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T10:31:31+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/a2cf502550b6a96950d19633441042addf8cc198"
+    "deployedAt": "2025-10-25T13:29:09+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/3c0b25e08196e5eba762c415bd2aa5493a94729c"
   }
 }
