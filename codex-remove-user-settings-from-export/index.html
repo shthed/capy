@@ -4838,7 +4838,7 @@
 
       downloadBtn.addEventListener("click", () => {
         if (!state.puzzle) return;
-        const payload = stripUserSettingsFromSnapshot(serializeCurrentPuzzle());
+        const payload = serializeCurrentPuzzle();
         const blob = new Blob([JSON.stringify(payload, null, 2)], {
           type: "application/json",
         });
@@ -4857,7 +4857,7 @@
 
       downloadCompactBtn.addEventListener("click", () => {
         if (!state.puzzle) return;
-        const snapshot = stripUserSettingsFromSnapshot(serializeCurrentPuzzle());
+        const snapshot = serializeCurrentPuzzle();
         const compact = compactPuzzleSnapshot(snapshot) || snapshot;
         if (!compact) {
           logDebug("Unable to export compact puzzle: no snapshot available");
@@ -10270,30 +10270,6 @@
             baseScale: Number.isFinite(baseScale) ? baseScale : 1,
           };
         }
-        const settingsSource =
-          snapshot.settings && typeof snapshot.settings === "object" ? snapshot.settings : {};
-        payload.settings = {
-          autoAdvance: Boolean(settingsSource.autoAdvance),
-          animateHints: Boolean(settingsSource.animateHints),
-          hintTypes: normalizeHintTypes(settingsSource.hintTypes ?? state.settings.hintTypes),
-          hintFadeDuration: normalizeHintFadeDuration(
-            settingsSource.hintFadeDuration ?? state.settings.hintFadeDuration
-          ),
-          hintIntensity: normalizeHintIntensity(settingsSource.hintIntensity ?? state.settings.hintIntensity),
-          difficulty: resolveDifficulty(settingsSource.difficulty ?? state.settings.difficulty),
-          uiScale:
-            Number.isFinite(settingsSource.uiScale) && settingsSource.uiScale > 0
-              ? clamp(settingsSource.uiScale, 0.2, 3)
-              : DEFAULT_UI_SCALE,
-          artPrompt:
-            typeof settingsSource.artPrompt === "string" ? settingsSource.artPrompt : "",
-          imageDescription:
-            typeof settingsSource.imageDescription === "string"
-              ? settingsSource.imageDescription
-              : state.settings.imageDescription || "",
-          renderer:
-            normalizeRendererType(settingsSource.renderer ?? state.settings.renderer) || "canvas2d",
-        };
         return payload;
       }
 
@@ -10314,6 +10290,18 @@
             typeof record.reason === "string" && record.reason ? record.reason : "update",
           data,
         };
+        const settingsSource =
+          record.settings && typeof record.settings === "object"
+            ? record.settings
+            : record.data && typeof record.data === "object" && record.data.settings
+            ? record.data.settings
+            : null;
+        if (settingsSource && typeof settingsSource === "object") {
+          const settingsSnapshot = getUserSettingsSnapshot(settingsSource);
+          if (settingsSnapshot) {
+            normalized.settings = settingsSnapshot;
+          }
+        }
         if (typeof record.title === "string" && record.title.trim()) {
           normalized.title = record.title.trim();
         } else if (typeof data.title === "string" && data.title) {
@@ -10389,25 +10377,6 @@
             zoom: viewState.zoom,
             baseScale: viewState.baseScale,
           },
-          settings: {
-            autoAdvance: Boolean(state.settings.autoAdvance),
-            animateHints: Boolean(state.settings.animateHints),
-            hintTypes: normalizeHintTypes(state.settings.hintTypes),
-            hintFadeDuration: normalizeHintFadeDuration(state.settings.hintFadeDuration),
-            hintIntensity: normalizeHintIntensity(state.settings.hintIntensity),
-            difficulty: resolveDifficulty(state.settings.difficulty),
-            uiScale:
-              Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
-                ? clamp(state.settings.uiScale, 0.2, 3)
-                : DEFAULT_UI_SCALE,
-            artPrompt: state.settings.artPrompt || "",
-            imageDescription: state.settings.imageDescription || "",
-            showRegionLabels: state.settings.showRegionLabels !== false,
-            theme: state.settings.theme || DEFAULT_UI_THEME,
-            renderer: state.settings.renderer || "canvas2d",
-            stageBackgroundColor: state.settings.stageBackgroundColor || DEFAULT_STAGE_BACKGROUND_HEX,
-            mouseControls: cloneMouseControls(state.settings.mouseControls),
-          },
         };
         if (regionMapPacked) {
           snapshot.regionMapPacked = regionMapPacked;
@@ -10429,18 +10398,6 @@
           snapshot.sourceImage = sourceImageSnapshot;
         }
         return compactPuzzleSnapshot(snapshot) || snapshot;
-      }
-
-      function stripUserSettingsFromSnapshot(snapshot) {
-        if (!snapshot || typeof snapshot !== "object") {
-          return snapshot;
-        }
-        if (!Object.prototype.hasOwnProperty.call(snapshot, "settings")) {
-          return snapshot;
-        }
-        const payload = { ...snapshot };
-        delete payload.settings;
-        return payload;
       }
 
       function isSettingsAutosaveReason(reason) {
@@ -10719,12 +10676,14 @@
       function persistAutosave(reason = "update") {
         if (!state.puzzle) return null;
         const snapshot = serializeCurrentPuzzle();
+        const settingsSnapshot = getUserSettingsSnapshot(state.settings);
         const record = normalizeAutosaveRecord({
           version: 1,
           timestamp: Date.now(),
           reason,
           title: snapshot.title || state.sourceTitle || "capy-puzzle",
           data: snapshot,
+          ...(settingsSnapshot ? { settings: settingsSnapshot } : {}),
         });
         if (!record) return null;
         const storageRecord = encodeAutosaveStorageRecord(record);
@@ -10809,6 +10768,7 @@
               timestamp: latestManual.timestamp,
               data: latestManual.data,
               title: latestManual.title,
+              settings: latestManual.settings,
               origin: "manual save",
             });
           }
@@ -10993,7 +10953,7 @@
             backgroundColor: latest.data.backgroundColor,
             stageBackgroundColor: latest.data.stageBackgroundColor,
             viewport: latest.data.viewport,
-            settings: latest.data.settings,
+            settings: latest.settings ?? latest.data.settings,
             title: descriptor,
             logMessage: `Restoring ${descriptor} from backup`,
             skipDefaultLog: true,
@@ -11555,6 +11515,54 @@
         return output;
       }
 
+      function decodeStoredPuzzleSnapshot(source) {
+        if (!source) {
+          return { puzzle: null, settings: null };
+        }
+        let data = null;
+        if (typeof source === "string") {
+          try {
+            data = JSON.parse(source);
+          } catch (error) {
+            console.error("Failed to parse snapshot string", error);
+            return { puzzle: null, settings: null };
+          }
+        } else if (
+          typeof source === "object" &&
+          source.__compressed === true &&
+          typeof source.payload === "string"
+        ) {
+          try {
+            const encoding = typeof source.encoding === "string" ? source.encoding : "identity";
+            const text = decompressSnapshotPayload(source.payload, encoding);
+            if (typeof text !== "string") {
+              return { puzzle: null, settings: null };
+            }
+            data = JSON.parse(text);
+          } catch (error) {
+            console.error("Failed to decompress snapshot", error);
+            return { puzzle: null, settings: null };
+          }
+        } else if (typeof source === "object") {
+          data = source;
+        }
+        if (!data || typeof data !== "object") {
+          return { puzzle: null, settings: null };
+        }
+        let settingsSource = null;
+        if (data.settings && typeof data.settings === "object") {
+          settingsSource = data.settings;
+          data = { ...data };
+          delete data.settings;
+        }
+        const puzzle = compactPuzzleSnapshot(data);
+        const settings =
+          settingsSource && typeof settingsSource === "object"
+            ? getUserSettingsSnapshot(settingsSource)
+            : null;
+        return { puzzle, settings };
+      }
+
       function encodeStoredSnapshot(snapshot) {
         const data = compactPuzzleSnapshot(snapshot);
         if (!data) return null;
@@ -11575,34 +11583,8 @@
       }
 
       function decodeStoredSnapshot(source) {
-        if (!source) return null;
-        let data = null;
-        if (typeof source === "string") {
-          try {
-            data = JSON.parse(source);
-          } catch (error) {
-            console.error("Failed to parse snapshot string", error);
-            return null;
-          }
-        } else if (typeof source === "object" && source.__compressed === true && typeof source.payload === "string") {
-          try {
-            const encoding = typeof source.encoding === "string" ? source.encoding : "identity";
-            const text = decompressSnapshotPayload(source.payload, encoding);
-            if (typeof text !== "string") {
-              return null;
-            }
-            data = JSON.parse(text);
-          } catch (error) {
-            console.error("Failed to decompress snapshot", error);
-            return null;
-          }
-        } else if (typeof source === "object") {
-          data = source;
-        }
-        if (!data || typeof data !== "object") {
-          return null;
-        }
-        return compactPuzzleSnapshot(data);
+        const { puzzle } = decodeStoredPuzzleSnapshot(source);
+        return puzzle;
       }
 
       function encodeAutosaveStorageRecord(record) {
@@ -11615,6 +11597,9 @@
           reason: record.reason,
           data,
         };
+        if (record.settings && typeof record.settings === "object") {
+          storageRecord.settings = record.settings;
+        }
         if (typeof record.title === "string" && record.title.trim()) {
           storageRecord.title = record.title.trim();
         }
@@ -11623,8 +11608,10 @@
 
       function decodeAutosaveStorageRecord(record) {
         if (!record || typeof record !== "object") return null;
-        const data = decodeStoredSnapshot(record.data ?? record.payload ?? null);
-        if (!data) return null;
+        const { puzzle, settings } = decodeStoredPuzzleSnapshot(
+          record.data ?? record.payload ?? null
+        );
+        if (!puzzle) return null;
         const normalized = {
           version:
             typeof record.version === "number" && Number.isFinite(record.version) ? record.version : 1,
@@ -11633,8 +11620,16 @@
               ? record.timestamp
               : Date.now(),
           reason: typeof record.reason === "string" && record.reason ? record.reason : "update",
-          data,
+          data: puzzle,
         };
+        if (settings && typeof settings === "object") {
+          normalized.settings = settings;
+        } else if (record.settings && typeof record.settings === "object") {
+          const snapshot = getUserSettingsSnapshot(record.settings);
+          if (snapshot) {
+            normalized.settings = snapshot;
+          }
+        }
         if (typeof record.title === "string" && record.title.trim()) {
           normalized.title = record.title.trim();
         }
@@ -11650,6 +11645,9 @@
           timestamp: entry.timestamp,
           data,
         };
+        if (entry.settings && typeof entry.settings === "object") {
+          storageEntry.settings = entry.settings;
+        }
         if (typeof entry.title === "string" && entry.title.trim()) {
           storageEntry.title = entry.title.trim();
         }
@@ -11658,13 +11656,21 @@
 
       function decodeSaveStorageEntry(entry) {
         if (!entry || typeof entry !== "object") return null;
-        const data = decodeStoredSnapshot(entry.data ?? null);
-        if (!data) return null;
+        const { puzzle, settings } = decodeStoredPuzzleSnapshot(entry.data ?? null);
+        if (!puzzle) return null;
         const decoded = {
           id: entry.id,
           timestamp: entry.timestamp,
-          data,
+          data: puzzle,
         };
+        if (settings && typeof settings === "object") {
+          decoded.settings = settings;
+        } else if (entry.settings && typeof entry.settings === "object") {
+          const snapshot = getUserSettingsSnapshot(entry.settings);
+          if (snapshot) {
+            decoded.settings = snapshot;
+          }
+        }
         if (typeof entry.title === "string" && entry.title.trim()) {
           decoded.title = entry.title.trim();
         }
@@ -11703,6 +11709,18 @@
                 : Date.now(),
             data,
           };
+          const settingsSource =
+            decoded.settings && typeof decoded.settings === "object"
+              ? decoded.settings
+              : entry.settings && typeof entry.settings === "object"
+              ? entry.settings
+              : null;
+          if (settingsSource && typeof settingsSource === "object") {
+            const settingsSnapshot = getUserSettingsSnapshot(settingsSource);
+            if (settingsSnapshot) {
+              normalized.settings = settingsSnapshot;
+            }
+          }
           if (typeof decoded.title === "string" && decoded.title.trim()) {
             normalized.title = decoded.title.trim();
           } else if (typeof data.title === "string" && data.title) {
@@ -11858,6 +11876,7 @@
 
       function saveCurrentSnapshot() {
         const payload = serializeCurrentPuzzle();
+        const settingsSnapshot = getUserSettingsSnapshot(state.settings);
         const resolvedTitle =
           (typeof payload?.title === "string" && payload.title.trim()) ||
           (typeof state.sourceTitle === "string" && state.sourceTitle.trim()) ||
@@ -11872,6 +11891,11 @@
           entry.title = resolvedTitle;
           entry.timestamp = now;
           entry.data = payload;
+          if (settingsSnapshot) {
+            entry.settings = settingsSnapshot;
+          } else {
+            delete entry.settings;
+          }
           state.loadedSaveId = activeSaveId;
           state.saves = [entry, ...state.saves.filter((item) => item.id !== activeSaveId)];
           logDebug(`Updated save: ${entry.title}`);
@@ -11883,6 +11907,9 @@
             timestamp: now,
             data: payload,
           };
+          if (settingsSnapshot) {
+            entry.settings = settingsSnapshot;
+          }
           state.loadedSaveId = id;
           state.saves.unshift(entry);
           logDebug(`Saved snapshot: ${entry.title}`);
@@ -12293,7 +12320,7 @@
                 backgroundColor: record.data.backgroundColor,
                 stageBackgroundColor: record.data.stageBackgroundColor,
                 viewport: record.data.viewport,
-                settings: record.data.settings,
+                settings: record.settings ?? record.data.settings,
                 title: resolvedTitle,
                 loadedSaveId: null,
               })
@@ -12323,7 +12350,7 @@
             backgroundColor: entry.data.backgroundColor,
             stageBackgroundColor: entry.data.stageBackgroundColor,
             viewport: entry.data.viewport,
-            settings: entry.data.settings,
+            settings: entry.settings ?? entry.data.settings,
             title: entry.title || entry.data.title,
             loadedSaveId: entry.id,
           })

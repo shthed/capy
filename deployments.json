@@ -13,10 +13,10 @@
     "key": "codex-remove-user-settings-from-export",
     "branch": "codex/remove-user-settings-from-export",
     "safeName": "codex-remove-user-settings-from-export",
-    "commit": "412e12fc2192e1b8964918e88f141d91c97e770c",
-    "message": "Remove user settings from exported save files",
+    "commit": "0aacb4fc1b82a052a8aecc4b595abfc6d0b8bc34",
+    "message": "Separate user settings from puzzle snapshots",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T10:58:02+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/412e12fc2192e1b8964918e88f141d91c97e770c"
+    "deployedAt": "2025-10-25T13:20:09+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/0aacb4fc1b82a052a8aecc4b595abfc6d0b8bc34"
   }
 }
