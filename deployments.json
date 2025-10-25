@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "a2cf502550b6a96950d19633441042addf8cc198",
-    "message": "Delete preview directory",
+    "commit": "4fb7e353c050b8e752af33406354dd026817fe45",
+    "message": "Merge pull request #226 from shthed/codex/remove-user-settings-from-export\n\nRemove user settings from exported save files",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T10:31:31+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/a2cf502550b6a96950d19633441042addf8cc198",
+    "deployedAt": "2025-10-25T13:24:59+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/4fb7e353c050b8e752af33406354dd026817fe45",
     "key": "main"
-  },
-  "codex-remove-user-settings-from-export": {
-    "key": "codex-remove-user-settings-from-export",
-    "branch": "codex/remove-user-settings-from-export",
-    "safeName": "codex-remove-user-settings-from-export",
-    "commit": "0aacb4fc1b82a052a8aecc4b595abfc6d0b8bc34",
-    "message": "Separate user settings from puzzle snapshots",
-    "actor": "shthed",
-    "deployedAt": "2025-10-25T13:20:09+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/0aacb4fc1b82a052a8aecc4b595abfc6d0b8bc34"
   }
 }
