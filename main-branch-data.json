@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "4231f653738292c8b8c7ad4614bfd2112eddeb81",
+      "shortSha": "4231f65",
+      "message": "Merge pull request #225 from shthed/codex/fix-unrecognized-function-in-workflow-file\n\nFix post-deploy workflow concurrency expression",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T02:26:27Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4231f653738292c8b8c7ad4614bfd2112eddeb81",
+      "prs": [
+        {
+          "number": 225,
+          "title": "Fix post-deploy workflow concurrency expression",
+          "url": "https://github.com/shthed/capy/pull/225",
+          "branch": "codex/fix-unrecognized-function-in-workflow-file"
+        }
+      ]
+    },
+    {
+      "sha": "0e655dfd7d1ee7d37f9414d2c94fe14dd7287fe4",
+      "shortSha": "0e655df",
+      "message": "Update .github/workflows/post-deploy-tests.yml\r\n\r\nBranch names containing forward slashes\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T02:26:14Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0e655dfd7d1ee7d37f9414d2c94fe14dd7287fe4",
+      "prs": [
+        {
+          "number": 225,
+          "title": "Fix post-deploy workflow concurrency expression",
+          "url": "https://github.com/shthed/capy/pull/225",
+          "branch": "codex/fix-unrecognized-function-in-workflow-file"
+        }
+      ]
+    },
+    {
       "sha": "92f2c377ad490a23248abe85d9871fb9d60968d3",
       "shortSha": "92f2c37",
       "message": "Clean up UI review artifacts directory\n\nRemove existing artifacts directory before creating a new one.",
@@ -10,54 +42,22 @@
       "prs": []
     },
     {
-      "sha": "39a0b8e55fbcd54f874093174511c0eb2723942e",
-      "shortSha": "39a0b8e",
-      "message": "Merge pull request #224 from shthed/codex/configure-playwright-reporter-and-workflows\n\nConfigure Playwright UI review artifacts",
+      "sha": "ff4a2c18337c89405c25797482fdd61eb0db1206",
+      "shortSha": "ff4a2c1",
+      "message": "Fix concurrency group expression",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-25T00:24:44Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/39a0b8e55fbcd54f874093174511c0eb2723942e",
+      "date": "2025-10-25T02:20:10Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/ff4a2c18337c89405c25797482fdd61eb0db1206",
       "prs": [
         {
-          "number": 224,
-          "title": "Configure Playwright UI review artifacts",
-          "url": "https://github.com/shthed/capy/pull/224",
-          "branch": "codex/configure-playwright-reporter-and-workflows"
-        }
-      ]
-    },
-    {
-      "sha": "b08b33d2ea1c56b09ad82b10d3f70d0fd1353447",
-      "shortSha": "b08b33d",
-      "message": "Update playwright.config.js\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-25T00:24:32Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/b08b33d2ea1c56b09ad82b10d3f70d0fd1353447",
-      "prs": [
-        {
-          "number": 224,
-          "title": "Configure Playwright UI review artifacts",
-          "url": "https://github.com/shthed/capy/pull/224",
-          "branch": "codex/configure-playwright-reporter-and-workflows"
-        }
-      ]
-    },
-    {
-      "sha": "32a01b235c989f02dc92a528f76d7726b3a2a7b9",
-      "shortSha": "32a01b2",
-      "message": "Update .github/workflows/post-deploy-tests.yml\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-25T00:24:13Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/32a01b235c989f02dc92a528f76d7726b3a2a7b9",
-      "prs": [
-        {
-          "number": 224,
-          "title": "Configure Playwright UI review artifacts",
-          "url": "https://github.com/shthed/capy/pull/224",
-          "branch": "codex/configure-playwright-reporter-and-workflows"
+          "number": 225,
+          "title": "Fix post-deploy workflow concurrency expression",
+          "url": "https://github.com/shthed/capy/pull/225",
+          "branch": "codex/fix-unrecognized-function-in-workflow-file"
         }
       ]
     }
   ],
-  "lastCommitDate": "2025-10-25T02:25:10Z",
-  "deploymentTimestamp": 1761359126501
+  "lastCommitDate": "2025-10-25T02:26:27Z",
+  "deploymentTimestamp": 1761359208810
 }

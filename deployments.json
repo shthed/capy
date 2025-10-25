@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "92f2c377ad490a23248abe85d9871fb9d60968d3",
-    "message": "Clean up UI review artifacts directory\n\nRemove existing artifacts directory before creating a new one.",
+    "commit": "4231f653738292c8b8c7ad4614bfd2112eddeb81",
+    "message": "Merge pull request #225 from shthed/codex/fix-unrecognized-function-in-workflow-file\n\nFix post-deploy workflow concurrency expression",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T10:25:10+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/92f2c377ad490a23248abe85d9871fb9d60968d3",
+    "deployedAt": "2025-10-25T10:26:27+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/4231f653738292c8b8c7ad4614bfd2112eddeb81",
     "key": "main"
-  },
-  "codex-fix-unrecognized-function-in-workflow-file": {
-    "key": "codex-fix-unrecognized-function-in-workflow-file",
-    "branch": "codex/fix-unrecognized-function-in-workflow-file",
-    "safeName": "codex-fix-unrecognized-function-in-workflow-file",
-    "commit": "ff4a2c18337c89405c25797482fdd61eb0db1206",
-    "message": "Fix concurrency group expression",
-    "actor": "shthed",
-    "deployedAt": "2025-10-25T10:20:10+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/ff4a2c18337c89405c25797482fdd61eb0db1206"
   }
 }
