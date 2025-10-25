@@ -4838,7 +4838,7 @@
 
       downloadBtn.addEventListener("click", () => {
         if (!state.puzzle) return;
-        const payload = serializeCurrentPuzzle();
+        const payload = stripUserSettingsFromSnapshot(serializeCurrentPuzzle());
         const blob = new Blob([JSON.stringify(payload, null, 2)], {
           type: "application/json",
         });
@@ -4857,7 +4857,7 @@
 
       downloadCompactBtn.addEventListener("click", () => {
         if (!state.puzzle) return;
-        const snapshot = serializeCurrentPuzzle();
+        const snapshot = stripUserSettingsFromSnapshot(serializeCurrentPuzzle());
         const compact = compactPuzzleSnapshot(snapshot) || snapshot;
         if (!compact) {
           logDebug("Unable to export compact puzzle: no snapshot available");
@@ -10429,6 +10429,18 @@
           snapshot.sourceImage = sourceImageSnapshot;
         }
         return compactPuzzleSnapshot(snapshot) || snapshot;
+      }
+
+      function stripUserSettingsFromSnapshot(snapshot) {
+        if (!snapshot || typeof snapshot !== "object") {
+          return snapshot;
+        }
+        if (!Object.prototype.hasOwnProperty.call(snapshot, "settings")) {
+          return snapshot;
+        }
+        const payload = { ...snapshot };
+        delete payload.settings;
+        return payload;
       }
 
       function isSettingsAutosaveReason(reason) {
