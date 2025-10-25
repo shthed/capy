@@ -1,0 +1,18 @@
+[
+  {
+    "branch": "codex/choose-better-algorithm-for-label-placement",
+    "safeName": "codex-choose-better-algorithm-for-label-placement",
+    "title": "Improve region label placement with polylabel",
+    "number": 229,
+    "updatedAt": "2025-10-25T10:20:11Z",
+    "url": "https://github.com/shthed/capy/pull/229"
+  },
+  {
+    "branch": "codex/fix-autosave-settings-not-persisting",
+    "safeName": "codex-fix-autosave-settings-not-persisting",
+    "title": "Fix settings persistence when no puzzle is loaded",
+    "number": 228,
+    "updatedAt": "2025-10-25T08:53:11Z",
+    "url": "https://github.com/shthed/capy/pull/228"
+  }
+]
