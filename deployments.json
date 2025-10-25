@@ -2,22 +2,12 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "9e64725b32cbb137963f7c74911de69ee4e54324",
-    "message": "Merge pull request #227 from shthed/codex/remove-and-redo-region-numbers-implementation\n\nAlways render region numbers",
+    "commit": "0c5e3f9506c16bfe0e761c1735678da97c392228",
+    "message": "Merge pull request #229 from shthed/codex/choose-better-algorithm-for-label-placement\n\nImprove region label placement with polylabel",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T16:48:04+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/9e64725b32cbb137963f7c74911de69ee4e54324",
+    "deployedAt": "2025-10-25T18:24:08+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/0c5e3f9506c16bfe0e761c1735678da97c392228",
     "key": "main"
-  },
-  "codex-choose-better-algorithm-for-label-placement": {
-    "key": "codex-choose-better-algorithm-for-label-placement",
-    "branch": "codex/choose-better-algorithm-for-label-placement",
-    "safeName": "codex-choose-better-algorithm-for-label-placement",
-    "commit": "c9e5bb232f756f004458aa486f03a797df3d82d0",
-    "message": "Merge branch 'main' into codex/choose-better-algorithm-for-label-placement",
-    "actor": "shthed",
-    "deployedAt": "2025-10-25T18:21:32+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/c9e5bb232f756f004458aa486f03a797df3d82d0"
   },
   "codex-fix-autosave-settings-not-persisting": {
     "key": "codex-fix-autosave-settings-not-persisting",
