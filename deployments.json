@@ -13,10 +13,10 @@
     "key": "codex-update-tests-ui-review.spec.js-for-base_url",
     "branch": "codex/update-tests/ui-review.spec.js-for-base_url",
     "safeName": "codex-update-tests-ui-review.spec.js-for-base_url",
-    "commit": "597ca3d8c1e914989070a4c5c6e47c8f984ad4c1",
-    "message": "Merge pull request #220 from shthed/codex/refactor-label-layout-for-zoom-scaling\n\nAdjust region label layout to respect zoom ratio",
+    "commit": "d2c0a59424cf651ff2de865bb5d84e27468488d3",
+    "message": "Simplify UI smoke test",
     "actor": "shthed",
-    "deployedAt": "2025-10-24T21:42:21+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/597ca3d8c1e914989070a4c5c6e47c8f984ad4c1"
+    "deployedAt": "2025-10-25T08:18:44+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/d2c0a59424cf651ff2de865bb5d84e27468488d3"
   }
 }
