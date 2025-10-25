@@ -1,6 +1,15 @@
 {
   "commits": [
     {
+      "sha": "a2cf502550b6a96950d19633441042addf8cc198",
+      "shortSha": "a2cf502",
+      "message": "Delete preview directory",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T02:31:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a2cf502550b6a96950d19633441042addf8cc198",
+      "prs": []
+    },
+    {
       "sha": "4231f653738292c8b8c7ad4614bfd2112eddeb81",
       "shortSha": "4231f65",
       "message": "Merge pull request #225 from shthed/codex/fix-unrecognized-function-in-workflow-file\n\nFix post-deploy workflow concurrency expression",
@@ -40,24 +49,8 @@
       "date": "2025-10-25T02:25:10Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/92f2c377ad490a23248abe85d9871fb9d60968d3",
       "prs": []
-    },
-    {
-      "sha": "ff4a2c18337c89405c25797482fdd61eb0db1206",
-      "shortSha": "ff4a2c1",
-      "message": "Fix concurrency group expression",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-25T02:20:10Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/ff4a2c18337c89405c25797482fdd61eb0db1206",
-      "prs": [
-        {
-          "number": 225,
-          "title": "Fix post-deploy workflow concurrency expression",
-          "url": "https://github.com/shthed/capy/pull/225",
-          "branch": "codex/fix-unrecognized-function-in-workflow-file"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-25T02:26:27Z",
-  "deploymentTimestamp": 1761359208810
+  "lastCommitDate": "2025-10-25T02:31:31Z",
+  "deploymentTimestamp": 1761359506852
 }

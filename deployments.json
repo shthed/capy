@@ -2,11 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "4231f653738292c8b8c7ad4614bfd2112eddeb81",
-    "message": "Merge pull request #225 from shthed/codex/fix-unrecognized-function-in-workflow-file\n\nFix post-deploy workflow concurrency expression",
+    "commit": "a2cf502550b6a96950d19633441042addf8cc198",
+    "message": "Delete preview directory",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T10:26:27+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/4231f653738292c8b8c7ad4614bfd2112eddeb81",
+    "deployedAt": "2025-10-25T10:31:31+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/a2cf502550b6a96950d19633441042addf8cc198",
     "key": "main"
   }
 }
