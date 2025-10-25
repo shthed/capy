@@ -773,7 +773,6 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     baseSnapshotKey: null,
     lastRenderScale: null,
     lastFilledCount: null,
-    labelsVisible: null,
   };
 
   let currentMetrics = payload && payload.metrics ? { ...payload.metrics } : null;
@@ -1324,12 +1323,6 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       uploadState.lastFilledCount = filledCount;
     }
 
-    const labelsVisible = !previewVisible && state?.settings?.showRegionLabels !== false;
-    if (uploadState.labelsVisible !== labelsVisible) {
-      uploadState.numbersDirty = true;
-      uploadState.labelsVisible = labelsVisible;
-    }
-
     if (cache && cache.filledLayerDirty) {
       uploadState.filledDirty = true;
       if (typeof hooks.rebuildFilledLayer === "function") {
@@ -1466,7 +1459,7 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       drawQuad({ texture: layerTextures.outline });
     }
 
-    const numbersVisible = Boolean(hasCache && labelsVisible && numbersContext);
+    const numbersVisible = Boolean(hasCache && numbersContext);
     if (!numbersVisible) {
       if (uploadState.numbersHasContent || uploadState.numbersDirty) {
         if (numbersContext && numbersSurface.canvas) {
@@ -1793,7 +1786,6 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     filledRef: null,
     filledHash: null,
     filledSize: 0,
-    labelsVisible: false,
     dataUrl: "",
   };
 
@@ -2048,13 +2040,6 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
 
   function updateNumbersLayer(contextArgs, filledState) {
     const { state, cache, metrics } = contextArgs;
-    const labelsVisible = state?.settings?.showRegionLabels !== false;
-    if (!labelsVisible) {
-      numbersSurface.labelsVisible = false;
-      numbersImage.removeAttribute("href");
-      numbersImage.style.display = "none";
-      return;
-    }
     const pixelWidth = Math.max(1, Math.round(metrics?.pixelWidth ?? currentPixelWidth));
     const pixelHeight = Math.max(1, Math.round(metrics?.pixelHeight ?? currentPixelHeight));
     const sizeChanged =
@@ -2068,10 +2053,6 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     let dirty = false;
     if (numbersSurface.cacheVersion !== cache.version) {
       numbersSurface.cacheVersion = cache.version;
-      dirty = true;
-    }
-    if (numbersSurface.labelsVisible !== labelsVisible) {
-      numbersSurface.labelsVisible = labelsVisible;
       dirty = true;
     }
     if (numbersSurface.filledRef !== filledState.ref || numbersSurface.filledSize !== filledState.size) {
