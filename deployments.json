@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "4fb7e353c050b8e752af33406354dd026817fe45",
-    "message": "Merge pull request #226 from shthed/codex/remove-user-settings-from-export\n\nRemove user settings from exported save files",
+    "commit": "9e64725b32cbb137963f7c74911de69ee4e54324",
+    "message": "Merge pull request #227 from shthed/codex/remove-and-redo-region-numbers-implementation\n\nAlways render region numbers",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T13:24:59+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/4fb7e353c050b8e752af33406354dd026817fe45",
+    "deployedAt": "2025-10-25T16:48:04+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/9e64725b32cbb137963f7c74911de69ee4e54324",
     "key": "main"
-  },
-  "codex-remove-and-redo-region-numbers-implementation": {
-    "key": "codex-remove-and-redo-region-numbers-implementation",
-    "branch": "codex/remove-and-redo-region-numbers-implementation",
-    "safeName": "codex-remove-and-redo-region-numbers-implementation",
-    "commit": "d38c1af4fbb3302e782d30dafc97d6ee68fb2cb3",
-    "message": "Merge branch 'main' into codex/remove-and-redo-region-numbers-implementation",
-    "actor": "shthed",
-    "deployedAt": "2025-10-25T16:47:14+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/d38c1af4fbb3302e782d30dafc97d6ee68fb2cb3"
   }
 }
