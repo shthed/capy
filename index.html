@@ -7903,9 +7903,14 @@
       }
 
       function computeRegionLabelFontSize(region, labelText = "") {
-        const defaultSize = 10;
+        const uiScaleSetting =
+          Number.isFinite(state?.settings?.uiScale) && state.settings.uiScale > 0
+            ? state.settings.uiScale
+            : DEFAULT_UI_SCALE;
+        const scaleFactor = uiScaleSetting / DEFAULT_UI_SCALE;
+        const baseSize = 10 * (Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1);
         if (!region) {
-          return defaultSize;
+          return baseSize;
         }
         const puzzleWidth = state.puzzle?.width || 0;
         const bounds =
@@ -7917,27 +7922,26 @@
             : bounds
             ? Math.max(1, bounds.width * bounds.height)
             : 0;
-        if (estimatedArea <= 0) {
-          return defaultSize;
-        }
-        const shortestSpan = bounds
-          ? Math.max(1, Math.min(bounds.width, bounds.height))
-          : Math.sqrt(estimatedArea);
-        const areaRoot = Math.pow(estimatedArea, 0.25);
-        const spanRoot = Math.sqrt(shortestSpan);
-        let estimate = 4 + areaRoot * 0.9 + spanRoot * 0.8;
+        const fallbackSpan = estimatedArea > 0 ? Math.sqrt(estimatedArea) : baseSize;
+        const regionHeight = bounds ? Math.max(1, bounds.height) : Math.max(1, fallbackSpan);
+        const heightLimitRaw = regionHeight * 0.5;
+        const heightLimit =
+          Number.isFinite(heightLimitRaw) && heightLimitRaw > 0 ? heightLimitRaw : baseSize;
         const textLength = typeof labelText === "string" ? labelText.length : 0;
-        if (textLength > 1) {
-          const normalizedLength = Math.min(textLength, 4);
-          const lengthFactor = 1 + (normalizedLength - 1) * 0.18;
-          estimate /= lengthFactor;
+        const normalizedLength = Math.min(Math.max(textLength, 1), 6);
+        const lengthPenalty = 1 + (normalizedLength - 1) * 0.25;
+        const baseCandidate = baseSize / lengthPenalty;
+        const limited = Math.min(baseCandidate, heightLimit);
+        if (!Number.isFinite(limited) || limited <= 0) {
+          const fallback = Math.min(heightLimit, baseCandidate > 0 ? baseCandidate : baseSize);
+          return fallback > 0 ? fallback : 0.5;
         }
-        return clamp(estimate, 4, 24);
+        return limited;
       }
 
       function computeRegionLabelStrokeWidth(fontSize) {
         const normalized = Number.isFinite(fontSize) ? fontSize : 10;
-        return clamp(normalized / 8, 0.5, 2.5);
+        return clamp(normalized / 18, 0.15, 0.9);
       }
 
       function getRegionLabelText(region) {
