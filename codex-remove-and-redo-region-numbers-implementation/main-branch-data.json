@@ -1,0 +1,63 @@
+{
+  "commits": [
+    {
+      "sha": "4fb7e353c050b8e752af33406354dd026817fe45",
+      "shortSha": "4fb7e35",
+      "message": "Merge pull request #226 from shthed/codex/remove-user-settings-from-export\n\nRemove user settings from exported save files",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T05:24:59Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/4fb7e353c050b8e752af33406354dd026817fe45",
+      "prs": [
+        {
+          "number": 226,
+          "title": "Remove user settings from exported save files",
+          "url": "https://github.com/shthed/capy/pull/226",
+          "branch": "codex/remove-user-settings-from-export"
+        }
+      ]
+    },
+    {
+      "sha": "0aacb4fc1b82a052a8aecc4b595abfc6d0b8bc34",
+      "shortSha": "0aacb4f",
+      "message": "Separate user settings from puzzle snapshots",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T05:20:09Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0aacb4fc1b82a052a8aecc4b595abfc6d0b8bc34",
+      "prs": [
+        {
+          "number": 226,
+          "title": "Remove user settings from exported save files",
+          "url": "https://github.com/shthed/capy/pull/226",
+          "branch": "codex/remove-user-settings-from-export"
+        }
+      ]
+    },
+    {
+      "sha": "412e12fc2192e1b8964918e88f141d91c97e770c",
+      "shortSha": "412e12f",
+      "message": "Remove user settings from exported save files",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T02:58:02Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/412e12fc2192e1b8964918e88f141d91c97e770c",
+      "prs": [
+        {
+          "number": 226,
+          "title": "Remove user settings from exported save files",
+          "url": "https://github.com/shthed/capy/pull/226",
+          "branch": "codex/remove-user-settings-from-export"
+        }
+      ]
+    },
+    {
+      "sha": "a2cf502550b6a96950d19633441042addf8cc198",
+      "shortSha": "a2cf502",
+      "message": "Delete preview directory",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T02:31:31Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a2cf502550b6a96950d19633441042addf8cc198",
+      "prs": []
+    }
+  ],
+  "lastCommitDate": "2025-10-25T05:24:59Z",
+  "deploymentTimestamp": 1761370160966
+}

@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-25T13:24:59+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/4fb7e353c050b8e752af33406354dd026817fe45",
     "key": "main"
+  },
+  "codex-remove-and-redo-region-numbers-implementation": {
+    "key": "codex-remove-and-redo-region-numbers-implementation",
+    "branch": "codex/remove-and-redo-region-numbers-implementation",
+    "safeName": "codex-remove-and-redo-region-numbers-implementation",
+    "commit": "a2cf502550b6a96950d19633441042addf8cc198",
+    "message": "Delete preview directory",
+    "actor": "shthed",
+    "deployedAt": "2025-10-25T10:31:31+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/a2cf502550b6a96950d19633441042addf8cc198"
   }
 }
