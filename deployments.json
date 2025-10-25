@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-25T07:40:40+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/3f6e7f201a032d9af2f1a2690775d0e95137ff3d",
     "key": "main"
+  },
+  "codex-update-tests-ui-review.spec.js-for-base_url": {
+    "key": "codex-update-tests-ui-review.spec.js-for-base_url",
+    "branch": "codex/update-tests/ui-review.spec.js-for-base_url",
+    "safeName": "codex-update-tests-ui-review.spec.js-for-base_url",
+    "commit": "597ca3d8c1e914989070a4c5c6e47c8f984ad4c1",
+    "message": "Merge pull request #220 from shthed/codex/refactor-label-layout-for-zoom-scaling\n\nAdjust region label layout to respect zoom ratio",
+    "actor": "shthed",
+    "deployedAt": "2025-10-24T21:42:21+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/597ca3d8c1e914989070a4c5c6e47c8f984ad4c1"
   }
 }
