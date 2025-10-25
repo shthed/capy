@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-25T08:24:44+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/39a0b8e55fbcd54f874093174511c0eb2723942e",
     "key": "main"
+  },
+  "codex-fix-unrecognized-function-in-workflow-file": {
+    "key": "codex-fix-unrecognized-function-in-workflow-file",
+    "branch": "codex/fix-unrecognized-function-in-workflow-file",
+    "safeName": "codex-fix-unrecognized-function-in-workflow-file",
+    "commit": "39a0b8e55fbcd54f874093174511c0eb2723942e",
+    "message": "Merge pull request #224 from shthed/codex/configure-playwright-reporter-and-workflows\n\nConfigure Playwright UI review artifacts",
+    "actor": "shthed",
+    "deployedAt": "2025-10-25T08:24:44+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/39a0b8e55fbcd54f874093174511c0eb2723942e"
   }
 }

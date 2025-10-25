@@ -1,0 +1,10 @@
+[
+  {
+    "branch": "codex/fix-unrecognized-function-in-workflow-file",
+    "safeName": "codex-fix-unrecognized-function-in-workflow-file",
+    "title": "Fix post-deploy workflow concurrency expression",
+    "number": 225,
+    "updatedAt": "2025-10-25T02:20:13Z",
+    "url": "https://github.com/shthed/capy/pull/225"
+  }
+]
