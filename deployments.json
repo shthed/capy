@@ -13,10 +13,10 @@
     "key": "codex-configure-playwright-reporter-and-workflows",
     "branch": "codex/configure-playwright-reporter-and-workflows",
     "safeName": "codex-configure-playwright-reporter-and-workflows",
-    "commit": "3f6e7f201a032d9af2f1a2690775d0e95137ff3d",
-    "message": "Merge pull request #222 from shthed/codex/add-url-image-loading-and-region-drawing-vqj4rt\n\nImprove remote image URL workflow",
+    "commit": "f41e1efdf8318330640e36d0ddb21d1930e6ecde",
+    "message": "Configure Playwright UI review artifacts",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T07:40:40+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/3f6e7f201a032d9af2f1a2690775d0e95137ff3d"
+    "deployedAt": "2025-10-25T08:23:01+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/f41e1efdf8318330640e36d0ddb21d1930e6ecde"
   }
 }
