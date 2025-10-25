@@ -2214,6 +2214,18 @@
             </label>
             <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
             <label class="control">
+              <span>Label size <output data-for="labelScale">100%</output></span>
+              <input
+                id="labelScale"
+                type="range"
+                min="0.2"
+                max="2"
+                step="0.05"
+                value="1"
+              />
+            </label>
+            <p class="control-note">Scale region numbers independently from the surrounding interface.</p>
+            <label class="control">
               <span>Interface theme</span>
               <select id="uiTheme">
                 <option value="dark">Dark</option>
@@ -2337,6 +2349,7 @@
       const backgroundColorInput = document.getElementById("backgroundColor");
       const stageBackgroundColorInput = document.getElementById("stageBackgroundColor");
       const uiScaleInput = document.getElementById("uiScale");
+      const labelScaleInput = document.getElementById("labelScale");
       const colorCountEl = document.getElementById("colorCount");
       const minRegionEl = document.getElementById("minRegion");
       const detailEl = document.getElementById("detailLevel");
@@ -2405,6 +2418,7 @@
       const settingsOutputs = settingsSheet
         ? {
             uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
+            labelScale: settingsSheet.querySelector('output[data-for="labelScale"]'),
             hintFadeDuration: settingsSheet.querySelector('output[data-for="hintFadeDuration"]'),
             hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
           }
@@ -2427,6 +2441,7 @@
         "settings-hint-fade",
         "settings-hint-intensity",
         "settings-ui-scale",
+        "settings-label-scale",
         "settings-image-description",
         "settings-art-prompt",
         "settings-region-labels",
@@ -2438,6 +2453,7 @@
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
       const DEFAULT_UI_SCALE = 0.75;
+      const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
       const VALID_GENERATION_ALGORITHMS = new Set(["local-kmeans", "local-posterize"]);
@@ -3610,6 +3626,7 @@
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           stageBackgroundColor: DEFAULT_STAGE_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
+          labelScale: DEFAULT_LABEL_SCALE,
           artPrompt: "",
           imageDescription: "",
           showRegionLabels: true,
@@ -4163,6 +4180,11 @@
             force: true,
           });
         }
+        if (typeof settings.labelScale === "number") {
+          applyLabelScale(settings.labelScale, { skipLog: true, skipAutosave: true });
+        } else if (state.settings.labelScale != null) {
+          applyLabelScale(state.settings.labelScale, { skipLog: true, skipAutosave: true });
+        }
         if (typeof settings.autoAdvance === "boolean") {
           state.settings.autoAdvance = settings.autoAdvance;
           if (autoAdvanceToggle) {
@@ -4226,6 +4248,19 @@
         }
         if (typeof settings.uiScale === "number") {
           applyUiScale(settings.uiScale, { skipLog: true, skipAutosave: true });
+        }
+        if (typeof settings.labelScale === "number") {
+          applyLabelScale(settings.labelScale, {
+            skipLog: true,
+            skipAutosave: true,
+            skipRender: true,
+          });
+        } else if (state.settings.labelScale != null) {
+          applyLabelScale(state.settings.labelScale, {
+            skipLog: true,
+            skipAutosave: true,
+            skipRender: true,
+          });
         }
         if (typeof settings.artPrompt === "string") {
           applyArtPrompt(settings.artPrompt, { skipLog: true, skipAutosave: true });
@@ -4798,6 +4833,15 @@
         });
         uiScaleInput.addEventListener("change", (event) => {
           applyUiScale(event.target.value);
+        });
+      }
+
+      if (labelScaleInput) {
+        labelScaleInput.addEventListener("input", (event) => {
+          applyLabelScale(event.target.value, { skipLog: true, skipAutosave: true });
+        });
+        labelScaleInput.addEventListener("change", (event) => {
+          applyLabelScale(event.target.value);
         });
       }
 
@@ -6042,6 +6086,37 @@
         return resolved;
       }
 
+      function applyLabelScale(scale, options = {}) {
+        const { skipLog = false, skipAutosave = false, skipRender = false, force = false } = options;
+        const numeric = Number(scale);
+        const fallbackScale =
+          Number.isFinite(state.settings.labelScale) && state.settings.labelScale > 0
+            ? state.settings.labelScale
+            : DEFAULT_LABEL_SCALE;
+        const resolved = clamp(
+          Number.isFinite(numeric) && numeric > 0 ? numeric : fallbackScale,
+          0.2,
+          2
+        );
+        const current = fallbackScale;
+        const changed = force || Math.abs(resolved - current) > 0.001;
+        state.settings.labelScale = resolved;
+        if (labelScaleInput && Math.abs(Number(labelScaleInput.value) - resolved) > 0.001) {
+          labelScaleInput.value = String(resolved);
+        }
+        updateOptionOutputs();
+        if (changed && !skipRender) {
+          renderPuzzle();
+        }
+        if (changed && !skipLog) {
+          logDebug(`Label size set to ${Math.round(resolved * 100)}%`);
+        }
+        if (changed && !skipAutosave) {
+          scheduleAutosave("settings-label-scale");
+        }
+        return resolved;
+      }
+
       function updateChatGptLink(description) {
         if (!chatGptLink) {
           return;
@@ -6102,22 +6177,23 @@
       function applyRegionLabelVisibility(_visible, options = {}) {
         const { skipLog = false, skipAutosave = false, forceRender = false, skipRender = false } = options;
         const previous = state.settings.showRegionLabels !== false;
-        state.settings.showRegionLabels = true;
-        if (showRegionLabelsToggle && !showRegionLabelsToggle.checked) {
-          showRegionLabelsToggle.checked = true;
+        const visible = _visible !== false;
+        state.settings.showRegionLabels = visible;
+        if (showRegionLabelsToggle && showRegionLabelsToggle.checked !== visible) {
+          showRegionLabelsToggle.checked = visible;
         }
-        if (!skipRender && (forceRender || !previous)) {
+        if (!skipRender && (forceRender || previous !== visible)) {
           renderPuzzle();
         }
-        if (!previous) {
+        if (previous !== visible) {
           if (!skipLog) {
-            logDebug("Region numbers are always shown");
+            logDebug(visible ? "Region numbers shown" : "Region numbers hidden");
           }
           if (!skipAutosave) {
             scheduleAutosave("settings-region-labels");
           }
         }
-        return true;
+        return visible;
       }
 
       function applyTheme(theme, options = {}) {
@@ -6286,6 +6362,15 @@
                 ? state.settings.uiScale
                 : DEFAULT_UI_SCALE);
           settingsOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
+        }
+        if (settingsOutputs.labelScale) {
+          const source = labelScaleInput ? parseFloat(labelScaleInput.value) : NaN;
+          const value = Number.isFinite(source) && source > 0
+            ? source
+            : (Number.isFinite(state.settings.labelScale) && state.settings.labelScale > 0
+                ? state.settings.labelScale
+                : DEFAULT_LABEL_SCALE);
+          settingsOutputs.labelScale.textContent = `${Math.round(value * 100)}%`;
         }
         if (settingsOutputs.hintFadeDuration) {
           const source = hintFadeDurationInput ? Number(hintFadeDurationInput.value) : state.settings.hintFadeDuration;
@@ -7871,6 +7956,7 @@
 
       function drawNumbers(ctx) {
         if (!state.puzzle || !ctx) return;
+        if (state.settings.showRegionLabels === false) return;
         const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
         withRenderScale(ctx, scale, () => {
           const fallbackNumberInk = backgroundInk.number;
@@ -7907,8 +7993,13 @@
           Number.isFinite(state?.settings?.uiScale) && state.settings.uiScale > 0
             ? state.settings.uiScale
             : DEFAULT_UI_SCALE;
+        const labelScaleSetting =
+          Number.isFinite(state?.settings?.labelScale) && state.settings.labelScale > 0
+            ? state.settings.labelScale
+            : DEFAULT_LABEL_SCALE;
         const scaleFactor = uiScaleSetting / DEFAULT_UI_SCALE;
-        const baseSize = 10 * (Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1);
+        const baseSize =
+          10 * (Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1) * labelScaleSetting;
         if (!region) {
           return baseSize;
         }
@@ -7924,6 +8015,7 @@
             : 0;
         const fallbackSpan = estimatedArea > 0 ? Math.sqrt(estimatedArea) : baseSize;
         const regionHeight = bounds ? Math.max(1, bounds.height) : Math.max(1, fallbackSpan);
+        const regionWidth = bounds ? Math.max(1, bounds.width) : Math.max(1, fallbackSpan);
         const heightLimitRaw = regionHeight * 0.5;
         const heightLimit =
           Number.isFinite(heightLimitRaw) && heightLimitRaw > 0 ? heightLimitRaw : baseSize;
@@ -7931,17 +8023,26 @@
         const normalizedLength = Math.min(Math.max(textLength, 1), 6);
         const lengthPenalty = 1 + (normalizedLength - 1) * 0.25;
         const baseCandidate = baseSize / lengthPenalty;
-        const limited = Math.min(baseCandidate, heightLimit);
+        const effectiveLength = Math.max(textLength, 1);
+        const averageGlyphWidth = 0.62;
+        const widthLimitRaw =
+          regionWidth > 0
+            ? (regionWidth * 0.85) /
+              Math.max(effectiveLength * averageGlyphWidth, averageGlyphWidth)
+            : baseCandidate;
+        const widthLimit =
+          Number.isFinite(widthLimitRaw) && widthLimitRaw > 0 ? widthLimitRaw : baseCandidate;
+        const limited = Math.min(baseCandidate, heightLimit, widthLimit);
         if (!Number.isFinite(limited) || limited <= 0) {
-          const fallback = Math.min(heightLimit, baseCandidate > 0 ? baseCandidate : baseSize);
-          return fallback > 0 ? fallback : 0.5;
+          const fallback = Math.min(heightLimit, widthLimit, baseCandidate > 0 ? baseCandidate : baseSize);
+          return fallback > 0 ? fallback : 0.35;
         }
         return limited;
       }
 
       function computeRegionLabelStrokeWidth(fontSize) {
         const normalized = Number.isFinite(fontSize) ? fontSize : 10;
-        return clamp(normalized / 18, 0.15, 0.9);
+        return clamp(normalized / 28, 0.06, 0.45);
       }
 
       function getRegionLabelText(region) {
@@ -10124,6 +10225,10 @@
               Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
                 ? clamp(state.settings.uiScale, 0.2, 3)
                 : DEFAULT_UI_SCALE,
+            labelScale:
+              Number.isFinite(state.settings.labelScale) && state.settings.labelScale > 0
+                ? clamp(state.settings.labelScale, 0.2, 2)
+                : DEFAULT_LABEL_SCALE,
             artPrompt: state.settings.artPrompt || "",
             imageDescription: state.settings.imageDescription || "",
             showRegionLabels: state.settings.showRegionLabels !== false,
@@ -10317,6 +10422,12 @@
           const candidate = Number(payload.uiScale);
           if (Number.isFinite(candidate)) {
             normalized.uiScale = clamp(candidate, 0.2, 3);
+          }
+        }
+        if (payload.labelScale != null) {
+          const candidate = Number(payload.labelScale);
+          if (Number.isFinite(candidate)) {
+            normalized.labelScale = clamp(candidate, 0.2, 2);
           }
         }
         if (typeof payload.artPrompt === "string") {
