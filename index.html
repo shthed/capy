@@ -8145,6 +8145,124 @@
       }
 
       function findRegionLabelAnchor(region, halfWidth, halfHeight, bounds, width, height, regionMap) {
+        if (!region || !Number.isFinite(halfWidth) || !Number.isFinite(halfHeight)) {
+          return null;
+        }
+        const preferred = [];
+        const visualAnchor = findRegionLabelAnchorPolylabel(
+          region,
+          halfWidth,
+          halfHeight,
+          bounds,
+          width,
+          height,
+          regionMap
+        );
+        if (visualAnchor) {
+          region._preferredLabelAnchors = null;
+          return visualAnchor;
+        }
+        if (region._preferredLabelAnchors && Array.isArray(region._preferredLabelAnchors)) {
+          preferred.push(...region._preferredLabelAnchors);
+        }
+        return findRegionLabelAnchorLegacy(
+          region,
+          halfWidth,
+          halfHeight,
+          bounds,
+          width,
+          height,
+          regionMap,
+          preferred
+        );
+      }
+
+      function findRegionLabelAnchorPolylabel(
+        region,
+        halfWidth,
+        halfHeight,
+        bounds,
+        width,
+        height,
+        regionMap
+      ) {
+        const polygon = ensureRegionLabelPolygon(region, width, height);
+        if (!polygon) return null;
+        const precision = resolvePolylabelPrecision(bounds);
+        const visualCenter = ensureRegionVisualCenter(region, polygon, precision);
+        if (!visualCenter) return null;
+        const anchorX = clamp(
+          visualCenter.x,
+          bounds.minX + halfWidth,
+          bounds.maxX + 1 - halfWidth
+        );
+        const anchorY = clamp(
+          visualCenter.y,
+          bounds.minY + halfHeight,
+          bounds.maxY + 1 - halfHeight
+        );
+        if (
+          rectangleFitsRegion(
+            region.id,
+            anchorX,
+            anchorY,
+            halfWidth,
+            halfHeight,
+            width,
+            height,
+            regionMap
+          )
+        ) {
+          return { x: anchorX, y: anchorY };
+        }
+        const diagHalf = Math.sqrt(halfWidth * halfWidth + halfHeight * halfHeight);
+        if (visualCenter.distance != null && visualCenter.distance >= diagHalf) {
+          const epsilon = 1e-3;
+          const adjustedX = clamp(
+            visualCenter.x,
+            bounds.minX + halfWidth + epsilon,
+            bounds.maxX + 1 - halfWidth - epsilon
+          );
+          const adjustedY = clamp(
+            visualCenter.y,
+            bounds.minY + halfHeight + epsilon,
+            bounds.maxY + 1 - halfHeight - epsilon
+          );
+          if (
+            rectangleFitsRegion(
+              region.id,
+              adjustedX,
+              adjustedY,
+              halfWidth,
+              halfHeight,
+              width,
+              height,
+              regionMap
+            )
+          ) {
+            return { x: adjustedX, y: adjustedY };
+          }
+        }
+        region._preferredLabelAnchors = [
+          {
+            x: clamp(visualCenter.x, bounds.minX + halfWidth, bounds.maxX + 1 - halfWidth),
+            y: clamp(visualCenter.y, bounds.minY + halfHeight, bounds.maxY + 1 - halfHeight),
+            weight: 6,
+          },
+        ];
+        return null;
+      }
+
+      function findRegionLabelAnchorLegacy(
+        region,
+        halfWidth,
+        halfHeight,
+        bounds,
+        width,
+        height,
+        regionMap,
+        preferredCandidates = []
+      ) {
         const marginX = Math.max(0, Math.ceil(halfWidth - 0.5));
         const marginY = Math.max(0, Math.ceil(halfHeight - 0.5));
         const minCenterX = Math.max(bounds.minX + halfWidth, halfWidth);
@@ -8168,6 +8286,14 @@
           seen.add(key);
           candidates.push({ x: clampedX, y: clampedY, weight });
         };
+        if (Array.isArray(preferredCandidates)) {
+          for (const candidate of preferredCandidates) {
+            if (!candidate || !Number.isFinite(candidate.x) || !Number.isFinite(candidate.y)) {
+              continue;
+            }
+            addCandidate(candidate.x, candidate.y, candidate.weight ?? 4);
+          }
+        }
         addCandidate(centroidX, centroidY, 2);
         const minY = Math.max(bounds.minY + marginY, 0);
         const maxY = Math.min(bounds.maxY - marginY, height - 1);
@@ -8257,6 +8383,444 @@
           }
         }
         return best;
+      }
+
+      function resolvePolylabelPrecision(bounds) {
+        if (!bounds || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height)) {
+          return 0.25;
+        }
+        const largest = Math.max(1, bounds.width, bounds.height);
+        const normalized = clamp(largest / 160, 0.05, 0.35);
+        return normalized;
+      }
+
+      function ensureRegionVisualCenter(region, polygon, precision) {
+        if (!Array.isArray(polygon) || polygon.length === 0) {
+          return null;
+        }
+        const cachedPrecision = region?._labelVisualCenterPrecision;
+        if (
+          region &&
+          region._labelVisualCenter &&
+          cachedPrecision != null &&
+          cachedPrecision <= precision + 1e-6
+        ) {
+          return region._labelVisualCenter;
+        }
+        const result = computeRegionPolylabel(polygon, precision);
+        if (region) {
+          region._labelVisualCenter = result || null;
+          region._labelVisualCenterPrecision = precision;
+        }
+        return result;
+      }
+
+      function ensureRegionLabelPolygon(region, width, height) {
+        if (
+          !region ||
+          !Array.isArray(region.pixels) ||
+          region.pixels.length === 0 ||
+          !Number.isFinite(width) ||
+          width <= 0 ||
+          !Number.isFinite(height) ||
+          height <= 0
+        ) {
+          return null;
+        }
+        if (
+          region._labelPolygon &&
+          region._labelPolygonWidth === width &&
+          region._labelPolygonHeight === height
+        ) {
+          return region._labelPolygon;
+        }
+        const polygon = buildRegionLabelPolygon(region, width, height);
+        region._labelPolygon = polygon;
+        region._labelPolygonWidth = width;
+        region._labelPolygonHeight = height;
+        region._labelVisualCenter = null;
+        region._labelVisualCenterPrecision = null;
+        region._preferredLabelAnchors = null;
+        return polygon;
+      }
+
+      function buildRegionLabelPolygon(region, width, height) {
+        const pixels = region.pixels;
+        if (!Array.isArray(pixels) || pixels.length === 0) return null;
+        const pixelSet = new Set(pixels);
+        const edges = new Map();
+        const addEdge = (sx, sy, ex, ey) => {
+          const key = `${sx},${sy}`;
+          const edge = { sx, sy, ex, ey };
+          if (!edges.has(key)) edges.set(key, []);
+          edges.get(key).push(edge);
+        };
+        const widthLimit = width;
+        const heightLimit = height;
+        for (const idx of pixels) {
+          const x = idx % widthLimit;
+          const y = (idx / widthLimit) | 0;
+          const northIdx = idx - widthLimit;
+          const southIdx = idx + widthLimit;
+          const westIdx = idx - 1;
+          const eastIdx = idx + 1;
+          const hasNorth = y > 0 && pixelSet.has(northIdx);
+          const hasSouth = y + 1 < heightLimit && pixelSet.has(southIdx);
+          const hasWest = x > 0 && pixelSet.has(westIdx);
+          const hasEast = x + 1 < widthLimit && pixelSet.has(eastIdx);
+          if (!hasNorth) {
+            addEdge(x + 1, y, x, y);
+          }
+          if (!hasWest) {
+            addEdge(x, y, x, y + 1);
+          }
+          if (!hasSouth) {
+            addEdge(x, y + 1, x + 1, y + 1);
+          }
+          if (!hasEast) {
+            addEdge(x + 1, y + 1, x + 1, y);
+          }
+        }
+        const loops = [];
+        const takeEdge = (key) => {
+          const bucket = edges.get(key);
+          if (!bucket || bucket.length === 0) return null;
+          const edge = bucket.pop();
+          if (bucket.length === 0) {
+            edges.delete(key);
+          }
+          return edge;
+        };
+        const maxSteps = pixels.length * 8 + 8;
+        for (const startKey of Array.from(edges.keys())) {
+          let edge = takeEdge(startKey);
+          while (edge) {
+            const loop = [];
+            const originKey = `${edge.sx},${edge.sy}`;
+            loop.push([edge.sx, edge.sy]);
+            let current = edge;
+            let guard = 0;
+            while (current) {
+              loop.push([current.ex, current.ey]);
+              const nextKey = `${current.ex},${current.ey}`;
+              if (nextKey === originKey) {
+                break;
+              }
+              current = takeEdge(nextKey);
+              guard += 1;
+              if (guard > maxSteps) {
+                loop.length = 0;
+                break;
+              }
+            }
+            if (loop.length >= 4 && pointsEqual(loop[0], loop[loop.length - 1])) {
+              loops.push(loop);
+            }
+            edge = takeEdge(startKey);
+          }
+        }
+        if (loops.length === 0) {
+          return null;
+        }
+        let outerIndex = 0;
+        let bestArea = -Infinity;
+        for (let i = 0; i < loops.length; i++) {
+          const area = Math.abs(polygonArea(loops[i]));
+          if (area > bestArea) {
+            bestArea = area;
+            outerIndex = i;
+          }
+        }
+        const polygon = [];
+        const outerRing = normalizePolygonRing(loops[outerIndex], true);
+        if (!outerRing || outerRing.length < 4) {
+          return null;
+        }
+        polygon.push(outerRing);
+        for (let i = 0; i < loops.length; i++) {
+          if (i === outerIndex) continue;
+          const holeRing = normalizePolygonRing(loops[i], false);
+          if (holeRing && holeRing.length >= 4) {
+            polygon.push(holeRing);
+          }
+        }
+        return polygon;
+      }
+
+      function normalizePolygonRing(points, makeCounterClockwise) {
+        if (!Array.isArray(points) || points.length === 0) {
+          return [];
+        }
+        const normalized = [];
+        for (let i = 0; i < points.length; i++) {
+          const point = points[i];
+          if (i > 0 && pointsEqual(point, points[i - 1])) continue;
+          normalized.push([point[0], point[1]]);
+        }
+        if (normalized.length === 0) return normalized;
+        if (!pointsEqual(normalized[0], normalized[normalized.length - 1])) {
+          normalized.push([normalized[0][0], normalized[0][1]]);
+        }
+        if (normalized.length < 4) {
+          return normalized;
+        }
+        const area = polygonArea(normalized);
+        if (makeCounterClockwise) {
+          if (area < 0) {
+            normalized.reverse();
+          }
+        } else if (area > 0) {
+          normalized.reverse();
+        }
+        return normalized;
+      }
+
+      function polygonArea(points) {
+        if (!Array.isArray(points) || points.length < 3) {
+          return 0;
+        }
+        let sum = 0;
+        for (let i = 0; i < points.length - 1; i++) {
+          const a = points[i];
+          const b = points[i + 1];
+          sum += a[0] * b[1] - b[0] * a[1];
+        }
+        return sum / 2;
+      }
+
+      function pointsEqual(a, b) {
+        return (
+          Array.isArray(a) &&
+          Array.isArray(b) &&
+          Math.abs(a[0] - b[0]) < 1e-6 &&
+          Math.abs(a[1] - b[1]) < 1e-6
+        );
+      }
+
+      function computeRegionPolylabel(polygon, precision = 0.25) {
+        if (!Array.isArray(polygon) || polygon.length === 0) {
+          return null;
+        }
+        const outer = polygon[0];
+        if (!Array.isArray(outer) || outer.length < 4) {
+          return null;
+        }
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (let i = 0; i < outer.length; i++) {
+          const [x, y] = outer[i];
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+        if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+          return null;
+        }
+        const width = maxX - minX;
+        const height = maxY - minY;
+        const normalizedPrecision = Math.max(precision, 1e-4);
+        const cellSize = Math.max(normalizedPrecision, Math.min(width, height));
+        if (!(cellSize > normalizedPrecision)) {
+          const start = outer[0];
+          const distance = pointToPolygonDistance(start[0], start[1], polygon);
+          return { x: start[0], y: start[1], distance };
+        }
+        let bestCell = getCentroidPolylabelCell(polygon);
+        const bboxCell = createPolylabelCell(minX + width / 2, minY + height / 2, 0, polygon);
+        if (!bestCell || bestCell.d < 0) {
+          bestCell = bboxCell;
+        } else if (bboxCell && bboxCell.d > bestCell.d) {
+          bestCell = bboxCell;
+        }
+        const queue = new PolylabelMaxHeap();
+        const half = cellSize / 2;
+        const enqueueCell = (cell) => {
+          if (!cell) return;
+          if (cell.d > bestCell.d) {
+            bestCell = cell;
+          }
+          if (cell.max > bestCell.d + normalizedPrecision) {
+            queue.push(cell);
+          }
+        };
+        for (let x = minX; x < maxX; x += cellSize) {
+          for (let y = minY; y < maxY; y += cellSize) {
+            enqueueCell(createPolylabelCell(x + half, y + half, half, polygon));
+          }
+        }
+        let iterations = 0;
+        const maxIterations = 6000;
+        while (!queue.isEmpty() && iterations < maxIterations) {
+          const cell = queue.pop();
+          if (!cell) break;
+          if (cell.d > bestCell.d) {
+            bestCell = cell;
+          }
+          if (cell.max - bestCell.d <= normalizedPrecision) {
+            iterations += 1;
+            continue;
+          }
+          const h = cell.h / 2;
+          if (h <= 0) {
+            iterations += 1;
+            continue;
+          }
+          enqueueCell(createPolylabelCell(cell.x - h, cell.y - h, h, polygon));
+          enqueueCell(createPolylabelCell(cell.x + h, cell.y - h, h, polygon));
+          enqueueCell(createPolylabelCell(cell.x - h, cell.y + h, h, polygon));
+          enqueueCell(createPolylabelCell(cell.x + h, cell.y + h, h, polygon));
+          iterations += 1;
+        }
+        if (!bestCell) return null;
+        return { x: bestCell.x, y: bestCell.y, distance: bestCell.d };
+      }
+
+      function createPolylabelCell(x, y, h, polygon) {
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(h)) return null;
+        const d = pointToPolygonDistance(x, y, polygon);
+        return {
+          x,
+          y,
+          h,
+          d,
+          max: d + h * Math.SQRT2,
+        };
+      }
+
+      function getCentroidPolylabelCell(polygon) {
+        if (!Array.isArray(polygon) || polygon.length === 0) return null;
+        const points = polygon[0];
+        if (!Array.isArray(points) || points.length < 3) return null;
+        let area = 0;
+        let x = 0;
+        let y = 0;
+        for (let i = 0, len = points.length, j = len - 1; i < len; j = i++) {
+          const a = points[i];
+          const b = points[j];
+          const f = a[0] * b[1] - b[0] * a[1];
+          x += (a[0] + b[0]) * f;
+          y += (a[1] + b[1]) * f;
+          area += f * 3;
+        }
+        if (area === 0) {
+          const first = points[0];
+          return createPolylabelCell(first[0], first[1], 0, polygon);
+        }
+        const centroid = createPolylabelCell(x / area, y / area, 0, polygon);
+        if (!centroid || centroid.d < 0) {
+          const fallback = points[0];
+          return createPolylabelCell(fallback[0], fallback[1], 0, polygon);
+        }
+        return centroid;
+      }
+
+      function pointToPolygonDistance(x, y, polygon) {
+        let inside = false;
+        let minDistSq = Infinity;
+        for (const ring of polygon) {
+          for (let i = 0, len = ring.length, j = len - 1; i < len; j = i++) {
+            const a = ring[i];
+            const b = ring[j];
+            if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) {
+              inside = !inside;
+            }
+            const distSq = pointToSegmentDistanceSquared(x, y, a, b);
+            if (distSq < minDistSq) {
+              minDistSq = distSq;
+            }
+          }
+        }
+        if (minDistSq === Infinity) {
+          return 0;
+        }
+        if (minDistSq === 0) {
+          return 0;
+        }
+        const distance = Math.sqrt(minDistSq);
+        return inside ? distance : -distance;
+      }
+
+      function pointToSegmentDistanceSquared(px, py, a, b) {
+        let x = a[0];
+        let y = a[1];
+        let dx = b[0] - x;
+        let dy = b[1] - y;
+        if (dx !== 0 || dy !== 0) {
+          const t = ((px - x) * dx + (py - y) * dy) / (dx * dx + dy * dy);
+          if (t > 1) {
+            x = b[0];
+            y = b[1];
+          } else if (t > 0) {
+            x += dx * t;
+            y += dy * t;
+          }
+        }
+        dx = px - x;
+        dy = py - y;
+        return dx * dx + dy * dy;
+      }
+
+      class PolylabelMaxHeap {
+        constructor() {
+          this.items = [];
+        }
+
+        isEmpty() {
+          return this.items.length === 0;
+        }
+
+        push(cell) {
+          this.items.push(cell);
+          this.siftUp(this.items.length - 1);
+        }
+
+        pop() {
+          if (this.items.length === 0) return null;
+          const top = this.items[0];
+          const last = this.items.pop();
+          if (this.items.length > 0) {
+            this.items[0] = last;
+            this.siftDown(0);
+          }
+          return top;
+        }
+
+        siftUp(index) {
+          let i = index;
+          while (i > 0) {
+            const parent = (i - 1) >> 1;
+            if (this.items[parent].max >= this.items[i].max) break;
+            const tmp = this.items[parent];
+            this.items[parent] = this.items[i];
+            this.items[i] = tmp;
+            i = parent;
+          }
+        }
+
+        siftDown(index) {
+          let i = index;
+          const length = this.items.length;
+          while (true) {
+            let left = i * 2 + 1;
+            let right = left + 1;
+            let largest = i;
+            if (left < length && this.items[left].max > this.items[largest].max) {
+              largest = left;
+            }
+            if (right < length && this.items[right].max > this.items[largest].max) {
+              largest = right;
+            }
+            if (largest === i) break;
+            const tmp = this.items[i];
+            this.items[i] = this.items[largest];
+            this.items[largest] = tmp;
+            i = largest;
+          }
+        }
       }
 
       function rectangleFitsRegion(regionId, centerX, centerY, halfWidth, halfHeight, width, height, regionMap) {
