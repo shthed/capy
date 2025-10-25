@@ -13,11 +13,11 @@
     "key": "codex-choose-better-algorithm-for-label-placement",
     "branch": "codex/choose-better-algorithm-for-label-placement",
     "safeName": "codex-choose-better-algorithm-for-label-placement",
-    "commit": "4fb7e353c050b8e752af33406354dd026817fe45",
-    "message": "Merge pull request #226 from shthed/codex/remove-user-settings-from-export\n\nRemove user settings from exported save files",
+    "commit": "caf83bf2d0d0ec8164f4557d414e01edd02f5576",
+    "message": "Improve region label placement with polylabel",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T13:24:59+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/4fb7e353c050b8e752af33406354dd026817fe45"
+    "deployedAt": "2025-10-25T18:20:08+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/caf83bf2d0d0ec8164f4557d414e01edd02f5576"
   },
   "codex-fix-autosave-settings-not-persisting": {
     "key": "codex-fix-autosave-settings-not-persisting",
