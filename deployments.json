@@ -13,10 +13,10 @@
     "key": "codex-fix-autosave-settings-not-persisting",
     "branch": "codex/fix-autosave-settings-not-persisting",
     "safeName": "codex-fix-autosave-settings-not-persisting",
-    "commit": "9fcf3f9ea43b6f7d4de6b4ea451ce1cdf55840b3",
-    "message": "Fix settings persistence when puzzle not loaded",
+    "commit": "53149c3629853d8db97024f904939ba24a7afacf",
+    "message": "Ensure UI scale persists and lighten light-theme selects",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T16:48:23+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/9fcf3f9ea43b6f7d4de6b4ea451ce1cdf55840b3"
+    "deployedAt": "2025-10-25T18:24:41+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/53149c3629853d8db97024f904939ba24a7afacf"
   }
 }
