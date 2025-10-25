@@ -665,6 +665,25 @@
         background-image: none;
       }
 
+      body[data-theme="light"] .control select {
+        background: rgba(255, 255, 255, 0.95);
+        border-color: rgba(15, 23, 42, 0.18);
+        box-shadow: 0 1px 0 rgba(148, 163, 184, 0.35);
+        color: rgba(15, 23, 42, 0.86);
+        background-image: linear-gradient(45deg, transparent 50%, rgba(71, 85, 105, 0.65) 50%),
+          linear-gradient(135deg, rgba(71, 85, 105, 0.65) 50%, transparent 50%);
+      }
+
+      body[data-theme="light"] .control select:focus {
+        border-color: rgba(37, 99, 235, 0.45);
+        box-shadow: 0 0 0 calc(2px * var(--ui-scale)) rgba(59, 130, 246, 0.25);
+      }
+
+      body[data-theme="light"] .control select:disabled {
+        opacity: 0.75;
+        color: rgba(148, 163, 184, 0.8);
+      }
+
       .control {
         display: flex;
         flex-direction: column;
@@ -6038,8 +6057,13 @@
         if (changed && !skipLog) {
           logDebug(`Interface scale set to ${Math.round(resolved * 100)}%`);
         }
-        if (changed && !skipAutosave) {
+        if (!changed) {
+          return resolved;
+        }
+        if (!skipAutosave) {
           scheduleAutosave("settings-ui-scale");
+        } else {
+          scheduleSettingsPersist();
         }
         return resolved;
       }
