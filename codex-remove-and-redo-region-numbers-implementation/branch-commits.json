@@ -1,6 +1,21 @@
 {
   "codex/remove-and-redo-region-numbers-implementation": [
     {
+      "sha": "cc136723984ec697e69a9c5b3d340d94f2b26ac1",
+      "shortSha": "cc13672",
+      "message": "Add label size control and refine region labels",
+      "date": "2025-10-25T08:35:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/cc136723984ec697e69a9c5b3d340d94f2b26ac1",
+      "prs": [
+        {
+          "number": 227,
+          "title": "Always render region numbers",
+          "url": "https://github.com/shthed/capy/pull/227",
+          "branch": "codex/remove-and-redo-region-numbers-implementation"
+        }
+      ]
+    },
+    {
       "sha": "339cfb43536143a788612f5b6915a204b18c385d",
       "shortSha": "339cfb4",
       "message": "Shrink region labels to half-height cap",
@@ -36,21 +51,6 @@
       "message": "Scale region label rendering",
       "date": "2025-10-25T05:55:07Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/149a1d338c242de614ddd7ecab3f7e78b7f53385",
-      "prs": [
-        {
-          "number": 227,
-          "title": "Always render region numbers",
-          "url": "https://github.com/shthed/capy/pull/227",
-          "branch": "codex/remove-and-redo-region-numbers-implementation"
-        }
-      ]
-    },
-    {
-      "sha": "3c0b25e08196e5eba762c415bd2aa5493a94729c",
-      "shortSha": "3c0b25e",
-      "message": "Always render region numbers",
-      "date": "2025-10-25T05:29:09Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/3c0b25e08196e5eba762c415bd2aa5493a94729c",
       "prs": [
         {
           "number": 227,
@@ -63,6 +63,21 @@
   ],
   "codex-remove-and-redo-region-numbers-implementation": [
     {
+      "sha": "cc136723984ec697e69a9c5b3d340d94f2b26ac1",
+      "shortSha": "cc13672",
+      "message": "Add label size control and refine region labels",
+      "date": "2025-10-25T08:35:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/cc136723984ec697e69a9c5b3d340d94f2b26ac1",
+      "prs": [
+        {
+          "number": 227,
+          "title": "Always render region numbers",
+          "url": "https://github.com/shthed/capy/pull/227",
+          "branch": "codex/remove-and-redo-region-numbers-implementation"
+        }
+      ]
+    },
+    {
       "sha": "339cfb43536143a788612f5b6915a204b18c385d",
       "shortSha": "339cfb4",
       "message": "Shrink region labels to half-height cap",
@@ -98,21 +113,6 @@
       "message": "Scale region label rendering",
       "date": "2025-10-25T05:55:07Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/149a1d338c242de614ddd7ecab3f7e78b7f53385",
-      "prs": [
-        {
-          "number": 227,
-          "title": "Always render region numbers",
-          "url": "https://github.com/shthed/capy/pull/227",
-          "branch": "codex/remove-and-redo-region-numbers-implementation"
-        }
-      ]
-    },
-    {
-      "sha": "3c0b25e08196e5eba762c415bd2aa5493a94729c",
-      "shortSha": "3c0b25e",
-      "message": "Always render region numbers",
-      "date": "2025-10-25T05:29:09Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/3c0b25e08196e5eba762c415bd2aa5493a94729c",
       "prs": [
         {
           "number": 227,
