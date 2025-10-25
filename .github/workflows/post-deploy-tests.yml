@@ -63,6 +63,7 @@ jobs:
       - name: Prepare UI review artifacts directory
         run: |
           set -euo pipefail
+          rm -rf artifacts/ui-review
           mkdir -p artifacts/ui-review
       - name: Run Playwright smoke tests
         env:
