@@ -13,10 +13,10 @@
     "key": "codex-remove-and-redo-region-numbers-implementation",
     "branch": "codex/remove-and-redo-region-numbers-implementation",
     "safeName": "codex-remove-and-redo-region-numbers-implementation",
-    "commit": "10c6584640daa4e5c013ae82b806b43aeae12311",
-    "message": "Reduce region number label scale",
+    "commit": "339cfb43536143a788612f5b6915a204b18c385d",
+    "message": "Shrink region labels to half-height cap",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T14:29:12+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/10c6584640daa4e5c013ae82b806b43aeae12311"
+    "deployedAt": "2025-10-25T16:08:30+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/339cfb43536143a788612f5b6915a204b18c385d"
   }
 }
