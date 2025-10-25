@@ -10645,11 +10645,17 @@
       }
 
       function scheduleAutosave(reason, options = {}) {
-        if (!state.puzzle) return null;
         const { immediate = false, delay = 350 } = options;
         const resolvedReason = reason || pendingAutosaveReason || "update";
-        if (isSettingsAutosaveReason(resolvedReason)) {
+        const settingsUpdate = isSettingsAutosaveReason(resolvedReason);
+        if (settingsUpdate) {
           scheduleSettingsPersist({ immediate, delay });
+        }
+        if (!state.puzzle) {
+          if (settingsUpdate) {
+            pendingAutosaveReason = null;
+          }
+          return null;
         }
         if (immediate) {
           pendingAutosaveReason = null;
