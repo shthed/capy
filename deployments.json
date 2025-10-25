@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "a7b3ec491f6fae8020b380c630eb78cb8b624720",
-    "message": "Merge pull request #223 from shthed/codex/update-tests/ui-review.spec.js-for-base_url\n\nStreamline Playwright smoke test for quick load check",
+    "commit": "39a0b8e55fbcd54f874093174511c0eb2723942e",
+    "message": "Merge pull request #224 from shthed/codex/configure-playwright-reporter-and-workflows\n\nConfigure Playwright UI review artifacts",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T08:21:44+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/a7b3ec491f6fae8020b380c630eb78cb8b624720",
+    "deployedAt": "2025-10-25T08:24:44+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/39a0b8e55fbcd54f874093174511c0eb2723942e",
     "key": "main"
-  },
-  "codex-configure-playwright-reporter-and-workflows": {
-    "key": "codex-configure-playwright-reporter-and-workflows",
-    "branch": "codex/configure-playwright-reporter-and-workflows",
-    "safeName": "codex-configure-playwright-reporter-and-workflows",
-    "commit": "32a01b235c989f02dc92a528f76d7726b3a2a7b9",
-    "message": "Update .github/workflows/post-deploy-tests.yml\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
-    "actor": "shthed",
-    "deployedAt": "2025-10-25T08:24:13+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/32a01b235c989f02dc92a528f76d7726b3a2a7b9"
   }
 }
