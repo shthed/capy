@@ -7875,8 +7875,6 @@
         withRenderScale(ctx, scale, () => {
           const fallbackNumberInk = backgroundInk.number;
           const fallbackOutlineInk = backgroundInk.outline;
-          const baseFont = 12;
-          const strokeWidth = 2;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.lineJoin = "round";
@@ -7888,18 +7886,51 @@
             if (!text) continue;
             const center = getRegionCenter(region);
             if (!center) continue;
+            const fontSize = computeRegionLabelFontSize(region);
+            const strokeWidth = computeRegionLabelStrokeWidth(fontSize);
             const paletteColor = getPaletteEntry(region.colorId);
             const regionInk =
               paletteColor?.hex && typeof paletteColor.hex === "string"
                 ? rgbaFromHex(paletteColor.hex, 1)
                 : fallbackNumberInk;
             ctx.fillStyle = regionInk;
-            ctx.font = `${baseFont}px "Inter", "Segoe UI", sans-serif`;
+            ctx.font = `${fontSize}px "Inter", "Segoe UI", sans-serif`;
             ctx.lineWidth = strokeWidth;
             ctx.strokeText(text, center.x, center.y);
             ctx.fillText(text, center.x, center.y);
           }
         });
+      }
+
+      function computeRegionLabelFontSize(region) {
+        const defaultSize = 12;
+        if (!region) {
+          return defaultSize;
+        }
+        const puzzleWidth = state.puzzle?.width || 0;
+        const bounds =
+          puzzleWidth > 0 ? ensureRegionBounds(region, puzzleWidth) : region.bounds ?? null;
+        const pixelCount = Array.isArray(region.pixels) ? region.pixels.length : 0;
+        const estimatedArea =
+          pixelCount > 0
+            ? pixelCount
+            : bounds
+            ? Math.max(1, bounds.width * bounds.height)
+            : 0;
+        if (estimatedArea <= 0) {
+          return defaultSize;
+        }
+        const sqrtArea = Math.sqrt(estimatedArea);
+        const shortestSpan = bounds
+          ? Math.max(1, Math.min(bounds.width, bounds.height))
+          : sqrtArea;
+        const estimate = 6 + sqrtArea * 0.5 + shortestSpan * 0.35;
+        return clamp(estimate, 6, 48);
+      }
+
+      function computeRegionLabelStrokeWidth(fontSize) {
+        const normalized = Number.isFinite(fontSize) ? fontSize : 12;
+        return clamp(normalized / 6, 1, 8);
       }
 
       function getRegionLabelText(region) {
