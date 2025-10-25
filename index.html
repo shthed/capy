@@ -7982,6 +7982,11 @@
         if (!state.puzzle || !ctx) return;
         if (state.settings.showRegionLabels === false) return;
         const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+        const puzzleWidth = state.puzzle?.width || 0;
+        const puzzleHeight = state.puzzle?.height || 0;
+        const regionMap = state.puzzle?.regionMap || null;
+        const hasRegionMap =
+          regionMap && puzzleWidth > 0 && puzzleHeight > 0 && regionMap.length === puzzleWidth * puzzleHeight;
         withRenderScale(ctx, scale, () => {
           const fallbackNumberInk = backgroundInk.number;
           const fallbackOutlineInk = backgroundInk.outline;
@@ -7994,15 +7999,56 @@
             if (!region || state.filled.has(region.id)) continue;
             const text = getRegionLabelText(region);
             if (!text) continue;
-            const center = getRegionCenter(region);
-            if (!center) continue;
-            const fontSize = computeRegionLabelFontSize(region, text);
-            const strokeWidth = computeRegionLabelStrokeWidth(fontSize);
+            let fontSize = computeRegionLabelFontSize(region, text);
+            if (!Number.isFinite(fontSize) || fontSize <= 0) {
+              continue;
+            }
+            let bounds = null;
+            if (puzzleWidth > 0) {
+              bounds = ensureRegionBounds(region, puzzleWidth);
+            }
+            let metrics = measureLabelMetrics(text, fontSize);
+            let center = null;
+            if (metrics && hasRegionMap) {
+              center = findRegionLabelAnchor(
+                region,
+                metrics.halfWidth,
+                metrics.halfHeight,
+                bounds,
+                puzzleWidth,
+                puzzleHeight,
+                regionMap
+              );
+              let attempts = 0;
+              while (!center && attempts < 5 && fontSize > 0.5) {
+                attempts += 1;
+                fontSize = Math.max(fontSize * 0.85, fontSize - 0.75);
+                metrics = measureLabelMetrics(text, fontSize);
+                if (!metrics) {
+                  break;
+                }
+                center = findRegionLabelAnchor(
+                  region,
+                  metrics.halfWidth,
+                  metrics.halfHeight,
+                  bounds,
+                  puzzleWidth,
+                  puzzleHeight,
+                  regionMap
+                );
+              }
+            }
+            if (!center) {
+              center = getRegionCenter(region);
+              metrics = metrics || measureLabelMetrics(text, fontSize);
+            }
+            if (!center || !metrics) continue;
             const paletteColor = getPaletteEntry(region.colorId);
             const regionInk =
               paletteColor?.hex && typeof paletteColor.hex === "string"
                 ? rgbaFromHex(paletteColor.hex, 1)
                 : fallbackNumberInk;
+            const strokeWidth = computeRegionLabelStrokeWidth(fontSize);
             ctx.fillStyle = regionInk;
             ctx.font = `${fontSize}px "Inter", "Segoe UI", sans-serif`;
             ctx.lineWidth = strokeWidth;
@@ -8040,7 +8086,7 @@
         const fallbackSpan = estimatedArea > 0 ? Math.sqrt(estimatedArea) : baseSize;
         const regionHeight = bounds ? Math.max(1, bounds.height) : Math.max(1, fallbackSpan);
         const regionWidth = bounds ? Math.max(1, bounds.width) : Math.max(1, fallbackSpan);
-        const heightLimitRaw = regionHeight * 0.5;
+        const heightLimitRaw = regionHeight * 0.42;
         const heightLimit =
           Number.isFinite(heightLimitRaw) && heightLimitRaw > 0 ? heightLimitRaw : baseSize;
         const textLength = typeof labelText === "string" ? labelText.length : 0;
@@ -8051,7 +8097,7 @@
         const averageGlyphWidth = 0.62;
         const widthLimitRaw =
           regionWidth > 0
-            ? (regionWidth * 0.85) /
+            ? (regionWidth * 0.78) /
               Math.max(effectiveLength * averageGlyphWidth, averageGlyphWidth)
             : baseCandidate;
         const widthLimit =
