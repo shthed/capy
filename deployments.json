@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-25T10:31:31+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/a2cf502550b6a96950d19633441042addf8cc198",
     "key": "main"
+  },
+  "codex-remove-user-settings-from-export": {
+    "key": "codex-remove-user-settings-from-export",
+    "branch": "codex/remove-user-settings-from-export",
+    "safeName": "codex-remove-user-settings-from-export",
+    "commit": "a2cf502550b6a96950d19633441042addf8cc198",
+    "message": "Delete preview directory",
+    "actor": "shthed",
+    "deployedAt": "2025-10-25T10:31:31+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/a2cf502550b6a96950d19633441042addf8cc198"
   }
 }
