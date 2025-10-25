@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "95ec4d203ea5d83921d7a4ca2a25810c913972e1",
+      "shortSha": "95ec4d2",
+      "message": "Merge pull request #228 from shthed/codex/fix-autosave-settings-not-persisting\n\nFix settings persistence when no puzzle is loaded",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T10:26:23Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/95ec4d203ea5d83921d7a4ca2a25810c913972e1",
+      "prs": [
+        {
+          "number": 228,
+          "title": "Fix settings persistence when no puzzle is loaded",
+          "url": "https://github.com/shthed/capy/pull/228",
+          "branch": "codex/fix-autosave-settings-not-persisting"
+        }
+      ]
+    },
+    {
+      "sha": "53149c3629853d8db97024f904939ba24a7afacf",
+      "shortSha": "53149c3",
+      "message": "Ensure UI scale persists and lighten light-theme selects",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T10:24:41Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/53149c3629853d8db97024f904939ba24a7afacf",
+      "prs": [
+        {
+          "number": 228,
+          "title": "Fix settings persistence when no puzzle is loaded",
+          "url": "https://github.com/shthed/capy/pull/228",
+          "branch": "codex/fix-autosave-settings-not-persisting"
+        }
+      ]
+    },
+    {
       "sha": "0c5e3f9506c16bfe0e761c1735678da97c392228",
       "shortSha": "0c5e3f9",
       "message": "Merge pull request #229 from shthed/codex/choose-better-algorithm-for-label-placement\n\nImprove region label placement with polylabel",
@@ -31,40 +63,8 @@
           "branch": "codex/choose-better-algorithm-for-label-placement"
         }
       ]
-    },
-    {
-      "sha": "caf83bf2d0d0ec8164f4557d414e01edd02f5576",
-      "shortSha": "caf83bf",
-      "message": "Improve region label placement with polylabel",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-25T10:20:08Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/caf83bf2d0d0ec8164f4557d414e01edd02f5576",
-      "prs": [
-        {
-          "number": 229,
-          "title": "Improve region label placement with polylabel",
-          "url": "https://github.com/shthed/capy/pull/229",
-          "branch": "codex/choose-better-algorithm-for-label-placement"
-        }
-      ]
-    },
-    {
-      "sha": "9e64725b32cbb137963f7c74911de69ee4e54324",
-      "shortSha": "9e64725",
-      "message": "Merge pull request #227 from shthed/codex/remove-and-redo-region-numbers-implementation\n\nAlways render region numbers",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-25T08:48:04Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/9e64725b32cbb137963f7c74911de69ee4e54324",
-      "prs": [
-        {
-          "number": 227,
-          "title": "Always render region numbers",
-          "url": "https://github.com/shthed/capy/pull/227",
-          "branch": "codex/remove-and-redo-region-numbers-implementation"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-25T10:24:08Z",
-  "deploymentTimestamp": 1761387864939
+  "lastCommitDate": "2025-10-25T10:26:23Z",
+  "deploymentTimestamp": 1761388000339
 }

@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "0c5e3f9506c16bfe0e761c1735678da97c392228",
-    "message": "Merge pull request #229 from shthed/codex/choose-better-algorithm-for-label-placement\n\nImprove region label placement with polylabel",
+    "commit": "95ec4d203ea5d83921d7a4ca2a25810c913972e1",
+    "message": "Merge pull request #228 from shthed/codex/fix-autosave-settings-not-persisting\n\nFix settings persistence when no puzzle is loaded",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T18:24:08+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/0c5e3f9506c16bfe0e761c1735678da97c392228",
+    "deployedAt": "2025-10-25T18:26:23+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/95ec4d203ea5d83921d7a4ca2a25810c913972e1",
     "key": "main"
-  },
-  "codex-fix-autosave-settings-not-persisting": {
-    "key": "codex-fix-autosave-settings-not-persisting",
-    "branch": "codex/fix-autosave-settings-not-persisting",
-    "safeName": "codex-fix-autosave-settings-not-persisting",
-    "commit": "53149c3629853d8db97024f904939ba24a7afacf",
-    "message": "Ensure UI scale persists and lighten light-theme selects",
-    "actor": "shthed",
-    "deployedAt": "2025-10-25T18:24:41+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/53149c3629853d8db97024f904939ba24a7afacf"
   }
 }
