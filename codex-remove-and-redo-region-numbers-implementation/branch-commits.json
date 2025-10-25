@@ -1,6 +1,21 @@
 {
   "codex/remove-and-redo-region-numbers-implementation": [
     {
+      "sha": "10c6584640daa4e5c013ae82b806b43aeae12311",
+      "shortSha": "10c6584",
+      "message": "Reduce region number label scale",
+      "date": "2025-10-25T06:29:12Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/10c6584640daa4e5c013ae82b806b43aeae12311",
+      "prs": [
+        {
+          "number": 227,
+          "title": "Always render region numbers",
+          "url": "https://github.com/shthed/capy/pull/227",
+          "branch": "codex/remove-and-redo-region-numbers-implementation"
+        }
+      ]
+    },
+    {
       "sha": "149a1d338c242de614ddd7ecab3f7e78b7f53385",
       "shortSha": "149a1d3",
       "message": "Scale region label rendering",
@@ -36,21 +51,6 @@
       "message": "Delete preview directory",
       "date": "2025-10-25T02:31:31Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/a2cf502550b6a96950d19633441042addf8cc198",
-      "prs": [
-        {
-          "number": 227,
-          "title": "Always render region numbers",
-          "url": "https://github.com/shthed/capy/pull/227",
-          "branch": "codex/remove-and-redo-region-numbers-implementation"
-        }
-      ]
-    },
-    {
-      "sha": "4231f653738292c8b8c7ad4614bfd2112eddeb81",
-      "shortSha": "4231f65",
-      "message": "Merge pull request #225 from shthed/codex/fix-unrecognized-function-in-workflow-file\n\nFix post-deploy workflow concurrency expression",
-      "date": "2025-10-25T02:26:27Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4231f653738292c8b8c7ad4614bfd2112eddeb81",
       "prs": [
         {
           "number": 227,
@@ -63,6 +63,21 @@
   ],
   "codex-remove-and-redo-region-numbers-implementation": [
     {
+      "sha": "10c6584640daa4e5c013ae82b806b43aeae12311",
+      "shortSha": "10c6584",
+      "message": "Reduce region number label scale",
+      "date": "2025-10-25T06:29:12Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/10c6584640daa4e5c013ae82b806b43aeae12311",
+      "prs": [
+        {
+          "number": 227,
+          "title": "Always render region numbers",
+          "url": "https://github.com/shthed/capy/pull/227",
+          "branch": "codex/remove-and-redo-region-numbers-implementation"
+        }
+      ]
+    },
+    {
       "sha": "149a1d338c242de614ddd7ecab3f7e78b7f53385",
       "shortSha": "149a1d3",
       "message": "Scale region label rendering",
@@ -98,21 +113,6 @@
       "message": "Delete preview directory",
       "date": "2025-10-25T02:31:31Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/a2cf502550b6a96950d19633441042addf8cc198",
-      "prs": [
-        {
-          "number": 227,
-          "title": "Always render region numbers",
-          "url": "https://github.com/shthed/capy/pull/227",
-          "branch": "codex/remove-and-redo-region-numbers-implementation"
-        }
-      ]
-    },
-    {
-      "sha": "4231f653738292c8b8c7ad4614bfd2112eddeb81",
-      "shortSha": "4231f65",
-      "message": "Merge pull request #225 from shthed/codex/fix-unrecognized-function-in-workflow-file\n\nFix post-deploy workflow concurrency expression",
-      "date": "2025-10-25T02:26:27Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/4231f653738292c8b8c7ad4614bfd2112eddeb81",
       "prs": [
         {
           "number": 227,
