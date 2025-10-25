@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "a7b3ec491f6fae8020b380c630eb78cb8b624720",
+      "shortSha": "a7b3ec4",
+      "message": "Merge pull request #223 from shthed/codex/update-tests/ui-review.spec.js-for-base_url\n\nStreamline Playwright smoke test for quick load check",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T00:21:44Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a7b3ec491f6fae8020b380c630eb78cb8b624720",
+      "prs": [
+        {
+          "number": 223,
+          "title": "Streamline Playwright smoke test for quick load check",
+          "url": "https://github.com/shthed/capy/pull/223",
+          "branch": "codex/update-tests/ui-review.spec.js-for-base_url"
+        }
+      ]
+    },
+    {
+      "sha": "d2c0a59424cf651ff2de865bb5d84e27468488d3",
+      "shortSha": "d2c0a59",
+      "message": "Simplify UI smoke test",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T00:18:44Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d2c0a59424cf651ff2de865bb5d84e27468488d3",
+      "prs": [
+        {
+          "number": 223,
+          "title": "Streamline Playwright smoke test for quick load check",
+          "url": "https://github.com/shthed/capy/pull/223",
+          "branch": "codex/update-tests/ui-review.spec.js-for-base_url"
+        }
+      ]
+    },
+    {
       "sha": "3f6e7f201a032d9af2f1a2690775d0e95137ff3d",
       "shortSha": "3f6e7f2",
       "message": "Merge pull request #222 from shthed/codex/add-url-image-loading-and-region-drawing-vqj4rt\n\nImprove remote image URL workflow",
@@ -31,40 +63,8 @@
           "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
         }
       ]
-    },
-    {
-      "sha": "b479af019e5f2e318eea54b2074217240ada970f",
-      "shortSha": "b479af0",
-      "message": "Merge remote-tracking branch 'origin/main' into work",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-24T23:37:42Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/b479af019e5f2e318eea54b2074217240ada970f",
-      "prs": [
-        {
-          "number": 222,
-          "title": "Improve remote image URL workflow",
-          "url": "https://github.com/shthed/capy/pull/222",
-          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
-        }
-      ]
-    },
-    {
-      "sha": "386918d45ef6a19cc553e7e3edda69d05a0b04ac",
-      "shortSha": "386918d",
-      "message": "Clarify remote image load error message",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-24T13:44:43Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/386918d45ef6a19cc553e7e3edda69d05a0b04ac",
-      "prs": [
-        {
-          "number": 222,
-          "title": "Improve remote image URL workflow",
-          "url": "https://github.com/shthed/capy/pull/222",
-          "branch": "codex/add-url-image-loading-and-region-drawing-vqj4rt"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-24T23:40:40Z",
-  "deploymentTimestamp": 1761349259082
+  "lastCommitDate": "2025-10-25T00:21:44Z",
+  "deploymentTimestamp": 1761351721472
 }
