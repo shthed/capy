@@ -7886,7 +7886,7 @@
             if (!text) continue;
             const center = getRegionCenter(region);
             if (!center) continue;
-            const fontSize = computeRegionLabelFontSize(region);
+            const fontSize = computeRegionLabelFontSize(region, text);
             const strokeWidth = computeRegionLabelStrokeWidth(fontSize);
             const paletteColor = getPaletteEntry(region.colorId);
             const regionInk =
@@ -7902,8 +7902,8 @@
         });
       }
 
-      function computeRegionLabelFontSize(region) {
-        const defaultSize = 12;
+      function computeRegionLabelFontSize(region, labelText = "") {
+        const defaultSize = 10;
         if (!region) {
           return defaultSize;
         }
@@ -7920,17 +7920,24 @@
         if (estimatedArea <= 0) {
           return defaultSize;
         }
-        const sqrtArea = Math.sqrt(estimatedArea);
         const shortestSpan = bounds
           ? Math.max(1, Math.min(bounds.width, bounds.height))
-          : sqrtArea;
-        const estimate = 6 + sqrtArea * 0.5 + shortestSpan * 0.35;
-        return clamp(estimate, 6, 48);
+          : Math.sqrt(estimatedArea);
+        const areaRoot = Math.pow(estimatedArea, 0.25);
+        const spanRoot = Math.sqrt(shortestSpan);
+        let estimate = 4 + areaRoot * 0.9 + spanRoot * 0.8;
+        const textLength = typeof labelText === "string" ? labelText.length : 0;
+        if (textLength > 1) {
+          const normalizedLength = Math.min(textLength, 4);
+          const lengthFactor = 1 + (normalizedLength - 1) * 0.18;
+          estimate /= lengthFactor;
+        }
+        return clamp(estimate, 4, 24);
       }
 
       function computeRegionLabelStrokeWidth(fontSize) {
-        const normalized = Number.isFinite(fontSize) ? fontSize : 12;
-        return clamp(normalized / 6, 1, 8);
+        const normalized = Number.isFinite(fontSize) ? fontSize : 10;
+        return clamp(normalized / 8, 0.5, 2.5);
       }
 
       function getRegionLabelText(region) {
