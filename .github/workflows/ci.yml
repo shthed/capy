@@ -23,7 +23,7 @@ jobs:
 
       - name: Provision Playwright browsers
         run: |
-          npx playwright install --with-deps chromium
+          npx playwright install chromium --only-shell
 
       - name: Run placeholder test hook
         run: |
