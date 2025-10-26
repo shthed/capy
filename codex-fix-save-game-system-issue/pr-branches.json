@@ -4,7 +4,7 @@
     "safeName": "codex-fix-save-game-system-issue",
     "title": "Prefer autosave when restoring sessions",
     "number": 232,
-    "updatedAt": "2025-10-26T04:06:20Z",
+    "updatedAt": "2025-10-26T05:18:59Z",
     "url": "https://github.com/shthed/capy/pull/232"
   }
 ]

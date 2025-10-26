@@ -13,10 +13,10 @@
     "key": "codex-fix-save-game-system-issue",
     "branch": "codex/fix-save-game-system-issue",
     "safeName": "codex-fix-save-game-system-issue",
-    "commit": "7f46c6048b637fdadd8b904ca70220085de124c8",
-    "message": "Unify autosave with manual saves and simplify storage",
+    "commit": "3e6471fb117eaec41f471f353d8401070527ec58",
+    "message": "Restore legacy save migration and clean generator copy",
     "actor": "shthed",
-    "deployedAt": "2025-10-26T12:06:18+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/7f46c6048b637fdadd8b904ca70220085de124c8"
+    "deployedAt": "2025-10-26T13:18:57+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/3e6471fb117eaec41f471f353d8401070527ec58"
   }
 }
