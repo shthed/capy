@@ -25,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          SAFE_BRANCH=$(printf '%s' "${HEAD_BRANCH}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          SAFE_BRANCH=$(printf '%s' "${HEAD_BRANCH}" | sed 's/[^a-zA-Z0-9_-]/-/g')
           echo "branch_slug=${SAFE_BRANCH}" >> "$GITHUB_OUTPUT"
 
   review:
