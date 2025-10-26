@@ -2591,6 +2591,8 @@
       let settingsPersistTimer = null;
       let pendingSettingsPersistPayload = null;
       let lastStoredSettingsJson = null;
+      let suppressSettingsPersist = 0;
+      let hasStoredUserSettings = false;
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
       let pendingAutosaveReason = null;
@@ -3730,6 +3732,7 @@
 
       const storedUserSettings = loadUserSettings();
       if (storedUserSettings) {
+        hasStoredUserSettings = true;
         state.settings = {
           ...state.settings,
           ...storedUserSettings,
@@ -4262,6 +4265,7 @@
             skipLog: true,
             skipAutosave: true,
             force: true,
+            skipPersist: true,
           });
         }
         if (typeof settings.labelScale === "number") {
@@ -4521,16 +4525,22 @@
         };
       }
 
-      applyGameplaySettings(state.settings);
-      updateOptionOutputs();
-      refreshSaveList();
-      updateStorageUsageSummary();
-      updateCommandStates();
-      renderDebugLog();
-      logDebug("Session started");
-      syncCommandRailMetrics();
-      handleViewportChange({ log: true, recenter: true });
-      resetView({ recenter: true });
+      suppressSettingsPersist += 1;
+      try {
+        applyGameplaySettings(state.settings);
+        updateOptionOutputs();
+        refreshSaveList();
+        updateStorageUsageSummary();
+        updateCommandStates();
+        renderDebugLog();
+        logDebug("Session started");
+        syncCommandRailMetrics();
+        handleViewportChange({ log: true, recenter: true });
+        resetView({ recenter: true });
+      } finally {
+        suppressSettingsPersist = Math.max(0, suppressSettingsPersist - 1);
+      }
+      scheduleSettingsPersist({ immediate: true });
 
       if (paletteSortEl) {
         paletteSortEl.value = state.paletteSort;
@@ -6316,7 +6326,7 @@
       }
 
       function applyStageBackgroundColor(hex, options = {}) {
-        const { skipLog = false, skipAutosave = false, force = false } = options;
+        const { skipLog = false, skipAutosave = false, force = false, skipPersist = false } = options;
         const current = state.settings.stageBackgroundColor ?? DEFAULT_STAGE_BACKGROUND_HEX;
         const normalized = sanitizeHexColor(hex, current);
         const changed = force || normalized !== current;
@@ -6337,7 +6347,9 @@
         if (!changed) {
           return normalized;
         }
-        scheduleSettingsPersist({ immediate: true });
+        if (!skipPersist) {
+          scheduleSettingsPersist({ immediate: true });
+        }
         if (!skipAutosave) {
           scheduleAutosave("stage-background-colour");
         }
@@ -7742,7 +7754,7 @@
         }
         updateOptionOutputs();
         const resolvedSettings = metadata.settings ?? data.settings;
-        if (resolvedSettings) {
+        if (resolvedSettings && !hasStoredUserSettings) {
           applyGameplaySettings(resolvedSettings);
         }
         applyStageBackgroundColor(stageBackgroundHex, {
@@ -11223,6 +11235,7 @@
           console.error("Failed to serialise settings", error);
           return null;
         }
+        hasStoredUserSettings = true;
         if (serialized === lastStoredSettingsJson) {
           return record;
         }
@@ -11241,6 +11254,10 @@
         const { immediate = false, delay = 350 } = options || {};
         const snapshot = getUserSettingsSnapshot(state.settings);
         if (!snapshot) return null;
+        if (suppressSettingsPersist > 0) {
+          pendingSettingsPersistPayload = snapshot;
+          return null;
+        }
         if (immediate) {
           pendingSettingsPersistPayload = null;
           if (
