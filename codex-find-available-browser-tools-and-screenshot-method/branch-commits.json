@@ -1,0 +1,126 @@
+{
+  "codex/find-available-browser-tools-and-screenshot-method": [
+    {
+      "sha": "5d07f02a17154b405078c9f7fb6c273bebc6ceac",
+      "shortSha": "5d07f02",
+      "message": "Simplify Playwright smoke test to Chromium",
+      "date": "2025-10-26T05:58:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/5d07f02a17154b405078c9f7fb6c273bebc6ceac",
+      "prs": [
+        {
+          "number": 235,
+          "title": "Limit Playwright smoke test to Chromium page load",
+          "url": "https://github.com/shthed/capy/pull/235",
+          "branch": "codex/find-available-browser-tools-and-screenshot-method"
+        }
+      ]
+    },
+    {
+      "sha": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "shortSha": "bbf7371",
+      "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
+      "date": "2025-10-26T00:54:52Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "prs": [
+        {
+          "number": 235,
+          "title": "Limit Playwright smoke test to Chromium page load",
+          "url": "https://github.com/shthed/capy/pull/235",
+          "branch": "codex/find-available-browser-tools-and-screenshot-method"
+        }
+      ]
+    },
+    {
+      "sha": "69903bad7d31a0ca173666d6f8309de678623b20",
+      "shortSha": "69903ba",
+      "message": "Sanitize concurrency group branch name",
+      "date": "2025-10-26T00:49:07Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/69903bad7d31a0ca173666d6f8309de678623b20",
+      "prs": [
+        {
+          "number": 235,
+          "title": "Limit Playwright smoke test to Chromium page load",
+          "url": "https://github.com/shthed/capy/pull/235",
+          "branch": "codex/find-available-browser-tools-and-screenshot-method"
+        }
+      ]
+    },
+    {
+      "sha": "7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "shortSha": "7bace75",
+      "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
+      "date": "2025-10-25T11:10:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "prs": [
+        {
+          "number": 235,
+          "title": "Limit Playwright smoke test to Chromium page load",
+          "url": "https://github.com/shthed/capy/pull/235",
+          "branch": "codex/find-available-browser-tools-and-screenshot-method"
+        }
+      ]
+    }
+  ],
+  "codex-find-available-browser-tools-and-screenshot-method": [
+    {
+      "sha": "5d07f02a17154b405078c9f7fb6c273bebc6ceac",
+      "shortSha": "5d07f02",
+      "message": "Simplify Playwright smoke test to Chromium",
+      "date": "2025-10-26T05:58:45Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/5d07f02a17154b405078c9f7fb6c273bebc6ceac",
+      "prs": [
+        {
+          "number": 235,
+          "title": "Limit Playwright smoke test to Chromium page load",
+          "url": "https://github.com/shthed/capy/pull/235",
+          "branch": "codex/find-available-browser-tools-and-screenshot-method"
+        }
+      ]
+    },
+    {
+      "sha": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "shortSha": "bbf7371",
+      "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
+      "date": "2025-10-26T00:54:52Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "prs": [
+        {
+          "number": 235,
+          "title": "Limit Playwright smoke test to Chromium page load",
+          "url": "https://github.com/shthed/capy/pull/235",
+          "branch": "codex/find-available-browser-tools-and-screenshot-method"
+        }
+      ]
+    },
+    {
+      "sha": "69903bad7d31a0ca173666d6f8309de678623b20",
+      "shortSha": "69903ba",
+      "message": "Sanitize concurrency group branch name",
+      "date": "2025-10-26T00:49:07Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/69903bad7d31a0ca173666d6f8309de678623b20",
+      "prs": [
+        {
+          "number": 235,
+          "title": "Limit Playwright smoke test to Chromium page load",
+          "url": "https://github.com/shthed/capy/pull/235",
+          "branch": "codex/find-available-browser-tools-and-screenshot-method"
+        }
+      ]
+    },
+    {
+      "sha": "7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "shortSha": "7bace75",
+      "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
+      "date": "2025-10-25T11:10:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "prs": [
+        {
+          "number": 235,
+          "title": "Limit Playwright smoke test to Chromium page load",
+          "url": "https://github.com/shthed/capy/pull/235",
+          "branch": "codex/find-available-browser-tools-and-screenshot-method"
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "f5498b0b2b8dcd164046f6bf788bb0936c88289c",
+      "shortSha": "f5498b0",
+      "message": "Merge pull request #232 from shthed/codex/fix-save-game-system-issue\n\nPrefer autosave when restoring sessions",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-26T05:58:17Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/f5498b0b2b8dcd164046f6bf788bb0936c88289c",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
+      "sha": "a00dbe5e1ffa5c1b3876c996a925123a59ae90d3",
+      "shortSha": "a00dbe5",
+      "message": "Fix polylabel heap factory initialization",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-26T05:55:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a00dbe5e1ffa5c1b3876c996a925123a59ae90d3",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
       "sha": "dd10b4092afcf4e7a39016cba96658e3f509cc48",
       "shortSha": "dd10b40",
       "message": "Merge pull request #233 from shthed/codex/change-color-selection-logic\n\nEnhance palette sorting with spectrum and warmth modes",
@@ -31,40 +63,8 @@
           "branch": "codex/optimize-pages-deployment-process"
         }
       ]
-    },
-    {
-      "sha": "58c2ae14453207a85d152ffeaa7cfd15add41d8e",
-      "shortSha": "58c2ae1",
-      "message": "Always deploy branches without PR checks",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-26T05:33:18Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/58c2ae14453207a85d152ffeaa7cfd15add41d8e",
-      "prs": [
-        {
-          "number": 234,
-          "title": "Simplify Pages deployment workflow",
-          "url": "https://github.com/shthed/capy/pull/234",
-          "branch": "codex/optimize-pages-deployment-process"
-        }
-      ]
-    },
-    {
-      "sha": "d23e5306b671a19328dc0a7839e33146fc59fb58",
-      "shortSha": "d23e530",
-      "message": "Improve palette spectrum sorting",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-26T05:33:04Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/d23e5306b671a19328dc0a7839e33146fc59fb58",
-      "prs": [
-        {
-          "number": 233,
-          "title": "Enhance palette sorting with spectrum and warmth modes",
-          "url": "https://github.com/shthed/capy/pull/233",
-          "branch": "codex/change-color-selection-logic"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-26T05:54:03Z",
-  "deploymentTimestamp": 1761458174281
+  "lastCommitDate": "2025-10-26T05:58:17Z",
+  "deploymentTimestamp": 1761458338966
 }

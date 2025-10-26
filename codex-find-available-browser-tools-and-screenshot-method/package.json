@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "http-server -c-1 . -p 8000",
     "test": "node ./scripts/run-tests.js",
-    "test:smoke": "playwright test --config=playwright.config.js --project=chromium-desktop"
+    "test:smoke": "playwright test --config=playwright.config.js --project=chromium"
   },
   "devDependencies": {
     "@playwright/test": "^1.43.1",
@@ -16,5 +16,5 @@
   "engines": {
     "node": ">=18"
   },
-  "postinstall": "npx playwright install"
+  "postinstall": "npx playwright install chromium"
 }

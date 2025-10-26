@@ -9,14 +9,14 @@
     "commitUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
     "key": "main"
   },
-  "codex-fix-save-game-system-issue": {
-    "key": "codex-fix-save-game-system-issue",
-    "branch": "codex/fix-save-game-system-issue",
-    "safeName": "codex-fix-save-game-system-issue",
-    "commit": "a00dbe5e1ffa5c1b3876c996a925123a59ae90d3",
-    "message": "Fix polylabel heap factory initialization",
+  "codex-find-available-browser-tools-and-screenshot-method": {
+    "key": "codex-find-available-browser-tools-and-screenshot-method",
+    "branch": "codex/find-available-browser-tools-and-screenshot-method",
+    "safeName": "codex-find-available-browser-tools-and-screenshot-method",
+    "commit": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
+    "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
     "actor": "shthed",
-    "deployedAt": "2025-10-26T13:55:57+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/a00dbe5e1ffa5c1b3876c996a925123a59ae90d3"
+    "deployedAt": "2025-10-26T08:54:52+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c"
   }
 }
