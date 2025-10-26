@@ -4,7 +4,7 @@
     "safeName": "codex-find-available-browser-tools-and-screenshot-method",
     "title": "Limit Playwright smoke test to Chromium page load",
     "number": 235,
-    "updatedAt": "2025-10-26T05:58:48Z",
+    "updatedAt": "2025-10-26T05:59:01Z",
     "url": "https://github.com/shthed/capy/pull/235"
   }
 ]

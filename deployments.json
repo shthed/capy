@@ -13,10 +13,10 @@
     "key": "codex-find-available-browser-tools-and-screenshot-method",
     "branch": "codex/find-available-browser-tools-and-screenshot-method",
     "safeName": "codex-find-available-browser-tools-and-screenshot-method",
-    "commit": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
-    "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
+    "commit": "5d07f02a17154b405078c9f7fb6c273bebc6ceac",
+    "message": "Simplify Playwright smoke test to Chromium",
     "actor": "shthed",
-    "deployedAt": "2025-10-26T08:54:52+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c"
+    "deployedAt": "2025-10-26T13:58:45+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/5d07f02a17154b405078c9f7fb6c273bebc6ceac"
   }
 }
