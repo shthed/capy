@@ -1810,7 +1810,7 @@
           hidden
         >
           <p class="generator-import-title">
-            Ready to generate <strong data-import-file>your file</strong>
+            <strong data-import-file></strong>
           </p>
           <p class="generator-import-description" data-import-description></p>
           <div class="generator-import-actions">
@@ -1818,30 +1818,6 @@
             <button type="button" class="close-button" data-import-cancel>Cancel</button>
           </div>
         </div>
-        <section class="sheet-section" aria-labelledby="urlImportHeading">
-          <h3 id="urlImportHeading">Load from URL</h3>
-          <form class="generator-url-form" data-source-url-form>
-            <label class="control">
-              <span>Image address</span>
-              <input
-                type="url"
-                name="sourceImageUrl"
-                inputmode="url"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="https://example.com/image.jpg"
-                data-source-url-input
-              />
-            </label>
-            <div class="generator-url-actions">
-              <button type="submit" data-source-url-submit>Load image</button>
-              <p class="control-note" data-source-url-hint>
-                Paste a direct link to a PNG or JPEG image.
-              </p>
-              <p class="control-note generator-url-error" data-source-url-error hidden role="alert"></p>
-            </div>
-          </form>
-        </section>
         <section class="sheet-section" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Clustering &amp; detail</h3>
           <p class="control-note">
@@ -3648,12 +3624,6 @@
         sampleArtwork: null,
       };
 
-      try {
-        localStorage.removeItem(LEGACY_AUTOSAVE_STORAGE_KEY);
-      } catch (error) {
-        console.error("Failed to clear legacy autosave key", error);
-      }
-
       const storedUserSettings = loadUserSettings();
       if (storedUserSettings) {
         state.settings = {
@@ -3841,6 +3811,8 @@
         refreshSaveList();
         updateStorageUsageSummary();
       });
+
+      migrateLegacyAutosave();
 
       function getDefaultGameTitle() {
         const title = state.defaultGame?.title;
@@ -6479,7 +6451,7 @@
         if (!pendingImportFile) {
           generatorImportNotice.hidden = true;
           if (generatorImportFileEl) {
-            generatorImportFileEl.textContent = "your file";
+            generatorImportFileEl.textContent = "";
           }
           if (generatorImportDescriptionEl) {
             generatorImportDescriptionEl.textContent = "";
@@ -11335,6 +11307,90 @@
         };
       }
 
+      function decodeLegacyAutosaveStorageRecord(record) {
+        if (!record || typeof record !== "object") return null;
+        const { puzzle, settings } = decodeStoredPuzzleSnapshot(record.data ?? record.payload ?? null);
+        if (!puzzle) return null;
+        const normalized = {
+          timestamp:
+            typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
+              ? record.timestamp
+              : Date.now(),
+          data: puzzle,
+        };
+        if (typeof record.id === "string" && record.id.trim()) {
+          normalized.id = record.id.trim();
+        }
+        if (settings && typeof settings === "object") {
+          normalized.settings = settings;
+        } else if (record.settings && typeof record.settings === "object") {
+          const snapshot = getUserSettingsSnapshot(record.settings);
+          if (snapshot) {
+            normalized.settings = snapshot;
+          }
+        }
+        if (typeof record.title === "string" && record.title.trim()) {
+          normalized.title = record.title.trim();
+        } else if (typeof puzzle.title === "string" && puzzle.title) {
+          normalized.title = puzzle.title;
+        }
+        return normalized;
+      }
+
+      function migrateLegacyAutosave() {
+        if (typeof localStorage === "undefined") {
+          return;
+        }
+        let raw = null;
+        try {
+          raw = localStorage.getItem(LEGACY_AUTOSAVE_STORAGE_KEY);
+        } catch (error) {
+          console.error("Failed to read legacy autosave", error);
+          return;
+        }
+        if (!raw) {
+          return;
+        }
+        try {
+          const parsed = JSON.parse(raw);
+          const legacy = decodeLegacyAutosaveStorageRecord(parsed);
+          if (!legacy || !legacy.data) {
+            return;
+          }
+          const timestamp = Number.isFinite(legacy.timestamp) ? legacy.timestamp : Date.now();
+          const seed = Math.floor(Math.random() * 10000);
+          const id = legacy.id && typeof legacy.id === "string" && legacy.id.trim()
+            ? legacy.id.trim()
+            : `save-${timestamp}-${seed}-autosave`;
+          const entry = {
+            id,
+            timestamp,
+            data: legacy.data,
+          };
+          if (legacy.settings && typeof legacy.settings === "object") {
+            const snapshot = getUserSettingsSnapshot(legacy.settings);
+            if (snapshot) {
+              entry.settings = snapshot;
+            }
+          }
+          if (legacy.title) {
+            entry.title = legacy.title;
+          }
+          state.saves = [entry, ...state.saves.filter((item) => item.id !== id)];
+          state.loadedSaveId = id;
+          persistSaves();
+          logDebug("Migrated legacy autosave into manual slot");
+        } catch (error) {
+          console.error("Failed to migrate legacy autosave", error);
+        } finally {
+          try {
+            localStorage.removeItem(LEGACY_AUTOSAVE_STORAGE_KEY);
+          } catch (removeError) {
+            console.error("Failed to clear legacy autosave key", removeError);
+          }
+        }
+      }
+
       function formatBytes(bytes) {
         if (!Number.isFinite(bytes) || bytes <= 0) {
           return "0 B";
@@ -11666,14 +11722,109 @@
         return bytes;
       }
 
+      function simpleLZ77Decompress(bytes) {
+        if (!bytes || bytes.length === 0) {
+          return new Uint8Array(0);
+        }
+        const output = [];
+        let index = 0;
+        while (index < bytes.length) {
+          const controlByte = bytes[index++];
+          for (let bit = 0; bit < 8 && index < bytes.length; bit += 1) {
+            const isMatch = (controlByte >> bit) & 1;
+            if (isMatch) {
+              if (index + 1 >= bytes.length) {
+                return null;
+              }
+              const first = bytes[index++];
+              const second = bytes[index++];
+              const offset = ((first << 4) | (second >> 4)) & 0xfff;
+              const length = (second & 0x0f) + 3;
+              if (offset === 0 || offset > output.length) {
+                return null;
+              }
+              const start = output.length - offset;
+              for (let i = 0; i < length; i += 1) {
+                output.push(output[start + i]);
+              }
+            } else {
+              output.push(bytes[index++]);
+            }
+          }
+        }
+        return new Uint8Array(output);
+      }
 
+      function lzwDecompress(codes) {
+        if (!codes || codes.length === 0) {
+          return "";
+        }
+        const dictionary = [];
+        for (let index = 0; index < 256; index += 1) {
+          dictionary[index] = String.fromCharCode(index);
+        }
+        let dictSize = 256;
+        let previous = String.fromCharCode(codes[0]);
+        let output = previous;
+        for (let index = 1; index < codes.length; index += 1) {
+          const code = codes[index];
+          let entry = "";
+          if (dictionary[code] != null) {
+            entry = dictionary[code];
+          } else if (code === dictSize) {
+            entry = previous + previous.charAt(0);
+          } else {
+            return null;
+          }
+          output += entry;
+          if (dictSize < 65535) {
+            dictionary[dictSize] = previous + entry.charAt(0);
+            dictSize += 1;
+          }
+          previous = entry;
+        }
+        return output;
+      }
 
-
-
-
-
-
-
+      function decodeLegacySnapshotPayload(source) {
+        if (!source || typeof source !== "object") {
+          return null;
+        }
+        const payload = typeof source.payload === "string" ? source.payload : "";
+        if (!payload) {
+          return null;
+        }
+        const encoding = typeof source.encoding === "string" ? source.encoding : "identity";
+        if (encoding === "identity") {
+          return payload;
+        }
+        if (encoding === "lz77") {
+          try {
+            const bytes = decodeBase64ToBytes(payload);
+            const decompressed = simpleLZ77Decompress(bytes);
+            return decompressed ? decodeUtf8Bytes(decompressed) : null;
+          } catch (error) {
+            console.error("Failed to decompress legacy LZ77 payload", error);
+            return null;
+          }
+        }
+        if (encoding === "lzw16") {
+          try {
+            const bytes = decodeBase64ToBytes(payload);
+            if (bytes.byteLength === 0) {
+              return "";
+            }
+            const length = Math.floor(bytes.byteLength / 2);
+            const codes = new Uint16Array(bytes.buffer, bytes.byteOffset, length);
+            return lzwDecompress(codes);
+          } catch (error) {
+            console.error("Failed to decompress legacy LZW payload", error);
+            return null;
+          }
+        }
+        console.error(`Unsupported legacy snapshot encoding: ${encoding}`);
+        return null;
+      }
 
       function decodeStoredPuzzleSnapshot(source) {
         if (!source) {
@@ -11685,6 +11836,21 @@
             data = JSON.parse(source);
           } catch (error) {
             console.error("Failed to parse snapshot string", error);
+            return { puzzle: null, settings: null };
+          }
+        } else if (
+          typeof source === "object" &&
+          source.__compressed === true &&
+          typeof source.payload === "string"
+        ) {
+          const textPayload = decodeLegacySnapshotPayload(source);
+          if (typeof textPayload !== "string") {
+            return { puzzle: null, settings: null };
+          }
+          try {
+            data = JSON.parse(textPayload);
+          } catch (error) {
+            console.error("Failed to parse legacy compressed snapshot", error);
             return { puzzle: null, settings: null };
           }
         }
