@@ -98,6 +98,21 @@
         root.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
         const combined = Math.min(1.8, Math.max(0.35, userScale * autoScale));
         root.style.setProperty("--ui-scale", combined.toFixed(4));
+        const orientation = width >= height ? "landscape" : "portrait";
+        const padding =
+          orientation === "portrait"
+            ? Math.min(28, Math.max(16, Math.round(minSide * 0.06)))
+            : 32;
+        root.style.setProperty("--app-width", `${width}px`);
+        root.style.setProperty("--app-height", `${height}px`);
+        root.style.setProperty("--viewport-padding", `${padding}px`);
+        const compactCommands = width < 720 || height < 540;
+        root.dataset.orientation = orientation;
+        root.dataset.compactCommands = compactCommands ? "true" : "false";
+        window.__capyPrebootMetrics = {
+          orientation,
+          compactCommands,
+        };
       })();
     </script>
     <style>
@@ -1564,6 +1579,29 @@
     </style>
   </head>
   <body data-theme="dark">
+    <script>
+      (function () {
+        if (typeof window === "undefined" || !document.body) {
+          return;
+        }
+        const metrics = window.__capyPrebootMetrics || {};
+        if (metrics.orientation) {
+          document.body.dataset.orientation = metrics.orientation;
+          document.documentElement.dataset.orientation = metrics.orientation;
+        }
+        if (typeof metrics.compactCommands === "boolean") {
+          document.body.classList.toggle("compact-commands", metrics.compactCommands);
+          document.documentElement.dataset.compactCommands = metrics.compactCommands
+            ? "true"
+            : "false";
+        }
+        try {
+          delete window.__capyPrebootMetrics;
+        } catch (_error) {
+          window.__capyPrebootMetrics = undefined;
+        }
+      })();
+    </script>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
         <button
@@ -5640,9 +5678,11 @@
         document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
         const autoScale = clamp(minSide / 880, 0.6, 1.1);
         document.documentElement.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
+        const compact = visualWidth < 720 || visualHeight < 540;
+        document.documentElement.dataset.orientation = orientation;
+        document.documentElement.dataset.compactCommands = compact ? "true" : "false";
         if (document.body) {
           document.body.dataset.orientation = orientation;
-          const compact = visualWidth < 720 || visualHeight < 540;
           document.body.classList.toggle("compact-commands", compact);
         }
         syncComputedUiScale();
