@@ -9459,6 +9459,8 @@
           paletteSortEl.value = next;
         }
         renderPalette();
+        renderPuzzle();
+        refreshCustomCursorHighlight();
         if (!skipLog) {
           const label =
             next === "spectrum"
@@ -10117,8 +10119,16 @@
         cursorOverlay.style.setProperty("--cursor-x", `${cursorLastClientX}px`);
         cursorOverlay.style.setProperty("--cursor-y", `${cursorLastClientY}px`);
         const colorId = paletteColor?.id ?? region.colorId;
+        const displayNumber = getColorDisplayNumber(colorId, { includeCompleted: true });
+        const pointerNumber =
+          displayNumber != null
+            ? displayNumber
+            : colorId != null
+            ? colorId
+            : null;
         if (cursorNumberEl) {
-          cursorNumberEl.textContent = String(colorId);
+          cursorNumberEl.textContent =
+            pointerNumber != null ? String(pointerNumber) : "";
           const pointerNumberColor =
             paletteColor?.hex != null ? computePointerNumberColor(paletteColor.hex) : null;
           if (pointerNumberColor) {
