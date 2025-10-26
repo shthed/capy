@@ -72,14 +72,32 @@
         if (!root || typeof window === "undefined") return;
         const SETTINGS_STORAGE_KEY = "capy.settings.v1";
         const DEFAULT_UI_SCALE = 0.75;
+        const MIN_UI_SCALE = 0.2;
+        const MAX_UI_SCALE = 3;
+        const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
         let userScale = DEFAULT_UI_SCALE;
         try {
           const raw = window.localStorage?.getItem(SETTINGS_STORAGE_KEY);
           if (raw) {
             const parsed = JSON.parse(raw);
-            const candidate = Number(parsed?.uiScale);
+            const payload =
+              parsed && typeof parsed === "object"
+                ? parsed.settings && typeof parsed.settings === "object"
+                  ? parsed.settings
+                  : parsed
+                : null;
+            let candidate = payload && payload.uiScale != null ? Number(payload.uiScale) : NaN;
+            if (!Number.isFinite(candidate) && payload && typeof payload.uiScale === "string") {
+              const trimmed = payload.uiScale.trim();
+              if (trimmed.endsWith("%")) {
+                candidate = Number(trimmed.slice(0, -1)) / 100;
+              }
+            }
             if (Number.isFinite(candidate) && candidate > 0) {
-              userScale = Math.min(3, Math.max(0.2, candidate));
+              if (candidate > MAX_UI_SCALE && candidate <= MAX_UI_SCALE * 100) {
+                candidate /= 100;
+              }
+              userScale = clamp(candidate, MIN_UI_SCALE, MAX_UI_SCALE);
             }
           }
         } catch (_error) {
