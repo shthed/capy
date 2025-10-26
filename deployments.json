@@ -8,5 +8,15 @@
     "deployedAt": "2025-10-25T19:10:57+08:00",
     "commitUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda",
     "key": "main"
+  },
+  "codex-explain-post-deploy-tests.yml-changes": {
+    "key": "codex-explain-post-deploy-tests.yml-changes",
+    "branch": "codex/explain-post-deploy-tests.yml-changes",
+    "safeName": "codex-explain-post-deploy-tests.yml-changes",
+    "commit": "7bace758990dbd094c724b0c0c422810b9ab1fda",
+    "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
+    "actor": "shthed",
+    "deployedAt": "2025-10-25T19:10:57+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda"
   }
 }
