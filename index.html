@@ -1447,15 +1447,6 @@
         border: 1px solid rgba(59, 130, 246, 0.2);
       }
 
-      .save-entry--autosave {
-        border-color: rgba(250, 204, 21, 0.4);
-        box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.2);
-      }
-
-      .save-entry--autosave[data-autosave-ready="false"] {
-        opacity: 0.85;
-      }
-
       .save-entry header {
         display: flex;
         justify-content: space-between;
@@ -1675,11 +1666,6 @@
           aria-labelledby="saveManagerTitle"
           data-save-section="dialog"
         >
-          <article
-            class="save-entry save-entry--autosave"
-            data-save-autosave-slot
-            data-save-id="autosave"
-          ></article>
           <div
             class="save-manager-list"
             data-save-list
@@ -1688,13 +1674,12 @@
             role="list"
           ></div>
           <p class="save-manager-empty" data-save-empty hidden>
-            No manual saves yet. Create one above or keep playing to autosave progress.
+            No saves yet. Create one above to start autosaving progress.
           </p>
           <div class="save-manager-actions">
             <button type="button" data-save-snapshot disabled>Save current puzzle</button>
             <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
             <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
-            <button id="downloadCompact" type="button" disabled>Export compact puzzle</button>
           </div>
         </section>
         <section class="sheet-section" aria-labelledby="storageHeading">
@@ -1825,7 +1810,7 @@
           hidden
         >
           <p class="generator-import-title">
-            Ready to generate <strong data-import-file>your file</strong>
+            <strong data-import-file></strong>
           </p>
           <p class="generator-import-description" data-import-description></p>
           <div class="generator-import-actions">
@@ -1833,30 +1818,6 @@
             <button type="button" class="close-button" data-import-cancel>Cancel</button>
           </div>
         </div>
-        <section class="sheet-section" aria-labelledby="urlImportHeading">
-          <h3 id="urlImportHeading">Load from URL</h3>
-          <form class="generator-url-form" data-source-url-form>
-            <label class="control">
-              <span>Image address</span>
-              <input
-                type="url"
-                name="sourceImageUrl"
-                inputmode="url"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="https://example.com/image.jpg"
-                data-source-url-input
-              />
-            </label>
-            <div class="generator-url-actions">
-              <button type="submit" data-source-url-submit>Load image</button>
-              <p class="control-note" data-source-url-hint>
-                Paste a direct link to a PNG or JPEG image.
-              </p>
-              <p class="control-note generator-url-error" data-source-url-error hidden role="alert"></p>
-            </div>
-          </form>
-        </section>
         <section class="sheet-section" aria-labelledby="generatorHeading">
           <h3 id="generatorHeading">Clustering &amp; detail</h3>
           <p class="control-note">
@@ -2334,9 +2295,6 @@
       const clearDebugLogButton = document.getElementById("clearDebugLog");
       const saveStorageSummary = document.getElementById("saveStorageSummary");
       const deleteAllSavesButton = document.getElementById("deleteAllSaves");
-      const autosaveContainers = Array.from(
-        document.querySelectorAll("[data-save-autosave-slot]")
-      );
       const viewportEl = document.getElementById("viewport");
       const canvasStage = document.getElementById("canvasStage");
       const canvasTransform = document.getElementById("canvasTransform");
@@ -2383,7 +2341,6 @@
       const chatGptLink = document.getElementById("chatGptLink");
       const applyBtn = document.getElementById("applyOptions");
       const downloadBtn = document.getElementById("downloadJson");
-      const downloadCompactBtn = document.getElementById("downloadCompact");
       const saveSnapshotButtons = Array.from(document.querySelectorAll("[data-save-snapshot]"));
       const resetProgressButtons = Array.from(document.querySelectorAll("[data-reset-progress]"));
       const saveListContainers = Array.from(document.querySelectorAll("[data-save-list]"));
@@ -2460,8 +2417,7 @@
         activateSettingsTab(activeSettingsTabId, { force: true });
       }
       const SAVE_STORAGE_KEY = "capy.saves.v2";
-      const AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
-      const AUTOSAVE_MANAGEMENT_ID = "autosave";
+      const LEGACY_AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const SETTINGS_STORAGE_KEY = "capy.settings.v1";
       const SETTINGS_AUTOSAVE_REASONS = new Set([
@@ -3669,7 +3625,6 @@
         },
         previewVisible: false,
         saves: gameSaveManager.hydrate(),
-        autosave: loadAutosave(),
         loadedSaveId: null,
         previewImageData: null,
         renderCache: createRenderCache(),
@@ -3870,6 +3825,8 @@
         refreshSaveList();
         updateStorageUsageSummary();
       });
+
+      migrateLegacyAutosave();
 
       function getDefaultGameTitle() {
         const title = state.defaultGame?.title;
@@ -4630,9 +4587,7 @@
 
       if (deleteAllSavesButton) {
         deleteAllSavesButton.addEventListener("click", () => {
-          const confirmed = window.confirm(
-            "Delete all manual saves and the current autosave? This can't be undone."
-          );
+          const confirmed = window.confirm("Delete all saves? This can't be undone.");
           if (!confirmed) {
             return;
           }
@@ -4930,70 +4885,6 @@
         logDebug("Exported puzzle JSON");
       });
 
-      downloadCompactBtn.addEventListener("click", () => {
-        if (!state.puzzle) return;
-        const snapshot = serializeCurrentPuzzle();
-        const compact = compactPuzzleSnapshot(snapshot) || snapshot;
-        if (!compact) {
-          logDebug("Unable to export compact puzzle: no snapshot available");
-          return;
-        }
-        const baseTitle =
-          (typeof compact.title === "string" && compact.title.trim()) ||
-          (typeof state.sourceTitle === "string" && state.sourceTitle.trim()) ||
-          "color-by-number";
-        let exportPayload = compact;
-        let extension = "json";
-        let compressionStats = null;
-        try {
-          const json = JSON.stringify(compact);
-          const compressed = tryCompressString(json);
-          compressionStats = compressed;
-          exportPayload = {
-            format: "capy-export@2",
-            encoding: compressed.encoding,
-            payload: compressed.payload,
-          };
-          if (Number.isFinite(compact.width)) {
-            exportPayload.width = compact.width;
-          }
-          if (Number.isFinite(compact.height)) {
-            exportPayload.height = compact.height;
-          }
-          if (typeof compact.title === "string" && compact.title.trim()) {
-            exportPayload.title = compact.title.trim();
-          }
-          extension = "capy";
-        } catch (error) {
-          console.error("Failed to prepare compact export", error);
-          exportPayload = compact;
-          extension = "json";
-        }
-        const serialized = JSON.stringify(exportPayload);
-        const blob = new Blob([serialized], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${baseTitle}.${extension}`;
-        document.body.appendChild(link);
-        link.click();
-        requestAnimationFrame(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        });
-        if (compressionStats && compressionStats.compressed) {
-          logDebug(
-            `Exported compact puzzle (${formatBytes(compressionStats.compressedBytes)} from ${formatBytes(
-              compressionStats.originalBytes
-            )})`
-          );
-        } else if (compressionStats) {
-          logDebug(`Exported compact puzzle (${formatBytes(compressionStats.originalBytes)})`);
-        } else {
-          logDebug("Exported compact puzzle");
-        }
-      });
-
       for (const button of saveSnapshotButtons) {
         button.addEventListener("click", () => {
           if (!state.puzzle) return;
@@ -5040,12 +4931,6 @@
       for (const list of saveListContainers) {
         list.addEventListener("click", handleSaveListClick);
       }
-
-      for (const container of autosaveContainers) {
-        container.addEventListener("click", handleSaveListClick);
-      }
-
-      refreshAutosaveSlot();
 
       colorCountEl.addEventListener("input", updateOptionOutputs);
       minRegionEl.addEventListener("input", updateOptionOutputs);
@@ -5954,7 +5839,6 @@
         const hasPuzzle = Boolean(state.puzzle);
         previewToggle.disabled = !hasPuzzle;
         downloadBtn.disabled = !hasPuzzle;
-        downloadCompactBtn.disabled = !hasPuzzle;
         for (const button of saveSnapshotButtons) {
           button.disabled = !hasPuzzle;
         }
@@ -6581,7 +6465,7 @@
         if (!pendingImportFile) {
           generatorImportNotice.hidden = true;
           if (generatorImportFileEl) {
-            generatorImportFileEl.textContent = "your file";
+            generatorImportFileEl.textContent = "";
           }
           if (generatorImportDescriptionEl) {
             generatorImportDescriptionEl.textContent = "";
@@ -6793,31 +6677,22 @@
             try {
               let payload = JSON.parse(reader.result);
               let formatLabel = "JSON";
-              let exportMetadata = null;
               if (
                 payload &&
                 typeof payload === "object" &&
                 typeof payload.format === "string" &&
                 payload.format.startsWith("capy-export@") &&
-                typeof payload.payload === "string"
+                payload.data &&
+                typeof payload.data === "object"
               ) {
-                exportMetadata = payload;
-                formatLabel = "compact export";
-                const normalized = decodeCompactExportPayload(payload);
-                if (!normalized) {
-                  throw new Error("Unsupported compact export payload");
-                }
-                payload = normalized;
-              } else if (payload && typeof payload === "object" && payload.__compressed === true) {
-                const decoded = decodeStoredSnapshot(payload);
-                if (decoded) {
-                  payload = decoded;
-                  formatLabel = "compressed snapshot";
-                }
+                formatLabel = "capy export";
+                payload = payload.data;
+              }
+              if (!payload || typeof payload !== "object") {
+                throw new Error("Unsupported puzzle data");
               }
               const providedTitleRaw =
                 (typeof payload?.title === "string" && payload.title.trim()) ||
-                (typeof exportMetadata?.title === "string" && exportMetadata.title.trim()) ||
                 null;
               const providedTitle = providedTitleRaw;
               const fallbackTitle = file.name || "Imported puzzle";
@@ -7792,7 +7667,7 @@
             `Loaded ${descriptor} (${data.width}×${data.height}, ${paletteCount} colours, ${regionCount} regions)`
           );
         }
-        refreshAutosaveSlot();
+        refreshSaveList();
         scheduleAutosave("puzzle-load", { immediate: true });
         return true;
       }
@@ -8768,7 +8643,7 @@
         } else if (bboxCell && bboxCell.d > bestCell.d) {
           bestCell = bboxCell;
         }
-        const queue = new PolylabelMaxHeap();
+        const queue = createPolylabelMaxHeap();
         const half = cellSize / 2;
         const enqueueCell = (cell) => {
           if (!cell) return;
@@ -8896,63 +8771,64 @@
         return dx * dx + dy * dy;
       }
 
-      class PolylabelMaxHeap {
-        constructor() {
-          this.items = [];
+      function createPolylabelMaxHeap() {
+        const items = [];
+
+        function isEmpty() {
+          return items.length === 0;
         }
 
-        isEmpty() {
-          return this.items.length === 0;
+        function push(cell) {
+          if (!cell) return;
+          items.push(cell);
+          siftUp(items.length - 1);
         }
 
-        push(cell) {
-          this.items.push(cell);
-          this.siftUp(this.items.length - 1);
-        }
-
-        pop() {
-          if (this.items.length === 0) return null;
-          const top = this.items[0];
-          const last = this.items.pop();
-          if (this.items.length > 0) {
-            this.items[0] = last;
-            this.siftDown(0);
+        function pop() {
+          if (items.length === 0) return null;
+          const top = items[0];
+          const last = items.pop();
+          if (items.length > 0) {
+            items[0] = last;
+            siftDown(0);
           }
           return top;
         }
 
-        siftUp(index) {
+        function siftUp(index) {
           let i = index;
           while (i > 0) {
             const parent = (i - 1) >> 1;
-            if (this.items[parent].max >= this.items[i].max) break;
-            const tmp = this.items[parent];
-            this.items[parent] = this.items[i];
-            this.items[i] = tmp;
+            if (items[parent].max >= items[i].max) break;
+            const tmp = items[parent];
+            items[parent] = items[i];
+            items[i] = tmp;
             i = parent;
           }
         }
 
-        siftDown(index) {
+        function siftDown(index) {
           let i = index;
-          const length = this.items.length;
+          const length = items.length;
           while (true) {
-            let left = i * 2 + 1;
-            let right = left + 1;
+            const left = i * 2 + 1;
+            const right = left + 1;
             let largest = i;
-            if (left < length && this.items[left].max > this.items[largest].max) {
+            if (left < length && items[left].max > items[largest].max) {
               largest = left;
             }
-            if (right < length && this.items[right].max > this.items[largest].max) {
+            if (right < length && items[right].max > items[largest].max) {
               largest = right;
             }
             if (largest === i) break;
-            const tmp = this.items[i];
-            this.items[i] = this.items[largest];
-            this.items[largest] = tmp;
+            const tmp = items[i];
+            items[i] = items[largest];
+            items[largest] = tmp;
             i = largest;
           }
         }
+
+        return { isEmpty, push, pop };
       }
 
       function rectangleFitsRegion(regionId, centerX, centerY, halfWidth, halfHeight, width, height, regionMap) {
@@ -11068,42 +10944,6 @@
         return payload;
       }
 
-      function normalizeAutosaveRecord(record) {
-        if (!record || typeof record !== "object") return null;
-        const data = compactPuzzleSnapshot(record.data);
-        if (!data) return null;
-        const normalized = {
-          version:
-            typeof record.version === "number" && Number.isFinite(record.version)
-              ? record.version
-              : 1,
-          timestamp:
-            typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
-              ? record.timestamp
-              : Date.now(),
-          reason:
-            typeof record.reason === "string" && record.reason ? record.reason : "update",
-          data,
-        };
-        const settingsSource =
-          record.settings && typeof record.settings === "object"
-            ? record.settings
-            : record.data && typeof record.data === "object" && record.data.settings
-            ? record.data.settings
-            : null;
-        if (settingsSource && typeof settingsSource === "object") {
-          const settingsSnapshot = getUserSettingsSnapshot(settingsSource);
-          if (settingsSnapshot) {
-            normalized.settings = settingsSnapshot;
-          }
-        }
-        if (typeof record.title === "string" && record.title.trim()) {
-          normalized.title = record.title.trim();
-        } else if (typeof data.title === "string" && data.title) {
-          normalized.title = data.title;
-        }
-        return normalized;
-      }
 
       function serializeCurrentPuzzle() {
         if (!state.puzzle) return {};
@@ -11484,105 +11324,59 @@
         if (!state.puzzle) return null;
         const snapshot = serializeCurrentPuzzle();
         const settingsSnapshot = getUserSettingsSnapshot(state.settings);
-        const record = normalizeAutosaveRecord({
-          version: 1,
-          timestamp: Date.now(),
-          reason,
-          title: snapshot.title || state.sourceTitle || "capy-puzzle",
-          data: snapshot,
-          ...(settingsSnapshot ? { settings: settingsSnapshot } : {}),
-        });
-        if (!record) return null;
-        const storageRecord = encodeAutosaveStorageRecord(record);
-        if (!storageRecord) {
-          updateStorageUsageSummary();
-          return record;
+        const now = Date.now();
+        const resolvedTitle =
+          (typeof snapshot?.title === "string" && snapshot.title.trim()) ||
+          (typeof state.sourceTitle === "string" && state.sourceTitle.trim()) ||
+          getDefaultGameTitle();
+        if (snapshot && typeof snapshot === "object") {
+          snapshot.title = resolvedTitle;
         }
-        let serialized = null;
-        let attemptedBytes = 0;
-        try {
-          serialized = JSON.stringify(storageRecord);
-          attemptedBytes = getStoredStringSize(serialized);
-        } catch (error) {
-          console.error("Failed to prepare autosave for storage", error);
+        let activeSaveId = typeof state.loadedSaveId === "string" ? state.loadedSaveId : null;
+        let entry = activeSaveId ? state.saves.find((item) => item.id === activeSaveId) : null;
+        if (!entry) {
+          activeSaveId = `save-${now}-${Math.floor(Math.random() * 10000)}`;
+          entry = { id: activeSaveId };
+          state.saves.unshift(entry);
         }
-        if (serialized) {
-          try {
-            localStorage.setItem(AUTOSAVE_STORAGE_KEY, serialized);
-          } catch (error) {
-            console.error("Failed to persist autosave", error);
-            if (error && error.name === "QuotaExceededError") {
-              logDebug("Storage full: unable to write autosave. Delete old saves or exports and retry.");
-              logStorageFailureDetails("autosave", attemptedBytes);
-            }
-          }
+        entry.title = resolvedTitle;
+        entry.timestamp = now;
+        entry.data = snapshot;
+        if (settingsSnapshot) {
+          entry.settings = settingsSnapshot;
+        } else {
+          delete entry.settings;
         }
-        state.autosave = record;
-        refreshAutosaveSlot();
-        updateStorageUsageSummary();
-        return record;
+        state.loadedSaveId = activeSaveId;
+        state.saves = [entry, ...state.saves.filter((item) => item.id !== activeSaveId)];
+        persistSaves();
+        logDebug(`Autosaved ${resolvedTitle} (${reason})`);
+        return entry;
       }
 
-      function loadAutosave() {
-        try {
-          const raw = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
-          if (!raw) return null;
-          const parsed = JSON.parse(raw);
-          const decoded = decodeAutosaveStorageRecord(parsed) || parsed;
-          const normalized = normalizeAutosaveRecord(decoded);
-          if (normalized) {
-            let rewritePayload = null;
-            try {
-              const encoded = encodeAutosaveStorageRecord(normalized);
-              if (encoded) {
-                const serialized = JSON.stringify(encoded);
-                if (serialized !== raw) {
-                  rewritePayload = serialized;
-                }
-              }
-            } catch (prepareError) {
-              console.error("Failed to prepare autosave for rewrite", prepareError);
-            }
-            if (rewritePayload) {
-              try {
-                localStorage.setItem(AUTOSAVE_STORAGE_KEY, rewritePayload);
-              } catch (persistError) {
-                console.error("Failed to compact autosave", persistError);
-              }
-              updateStorageUsageSummary();
-            }
-            return normalized;
-          }
-        } catch (error) {
-          console.error("Failed to load autosave", error);
-        }
-        return null;
-      }
 
       function getLatestBackupRecord() {
-        const candidates = [];
-        const autosave = loadAutosave();
-        if (autosave && autosave.data) {
-          candidates.push({ ...autosave, origin: "local autosave" });
+        if (!Array.isArray(state.saves) || state.saves.length === 0) {
+          return null;
         }
-        if (Array.isArray(state.saves) && state.saves.length > 0) {
-          const [latestManual] = [...state.saves].sort(
-            (a, b) => (b.timestamp || 0) - (a.timestamp || 0)
-          );
-          if (latestManual && latestManual.data) {
-            candidates.push({
-              id: latestManual.id,
-              timestamp: latestManual.timestamp,
-              data: latestManual.data,
-              title: latestManual.title,
-              settings: latestManual.settings,
-              origin: "manual save",
-            });
-          }
+        let candidate = null;
+        if (typeof state.loadedSaveId === "string") {
+          candidate = state.saves.find((entry) => entry.id === state.loadedSaveId) || null;
         }
-        if (candidates.length === 0) return null;
-        candidates.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-        return candidates[0];
+        if (!candidate) {
+          [candidate] = [...state.saves].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        }
+        if (candidate && candidate.data) {
+          return {
+            id: candidate.id,
+            timestamp: candidate.timestamp,
+            data: candidate.data,
+            title: candidate.title,
+            settings: candidate.settings,
+            origin: "save slot",
+          };
+        }
+        return null;
       }
 
       function getStoredStringSize(raw) {
@@ -11620,19 +11414,95 @@
         } catch (error) {
           console.error("Failed to read save storage size", error);
         }
-        let autosaveBytes = 0;
-        try {
-          autosaveBytes = getStoredStringSize(localStorage.getItem(AUTOSAVE_STORAGE_KEY));
-        } catch (error) {
-          console.error("Failed to read autosave size", error);
-        }
-        const totalBytes = manualBytes + autosaveBytes;
         return {
           manualBytes,
           manualCount,
-          autosaveBytes,
-          totalBytes,
+          totalBytes: manualBytes,
         };
+      }
+
+      function decodeLegacyAutosaveStorageRecord(record) {
+        if (!record || typeof record !== "object") return null;
+        const { puzzle, settings } = decodeStoredPuzzleSnapshot(record.data ?? record.payload ?? null);
+        if (!puzzle) return null;
+        const normalized = {
+          timestamp:
+            typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
+              ? record.timestamp
+              : Date.now(),
+          data: puzzle,
+        };
+        if (typeof record.id === "string" && record.id.trim()) {
+          normalized.id = record.id.trim();
+        }
+        if (settings && typeof settings === "object") {
+          normalized.settings = settings;
+        } else if (record.settings && typeof record.settings === "object") {
+          const snapshot = getUserSettingsSnapshot(record.settings);
+          if (snapshot) {
+            normalized.settings = snapshot;
+          }
+        }
+        if (typeof record.title === "string" && record.title.trim()) {
+          normalized.title = record.title.trim();
+        } else if (typeof puzzle.title === "string" && puzzle.title) {
+          normalized.title = puzzle.title;
+        }
+        return normalized;
+      }
+
+      function migrateLegacyAutosave() {
+        if (typeof localStorage === "undefined") {
+          return;
+        }
+        let raw = null;
+        try {
+          raw = localStorage.getItem(LEGACY_AUTOSAVE_STORAGE_KEY);
+        } catch (error) {
+          console.error("Failed to read legacy autosave", error);
+          return;
+        }
+        if (!raw) {
+          return;
+        }
+        try {
+          const parsed = JSON.parse(raw);
+          const legacy = decodeLegacyAutosaveStorageRecord(parsed);
+          if (!legacy || !legacy.data) {
+            return;
+          }
+          const timestamp = Number.isFinite(legacy.timestamp) ? legacy.timestamp : Date.now();
+          const seed = Math.floor(Math.random() * 10000);
+          const id = legacy.id && typeof legacy.id === "string" && legacy.id.trim()
+            ? legacy.id.trim()
+            : `save-${timestamp}-${seed}-autosave`;
+          const entry = {
+            id,
+            timestamp,
+            data: legacy.data,
+          };
+          if (legacy.settings && typeof legacy.settings === "object") {
+            const snapshot = getUserSettingsSnapshot(legacy.settings);
+            if (snapshot) {
+              entry.settings = snapshot;
+            }
+          }
+          if (legacy.title) {
+            entry.title = legacy.title;
+          }
+          state.saves = [entry, ...state.saves.filter((item) => item.id !== id)];
+          state.loadedSaveId = id;
+          persistSaves();
+          logDebug("Migrated legacy autosave into manual slot");
+        } catch (error) {
+          console.error("Failed to migrate legacy autosave", error);
+        } finally {
+          try {
+            localStorage.removeItem(LEGACY_AUTOSAVE_STORAGE_KEY);
+          } catch (removeError) {
+            console.error("Failed to clear legacy autosave key", removeError);
+          }
+        }
       }
 
       function formatBytes(bytes) {
@@ -11653,8 +11523,7 @@
       function logStorageFailureDetails(kind, attemptedBytes) {
         if (Number.isFinite(attemptedBytes) && attemptedBytes > 0) {
           const label = formatBytes(attemptedBytes);
-          const prefix = kind === "autosave" ? "Autosave" : "Save snapshot";
-          logDebug(`${prefix} payload ≈${label}.`);
+          logDebug(`Save snapshot payload ≈${label}.`);
         }
         if (navigator.storage && typeof navigator.storage.estimate === "function") {
           navigator.storage
@@ -11684,26 +11553,21 @@
       function updateStorageUsageSummary() {
         if (!saveStorageSummary) return;
         const token = ++storageSummaryUpdateToken;
-        let stats = { manualBytes: 0, manualCount: 0, autosaveBytes: 0, totalBytes: 0 };
+        let stats = { manualBytes: 0, manualCount: 0, totalBytes: 0 };
         try {
           stats = collectSaveStorageStats();
         } catch (error) {
           console.error("Failed to update save storage summary", error);
         }
         let summaryText =
-          "Save data lives entirely in this browser. Autosaves run while you play, and manual saves appear in the save manager.";
-        let disableClearButton = true;
-        const hasAutosave = stats.autosaveBytes > 0;
-        const hasManual = stats.manualCount > 0;
-        if (hasAutosave || hasManual) {
-          const autosaveLabel = hasAutosave ? `Autosave ${formatBytes(stats.autosaveBytes)}` : "No autosave stored";
-          const manualLabel = hasManual
-            ? `${stats.manualCount} manual ${stats.manualCount === 1 ? "save" : "saves"} using ${formatBytes(
-                stats.manualBytes
-              )}`
-            : "No manual saves";
-          summaryText = `${autosaveLabel} · ${manualLabel} · Total ${formatBytes(stats.totalBytes)} stored locally.`;
-          disableClearButton = !(hasAutosave || hasManual);
+          "Save data lives entirely in this browser. The active slot updates automatically as you play.";
+        let disableClearButton = stats.manualCount === 0;
+        if (stats.manualCount > 0) {
+          const manualLabel =
+            stats.manualCount === 1
+              ? "1 save"
+              : `${stats.manualCount} saves`;
+          summaryText = `${manualLabel} using ${formatBytes(stats.manualBytes)} stored locally.`;
         }
         saveStorageSummary.textContent = summaryText;
         if (deleteAllSavesButton) {
@@ -11948,122 +11812,28 @@
         return result;
       }
 
-      function simpleLZ77Compress(bytes) {
-        if (!bytes || bytes.length === 0) {
+      function encodeBytesToBase64(bytes) {
+        if (!bytes || typeof bytes.length !== "number" || bytes.length === 0) {
+          return "";
+        }
+        let binary = "";
+        for (let index = 0; index < bytes.length; index += 1) {
+          binary += String.fromCharCode(bytes[index]);
+        }
+        return btoa(binary);
+      }
+
+      function decodeBase64ToBytes(base64) {
+        if (typeof base64 !== "string" || base64.length === 0) {
           return new Uint8Array(0);
         }
-        const WINDOW_SIZE = 0xfff;
-        const MIN_MATCH = 3;
-        const MAX_MATCH = 18;
-        const dictionary = new Map();
-        const output = [];
-        let controlIndex = -1;
-        let controlByte = 0;
-        let controlBit = 0;
-
-        function startControlBlock() {
-          controlIndex = output.length;
-          output.push(0);
-          controlByte = 0;
-          controlBit = 0;
+        const binary = atob(base64);
+        const buffer = new ArrayBuffer(binary.length);
+        const bytes = new Uint8Array(buffer);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
         }
-
-        function commitControlBlock() {
-          if (controlIndex >= 0) {
-            output[controlIndex] = controlByte;
-          }
-        }
-
-        function pushControlBit(isMatch) {
-          if (isMatch) {
-            controlByte |= 1 << controlBit;
-          }
-          controlBit += 1;
-          if (controlBit === 8) {
-            commitControlBlock();
-            startControlBlock();
-          }
-        }
-
-        function addToDictionary(position) {
-          if (position + (MIN_MATCH - 1) >= bytes.length) {
-            return;
-          }
-          const key =
-            (bytes[position] << 16) | (bytes[position + 1] << 8) | bytes[position + 2];
-          let bucket = dictionary.get(key);
-          if (!bucket) {
-            bucket = [];
-            dictionary.set(key, bucket);
-          }
-          bucket.push(position);
-          const windowStart = position - WINDOW_SIZE;
-          while (bucket.length > 0 && bucket[0] < windowStart) {
-            bucket.shift();
-          }
-          const MAX_BUCKET = 64;
-          if (bucket.length > MAX_BUCKET) {
-            bucket.splice(0, bucket.length - MAX_BUCKET);
-          }
-        }
-
-        startControlBlock();
-        let position = 0;
-        while (position < bytes.length) {
-          let bestLength = 0;
-          let bestOffset = 0;
-          if (position + MIN_MATCH <= bytes.length) {
-            const key =
-              (bytes[position] << 16) | (bytes[position + 1] << 8) | bytes[position + 2];
-            const bucket = dictionary.get(key);
-            if (bucket && bucket.length) {
-              for (let i = bucket.length - 1; i >= 0; i -= 1) {
-                const candidate = bucket[i];
-                const offset = position - candidate;
-                if (offset <= 0 || offset > WINDOW_SIZE) {
-                  if (position - candidate > WINDOW_SIZE) {
-                    bucket.splice(i, 1);
-                  }
-                  continue;
-                }
-                const maxLength = Math.min(MAX_MATCH, bytes.length - position);
-                let length = 0;
-                while (length < maxLength && bytes[candidate + length] === bytes[position + length]) {
-                  length += 1;
-                }
-                if (length >= MIN_MATCH && length > bestLength) {
-                  bestLength = length;
-                  bestOffset = offset;
-                  if (length === MAX_MATCH) {
-                    break;
-                  }
-                }
-              }
-            }
-          }
-          if (bestLength >= MIN_MATCH) {
-            pushControlBit(true);
-            const adjustedLength = bestLength - MIN_MATCH;
-            const firstByte = (bestOffset >> 4) & 0xff;
-            const secondByte = ((bestOffset & 0x0f) << 4) | (adjustedLength & 0x0f);
-            output.push(firstByte, secondByte);
-            for (let i = 0; i < bestLength; i += 1) {
-              addToDictionary(position + i);
-            }
-            position += bestLength;
-          } else {
-            pushControlBit(false);
-            output.push(bytes[position]);
-            addToDictionary(position);
-            position += 1;
-          }
-        }
-        if (controlBit === 0) {
-          output.pop();
-        } else {
-          commitControlBlock();
-        }
-        return new Uint8Array(output);
+        return bytes;
       }
 
       function simpleLZ77Decompress(bytes) {
@@ -12099,198 +11869,6 @@
         return new Uint8Array(output);
       }
 
-      function tryCompressString(input) {
-        if (typeof input !== "string" || input.length === 0) {
-          return {
-            payload: "",
-            compressed: false,
-            encoding: "identity",
-            originalBytes: 0,
-            compressedBytes: 0,
-          };
-        }
-        let originalBytes = 0;
-        try {
-          originalBytes = getStoredStringSize(input);
-        } catch (error) {
-          console.error("Failed to inspect string size before compression", error);
-        }
-        const result = {
-          payload: input,
-          compressed: false,
-          encoding: "identity",
-          originalBytes,
-          compressedBytes: originalBytes,
-        };
-        try {
-          const utf8 = encodeUtf8String(input);
-          if (utf8.length > 0) {
-            const compressed = simpleLZ77Compress(utf8);
-            if (compressed.length > 0) {
-              const payload = encodeBytesToBase64(compressed);
-              if (payload) {
-                const storedSize = getStoredStringSize(payload);
-                if (storedSize < result.compressedBytes) {
-                  result.payload = payload;
-                  result.compressed = storedSize < originalBytes;
-                  result.encoding = result.compressed ? "lz77" : "identity";
-                  result.compressedBytes = result.compressed ? storedSize : originalBytes;
-                  if (!result.compressed) {
-                    result.payload = input;
-                  }
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.error("Failed to compress payload with LZ77", error);
-        }
-        try {
-          const codes = lzwCompress(input);
-          if (codes && codes.length > 0) {
-            const bytes = new Uint8Array(codes.buffer);
-            if (bytes.length > 0) {
-              const payload = encodeBytesToBase64(bytes);
-              if (payload) {
-                const storedSize = getStoredStringSize(payload);
-                if (storedSize < result.compressedBytes) {
-                  result.payload = payload;
-                  result.compressed = storedSize < originalBytes;
-                  result.encoding = result.compressed ? "lzw16" : "identity";
-                  result.compressedBytes = result.compressed ? storedSize : originalBytes;
-                  if (!result.compressed) {
-                    result.payload = input;
-                  }
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.error("Failed to compress save payload", error);
-        }
-        return result;
-      }
-
-      function encodeBytesToBase64(bytes) {
-        if (!bytes || typeof bytes.length !== "number" || bytes.length === 0) {
-          return "";
-        }
-        let binary = "";
-        for (let index = 0; index < bytes.length; index += 1) {
-          binary += String.fromCharCode(bytes[index]);
-        }
-        return btoa(binary);
-      }
-
-      function decodeBase64ToBytes(base64) {
-        if (typeof base64 !== "string" || base64.length === 0) {
-          return new Uint8Array(0);
-        }
-        const binary = atob(base64);
-        const buffer = new ArrayBuffer(binary.length);
-        const bytes = new Uint8Array(buffer);
-        for (let index = 0; index < binary.length; index += 1) {
-          bytes[index] = binary.charCodeAt(index);
-        }
-        return bytes;
-      }
-
-      function decompressSnapshotPayload(payload, encoding) {
-        if (typeof payload !== "string") {
-          return null;
-        }
-        const normalizedEncoding = typeof encoding === "string" ? encoding : "identity";
-        if (normalizedEncoding === "identity") {
-          return payload;
-        }
-        if (normalizedEncoding === "lz77") {
-          try {
-            const bytes = decodeBase64ToBytes(payload);
-            const decompressed = simpleLZ77Decompress(bytes);
-            if (!decompressed) {
-              return null;
-            }
-            return decodeUtf8Bytes(decompressed);
-          } catch (error) {
-            console.error("Failed to decompress LZ77 payload", error);
-            return null;
-          }
-        }
-        if (normalizedEncoding === "lzw16") {
-          try {
-            const bytes = decodeBase64ToBytes(payload);
-            if (bytes.byteLength === 0) {
-              return "";
-            }
-            const length = Math.floor(bytes.byteLength / 2);
-            const codes = new Uint16Array(bytes.buffer, bytes.byteOffset, length);
-            return lzwDecompress(codes);
-          } catch (error) {
-            console.error("Failed to decompress LZW payload", error);
-            return null;
-          }
-        }
-        console.error(`Unsupported snapshot encoding: ${normalizedEncoding}`);
-        return null;
-      }
-
-      function decodeCompactExportPayload(source) {
-        if (!source || typeof source !== "object") {
-          return null;
-        }
-        const encoding = typeof source.encoding === "string" ? source.encoding : "identity";
-        const text = decompressSnapshotPayload(source.payload, encoding);
-        if (typeof text !== "string") {
-          return null;
-        }
-        try {
-          const parsed = JSON.parse(text);
-          return compactPuzzleSnapshot(parsed) || parsed;
-        } catch (error) {
-          console.error("Failed to parse compact export payload", error);
-          return null;
-        }
-      }
-
-      function lzwCompress(input) {
-        if (typeof input !== "string" || input.length === 0) {
-          return new Uint16Array(0);
-        }
-        const dictionary = new Map();
-        for (let index = 0; index < 256; index += 1) {
-          dictionary.set(String.fromCharCode(index), index);
-        }
-        let dictSize = 256;
-        let current = "";
-        const codes = [];
-        for (let index = 0; index < input.length; index += 1) {
-          const char = input.charAt(index);
-          const candidate = current + char;
-          if (dictionary.has(candidate)) {
-            current = candidate;
-          } else {
-            if (current) {
-              const code = dictionary.get(current);
-              if (typeof code === "number") {
-                codes.push(code);
-              }
-            }
-            if (dictSize < 65535) {
-              dictionary.set(candidate, dictSize);
-              dictSize += 1;
-            }
-            current = char;
-          }
-        }
-        if (current) {
-          const code = dictionary.get(current);
-          if (typeof code === "number") {
-            codes.push(code);
-          }
-        }
-        return new Uint16Array(codes);
-      }
-
       function lzwDecompress(codes) {
         if (!codes || codes.length === 0) {
           return "";
@@ -12322,11 +11900,51 @@
         return output;
       }
 
+      function decodeLegacySnapshotPayload(source) {
+        if (!source || typeof source !== "object") {
+          return null;
+        }
+        const payload = typeof source.payload === "string" ? source.payload : "";
+        if (!payload) {
+          return null;
+        }
+        const encoding = typeof source.encoding === "string" ? source.encoding : "identity";
+        if (encoding === "identity") {
+          return payload;
+        }
+        if (encoding === "lz77") {
+          try {
+            const bytes = decodeBase64ToBytes(payload);
+            const decompressed = simpleLZ77Decompress(bytes);
+            return decompressed ? decodeUtf8Bytes(decompressed) : null;
+          } catch (error) {
+            console.error("Failed to decompress legacy LZ77 payload", error);
+            return null;
+          }
+        }
+        if (encoding === "lzw16") {
+          try {
+            const bytes = decodeBase64ToBytes(payload);
+            if (bytes.byteLength === 0) {
+              return "";
+            }
+            const length = Math.floor(bytes.byteLength / 2);
+            const codes = new Uint16Array(bytes.buffer, bytes.byteOffset, length);
+            return lzwDecompress(codes);
+          } catch (error) {
+            console.error("Failed to decompress legacy LZW payload", error);
+            return null;
+          }
+        }
+        console.error(`Unsupported legacy snapshot encoding: ${encoding}`);
+        return null;
+      }
+
       function decodeStoredPuzzleSnapshot(source) {
         if (!source) {
           return { puzzle: null, settings: null };
         }
-        let data = null;
+        let data = source;
         if (typeof source === "string") {
           try {
             data = JSON.parse(source);
@@ -12339,19 +11957,16 @@
           source.__compressed === true &&
           typeof source.payload === "string"
         ) {
-          try {
-            const encoding = typeof source.encoding === "string" ? source.encoding : "identity";
-            const text = decompressSnapshotPayload(source.payload, encoding);
-            if (typeof text !== "string") {
-              return { puzzle: null, settings: null };
-            }
-            data = JSON.parse(text);
-          } catch (error) {
-            console.error("Failed to decompress snapshot", error);
+          const textPayload = decodeLegacySnapshotPayload(source);
+          if (typeof textPayload !== "string") {
             return { puzzle: null, settings: null };
           }
-        } else if (typeof source === "object") {
-          data = source;
+          try {
+            data = JSON.parse(textPayload);
+          } catch (error) {
+            console.error("Failed to parse legacy compressed snapshot", error);
+            return { puzzle: null, settings: null };
+          }
         }
         if (!data || typeof data !== "object") {
           return { puzzle: null, settings: null };
@@ -12373,75 +11988,10 @@
       function encodeStoredSnapshot(snapshot) {
         const data = compactPuzzleSnapshot(snapshot);
         if (!data) return null;
-        try {
-          const json = JSON.stringify(data);
-          const compressed = tryCompressString(json);
-          if (compressed.compressed) {
-            return {
-              __compressed: true,
-              encoding: compressed.encoding,
-              payload: compressed.payload,
-            };
-          }
-        } catch (error) {
-          console.error("Failed to prepare snapshot for storage", error);
-        }
         return data;
       }
 
-      function decodeStoredSnapshot(source) {
-        const { puzzle } = decodeStoredPuzzleSnapshot(source);
-        return puzzle;
-      }
 
-      function encodeAutosaveStorageRecord(record) {
-        if (!record || typeof record !== "object") return null;
-        const data = encodeStoredSnapshot(record.data);
-        if (!data) return null;
-        const storageRecord = {
-          version: record.version,
-          timestamp: record.timestamp,
-          reason: record.reason,
-          data,
-        };
-        if (record.settings && typeof record.settings === "object") {
-          storageRecord.settings = record.settings;
-        }
-        if (typeof record.title === "string" && record.title.trim()) {
-          storageRecord.title = record.title.trim();
-        }
-        return storageRecord;
-      }
-
-      function decodeAutosaveStorageRecord(record) {
-        if (!record || typeof record !== "object") return null;
-        const { puzzle, settings } = decodeStoredPuzzleSnapshot(
-          record.data ?? record.payload ?? null
-        );
-        if (!puzzle) return null;
-        const normalized = {
-          version:
-            typeof record.version === "number" && Number.isFinite(record.version) ? record.version : 1,
-          timestamp:
-            typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
-              ? record.timestamp
-              : Date.now(),
-          reason: typeof record.reason === "string" && record.reason ? record.reason : "update",
-          data: puzzle,
-        };
-        if (settings && typeof settings === "object") {
-          normalized.settings = settings;
-        } else if (record.settings && typeof record.settings === "object") {
-          const snapshot = getUserSettingsSnapshot(record.settings);
-          if (snapshot) {
-            normalized.settings = snapshot;
-          }
-        }
-        if (typeof record.title === "string" && record.title.trim()) {
-          normalized.title = record.title.trim();
-        }
-        return normalized;
-      }
 
       function encodeSaveStorageEntry(entry) {
         if (!entry || typeof entry !== "object") return null;
@@ -12723,7 +12273,6 @@
         }
         persistSaves();
         refreshSaveList();
-        scheduleAutosave("manual-save", { immediate: true });
       }
 
       function estimateSaveEntryBytes(entry) {
@@ -12861,165 +12410,8 @@
         return item;
       }
 
-      function resolveAutosaveRecord() {
-        if (state.autosave && state.autosave.data) {
-          return state.autosave;
-        }
-        const stored = loadAutosave();
-        if (stored && stored.data) {
-          state.autosave = stored;
-          return stored;
-        }
-        state.autosave = null;
-        return null;
-      }
 
-      function estimateAutosaveBytes(record) {
-        if (!record || !record.data) return 0;
-        try {
-          const encoded = encodeAutosaveStorageRecord(record);
-          if (!encoded) return 0;
-          return getStoredStringSize(JSON.stringify(encoded));
-        } catch (error) {
-          console.error("Failed to estimate autosave size", error);
-          return 0;
-        }
-      }
 
-      function describeAutosaveSlot() {
-        const record = resolveAutosaveRecord();
-        const data = record?.data ?? null;
-        const titleCandidates = [
-          typeof record?.title === "string" ? record.title.trim() : "",
-          typeof data?.title === "string" ? data.title.trim() : "",
-          typeof state.sourceTitle === "string" ? state.sourceTitle.trim() : "",
-          getDefaultGameTitle(),
-        ];
-        const resolvedTitle = titleCandidates.find((value) => value);
-        const title = resolvedTitle || "Autosave";
-        const doneCount = Array.isArray(data?.filled)
-          ? data.filled.length
-          : state.filled instanceof Set
-          ? state.filled.size
-          : 0;
-        const totalCount = Array.isArray(data?.regions)
-          ? data.regions.length
-          : Array.isArray(state.puzzle?.regions)
-          ? state.puzzle.regions.length
-          : 0;
-        const progressText =
-          totalCount > 0
-            ? `${doneCount} of ${totalCount} regions filled`
-            : doneCount > 0
-            ? `${doneCount} regions filled`
-            : "No progress yet";
-        const timestampValue = Number(record?.timestamp);
-        const timestamp =
-          Number.isFinite(timestampValue) && timestampValue > 0
-            ? new Date(timestampValue)
-            : null;
-        const storageBytes = estimateAutosaveBytes(record);
-        const storageLabel = storageBytes > 0 ? formatBytes(storageBytes) : "";
-        let trackedEntry = null;
-        let statusText = record && record.data
-          ? "Updates automatically while you play."
-          : "Loads the demo puzzle until you create your own autosave.";
-        if (state.loadedSaveId) {
-          const loadedEntry = state.saves.find((item) => item.id === state.loadedSaveId);
-          if (loadedEntry) {
-            const loadedMetadata = describeSaveEntry(loadedEntry);
-            statusText = `Tracking manual save “${loadedMetadata.title}”.`;
-            trackedEntry = {
-              id: loadedMetadata.id,
-              title: loadedMetadata.title,
-            };
-          }
-        }
-        const ariaLabelParts = [title, progressText];
-        if (timestamp) {
-          ariaLabelParts.push(`Saved ${timestamp.toLocaleString()}`);
-        }
-        if (storageLabel) {
-          ariaLabelParts.push(`Storage ${storageLabel}`);
-        }
-        return {
-          record,
-          title,
-          progressText,
-          timestamp,
-          storageLabel,
-          statusText,
-          ariaLabel: ariaLabelParts.join(" – "),
-          ready: Boolean(record && record.data),
-          trackedEntry,
-        };
-      }
-
-      function refreshAutosaveSlot() {
-        if (!Array.isArray(autosaveContainers) || autosaveContainers.length === 0) {
-          return;
-        }
-        const metadata = describeAutosaveSlot();
-        for (const container of autosaveContainers) {
-          if (!(container instanceof HTMLElement)) continue;
-          container.innerHTML = "";
-          container.dataset.saveId = AUTOSAVE_MANAGEMENT_ID;
-          if (metadata.trackedEntry && metadata.trackedEntry.id) {
-            container.dataset.trackedSaveId = metadata.trackedEntry.id;
-          } else {
-            delete container.dataset.trackedSaveId;
-          }
-          container.dataset.autosaveReady = metadata.ready ? "true" : "false";
-          container.setAttribute("aria-label", metadata.ariaLabel);
-          const header = document.createElement("header");
-          const title = document.createElement("strong");
-          title.textContent = metadata.title;
-          header.appendChild(title);
-          const badge = document.createElement("span");
-          badge.className = "save-entry-badge";
-          badge.textContent = "Autosave";
-          header.appendChild(badge);
-          container.appendChild(header);
-          const meta = document.createElement("div");
-          meta.className = "save-entry-meta";
-          const progress = document.createElement("span");
-          progress.textContent = metadata.progressText;
-          meta.appendChild(progress);
-          const saved = document.createElement("span");
-          saved.textContent = metadata.timestamp
-            ? `Saved ${metadata.timestamp.toLocaleString()}`
-            : "Not yet saved";
-          meta.appendChild(saved);
-          if (metadata.storageLabel) {
-            const storage = document.createElement("span");
-            storage.className = "save-entry-storage";
-            storage.textContent = `Storage ${metadata.storageLabel}`;
-            meta.appendChild(storage);
-          }
-          container.appendChild(meta);
-          if (metadata.statusText) {
-            const status = document.createElement("div");
-            status.className = "save-entry-status";
-            status.textContent = metadata.statusText;
-            container.appendChild(status);
-          }
-          const actions = document.createElement("div");
-          actions.className = "save-actions";
-          const actionLabel = metadata.ready ? "Resume" : "Start demo puzzle";
-          const resume = createSaveActionButton("load", actionLabel);
-          actions.appendChild(resume);
-          if (metadata.trackedEntry && metadata.trackedEntry.id) {
-            const rename = createSaveActionButton("rename", "Rename");
-            rename.dataset.targetId = metadata.trackedEntry.id;
-            const exportButton = createSaveActionButton("export", "Export");
-            exportButton.dataset.targetId = metadata.trackedEntry.id;
-            const remove = createSaveActionButton("delete", "Delete");
-            remove.dataset.targetId = metadata.trackedEntry.id;
-            actions.append(rename, exportButton, remove);
-          }
-          container.appendChild(actions);
-        }
-      }
 
       function refreshGameSelection() {
         if (!gameSelectionList) return;
@@ -13069,17 +12461,13 @@
 
       function refreshSaveList() {
         const manualEntries = Array.isArray(state.saves) ? state.saves : [];
-        const visibleEntries = state.loadedSaveId
-          ? manualEntries.filter((entry) => entry.id !== state.loadedSaveId)
-          : manualEntries;
-        const hasVisibleEntries = visibleEntries.length > 0;
-        refreshAutosaveSlot();
+        const hasEntries = manualEntries.length > 0;
         for (const list of saveListContainers) {
           if (!list) continue;
           list.innerHTML = "";
-          if (hasVisibleEntries) {
+          if (hasEntries) {
             const fragment = document.createDocumentFragment();
-            for (const entry of visibleEntries) {
+            for (const entry of manualEntries) {
               fragment.appendChild(createSaveManagementItem(entry));
             }
             list.appendChild(fragment);
@@ -13087,16 +12475,11 @@
         }
         for (const emptyState of saveListEmptyStates) {
           if (!emptyState) continue;
-          if (hasVisibleEntries) {
+          if (hasEntries) {
             emptyState.hidden = true;
           } else {
             emptyState.hidden = false;
-            if (manualEntries.length > 0) {
-              emptyState.textContent = "No other manual saves yet.";
-            } else {
-              emptyState.textContent =
-                "No manual saves yet. Create one above or keep playing to autosave progress.";
-            }
+            emptyState.textContent = "No saves yet. Create one above to start autosaving progress.";
           }
         }
         updateCommandStates();
@@ -13112,42 +12495,6 @@
       }
 
       function loadSaveEntry(id) {
-        if (id === AUTOSAVE_MANAGEMENT_ID) {
-          const record = resolveAutosaveRecord();
-          if (record && record.data) {
-            const resolvedTitle =
-              (typeof record.title === "string" && record.title.trim()) ||
-              (typeof record.data.title === "string" && record.data.title.trim()) ||
-              state.sourceTitle ||
-              getDefaultGameTitle();
-            if (
-              applyPuzzleResult(record.data, {
-                options: record.data.options,
-                activeColor: record.data.activeColor,
-                backgroundColor: record.data.backgroundColor,
-                stageBackgroundColor: record.data.stageBackgroundColor,
-                viewport: record.data.viewport,
-                settings: record.settings ?? record.data.settings,
-                title: resolvedTitle,
-                loadedSaveId: null,
-              })
-            ) {
-              state.sourceUrl = record.data.sourceUrl ?? null;
-              state.sourceTitle = resolvedTitle;
-              state.loadedSaveId = null;
-              state.autosave = record;
-              hideStartScreen();
-              refreshSaveList();
-              logDebug(`Loaded autosave: ${resolvedTitle}`);
-            }
-            return;
-          }
-          loadSamplePuzzle({ announce: true });
-          state.loadedSaveId = null;
-          refreshSaveList();
-          logDebug("Loaded demo puzzle from autosave slot");
-          return;
-        }
         const entry = state.saves.find((item) => item.id === id);
         if (!entry) return;
         if (
@@ -13186,15 +12533,14 @@
         gameSaveManager.clear();
         state.saves = [];
         state.loadedSaveId = null;
-        state.autosave = null;
         refreshSaveList();
         try {
-          localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
+          localStorage.removeItem(LEGACY_AUTOSAVE_STORAGE_KEY);
         } catch (error) {
-          console.error("Failed to clear autosave", error);
+          console.error("Failed to clear legacy autosave", error);
         }
         updateStorageUsageSummary();
-        logDebug("Cleared autosave and manual saves");
+        logDebug("Cleared all saves");
       }
 
       function renameSaveEntry(id) {

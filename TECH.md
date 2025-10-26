@@ -106,8 +106,8 @@ Tweaking the deployment:
 ### Headline Features
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or previously exported JSON puzzles straight into the generator pipeline.
-- **Saves sheet quick start.** The Saves panel opens with an **Upload Image** button and a dedicated autosave slot that always reflects the current puzzle (falling back to the bundled Capybara Springs demo when no save exists). Manual snapshot tools, export shortcuts, and the **Reset puzzle progress** control sit after the save cards so you can bookmark or rewind without digging through other menus.
-- **Built-in capybara sample.** The "Capybara Springs" illustration loads automatically on boot (when no autosave exists) in the medium detail preset so players can start painting immediately.
+- **Saves sheet quick start.** The Saves panel opens with an **Upload Image** button and lists manual slots. The active slot stays pinned to the top with an "Autosaving this slot" badge so you always know which snapshot will keep tracking progress. Manual snapshot tools, export shortcuts, and the **Reset puzzle progress** control sit after the save cards so you can bookmark or rewind without digging through other menus.
+- **Built-in capybara sample.** The "Capybara Springs" illustration loads automatically on boot when no saves exist in the medium detail preset so players can start painting immediately.
 - **Sample detail presets.** Low/Medium/High chips tune colour counts, resize targets, k-means iterations, and smoothing passes so QA can switch between breezy ≈26-region boards, balanced ≈20-region sessions, or high-fidelity ≈140-region runs.
 - **Detailed debug logging.** The Help panel’s live log announces sample loads, fills, hints, zooms, background tweaks, fullscreen toggles, and ignored clicks so QA can confirm the flow without DevTools.
 - **Embedded documentation.** The Help panel loads the hosted README (`https://shthed.github.io/capy/README`) for in-app gameplay and contributor notes.
@@ -118,7 +118,8 @@ Tweaking the deployment:
 - **Responsive command rail.** Header icons clamp to the viewport, wrap when space runs short, respect safe-area insets, and stay pinned to the top edge so controls remain reachable.
 - **Palette guidance.** Choosing a swatch pulses every matching region, flashing when a colour is complete so it is obvious where to paint next. Players can disable the matching-region hint in Settings if they prefer to scout manually.
 - **Customisable background.** Settings lets you pick a backdrop colour; outlines and numbers flip contrast automatically.
-- **Progress persistence.** Every stroke updates a rolling autosave; manual snapshots live in the Saves manager with rename/export/delete controls. Storage quota usage is surfaced in the Help panel.
+- **Progress persistence.** Every stroke rewrites the active save slot; additional manual snapshots live in the Saves manager with rename/export/delete controls. Storage quota usage is surfaced in the Help panel, and the legacy autosave bucket migrates into a manual slot on first launch.
+- **Startup restore priority.** Launching the app resumes from the most recent save (preferring the active slot) and falls back to the bundled sample only when nothing is stored.
 - **Settings persistence.** Gameplay, hint, control, and appearance preferences now sync to `localStorage` (`capy.settings.v1`) so `capy.json` only ships puzzle data.
 
 ### Detail Presets
@@ -153,7 +154,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 - **Settings panel** – Slides in beside the playfield so you can keep painting while adjusting sliders. Controls are grouped into Gameplay, Hints, Controls, and Appearance tabs so related toggles stay visible on smaller screens. Options cover palette size, minimum region size, resize detail, sample rate, k-means iterations, smoothing passes, interface theme, unfilled region colour, stage background, interface scale (75% by default for mobile breathing room), auto-advance, difficulty, hint animations, hint type toggles, overlay intensity, palette sorting, and mouse button mappings. Palette sorting modes include region number, remaining regions, colour name, a rainbow spectrum order based on OKLCH hue, a warm→cool temperature pass, and perceptual lightness (legacy hue/brightness selections migrate to spectrum/lightness automatically). Houses JSON export and detail preset chips plus an **Advanced options** accordion for art prompt metadata.
 - **Detail presets** – Onboarding hints and Settings surface the active preset with live captions describing colours, min region size, resize edge, and approximate region counts.
 - **Start & save screen** – Launch puzzles, reload the sample, and manage manual snapshots. **Choose an image** leads the overlay; manual snapshots can be renamed, exported, or deleted; **Reset puzzle progress** clears the active board. The Save storage panel reports local usage and lets you cap the embedded source image between 256 KB and 5 MB for future saves and exports.
-- **Generator sheet** – Hosts clustering sliders, detail presets, and a **Load from URL** form so remote images can be generated without uploading files. URL imports cache only the link; we fetch the bitmap on demand whenever the puzzle regenerates or reloads from a save.
+- **Generator sheet** – Hosts clustering sliders and detail presets for the bundled vignette. Remote URL imports are temporarily unavailable while we redesign the flow; file uploads continue to work through the Import overlay.
 - **Help panel** – Lists command buttons, summarises gestures, and surfaces the live debug log for telemetry.
 - **Palette dock** – Horizontal scroller anchored to the bottom. Flat colour tiles adjust label contrast automatically, collapse completed colours, and expose tooltips plus `data-color-id` attributes for automation.
 
@@ -188,7 +189,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 
 ## Puzzle JSON Format
 
-Autosaves and manual exports share the `capy-puzzle@2` payload with the following key fields:
+Saved puzzles share the `capy-puzzle@2` payload with the following key fields:
 
 - `format` – Schema version (`capy-puzzle@2`).
 - `width` / `height` – Canvas dimensions in pixels.
@@ -198,9 +199,9 @@ Autosaves and manual exports share the `capy-puzzle@2` payload with the followin
 - `filled` – Region ids already painted.
 - `backgroundColor`, `stageBackgroundColor`, `options`, `activeColor`, `viewport`, `sourceUrl` – Appearance and generator state used to restore the session.
 
-Manual saves and autosaves persist the active user settings alongside the puzzle snapshot so restoring a session reapplies difficulty, renderer, and other preferences, but exported files omit that bundle for portability.
+Saved slots persist the active user settings alongside the puzzle snapshot so restoring a session reapplies difficulty, renderer, and other preferences, but exported files omit that bundle for portability.
 
-Packing the region map trims payloads by more than half, avoiding `QuotaExceededError` when large puzzles previously overflowed localStorage. Compact exports now wrap the same data in a `capy-export@2` envelope with an `encoding` (`identity`, `lz77`, or legacy `lzw16`) and Base64 `payload`; imports hand the decoded string back through `compactPuzzleSnapshot` before calling `applyPuzzleResult`. The compactor rekeys palette entries to `{ i, h, n, r }`, regions to `{ i, c, p, x, y }`, stores the region map as `m`, and varint-packs filled region ids into the `f` string. If storage does fill up, the Help log prompts the user to clear old saves before retrying.
+Packing the region map trims payloads by more than half, avoiding `QuotaExceededError` when large puzzles previously overflowed localStorage. Saves now store the compacted structure directly in `localStorage` without extra compression, and exports write the same JSON so imports hand the decoded object straight to `compactPuzzleSnapshot` before calling `applyPuzzleResult`. The compactor rekeys palette entries to `{ i, h, n, r }`, regions to `{ i, c, p, x, y }`, stores the region map as `m`, and varint-packs filled region ids into the `f` string. If storage does fill up, the Help log prompts the user to clear old saves before retrying.
 
 ## Accessibility & Keyboard Notes
 
@@ -219,7 +220,7 @@ Supplement the automated run with these manual checks when you change gameplay, 
 
 - **Boot and sample load.** Refresh to confirm onboarding hints, command rail, palette dock, and sample puzzle appear without errors.
 - **Palette readability.** Scrub swatches to ensure labels remain legible across bright/dark paints on desktop and mobile viewports.
-- **Painting loop.** Fill regions to verify flashes, completion states, and autosave updates.
+- **Painting loop.** Fill regions to verify flashes, completion states, and that the active save updates.
 - **Save/load recovery.** Create a manual save, reload, and confirm it restores correctly.
 
 Local workflow:
