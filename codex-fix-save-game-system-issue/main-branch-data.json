@@ -1,0 +1,70 @@
+{
+  "commits": [
+    {
+      "sha": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "shortSha": "bbf7371",
+      "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-26T00:54:52Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "prs": [
+        {
+          "number": 231,
+          "title": "Sanitize post-deploy concurrency group branch names",
+          "url": "https://github.com/shthed/capy/pull/231",
+          "branch": "codex/explain-post-deploy-tests.yml-changes"
+        }
+      ]
+    },
+    {
+      "sha": "69903bad7d31a0ca173666d6f8309de678623b20",
+      "shortSha": "69903ba",
+      "message": "Sanitize concurrency group branch name",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-26T00:49:07Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/69903bad7d31a0ca173666d6f8309de678623b20",
+      "prs": [
+        {
+          "number": 231,
+          "title": "Sanitize post-deploy concurrency group branch names",
+          "url": "https://github.com/shthed/capy/pull/231",
+          "branch": "codex/explain-post-deploy-tests.yml-changes"
+        }
+      ]
+    },
+    {
+      "sha": "7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "shortSha": "7bace75",
+      "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T11:10:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "prs": [
+        {
+          "number": 230,
+          "title": "Improve region label placement and sizing",
+          "url": "https://github.com/shthed/capy/pull/230",
+          "branch": "codex/adjust-region-number-label-sizing"
+        }
+      ]
+    },
+    {
+      "sha": "3cfbf3c9a90c50f71f5c4251086017f018f65eb3",
+      "shortSha": "3cfbf3c",
+      "message": "Improve region label placement and sizing",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-25T10:59:44Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3cfbf3c9a90c50f71f5c4251086017f018f65eb3",
+      "prs": [
+        {
+          "number": 230,
+          "title": "Improve region label placement and sizing",
+          "url": "https://github.com/shthed/capy/pull/230",
+          "branch": "codex/adjust-region-number-label-sizing"
+        }
+      ]
+    }
+  ],
+  "lastCommitDate": "2025-10-26T00:54:52Z",
+  "deploymentTimestamp": 1761440180152
+}
