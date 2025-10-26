@@ -10,11 +10,6 @@ on:
         description: 'Branch to deploy (defaults to the ref that triggered the run)'
         required: false
         type: string
-      allow_without_pr:
-        description: 'Deploy even without an open PR when manually triggered'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -28,7 +23,6 @@ jobs:
     env:
       EFFECTIVE_BRANCH: "${{ github.event_name == 'workflow_dispatch' && inputs.target_branch != '' && inputs.target_branch || github.ref_name }}"
       EFFECTIVE_REF: "${{ github.event_name == 'workflow_dispatch' && inputs.target_branch != '' && format('refs/heads/{0}', inputs.target_branch) || github.ref }}"
-      ALLOW_WITHOUT_PR: "${{ github.event_name == 'workflow_dispatch' && inputs.allow_without_pr && 'true' || 'false' }}"
     concurrency:
       group: pages-deployments
       cancel-in-progress: false
@@ -42,193 +36,7 @@ jobs:
           ref: ${{ env.EFFECTIVE_REF }}
           fetch-depth: 0
 
-      - name: Fetch open PR metadata
-        id: pr-metadata
-        uses: actions/github-script@v7
-        env:
-          TARGET_BRANCH: ${{ env.EFFECTIVE_BRANCH }}
-        with:
-          script: |
-            const { data: pulls } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              sort: 'updated',
-              direction: 'desc',
-              per_page: 100
-            });
-
-            const branches = pulls.map(pr => ({
-              branch: pr.head.ref,
-              safeName: pr.head.ref.replace(/[^a-zA-Z0-9._-]/g, '-'),
-              title: pr.title,
-              number: pr.number,
-              updatedAt: pr.updated_at,
-              url: pr.html_url
-            }));
-
-            const targetBranch = process.env.TARGET_BRANCH || '';
-            const hasOpenPr = targetBranch
-              ? branches.some(pr => pr.branch === targetBranch)
-              : branches.some(pr => pr.branch === (context.ref || '').replace('refs/heads/', ''));
-
-            core.setOutput('has-open-pr', hasOpenPr ? 'true' : 'false');
-
-            const fs = require('fs');
-            fs.writeFileSync('pr-branches.json', JSON.stringify(branches, null, 2));
-
-            return branches.length;
-
-      - name: Determine deployment eligibility
-        id: deployment-gate
-        env:
-          HAS_OPEN_PR: ${{ steps.pr-metadata.outputs.has-open-pr }}
-          TARGET_BRANCH: ${{ env.EFFECTIVE_BRANCH }}
-          ALLOW_WITHOUT_PR: ${{ env.ALLOW_WITHOUT_PR }}
-        run: |
-          set -euo pipefail
-
-          BRANCH_NAME="${TARGET_BRANCH}"
-
-          if [ "$BRANCH_NAME" = "main" ]; then
-            echo "eligible=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "${HAS_OPEN_PR}" = "true" ]; then
-            echo "eligible=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "${ALLOW_WITHOUT_PR}" = "true" ]; then
-            echo "eligible=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "eligible=false" >> "$GITHUB_OUTPUT"
-
-      - name: Skip deployment for branches without open PRs
-        if: steps.deployment-gate.outputs.eligible != 'true'
-        run: |
-          echo "No open pull request detected for ${EFFECTIVE_BRANCH}; skipping deployment."
-          echo "Set allow_without_pr=true when dispatching manually to override this gate."
-
-      - name: Fetch main branch commits
-        if: steps.deployment-gate.outputs.eligible == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-
-            const { data: commits } = await github.rest.repos.listCommits({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: 'main',
-              per_page: 4
-            });
-
-            const commitsWithPRs = await Promise.all(commits.map(async (commit) => {
-              let prs = [];
-              try {
-                const { data: prData } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  commit_sha: commit.sha
-                });
-                prs = prData.map(pr => ({
-                  number: pr.number,
-                  title: pr.title,
-                  url: pr.html_url,
-                  branch: pr.head?.ref ?? null
-                }));
-              } catch (error) {
-                core.warning(`Could not fetch PRs for commit ${commit.sha}: ${error.message}`);
-              }
-
-              return {
-                sha: commit.sha,
-                shortSha: commit.sha.substring(0, 7),
-                message: commit.commit.message,
-                author: commit.commit.author?.name ?? commit.commit.committer?.name ?? 'Unknown author',
-                date: commit.commit.author?.date ?? commit.commit.committer?.date ?? '',
-                htmlUrl: commit.html_url,
-                prs
-              };
-            }));
-
-            const mainBranchData = {
-              commits: commitsWithPRs,
-              lastCommitDate: commits[0]?.commit.author?.date ?? commits[0]?.commit.committer?.date ?? null,
-              deploymentTimestamp: Date.now()
-            };
-
-            fs.writeFileSync('main-branch-data.json', JSON.stringify(mainBranchData, null, 2));
-
-            return mainBranchData.commits.length;
-
-      - name: Fetch branch commit history
-        if: steps.deployment-gate.outputs.eligible == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-
-            let prBranches = [];
-            try {
-              prBranches = JSON.parse(fs.readFileSync('pr-branches.json', 'utf8'));
-            } catch (error) {
-              core.warning(`Could not read pr-branches.json: ${error.message}`);
-            }
-
-            const branchCommitData = {};
-
-            const branches = Array.isArray(prBranches) ? prBranches : [];
-
-            for (const pr of branches) {
-              const branchName = pr?.branch;
-              if (!branchName) {
-                continue;
-              }
-
-              try {
-                const { data: commits } = await github.rest.repos.listCommits({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  sha: branchName,
-                  per_page: 4
-                });
-
-                const prInfo = {
-                  number: pr.number,
-                  title: pr.title,
-                  url: pr.url ?? pr.html_url ?? null,
-                  branch: pr.branch ?? null
-                };
-
-                const commitsWithMetadata = commits.map((commit) => ({
-                  sha: commit.sha,
-                  shortSha: commit.sha.substring(0, 7),
-                  message: commit.commit.message,
-                  date: commit.commit.author?.date ?? commit.commit.committer?.date ?? '',
-                  htmlUrl: commit.html_url,
-                  prs: prInfo.number != null || prInfo.title || prInfo.url ? [prInfo] : []
-                }));
-
-                branchCommitData[branchName] = commitsWithMetadata;
-
-                const safeName = typeof pr?.safeName === 'string' ? pr.safeName : branchName.replace(/[^a-zA-Z0-9._-]/g, '-');
-                branchCommitData[safeName] = commitsWithMetadata;
-              } catch (error) {
-                core.warning(`Could not fetch commits for branch ${branchName}: ${error.message}`);
-              }
-            }
-
-            fs.writeFileSync('branch-commits.json', JSON.stringify(branchCommitData, null, 2));
-
-            return Object.keys(branchCommitData).length;
-
       - name: Sync branch to gh-pages
-        if: steps.deployment-gate.outputs.eligible == 'true'
         id: sync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -241,13 +49,11 @@ jobs:
           BRANCH_NAME="${TARGET_BRANCH}"
           SAFE_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g')
           TARGET_DIR="."
-          TARGET_KEY="main"
 
           if [ "$BRANCH_NAME" = "main" ]; then
             SAFE_NAME=""
           else
             TARGET_DIR="$SAFE_NAME"
-            TARGET_KEY="$SAFE_NAME"
           fi
 
           git config --global user.name "github-actions[bot]"
@@ -270,56 +76,6 @@ jobs:
           cd pages
 
           touch .nojekyll
-          MANIFEST=".branch-manifest"
-          touch "$MANIFEST"
-
-          EXISTING_MANIFEST=()
-          if [ -s "$MANIFEST" ]; then
-            mapfile -t EXISTING_MANIFEST < "$MANIFEST"
-          fi
-
-          ACTIVE_SAFE_NAMES=()
-          if [ -f "../pr-branches.json" ]; then
-            mapfile -t ACTIVE_SAFE_NAMES < <(
-              jq -r '
-                map(select(.branch != null))
-                | map(.safeName // (.branch | gsub("[^A-Za-z0-9._-]"; "-")))
-                | map(select(length > 0))
-                | unique[]
-              ' ../pr-branches.json 2>/dev/null
-            ) || ACTIVE_SAFE_NAMES=()
-          fi
-
-          if [ -n "$SAFE_NAME" ]; then
-            ACTIVE_SAFE_NAMES+=("$SAFE_NAME")
-          fi
-
-          declare -A ACTIVE_SET=()
-          UNIQUE_SAFE_NAMES=()
-          for name in "${ACTIVE_SAFE_NAMES[@]}"; do
-            name="${name//$'\r'/}"
-            [ -n "$name" ] || continue
-            if [ -z "${ACTIVE_SET[$name]:-}" ]; then
-              UNIQUE_SAFE_NAMES+=("$name")
-              ACTIVE_SET[$name]=1
-            fi
-          done
-
-          for entry in "${EXISTING_MANIFEST[@]}"; do
-            entry="${entry//$'\r'/}"
-            [ -n "$entry" ] || continue
-            if [ -z "${ACTIVE_SET[$entry]:-}" ]; then
-              rm -rf "$entry"
-            fi
-          done
-
-          if [ "${#UNIQUE_SAFE_NAMES[@]}" -gt 0 ]; then
-            printf '%s\n' "${UNIQUE_SAFE_NAMES[@]}" > "$MANIFEST"
-            ACTIVE_JSON=$(printf '%s\n' "${UNIQUE_SAFE_NAMES[@]}" | python3 -c 'import json, sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))') || ACTIVE_JSON='[]'
-          else
-            : > "$MANIFEST"
-            ACTIVE_JSON='[]'
-          fi
 
           generate_readme_html() {
             local target_root="$1"
@@ -347,22 +103,13 @@ jobs:
             "--exclude=.github"
             "--exclude=node_modules/"
             "--exclude=pages/"
-            "--exclude=.branch-manifest"
-            "--exclude=deployments.json"
-            "--exclude=branch.html"
             "--exclude=.gitignore"
             "--exclude=.gitattributes"
             "--exclude=.DS_Store"
           )
 
           if [ "$TARGET_DIR" = "." ]; then
-            EXTRA_EXCLUDES=()
-            for entry in "${UNIQUE_SAFE_NAMES[@]}"; do
-              [ -n "$entry" ] || continue
-              EXTRA_EXCLUDES+=("--exclude=${entry}/")
-            done
-
-            rsync -a --delete --force "${RSYNC_ARGS[@]}" "${EXTRA_EXCLUDES[@]}" ../ ./
+            rsync -a "${RSYNC_ARGS[@]}" ../ ./
             generate_readme_html "."
           else
             rm -rf "$TARGET_DIR"
@@ -415,14 +162,6 @@ jobs:
 
             rsync -a "${RSYNC_ARGS[@]}" "${JS_SYNC_EXCLUDES[@]}" "${JS_INCLUDE_RULES[@]}" ../ "$TARGET_DIR/"
             generate_readme_html "$TARGET_DIR"
-            if ! grep -qxF "$TARGET_KEY" "$MANIFEST"; then
-              echo "$TARGET_KEY" >> "$MANIFEST"
-            fi
-          fi
-
-          DEPLOY_DATA="deployments.json"
-          if [ ! -f "$DEPLOY_DATA" ]; then
-            echo '{}' > "$DEPLOY_DATA"
           fi
 
           MESSAGE="$COMMIT_MESSAGE"
@@ -434,41 +173,6 @@ jobs:
           if [ -z "$TIMESTAMP" ]; then
             TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
           fi
-
-          DEPLOY_DATA_PATH="$DEPLOY_DATA" \
-          DEPLOY_BRANCH="$BRANCH_NAME" \
-          DEPLOY_SAFE_NAME="$SAFE_NAME" \
-          DEPLOY_COMMIT="${GITHUB_SHA}" \
-          DEPLOY_MESSAGE="$MESSAGE" \
-          DEPLOY_ACTOR="${GITHUB_ACTOR}" \
-          DEPLOY_TIMESTAMP="$TIMESTAMP" \
-          DEPLOY_URL="https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" \
-          DEPLOY_TARGET_KEY="$TARGET_KEY" \
-          DEPLOY_ACTIVE="$ACTIVE_JSON" \
-          node ../scripts/update-deployments.mjs
-
-          PR_DATA_FILE="../pr-branches.json"
-          MAIN_DATA_FILE="../main-branch-data.json"
-          if [ ! -f "$PR_DATA_FILE" ]; then
-            echo '[]' > "$PR_DATA_FILE"
-          fi
-          if [ ! -f "$MAIN_DATA_FILE" ]; then
-            echo '{"commits":[]}' > "$MAIN_DATA_FILE"
-          fi
-
-          BRANCH_COMMITS_FILE="../branch-commits.json"
-          if [ ! -f "$BRANCH_COMMITS_FILE" ]; then
-            echo '{}' > "$BRANCH_COMMITS_FILE"
-          fi
-
-          BRANCH_HTML_PATH="branch.html"
-
-          DEPLOY_DATA_PATH="$DEPLOY_DATA" \
-          PR_DATA_PATH="$PR_DATA_FILE" \
-          MAIN_DATA_PATH="$MAIN_DATA_FILE" \
-          BRANCH_COMMITS_PATH="$BRANCH_COMMITS_FILE" \
-          BRANCH_HTML_PATH="$BRANCH_HTML_PATH" \
-          node ../scripts/render-branch-page.mjs
 
           git add -A
           if [ -n "$(git status --short)" ]; then
@@ -491,7 +195,6 @@ jobs:
           cd ..
 
       - name: Prepare Pages artifact
-        if: steps.deployment-gate.outputs.eligible == 'true'
         run: |
           set -euo pipefail
           rm -rf site
@@ -499,20 +202,16 @@ jobs:
           rsync -a --exclude='.git/' pages/ site/
 
       - name: Setup Pages
-        if: steps.deployment-gate.outputs.eligible == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        if: steps.deployment-gate.outputs.eligible == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
       - name: Deploy to GitHub Pages
-        if: steps.deployment-gate.outputs.eligible == 'true'
         id: deploy-pages
         uses: actions/deploy-pages@v4
 
       - name: Preview URL
-        if: steps.deployment-gate.outputs.eligible == 'true'
         run: echo "Preview available at ${{ steps.sync.outputs.preview_url }}"
