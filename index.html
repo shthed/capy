@@ -8340,11 +8340,11 @@
         const controller = state.rendering?.controller;
         if (controller && typeof controller.getContext === "function") {
           const ctx = controller.getContext();
-          if (ctx) {
+          if (ctx && typeof ctx.measureText === "function") {
             return ctx;
           }
         }
-        if (previewCtx) {
+        if (previewCtx && typeof previewCtx.measureText === "function") {
           return previewCtx;
         }
         if (!scratchMeasureCtx) {
@@ -8362,7 +8362,9 @@
             scratchMeasureCtx = scratchMeasureCanvas.getContext("2d");
           }
         }
-        return scratchMeasureCtx;
+        return scratchMeasureCtx && typeof scratchMeasureCtx.measureText === "function"
+          ? scratchMeasureCtx
+          : null;
       }
 
       function findRegionLabelAnchor(region, halfWidth, halfHeight, bounds, width, height, regionMap) {

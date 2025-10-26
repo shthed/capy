@@ -1624,7 +1624,16 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   }
 
   function getContext() {
-    return gl;
+    const width = Math.max(
+      1,
+      Math.round(uploadState.pixelWidth || currentPixelWidth || canvas?.width || 1)
+    );
+    const height = Math.max(
+      1,
+      Math.round(uploadState.pixelHeight || currentPixelHeight || canvas?.height || 1)
+    );
+    const { context } = ensureNumbersSurface(width, height);
+    return context || null;
   }
 
   function dispose() {
