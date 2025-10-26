@@ -9,6 +9,16 @@
     "commitUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
     "key": "main"
   },
+  "codex-change-color-selection-logic": {
+    "key": "codex-change-color-selection-logic",
+    "branch": "codex/change-color-selection-logic",
+    "safeName": "codex-change-color-selection-logic",
+    "commit": "d23e5306b671a19328dc0a7839e33146fc59fb58",
+    "message": "Improve palette spectrum sorting",
+    "actor": "shthed",
+    "deployedAt": "2025-10-26T13:33:04+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/d23e5306b671a19328dc0a7839e33146fc59fb58"
+  },
   "codex-fix-save-game-system-issue": {
     "key": "codex-fix-save-game-system-issue",
     "branch": "codex/fix-save-game-system-issue",

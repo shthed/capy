@@ -1,0 +1,26 @@
+[
+  {
+    "branch": "codex/optimize-pages-deployment-process",
+    "safeName": "codex-optimize-pages-deployment-process",
+    "title": "Simplify Pages deployment workflow",
+    "number": 234,
+    "updatedAt": "2025-10-26T05:33:21Z",
+    "url": "https://github.com/shthed/capy/pull/234"
+  },
+  {
+    "branch": "codex/change-color-selection-logic",
+    "safeName": "codex-change-color-selection-logic",
+    "title": "Enhance palette sorting with spectrum and warmth modes",
+    "number": 233,
+    "updatedAt": "2025-10-26T05:33:08Z",
+    "url": "https://github.com/shthed/capy/pull/233"
+  },
+  {
+    "branch": "codex/fix-save-game-system-issue",
+    "safeName": "codex-fix-save-game-system-issue",
+    "title": "Prefer autosave when restoring sessions",
+    "number": 232,
+    "updatedAt": "2025-10-26T05:32:45Z",
+    "url": "https://github.com/shthed/capy/pull/232"
+  }
+]

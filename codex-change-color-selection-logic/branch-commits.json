@@ -1,0 +1,374 @@
+{
+  "codex/optimize-pages-deployment-process": [
+    {
+      "sha": "58c2ae14453207a85d152ffeaa7cfd15add41d8e",
+      "shortSha": "58c2ae1",
+      "message": "Always deploy branches without PR checks",
+      "date": "2025-10-26T05:33:18Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/58c2ae14453207a85d152ffeaa7cfd15add41d8e",
+      "prs": [
+        {
+          "number": 234,
+          "title": "Simplify Pages deployment workflow",
+          "url": "https://github.com/shthed/capy/pull/234",
+          "branch": "codex/optimize-pages-deployment-process"
+        }
+      ]
+    },
+    {
+      "sha": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "shortSha": "bbf7371",
+      "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
+      "date": "2025-10-26T00:54:52Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "prs": [
+        {
+          "number": 234,
+          "title": "Simplify Pages deployment workflow",
+          "url": "https://github.com/shthed/capy/pull/234",
+          "branch": "codex/optimize-pages-deployment-process"
+        }
+      ]
+    },
+    {
+      "sha": "69903bad7d31a0ca173666d6f8309de678623b20",
+      "shortSha": "69903ba",
+      "message": "Sanitize concurrency group branch name",
+      "date": "2025-10-26T00:49:07Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/69903bad7d31a0ca173666d6f8309de678623b20",
+      "prs": [
+        {
+          "number": 234,
+          "title": "Simplify Pages deployment workflow",
+          "url": "https://github.com/shthed/capy/pull/234",
+          "branch": "codex/optimize-pages-deployment-process"
+        }
+      ]
+    },
+    {
+      "sha": "7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "shortSha": "7bace75",
+      "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
+      "date": "2025-10-25T11:10:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "prs": [
+        {
+          "number": 234,
+          "title": "Simplify Pages deployment workflow",
+          "url": "https://github.com/shthed/capy/pull/234",
+          "branch": "codex/optimize-pages-deployment-process"
+        }
+      ]
+    }
+  ],
+  "codex-optimize-pages-deployment-process": [
+    {
+      "sha": "58c2ae14453207a85d152ffeaa7cfd15add41d8e",
+      "shortSha": "58c2ae1",
+      "message": "Always deploy branches without PR checks",
+      "date": "2025-10-26T05:33:18Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/58c2ae14453207a85d152ffeaa7cfd15add41d8e",
+      "prs": [
+        {
+          "number": 234,
+          "title": "Simplify Pages deployment workflow",
+          "url": "https://github.com/shthed/capy/pull/234",
+          "branch": "codex/optimize-pages-deployment-process"
+        }
+      ]
+    },
+    {
+      "sha": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "shortSha": "bbf7371",
+      "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
+      "date": "2025-10-26T00:54:52Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "prs": [
+        {
+          "number": 234,
+          "title": "Simplify Pages deployment workflow",
+          "url": "https://github.com/shthed/capy/pull/234",
+          "branch": "codex/optimize-pages-deployment-process"
+        }
+      ]
+    },
+    {
+      "sha": "69903bad7d31a0ca173666d6f8309de678623b20",
+      "shortSha": "69903ba",
+      "message": "Sanitize concurrency group branch name",
+      "date": "2025-10-26T00:49:07Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/69903bad7d31a0ca173666d6f8309de678623b20",
+      "prs": [
+        {
+          "number": 234,
+          "title": "Simplify Pages deployment workflow",
+          "url": "https://github.com/shthed/capy/pull/234",
+          "branch": "codex/optimize-pages-deployment-process"
+        }
+      ]
+    },
+    {
+      "sha": "7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "shortSha": "7bace75",
+      "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
+      "date": "2025-10-25T11:10:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "prs": [
+        {
+          "number": 234,
+          "title": "Simplify Pages deployment workflow",
+          "url": "https://github.com/shthed/capy/pull/234",
+          "branch": "codex/optimize-pages-deployment-process"
+        }
+      ]
+    }
+  ],
+  "codex/change-color-selection-logic": [
+    {
+      "sha": "d23e5306b671a19328dc0a7839e33146fc59fb58",
+      "shortSha": "d23e530",
+      "message": "Improve palette spectrum sorting",
+      "date": "2025-10-26T05:33:04Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d23e5306b671a19328dc0a7839e33146fc59fb58",
+      "prs": [
+        {
+          "number": 233,
+          "title": "Enhance palette sorting with spectrum and warmth modes",
+          "url": "https://github.com/shthed/capy/pull/233",
+          "branch": "codex/change-color-selection-logic"
+        }
+      ]
+    },
+    {
+      "sha": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "shortSha": "bbf7371",
+      "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
+      "date": "2025-10-26T00:54:52Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "prs": [
+        {
+          "number": 233,
+          "title": "Enhance palette sorting with spectrum and warmth modes",
+          "url": "https://github.com/shthed/capy/pull/233",
+          "branch": "codex/change-color-selection-logic"
+        }
+      ]
+    },
+    {
+      "sha": "69903bad7d31a0ca173666d6f8309de678623b20",
+      "shortSha": "69903ba",
+      "message": "Sanitize concurrency group branch name",
+      "date": "2025-10-26T00:49:07Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/69903bad7d31a0ca173666d6f8309de678623b20",
+      "prs": [
+        {
+          "number": 233,
+          "title": "Enhance palette sorting with spectrum and warmth modes",
+          "url": "https://github.com/shthed/capy/pull/233",
+          "branch": "codex/change-color-selection-logic"
+        }
+      ]
+    },
+    {
+      "sha": "7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "shortSha": "7bace75",
+      "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
+      "date": "2025-10-25T11:10:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "prs": [
+        {
+          "number": 233,
+          "title": "Enhance palette sorting with spectrum and warmth modes",
+          "url": "https://github.com/shthed/capy/pull/233",
+          "branch": "codex/change-color-selection-logic"
+        }
+      ]
+    }
+  ],
+  "codex-change-color-selection-logic": [
+    {
+      "sha": "d23e5306b671a19328dc0a7839e33146fc59fb58",
+      "shortSha": "d23e530",
+      "message": "Improve palette spectrum sorting",
+      "date": "2025-10-26T05:33:04Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d23e5306b671a19328dc0a7839e33146fc59fb58",
+      "prs": [
+        {
+          "number": 233,
+          "title": "Enhance palette sorting with spectrum and warmth modes",
+          "url": "https://github.com/shthed/capy/pull/233",
+          "branch": "codex/change-color-selection-logic"
+        }
+      ]
+    },
+    {
+      "sha": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "shortSha": "bbf7371",
+      "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
+      "date": "2025-10-26T00:54:52Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "prs": [
+        {
+          "number": 233,
+          "title": "Enhance palette sorting with spectrum and warmth modes",
+          "url": "https://github.com/shthed/capy/pull/233",
+          "branch": "codex/change-color-selection-logic"
+        }
+      ]
+    },
+    {
+      "sha": "69903bad7d31a0ca173666d6f8309de678623b20",
+      "shortSha": "69903ba",
+      "message": "Sanitize concurrency group branch name",
+      "date": "2025-10-26T00:49:07Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/69903bad7d31a0ca173666d6f8309de678623b20",
+      "prs": [
+        {
+          "number": 233,
+          "title": "Enhance palette sorting with spectrum and warmth modes",
+          "url": "https://github.com/shthed/capy/pull/233",
+          "branch": "codex/change-color-selection-logic"
+        }
+      ]
+    },
+    {
+      "sha": "7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "shortSha": "7bace75",
+      "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
+      "date": "2025-10-25T11:10:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "prs": [
+        {
+          "number": 233,
+          "title": "Enhance palette sorting with spectrum and warmth modes",
+          "url": "https://github.com/shthed/capy/pull/233",
+          "branch": "codex/change-color-selection-logic"
+        }
+      ]
+    }
+  ],
+  "codex/fix-save-game-system-issue": [
+    {
+      "sha": "43b282149d1b486a834ad1bb089dc112b9f787b8",
+      "shortSha": "43b2821",
+      "message": "Fix Polylabel heap initialization regression",
+      "date": "2025-10-26T05:32:44Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/43b282149d1b486a834ad1bb089dc112b9f787b8",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
+      "sha": "3e6471fb117eaec41f471f353d8401070527ec58",
+      "shortSha": "3e6471f",
+      "message": "Restore legacy save migration and clean generator copy",
+      "date": "2025-10-26T05:18:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3e6471fb117eaec41f471f353d8401070527ec58",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
+      "sha": "7f46c6048b637fdadd8b904ca70220085de124c8",
+      "shortSha": "7f46c60",
+      "message": "Unify autosave with manual saves and simplify storage",
+      "date": "2025-10-26T04:06:18Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7f46c6048b637fdadd8b904ca70220085de124c8",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
+      "sha": "8265ede530a943e36b2df60b8466867b007419e2",
+      "shortSha": "8265ede",
+      "message": "Prefer autosave when restoring sessions",
+      "date": "2025-10-26T00:56:04Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8265ede530a943e36b2df60b8466867b007419e2",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    }
+  ],
+  "codex-fix-save-game-system-issue": [
+    {
+      "sha": "43b282149d1b486a834ad1bb089dc112b9f787b8",
+      "shortSha": "43b2821",
+      "message": "Fix Polylabel heap initialization regression",
+      "date": "2025-10-26T05:32:44Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/43b282149d1b486a834ad1bb089dc112b9f787b8",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
+      "sha": "3e6471fb117eaec41f471f353d8401070527ec58",
+      "shortSha": "3e6471f",
+      "message": "Restore legacy save migration and clean generator copy",
+      "date": "2025-10-26T05:18:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/3e6471fb117eaec41f471f353d8401070527ec58",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
+      "sha": "7f46c6048b637fdadd8b904ca70220085de124c8",
+      "shortSha": "7f46c60",
+      "message": "Unify autosave with manual saves and simplify storage",
+      "date": "2025-10-26T04:06:18Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7f46c6048b637fdadd8b904ca70220085de124c8",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
+      "sha": "8265ede530a943e36b2df60b8466867b007419e2",
+      "shortSha": "8265ede",
+      "message": "Prefer autosave when restoring sessions",
+      "date": "2025-10-26T00:56:04Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/8265ede530a943e36b2df60b8466867b007419e2",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    }
+  ]
+}
