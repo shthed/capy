@@ -2026,7 +2026,7 @@
               Easy mode lets you click any region to auto-select its colour before filling it.
             </p>
             <label class="control">
-              <span>Sort swatches</span>
+              <span>Sort Colours</span>
               <select id="paletteSort" data-testid="palette-sort" disabled>
                 <option value="region">Number</option>
                 <option value="remaining">Remaining regions</option>
@@ -9122,6 +9122,7 @@
           }
         }
 
+        let displayIndex = 0;
         for (const color of paletteEntries) {
           const remaining = remainingByColor.get(color.id) || 0;
           if (remaining <= 0) {
@@ -9133,6 +9134,7 @@
           const totalWord = total === 1 ? "region" : "regions";
           const tooltipText = `${remaining} ${regionWord} left`;
           const ariaSummary = `${remaining} of ${total} ${totalWord} remaining.`;
+          const displayNumber = displayIndex + 1;
           const swatch = document.createElement("button");
           swatch.type = "button";
           swatch.className = "swatch";
@@ -9141,10 +9143,11 @@
           swatch.dataset.remaining = String(remaining);
           swatch.dataset.total = String(total);
           swatch.dataset.name = labelText;
+          swatch.dataset.displayIndex = String(displayNumber);
           swatch.setAttribute("role", "listitem");
           swatch.setAttribute(
             "aria-label",
-            `Colour ${color.id}: ${labelText}. ${ariaSummary}`
+            `Colour ${displayNumber}: ${labelText}. ${ariaSummary}`
           );
           swatch.title = `${labelText} · ${tooltipText} (${total} total)`;
           if (state.activeColor === color.id) swatch.classList.add("active");
@@ -9156,7 +9159,7 @@
           const label = document.createElement("span");
           label.className = "label";
           const number = document.createElement("strong");
-          number.textContent = String(color.id);
+          number.textContent = String(displayNumber);
           label.appendChild(number);
           swatch.appendChild(label);
           const tooltipId = `swatchTooltip-${color.id}`;
@@ -9181,6 +9184,7 @@
             activateColor(color.id);
           });
           paletteEl.appendChild(swatch);
+          displayIndex += 1;
         }
       }
 
