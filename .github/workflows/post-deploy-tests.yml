@@ -21,7 +21,7 @@ jobs:
       github.event.workflow_run.head_branch != ''
     runs-on: ubuntu-latest
     concurrency:
-      group: post-deploy-tests-${{ github.run_id }}
+      group: ${{ format('post-deploy-tests-{0}', replace(github.event.workflow_run.head_branch, '/', '-')) }}
       cancel-in-progress: true
     steps:
       - name: Checkout branch commit
