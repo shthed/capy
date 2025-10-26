@@ -157,7 +157,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 - **Start & save screen** – Launch puzzles, reload the sample, and manage manual snapshots. **Choose an image** leads the overlay; manual snapshots can be renamed, exported, or deleted; **Reset puzzle progress** clears the active board. The Save storage panel reports local usage and lets you cap the embedded source image between 256 KB and 5 MB for future saves and exports.
 - **Generator sheet** – Hosts clustering sliders and detail presets for the bundled vignette. Remote URL imports are temporarily unavailable while we redesign the flow; file uploads continue to work through the Import overlay.
 - **Help panel** – Lists command buttons, summarises gestures, and surfaces the live debug log for telemetry.
-- **Palette dock** – Horizontal scroller anchored to the bottom. Flat colour tiles adjust label contrast automatically, collapse completed colours, and expose tooltips plus `data-color-id` attributes for automation.
+- **Palette dock** – Horizontal scroller anchored to the bottom. Flat colour tiles adjust label contrast automatically, collapse completed colours, and expose tooltips plus `data-color-id` attributes for automation. Completed swatches drop from the picker without renumbering the remaining entries so labels and hints keep stable references.
 
 ## Interaction & Architecture Notes
 

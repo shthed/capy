@@ -9229,8 +9229,14 @@
       function renderPalette() {
         if (!paletteEl) return;
         paletteEl.innerHTML = "";
-        const displayNumbers = new Map();
-        state.paletteDisplayNumbers = displayNumbers;
+        let displayNumbers =
+          state?.paletteDisplayNumbers instanceof Map ? state.paletteDisplayNumbers : null;
+        if (!displayNumbers) {
+          displayNumbers = new Map();
+          state.paletteDisplayNumbers = displayNumbers;
+        } else {
+          displayNumbers.clear();
+        }
         if (!state.puzzle) {
           if (paletteSortEl) {
             paletteSortEl.disabled = true;
@@ -9242,12 +9248,20 @@
           return;
         }
         const {
-          entries: paletteEntries,
+          entries: allPaletteEntries,
           totalByColor,
           remainingByColor,
           sortMode,
           getNameData,
-        } = getPaletteEntryOrder();
+        } = getPaletteEntryOrder({ includeCompleted: true });
+        let displayIndex = 0;
+        for (const color of allPaletteEntries) {
+          displayIndex += 1;
+          displayNumbers.set(color.id, displayIndex);
+        }
+        const paletteEntries = allPaletteEntries.filter(
+          (color) => (remainingByColor.get(color.id) || 0) > 0
+        );
         if (paletteEntries.length === 0) {
           if (paletteSortEl) {
             paletteSortEl.disabled = true;
@@ -9261,7 +9275,6 @@
           }
         }
 
-        let displayIndex = 0;
         for (const color of paletteEntries) {
           const remaining = remainingByColor.get(color.id) || 0;
           if (remaining <= 0) {
@@ -9273,7 +9286,12 @@
           const totalWord = total === 1 ? "region" : "regions";
           const tooltipText = `${remaining} ${regionWord} left`;
           const ariaSummary = `${remaining} of ${total} ${totalWord} remaining.`;
-          const displayNumber = displayIndex + 1;
+          const displayNumber =
+            displayNumbers.has(color.id)
+              ? displayNumbers.get(color.id)
+              : color.id != null
+              ? color.id
+              : displayNumbers.size + 1;
           const labelText =
             rawLabelText === `Colour ${color.id}` ? `Colour ${displayNumber}` : rawLabelText;
           displayNumbers.set(color.id, displayNumber);
@@ -9326,7 +9344,6 @@
             activateColor(color.id);
           });
           paletteEl.appendChild(swatch);
-          displayIndex += 1;
         }
       }
 
@@ -9339,7 +9356,12 @@
         if (source && source.size > 0 && source.has(colorId)) {
           return source.get(colorId);
         }
-        const { entries } = getPaletteEntryOrder(options);
+        const shouldOverrideIncludeCompleted =
+          !options || !Object.prototype.hasOwnProperty.call(options, "includeCompleted");
+        const effectiveOptions = shouldOverrideIncludeCompleted
+          ? { ...options, includeCompleted: true }
+          : options;
+        const { entries } = getPaletteEntryOrder(effectiveOptions);
         for (let index = 0; index < entries.length; index += 1) {
           const entry = entries[index];
           if (entry.id === colorId) {
