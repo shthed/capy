@@ -13,10 +13,10 @@
     "key": "codex-fix-save-game-system-issue",
     "branch": "codex/fix-save-game-system-issue",
     "safeName": "codex-fix-save-game-system-issue",
-    "commit": "7bace758990dbd094c724b0c0c422810b9ab1fda",
-    "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
+    "commit": "8265ede530a943e36b2df60b8466867b007419e2",
+    "message": "Prefer autosave when restoring sessions",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T19:10:57+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda"
+    "deployedAt": "2025-10-26T08:56:04+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/8265ede530a943e36b2df60b8466867b007419e2"
   }
 }
