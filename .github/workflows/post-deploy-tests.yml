@@ -13,7 +13,23 @@ permissions:
   pull-requests: write
 
 jobs:
+  slug:
+    runs-on: ubuntu-latest
+    outputs:
+      branch_slug: ${{ steps.slug.outputs.branch_slug }}
+    steps:
+      - name: Derive branch slug
+        id: slug
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch || '' }}
+        run: |
+          set -euo pipefail
+
+          SAFE_BRANCH=$(printf '%s' "${HEAD_BRANCH}" | sed 's/[^a-zA-Z0-9_-]/-/g')
+          echo "branch_slug=${SAFE_BRANCH}" >> "$GITHUB_OUTPUT"
+
   review:
+    needs: slug
     if: |
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
@@ -21,7 +37,7 @@ jobs:
       github.event.workflow_run.head_branch != ''
     runs-on: ubuntu-latest
     concurrency:
-      group: ${{ format('post-deploy-tests-{0}', replace(github.event.workflow_run.head_branch, '/', '-')) }}
+      group: post-deploy-tests-${{ needs.slug.outputs.branch_slug }}
       cancel-in-progress: true
     steps:
       - name: Checkout branch commit
