@@ -3636,6 +3636,7 @@
           description: DEFAULT_GAME_FALLBACK.description,
         },
         sampleArtwork: null,
+        paletteDisplayNumbers: new Map(),
       };
 
       const storedUserSettings = loadUserSettings();
@@ -5196,8 +5197,8 @@
             const regionWord = remaining.length === 1 ? "region" : "regions";
             logDebug(
               matchingHintsEnabled
-                ? `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for colour #${region.colorId}`
-                : `Region ${region.id} already filled; ${remaining.length} ${regionWord} still remain for colour #${region.colorId}`
+                ? `Region ${region.id} already filled; flashing ${remaining.length} remaining ${regionWord} for ${describeColour(region.colorId, { includeCompleted: true })}`
+                : `Region ${region.id} already filled; ${remaining.length} ${regionWord} still remain for ${describeColour(region.colorId, { includeCompleted: true })}`
             );
           } else {
             logDebug(`Region ${region.id} already filled; ignoring ${label}`);
@@ -5223,14 +5224,14 @@
             }
             flashPaletteSwatch(region.colorId, { hex: paletteColor?.hex });
             logDebug(
-              `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
+              `Region ${region.id} expects ${describeColour(region.colorId, { includeCompleted: true })}; active colour is ${describeColour(state.activeColor, { includeCompleted: true })}`
             );
             return "mismatch";
           }
         }
         if (region.colorId !== state.activeColor) {
           logDebug(
-            `Region ${region.id} expects colour #${region.colorId}; active colour is #${state.activeColor}`
+            `Region ${region.id} expects ${describeColour(region.colorId, { includeCompleted: true })}; active colour is ${describeColour(state.activeColor, { includeCompleted: true })}`
           );
           return "mismatch";
         }
@@ -5247,7 +5248,7 @@
         updateCommandStates();
         scheduleAutosave("fill-region");
         logDebug(
-          `Filled region ${region.id} with colour #${region.colorId} (${state.filled.size}/${state.puzzle.regions.length})`
+          `Filled region ${region.id} with ${describeColour(region.colorId, { includeCompleted: true })} (${state.filled.size}/${state.puzzle.regions.length})`
         );
         if (state.settings.autoAdvance) {
           autoAdvanceColor(region.colorId);
@@ -8021,6 +8022,10 @@
         if (directLabel) {
           return directLabel;
         }
+        const displayNumber = getColorDisplayNumber(region.colorId);
+        if (displayNumber != null) {
+          return String(displayNumber);
+        }
         const fallbackId = region.colorId != null ? String(region.colorId) : "";
         return fallbackId;
       }
@@ -8910,7 +8915,9 @@
         if (changed) {
           scheduleAutosave("color-select");
         }
-        logDebug(`${changed ? "Selected" : "Re-selected"} colour #${colorId} (${suffix})`);
+        logDebug(
+          `${changed ? "Selected" : "Re-selected"} ${describeColour(colorId, { includeCompleted: true })} (${suffix})`
+        );
         refreshCustomCursorHighlight();
         return changed;
       }
@@ -9092,6 +9099,8 @@
       function renderPalette() {
         if (!paletteEl) return;
         paletteEl.innerHTML = "";
+        const displayNumbers = new Map();
+        state.paletteDisplayNumbers = displayNumbers;
         if (!state.puzzle) {
           if (paletteSortEl) {
             paletteSortEl.disabled = true;
@@ -9129,12 +9138,15 @@
             continue;
           }
           const total = totalByColor.get(color.id) || 0;
-          const { text: labelText } = getNameData(color);
+          const { text: rawLabelText } = getNameData(color);
           const regionWord = remaining === 1 ? "region" : "regions";
           const totalWord = total === 1 ? "region" : "regions";
           const tooltipText = `${remaining} ${regionWord} left`;
           const ariaSummary = `${remaining} of ${total} ${totalWord} remaining.`;
           const displayNumber = displayIndex + 1;
+          const labelText =
+            rawLabelText === `Colour ${color.id}` ? `Colour ${displayNumber}` : rawLabelText;
+          displayNumbers.set(color.id, displayNumber);
           const swatch = document.createElement("button");
           swatch.type = "button";
           swatch.className = "swatch";
@@ -9186,6 +9198,39 @@
           paletteEl.appendChild(swatch);
           displayIndex += 1;
         }
+      }
+
+      function getColorDisplayNumber(colorId, options = {}) {
+        if (colorId == null) {
+          return null;
+        }
+        const source =
+          state?.paletteDisplayNumbers instanceof Map ? state.paletteDisplayNumbers : null;
+        if (source && source.size > 0 && source.has(colorId)) {
+          return source.get(colorId);
+        }
+        const { entries } = getPaletteEntryOrder(options);
+        for (let index = 0; index < entries.length; index += 1) {
+          const entry = entries[index];
+          if (entry.id === colorId) {
+            return index + 1;
+          }
+        }
+        return null;
+      }
+
+      function describeColour(colorId, options = {}) {
+        const displayNumber = getColorDisplayNumber(colorId, options);
+        if (displayNumber != null && colorId != null) {
+          return `colour ${displayNumber} (#${colorId})`;
+        }
+        if (displayNumber != null) {
+          return `colour ${displayNumber}`;
+        }
+        if (colorId != null) {
+          return `colour #${colorId}`;
+        }
+        return "colour";
       }
 
       function handlePaletteWheel(event) {
@@ -9666,7 +9711,7 @@
               activateColor(hit.region.colorId);
             } else {
               logDebug(
-                `Colour #${hit.region.colorId} already complete; ${describeMouseButton(buttonName)} click ignored`
+                `${describeColour(hit.region.colorId, { includeCompleted: true })} already complete; ${describeMouseButton(buttonName)} click ignored`
               );
             }
           } else {
@@ -10427,7 +10472,9 @@
             flashColorRegions(target.colorId, { paletteColor, onlyUnfilled: true });
           }
         }
-        logDebug(`Hint spotlighted region ${target.id} (colour #${target.colorId})`);
+        logDebug(
+          `Hint spotlighted region ${target.id} (${describeColour(target.colorId, { includeCompleted: true })})`
+        );
       }
 
       function flashColorRegions(colorId, options = {}) {
