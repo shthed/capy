@@ -21,6 +21,10 @@ jobs:
         run: |
           npm ci
 
+      - name: Provision Playwright browsers
+        run: |
+          npx playwright install --with-deps chromium
+
       - name: Run placeholder test hook
         run: |
           npm test --silent
