@@ -2070,8 +2070,9 @@
                 <option value="region">Number</option>
                 <option value="remaining">Remaining regions</option>
                 <option value="name">Colour name</option>
-                <option value="hue">Hue</option>
-                <option value="brightness">Brightness</option>
+                <option value="spectrum">Rainbow spectrum</option>
+                <option value="warmth">Warm → cool</option>
+                <option value="lightness">Perceptual lightness</option>
               </select>
             </label>
             <p class="control-note">Choose how unfinished colours appear in the dock.</p>
@@ -2389,6 +2390,19 @@
       const saveListEmptyStates = Array.from(document.querySelectorAll("[data-save-empty]"));
       const paletteEl = document.getElementById("palette");
       const paletteSortEl = document.getElementById("paletteSort");
+      const ALLOWED_PALETTE_SORT_MODES = new Set([
+        "region",
+        "remaining",
+        "name",
+        "spectrum",
+        "warmth",
+        "lightness",
+      ]);
+      const LEGACY_PALETTE_SORT_ALIASES = new Map([
+        ["hue", "spectrum"],
+        ["brightness", "lightness"],
+      ]);
+      const WARM_HUE_PIVOT_RADIANS = (40 * Math.PI) / 180;
       const generatorImportNotice =
         generatorSheet?.querySelector("[data-import-notice]") || null;
       const generatorImportFileEl = generatorSheet?.querySelector("[data-import-file]") || null;
@@ -9025,70 +9039,25 @@
         return changed;
       }
 
-      function renderPalette() {
-        if (!paletteEl) return;
-        paletteEl.innerHTML = "";
-        if (!state.puzzle) {
-          if (paletteSortEl) {
-            paletteSortEl.disabled = true;
-            const target = state.paletteSort || "region";
-            if (paletteSortEl.value !== target) {
-              paletteSortEl.value = target;
-            }
+      function resolvePaletteSortMode() {
+        const requested = typeof state.paletteSort === "string" ? state.paletteSort : "";
+        const normalized = LEGACY_PALETTE_SORT_ALIASES.get(requested) || requested;
+        if (ALLOWED_PALETTE_SORT_MODES.has(normalized)) {
+          if (normalized !== requested) {
+            state.paletteSort = normalized;
           }
-          return;
+          return normalized;
         }
+        state.paletteSort = "region";
+        return "region";
+      }
+
+      function getPaletteEntryOrder(options = {}) {
+        const includeCompleted = options?.includeCompleted === true;
         const totalByColor = new Map();
         const remainingByColor = new Map();
-        for (const region of state.puzzle.regions) {
-          const total = totalByColor.get(region.colorId) || 0;
-          totalByColor.set(region.colorId, total + 1);
-          if (!state.filled.has(region.id)) {
-            const remaining = remainingByColor.get(region.colorId) || 0;
-            remainingByColor.set(region.colorId, remaining + 1);
-          }
-        }
-        const paletteEntries = state.puzzle.palette
-          .filter((color) => (remainingByColor.get(color.id) || 0) > 0)
-          .slice();
-        if (paletteEntries.length === 0) {
-          if (paletteSortEl) {
-            paletteSortEl.disabled = true;
-          }
-          return;
-        }
-        const allowedSortModes = new Set(["region", "remaining", "hue", "name", "brightness"]);
-        const sortMode = allowedSortModes.has(state.paletteSort) ? state.paletteSort : "region";
-        if (!allowedSortModes.has(state.paletteSort)) {
-          state.paletteSort = sortMode;
-        }
-        if (paletteSortEl) {
-          paletteSortEl.disabled = false;
-          if (paletteSortEl.value !== sortMode) {
-            paletteSortEl.value = sortMode;
-          }
-        }
-        const hueCache = new Map();
-        const luminanceCache = new Map();
         const nameCache = new Map();
-        const getHue = (color) => {
-          if (!color) return 0;
-          if (hueCache.has(color.id)) {
-            return hueCache.get(color.id);
-          }
-          const value = hueFromHex(color.hex);
-          hueCache.set(color.id, value);
-          return value;
-        };
-        const getLuminance = (color) => {
-          if (!color) return 0;
-          if (luminanceCache.has(color.id)) {
-            return luminanceCache.get(color.id);
-          }
-          const value = relativeLuminance(hexToRgb(color.hex));
-          luminanceCache.set(color.id, value);
-          return value;
-        };
+        const toneCache = new Map();
         const getNameData = (color) => {
           if (!color) {
             return { text: "", sortKey: "" };
@@ -9103,9 +9072,107 @@
           nameCache.set(color.id, entry);
           return entry;
         };
-        paletteEntries.sort((a, b) => {
-          if (sortMode === "hue") {
-            const hueDelta = getHue(a) - getHue(b);
+        const getToneData = (color) => {
+          if (!color) {
+            return {
+              lightness: 0,
+              chroma: 0,
+              hue: 0,
+              warmth: 0,
+              isNeutral: true,
+            };
+          }
+          if (toneCache.has(color.id)) {
+            return toneCache.get(color.id);
+          }
+          const sourceHex = typeof color.hex === "string" ? color.hex : "#ffffff";
+          const tone = oklchFromHex(sourceHex);
+          const hueRadians = (tone.hue * Math.PI) / 180;
+          const warmth = Math.cos(hueRadians - WARM_HUE_PIVOT_RADIANS) * tone.chroma;
+          const entry = {
+            lightness: tone.lightness,
+            chroma: tone.chroma,
+            hue: tone.hue,
+            warmth,
+            isNeutral: tone.chroma < 0.03,
+          };
+          toneCache.set(color.id, entry);
+          return entry;
+        };
+        const sortMode = resolvePaletteSortMode();
+        if (!state.puzzle) {
+          return {
+            entries: [],
+            totalByColor,
+            remainingByColor,
+            sortMode,
+            getNameData,
+          };
+        }
+        for (const region of state.puzzle.regions) {
+          const total = totalByColor.get(region.colorId) || 0;
+          totalByColor.set(region.colorId, total + 1);
+          if (!state.filled.has(region.id)) {
+            const remaining = remainingByColor.get(region.colorId) || 0;
+            remainingByColor.set(region.colorId, remaining + 1);
+          }
+        }
+        const entries = state.puzzle.palette
+          .filter((color) => includeCompleted || (remainingByColor.get(color.id) || 0) > 0)
+          .slice();
+        entries.sort((a, b) => {
+          if (sortMode === "spectrum") {
+            const aTone = getToneData(a);
+            const bTone = getToneData(b);
+            if (aTone.isNeutral !== bTone.isNeutral) {
+              return aTone.isNeutral ? 1 : -1;
+            }
+            const hueDelta = aTone.hue - bTone.hue;
+            if (Math.abs(hueDelta) > 0.0001) {
+              return hueDelta;
+            }
+            const chromaDelta = bTone.chroma - aTone.chroma;
+            if (Math.abs(chromaDelta) > 0.0001) {
+              return chromaDelta;
+            }
+            const lightnessDelta = aTone.lightness - bTone.lightness;
+            if (Math.abs(lightnessDelta) > 0.0001) {
+              return lightnessDelta;
+            }
+            return a.id - b.id;
+          }
+          if (sortMode === "warmth") {
+            const aTone = getToneData(a);
+            const bTone = getToneData(b);
+            if (aTone.isNeutral !== bTone.isNeutral) {
+              return aTone.isNeutral ? 1 : -1;
+            }
+            const warmthDelta = bTone.warmth - aTone.warmth;
+            if (Math.abs(warmthDelta) > 0.0001) {
+              return warmthDelta;
+            }
+            const chromaDelta = bTone.chroma - aTone.chroma;
+            if (Math.abs(chromaDelta) > 0.0001) {
+              return chromaDelta;
+            }
+            const lightnessDelta = aTone.lightness - bTone.lightness;
+            if (Math.abs(lightnessDelta) > 0.0001) {
+              return lightnessDelta;
+            }
+            return a.id - b.id;
+          }
+          if (sortMode === "lightness") {
+            const aTone = getToneData(a);
+            const bTone = getToneData(b);
+            const lightnessDelta = aTone.lightness - bTone.lightness;
+            if (Math.abs(lightnessDelta) > 0.0001) {
+              return lightnessDelta;
+            }
+            const chromaDelta = bTone.chroma - aTone.chroma;
+            if (Math.abs(chromaDelta) > 0.0001) {
+              return chromaDelta;
+            }
+            const hueDelta = aTone.hue - bTone.hue;
             if (Math.abs(hueDelta) > 0.0001) {
               return hueDelta;
             }
@@ -9135,19 +9202,49 @@
             }
             return a.id - b.id;
           }
-          if (sortMode === "brightness") {
-            const luminanceDelta = getLuminance(b) - getLuminance(a);
-            if (Math.abs(luminanceDelta) > 0.0001) {
-              return luminanceDelta;
-            }
-            const hueDelta = getHue(a) - getHue(b);
-            if (Math.abs(hueDelta) > 0.0001) {
-              return hueDelta;
-            }
-            return a.id - b.id;
-          }
           return a.id - b.id;
         });
+        return {
+          entries,
+          totalByColor,
+          remainingByColor,
+          sortMode,
+          getNameData,
+        };
+      }
+
+      function renderPalette() {
+        if (!paletteEl) return;
+        paletteEl.innerHTML = "";
+        if (!state.puzzle) {
+          if (paletteSortEl) {
+            paletteSortEl.disabled = true;
+            const target = state.paletteSort || "region";
+            if (paletteSortEl.value !== target) {
+              paletteSortEl.value = target;
+            }
+          }
+          return;
+        }
+        const {
+          entries: paletteEntries,
+          totalByColor,
+          remainingByColor,
+          sortMode,
+          getNameData,
+        } = getPaletteEntryOrder();
+        if (paletteEntries.length === 0) {
+          if (paletteSortEl) {
+            paletteSortEl.disabled = true;
+          }
+          return;
+        }
+        if (paletteSortEl) {
+          paletteSortEl.disabled = false;
+          if (paletteSortEl.value !== sortMode) {
+            paletteSortEl.value = sortMode;
+          }
+        }
 
         for (const color of paletteEntries) {
           const remaining = remainingByColor.get(color.id) || 0;
@@ -9424,8 +9521,8 @@
       }
 
       function applyPaletteSort(sort, { skipLog } = {}) {
-        const allowed = new Set(["region", "hue", "remaining", "name", "brightness"]);
-        const next = allowed.has(sort) ? sort : "region";
+        const normalized = LEGACY_PALETTE_SORT_ALIASES.get(sort) || sort;
+        const next = ALLOWED_PALETTE_SORT_MODES.has(normalized) ? normalized : "region";
         if (state.paletteSort === next) {
           if (paletteSortEl && paletteSortEl.value !== next) {
             paletteSortEl.value = next;
@@ -9439,14 +9536,16 @@
         renderPalette();
         if (!skipLog) {
           const label =
-            next === "hue"
-              ? "colour hue"
+            next === "spectrum"
+              ? "rainbow spectrum"
+              : next === "warmth"
+              ? "warm to cool"
+              : next === "lightness"
+              ? "perceptual lightness"
               : next === "remaining"
               ? "remaining regions"
               : next === "name"
               ? "colour name"
-              : next === "brightness"
-              ? "brightness (light to dark)"
               : "region number";
           logDebug(`Palette sorted by ${label}`);
         }
@@ -10736,11 +10835,25 @@
         if (!state.puzzle) return;
         const remainingForColor = getRegionsByColor(currentColorId, { includeFilled: false });
         if (remainingForColor.length > 0) return;
-        const nextColour = state.puzzle.palette.find((color) =>
-          getRegionsByColor(color.id, { includeFilled: false }).length > 0
-        );
-        if (nextColour) {
-          activateColor(nextColour.id);
+        const { entries, remainingByColor } = getPaletteEntryOrder({ includeCompleted: true });
+        if (entries.length === 0) {
+          return;
+        }
+        const currentIndex = entries.findIndex((entry) => entry.id === currentColorId);
+        if (currentIndex >= 0) {
+          for (let index = currentIndex + 1; index < entries.length; index += 1) {
+            const candidate = entries[index];
+            if ((remainingByColor.get(candidate.id) || 0) > 0) {
+              activateColor(candidate.id);
+              return;
+            }
+          }
+        }
+        for (const entry of entries) {
+          if ((remainingByColor.get(entry.id) || 0) > 0) {
+            activateColor(entry.id);
+            return;
+          }
         }
       }
 
@@ -13230,27 +13343,46 @@
         return (lighter + 0.05) / (darker + 0.05);
       }
 
-      function hueFromHex(hex) {
+      function oklchFromHex(hex) {
         const [r, g, b] = hexToRgb(hex);
-        const rn = r / 255;
-        const gn = g / 255;
-        const bn = b / 255;
-        const max = Math.max(rn, gn, bn);
-        const min = Math.min(rn, gn, bn);
-        const delta = max - min;
-        if (delta === 0) {
-          return 0;
-        }
-        let hue;
-        if (max === rn) {
-          hue = (gn - bn) / delta + (gn < bn ? 6 : 0);
-        } else if (max === gn) {
-          hue = (bn - rn) / delta + 2;
-        } else {
-          hue = (rn - gn) / delta + 4;
-        }
-        hue *= 60;
-        return Number.isFinite(hue) ? hue : 0;
+        const { l, a, b: bb } = oklabFromRgb([r, g, b]);
+        const chroma = Math.sqrt(a * a + bb * bb);
+        const hueRaw = Math.atan2(bb, a) * (180 / Math.PI);
+        const hue = Number.isFinite(hueRaw) ? (hueRaw + 360) % 360 : 0;
+        const lightness = clamp(Number.isFinite(l) ? l : 0, 0, 1);
+        const safeChroma = Number.isFinite(chroma) && chroma > 0 ? chroma : 0;
+        return {
+          lightness,
+          chroma: safeChroma,
+          hue,
+        };
+      }
+
+      function oklabFromRgb([r, g, b]) {
+        const linearize = (channel) => {
+          const normalized = channel / 255;
+          if (normalized <= 0.04045) {
+            return normalized / 12.92;
+          }
+          return Math.pow((normalized + 0.055) / 1.055, 2.4);
+        };
+        const lr = linearize(r);
+        const lg = linearize(g);
+        const lb = linearize(b);
+        const l = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb;
+        const m = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb;
+        const s = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb;
+        const lRoot = Math.cbrt(l);
+        const mRoot = Math.cbrt(m);
+        const sRoot = Math.cbrt(s);
+        const L = 0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot;
+        const A = 1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot;
+        const B = 0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot;
+        return {
+          l: Number.isFinite(L) ? L : 0,
+          a: Number.isFinite(A) ? A : 0,
+          b: Number.isFinite(B) ? B : 0,
+        };
       }
 
       function hexToRgb(hex) {
