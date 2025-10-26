@@ -8,7 +8,7 @@ on:
 
 jobs:
   verify:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -20,6 +20,10 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci
+
+      - name: Provision Playwright browsers
+        run: |
+          npx playwright install chromium --only-shell
 
       - name: Run placeholder test hook
         run: |
