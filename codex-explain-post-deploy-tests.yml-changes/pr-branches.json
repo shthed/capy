@@ -4,7 +4,7 @@
     "safeName": "codex-explain-post-deploy-tests.yml-changes",
     "title": "Sanitize post-deploy concurrency group branch names",
     "number": 231,
-    "updatedAt": "2025-10-26T00:49:10Z",
+    "updatedAt": "2025-10-26T00:49:29Z",
     "url": "https://github.com/shthed/capy/pull/231"
   }
 ]
