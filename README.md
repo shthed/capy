@@ -67,8 +67,8 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 
 Automated UI coverage now runs through Playwright so you can validate the end-to-end flow without manual setup. Install dependencies once with `npm install`, then use the scripts below depending on the depth of feedback you need:
 
-- `npm test` – launches the local dev server and executes the full Playwright suite (Chromium desktop plus a WebKit mobile viewport) using `playwright.config.js`.
-- `npm run test:smoke` – targets the Chromium desktop project for faster iteration when you're focused on a single scenario.
+- `npm test` – launches the local dev server and executes the Playwright smoke check (Chromium desktop) using `playwright.config.js`.
+- `npm run test:smoke` – targets the same Chromium project for quick iteration.
 
 Playwright stores its reports under `playwright-report/` by default. After any run you can open the latest results with `npx playwright show-report` to review traces, screenshots, and console output.
 
