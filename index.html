@@ -11447,29 +11447,26 @@
       }
 
       function getLatestBackupRecord() {
-        const candidates = [];
         const autosave = loadAutosave();
         if (autosave && autosave.data) {
-          candidates.push({ ...autosave, origin: "local autosave" });
+          return { ...autosave, origin: "local autosave" };
         }
         if (Array.isArray(state.saves) && state.saves.length > 0) {
           const [latestManual] = [...state.saves].sort(
             (a, b) => (b.timestamp || 0) - (a.timestamp || 0)
           );
           if (latestManual && latestManual.data) {
-            candidates.push({
+            return {
               id: latestManual.id,
               timestamp: latestManual.timestamp,
               data: latestManual.data,
               title: latestManual.title,
               settings: latestManual.settings,
               origin: "manual save",
-            });
+            };
           }
         }
-        if (candidates.length === 0) return null;
-        candidates.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-        return candidates[0];
+        return null;
       }
 
       function getStoredStringSize(raw) {
