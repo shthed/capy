@@ -2297,6 +2297,18 @@
             </label>
             <p class="control-note">Scale region numbers independently from the surrounding interface.</p>
             <label class="control">
+              <span>Maximum zoom <output data-for="maxZoom">1200%</output></span>
+              <input
+                id="maxZoom"
+                type="range"
+                min="2"
+                max="30"
+                step="0.5"
+                value="12"
+              />
+            </label>
+            <p class="control-note">Limit how far the canvas can zoom in beyond the fitted view.</p>
+            <label class="control">
               <span>Interface theme</span>
               <select id="uiTheme">
                 <option value="dark">Dark</option>
@@ -2418,6 +2430,7 @@
       const stageBackgroundColorInput = document.getElementById("stageBackgroundColor");
       const uiScaleInput = document.getElementById("uiScale");
       const labelScaleInput = document.getElementById("labelScale");
+      const maxZoomInput = document.getElementById("maxZoom");
       const colorCountEl = document.getElementById("colorCount");
       const minRegionEl = document.getElementById("minRegion");
       const detailEl = document.getElementById("detailLevel");
@@ -2499,6 +2512,7 @@
         ? {
             uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
             labelScale: settingsSheet.querySelector('output[data-for="labelScale"]'),
+            maxZoom: settingsSheet.querySelector('output[data-for="maxZoom"]'),
             hintFadeDuration: settingsSheet.querySelector('output[data-for="hintFadeDuration"]'),
             hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
           }
@@ -2521,6 +2535,7 @@
         "settings-hint-intensity",
         "settings-ui-scale",
         "settings-label-scale",
+        "settings-max-zoom",
         "settings-image-description",
         "settings-art-prompt",
         "settings-region-labels",
@@ -3382,8 +3397,10 @@
 
       // View state drives pan/zoom transforms. baseScale keeps the puzzle fit-to-screen while
       // zoom holds user-controlled scaling.
-      const MAX_VIEWPORT_ZOOM = 3;
-      const MIN_VIEWPORT_ZOOM = 1 / 6;
+      const MIN_VIEWPORT_ZOOM = 1;
+      const DEFAULT_MAX_VIEWPORT_ZOOM = 12;
+      const MIN_CONFIGURABLE_MAX_ZOOM = 2;
+      const MAX_CONFIGURABLE_MAX_ZOOM = 30;
       const MIN_RENDER_SCALE = 1 / 1048576;
       const MAX_RENDER_SCALE = 1048576;
       const SUPPORTS_PATH2D = typeof Path2D === "function";
@@ -3708,6 +3725,7 @@
           stageBackgroundColor: DEFAULT_STAGE_BACKGROUND_HEX,
           uiScale: DEFAULT_UI_SCALE,
           labelScale: DEFAULT_LABEL_SCALE,
+          maxZoom: DEFAULT_MAX_VIEWPORT_ZOOM,
           artPrompt: "",
           imageDescription: "",
           showRegionLabels: true,
@@ -4338,6 +4356,11 @@
         if (typeof settings.uiScale === "number") {
           applyUiScale(settings.uiScale, { skipLog: true, skipAutosave: true });
         }
+        if (typeof settings.maxZoom === "number") {
+          applyMaxZoom(settings.maxZoom, { skipLog: true, skipAutosave: true });
+        } else if (state.settings.maxZoom != null) {
+          applyMaxZoom(state.settings.maxZoom, { skipLog: true, skipAutosave: true });
+        }
         if (typeof settings.labelScale === "number") {
           applyLabelScale(settings.labelScale, {
             skipLog: true,
@@ -4942,6 +4965,15 @@
         });
         labelScaleInput.addEventListener("change", (event) => {
           applyLabelScale(event.target.value);
+        });
+      }
+
+      if (maxZoomInput) {
+        maxZoomInput.addEventListener("input", (event) => {
+          applyMaxZoom(event.target.value, { skipLog: true, skipAutosave: true, skipPersist: true });
+        });
+        maxZoomInput.addEventListener("change", (event) => {
+          applyMaxZoom(event.target.value);
         });
       }
 
@@ -6121,6 +6153,45 @@
         return resolved;
       }
 
+      function applyMaxZoom(value, options = {}) {
+        const {
+          skipLog = false,
+          skipAutosave = false,
+          skipTransform = false,
+          skipPersist = false,
+          force = false,
+        } = options;
+        const previous = getConfiguredMaxViewportZoom();
+        const candidate = resolveMaxZoomCandidate(value);
+        const resolved = candidate != null ? candidate : previous;
+        const changed = force || Math.abs(resolved - previous) > 0.001;
+        state.settings.maxZoom = resolved;
+        if (maxZoomInput && Math.abs(Number(maxZoomInput.value) - resolved) > 0.001) {
+          maxZoomInput.value = String(resolved);
+        }
+        updateOptionOutputs();
+        if (changed) {
+          const currentZoom = normalizeZoomValue(viewState.zoom > 0 ? viewState.zoom : 1, 1);
+          if (Math.abs(currentZoom - viewState.zoom) > 0.0001) {
+            viewState.zoom = currentZoom;
+          }
+          if (!skipTransform) {
+            clampViewPanToPuzzleBounds();
+            applyViewTransform({ forceRender: !!state.puzzle });
+          }
+          if (!skipLog) {
+            logDebug(`Max zoom set to ${Math.round(resolved * 100)}%`);
+          }
+          if (!skipPersist) {
+            scheduleSettingsPersist({ immediate: true });
+          }
+          if (!skipAutosave) {
+            scheduleAutosave("settings-max-zoom");
+          }
+        }
+        return resolved;
+      }
+
       function applyLabelScale(scale, options = {}) {
         const { skipLog = false, skipAutosave = false, skipRender = false, force = false } = options;
         const numeric = Number(scale);
@@ -6424,6 +6495,14 @@
                 ? state.settings.labelScale
                 : DEFAULT_LABEL_SCALE);
           settingsOutputs.labelScale.textContent = `${Math.round(value * 100)}%`;
+        }
+        if (settingsOutputs.maxZoom) {
+          const source = maxZoomInput ? parseFloat(maxZoomInput.value) : NaN;
+          const value = Number.isFinite(source) && source > 0
+            ? resolveMaxZoomCandidate(source)
+            : getConfiguredMaxViewportZoom();
+          const display = value != null ? value : getConfiguredMaxViewportZoom();
+          settingsOutputs.maxZoom.textContent = `${Math.round(display * 100)}%`;
         }
         if (settingsOutputs.hintFadeDuration) {
           const source = hintFadeDurationInput ? Number(hintFadeDurationInput.value) : state.settings.hintFadeDuration;
@@ -10400,17 +10479,46 @@
         }
       }
 
-      function normalizeZoomValue(value, fallback = MIN_VIEWPORT_ZOOM) {
-        if (!Number.isFinite(value) || value <= 0) {
-          return clamp(fallback, MIN_VIEWPORT_ZOOM, MAX_VIEWPORT_ZOOM);
+      function resolveMaxZoomCandidate(value) {
+        let numeric = Number(value);
+        if (!Number.isFinite(numeric) && typeof value === "string") {
+          const trimmed = value.trim();
+          if (trimmed.endsWith("%")) {
+            numeric = Number(trimmed.slice(0, -1)) / 100;
+          }
         }
-        return clamp(value, MIN_VIEWPORT_ZOOM, MAX_VIEWPORT_ZOOM);
+        if (!Number.isFinite(numeric)) {
+          return null;
+        }
+        return clamp(numeric, MIN_CONFIGURABLE_MAX_ZOOM, MAX_CONFIGURABLE_MAX_ZOOM);
+      }
+
+      function getConfiguredMaxViewportZoom() {
+        const candidate = resolveMaxZoomCandidate(state?.settings?.maxZoom);
+        if (candidate != null) {
+          return candidate;
+        }
+        return DEFAULT_MAX_VIEWPORT_ZOOM;
+      }
+
+      function getZoomBounds() {
+        const maxZoom = Math.max(MIN_VIEWPORT_ZOOM, getConfiguredMaxViewportZoom());
+        return { minZoom: MIN_VIEWPORT_ZOOM, maxZoom };
+      }
+
+      function normalizeZoomValue(value, fallback = MIN_VIEWPORT_ZOOM) {
+        const { minZoom, maxZoom } = getZoomBounds();
+        if (!Number.isFinite(value) || value <= 0) {
+          return clamp(fallback, minZoom, maxZoom);
+        }
+        return clamp(value, minZoom, maxZoom);
       }
 
       function getScaleBounds(baseScale = 1) {
         const safeBase = Number.isFinite(baseScale) && baseScale > 0 ? baseScale : 1;
-        const minScale = clamp(safeBase * MIN_VIEWPORT_ZOOM, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
-        const maxScale = clamp(safeBase * MAX_VIEWPORT_ZOOM, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+        const { minZoom, maxZoom } = getZoomBounds();
+        const minScale = clamp(safeBase * minZoom, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+        const maxScale = clamp(safeBase * maxZoom, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
         return { minScale, maxScale };
       }
 
@@ -11270,6 +11378,11 @@
         const uiScale = Number.isFinite(scaleCandidate)
           ? clamp(scaleCandidate, 0.2, 3)
           : DEFAULT_UI_SCALE;
+        const maxZoomCandidate = resolveMaxZoomCandidate(base.maxZoom);
+        const maxZoom =
+          maxZoomCandidate != null
+            ? maxZoomCandidate
+            : resolveMaxZoomCandidate(state?.settings?.maxZoom) ?? DEFAULT_MAX_VIEWPORT_ZOOM;
         const renderer = normalizeRendererType(base.renderer) || "canvas2d";
         const themeCandidate =
           typeof base.theme === "string" ? base.theme.trim().toLowerCase() : "";
@@ -11296,6 +11409,7 @@
           hintIntensity,
           difficulty,
           uiScale,
+          maxZoom,
           artPrompt,
           imageDescription,
           showRegionLabels: base.showRegionLabels !== false,
@@ -11422,6 +11536,12 @@
           const candidate = Number(payload.uiScale);
           if (Number.isFinite(candidate)) {
             normalized.uiScale = clamp(candidate, 0.2, 3);
+          }
+        }
+        if (payload.maxZoom != null) {
+          const candidate = resolveMaxZoomCandidate(payload.maxZoom);
+          if (candidate != null) {
+            normalized.maxZoom = candidate;
           }
         }
         if (payload.labelScale != null) {
