@@ -66,6 +66,73 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
     <title>Image to Color-by-Number</title>
+    <script>
+      (function () {
+        const root = document.documentElement;
+        if (!root || typeof window === "undefined") return;
+        const SETTINGS_STORAGE_KEY = "capy.settings.v1";
+        const DEFAULT_UI_SCALE = 0.75;
+        const MIN_UI_SCALE = 0.2;
+        const MAX_UI_SCALE = 3;
+        const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+        let userScale = DEFAULT_UI_SCALE;
+        try {
+          const raw = window.localStorage?.getItem(SETTINGS_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const payload =
+              parsed && typeof parsed === "object"
+                ? parsed.settings && typeof parsed.settings === "object"
+                  ? parsed.settings
+                  : parsed
+                : null;
+            let candidate = payload && payload.uiScale != null ? Number(payload.uiScale) : NaN;
+            if (!Number.isFinite(candidate) && payload && typeof payload.uiScale === "string") {
+              const trimmed = payload.uiScale.trim();
+              if (trimmed.endsWith("%")) {
+                candidate = Number(trimmed.slice(0, -1)) / 100;
+              }
+            }
+            if (Number.isFinite(candidate) && candidate > 0) {
+              if (candidate > MAX_UI_SCALE && candidate <= MAX_UI_SCALE * 100) {
+                candidate /= 100;
+              }
+              userScale = clamp(candidate, MIN_UI_SCALE, MAX_UI_SCALE);
+            }
+          }
+        } catch (_error) {
+          /* localStorage may be unavailable; fall back to defaults. */
+        }
+        root.style.setProperty("--ui-scale-user", String(userScale));
+        const viewport = window.visualViewport;
+        const width = Math.round(
+          (viewport && viewport.width) || window.innerWidth || root.clientWidth || 0
+        );
+        const height = Math.round(
+          (viewport && viewport.height) || window.innerHeight || root.clientHeight || 0
+        );
+        const minSide = Math.max(1, Math.min(width, height));
+        const autoScale = Math.min(1.1, Math.max(0.6, minSide / 880));
+        root.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
+        const combined = Math.min(1.8, Math.max(0.35, userScale * autoScale));
+        root.style.setProperty("--ui-scale", combined.toFixed(4));
+        const orientation = width >= height ? "landscape" : "portrait";
+        const padding =
+          orientation === "portrait"
+            ? Math.min(28, Math.max(16, Math.round(minSide * 0.06)))
+            : 32;
+        root.style.setProperty("--app-width", `${width}px`);
+        root.style.setProperty("--app-height", `${height}px`);
+        root.style.setProperty("--viewport-padding", `${padding}px`);
+        const compactCommands = width < 720 || height < 540;
+        root.dataset.orientation = orientation;
+        root.dataset.compactCommands = compactCommands ? "true" : "false";
+        window.__capyPrebootMetrics = {
+          orientation,
+          compactCommands,
+        };
+      })();
+    </script>
     <style>
       :root {
         color-scheme: light dark;
@@ -1530,6 +1597,29 @@
     </style>
   </head>
   <body data-theme="dark">
+    <script>
+      (function () {
+        if (typeof window === "undefined" || !document.body) {
+          return;
+        }
+        const metrics = window.__capyPrebootMetrics || {};
+        if (metrics.orientation) {
+          document.body.dataset.orientation = metrics.orientation;
+          document.documentElement.dataset.orientation = metrics.orientation;
+        }
+        if (typeof metrics.compactCommands === "boolean") {
+          document.body.classList.toggle("compact-commands", metrics.compactCommands);
+          document.documentElement.dataset.compactCommands = metrics.compactCommands
+            ? "true"
+            : "false";
+        }
+        try {
+          delete window.__capyPrebootMetrics;
+        } catch (_error) {
+          window.__capyPrebootMetrics = undefined;
+        }
+      })();
+    </script>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
         <button
@@ -2501,6 +2591,8 @@
       let settingsPersistTimer = null;
       let pendingSettingsPersistPayload = null;
       let lastStoredSettingsJson = null;
+      let suppressSettingsPersist = 0;
+      let hasStoredUserSettings = false;
       const gameSaveManager = createGameSaveManager();
       let autosaveTimer = null;
       let pendingAutosaveReason = null;
@@ -3641,6 +3733,7 @@
 
       const storedUserSettings = loadUserSettings();
       if (storedUserSettings) {
+        hasStoredUserSettings = true;
         state.settings = {
           ...state.settings,
           ...storedUserSettings,
@@ -4141,7 +4234,11 @@
         if (changed && !options.skipLog) {
           logDebug(`Renderer switched to ${formatRendererLabel(resolved)}`);
         }
-        if (changed && !options.skipAutosave) {
+        if (!changed) {
+          return resolved;
+        }
+        scheduleSettingsPersist({ immediate: true });
+        if (!options.skipAutosave) {
           scheduleAutosave("settings-renderer");
         }
         return resolved;
@@ -4169,6 +4266,7 @@
             skipLog: true,
             skipAutosave: true,
             force: true,
+            skipPersist: true,
           });
         }
         if (typeof settings.labelScale === "number") {
@@ -4428,16 +4526,22 @@
         };
       }
 
-      applyGameplaySettings(state.settings);
-      updateOptionOutputs();
-      refreshSaveList();
-      updateStorageUsageSummary();
-      updateCommandStates();
-      renderDebugLog();
-      logDebug("Session started");
-      syncCommandRailMetrics();
-      handleViewportChange({ log: true, recenter: true });
-      resetView({ recenter: true });
+      suppressSettingsPersist += 1;
+      try {
+        applyGameplaySettings(state.settings);
+        updateOptionOutputs();
+        refreshSaveList();
+        updateStorageUsageSummary();
+        updateCommandStates();
+        renderDebugLog();
+        logDebug("Session started");
+        syncCommandRailMetrics();
+        handleViewportChange({ log: true, recenter: true });
+        resetView({ recenter: true });
+      } finally {
+        suppressSettingsPersist = Math.max(0, suppressSettingsPersist - 1);
+      }
+      scheduleSettingsPersist({ immediate: true });
 
       if (paletteSortEl) {
         paletteSortEl.value = state.paletteSort;
@@ -4667,6 +4771,7 @@
       autoAdvanceToggle.addEventListener("change", () => {
         state.settings.autoAdvance = autoAdvanceToggle.checked;
         logDebug(`Auto-advance ${autoAdvanceToggle.checked ? "enabled" : "disabled"}`);
+        scheduleSettingsPersist({ immediate: true });
         scheduleAutosave("settings-auto-advance");
       });
 
@@ -4677,6 +4782,7 @@
         }
         syncHintTypeToggles();
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
+        scheduleSettingsPersist({ immediate: true });
         scheduleAutosave("settings-hint-animations");
       });
 
@@ -4693,6 +4799,7 @@
             flashColorRegions(state.activeColor);
           }
           logDebug(`Matching colour hints ${next.matchingRegions ? "enabled" : "disabled"}`);
+          scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-hint-matching");
         });
       }
@@ -4708,6 +4815,7 @@
             clearOverlayAnimations();
           }
           logDebug(`Hover hints ${next.hoverRegions ? "enabled" : "disabled"}`);
+          scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-hint-hover");
         });
       }
@@ -4723,6 +4831,7 @@
               ? "Difficulty set to Easy – clicks auto-select matching colours"
               : "Difficulty set to Standard – clicks require the active colour"
           );
+          scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-difficulty");
         });
       }
@@ -4754,6 +4863,7 @@
           hintFadeDurationInput.value = String(duration);
           updateOptionOutputs();
           logDebug(`Hint fade set to ${(duration / 1000).toFixed(1)}s`);
+          scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-hint-fade");
         });
       }
@@ -4770,6 +4880,7 @@
           hintIntensityInput.value = String(Math.round(intensity * 100));
           updateOptionOutputs();
           logDebug(`Hint intensity set to ${Math.round(intensity * 100)}%`);
+          scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-hint-intensity");
         });
       }
@@ -5607,9 +5718,11 @@
         document.documentElement.style.setProperty("--viewport-padding", `${padding}px`);
         const autoScale = clamp(minSide / 880, 0.6, 1.1);
         document.documentElement.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
+        const compact = visualWidth < 720 || visualHeight < 540;
+        document.documentElement.dataset.orientation = orientation;
+        document.documentElement.dataset.compactCommands = compact ? "true" : "false";
         if (document.body) {
           document.body.dataset.orientation = orientation;
-          const compact = visualWidth < 720 || visualHeight < 540;
           document.body.classList.toggle("compact-commands", compact);
         }
         syncComputedUiScale();
@@ -6001,10 +6114,9 @@
         if (!changed) {
           return resolved;
         }
+        scheduleSettingsPersist({ immediate: true });
         if (!skipAutosave) {
           scheduleAutosave("settings-ui-scale");
-        } else {
-          scheduleSettingsPersist();
         }
         return resolved;
       }
@@ -6034,7 +6146,11 @@
         if (changed && !skipLog) {
           logDebug(`Label size set to ${Math.round(resolved * 100)}%`);
         }
-        if (changed && !skipAutosave) {
+        if (!changed) {
+          return resolved;
+        }
+        scheduleSettingsPersist({ immediate: true });
+        if (!skipAutosave) {
           scheduleAutosave("settings-label-scale");
         }
         return resolved;
@@ -6070,6 +6186,7 @@
                 : "Image description cleared"
             );
           }
+          scheduleSettingsPersist({ immediate: true });
           if (!skipAutosave) {
             scheduleAutosave("settings-image-description");
           }
@@ -6090,6 +6207,7 @@
             const trimmed = normalized.trim();
             logDebug(trimmed ? `Art prompt updated (${trimmed.length} characters)` : "Art prompt cleared");
           }
+          scheduleSettingsPersist({ immediate: true });
           if (!skipAutosave) {
             scheduleAutosave("settings-art-prompt");
           }
@@ -6112,6 +6230,7 @@
           if (!skipLog) {
             logDebug(visible ? "Region numbers shown" : "Region numbers hidden");
           }
+          scheduleSettingsPersist({ immediate: true });
           if (!skipAutosave) {
             scheduleAutosave("settings-region-labels");
           }
@@ -6138,7 +6257,11 @@
             : resolved.charAt(0).toUpperCase() + resolved.slice(1);
           logDebug(`Interface theme set to ${label}`);
         }
-        if (changed && !skipAutosave) {
+        if (!changed) {
+          return resolved;
+        }
+        scheduleSettingsPersist({ immediate: true });
+        if (!skipAutosave) {
           scheduleAutosave("settings-theme");
         }
         return resolved;
@@ -6168,6 +6291,7 @@
         if (!changed) {
           return normalized;
         }
+        scheduleSettingsPersist({ immediate: true });
         markOutlineLayerDirty();
         markFilledLayerDirty();
         if (!skipRender) {
@@ -6196,14 +6320,14 @@
         if (changed && !skipLog) {
           logDebug(`Unfilled region colour set to ${normalized.toUpperCase()}`);
         }
-        if (changed && !options.skipAutosave) {
+        if (!options.skipAutosave) {
           scheduleAutosave("background-colour");
         }
         return normalized;
       }
 
       function applyStageBackgroundColor(hex, options = {}) {
-        const { skipLog = false, skipAutosave = false, force = false } = options;
+        const { skipLog = false, skipAutosave = false, force = false, skipPersist = false } = options;
         const current = state.settings.stageBackgroundColor ?? DEFAULT_STAGE_BACKGROUND_HEX;
         const normalized = sanitizeHexColor(hex, current);
         const changed = force || normalized !== current;
@@ -6221,7 +6345,13 @@
         if (changed && !skipLog) {
           logDebug(`Stage background set to ${normalized.toUpperCase()}`);
         }
-        if (changed && !skipAutosave) {
+        if (!changed) {
+          return normalized;
+        }
+        if (!skipPersist) {
+          scheduleSettingsPersist({ immediate: true });
+        }
+        if (!skipAutosave) {
           scheduleAutosave("stage-background-colour");
         }
         return normalized;
@@ -7625,7 +7755,7 @@
         }
         updateOptionOutputs();
         const resolvedSettings = metadata.settings ?? data.settings;
-        if (resolvedSettings) {
+        if (resolvedSettings && !hasStoredUserSettings) {
           applyGameplaySettings(resolvedSettings);
         }
         applyStageBackgroundColor(stageBackgroundHex, {
@@ -9394,29 +9524,35 @@
         const normalized = cloneMouseControls(normalizedSource);
         state.settings.mouseControls = normalized;
         updateMouseControlInputs();
-        if (!skipLog) {
-          const changes = [];
-          for (const button of MOUSE_BUTTON_KEYS) {
-            const prev = previous[button];
-            const curr = normalized[button];
-            if (prev.click !== curr.click) {
-              changes.push(
-                `${describeMouseButton(button)} click → ${describeMouseClickAction(curr.click)}`
-              );
-            }
-            if (prev.drag !== curr.drag) {
-              changes.push(
-                `${describeMouseButton(button)} click + drag → ${describeMouseDragAction(curr.drag)}`
-              );
-            }
+        let changed = false;
+        const changes = [];
+        for (const button of MOUSE_BUTTON_KEYS) {
+          const prev = previous[button];
+          const curr = normalized[button];
+          if (prev.click !== curr.click) {
+            changed = true;
+            changes.push(
+              `${describeMouseButton(button)} click → ${describeMouseClickAction(curr.click)}`
+            );
           }
-          if (changes.length > 0) {
-            logDebug(`Mouse controls updated: ${changes.join("; ")}`);
+          if (prev.drag !== curr.drag) {
+            changed = true;
+            changes.push(
+              `${describeMouseButton(button)} click + drag → ${describeMouseDragAction(curr.drag)}`
+            );
           }
         }
+        if (!skipLog && changes.length > 0) {
+          logDebug(`Mouse controls updated: ${changes.join("; ")}`);
+        }
+        if (!changed) {
+          return normalized;
+        }
+        scheduleSettingsPersist({ immediate: true });
         if (!skipAutosave) {
           scheduleAutosave("settings-mouse-controls");
         }
+        return normalized;
       }
 
       function setMouseControl(button, type, rawValue) {
@@ -9442,6 +9578,7 @@
         const actionLabel =
           type === "click" ? describeMouseClickAction(nextValue) : describeMouseDragAction(nextValue);
         logDebug(`${describeMouseButton(button)} ${type === "click" ? "click" : "click + drag"} set to ${actionLabel}`);
+        scheduleSettingsPersist({ immediate: true });
         scheduleAutosave("settings-mouse-controls");
       }
 
@@ -11159,6 +11296,7 @@
           console.error("Failed to serialise settings", error);
           return null;
         }
+        hasStoredUserSettings = true;
         if (serialized === lastStoredSettingsJson) {
           return record;
         }
@@ -11177,6 +11315,10 @@
         const { immediate = false, delay = 350 } = options || {};
         const snapshot = getUserSettingsSnapshot(state.settings);
         if (!snapshot) return null;
+        if (suppressSettingsPersist > 0) {
+          pendingSettingsPersistPayload = snapshot;
+          return null;
+        }
         if (immediate) {
           pendingSettingsPersistPayload = null;
           if (
@@ -11351,7 +11493,7 @@
         const resolvedReason = reason || pendingAutosaveReason || "update";
         const settingsUpdate = isSettingsAutosaveReason(resolvedReason);
         if (settingsUpdate) {
-          scheduleSettingsPersist({ immediate, delay });
+          scheduleSettingsPersist({ immediate: true });
         }
         if (!state.puzzle) {
           if (settingsUpdate) {
