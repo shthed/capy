@@ -8629,7 +8629,7 @@
         } else if (bboxCell && bboxCell.d > bestCell.d) {
           bestCell = bboxCell;
         }
-        const queue = new PolylabelMaxHeap();
+        const queue = createPolylabelMaxHeap();
         const half = cellSize / 2;
         const enqueueCell = (cell) => {
           if (!cell) return;
@@ -8757,62 +8757,65 @@
         return dx * dx + dy * dy;
       }
 
-      function PolylabelMaxHeap() {
-        this.items = [];
+      function createPolylabelMaxHeap() {
+        const items = [];
+
+        function isEmpty() {
+          return items.length === 0;
+        }
+
+        function push(cell) {
+          if (!cell) return;
+          items.push(cell);
+          siftUp(items.length - 1);
+        }
+
+        function pop() {
+          if (items.length === 0) return null;
+          const top = items[0];
+          const last = items.pop();
+          if (items.length > 0) {
+            items[0] = last;
+            siftDown(0);
+          }
+          return top;
+        }
+
+        function siftUp(index) {
+          let i = index;
+          while (i > 0) {
+            const parent = (i - 1) >> 1;
+            if (items[parent].max >= items[i].max) break;
+            const tmp = items[parent];
+            items[parent] = items[i];
+            items[i] = tmp;
+            i = parent;
+          }
+        }
+
+        function siftDown(index) {
+          let i = index;
+          const length = items.length;
+          while (true) {
+            const left = i * 2 + 1;
+            const right = left + 1;
+            let largest = i;
+            if (left < length && items[left].max > items[largest].max) {
+              largest = left;
+            }
+            if (right < length && items[right].max > items[largest].max) {
+              largest = right;
+            }
+            if (largest === i) break;
+            const tmp = items[i];
+            items[i] = items[largest];
+            items[largest] = tmp;
+            i = largest;
+          }
+        }
+
+        return { isEmpty, push, pop };
       }
-
-      PolylabelMaxHeap.prototype.isEmpty = function () {
-        return this.items.length === 0;
-      };
-
-      PolylabelMaxHeap.prototype.push = function (cell) {
-        this.items.push(cell);
-        this.siftUp(this.items.length - 1);
-      };
-
-      PolylabelMaxHeap.prototype.pop = function () {
-        if (this.items.length === 0) return null;
-        const top = this.items[0];
-        const last = this.items.pop();
-        if (this.items.length > 0) {
-          this.items[0] = last;
-          this.siftDown(0);
-        }
-        return top;
-      };
-
-      PolylabelMaxHeap.prototype.siftUp = function (index) {
-        let i = index;
-        while (i > 0) {
-          const parent = (i - 1) >> 1;
-          if (this.items[parent].max >= this.items[i].max) break;
-          const tmp = this.items[parent];
-          this.items[parent] = this.items[i];
-          this.items[i] = tmp;
-          i = parent;
-        }
-      };
-
-      PolylabelMaxHeap.prototype.siftDown = function (index) {
-        let i = index;
-        const length = this.items.length;
-        while (true) {
-          const left = i * 2 + 1;
-          const right = left + 1;
-          let largest = i;
-          if (left < length && this.items[left].max > this.items[largest].max) {
-            largest = left;
-          }
-          if (right < length && this.items[right].max > this.items[largest].max) {
-            largest = right;
-          }
-          if (largest === i) break;
-          const tmp = this.items[i];
-          this.items[i] = this.items[largest];
-          this.items[largest] = tmp;
-          i = largest;
-        }
-      };
 
       function rectangleFitsRegion(regionId, centerX, centerY, halfWidth, halfHeight, width, height, regionMap) {
         const minX = Math.max(0, Math.floor(centerX - halfWidth));

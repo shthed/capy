@@ -1,70 +1,70 @@
 {
   "commits": [
     {
-      "sha": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
-      "shortSha": "bbf7371",
-      "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
+      "sha": "dd10b4092afcf4e7a39016cba96658e3f509cc48",
+      "shortSha": "dd10b40",
+      "message": "Merge pull request #233 from shthed/codex/change-color-selection-logic\n\nEnhance palette sorting with spectrum and warmth modes",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-26T00:54:52Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "date": "2025-10-26T05:54:03Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/dd10b4092afcf4e7a39016cba96658e3f509cc48",
       "prs": [
         {
-          "number": 231,
-          "title": "Sanitize post-deploy concurrency group branch names",
-          "url": "https://github.com/shthed/capy/pull/231",
-          "branch": "codex/explain-post-deploy-tests.yml-changes"
+          "number": 233,
+          "title": "Enhance palette sorting with spectrum and warmth modes",
+          "url": "https://github.com/shthed/capy/pull/233",
+          "branch": "codex/change-color-selection-logic"
         }
       ]
     },
     {
-      "sha": "69903bad7d31a0ca173666d6f8309de678623b20",
-      "shortSha": "69903ba",
-      "message": "Sanitize concurrency group branch name",
+      "sha": "0fc6fddfe398348d5ab8e9e0d4630ccafb3daaaf",
+      "shortSha": "0fc6fdd",
+      "message": "Merge pull request #234 from shthed/codex/optimize-pages-deployment-process\n\nSimplify Pages deployment workflow",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-26T00:49:07Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/69903bad7d31a0ca173666d6f8309de678623b20",
+      "date": "2025-10-26T05:48:15Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/0fc6fddfe398348d5ab8e9e0d4630ccafb3daaaf",
       "prs": [
         {
-          "number": 231,
-          "title": "Sanitize post-deploy concurrency group branch names",
-          "url": "https://github.com/shthed/capy/pull/231",
-          "branch": "codex/explain-post-deploy-tests.yml-changes"
+          "number": 234,
+          "title": "Simplify Pages deployment workflow",
+          "url": "https://github.com/shthed/capy/pull/234",
+          "branch": "codex/optimize-pages-deployment-process"
         }
       ]
     },
     {
-      "sha": "7bace758990dbd094c724b0c0c422810b9ab1fda",
-      "shortSha": "7bace75",
-      "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
+      "sha": "58c2ae14453207a85d152ffeaa7cfd15add41d8e",
+      "shortSha": "58c2ae1",
+      "message": "Always deploy branches without PR checks",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-25T11:10:57Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda",
+      "date": "2025-10-26T05:33:18Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/58c2ae14453207a85d152ffeaa7cfd15add41d8e",
       "prs": [
         {
-          "number": 230,
-          "title": "Improve region label placement and sizing",
-          "url": "https://github.com/shthed/capy/pull/230",
-          "branch": "codex/adjust-region-number-label-sizing"
+          "number": 234,
+          "title": "Simplify Pages deployment workflow",
+          "url": "https://github.com/shthed/capy/pull/234",
+          "branch": "codex/optimize-pages-deployment-process"
         }
       ]
     },
     {
-      "sha": "3cfbf3c9a90c50f71f5c4251086017f018f65eb3",
-      "shortSha": "3cfbf3c",
-      "message": "Improve region label placement and sizing",
+      "sha": "d23e5306b671a19328dc0a7839e33146fc59fb58",
+      "shortSha": "d23e530",
+      "message": "Improve palette spectrum sorting",
       "author": "Hairy Dog Trumpet",
-      "date": "2025-10-25T10:59:44Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/3cfbf3c9a90c50f71f5c4251086017f018f65eb3",
+      "date": "2025-10-26T05:33:04Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/d23e5306b671a19328dc0a7839e33146fc59fb58",
       "prs": [
         {
-          "number": 230,
-          "title": "Improve region label placement and sizing",
-          "url": "https://github.com/shthed/capy/pull/230",
-          "branch": "codex/adjust-region-number-label-sizing"
+          "number": 233,
+          "title": "Enhance palette sorting with spectrum and warmth modes",
+          "url": "https://github.com/shthed/capy/pull/233",
+          "branch": "codex/change-color-selection-logic"
         }
       ]
     }
   ],
-  "lastCommitDate": "2025-10-26T00:54:52Z",
-  "deploymentTimestamp": 1761456781728
+  "lastCommitDate": "2025-10-26T05:54:03Z",
+  "deploymentTimestamp": 1761458174281
 }

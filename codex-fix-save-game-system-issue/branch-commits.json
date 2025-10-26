@@ -1,6 +1,21 @@
 {
   "codex/fix-save-game-system-issue": [
     {
+      "sha": "a00dbe5e1ffa5c1b3876c996a925123a59ae90d3",
+      "shortSha": "a00dbe5",
+      "message": "Fix polylabel heap factory initialization",
+      "date": "2025-10-26T05:55:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a00dbe5e1ffa5c1b3876c996a925123a59ae90d3",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
       "sha": "43b282149d1b486a834ad1bb089dc112b9f787b8",
       "shortSha": "43b2821",
       "message": "Fix Polylabel heap initialization regression",
@@ -36,21 +51,6 @@
       "message": "Unify autosave with manual saves and simplify storage",
       "date": "2025-10-26T04:06:18Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/7f46c6048b637fdadd8b904ca70220085de124c8",
-      "prs": [
-        {
-          "number": 232,
-          "title": "Prefer autosave when restoring sessions",
-          "url": "https://github.com/shthed/capy/pull/232",
-          "branch": "codex/fix-save-game-system-issue"
-        }
-      ]
-    },
-    {
-      "sha": "8265ede530a943e36b2df60b8466867b007419e2",
-      "shortSha": "8265ede",
-      "message": "Prefer autosave when restoring sessions",
-      "date": "2025-10-26T00:56:04Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/8265ede530a943e36b2df60b8466867b007419e2",
       "prs": [
         {
           "number": 232,
@@ -63,6 +63,21 @@
   ],
   "codex-fix-save-game-system-issue": [
     {
+      "sha": "a00dbe5e1ffa5c1b3876c996a925123a59ae90d3",
+      "shortSha": "a00dbe5",
+      "message": "Fix polylabel heap factory initialization",
+      "date": "2025-10-26T05:55:57Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/a00dbe5e1ffa5c1b3876c996a925123a59ae90d3",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
       "sha": "43b282149d1b486a834ad1bb089dc112b9f787b8",
       "shortSha": "43b2821",
       "message": "Fix Polylabel heap initialization regression",
@@ -98,21 +113,6 @@
       "message": "Unify autosave with manual saves and simplify storage",
       "date": "2025-10-26T04:06:18Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/7f46c6048b637fdadd8b904ca70220085de124c8",
-      "prs": [
-        {
-          "number": 232,
-          "title": "Prefer autosave when restoring sessions",
-          "url": "https://github.com/shthed/capy/pull/232",
-          "branch": "codex/fix-save-game-system-issue"
-        }
-      ]
-    },
-    {
-      "sha": "8265ede530a943e36b2df60b8466867b007419e2",
-      "shortSha": "8265ede",
-      "message": "Prefer autosave when restoring sessions",
-      "date": "2025-10-26T00:56:04Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/8265ede530a943e36b2df60b8466867b007419e2",
       "prs": [
         {
           "number": 232,
