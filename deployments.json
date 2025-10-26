@@ -2,21 +2,11 @@
   "main": {
     "branch": "main",
     "safeName": "",
-    "commit": "7bace758990dbd094c724b0c0c422810b9ab1fda",
-    "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
+    "commit": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
+    "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
     "actor": "shthed",
-    "deployedAt": "2025-10-25T19:10:57+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/7bace758990dbd094c724b0c0c422810b9ab1fda",
+    "deployedAt": "2025-10-26T08:54:52+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
     "key": "main"
-  },
-  "codex-explain-post-deploy-tests.yml-changes": {
-    "key": "codex-explain-post-deploy-tests.yml-changes",
-    "branch": "codex/explain-post-deploy-tests.yml-changes",
-    "safeName": "codex-explain-post-deploy-tests.yml-changes",
-    "commit": "69903bad7d31a0ca173666d6f8309de678623b20",
-    "message": "Sanitize concurrency group branch name",
-    "actor": "shthed",
-    "deployedAt": "2025-10-26T08:49:07+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/69903bad7d31a0ca173666d6f8309de678623b20"
   }
 }

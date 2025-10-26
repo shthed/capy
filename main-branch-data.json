@@ -1,6 +1,38 @@
 {
   "commits": [
     {
+      "sha": "bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "shortSha": "bbf7371",
+      "message": "Merge pull request #231 from shthed/codex/explain-post-deploy-tests.yml-changes\n\nSanitize post-deploy concurrency group branch names",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-26T00:54:52Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/bbf737156565500ccaa4c37f9680f58b51ccba2c",
+      "prs": [
+        {
+          "number": 231,
+          "title": "Sanitize post-deploy concurrency group branch names",
+          "url": "https://github.com/shthed/capy/pull/231",
+          "branch": "codex/explain-post-deploy-tests.yml-changes"
+        }
+      ]
+    },
+    {
+      "sha": "69903bad7d31a0ca173666d6f8309de678623b20",
+      "shortSha": "69903ba",
+      "message": "Sanitize concurrency group branch name",
+      "author": "Hairy Dog Trumpet",
+      "date": "2025-10-26T00:49:07Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/69903bad7d31a0ca173666d6f8309de678623b20",
+      "prs": [
+        {
+          "number": 231,
+          "title": "Sanitize post-deploy concurrency group branch names",
+          "url": "https://github.com/shthed/capy/pull/231",
+          "branch": "codex/explain-post-deploy-tests.yml-changes"
+        }
+      ]
+    },
+    {
       "sha": "7bace758990dbd094c724b0c0c422810b9ab1fda",
       "shortSha": "7bace75",
       "message": "Merge pull request #230 from shthed/codex/adjust-region-number-label-sizing\n\nImprove region label placement and sizing",
@@ -31,40 +63,8 @@
           "branch": "codex/adjust-region-number-label-sizing"
         }
       ]
-    },
-    {
-      "sha": "95ec4d203ea5d83921d7a4ca2a25810c913972e1",
-      "shortSha": "95ec4d2",
-      "message": "Merge pull request #228 from shthed/codex/fix-autosave-settings-not-persisting\n\nFix settings persistence when no puzzle is loaded",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-25T10:26:23Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/95ec4d203ea5d83921d7a4ca2a25810c913972e1",
-      "prs": [
-        {
-          "number": 228,
-          "title": "Fix settings persistence when no puzzle is loaded",
-          "url": "https://github.com/shthed/capy/pull/228",
-          "branch": "codex/fix-autosave-settings-not-persisting"
-        }
-      ]
-    },
-    {
-      "sha": "53149c3629853d8db97024f904939ba24a7afacf",
-      "shortSha": "53149c3",
-      "message": "Ensure UI scale persists and lighten light-theme selects",
-      "author": "Hairy Dog Trumpet",
-      "date": "2025-10-25T10:24:41Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/53149c3629853d8db97024f904939ba24a7afacf",
-      "prs": [
-        {
-          "number": 228,
-          "title": "Fix settings persistence when no puzzle is loaded",
-          "url": "https://github.com/shthed/capy/pull/228",
-          "branch": "codex/fix-autosave-settings-not-persisting"
-        }
-      ]
     }
   ],
-  "lastCommitDate": "2025-10-25T11:10:57Z",
-  "deploymentTimestamp": 1761390678823
+  "lastCommitDate": "2025-10-26T00:54:52Z",
+  "deploymentTimestamp": 1761440111472
 }
