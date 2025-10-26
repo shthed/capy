@@ -23,6 +23,14 @@ any feature or workflow changes you ship.
 - **Manual smoke tests.** Exercise puzzle load, palette selection, painting, and
   save/load flows in at least one desktop and one mobile browser before
   requesting review.
+- **Browser tooling.** When you need UI screenshots or to verify hosted flows,
+  launch Playwright via `browser_container.run_playwright_script`. Install the
+  Chromium bundle with `npx playwright install --with-deps chromium` in the
+  main workspace (the installation is cached between calls). Forward the
+  relevant app port, save artifacts to a relative path (for example,
+  `artifacts/preview.png`), then surface them in the PR with standard Markdown
+  image syntax after fetching them through
+  `browser_container.open_image_artifact`.
 - **Automation discipline.** Record which tests ran, link the latest preview,
   and attach Playwright artifacts (when available) before handing off for
   review. Capture outcomes in the PR description so history remains searchable.
@@ -50,8 +58,13 @@ any feature or workflow changes you ship.
 - Primary test command: `npm test --silent` (currently prints a skip notice
   while the Playwright suite is offline). Mention in the final response if you
   cannot run it.
+- Playwright browsers are **not** preinstalled. Before running any tests or
+  scripts that launch Playwright, execute
+  `npx playwright install --with-deps chromium` to provision the Chromium
+  bundle and avoid `browserType.launch` errors about missing executables.
 - Targeted smoke run: `npm run test:smoke` for iterating on
-  `tests/ui-review.spec.js`.
+  `tests/ui-review.spec.js`, which now performs a single Chromium page-load
+  check.
 - Workflow hygiene: When editing files under `.github/workflows/`, validate the
   YAML with `npx yaml-lint <file>` before committing.
 - UI verification: Keep Playwright expectations aligned with UI markup, palette
