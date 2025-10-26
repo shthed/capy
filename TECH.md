@@ -121,7 +121,7 @@ Tweaking the deployment:
 - **Customisable background.** Settings lets you pick a backdrop colour; outlines and numbers flip contrast automatically.
 - **Progress persistence.** Every stroke rewrites the active save slot; additional manual snapshots live in the Saves manager with rename/export/delete controls. Storage quota usage is surfaced in the Help panel, and the legacy autosave bucket migrates into a manual slot on first launch.
 - **Startup restore priority.** Launching the app resumes from the most recent save (preferring the active slot) and falls back to the bundled sample only when nothing is stored.
-- **Settings persistence.** Gameplay, hint, control, and appearance preferences now sync to `localStorage` (`capy.settings.v1`) so `capy.json` only ships puzzle data. Settings writes commit immediately so UI tweaks survive reloads even if puzzle autosave is still pending.
+- **Settings persistence.** Gameplay, hint, control, and appearance preferences now sync to `localStorage` (`capy.settings.v1`) so `capy.json` only ships puzzle data. Settings writes commit immediately so UI tweaks survive reloads even if puzzle autosave is still pending, and puzzle loads leave those stored preferences intact.
 
 ### Detail Presets
 
@@ -201,7 +201,7 @@ Saved puzzles share the `capy-puzzle@2` payload with the following key fields:
 - `filled` – Region ids already painted.
 - `backgroundColor`, `stageBackgroundColor`, `options`, `activeColor`, `viewport`, `sourceUrl` – Appearance and generator state used to restore the session.
 
-Saved slots persist the active user settings alongside the puzzle snapshot so restoring a session reapplies difficulty, renderer, and other preferences, but exported files omit that bundle for portability.
+Saved slots persist the active user settings alongside the puzzle snapshot so restoring a session on a fresh device can hydrate difficulty, renderer, and other preferences, but exported files omit that bundle for portability. When the player already has settings stored locally, puzzle loads keep those preferences instead of overwriting them with the snapshot.
 
 Packing the region map trims payloads by more than half, avoiding `QuotaExceededError` when large puzzles previously overflowed localStorage. Saves now store the compacted structure directly in `localStorage` without extra compression, and exports write the same JSON so imports hand the decoded object straight to `compactPuzzleSnapshot` before calling `applyPuzzleResult`. The compactor rekeys palette entries to `{ i, h, n, r }`, regions to `{ i, c, p, x, y }`, stores the region map as `m`, and varint-packs filled region ids into the `f` string. If storage does fill up, the Help log prompts the user to clear old saves before retrying.
 
