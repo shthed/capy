@@ -116,6 +116,7 @@ Tweaking the deployment:
   passes before rebuilding the scene. Iterations rerun the clustering stage for tighter centroids; smoothing passes perform
   majority blending to fold stray pixels into their neighbours ahead of segmentation.
 - **Responsive command rail.** Header icons clamp to the viewport, wrap when space runs short, respect safe-area insets, and stay pinned to the top edge so controls remain reachable.
+- **Stable first paint.** An inline head script precomputes `--ui-scale-auto` from the current viewport and seeds `--ui-scale` so the interface renders at its final size before the runtime finishes booting.
 - **Palette guidance.** Choosing a swatch pulses every matching region, flashing when a colour is complete so it is obvious where to paint next. Players can disable the matching-region hint in Settings if they prefer to scout manually.
 - **Customisable background.** Settings lets you pick a backdrop colour; outlines and numbers flip contrast automatically.
 - **Progress persistence.** Every stroke rewrites the active save slot; additional manual snapshots live in the Saves manager with rename/export/delete controls. Storage quota usage is surfaced in the Help panel, and the legacy autosave bucket migrates into a manual slot on first launch.
