@@ -1,6 +1,21 @@
 {
   "codex/fix-save-game-system-issue": [
     {
+      "sha": "7f46c6048b637fdadd8b904ca70220085de124c8",
+      "shortSha": "7f46c60",
+      "message": "Unify autosave with manual saves and simplify storage",
+      "date": "2025-10-26T04:06:18Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7f46c6048b637fdadd8b904ca70220085de124c8",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
       "sha": "8265ede530a943e36b2df60b8466867b007419e2",
       "shortSha": "8265ede",
       "message": "Prefer autosave when restoring sessions",
@@ -36,21 +51,6 @@
       "message": "Improve region label placement and sizing",
       "date": "2025-10-25T10:59:44Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/3cfbf3c9a90c50f71f5c4251086017f018f65eb3",
-      "prs": [
-        {
-          "number": 232,
-          "title": "Prefer autosave when restoring sessions",
-          "url": "https://github.com/shthed/capy/pull/232",
-          "branch": "codex/fix-save-game-system-issue"
-        }
-      ]
-    },
-    {
-      "sha": "95ec4d203ea5d83921d7a4ca2a25810c913972e1",
-      "shortSha": "95ec4d2",
-      "message": "Merge pull request #228 from shthed/codex/fix-autosave-settings-not-persisting\n\nFix settings persistence when no puzzle is loaded",
-      "date": "2025-10-25T10:26:23Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/95ec4d203ea5d83921d7a4ca2a25810c913972e1",
       "prs": [
         {
           "number": 232,
@@ -63,6 +63,21 @@
   ],
   "codex-fix-save-game-system-issue": [
     {
+      "sha": "7f46c6048b637fdadd8b904ca70220085de124c8",
+      "shortSha": "7f46c60",
+      "message": "Unify autosave with manual saves and simplify storage",
+      "date": "2025-10-26T04:06:18Z",
+      "htmlUrl": "https://github.com/shthed/capy/commit/7f46c6048b637fdadd8b904ca70220085de124c8",
+      "prs": [
+        {
+          "number": 232,
+          "title": "Prefer autosave when restoring sessions",
+          "url": "https://github.com/shthed/capy/pull/232",
+          "branch": "codex/fix-save-game-system-issue"
+        }
+      ]
+    },
+    {
       "sha": "8265ede530a943e36b2df60b8466867b007419e2",
       "shortSha": "8265ede",
       "message": "Prefer autosave when restoring sessions",
@@ -98,21 +113,6 @@
       "message": "Improve region label placement and sizing",
       "date": "2025-10-25T10:59:44Z",
       "htmlUrl": "https://github.com/shthed/capy/commit/3cfbf3c9a90c50f71f5c4251086017f018f65eb3",
-      "prs": [
-        {
-          "number": 232,
-          "title": "Prefer autosave when restoring sessions",
-          "url": "https://github.com/shthed/capy/pull/232",
-          "branch": "codex/fix-save-game-system-issue"
-        }
-      ]
-    },
-    {
-      "sha": "95ec4d203ea5d83921d7a4ca2a25810c913972e1",
-      "shortSha": "95ec4d2",
-      "message": "Merge pull request #228 from shthed/codex/fix-autosave-settings-not-persisting\n\nFix settings persistence when no puzzle is loaded",
-      "date": "2025-10-25T10:26:23Z",
-      "htmlUrl": "https://github.com/shthed/capy/commit/95ec4d203ea5d83921d7a4ca2a25810c913972e1",
       "prs": [
         {
           "number": 232,

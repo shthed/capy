@@ -13,10 +13,10 @@
     "key": "codex-fix-save-game-system-issue",
     "branch": "codex/fix-save-game-system-issue",
     "safeName": "codex-fix-save-game-system-issue",
-    "commit": "8265ede530a943e36b2df60b8466867b007419e2",
-    "message": "Prefer autosave when restoring sessions",
+    "commit": "7f46c6048b637fdadd8b904ca70220085de124c8",
+    "message": "Unify autosave with manual saves and simplify storage",
     "actor": "shthed",
-    "deployedAt": "2025-10-26T08:56:04+08:00",
-    "commitUrl": "https://github.com/shthed/capy/commit/8265ede530a943e36b2df60b8466867b007419e2"
+    "deployedAt": "2025-10-26T12:06:18+08:00",
+    "commitUrl": "https://github.com/shthed/capy/commit/7f46c6048b637fdadd8b904ca70220085de124c8"
   }
 }
