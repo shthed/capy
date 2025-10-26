@@ -4230,7 +4230,11 @@
         if (changed && !options.skipLog) {
           logDebug(`Renderer switched to ${formatRendererLabel(resolved)}`);
         }
-        if (changed && !options.skipAutosave) {
+        if (!changed) {
+          return resolved;
+        }
+        scheduleSettingsPersist({ immediate: true });
+        if (!options.skipAutosave) {
           scheduleAutosave("settings-renderer");
         }
         return resolved;
@@ -4756,6 +4760,7 @@
       autoAdvanceToggle.addEventListener("change", () => {
         state.settings.autoAdvance = autoAdvanceToggle.checked;
         logDebug(`Auto-advance ${autoAdvanceToggle.checked ? "enabled" : "disabled"}`);
+        scheduleSettingsPersist({ immediate: true });
         scheduleAutosave("settings-auto-advance");
       });
 
@@ -4766,6 +4771,7 @@
         }
         syncHintTypeToggles();
         logDebug(`Hint animations ${hintFlashToggle.checked ? "enabled" : "disabled"}`);
+        scheduleSettingsPersist({ immediate: true });
         scheduleAutosave("settings-hint-animations");
       });
 
@@ -4782,6 +4788,7 @@
             flashColorRegions(state.activeColor);
           }
           logDebug(`Matching colour hints ${next.matchingRegions ? "enabled" : "disabled"}`);
+          scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-hint-matching");
         });
       }
@@ -4797,6 +4804,7 @@
             clearOverlayAnimations();
           }
           logDebug(`Hover hints ${next.hoverRegions ? "enabled" : "disabled"}`);
+          scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-hint-hover");
         });
       }
@@ -4812,6 +4820,7 @@
               ? "Difficulty set to Easy – clicks auto-select matching colours"
               : "Difficulty set to Standard – clicks require the active colour"
           );
+          scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-difficulty");
         });
       }
@@ -4843,6 +4852,7 @@
           hintFadeDurationInput.value = String(duration);
           updateOptionOutputs();
           logDebug(`Hint fade set to ${(duration / 1000).toFixed(1)}s`);
+          scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-hint-fade");
         });
       }
@@ -4859,6 +4869,7 @@
           hintIntensityInput.value = String(Math.round(intensity * 100));
           updateOptionOutputs();
           logDebug(`Hint intensity set to ${Math.round(intensity * 100)}%`);
+          scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-hint-intensity");
         });
       }
@@ -6092,10 +6103,9 @@
         if (!changed) {
           return resolved;
         }
+        scheduleSettingsPersist({ immediate: true });
         if (!skipAutosave) {
           scheduleAutosave("settings-ui-scale");
-        } else {
-          scheduleSettingsPersist();
         }
         return resolved;
       }
@@ -6125,7 +6135,11 @@
         if (changed && !skipLog) {
           logDebug(`Label size set to ${Math.round(resolved * 100)}%`);
         }
-        if (changed && !skipAutosave) {
+        if (!changed) {
+          return resolved;
+        }
+        scheduleSettingsPersist({ immediate: true });
+        if (!skipAutosave) {
           scheduleAutosave("settings-label-scale");
         }
         return resolved;
@@ -6161,6 +6175,7 @@
                 : "Image description cleared"
             );
           }
+          scheduleSettingsPersist({ immediate: true });
           if (!skipAutosave) {
             scheduleAutosave("settings-image-description");
           }
@@ -6181,6 +6196,7 @@
             const trimmed = normalized.trim();
             logDebug(trimmed ? `Art prompt updated (${trimmed.length} characters)` : "Art prompt cleared");
           }
+          scheduleSettingsPersist({ immediate: true });
           if (!skipAutosave) {
             scheduleAutosave("settings-art-prompt");
           }
@@ -6203,6 +6219,7 @@
           if (!skipLog) {
             logDebug(visible ? "Region numbers shown" : "Region numbers hidden");
           }
+          scheduleSettingsPersist({ immediate: true });
           if (!skipAutosave) {
             scheduleAutosave("settings-region-labels");
           }
@@ -6229,7 +6246,11 @@
             : resolved.charAt(0).toUpperCase() + resolved.slice(1);
           logDebug(`Interface theme set to ${label}`);
         }
-        if (changed && !skipAutosave) {
+        if (!changed) {
+          return resolved;
+        }
+        scheduleSettingsPersist({ immediate: true });
+        if (!skipAutosave) {
           scheduleAutosave("settings-theme");
         }
         return resolved;
@@ -6259,6 +6280,7 @@
         if (!changed) {
           return normalized;
         }
+        scheduleSettingsPersist({ immediate: true });
         markOutlineLayerDirty();
         markFilledLayerDirty();
         if (!skipRender) {
@@ -6287,7 +6309,7 @@
         if (changed && !skipLog) {
           logDebug(`Unfilled region colour set to ${normalized.toUpperCase()}`);
         }
-        if (changed && !options.skipAutosave) {
+        if (!options.skipAutosave) {
           scheduleAutosave("background-colour");
         }
         return normalized;
@@ -6312,7 +6334,11 @@
         if (changed && !skipLog) {
           logDebug(`Stage background set to ${normalized.toUpperCase()}`);
         }
-        if (changed && !skipAutosave) {
+        if (!changed) {
+          return normalized;
+        }
+        scheduleSettingsPersist({ immediate: true });
+        if (!skipAutosave) {
           scheduleAutosave("stage-background-colour");
         }
         return normalized;
@@ -9437,29 +9463,36 @@
         const normalized = cloneMouseControls(normalizedSource);
         state.settings.mouseControls = normalized;
         updateMouseControlInputs();
-        if (!skipLog) {
-          const changes = [];
-          for (const button of MOUSE_BUTTON_KEYS) {
-            const prev = previous[button];
-            const curr = normalized[button];
-            if (prev.click !== curr.click) {
-              changes.push(
-                `${describeMouseButton(button)} click → ${describeMouseClickAction(curr.click)}`
-              );
-            }
-            if (prev.drag !== curr.drag) {
-              changes.push(
-                `${describeMouseButton(button)} click + drag → ${describeMouseDragAction(curr.drag)}`
-              );
-            }
+        let changed = false;
+        const changes = [];
+        for (const button of MOUSE_BUTTON_KEYS) {
+          const prev = previous[button];
+          const curr = normalized[button];
+          if (prev.click !== curr.click) {
+            changed = true;
+            changes.push(
+              `${describeMouseButton(button)} click → ${describeMouseClickAction(curr.click)}`
+            );
           }
-          if (changes.length > 0) {
-            logDebug(`Mouse controls updated: ${changes.join("; ")}`);
+          if (prev.drag !== curr.drag) {
+            changed = true;
+            changes.push(
+              `${describeMouseButton(button)} click + drag → ${describeMouseDragAction(curr.drag)}`
+            );
           }
         }
+        if (!skipLog && changes.length > 0) {
+          logDebug(`Mouse controls updated: ${changes.join("; ")}`);
+        }
+        if (!changed) {
+          return normalized;
+        }
+        scheduleSettingsPersist({ immediate: true });
         if (!skipAutosave) {
           scheduleAutosave("settings-mouse-controls");
         }
+        return normalized;
+      }
       }
 
       function setMouseControl(button, type, rawValue) {
@@ -9485,6 +9518,7 @@
         const actionLabel =
           type === "click" ? describeMouseClickAction(nextValue) : describeMouseDragAction(nextValue);
         logDebug(`${describeMouseButton(button)} ${type === "click" ? "click" : "click + drag"} set to ${actionLabel}`);
+        scheduleSettingsPersist({ immediate: true });
         scheduleAutosave("settings-mouse-controls");
       }
 
@@ -11382,7 +11416,7 @@
         const resolvedReason = reason || pendingAutosaveReason || "update";
         const settingsUpdate = isSettingsAutosaveReason(resolvedReason);
         if (settingsUpdate) {
-          scheduleSettingsPersist({ immediate, delay });
+          scheduleSettingsPersist({ immediate: true });
         }
         if (!state.puzzle) {
           if (settingsUpdate) {
