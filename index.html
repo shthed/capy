@@ -593,7 +593,10 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        will-change: width, height;
+        --zoom: 1;
+        transform: scale3d(var(--zoom), var(--zoom), 1);
+        transform-origin: center;
+        will-change: transform, width, height;
       }
 
       #viewport::before {
@@ -3413,6 +3416,7 @@
       };
 
       const canvasMetrics = {
+        baseDisplayScale: 1,
         displayScale: 1,
         pixelRatio: 1,
         renderScale: 1,
@@ -3426,6 +3430,8 @@
       let pendingViewTransform = null;
       let viewTransformFrame = null;
       let cancelViewTransformFrame = null;
+      const ZOOM_RENDER_DEBOUNCE_MS = 80;
+      let pendingZoomRender = null;
 
       function clampViewPanToPuzzleBounds() {
         let changed = false;
@@ -3508,19 +3514,29 @@
         if (!state.puzzle || !puzzleCanvas) {
           return false;
         }
-        const nextDisplayScale = computeDisplayScale();
+        const baseDisplayScale =
+          Number.isFinite(viewState.baseScale) && viewState.baseScale > 0 ? viewState.baseScale : 1;
+        const zoom = normalizeZoomValue(viewState.zoom > 0 ? viewState.zoom : 1, 1);
+        const { minScale, maxScale } = getScaleBounds(baseDisplayScale);
+        const displayScale = clamp(baseDisplayScale * zoom, minScale, maxScale);
         const pixelRatio = getDevicePixelRatio();
-        const renderScale = nextDisplayScale * pixelRatio;
+        const nativeScale = Math.max(displayScale, 1);
+        const renderScale = nativeScale * pixelRatio;
         const pixelWidth = Math.max(1, Math.round(state.puzzle.width * renderScale));
         const pixelHeight = Math.max(1, Math.round(state.puzzle.height * renderScale));
-        const displayWidth = Math.max(1, state.puzzle.width * nextDisplayScale);
-        const displayHeight = Math.max(1, state.puzzle.height * nextDisplayScale);
+        const displayWidth = Math.max(1, state.puzzle.width * baseDisplayScale);
+        const displayHeight = Math.max(1, state.puzzle.height * baseDisplayScale);
         const changed =
-          Math.abs(nextDisplayScale - canvasMetrics.displayScale) > 0.0001 ||
+          Math.abs(baseDisplayScale - canvasMetrics.baseDisplayScale) > 0.0001 ||
+          Math.abs(displayScale - canvasMetrics.displayScale) > 0.0001 ||
+          Math.abs(renderScale - canvasMetrics.renderScale) > 0.0001 ||
+          Math.abs(pixelRatio - canvasMetrics.pixelRatio) > 0.0001 ||
+          Math.abs(displayWidth - canvasMetrics.displayWidth) > 0.0001 ||
+          Math.abs(displayHeight - canvasMetrics.displayHeight) > 0.0001 ||
           canvasMetrics.pixelWidth !== pixelWidth ||
-          canvasMetrics.pixelHeight !== pixelHeight ||
-          Math.abs(pixelRatio - canvasMetrics.pixelRatio) > 0.0001;
-        canvasMetrics.displayScale = nextDisplayScale;
+          canvasMetrics.pixelHeight !== pixelHeight;
+        canvasMetrics.baseDisplayScale = baseDisplayScale;
+        canvasMetrics.displayScale = displayScale;
         canvasMetrics.pixelRatio = pixelRatio;
         canvasMetrics.renderScale = renderScale;
         canvasMetrics.pixelWidth = pixelWidth;
@@ -10557,10 +10573,21 @@
         const significant = Math.abs(targetScale - currentScale) >= Math.max(0.01, currentScale * 0.001);
         viewState.zoom = nextZoom;
         if (options.defer) {
-          scheduleViewTransform({ forceRender: true });
+          scheduleViewTransform({ skipSizing: true });
         } else {
-          applyViewTransform({ forceRender: true });
+          applyViewTransform({ skipSizing: true });
         }
+        if (pendingZoomRender != null) {
+          clearTimeout(pendingZoomRender);
+        }
+        const scheduleTimeout =
+          typeof window !== "undefined" && typeof window.setTimeout === "function"
+            ? window.setTimeout.bind(window)
+            : setTimeout;
+        pendingZoomRender = scheduleTimeout(() => {
+          pendingZoomRender = null;
+          applyViewTransform({ forceRender: true });
+        }, ZOOM_RENDER_DEBOUNCE_MS);
         if (significant && !options.skipLog) {
           logDebug(`Zoom set to ${(targetScale * 100).toFixed(0)}%`);
         }
@@ -10602,6 +10629,10 @@
         if (canvasStage) {
           canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
           canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
+        }
+        if (canvasTransform) {
+          const zoomFactor = normalizeZoomValue(viewState.zoom > 0 ? viewState.zoom : 1, 1);
+          canvasTransform.style.setProperty("--zoom", `${zoomFactor}`);
         }
         invalidateCanvasRect();
         if (!state.puzzle) {
