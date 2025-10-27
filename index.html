@@ -3416,6 +3416,7 @@
       };
 
       const canvasMetrics = {
+        baseDisplayScale: 1,
         displayScale: 1,
         pixelRatio: 1,
         renderScale: 1,
@@ -3515,22 +3516,27 @@
         }
         const baseDisplayScale =
           Number.isFinite(viewState.baseScale) && viewState.baseScale > 0 ? viewState.baseScale : 1;
+        const zoom = normalizeZoomValue(viewState.zoom > 0 ? viewState.zoom : 1, 1);
+        const { minScale, maxScale } = getScaleBounds(baseDisplayScale);
+        const displayScale = clamp(baseDisplayScale * zoom, minScale, maxScale);
         const pixelRatio = getDevicePixelRatio();
-        const nativeScale = Math.max(baseDisplayScale, 1);
+        const nativeScale = Math.max(displayScale, 1);
         const renderScale = nativeScale * pixelRatio;
         const pixelWidth = Math.max(1, Math.round(state.puzzle.width * renderScale));
         const pixelHeight = Math.max(1, Math.round(state.puzzle.height * renderScale));
         const displayWidth = Math.max(1, state.puzzle.width * baseDisplayScale);
         const displayHeight = Math.max(1, state.puzzle.height * baseDisplayScale);
         const changed =
-          Math.abs(baseDisplayScale - canvasMetrics.displayScale) > 0.0001 ||
+          Math.abs(baseDisplayScale - canvasMetrics.baseDisplayScale) > 0.0001 ||
+          Math.abs(displayScale - canvasMetrics.displayScale) > 0.0001 ||
           Math.abs(renderScale - canvasMetrics.renderScale) > 0.0001 ||
           Math.abs(pixelRatio - canvasMetrics.pixelRatio) > 0.0001 ||
           Math.abs(displayWidth - canvasMetrics.displayWidth) > 0.0001 ||
           Math.abs(displayHeight - canvasMetrics.displayHeight) > 0.0001 ||
           canvasMetrics.pixelWidth !== pixelWidth ||
           canvasMetrics.pixelHeight !== pixelHeight;
-        canvasMetrics.displayScale = baseDisplayScale;
+        canvasMetrics.baseDisplayScale = baseDisplayScale;
+        canvasMetrics.displayScale = displayScale;
         canvasMetrics.pixelRatio = pixelRatio;
         canvasMetrics.renderScale = renderScale;
         canvasMetrics.pixelWidth = pixelWidth;
