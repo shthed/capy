@@ -649,6 +649,80 @@ void main() {
 }
 `;
 
+const OUTLINE_VERTEX_SHADER_SOURCE = `
+attribute vec2 a_position;
+uniform vec2 u_viewSize;
+uniform float u_scale;
+void main() {
+  vec2 scaled = a_position * u_scale;
+  vec2 normalized = (scaled / u_viewSize) * 2.0 - 1.0;
+  normalized.y = 1.0 - normalized.y;
+  gl_Position = vec4(normalized, 0.0, 1.0);
+}
+`;
+
+const OUTLINE_FRAGMENT_SHADER_SOURCE = `
+precision mediump float;
+uniform vec4 u_color;
+void main() {
+  gl_FragColor = u_color;
+}
+`;
+
+const TEXT_VERTEX_SHADER_SOURCE = `
+attribute vec2 a_position;
+attribute vec2 a_texCoord;
+uniform vec2 u_viewSize;
+varying vec2 v_texCoord;
+void main() {
+  vec2 normalized = (a_position / u_viewSize) * 2.0 - 1.0;
+  normalized.y = 1.0 - normalized.y;
+  gl_Position = vec4(normalized, 0.0, 1.0);
+  v_texCoord = a_texCoord;
+}
+`;
+
+const TEXT_FRAGMENT_SHADER_SOURCE = `
+precision mediump float;
+varying vec2 v_texCoord;
+uniform sampler2D u_texture;
+uniform vec4 u_fillColor;
+uniform vec4 u_strokeColor;
+void main() {
+  vec4 sample = texture2D(u_texture, v_texCoord);
+  float strokeAlpha = sample.r;
+  float fillAlpha = sample.g;
+  vec4 stroke = vec4(u_strokeColor.rgb, u_strokeColor.a * strokeAlpha);
+  vec4 fill = vec4(u_fillColor.rgb, u_fillColor.a * fillAlpha);
+  float outAlpha = stroke.a + fill.a * (1.0 - stroke.a);
+  vec3 outColor = vec3(0.0);
+  if (outAlpha > 0.0001) {
+    outColor = (stroke.rgb * stroke.a + fill.rgb * fill.a * (1.0 - stroke.a)) / outAlpha;
+  }
+  gl_FragColor = vec4(outColor, outAlpha);
+}
+`;
+
+const GLYPH_ATLAS_CHARACTERS = (() => {
+  const chars = [];
+  for (let code = 32; code <= 126; code += 1) {
+    chars.push(String.fromCharCode(code));
+  }
+  const extras = ["£", "€", "•", "·", "±"];
+  for (const char of extras) {
+    if (!chars.includes(char)) {
+      chars.push(char);
+    }
+  }
+  if (!chars.includes("?")) {
+    chars.push("?");
+  }
+  return chars.join("");
+})();
+
+const GLYPH_ATLAS_BASE_FONT_SIZE = 64;
+const GLYPH_ATLAS_CELL_PADDING = 28;
+
 export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   const logger = typeof hooks?.log === "function" ? hooks.log : null;
 
@@ -723,18 +797,10 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   const layerTextures = {
     base: createLayerTexture(gl.LINEAR),
     filled: createLayerTexture(),
-    outline: createLayerTexture(),
-    numbers: createLayerTexture(),
     overlay: createLayerTexture(),
   };
 
-  if (
-    !layerTextures.base ||
-    !layerTextures.filled ||
-    !layerTextures.outline ||
-    !layerTextures.numbers ||
-    !layerTextures.overlay
-  ) {
+  if (!layerTextures.base || !layerTextures.filled || !layerTextures.overlay) {
     emitLog("Failed to allocate WebGL layer textures", { type: "webgl", stage: "layers" });
     Object.values(layerTextures).forEach((texture) => {
       if (texture && gl.isTexture(texture)) {
@@ -757,22 +823,148 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     hasContent: false,
   };
 
+  const outlineProgram = linkProgram(gl, OUTLINE_VERTEX_SHADER_SOURCE, OUTLINE_FRAGMENT_SHADER_SOURCE);
+  if (!outlineProgram) {
+    emitLog("Failed to create outline shader program", { type: "webgl", stage: "outline-program" });
+    Object.values(layerTextures).forEach((texture) => {
+      if (texture && gl.isTexture(texture)) {
+        gl.deleteTexture(texture);
+        trackedTextures.delete(texture);
+      }
+    });
+    trackedTextures.delete(fallbackTexture);
+    gl.deleteTexture(fallbackTexture);
+    gl.deleteBuffer(quadBuffer);
+    gl.deleteProgram(program);
+    return null;
+  }
+  trackedPrograms.add(outlineProgram);
+  const outlineAttributes = {
+    position: gl.getAttribLocation(outlineProgram, "a_position"),
+  };
+  const outlineUniforms = {
+    viewSize: gl.getUniformLocation(outlineProgram, "u_viewSize"),
+    scale: gl.getUniformLocation(outlineProgram, "u_scale"),
+    color: gl.getUniformLocation(outlineProgram, "u_color"),
+  };
+  const outlineBuffer = gl.createBuffer();
+  if (!outlineBuffer) {
+    emitLog("Failed to allocate outline vertex buffer", { type: "webgl", stage: "outline-buffer" });
+    gl.deleteProgram(outlineProgram);
+    trackedPrograms.delete(outlineProgram);
+    Object.values(layerTextures).forEach((texture) => {
+      if (texture && gl.isTexture(texture)) {
+        gl.deleteTexture(texture);
+        trackedTextures.delete(texture);
+      }
+    });
+    trackedTextures.delete(fallbackTexture);
+    gl.deleteTexture(fallbackTexture);
+    gl.deleteBuffer(quadBuffer);
+    gl.deleteProgram(program);
+    return null;
+  }
+  trackedBuffers.add(outlineBuffer);
+
+  const textProgram = linkProgram(gl, TEXT_VERTEX_SHADER_SOURCE, TEXT_FRAGMENT_SHADER_SOURCE);
+  if (!textProgram) {
+    emitLog("Failed to create text shader program", { type: "webgl", stage: "text-program" });
+    gl.deleteBuffer(outlineBuffer);
+    trackedBuffers.delete(outlineBuffer);
+    gl.deleteProgram(outlineProgram);
+    trackedPrograms.delete(outlineProgram);
+    Object.values(layerTextures).forEach((texture) => {
+      if (texture && gl.isTexture(texture)) {
+        gl.deleteTexture(texture);
+        trackedTextures.delete(texture);
+      }
+    });
+    trackedTextures.delete(fallbackTexture);
+    gl.deleteTexture(fallbackTexture);
+    gl.deleteBuffer(quadBuffer);
+    gl.deleteProgram(program);
+    return null;
+  }
+  trackedPrograms.add(textProgram);
+  const textAttributes = {
+    position: gl.getAttribLocation(textProgram, "a_position"),
+    texCoord: gl.getAttribLocation(textProgram, "a_texCoord"),
+  };
+  const textUniforms = {
+    viewSize: gl.getUniformLocation(textProgram, "u_viewSize"),
+    texture: gl.getUniformLocation(textProgram, "u_texture"),
+    fillColor: gl.getUniformLocation(textProgram, "u_fillColor"),
+    strokeColor: gl.getUniformLocation(textProgram, "u_strokeColor"),
+  };
+  const textPositionBuffer = gl.createBuffer();
+  const textTexCoordBuffer = gl.createBuffer();
+  if (!textPositionBuffer || !textTexCoordBuffer) {
+    emitLog("Failed to allocate text buffers", { type: "webgl", stage: "text-buffers" });
+    if (textPositionBuffer && gl.isBuffer(textPositionBuffer)) {
+      gl.deleteBuffer(textPositionBuffer);
+    }
+    if (textTexCoordBuffer && gl.isBuffer(textTexCoordBuffer)) {
+      gl.deleteBuffer(textTexCoordBuffer);
+    }
+    gl.deleteProgram(textProgram);
+    trackedPrograms.delete(textProgram);
+    gl.deleteBuffer(outlineBuffer);
+    trackedBuffers.delete(outlineBuffer);
+    gl.deleteProgram(outlineProgram);
+    trackedPrograms.delete(outlineProgram);
+    Object.values(layerTextures).forEach((texture) => {
+      if (texture && gl.isTexture(texture)) {
+        gl.deleteTexture(texture);
+        trackedTextures.delete(texture);
+      }
+    });
+    trackedTextures.delete(fallbackTexture);
+    gl.deleteTexture(fallbackTexture);
+    gl.deleteBuffer(quadBuffer);
+    gl.deleteProgram(program);
+    return null;
+  }
+  trackedBuffers.add(textPositionBuffer);
+  trackedBuffers.add(textTexCoordBuffer);
+
+  const textAtlas = createGlyphAtlas(gl);
+  if (!textAtlas) {
+    emitLog("Failed to build glyph atlas", { type: "webgl", stage: "text-atlas" });
+    gl.deleteBuffer(textPositionBuffer);
+    gl.deleteBuffer(textTexCoordBuffer);
+    trackedBuffers.delete(textPositionBuffer);
+    trackedBuffers.delete(textTexCoordBuffer);
+    gl.deleteProgram(textProgram);
+    trackedPrograms.delete(textProgram);
+    gl.deleteBuffer(outlineBuffer);
+    trackedBuffers.delete(outlineBuffer);
+    gl.deleteProgram(outlineProgram);
+    trackedPrograms.delete(outlineProgram);
+    Object.values(layerTextures).forEach((texture) => {
+      if (texture && gl.isTexture(texture)) {
+        gl.deleteTexture(texture);
+        trackedTextures.delete(texture);
+      }
+    });
+    trackedTextures.delete(fallbackTexture);
+    gl.deleteTexture(fallbackTexture);
+    gl.deleteBuffer(quadBuffer);
+    gl.deleteProgram(program);
+    return null;
+  }
+  trackedTextures.add(textAtlas.texture);
+
   const uploadState = {
     cacheVersion: null,
     pixelWidth: canvas?.width ? Math.max(1, Math.round(canvas.width)) : 1,
     pixelHeight: canvas?.height ? Math.max(1, Math.round(canvas.height)) : 1,
     filledDirty: true,
-    outlineDirty: true,
-    numbersDirty: true,
-    numbersHasContent: false,
     overlayDirty: true,
     overlayHasContent: false,
     baseDirty: true,
     baseHasContent: false,
     baseImageRef: null,
     baseSnapshotKey: null,
-    lastRenderScale: null,
-    lastFilledCount: null,
   };
 
   let currentMetrics = payload && payload.metrics ? { ...payload.metrics } : null;
@@ -903,6 +1095,113 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     return null;
   }
 
+  function createGlyphAtlas(glContext) {
+    const characters = GLYPH_ATLAS_CHARACTERS;
+    const glyphCount = characters.length;
+    if (glyphCount === 0) {
+      return null;
+    }
+    const baseCell = Math.max(8, Math.ceil(GLYPH_ATLAS_BASE_FONT_SIZE + GLYPH_ATLAS_CELL_PADDING * 2));
+    const columns = Math.max(1, Math.ceil(Math.sqrt(glyphCount)));
+    const rows = Math.max(1, Math.ceil(glyphCount / columns));
+    const width = Math.max(1, columns * baseCell);
+    const height = Math.max(1, rows * baseCell);
+    const canvasSurface = createOffscreenCanvas(width, height);
+    if (!canvasSurface) {
+      return null;
+    }
+    const ctx = canvasSurface.getContext("2d");
+    if (!ctx) {
+      return null;
+    }
+    ctx.clearRect(0, 0, width, height);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.imageSmoothingEnabled = true;
+    const strokeWidth = Math.max(1.5, GLYPH_ATLAS_BASE_FONT_SIZE * 0.18);
+    ctx.lineWidth = strokeWidth;
+    ctx.font = `${GLYPH_ATLAS_BASE_FONT_SIZE}px "Inter", "Segoe UI", sans-serif`;
+    const glyphs = new Map();
+    for (let index = 0; index < glyphCount; index += 1) {
+      const char = characters[index];
+      const column = index % columns;
+      const row = (index / columns) | 0;
+      const cx = column * baseCell + baseCell / 2;
+      const cy = row * baseCell + baseCell / 2;
+      ctx.strokeStyle = "rgba(255, 0, 0, 1)";
+      ctx.fillStyle = "rgba(0, 255, 0, 1)";
+      ctx.strokeText(char, cx, cy);
+      ctx.fillText(char, cx, cy);
+      const measurement = ctx.measureText(char);
+      const widthWithStroke = Math.max(
+        1,
+        (measurement.width || GLYPH_ATLAS_BASE_FONT_SIZE) + strokeWidth * 1.1
+      );
+      const ascent = measurement.actualBoundingBoxAscent || GLYPH_ATLAS_BASE_FONT_SIZE * 0.78;
+      const descent = measurement.actualBoundingBoxDescent || GLYPH_ATLAS_BASE_FONT_SIZE * 0.22;
+      const heightWithStroke = Math.max(1, ascent + descent + strokeWidth * 1.1);
+      const halfWidth = Math.min(widthWithStroke / 2, baseCell / 2);
+      const halfHeight = Math.min(heightWithStroke / 2, baseCell / 2);
+      const u0 = Math.max(0, (cx - halfWidth) / width);
+      const v0 = Math.max(0, (cy - halfHeight) / height);
+      const u1 = Math.min(1, (cx + halfWidth) / width);
+      const v1 = Math.min(1, (cy + halfHeight) / height);
+      glyphs.set(char, {
+        u0,
+        v0,
+        u1,
+        v1,
+        width: widthWithStroke,
+        height: heightWithStroke,
+      });
+    }
+    if (!glyphs.has("?")) {
+      glyphs.set("?", glyphs.values().next().value || {
+        u0: 0,
+        v0: 0,
+        u1: 0.1,
+        v1: 0.1,
+        width: GLYPH_ATLAS_BASE_FONT_SIZE,
+        height: GLYPH_ATLAS_BASE_FONT_SIZE,
+      });
+    }
+    const texture = glContext.createTexture();
+    if (!texture) {
+      return null;
+    }
+    glContext.bindTexture(glContext.TEXTURE_2D, texture);
+    try {
+      glContext.texImage2D(
+        glContext.TEXTURE_2D,
+        0,
+        glContext.RGBA,
+        glContext.RGBA,
+        glContext.UNSIGNED_BYTE,
+        canvasSurface
+      );
+    } catch (error) {
+      console.warn("Failed to upload glyph atlas texture", error);
+      glContext.bindTexture(glContext.TEXTURE_2D, null);
+      glContext.deleteTexture(texture);
+      return null;
+    }
+    glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_MIN_FILTER, glContext.LINEAR);
+    glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_MAG_FILTER, glContext.LINEAR);
+    glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_WRAP_S, glContext.CLAMP_TO_EDGE);
+    glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_WRAP_T, glContext.CLAMP_TO_EDGE);
+    glContext.bindTexture(glContext.TEXTURE_2D, null);
+    return {
+      texture,
+      glyphs,
+      baseFontSize: GLYPH_ATLAS_BASE_FONT_SIZE,
+      strokeWidth,
+      width,
+      height,
+    };
+  }
+
   function ensureNumbersSurface(width, height) {
     const w = Math.max(1, Math.round(width));
     const h = Math.max(1, Math.round(height));
@@ -988,8 +1287,6 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   function markAllLayersDirty() {
     uploadState.baseDirty = true;
     uploadState.filledDirty = true;
-    uploadState.outlineDirty = true;
-    uploadState.numbersDirty = true;
     uploadState.overlayDirty = true;
   }
 
@@ -1096,6 +1393,205 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       return [r / 255, g / 255, b / 255, a];
     }
     return fallback;
+  }
+
+  const filledScratchSet = new Set();
+
+  function buildFilledSet(state) {
+    if (state && state.filled instanceof Set) {
+      return state.filled;
+    }
+    filledScratchSet.clear();
+    if (state && Array.isArray(state.filled)) {
+      for (const entry of state.filled) {
+        filledScratchSet.add(entry);
+      }
+    }
+    return filledScratchSet;
+  }
+
+  function drawGpuOutlines({
+    cache,
+    renderScale,
+    outlineColor,
+    filledRegions,
+    viewWidth,
+    viewHeight,
+  }) {
+    if (!gl || !outlineProgram || !outlineBuffer || !cache || !cache.ready) {
+      return;
+    }
+    if (!Array.isArray(cache.regions) || cache.regions.length === 0) {
+      return;
+    }
+    gl.useProgram(outlineProgram);
+    gl.bindBuffer(gl.ARRAY_BUFFER, outlineBuffer);
+    if (outlineAttributes.position >= 0) {
+      gl.enableVertexAttribArray(outlineAttributes.position);
+      gl.vertexAttribPointer(outlineAttributes.position, 2, gl.FLOAT, false, 0, 0);
+    }
+    if (outlineUniforms.viewSize) {
+      gl.uniform2f(outlineUniforms.viewSize, viewWidth, viewHeight);
+    }
+    if (outlineUniforms.scale) {
+      gl.uniform1f(outlineUniforms.scale, renderScale);
+    }
+    if (outlineUniforms.color && outlineColor) {
+      gl.uniform4f(
+        outlineUniforms.color,
+        outlineColor[0],
+        outlineColor[1],
+        outlineColor[2],
+        outlineColor[3]
+      );
+    }
+    const strokeWidth = cache.strokeWidth > 0 ? cache.strokeWidth : 1;
+    gl.lineWidth(Math.max(1, strokeWidth));
+    for (const geometry of cache.regions) {
+      if (!geometry || (filledRegions && filledRegions.has(geometry.id))) {
+        continue;
+      }
+      if (!Array.isArray(geometry.outlineSegments)) {
+        continue;
+      }
+      for (const segment of geometry.outlineSegments) {
+        if (!segment || !segment.data || segment.vertexCount < 2) {
+          continue;
+        }
+        gl.bufferData(gl.ARRAY_BUFFER, segment.data, gl.STREAM_DRAW);
+        gl.drawArrays(gl.LINE_STRIP, 0, segment.vertexCount);
+      }
+    }
+    if (outlineAttributes.position >= 0) {
+      gl.disableVertexAttribArray(outlineAttributes.position);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  }
+
+  function drawGpuLabels({
+    cache,
+    state,
+    renderScale,
+    strokeColor,
+    fallbackColor,
+    filledRegions,
+    viewWidth,
+    viewHeight,
+  }) {
+    if (!gl || !textProgram || !textPositionBuffer || !textTexCoordBuffer) {
+      return;
+    }
+    if (!textAtlas || !gl.isTexture(textAtlas.texture)) {
+      return;
+    }
+    if (!cache || !cache.ready || !Array.isArray(cache.regions) || cache.regions.length === 0) {
+      return;
+    }
+    const showLabels = state?.settings?.showRegionLabels !== false;
+    if (!showLabels) {
+      return;
+    }
+    gl.useProgram(textProgram);
+    if (textUniforms.viewSize) {
+      gl.uniform2f(textUniforms.viewSize, viewWidth, viewHeight);
+    }
+    if (textUniforms.strokeColor && strokeColor) {
+      gl.uniform4f(
+        textUniforms.strokeColor,
+        strokeColor[0],
+        strokeColor[1],
+        strokeColor[2],
+        strokeColor[3]
+      );
+    }
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, textAtlas.texture);
+    if (textUniforms.texture !== null) {
+      gl.uniform1i(textUniforms.texture, 0);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, textPositionBuffer);
+    if (textAttributes.position >= 0) {
+      gl.enableVertexAttribArray(textAttributes.position);
+      gl.vertexAttribPointer(textAttributes.position, 2, gl.FLOAT, false, 0, 0);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, textTexCoordBuffer);
+    if (textAttributes.texCoord >= 0) {
+      gl.enableVertexAttribArray(textAttributes.texCoord);
+      gl.vertexAttribPointer(textAttributes.texCoord, 2, gl.FLOAT, false, 0, 0);
+    }
+
+    for (const geometry of cache.regions) {
+      if (!geometry || (filledRegions && filledRegions.has(geometry.id))) {
+        continue;
+      }
+      const label = geometry.label;
+      if (!label || !Array.isArray(label.glyphs) || label.glyphs.length === 0) {
+        continue;
+      }
+      const fillColor =
+        Array.isArray(label.fillColor) && label.fillColor.length === 4
+          ? label.fillColor
+          : fallbackColor;
+      if (textUniforms.fillColor && fillColor) {
+        gl.uniform4f(
+          textUniforms.fillColor,
+          fillColor[0],
+          fillColor[1],
+          fillColor[2],
+          fillColor[3]
+        );
+      }
+      const centerX = (label.center && Number.isFinite(label.center.x) ? label.center.x : 0) * renderScale;
+      const centerY = (label.center && Number.isFinite(label.center.y) ? label.center.y : 0) * renderScale;
+      const baseHeight = label.textHeight || label.metrics?.heightWithStroke || label.fontSize || 0;
+      const glyphPositions = [];
+      const glyphTexCoords = [];
+      for (const entry of label.glyphs) {
+        if (!entry) {
+          continue;
+        }
+        const glyphInfo = textAtlas.glyphs.get(entry.char) || textAtlas.glyphs.get("?");
+        if (!glyphInfo) {
+          continue;
+        }
+        const widthUnits = Number.isFinite(entry.width)
+          ? entry.width
+          : glyphInfo.width * (label.fontSize / textAtlas.baseFontSize);
+        const heightUnits = Number.isFinite(entry.height) ? entry.height : baseHeight;
+        const glyphWidth = Math.max(0.01, widthUnits) * renderScale;
+        const glyphHeight = Math.max(0.01, heightUnits) * renderScale;
+        const offsetX = Number.isFinite(entry.offset) ? entry.offset * renderScale : 0;
+        const x0 = centerX + offsetX - glyphWidth / 2;
+        const x1 = centerX + offsetX + glyphWidth / 2;
+        const y0 = centerY - glyphHeight / 2;
+        const y1 = centerY + glyphHeight / 2;
+        const u0 = glyphInfo.u0 ?? 0;
+        const v0 = glyphInfo.v0 ?? 0;
+        const u1 = glyphInfo.u1 ?? 0;
+        const v1 = glyphInfo.v1 ?? 0;
+        glyphPositions.push(x0, y0, x1, y0, x1, y1, x0, y0, x1, y1, x0, y1);
+        glyphTexCoords.push(u0, v0, u1, v0, u1, v1, u0, v0, u1, v1, u0, v1);
+      }
+      if (glyphPositions.length === 0 || glyphTexCoords.length === 0) {
+        continue;
+      }
+      const positionArray = new Float32Array(glyphPositions);
+      const texCoordArray = new Float32Array(glyphTexCoords);
+      gl.bindBuffer(gl.ARRAY_BUFFER, textPositionBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, positionArray, gl.STREAM_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, textTexCoordBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, texCoordArray, gl.STREAM_DRAW);
+      gl.drawArrays(gl.TRIANGLES, 0, positionArray.length / 2);
+    }
+
+    if (textAttributes.position >= 0) {
+      gl.disableVertexAttribArray(textAttributes.position);
+    }
+    if (textAttributes.texCoord >= 0) {
+      gl.disableVertexAttribArray(textAttributes.texCoord);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
   function clampColorComponent(value) {
@@ -1277,19 +1773,8 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       uploadState.baseImageRef = null;
       uploadState.baseSnapshotKey = null;
       uploadState.filledDirty = true;
-      uploadState.outlineDirty = true;
-      uploadState.numbersDirty = true;
       uploadState.overlayDirty = true;
-      uploadState.numbersHasContent = false;
       uploadState.overlayHasContent = false;
-    }
-
-    const { context: numbersContext, resized: numbersResized } = ensureNumbersSurface(
-      pixelWidth,
-      pixelHeight
-    );
-    if (numbersResized) {
-      uploadState.numbersDirty = true;
     }
 
     const puzzleImage = state?.puzzle?.sourceImage || null;
@@ -1309,19 +1794,6 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     resetOverlaySurface(pixelWidth, pixelHeight);
 
     const renderScale = cache && Number.isFinite(cache.renderScale) ? cache.renderScale : 1;
-    if (
-      uploadState.lastRenderScale == null ||
-      Math.abs(uploadState.lastRenderScale - renderScale) > 0.0001
-    ) {
-      uploadState.numbersDirty = true;
-      uploadState.lastRenderScale = renderScale;
-    }
-
-    const filledCount = getFilledCount(state);
-    if (uploadState.lastFilledCount !== filledCount) {
-      uploadState.numbersDirty = true;
-      uploadState.lastFilledCount = filledCount;
-    }
 
     if (cache && cache.filledLayerDirty) {
       uploadState.filledDirty = true;
@@ -1330,17 +1802,6 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
           hooks.rebuildFilledLayer({ state, cache, metrics });
         } catch (error) {
           console.warn("Filled layer rebuild hook failed", error);
-        }
-      }
-    }
-
-    if (cache && cache.outlineLayerDirty) {
-      uploadState.outlineDirty = true;
-      if (typeof hooks.rasterizeOutlineLayer === "function") {
-        try {
-          hooks.rasterizeOutlineLayer({ state, cache, metrics });
-        } catch (error) {
-          console.warn("Outline layer rebuild hook failed", error);
         }
       }
     }
@@ -1368,21 +1829,18 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
         drawQuad({ texture: layerTextures.filled });
       }
       if (uploadState.overlayDirty) {
-        if (overlaySurface.canvas) {
-          uploadTextureFromSource(layerTextures.overlay, overlaySurface.canvas);
-        } else {
-          uploadTransparentTexture(layerTextures.overlay);
-        }
-        uploadState.overlayDirty = false;
-        uploadState.overlayHasContent = false;
+      if (overlaySurface.canvas) {
+        uploadTextureFromSource(layerTextures.overlay, overlaySurface.canvas);
+      } else {
+        uploadTransparentTexture(layerTextures.overlay);
       }
-      uploadState.numbersHasContent = false;
-      uploadState.filledDirty = true;
-      uploadState.outlineDirty = true;
-      uploadState.numbersDirty = true;
-      uploadState.overlayDirty = true;
+      uploadState.overlayDirty = false;
       uploadState.overlayHasContent = false;
-      uploadState.baseDirty = true;
+    }
+    uploadState.filledDirty = true;
+    uploadState.overlayDirty = true;
+    uploadState.overlayHasContent = false;
+    uploadState.baseDirty = true;
       overlaySurface.hasContent = false;
       overlaySurface.dirty = true;
       return null;
@@ -1445,65 +1903,34 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       drawQuad({ texture: layerTextures.filled });
     }
 
-    if (uploadState.outlineDirty) {
-      if (hasCache && cache?.outlineLayer) {
-        if (!uploadTextureFromSource(layerTextures.outline, cache.outlineLayer)) {
-          uploadTransparentTexture(layerTextures.outline);
-        }
-      } else {
-        uploadTransparentTexture(layerTextures.outline);
-      }
-      uploadState.outlineDirty = false;
-    }
-    if (hasCache && cache?.outlineLayer) {
-      drawQuad({ texture: layerTextures.outline });
-    }
-
-    const numbersVisible = Boolean(hasCache && numbersContext);
-    if (!numbersVisible) {
-      if (uploadState.numbersHasContent || uploadState.numbersDirty) {
-        if (numbersContext && numbersSurface.canvas) {
-          clearSurfaceContext(numbersContext);
-          uploadTextureFromSource(layerTextures.numbers, numbersSurface.canvas);
-        } else {
-          uploadTransparentTexture(layerTextures.numbers);
-        }
-        uploadState.numbersHasContent = false;
-        uploadState.numbersDirty = false;
-      }
-    } else {
-      if (uploadState.numbersDirty) {
-        clearSurfaceContext(numbersContext);
-        let drewNumbers = false;
-        if (typeof hooks.drawNumbersLayer === "function") {
-          try {
-            hooks.drawNumbersLayer({
-              context: numbersContext,
-              state,
-              cache,
-              metrics,
-            });
-            drewNumbers = true;
-          } catch (error) {
-            console.warn("Numbers layer hook failed", error);
-            drewNumbers = false;
-          }
-        }
-        if (drewNumbers && numbersSurface.canvas) {
-          if (!uploadTextureFromSource(layerTextures.numbers, numbersSurface.canvas)) {
-            uploadTransparentTexture(layerTextures.numbers);
-            drewNumbers = false;
-          }
-        } else {
-          uploadTransparentTexture(layerTextures.numbers);
-          drewNumbers = false;
-        }
-        uploadState.numbersDirty = false;
-        uploadState.numbersHasContent = drewNumbers;
-      }
-      if (uploadState.numbersHasContent) {
-        drawQuad({ texture: layerTextures.numbers });
-      }
+    if (hasCache) {
+      const viewWidth = Math.max(1, cache?.width ? cache.width * renderScale : pixelWidth);
+      const viewHeight = Math.max(1, cache?.height ? cache.height * renderScale : pixelHeight);
+      const filledSet = buildFilledSet(state);
+      const outlineColorVec = parseColorToClear(args.outlineColor, [0, 0, 0, 1]);
+      drawGpuOutlines({
+        cache,
+        renderScale,
+        outlineColor: outlineColorVec,
+        filledRegions: filledSet,
+        viewWidth,
+        viewHeight,
+      });
+      const strokeColorVec = parseColorToClear(
+        args.labelStrokeColor || args.outlineColor,
+        [0, 0, 0, 1]
+      );
+      const fallbackLabelColor = parseColorToClear(args.labelFallbackColor, [1, 1, 1, 1]);
+      drawGpuLabels({
+        cache,
+        state,
+        renderScale,
+        strokeColor: strokeColorVec,
+        fallbackColor: fallbackLabelColor,
+        filledRegions: filledSet,
+        viewWidth,
+        viewHeight,
+      });
     }
 
     if (uploadState.overlayDirty) {
@@ -1678,7 +2105,6 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     overlaySurface.context = null;
     overlaySurface.hasContent = false;
     overlaySurface.dirty = true;
-    uploadState.numbersHasContent = false;
     uploadState.overlayHasContent = false;
     uploadState.baseHasContent = false;
     uploadState.baseImageRef = null;
