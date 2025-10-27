@@ -2544,6 +2544,7 @@
         "settings-region-labels",
         "settings-theme",
         "settings-mouse-controls",
+        "settings-palette-sort",
         "background-colour",
         "stage-background-colour",
       ]);
@@ -3768,10 +3769,14 @@
       const storedUserSettings = loadUserSettings();
       if (storedUserSettings) {
         hasStoredUserSettings = true;
+        const { paletteSort: storedPaletteSort, ...restStoredSettings } = storedUserSettings;
         state.settings = {
           ...state.settings,
-          ...storedUserSettings,
+          ...restStoredSettings,
         };
+        if (typeof storedPaletteSort === "string" && storedPaletteSort) {
+          state.paletteSort = storedPaletteSort;
+        }
       }
 
       const unavailableRenderers = new Set();
@@ -9727,6 +9732,8 @@
         renderPalette();
         renderPuzzle();
         refreshCustomCursorHighlight();
+        scheduleSettingsPersist({ immediate: true });
+        scheduleAutosave("settings-palette-sort");
         if (!skipLog) {
           const label =
             next === "spectrum"
@@ -11444,7 +11451,7 @@
         const artPrompt = typeof base.artPrompt === "string" ? base.artPrompt : "";
         const imageDescription =
           typeof base.imageDescription === "string" ? base.imageDescription : "";
-        return {
+        const snapshot = {
           autoAdvance: base.autoAdvance !== false,
           animateHints: base.animateHints !== false,
           hintTypes,
@@ -11462,6 +11469,20 @@
           stageBackgroundColor,
           mouseControls,
         };
+        const paletteSortSource =
+          typeof base.paletteSort === "string"
+            ? base.paletteSort
+            : typeof state?.paletteSort === "string"
+            ? state.paletteSort
+            : null;
+        if (paletteSortSource) {
+          const normalizedSort =
+            LEGACY_PALETTE_SORT_ALIASES.get(paletteSortSource) || paletteSortSource;
+          if (ALLOWED_PALETTE_SORT_MODES.has(normalizedSort)) {
+            snapshot.paletteSort = normalizedSort;
+          }
+        }
+        return snapshot;
       }
 
       function persistUserSettings(snapshot) {
@@ -11631,6 +11652,15 @@
           normalized.mouseControls = cloneMouseControls(
             normalizeMouseControls(payload.mouseControls, DEFAULT_MOUSE_CONTROLS)
           );
+        }
+        if (payload.paletteSort != null) {
+          const candidate =
+            typeof payload.paletteSort === "string" ? payload.paletteSort : "";
+          const normalizedSort =
+            LEGACY_PALETTE_SORT_ALIASES.get(candidate) || candidate;
+          if (ALLOWED_PALETTE_SORT_MODES.has(normalizedSort)) {
+            normalized.paletteSort = normalizedSort;
+          }
         }
         return Object.keys(normalized).length > 0 ? normalized : null;
       }
