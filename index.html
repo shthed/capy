@@ -5274,6 +5274,16 @@
         }
       }
 
+      window.addEventListener("pagehide", (event) => {
+        if (event?.persisted) {
+          return;
+        }
+        flushPendingAutosave("pagehide");
+      });
+      window.addEventListener("beforeunload", () => {
+        flushPendingAutosave("beforeunload");
+      });
+
       let suppressNextCanvasClickUntil = 0;
       let lastRegionHintId = null;
       let lastRegionHintTime = 0;
@@ -11630,6 +11640,14 @@
           console.error("Failed to load stored settings", error);
         }
         return null;
+      }
+
+      function flushPendingAutosave(reason = "shutdown") {
+        scheduleSettingsPersist({ immediate: true });
+        if (!state.puzzle) {
+          return null;
+        }
+        return scheduleAutosave(pendingAutosaveReason || reason, { immediate: true });
       }
 
       function scheduleAutosave(reason, options = {}) {
