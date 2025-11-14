@@ -2381,6 +2381,10 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       uploadState.baseDirty = false;
     }
 
+    const hasCache = Boolean(cache && cache.ready);
+    const puzzleWidth = cache?.width || state?.puzzle?.width || 1;
+    const puzzleHeight = cache?.height || state?.puzzle?.height || 1;
+
     if (uploadState.baseHasContent) {
       drawWorldLayer({
         texture: layerTextures.base,
@@ -2392,10 +2396,6 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
         height: puzzleHeight,
       });
     }
-
-    const hasCache = Boolean(cache && cache.ready);
-    const puzzleWidth = cache?.width || state?.puzzle?.width || 1;
-    const puzzleHeight = cache?.height || state?.puzzle?.height || 1;
 
     if (cache?.filledLayerNeedsUpload) {
       uploadState.filledDirty = true;
