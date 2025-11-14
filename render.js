@@ -1,3 +1,47 @@
+const FRAME_LOG_INTERVAL_MS = 1000;
+
+function getTimestamp() {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+  return Date.now();
+}
+
+function createFrameLogger(label) {
+  const stats = {
+    frames: 0,
+    total: 0,
+    max: 0,
+    lastLogTs: getTimestamp(),
+  };
+  return function logFrameDuration(durationMs) {
+    if (!Number.isFinite(durationMs)) {
+      return;
+    }
+    stats.frames += 1;
+    stats.total += durationMs;
+    if (durationMs > stats.max) {
+      stats.max = durationMs;
+    }
+    const now = getTimestamp();
+    if (now - stats.lastLogTs < FRAME_LOG_INTERVAL_MS) {
+      return;
+    }
+    if (stats.frames > 0) {
+      const average = stats.total / stats.frames;
+      const peak = stats.max;
+      console.log(
+        `[Renderer:${label}] ${stats.frames} frames in ${(now - stats.lastLogTs).toFixed(0)}ms – ` +
+          `avg ${average.toFixed(2)}ms, max ${peak.toFixed(2)}ms`
+      );
+    }
+    stats.frames = 0;
+    stats.total = 0;
+    stats.max = 0;
+    stats.lastLogTs = now;
+  };
+}
+
 export function createRendererController(canvas, options = {}) {
   const { initialRenderer = "canvas2d", hooks = {}, renderers = {} } = options || {};
 
@@ -293,6 +337,7 @@ export function createCanvas2dRenderer(canvas, hooks = {}) {
   let context = null;
 
   const logger = typeof hooks?.log === "function" ? hooks.log : null;
+  const logFrameDuration = createFrameLogger("canvas2d");
 
   function emitLog(message, details) {
     if (!logger) {
@@ -345,10 +390,15 @@ export function createCanvas2dRenderer(canvas, hooks = {}) {
     renderFrame(args) {
       const ctx = ensureContext();
       if (!ctx) return null;
-      if (typeof hooks.renderFrame === "function") {
-        return hooks.renderFrame({ context: ctx, ...args });
+      const start = getTimestamp();
+      try {
+        if (typeof hooks.renderFrame === "function") {
+          return hooks.renderFrame({ context: ctx, ...args });
+        }
+        return null;
+      } finally {
+        logFrameDuration(getTimestamp() - start);
       }
-      return null;
     },
     renderPreview(args) {
       if (typeof hooks.renderPreview === "function") {
@@ -651,6 +701,7 @@ void main() {
 
 export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   const logger = typeof hooks?.log === "function" ? hooks.log : null;
+  const logFrameDuration = createFrameLogger("webgl");
 
   function emitLog(message, details) {
     if (!logger) {
@@ -1216,6 +1267,9 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       return null;
     }
 
+    const start = getTimestamp();
+
+    try {
     let hookResult;
     if (typeof hooks.renderFrame === "function") {
       hookResult = hooks.renderFrame({
@@ -1521,6 +1575,8 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     }
 
     return null;
+  } finally {
+    logFrameDuration(getTimestamp() - start);
   }
 
   function renderPreview(args = {}) {

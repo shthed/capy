@@ -2849,7 +2849,7 @@
             if (!allowShortcutTarget) {
               return;
             }
-            applyZoom(wantsZoomIn ? 1.1 : 0.9);
+            applyZoom(wantsZoomIn ? 1.1 : 0.9, undefined, undefined, { defer: true });
           },
           { capture: true }
         );
@@ -9762,13 +9762,13 @@
         const key = event.key;
         if (key === "+" || key === "=" || event.code === "Equal" || event.code === "NumpadAdd") {
           event.preventDefault();
-          applyZoom(1.1);
+          applyZoom(1.1, undefined, undefined, { defer: true });
           return;
         }
 
         if (key === "-" || event.code === "Minus" || event.code === "NumpadSubtract") {
           event.preventDefault();
-          applyZoom(0.9);
+          applyZoom(0.9, undefined, undefined, { defer: true });
         }
       }
 
@@ -9886,7 +9886,7 @@
         if (!Number.isFinite(multiplier) || Math.abs(multiplier - 1) < 0.001) {
           return;
         }
-        applyZoom(multiplier, event.clientX, event.clientY, { skipLog: true });
+        applyZoom(multiplier, event.clientX, event.clientY, { skipLog: true, defer: true });
         session.zoomChanged = true;
       }
 
@@ -9983,7 +9983,7 @@
         }
         if (action === "zoom-in" || action === "zoom-out") {
           const multiplier = action === "zoom-in" ? 1.15 : 0.85;
-          applyZoom(multiplier, event.clientX, event.clientY);
+          applyZoom(multiplier, event.clientX, event.clientY, { defer: true });
           return;
         }
       }
@@ -10556,7 +10556,8 @@
         const nextZoom = normalizeZoomValue(targetScale / baseScale, currentZoom);
         const significant = Math.abs(targetScale - currentScale) >= Math.max(0.01, currentScale * 0.001);
         viewState.zoom = nextZoom;
-        if (options.defer) {
+        const shouldDefer = options.defer !== undefined ? options.defer : true;
+        if (shouldDefer) {
           scheduleViewTransform({ forceRender: true });
         } else {
           applyViewTransform({ forceRender: true });
@@ -10587,7 +10588,7 @@
         if (!Number.isFinite(multiplier) || Math.abs(multiplier - 1) < 0.001) {
           return;
         }
-        applyZoom(multiplier, event.clientX, event.clientY);
+        applyZoom(multiplier, event.clientX, event.clientY, { defer: true });
       }
 
       function applyViewTransform(options = {}) {
