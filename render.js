@@ -19,6 +19,7 @@ export function createRendererController(canvas, options = {}) {
   let activeType = null;
   let lastMetrics = null;
   let controllerApi = null;
+  let activeCapabilities = {};
 
   function selectInitialType() {
     if (initialRenderer && factories.has(initialRenderer)) {
@@ -158,6 +159,19 @@ export function createRendererController(canvas, options = {}) {
     }
     activeRenderer = renderer;
     activeType = targetType;
+    activeCapabilities = {};
+    if (renderer && typeof renderer.getCapabilities === "function") {
+      try {
+        const caps = renderer.getCapabilities();
+        if (caps && typeof caps === "object") {
+          activeCapabilities = { ...caps };
+        }
+      } catch (error) {
+        console.warn("Renderer capability probe failed", error);
+      }
+    } else if (renderer && renderer.capabilities && typeof renderer.capabilities === "object") {
+      activeCapabilities = { ...renderer.capabilities };
+    }
     emitLog("Renderer activated", { type: activeType, previousType });
     if (lastMetrics && typeof activeRenderer.resize === "function") {
       activeRenderer.resize({ ...lastMetrics });
@@ -178,6 +192,10 @@ export function createRendererController(canvas, options = {}) {
 
   function listRenderers() {
     return Array.from(factories.keys());
+  }
+
+  function getCapabilities() {
+    return { ...activeCapabilities };
   }
 
   function resize(metrics) {
@@ -252,6 +270,7 @@ export function createRendererController(canvas, options = {}) {
     }
     activeRenderer = null;
     activeType = null;
+    activeCapabilities = {};
     if (resetMetrics) {
       lastMetrics = null;
     }
@@ -261,6 +280,7 @@ export function createRendererController(canvas, options = {}) {
     setRenderer,
     getRendererType,
     listRenderers,
+    getCapabilities,
     registerRenderer,
     unregisterRenderer,
     resize,
@@ -273,6 +293,11 @@ export function createRendererController(canvas, options = {}) {
   };
 
   controllerApi = api;
+  Object.defineProperty(api, "capabilities", {
+    get() {
+      return getCapabilities();
+    },
+  });
 
   registerRenderer("canvas2d", (currentCanvas, currentHooks) =>
     createCanvas2dRenderer(currentCanvas, currentHooks)
@@ -349,6 +374,12 @@ export function createCanvas2dRenderer(canvas, hooks = {}) {
         return hooks.renderFrame({ context: ctx, ...args });
       }
       return null;
+    },
+    getCapabilities() {
+      return {
+        infiniteWorld: false,
+        viewportAnchored: false,
+      };
     },
     renderPreview(args) {
       if (typeof hooks.renderPreview === "function") {
@@ -649,15 +680,36 @@ void main() {
 }
 `;
 
+const WORLD_VERTEX_SHADER_SOURCE = `
+attribute vec2 a_position;
+attribute vec2 a_texCoord;
+uniform vec2 u_cameraCenter;
+uniform float u_pixelsPerUnit;
+uniform vec2 u_viewSize;
+varying vec2 v_texCoord;
+void main() {
+  vec2 relative = (a_position - u_cameraCenter) * u_pixelsPerUnit;
+  vec2 screen = relative + u_viewSize * 0.5;
+  vec2 clip = vec2(
+    (screen.x / u_viewSize.x) * 2.0 - 1.0,
+    1.0 - (screen.y / u_viewSize.y) * 2.0
+  );
+  gl_Position = vec4(clip, 0.0, 1.0);
+  v_texCoord = a_texCoord;
+}
+`;
+
 const OUTLINE_VERTEX_SHADER_SOURCE = `
 attribute vec2 a_position;
+uniform vec2 u_cameraCenter;
+uniform float u_pixelsPerUnit;
 uniform vec2 u_viewSize;
-uniform float u_scale;
 void main() {
-  vec2 scaled = a_position * u_scale;
+  vec2 relative = (a_position - u_cameraCenter) * u_pixelsPerUnit;
+  vec2 screen = relative + u_viewSize * 0.5;
   vec2 clipPosition = vec2(
-    (scaled.x / u_viewSize.x) * 2.0 - 1.0,
-    1.0 - (scaled.y / u_viewSize.y) * 2.0
+    (screen.x / u_viewSize.x) * 2.0 - 1.0,
+    1.0 - (screen.y / u_viewSize.y) * 2.0
   );
   gl_Position = vec4(clipPosition, 0.0, 1.0);
 }
@@ -819,6 +871,59 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     return null;
   }
 
+  const worldProgram = linkProgram(gl, WORLD_VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE);
+  if (!worldProgram) {
+    emitLog("Failed to create world shader program", { type: "webgl", stage: "world-program" });
+    Object.values(layerTextures).forEach((texture) => {
+      if (texture && gl.isTexture(texture)) {
+        gl.deleteTexture(texture);
+        trackedTextures.delete(texture);
+      }
+    });
+    trackedTextures.delete(fallbackTexture);
+    gl.deleteTexture(fallbackTexture);
+    gl.deleteBuffer(quadBuffer);
+    gl.deleteProgram(program);
+    return null;
+  }
+  trackedPrograms.add(worldProgram);
+  const worldAttributes = {
+    position: gl.getAttribLocation(worldProgram, "a_position"),
+    texCoord: gl.getAttribLocation(worldProgram, "a_texCoord"),
+  };
+  const worldUniforms = {
+    cameraCenter: gl.getUniformLocation(worldProgram, "u_cameraCenter"),
+    pixelsPerUnit: gl.getUniformLocation(worldProgram, "u_pixelsPerUnit"),
+    viewSize: gl.getUniformLocation(worldProgram, "u_viewSize"),
+    texture: gl.getUniformLocation(worldProgram, "u_texture"),
+  };
+  const worldPositionBuffer = gl.createBuffer();
+  const worldTexCoordBuffer = gl.createBuffer();
+  if (!worldPositionBuffer || !worldTexCoordBuffer) {
+    emitLog("Failed to create world quad buffers", { type: "webgl", stage: "world-buffers" });
+    if (worldPositionBuffer && gl.isBuffer(worldPositionBuffer)) {
+      gl.deleteBuffer(worldPositionBuffer);
+    }
+    if (worldTexCoordBuffer && gl.isBuffer(worldTexCoordBuffer)) {
+      gl.deleteBuffer(worldTexCoordBuffer);
+    }
+    gl.deleteProgram(worldProgram);
+    trackedPrograms.delete(worldProgram);
+    Object.values(layerTextures).forEach((texture) => {
+      if (texture && gl.isTexture(texture)) {
+        gl.deleteTexture(texture);
+        trackedTextures.delete(texture);
+      }
+    });
+    trackedTextures.delete(fallbackTexture);
+    gl.deleteTexture(fallbackTexture);
+    gl.deleteBuffer(quadBuffer);
+    gl.deleteProgram(program);
+    return null;
+  }
+  trackedBuffers.add(worldPositionBuffer);
+  trackedBuffers.add(worldTexCoordBuffer);
+
   const numbersSurface = { canvas: null, context: null };
   const overlaySurface = {
     canvas: null,
@@ -847,8 +952,9 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     position: gl.getAttribLocation(outlineProgram, "a_position"),
   };
   const outlineUniforms = {
+    cameraCenter: gl.getUniformLocation(outlineProgram, "u_cameraCenter"),
+    pixelsPerUnit: gl.getUniformLocation(outlineProgram, "u_pixelsPerUnit"),
     viewSize: gl.getUniformLocation(outlineProgram, "u_viewSize"),
-    scale: gl.getUniformLocation(outlineProgram, "u_scale"),
     color: gl.getUniformLocation(outlineProgram, "u_color"),
   };
   const outlineBuffer = gl.createBuffer();
@@ -1416,16 +1522,20 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
 
   function drawGpuOutlines({
     cache,
-    renderScale,
+    camera,
     outlineColor,
     filledRegions,
     viewWidth,
     viewHeight,
+    geometries,
   }) {
     if (!gl || !outlineProgram || !outlineBuffer || !cache || !cache.ready) {
       return;
     }
-    if (!Array.isArray(cache.regions) || cache.regions.length === 0) {
+    const regions = Array.isArray(geometries) && geometries.length > 0
+      ? geometries
+      : cache.regions;
+    if (!Array.isArray(regions) || regions.length === 0) {
       return;
     }
     gl.useProgram(outlineProgram);
@@ -1437,8 +1547,15 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     if (outlineUniforms.viewSize) {
       gl.uniform2f(outlineUniforms.viewSize, viewWidth, viewHeight);
     }
-    if (outlineUniforms.scale) {
-      gl.uniform1f(outlineUniforms.scale, renderScale);
+    const pixelsPerUnit =
+      camera && Number.isFinite(camera.pixelsPerUnit) ? camera.pixelsPerUnit : 1;
+    if (outlineUniforms.pixelsPerUnit) {
+      gl.uniform1f(outlineUniforms.pixelsPerUnit, pixelsPerUnit);
+    }
+    if (outlineUniforms.cameraCenter) {
+      const cx = camera && Number.isFinite(camera.centerX) ? camera.centerX : 0;
+      const cy = camera && Number.isFinite(camera.centerY) ? camera.centerY : 0;
+      gl.uniform2f(outlineUniforms.cameraCenter, cx, cy);
     }
     if (outlineUniforms.color && outlineColor) {
       gl.uniform4f(
@@ -1451,7 +1568,7 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     }
     const strokeWidth = cache.strokeWidth > 0 ? cache.strokeWidth : 1;
     gl.lineWidth(Math.max(1, strokeWidth));
-    for (const geometry of cache.regions) {
+    for (const geometry of regions) {
       if (!geometry || (filledRegions && filledRegions.has(geometry.id))) {
         continue;
       }
@@ -1475,12 +1592,13 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   function drawGpuLabels({
     cache,
     state,
-    renderScale,
+    camera,
     strokeColor,
     fallbackColor,
     filledRegions,
     viewWidth,
     viewHeight,
+    geometries,
   }) {
     if (!gl || !textProgram || !textPositionBuffer || !textTexCoordBuffer) {
       return;
@@ -1488,7 +1606,10 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     if (!textAtlas || !gl.isTexture(textAtlas.texture)) {
       return;
     }
-    if (!cache || !cache.ready || !Array.isArray(cache.regions) || cache.regions.length === 0) {
+    const regions = Array.isArray(geometries) && geometries.length > 0
+      ? geometries
+      : cache?.regions;
+    if (!regions || regions.length === 0) {
       return;
     }
     const showLabels = state?.settings?.showRegionLabels !== false;
@@ -1524,7 +1645,7 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       gl.vertexAttribPointer(textAttributes.texCoord, 2, gl.FLOAT, false, 0, 0);
     }
 
-    for (const geometry of cache.regions) {
+    for (const geometry of regions) {
       if (!geometry || (filledRegions && filledRegions.has(geometry.id))) {
         continue;
       }
@@ -1545,8 +1666,20 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
           fillColor[3]
         );
       }
-      const centerX = (label.center && Number.isFinite(label.center.x) ? label.center.x : 0) * renderScale;
-      const centerY = (label.center && Number.isFinite(label.center.y) ? label.center.y : 0) * renderScale;
+      const pixelsPerUnit =
+        camera && Number.isFinite(camera.pixelsPerUnit) ? camera.pixelsPerUnit : 1;
+      const halfWidth = viewWidth * 0.5;
+      const halfHeight = viewHeight * 0.5;
+      const centerPuzzleX = label.center && Number.isFinite(label.center.x) ? label.center.x : 0;
+      const centerPuzzleY = label.center && Number.isFinite(label.center.y) ? label.center.y : 0;
+      const cx =
+        (centerPuzzleX - (camera && Number.isFinite(camera.centerX) ? camera.centerX : 0)) *
+          pixelsPerUnit +
+        halfWidth;
+      const cy =
+        (centerPuzzleY - (camera && Number.isFinite(camera.centerY) ? camera.centerY : 0)) *
+          pixelsPerUnit +
+        halfHeight;
       const baseHeight = label.textHeight || label.metrics?.heightWithStroke || label.fontSize || 0;
       const glyphPositions = [];
       const glyphTexCoords = [];
@@ -1562,13 +1695,13 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
           ? entry.width
           : glyphInfo.width * (label.fontSize / textAtlas.baseFontSize);
         const heightUnits = Number.isFinite(entry.height) ? entry.height : baseHeight;
-        const glyphWidth = Math.max(0.01, widthUnits) * renderScale;
-        const glyphHeight = Math.max(0.01, heightUnits) * renderScale;
-        const offsetX = Number.isFinite(entry.offset) ? entry.offset * renderScale : 0;
-        const x0 = centerX + offsetX - glyphWidth / 2;
-        const x1 = centerX + offsetX + glyphWidth / 2;
-        const y0 = centerY - glyphHeight / 2;
-        const y1 = centerY + glyphHeight / 2;
+        const glyphWidth = Math.max(0.01, widthUnits) * pixelsPerUnit;
+        const glyphHeight = Math.max(0.01, heightUnits) * pixelsPerUnit;
+        const offsetPixels = Number.isFinite(entry.offset) ? entry.offset * pixelsPerUnit : 0;
+        const x0 = cx + offsetPixels - glyphWidth / 2;
+        const x1 = cx + offsetPixels + glyphWidth / 2;
+        const y0 = cy - glyphHeight / 2;
+        const y1 = cy + glyphHeight / 2;
         const u0 = glyphInfo.u0 ?? 0;
         const v0 = glyphInfo.v0 ?? 0;
         const u1 = glyphInfo.u1 ?? 0;
@@ -1673,6 +1806,81 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     gl.bindTexture(target, null);
   }
 
+  let worldQuadWidth = 0;
+  let worldQuadHeight = 0;
+
+  function bindWorldQuad(width, height) {
+    const w = Math.max(1, Math.round(width));
+    const h = Math.max(1, Math.round(height));
+    if (w !== worldQuadWidth || h !== worldQuadHeight) {
+      const positions = new Float32Array([0, 0, w, 0, w, h, 0, 0, w, h, 0, h]);
+      const texCoords = new Float32Array([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, worldPositionBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, worldTexCoordBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
+      worldQuadWidth = w;
+      worldQuadHeight = h;
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, worldPositionBuffer);
+    if (worldAttributes.position >= 0) {
+      gl.enableVertexAttribArray(worldAttributes.position);
+      gl.vertexAttribPointer(worldAttributes.position, 2, gl.FLOAT, false, 0, 0);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, worldTexCoordBuffer);
+    if (worldAttributes.texCoord >= 0) {
+      gl.enableVertexAttribArray(worldAttributes.texCoord);
+      gl.vertexAttribPointer(worldAttributes.texCoord, 2, gl.FLOAT, false, 0, 0);
+    }
+  }
+
+  function drawWorldLayer({
+    texture = fallbackTexture,
+    camera,
+    viewWidth,
+    viewHeight,
+    pixelsPerUnit,
+    width,
+    height,
+  }) {
+    if (!gl || !worldProgram) {
+      return;
+    }
+    const tex = texture || fallbackTexture;
+    const w = Math.max(1, width || worldQuadWidth || 1);
+    const h = Math.max(1, height || worldQuadHeight || 1);
+    gl.useProgram(worldProgram);
+    bindWorldQuad(w, h);
+    if (worldUniforms.viewSize) {
+      gl.uniform2f(worldUniforms.viewSize, viewWidth, viewHeight);
+    }
+    if (worldUniforms.pixelsPerUnit) {
+      gl.uniform1f(
+        worldUniforms.pixelsPerUnit,
+        Number.isFinite(pixelsPerUnit) && pixelsPerUnit > 0 ? pixelsPerUnit : 1
+      );
+    }
+    if (worldUniforms.cameraCenter) {
+      const cx = camera && Number.isFinite(camera.centerX) ? camera.centerX : 0;
+      const cy = camera && Number.isFinite(camera.centerY) ? camera.centerY : 0;
+      gl.uniform2f(worldUniforms.cameraCenter, cx, cy);
+    }
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    if (worldUniforms.texture !== null) {
+      gl.uniform1i(worldUniforms.texture, 0);
+    }
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    if (worldAttributes.position >= 0) {
+      gl.disableVertexAttribArray(worldAttributes.position);
+    }
+    if (worldAttributes.texCoord >= 0) {
+      gl.disableVertexAttribArray(worldAttributes.texCoord);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
   function applyResize(metrics = {}) {
     if (!gl || !canvas) {
       return;
@@ -1709,6 +1917,299 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
         createRenderTarget,
       });
     }
+  }
+
+  function createProceduralWorldManager(options = {}) {
+    const { requestTile } = options;
+    const tiles = new Map();
+    const pending = new Map();
+    const rootKey = "0:0:0";
+    const MAX_LEVEL = 6;
+    const LEVEL_BASE = 512;
+    let activeGeometry = null;
+    let activeTileKey = rootKey;
+
+    tiles.set(rootKey, {
+      level: 0,
+      x: 0,
+      y: 0,
+      status: "ready",
+      geometry: null,
+      bounds: null,
+    });
+
+    const tileKey = (level, x, y) => `${level}:${x}:${y}`;
+
+    const geometryHasContent = (geometry) => Array.isArray(geometry) && geometry.length > 0;
+
+    function computeTargetLevel(pixelsPerUnit) {
+      if (!Number.isFinite(pixelsPerUnit) || pixelsPerUnit < LEVEL_BASE) {
+        return 0;
+      }
+      let level = 0;
+      let threshold = LEVEL_BASE;
+      while (pixelsPerUnit >= threshold && level < MAX_LEVEL) {
+        level += 1;
+        threshold *= 2;
+      }
+      return level;
+    }
+
+    function clampIndex(value, max) {
+      if (!Number.isFinite(value)) {
+        return 0;
+      }
+      const limit = Math.max(0, Math.floor(max));
+      if (limit <= 0) {
+        return 0;
+      }
+      return Math.min(limit - 1, Math.max(0, Math.floor(value)));
+    }
+
+    function resolveTileSelection(level, camera, width, height) {
+      const divisions = 1 << level;
+      const safeWidth = width > 0 ? width : 1;
+      const safeHeight = height > 0 ? height : 1;
+      const tileWidth = safeWidth / divisions;
+      const tileHeight = safeHeight / divisions;
+      const centerX = Number.isFinite(camera?.centerX) ? camera.centerX : safeWidth / 2;
+      const centerY = Number.isFinite(camera?.centerY) ? camera.centerY : safeHeight / 2;
+      const tileX = clampIndex(centerX / Math.max(tileWidth, 1), divisions);
+      const tileY = clampIndex(centerY / Math.max(tileHeight, 1), divisions);
+      return { tileX, tileY };
+    }
+
+    function attachRoot(cache) {
+      if (!cache || !Array.isArray(cache.regions)) {
+        return;
+      }
+      const tile = tiles.get(rootKey) || { level: 0, x: 0, y: 0, status: "ready" };
+      tile.geometry = cache.regions;
+      const nextWidth =
+        Number.isFinite(cache.width) && cache.width > 0
+          ? cache.width
+          : tile.bounds && Number.isFinite(tile.bounds.width) && tile.bounds.width > 0
+          ? tile.bounds.width
+          : 0;
+      const nextHeight =
+        Number.isFinite(cache.height) && cache.height > 0
+          ? cache.height
+          : tile.bounds && Number.isFinite(tile.bounds.height) && tile.bounds.height > 0
+          ? tile.bounds.height
+          : 0;
+      tile.bounds = { width: nextWidth, height: nextHeight };
+      tile.status = "ready";
+      tiles.set(rootKey, tile);
+      if (geometryHasContent(tile.geometry)) {
+        activeGeometry = tile.geometry;
+      } else {
+        activeGeometry = cache.regions;
+      }
+      activeTileKey = rootKey;
+    }
+
+    async function ensureTile(level, x, y, context) {
+      const key = tileKey(level, x, y);
+      const existing = tiles.get(key);
+      if (existing && existing.status === "ready") {
+        return existing;
+      }
+      if (pending.has(key)) {
+        return pending.get(key);
+      }
+      if (typeof requestTile !== "function") {
+        return existing || null;
+      }
+      const tile = existing || { level, x, y, status: "pending", geometry: null, bounds: null };
+      tile.status = "pending";
+      tiles.set(key, tile);
+      const promise = Promise.resolve()
+        .then(() => requestTile({ level, x, y, view: context }))
+        .then((result) => {
+          tile.status = "ready";
+          if (result && Array.isArray(result.regions)) {
+            tile.geometry = result.regions;
+          }
+          if (result && result.bounds) {
+            const width =
+              Number.isFinite(result.bounds.width) && result.bounds.width > 0
+                ? result.bounds.width
+                : tile.bounds && Number.isFinite(tile.bounds?.width)
+                ? tile.bounds.width
+                : null;
+            const height =
+              Number.isFinite(result.bounds.height) && result.bounds.height > 0
+                ? result.bounds.height
+                : tile.bounds && Number.isFinite(tile.bounds?.height)
+                ? tile.bounds.height
+                : null;
+            tile.bounds = {
+              width: width ?? (tile.bounds?.width || 0),
+              height: height ?? (tile.bounds?.height || 0),
+            };
+          } else if (!tile.bounds) {
+            tile.bounds = null;
+          }
+          pending.delete(key);
+          return tile;
+        })
+        .catch((error) => {
+          tile.status = "error";
+          tile.error = error;
+          pending.delete(key);
+          return tile;
+        });
+      pending.set(key, promise);
+      return promise;
+    }
+
+    function updateView(context = {}) {
+      const { cache, camera, state } = context;
+      if (cache && Array.isArray(cache.regions)) {
+        attachRoot(cache);
+      }
+      const root = tiles.get(rootKey);
+      if (!camera) {
+        if (root && geometryHasContent(root.geometry)) {
+          activeGeometry = root.geometry;
+          activeTileKey = rootKey;
+        }
+        return;
+      }
+
+      const fallbackWidth =
+        Number.isFinite(cache?.width) && cache.width > 0
+          ? cache.width
+          : Number.isFinite(state?.puzzle?.width) && state.puzzle.width > 0
+          ? state.puzzle.width
+          : 0;
+      const fallbackHeight =
+        Number.isFinite(cache?.height) && cache.height > 0
+          ? cache.height
+          : Number.isFinite(state?.puzzle?.height) && state.puzzle.height > 0
+          ? state.puzzle.height
+          : 0;
+
+      const width =
+        root && root.bounds && Number.isFinite(root.bounds.width) && root.bounds.width > 0
+          ? root.bounds.width
+          : fallbackWidth;
+      const height =
+        root && root.bounds && Number.isFinite(root.bounds.height) && root.bounds.height > 0
+          ? root.bounds.height
+          : fallbackHeight;
+
+      const targetLevel = computeTargetLevel(camera.pixelsPerUnit);
+      let selectedTile = root;
+      let selectedKey = rootKey;
+
+      if (targetLevel > 0 && width > 0 && height > 0) {
+        for (let level = 1; level <= targetLevel; level += 1) {
+          const { tileX, tileY } = resolveTileSelection(level, camera, width, height);
+          const key = tileKey(level, tileX, tileY);
+          const tile = tiles.get(key);
+          if (!tile || tile.status !== "ready" || !geometryHasContent(tile.geometry)) {
+            if (typeof requestTile === "function") {
+              ensureTile(level, tileX, tileY, context);
+            }
+          } else {
+            selectedTile = tile;
+            selectedKey = key;
+          }
+        }
+      }
+
+      if (selectedTile && geometryHasContent(selectedTile.geometry)) {
+        activeGeometry = selectedTile.geometry;
+        activeTileKey = selectedKey;
+      } else if (root && geometryHasContent(root?.geometry)) {
+        activeGeometry = root.geometry;
+        activeTileKey = rootKey;
+      } else if (cache && Array.isArray(cache.regions) && cache.regions.length > 0) {
+        activeGeometry = cache.regions;
+        activeTileKey = rootKey;
+      } else {
+        activeGeometry = null;
+        activeTileKey = rootKey;
+      }
+    }
+
+    function getActiveGeometry(cache) {
+      if (activeGeometry && Array.isArray(activeGeometry) && activeGeometry.length > 0) {
+        return activeGeometry;
+      }
+      if (cache && Array.isArray(cache.regions)) {
+        return cache.regions;
+      }
+      const root = tiles.get(rootKey);
+      if (root && Array.isArray(root.geometry)) {
+        return root.geometry;
+      }
+      return null;
+    }
+
+    function getTiles() {
+      return Array.from(tiles.values()).map((tile) => {
+        const key = tileKey(tile.level ?? 0, tile.x ?? 0, tile.y ?? 0);
+        return {
+          ...tile,
+          isActive: key === activeTileKey,
+        };
+      });
+    }
+
+    return {
+      updateView,
+      getActiveGeometry,
+      getTiles,
+    };
+  }
+
+  const proceduralWorld = createProceduralWorldManager({
+    requestTile: typeof hooks.requestProceduralTile === "function" ? hooks.requestProceduralTile : null,
+  });
+
+  const rendererCapabilities = {
+    infiniteWorld: true,
+    viewportAnchored: true,
+    minZoom: 1 / 65536,
+    maxZoom: Number.POSITIVE_INFINITY,
+    supportsProceduralTiles: typeof hooks.requestProceduralTile === "function",
+  };
+
+  function resolveCamera(cameraInput, state, cache, metrics, viewWidth, viewHeight) {
+    const puzzleWidth = cache?.width || state?.puzzle?.width || 1;
+    const puzzleHeight = cache?.height || state?.puzzle?.height || 1;
+    let centerX = puzzleWidth / 2;
+    let centerY = puzzleHeight / 2;
+    if (cameraInput && typeof cameraInput === "object") {
+      if (Number.isFinite(cameraInput.centerX)) {
+        centerX = cameraInput.centerX;
+      }
+      if (Number.isFinite(cameraInput.centerY)) {
+        centerY = cameraInput.centerY;
+      }
+    }
+    const pixelsPerUnit = Number.isFinite(metrics?.renderScale) && metrics.renderScale > 0
+      ? metrics.renderScale
+      : 1;
+    const viewportWidth = Math.max(1, viewWidth);
+    const viewportHeight = Math.max(1, viewHeight);
+    const halfWidthUnits = viewportWidth / (pixelsPerUnit * 2);
+    const halfHeightUnits = viewportHeight / (pixelsPerUnit * 2);
+    return {
+      centerX,
+      centerY,
+      pixelsPerUnit,
+      viewportWidth,
+      viewportHeight,
+      visibleBounds: {
+        left: centerX - halfWidthUnits,
+        right: centerX + halfWidthUnits,
+        top: centerY - halfHeightUnits,
+        bottom: centerY + halfHeightUnits,
+      },
+    };
   }
 
   function renderFrame(args = {}) {
@@ -1763,6 +2264,10 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       )
     );
 
+    const camera = resolveCamera(args?.camera, state, cache, metrics, pixelWidth, pixelHeight);
+    const pixelsPerUnit = camera.pixelsPerUnit;
+    proceduralWorld.updateView({ camera, cache, state, metrics });
+
     if (pixelWidth !== uploadState.pixelWidth || pixelHeight !== uploadState.pixelHeight) {
       uploadState.pixelWidth = pixelWidth;
       uploadState.pixelHeight = pixelHeight;
@@ -1797,7 +2302,12 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
 
     resetOverlaySurface(pixelWidth, pixelHeight);
 
-    const renderScale = cache && Number.isFinite(cache.renderScale) ? cache.renderScale : 1;
+    const renderScale = Number.isFinite(metrics.renderScale) && metrics.renderScale > 0
+      ? metrics.renderScale
+      : pixelsPerUnit;
+    if (cache) {
+      cache.renderScale = renderScale;
+    }
 
     if (cache && cache.filledLayerDirty) {
       uploadState.filledDirty = true;
@@ -1872,10 +2382,20 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     }
 
     if (uploadState.baseHasContent) {
-      drawQuad({ texture: layerTextures.base });
+      drawWorldLayer({
+        texture: layerTextures.base,
+        camera,
+        viewWidth: pixelWidth,
+        viewHeight: pixelHeight,
+        pixelsPerUnit,
+        width: puzzleWidth,
+        height: puzzleHeight,
+      });
     }
 
     const hasCache = Boolean(cache && cache.ready);
+    const puzzleWidth = cache?.width || state?.puzzle?.width || 1;
+    const puzzleHeight = cache?.height || state?.puzzle?.height || 1;
 
     if (cache?.filledLayerNeedsUpload) {
       uploadState.filledDirty = true;
@@ -1904,21 +2424,29 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       }
     }
     if (hasCache && cache?.filledLayer) {
-      drawQuad({ texture: layerTextures.filled });
+      drawWorldLayer({
+        texture: layerTextures.filled,
+        camera,
+        viewWidth: pixelWidth,
+        viewHeight: pixelHeight,
+        pixelsPerUnit,
+        width: puzzleWidth,
+        height: puzzleHeight,
+      });
     }
 
     if (hasCache) {
-      const viewWidth = Math.max(1, cache?.width ? cache.width * renderScale : pixelWidth);
-      const viewHeight = Math.max(1, cache?.height ? cache.height * renderScale : pixelHeight);
       const filledSet = buildFilledSet(state);
+      const geometrySet = proceduralWorld.getActiveGeometry(cache) || cache?.regions || [];
       const outlineColorVec = parseColorToClear(args.outlineColor, [0, 0, 0, 1]);
       drawGpuOutlines({
         cache,
-        renderScale,
+        camera,
         outlineColor: outlineColorVec,
         filledRegions: filledSet,
-        viewWidth,
-        viewHeight,
+        viewWidth: pixelWidth,
+        viewHeight: pixelHeight,
+        geometries: geometrySet,
       });
       const strokeColorVec = parseColorToClear(
         args.labelStrokeColor || args.outlineColor,
@@ -1928,12 +2456,13 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       drawGpuLabels({
         cache,
         state,
-        renderScale,
+        camera,
         strokeColor: strokeColorVec,
         fallbackColor: fallbackLabelColor,
         filledRegions: filledSet,
-        viewWidth,
-        viewHeight,
+        viewWidth: pixelWidth,
+        viewHeight: pixelHeight,
+        geometries: geometrySet,
       });
     }
 
@@ -1948,7 +2477,15 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     }
 
     if (overlaySurface.hasContent && uploadState.overlayHasContent) {
-      drawQuad({ texture: layerTextures.overlay });
+      drawWorldLayer({
+        texture: layerTextures.overlay,
+        camera,
+        viewWidth: pixelWidth,
+        viewHeight: pixelHeight,
+        pixelsPerUnit,
+        width: puzzleWidth,
+        height: puzzleHeight,
+      });
     }
 
     return null;
@@ -1999,6 +2536,13 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       uploadState.overlayDirty = true;
     }
 
+    const state = args?.state || payload?.state || null;
+    const cache = args?.cache || null;
+    const camera = resolveCamera(args?.camera, state, cache, metrics, pixelWidth, pixelHeight);
+    const pixelsPerUnit = camera.pixelsPerUnit;
+    const puzzleWidth = cache?.width || state?.puzzle?.width || 1;
+    const puzzleHeight = cache?.height || state?.puzzle?.height || 1;
+
     try {
       hooks.flashRegions({
         gl,
@@ -2036,7 +2580,15 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     gl.viewport(0, 0, pixelWidth, pixelHeight);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    drawQuad({ texture: layerTextures.overlay });
+    drawWorldLayer({
+      texture: layerTextures.overlay,
+      camera,
+      viewWidth: pixelWidth,
+      viewHeight: pixelHeight,
+      pixelsPerUnit,
+      width: puzzleWidth,
+      height: puzzleHeight,
+    });
     return null;
   }
 
@@ -2128,6 +2680,13 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     fillBackground,
     getContext,
     dispose,
+    getCapabilities() {
+      return { ...rendererCapabilities };
+    },
+    getWorld() {
+      return proceduralWorld;
+    },
+    capabilities: rendererCapabilities,
   };
 }
 
@@ -2689,5 +3248,15 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     fillBackground,
     getContext,
     dispose,
+    getCapabilities() {
+      return {
+        infiniteWorld: false,
+        viewportAnchored: false,
+      };
+    },
+    capabilities: {
+      infiniteWorld: false,
+      viewportAnchored: false,
+    },
   };
 }

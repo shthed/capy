@@ -3472,6 +3472,8 @@
         panY: 0,
         zoom: 1,
         baseScale: 1,
+        centerX: 0,
+        centerY: 0,
       };
 
       const canvasMetrics = {
@@ -3482,7 +3484,89 @@
         displayHeight: 0,
         pixelWidth: 0,
         pixelHeight: 0,
+        viewportWidth: 0,
+        viewportHeight: 0,
       };
+
+      function syncViewCenterFromPan() {
+        if (!state.puzzle) {
+          viewState.centerX = 0;
+          viewState.centerY = 0;
+          return;
+        }
+        const scale = computeDisplayScale();
+        const width = state.puzzle.width;
+        const height = state.puzzle.height;
+        const panX = Number.isFinite(viewState.panX) ? viewState.panX : 0;
+        const panY = Number.isFinite(viewState.panY) ? viewState.panY : 0;
+        const safeScale = scale || 1;
+        viewState.centerX = width / 2 - panX / safeScale;
+        viewState.centerY = height / 2 - panY / safeScale;
+      }
+
+      function syncViewPanFromCenter() {
+        if (!state.puzzle) {
+          viewState.panX = 0;
+          viewState.panY = 0;
+          return;
+        }
+        const scale = computeDisplayScale();
+        const width = state.puzzle.width;
+        const height = state.puzzle.height;
+        const centerX = Number.isFinite(viewState.centerX) ? viewState.centerX : width / 2;
+        const centerY = Number.isFinite(viewState.centerY) ? viewState.centerY : height / 2;
+        viewState.panX = (width / 2 - centerX) * scale;
+        viewState.panY = (height / 2 - centerY) * scale;
+      }
+
+      function setViewPan(panX, panY) {
+        viewState.panX = Number.isFinite(panX) ? panX : 0;
+        viewState.panY = Number.isFinite(panY) ? panY : 0;
+        syncViewCenterFromPan();
+      }
+
+      function adjustViewPan(deltaX, deltaY) {
+        const basePanX = Number.isFinite(viewState.panX) ? viewState.panX : 0;
+        const basePanY = Number.isFinite(viewState.panY) ? viewState.panY : 0;
+        setViewPan(basePanX + deltaX, basePanY + deltaY);
+      }
+
+      function setViewCenter(centerX, centerY) {
+        viewState.centerX = Number.isFinite(centerX) ? centerX : 0;
+        viewState.centerY = Number.isFinite(centerY) ? centerY : 0;
+        syncViewPanFromCenter();
+      }
+
+      function getViewCenter() {
+        if (!state.puzzle) {
+          return { x: 0, y: 0 };
+        }
+        if (!Number.isFinite(viewState.centerX) || !Number.isFinite(viewState.centerY)) {
+          syncViewCenterFromPan();
+        }
+        return { x: viewState.centerX, y: viewState.centerY };
+      }
+
+      function getViewCamera() {
+        if (!state.puzzle) {
+          return null;
+        }
+        const center = getViewCenter();
+        const scale = computeDisplayScale();
+        const pixelRatio = canvasMetrics.pixelRatio > 0 ? canvasMetrics.pixelRatio : getDevicePixelRatio();
+        const pixelsPerUnit = scale * pixelRatio;
+        const viewportWidth = canvasMetrics.pixelWidth || Math.max(1, canvasMetrics.displayWidth * pixelRatio);
+        const viewportHeight = canvasMetrics.pixelHeight || Math.max(1, canvasMetrics.displayHeight * pixelRatio);
+        return {
+          centerX: center.x,
+          centerY: center.y,
+          scale,
+          pixelsPerUnit,
+          pixelRatio,
+          viewportWidth,
+          viewportHeight,
+        };
+      }
 
       let cachedCanvasRect = null;
       let pendingViewTransform = null;
@@ -3492,38 +3576,43 @@
       function clampViewPanToPuzzleBounds() {
         let changed = false;
         if (!state.puzzle) {
-          if (Math.abs(viewState.panX) > 0.0001) {
-            viewState.panX = 0;
-            changed = true;
+          if (Math.abs(viewState.panX) > 0.0001 || Math.abs(viewState.panY) > 0.0001) {
+            setViewPan(0, 0);
+            return true;
           }
-          if (Math.abs(viewState.panY) > 0.0001) {
-            viewState.panY = 0;
-            changed = true;
-          }
-          return changed;
+          return false;
+        }
+        const capabilities = state.rendering?.capabilities || {};
+        if (capabilities.infiniteWorld) {
+          return false;
         }
         const displayScale = computeDisplayScale();
         const stageHalfWidth = Math.max(0, (state.puzzle.width || 0) * displayScale * 0.5);
         const stageHalfHeight = Math.max(0, (state.puzzle.height || 0) * displayScale * 0.5);
+        let panX = viewState.panX;
+        let panY = viewState.panY;
         if (Number.isFinite(stageHalfWidth)) {
-          const nextPanX = clamp(viewState.panX, -stageHalfWidth, stageHalfWidth);
-          if (Math.abs(nextPanX - viewState.panX) > 0.0001) {
-            viewState.panX = nextPanX;
+          const nextPanX = clamp(panX, -stageHalfWidth, stageHalfWidth);
+          if (Math.abs(nextPanX - panX) > 0.0001) {
+            panX = nextPanX;
             changed = true;
           }
-        } else if (Math.abs(viewState.panX) > 0.0001) {
-          viewState.panX = 0;
+        } else if (Math.abs(panX) > 0.0001) {
+          panX = 0;
           changed = true;
         }
         if (Number.isFinite(stageHalfHeight)) {
-          const nextPanY = clamp(viewState.panY, -stageHalfHeight, stageHalfHeight);
-          if (Math.abs(nextPanY - viewState.panY) > 0.0001) {
-            viewState.panY = nextPanY;
+          const nextPanY = clamp(panY, -stageHalfHeight, stageHalfHeight);
+          if (Math.abs(nextPanY - panY) > 0.0001) {
+            panY = nextPanY;
             changed = true;
           }
-        } else if (Math.abs(viewState.panY) > 0.0001) {
-          viewState.panY = 0;
+        } else if (Math.abs(panY) > 0.0001) {
+          panY = 0;
           changed = true;
+        }
+        if (changed) {
+          setViewPan(panX, panY);
         }
         return changed;
       }
@@ -3570,13 +3659,26 @@
         if (!state.puzzle || !puzzleCanvas) {
           return false;
         }
+        const capabilities = state.rendering?.capabilities || {};
+        const viewportAnchored = capabilities.viewportAnchored === true;
         const nextDisplayScale = computeDisplayScale();
         const pixelRatio = getDevicePixelRatio();
         const renderScale = nextDisplayScale * pixelRatio;
-        const pixelWidth = Math.max(1, Math.round(state.puzzle.width * renderScale));
-        const pixelHeight = Math.max(1, Math.round(state.puzzle.height * renderScale));
-        const displayWidth = Math.max(1, state.puzzle.width * nextDisplayScale);
-        const displayHeight = Math.max(1, state.puzzle.height * nextDisplayScale);
+        let displayWidth = Math.max(1, state.puzzle.width * nextDisplayScale);
+        let displayHeight = Math.max(1, state.puzzle.height * nextDisplayScale);
+        let pixelWidth = Math.max(1, Math.round(displayWidth * pixelRatio));
+        let pixelHeight = Math.max(1, Math.round(displayHeight * pixelRatio));
+        let viewportWidth = displayWidth;
+        let viewportHeight = displayHeight;
+        if (viewportAnchored && viewportEl) {
+          const rect = viewportEl.getBoundingClientRect();
+          viewportWidth = Math.max(1, rect.width || viewportEl.clientWidth || 1);
+          viewportHeight = Math.max(1, rect.height || viewportEl.clientHeight || 1);
+          displayWidth = viewportWidth;
+          displayHeight = viewportHeight;
+          pixelWidth = Math.max(1, Math.round(viewportWidth * pixelRatio));
+          pixelHeight = Math.max(1, Math.round(viewportHeight * pixelRatio));
+        }
         const changed =
           Math.abs(nextDisplayScale - canvasMetrics.displayScale) > 0.0001 ||
           canvasMetrics.pixelWidth !== pixelWidth ||
@@ -3589,6 +3691,8 @@
         canvasMetrics.pixelHeight = pixelHeight;
         canvasMetrics.displayWidth = displayWidth;
         canvasMetrics.displayHeight = displayHeight;
+        canvasMetrics.viewportWidth = viewportWidth;
+        canvasMetrics.viewportHeight = viewportHeight;
         return changed;
       }
 
@@ -3647,8 +3751,14 @@
         if (!cache) return false;
         const fallbackWidth = Math.max(1, cache.width || 1);
         const fallbackHeight = Math.max(1, cache.height || 1);
-        const pixelWidth = Math.max(1, canvasMetrics.pixelWidth || fallbackWidth);
-        const pixelHeight = Math.max(1, canvasMetrics.pixelHeight || fallbackHeight);
+        const capabilities = state.rendering?.capabilities || {};
+        const viewportAnchored = capabilities.viewportAnchored === true;
+        const pixelWidth = viewportAnchored
+          ? fallbackWidth
+          : Math.max(1, canvasMetrics.pixelWidth || fallbackWidth);
+        const pixelHeight = viewportAnchored
+          ? fallbackHeight
+          : Math.max(1, canvasMetrics.pixelHeight || fallbackHeight);
         const renderScale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
         const changed =
           cache.pixelWidth !== pixelWidth ||
@@ -3800,7 +3910,7 @@
         loadedSaveId: null,
         previewImageData: null,
         renderCache: createRenderCache(),
-        rendering: { controller: null },
+        rendering: { controller: null, capabilities: {}, world: null },
         defaultGame: {
           id: DEFAULT_GAME_SOURCE.id,
           path: DEFAULT_GAME_SOURCE.path,
@@ -3935,6 +4045,12 @@
           }
           unavailableRenderers.delete(nextType);
         }
+        state.rendering.capabilities = rendererController?.getCapabilities
+          ? rendererController.getCapabilities()
+          : {};
+        state.rendering.world = rendererController?.getWorld
+          ? rendererController.getWorld()
+          : null;
         if (puzzleCanvas) {
           if (nextType === "webgl") {
             puzzleCanvas.style.opacity = "0";
@@ -5266,10 +5382,20 @@
         if (!rect || rect.width <= 0 || rect.height <= 0) {
           return null;
         }
-        const scaleX = state.puzzle.width / rect.width;
-        const scaleY = state.puzzle.height / rect.height;
-        const x = Math.floor((clientX - rect.left) * scaleX);
-        const y = Math.floor((clientY - rect.top) * scaleY);
+        const capabilities = state.rendering?.capabilities || {};
+        const camera = getViewCamera();
+        const scale = camera ? camera.scale : computeDisplayScale();
+        const center = getViewCenter();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const panX = capabilities.viewportAnchored ? 0 : Number.isFinite(viewState.panX) ? viewState.panX : 0;
+        const panY = capabilities.viewportAnchored ? 0 : Number.isFinite(viewState.panY) ? viewState.panY : 0;
+        const offsetCssX = clientX - centerX - panX;
+        const offsetCssY = clientY - centerY - panY;
+        const worldX = center.x + offsetCssX / scale;
+        const worldY = center.y + offsetCssY / scale;
+        const x = Math.floor(worldX);
+        const y = Math.floor(worldY);
         if (x < 0 || y < 0 || x >= state.puzzle.width || y >= state.puzzle.height) {
           return null;
         }
@@ -8034,6 +8160,7 @@
           state,
           cache,
           metrics: { ...canvasMetrics },
+          camera: getViewCamera(),
           previewCanvas,
           previewCtx,
           previewImageData: state.previewImageData,
@@ -10485,8 +10612,7 @@
               const deltaX = centerX - previousCenterX;
               const deltaY = centerY - previousCenterY;
               if (Math.abs(deltaX) > 0.0001 || Math.abs(deltaY) > 0.0001) {
-                viewState.panX += deltaX;
-                viewState.panY += deltaY;
+                adjustViewPan(deltaX, deltaY);
                 clampViewPanToPuzzleBounds();
                 pinchSession.hasChanged = true;
                 scheduleViewTransform({ skipSizing: true });
@@ -10512,8 +10638,7 @@
           event.preventDefault();
           const dx = event.clientX - panOrigin.x;
           const dy = event.clientY - panOrigin.y;
-          viewState.panX = panOrigin.panX + dx;
-          viewState.panY = panOrigin.panY + dy;
+          setViewPan(panOrigin.panX + dx, panOrigin.panY + dy);
           clampViewPanToPuzzleBounds();
           if (session) {
             session.dragStarted = true;
@@ -10800,23 +10925,43 @@
       }
 
       function getZoomBounds() {
-        const maxZoom = Math.max(MIN_VIEWPORT_ZOOM, getConfiguredMaxViewportZoom());
-        return { minZoom: MIN_VIEWPORT_ZOOM, maxZoom };
+        const capabilities = state.rendering?.capabilities || {};
+        const minCapabilityZoom = Number.isFinite(capabilities.minZoom) && capabilities.minZoom > 0
+          ? capabilities.minZoom
+          : MIN_VIEWPORT_ZOOM;
+        let maxZoomCandidate = Number.isFinite(capabilities.maxZoom) && capabilities.maxZoom > 0
+          ? capabilities.maxZoom
+          : getConfiguredMaxViewportZoom();
+        let minZoom = Math.max(MIN_VIEWPORT_ZOOM, minCapabilityZoom);
+        let maxZoom;
+        if (!Number.isFinite(maxZoomCandidate) || maxZoomCandidate <= 0) {
+          maxZoom = Number.POSITIVE_INFINITY;
+        } else {
+          maxZoom = Math.max(minZoom, maxZoomCandidate);
+        }
+        return { minZoom, maxZoom };
       }
 
       function normalizeZoomValue(value, fallback = MIN_VIEWPORT_ZOOM) {
         const { minZoom, maxZoom } = getZoomBounds();
         if (!Number.isFinite(value) || value <= 0) {
-          return clamp(fallback, minZoom, maxZoom);
+          const safeFallback = Number.isFinite(fallback) && fallback > 0 ? fallback : minZoom;
+          return clamp(safeFallback, minZoom, maxZoom);
         }
-        return clamp(value, minZoom, maxZoom);
+        const clamped = clamp(value, minZoom, Number.isFinite(maxZoom) ? maxZoom : value);
+        if (!Number.isFinite(maxZoom)) {
+          return Math.max(minZoom, clamped);
+        }
+        return clamped;
       }
 
       function getScaleBounds(baseScale = 1) {
         const safeBase = Number.isFinite(baseScale) && baseScale > 0 ? baseScale : 1;
         const { minZoom, maxZoom } = getZoomBounds();
         const minScale = clamp(safeBase * minZoom, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
-        const maxScale = clamp(safeBase * maxZoom, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+        const maxScale = Number.isFinite(maxZoom)
+          ? clamp(safeBase * maxZoom, MIN_RENDER_SCALE, MAX_RENDER_SCALE)
+          : Number.POSITIVE_INFINITY;
         return { minScale, maxScale };
       }
 
@@ -10834,14 +10979,26 @@
         const centerY = viewportRect.top + viewportRect.height / 2;
         const anchorX = typeof clientX === "number" ? clientX : centerX;
         const anchorY = typeof clientY === "number" ? clientY : centerY;
-        const offsetX = anchorX - centerX - viewState.panX;
-        const offsetY = anchorY - centerY - viewState.panY;
-        viewState.panX += offsetX - offsetX * change;
-        viewState.panY += offsetY - offsetY * change;
-        clampViewPanToPuzzleBounds();
+        const capabilities = state.rendering?.capabilities || {};
+        const panX = capabilities.viewportAnchored ? 0 : Number.isFinite(viewState.panX) ? viewState.panX : 0;
+        const panY = capabilities.viewportAnchored ? 0 : Number.isFinite(viewState.panY) ? viewState.panY : 0;
+        const anchorOffsetCssX = anchorX - centerX - panX;
+        const anchorOffsetCssY = anchorY - centerY - panY;
+        const camera = getViewCamera();
+        const cssPixelsPerUnit = camera ? camera.scale : computeDisplayScale();
+        const anchorOffsetUnitsX = anchorOffsetCssX / cssPixelsPerUnit;
+        const anchorOffsetUnitsY = anchorOffsetCssY / cssPixelsPerUnit;
+        const center = getViewCenter();
+        const anchorWorldX = center.x + anchorOffsetUnitsX;
+        const anchorWorldY = center.y + anchorOffsetUnitsY;
         const nextZoom = normalizeZoomValue(targetScale / baseScale, currentZoom);
         const significant = Math.abs(targetScale - currentScale) >= Math.max(0.01, currentScale * 0.001);
         viewState.zoom = nextZoom;
+        const nextCssScale = clamp(baseScale * nextZoom, minScale, maxScale);
+        const nextOffsetUnitsX = anchorOffsetCssX / nextCssScale;
+        const nextOffsetUnitsY = anchorOffsetCssY / nextCssScale;
+        setViewCenter(anchorWorldX - nextOffsetUnitsX, anchorWorldY - nextOffsetUnitsY);
+        clampViewPanToPuzzleBounds();
         if (options.defer) {
           scheduleViewTransform({ forceRender: true });
         } else {
@@ -10886,8 +11043,14 @@
         }
         clampViewPanToPuzzleBounds();
         if (canvasStage) {
-          canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
-          canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
+          const capabilities = state.rendering?.capabilities || {};
+          if (capabilities.viewportAnchored) {
+            canvasStage.style.setProperty("--pan-x", `0px`);
+            canvasStage.style.setProperty("--pan-y", `0px`);
+          } else {
+            canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
+            canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
+          }
         }
         invalidateCanvasRect();
         if (!state.puzzle) {
@@ -10962,10 +11125,10 @@
       function resetView(options = {}) {
         const { preserveZoom = false, recenter = false } = options;
         if (!state.puzzle) {
-          viewState.panX = 0;
-          viewState.panY = 0;
+          setViewPan(0, 0);
           viewState.zoom = 1;
           viewState.baseScale = 1;
+          setViewCenter(0, 0);
           applyViewTransform();
           return;
         }
@@ -10977,8 +11140,7 @@
         if (preserveZoom) {
           const ratio = Number.isFinite(previousBase) && previousBase > 0 ? nextBase / previousBase : 1;
           if (Number.isFinite(ratio)) {
-            viewState.panX *= ratio;
-            viewState.panY *= ratio;
+            setViewPan(viewState.panX * ratio, viewState.panY * ratio);
           }
           const safeNextBase = nextBase > 0 ? nextBase : 1;
           const { minScale: nextMinScale, maxScale: nextMaxScale } = getScaleBounds(safeNextBase);
@@ -10986,13 +11148,13 @@
           const targetZoom = safeNextBase > 0 ? targetScale / safeNextBase : 1;
           viewState.zoom = normalizeZoomValue(targetZoom, viewState.zoom);
           if (recenter) {
-            viewState.panX = 0;
-            viewState.panY = 0;
+            setViewPan(0, 0);
+            setViewCenter(state.puzzle.width / 2, state.puzzle.height / 2);
           }
         } else {
-          viewState.panX = 0;
-          viewState.panY = 0;
+          setViewPan(0, 0);
           viewState.zoom = normalizeZoomValue(1);
+          setViewCenter(state.puzzle.width / 2, state.puzzle.height / 2);
         }
         viewState.baseScale = nextBase;
         clampViewPanToPuzzleBounds();
@@ -11019,8 +11181,11 @@
         const targetZoom = Number.isFinite(scaleRatio) && scaleRatio > 0 ? savedZoom * scaleRatio : savedZoom;
         viewState.baseScale = nextBase;
         viewState.zoom = normalizeZoomValue(targetZoom, savedZoom);
-        viewState.panX = hasPanX && Number.isFinite(viewport.panX) ? viewport.panX * scaleRatio : 0;
-        viewState.panY = hasPanY && Number.isFinite(viewport.panY) ? viewport.panY * scaleRatio : 0;
+        const targetPanX =
+          hasPanX && Number.isFinite(viewport.panX) ? viewport.panX * scaleRatio : 0;
+        const targetPanY =
+          hasPanY && Number.isFinite(viewport.panY) ? viewport.panY * scaleRatio : 0;
+        setViewPan(targetPanX, targetPanY);
         clampViewPanToPuzzleBounds();
         applyViewTransform();
         return true;
@@ -11399,7 +11564,14 @@
         if (!cache.ready) return;
         const controller = state.rendering?.controller;
         if (!controller) return;
-        controller.flashRegions({ state, cache, regions, fillStyle, metrics: { ...canvasMetrics } });
+        controller.flashRegions({
+          state,
+          cache,
+          regions,
+          fillStyle,
+          metrics: { ...canvasMetrics },
+          camera: getViewCamera(),
+        });
       }
 
       function flashRegionsWithContext({ context, state, cache, regions, fillStyle }) {
