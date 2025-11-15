@@ -64,9 +64,10 @@ source):
      `puzzle-generation.js`, `capy.json`) plus a branch-scoped README mirror at
      `/README/index.html`.
 4. **Index generation.** The workflow rebuilds `branch.html`, surfacing the main
-   deployment first followed by each active branch with preview links, PR data,
-   and the three most recent commits (timestamps render in the viewer’s local
-   timezone).
+   deployment first followed by every active branch. Each card now keeps the
+   layout intentionally simple: a preview link, branch and PR references, and
+   the full list of commits collected when metadata was generated (timestamps
+   stay in ISO format so the page can render without client-side scripts).
 5. **Cleanup.** Branch directories without open PRs are deleted on each run so
    deployments disappear automatically once work merges or closes.
 
