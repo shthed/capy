@@ -9270,15 +9270,28 @@
         if (!swatch) return;
         const scrollBehavior =
           prefersReducedMotionQuery && prefersReducedMotionQuery.matches ? "auto" : "smooth";
-        try {
-          swatch.scrollIntoView({
-            block: "nearest",
-            inline: "nearest",
-            behavior: scrollBehavior,
-          });
-        } catch (error) {
-          swatch.scrollIntoView();
+        const paletteWidth = paletteEl.clientWidth;
+        const maxScroll = Math.max(0, paletteEl.scrollWidth - paletteWidth);
+        if (maxScroll === 0) {
+          return;
         }
+        const swatchRect = swatch.getBoundingClientRect();
+        const paletteRect = paletteEl.getBoundingClientRect();
+        const swatchCenterOffset =
+          swatchRect.left - paletteRect.left + swatchRect.width / 2 - paletteWidth / 2;
+        const targetLeft = Math.min(
+          Math.max(paletteEl.scrollLeft + swatchCenterOffset, 0),
+          maxScroll
+        );
+        if (typeof paletteEl.scrollTo === "function") {
+          try {
+            paletteEl.scrollTo({ left: targetLeft, behavior: scrollBehavior });
+            return;
+          } catch (error) {
+            // fall back to manual scrolling
+          }
+        }
+        paletteEl.scrollLeft = targetLeft;
       }
 
       function activateColor(colorId, options = {}) {
