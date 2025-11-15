@@ -91,7 +91,7 @@ jobs:
             rm -rf "$output_dir"
             mkdir -p "$output_dir"
 
-            if ! node ../scripts/build-pages-site.mjs --source "$source_file" --output "$output_file" --mode gfm --context "${GITHUB_REPOSITORY}"; then
+            if ! node ../project/scripts/build-pages-site.mjs --source "$source_file" --output "$output_file" --mode gfm --context "${GITHUB_REPOSITORY}"; then
               echo "Warning: README markdown to HTML conversion failed" >&2
               return 0
             fi
@@ -103,6 +103,7 @@ jobs:
             "--exclude=.github"
             "--exclude=node_modules/"
             "--exclude=pages/"
+            "--exclude=project/"
             "--exclude=.gitignore"
             "--exclude=.gitattributes"
             "--exclude=.DS_Store"
@@ -151,6 +152,7 @@ jobs:
               "--exclude=node_modules/"
               "--exclude=pages/"
               "--exclude=preview/"
+              "--exclude=project/"
             )
 
             JS_INCLUDE_RULES=(
