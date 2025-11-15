@@ -3095,6 +3095,7 @@
           outlineLayer: null,
           outlineLayerCtx: null,
           outlineLayerDirty: true,
+          labelSettingsSignature: null,
         };
       }
 
@@ -3211,16 +3212,19 @@
         const expectedWidth = state.puzzle.width;
         const expectedHeight = state.puzzle.height;
         const expectedVersion = state.puzzle.regions.length;
+        const expectedLabelSignature = computeLabelSettingsSignature();
         const force = options.force === true;
         const needsRebuild =
           force ||
           !cache.ready ||
           cache.width !== expectedWidth ||
           cache.height !== expectedHeight ||
-          cache.version !== expectedVersion;
+          cache.version !== expectedVersion ||
+          cache.labelSettingsSignature !== expectedLabelSignature;
         if (needsRebuild) {
           rebuildRenderCache(cache);
         }
+        cache.labelSettingsSignature = expectedLabelSignature;
         syncCacheMetrics(cache);
         state.renderCache = cache;
         return cache;
@@ -3242,6 +3246,7 @@
           cache.outlineLayerCtx = null;
           cache.outlineLayerDirty = true;
           cache.ready = false;
+          cache.labelSettingsSignature = null;
           return cache;
         }
         cache.width = state.puzzle.width;
@@ -6445,6 +6450,9 @@
           uiScaleInput.value = String(resolved);
         }
         updateOptionOutputs();
+        if (changed) {
+          renderPuzzle();
+        }
         if (changed && !skipLog) {
           logDebug(`Interface scale set to ${Math.round(resolved * 100)}%`);
         }
@@ -8483,6 +8491,27 @@
             ctx.fillText(text, center.x, center.y);
           }
         });
+      }
+
+      function computeLabelSettingsSignature() {
+        const settings = state?.settings || {};
+        const labelsVisible = settings.showRegionLabels !== false;
+        const rawLabelScale =
+          Number.isFinite(settings.labelScale) && settings.labelScale > 0
+            ? settings.labelScale
+            : DEFAULT_LABEL_SCALE;
+        const labelScale = clamp(rawLabelScale, 0.2, 2);
+        const rawUiScale =
+          Number.isFinite(settings.uiScale) && settings.uiScale > 0
+            ? settings.uiScale
+            : DEFAULT_UI_SCALE;
+        const uiScale = clamp(rawUiScale, 0.2, 3);
+        const scaleFactorRaw = uiScale / DEFAULT_UI_SCALE;
+        const scaleFactor =
+          Number.isFinite(scaleFactorRaw) && scaleFactorRaw > 0 ? scaleFactorRaw : 1;
+        return [labelsVisible ? "on" : "off", labelScale.toFixed(4), scaleFactor.toFixed(4)].join(
+          "|"
+        );
       }
 
       function computeRegionLabelFontSize(region, labelText = "") {
