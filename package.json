@@ -1,5 +1,7 @@
 {
-  "name": "capy-runtime",
+  "name": "capy",
+  "version": "1.0.0",
+  "description": "Static color-by-number playground with optional Playwright smoke tests.",
   "private": true,
   "type": "module"
 }
