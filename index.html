@@ -6064,6 +6064,134 @@
         renderDebugLog();
       }
 
+      function formatConsoleValue(value) {
+        if (value instanceof Error) {
+          return value.stack || `${value.name || "Error"}: ${value.message || ""}`.trim();
+        }
+        const type = typeof value;
+        if (type === "string") {
+          return value;
+        }
+        if (type === "number" || type === "bigint" || type === "boolean") {
+          return String(value);
+        }
+        if (value === null) {
+          return "null";
+        }
+        if (value === undefined) {
+          return "undefined";
+        }
+        if (type === "function") {
+          return value.name ? `[Function ${value.name}]` : "[Function]";
+        }
+        try {
+          return JSON.stringify(value);
+        } catch (_error) {
+          return Object.prototype.toString.call(value);
+        }
+      }
+
+      function joinConsoleArguments(args) {
+        if (!Array.isArray(args) || args.length === 0) {
+          return "";
+        }
+        return args
+          .map((value) => {
+            try {
+              return formatConsoleValue(value);
+            } catch (_error) {
+              return "[unserializable]";
+            }
+          })
+          .filter((value) => value && typeof value === "string")
+          .join(" ");
+      }
+
+      function installConsoleErrorForwarder() {
+        if (installConsoleErrorForwarder.installed) {
+          return;
+        }
+        installConsoleErrorForwarder.installed = true;
+
+        const globalConsole = window.console;
+        if (globalConsole && typeof globalConsole === "object") {
+          const levels = [
+            ["error", "Error"],
+            ["warn", "Warning"],
+          ];
+          for (const [method, label] of levels) {
+            const original =
+              typeof globalConsole[method] === "function"
+                ? globalConsole[method].bind(globalConsole)
+                : null;
+            if (!original) {
+              continue;
+            }
+            globalConsole[method] = function forwardedConsoleMethod(...args) {
+              let result;
+              try {
+                result = original(...args);
+              } catch (_error) {
+                /* Swallow logging errors to avoid infinite loops. */
+              }
+              try {
+                const payload = joinConsoleArguments(args);
+                const message = payload ? `[${label}] ${payload}` : `[${label}]`;
+                logDebug(message);
+              } catch (_error) {
+                /* Ignore debug log failures. */
+              }
+              return result;
+            };
+          }
+        }
+
+        function recordErrorEvent(event, label) {
+          if (!event) return;
+          try {
+            const parts = [];
+            if (event.message) {
+              parts.push(event.message);
+            }
+            if (event.filename) {
+              const line = event.lineno != null ? event.lineno : null;
+              const column = event.colno != null ? event.colno : null;
+              const location =
+                line != null && column != null
+                  ? `${event.filename}:${line}:${column}`
+                  : line != null
+                  ? `${event.filename}:${line}`
+                  : event.filename;
+              parts.push(location);
+            }
+            if (event.reason && event.reason !== event.message) {
+              parts.push(formatConsoleValue(event.reason));
+            } else if (event.error) {
+              parts.push(formatConsoleValue(event.error));
+            }
+            const message = parts.length ? parts.join(" – ") : label;
+            logDebug(`[${label}] ${message}`);
+          } catch (_error) {
+            /* Ignore logging failures. */
+          }
+        }
+
+        window.addEventListener(
+          "error",
+          (event) => {
+            recordErrorEvent(event, "Unhandled Error");
+          },
+          true
+        );
+
+        window.addEventListener("unhandledrejection", (event) => {
+          recordErrorEvent(event, "Unhandled Promise Rejection");
+        });
+      }
+
+      installConsoleErrorForwarder.installed = false;
+      installConsoleErrorForwarder();
+
       function activateSettingsTab(tabId, options = {}) {
         if (!tabId || settingsTabButtons.length === 0) {
           return null;

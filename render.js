@@ -1,6 +1,13 @@
-const FRAME_LOG_INTERVAL_MS = 1000;
+;(function (global) {
+  "use strict";
 
-function getTimestamp() {
+  if (global && global.capyRenderer && global.capyRenderer.__legacyLoaderVersion) {
+    return;
+  }
+
+  const FRAME_LOG_INTERVAL_MS = 1000;
+
+  function getTimestamp() {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
     return performance.now();
   }
@@ -2319,25 +2326,33 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   };
 }
 
-const rendererExports = {
-  createRendererController,
-  createCanvas2dRenderer,
-  createWebGLRenderer,
-  createSvgRenderer,
-};
+  const rendererExports = {
+    createRendererController,
+    createCanvas2dRenderer,
+    createWebGLRenderer,
+    createSvgRenderer,
+  };
 
-if (typeof globalThis !== "undefined") {
-  const target = globalThis;
-  if (typeof target.capyRenderer !== "object" || target.capyRenderer === null) {
-    target.capyRenderer = {};
+  if (global && typeof global === "object") {
+    const target = global;
+    if (typeof target.capyRenderer !== "object" || target.capyRenderer === null) {
+      target.capyRenderer = {};
+    }
+    Object.assign(target.capyRenderer, rendererExports);
+    target.capyRenderer.__legacyLoaderVersion = "2024-07-28";
+    target.createRendererController = createRendererController;
+    target.createCanvas2dRenderer = createCanvas2dRenderer;
+    target.createWebGLRenderer = createWebGLRenderer;
+    target.createSvgRenderer = createSvgRenderer;
   }
-  Object.assign(target.capyRenderer, rendererExports);
-  target.createRendererController = createRendererController;
-  target.createCanvas2dRenderer = createCanvas2dRenderer;
-  target.createWebGLRenderer = createWebGLRenderer;
-  target.createSvgRenderer = createSvgRenderer;
-}
 
-if (typeof module !== "undefined" && typeof module.exports !== "undefined") {
-  module.exports = rendererExports;
-}
+  if (typeof module !== "undefined" && typeof module.exports !== "undefined") {
+    module.exports = rendererExports;
+  }
+})(typeof globalThis !== "undefined"
+  ? globalThis
+  : typeof window !== "undefined"
+  ? window
+  : typeof self !== "undefined"
+  ? self
+  : this);
