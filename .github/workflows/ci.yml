@@ -8,6 +8,9 @@ on:
 
 jobs:
   verify:
+    defaults:
+      run:
+        working-directory: project
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,15 +19,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: project/package-lock.json
 
       - name: Install dependencies
+        working-directory: project
         run: |
           npm ci
 
       - name: Provision Playwright browsers
+        working-directory: project
         run: |
           npx playwright install chromium --only-shell
 
       - name: Run placeholder test hook
+        working-directory: project
         run: |
           npm test --silent

@@ -25,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          SAFE_BRANCH=$(printf '%s' "${HEAD_BRANCH}" | sed 's/[^a-zA-Z0-9_-]/-/g')
+          SAFE_BRANCH=$(printf '%s' "${HEAD_BRANCH}" | sed 's/[^a-zA-Z0-9._-]/-/g')
           echo "branch_slug=${SAFE_BRANCH}" >> "$GITHUB_OUTPUT"
 
   review:
@@ -36,6 +36,9 @@ jobs:
       github.event.workflow_run.head_branch != null &&
       github.event.workflow_run.head_branch != ''
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project
     concurrency:
       group: post-deploy-tests-${{ needs.slug.outputs.branch_slug }}
       cancel-in-progress: true
@@ -50,11 +53,14 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
+          cache-dependency-path: project/package-lock.json
 
       - name: Install dependencies
+        working-directory: project
         run: npm ci
 
       - name: Install Playwright browsers
+        working-directory: project
         run: npx playwright install --with-deps
 
       - name: Derive Pages preview URL
@@ -77,6 +83,7 @@ jobs:
           echo "Preview URL: ${PREVIEW_URL}"
 
       - name: Prepare UI review artifacts directory
+        working-directory: project
         run: |
           set -euo pipefail
           rm -rf artifacts/ui-review
@@ -85,11 +92,13 @@ jobs:
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
           PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.preview_url }}
+        working-directory: project
         run: npm test --silent
 
       - name: Detect UI review artifacts
         id: artifact-check
         if: always()
+        working-directory: project
         run: |
           set -euo pipefail
 
@@ -103,8 +112,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-review-${{ github.event.workflow_run.head_branch }}-${{ github.run_id }}
-          path: artifacts/ui-review
+          name: ui-review-${{ needs.slug.outputs.branch_slug }}-${{ github.run_id }}
+          path: project/artifacts/ui-review
           if-no-files-found: ignore
 
       - name: Share preview and screenshots on PR
