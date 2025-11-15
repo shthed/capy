@@ -15,11 +15,11 @@ resize it, run the selected quantization pipeline (k-means palette clustering or
 the new posterize-and-merge pass) to build a discrete palette, merge tiny
 regions, and paint a canvas you can immediately play. An instant preview toggle,
 hint tools, a save manager, and a configurable generator all live inside a
-single `index.html` document—no build tools or extra runtime required.
+single `runtime/index.html` document—no build tools or extra runtime required.
 
 ## Repository Map
 
-- **Core application**
+- **Runtime (`runtime/`)**
   - `index.html` – Single-file UI, styles, and generator logic powering the colouring experience.
   - `render.js` – Renderer controller plus Canvas2D, WebGL, and SVG backends; manages the active drawing pipeline and exposes
     hooks for swapping or extending renderers at runtime.
@@ -61,15 +61,13 @@ source):
    (e.g., `automation/feature` → `automation-feature`), and creates a matching
    directory for non-`main` deployments.
 3. **Content sync.**
-   - `main` copies the full runtime (minus excluded directories like
-     `node_modules`, Playwright reports, and other transient artifacts) straight
-     to the root of `gh-pages` and regenerates `/README/index.html` with
-     `project/scripts/build-pages-site.mjs` so
+   - `main` clears the deployment working tree (leaving `.git`) and copies the
+     entire `runtime/` directory into the root of `gh-pages`, then regenerates
+     `/README/index.html` with `project/scripts/build-pages-site.mjs` so
      https://shthed.github.io/capy/README/ always mirrors the handbook.
-   - Other branches copy the runtime essentials—`index.html`, `capy.json`, and
-     every root-level `.js`/`.json` module (e.g. `render.js`,
-     `puzzle-generation.js`)—then run the same README conversion for a
-     branch-scoped mirror at `/README/index.html`.
+   - Other branches mirror the same `runtime/` payload inside their
+     branch-specific directories before running the README conversion for a
+     scoped `/README/index.html`.
 4. **Index generation.** The workflow rebuilds `branch.html`, surfacing the main
    deployment first followed by every active branch. Each card now keeps the
    layout intentionally simple: a preview link, branch and PR references, and
@@ -145,7 +143,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 
 ### Generator algorithms & tuning
 
-- **Algorithms.** The generator select box maps to `GENERATION_ALGORITHM_CATALOG` inside `puzzle-generation.js`. `local-kmeans`
+- **Algorithms.** The generator select box maps to `GENERATION_ALGORITHM_CATALOG` inside `runtime/puzzle-generation.js`. `local-kmeans`
   runs k-means clustering with user-controlled sampling and iteration counts. `local-posterize` bins pixels into evenly spaced
   RGB buckets, averages each bucket, and assigns pixels to the closest surviving colours. New entries can represent hosted
   services—UI copy stays service-agnostic so remote providers can drop in without layout tweaks.
@@ -179,7 +177,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 
 ### Code Architecture Tour
 
-- **Single-file app shell.** `index.html` owns markup, styles, and logic. The inline script is segmented into DOM caches, global state, event wiring, puzzle rendering, generation helpers, and persistence utilities—each called out in a developer-map comment.
+- **Single-file app shell.** `runtime/index.html` owns markup, styles, and logic. The inline script is segmented into DOM caches, global state, event wiring, puzzle rendering, generation helpers, and persistence utilities—each called out in a developer-map comment.
 - **Preboot viewport metrics.** A blocking `<script>` in the `<head>` seeds UI scale variables, viewport padding, and the orientation/compact flags before the stylesheet paints; a companion snippet at the top of `<body>` mirrors those attributes so the runtime boot avoids first-paint jumps when `handleViewportChange` recalculates metrics.
 - **Public testing surface.** `window.capyGenerator` exposes helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so automation and manual experiments can orchestrate the app without touching internals. Recent renderer work also surfaced `getRendererType()`, `listRenderers()`, `setRenderer(type)`, `registerRenderer(type, factory)`, and `unregisterRenderer(type)` so tests can assert the active backend or load experimental renderers without patching private state.
 - **Pan/zoom subsystem.** `viewState` tracks transforms for `#canvasStage` and `#canvasTransform`; helpers like `applyZoom`, `resetView`, and `applyViewTransform` keep navigation smooth across wheel, keyboard, and drag gestures.
