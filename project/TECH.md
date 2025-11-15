@@ -36,16 +36,22 @@ single `index.html` document—no build tools or extra runtime required.
   - `node_modules/` – Local dependency installs. This directory remains ignored in git but lives alongside the workspace metadata for clarity.
 - **Testing & QA**
   - `project/tests/ui-review.spec.js` – Playwright smoke test that loads the bundled site in Chromium and confirms the document title so we know the runtime boots.
+  - `project/scripts/run-tests.js` – Harness invoked by `npm test --silent`; prints the current suite status (skip notice while automated checks stay offline) and exits with CI-friendly codes.
   - `project/artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
   - **Playwright local setup** – Inside `project/`, run `npm install` followed by `npx playwright install --with-deps chromium` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
 - **Tooling & metadata**
   - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally.
   - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
+  - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn `README.md` into `/README/index.html` and keep embedded docs mirrored in previews.
+  - `project/scripts/render-branch-page.mjs` – Static HTML builder for `branch.html`, fed by deployment metadata so previews stay discoverable.
   - `project/scripts/prepare-deploy-metadata.mjs` – Fetches recent pull requests and commits via the GitHub API to regenerate the deployment metadata consumed by branch previews.
+  - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
+  - `project/scripts/cleanup-branches.mjs` – GitHub API helper invoked by automation to prune stale `automation/` branches once their PRs close and the commits age past the configured cutoff.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
+  - `.github/workflows/cleanup-branches.yml` – Nightly job (also invoked after every deployment run) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days.
 
 ## Deployment & Branch Previews
 
@@ -64,11 +70,13 @@ source):
 3. **Content sync.**
    - `main` copies the full runtime (minus excluded directories like
      `node_modules`, Playwright reports, and other transient artifacts) straight
-     to the root of `gh-pages` and regenerates `/README/index.html` so
+     to the root of `gh-pages` and regenerates `/README/index.html` with
+     `project/scripts/build-pages-site.mjs` so
      https://shthed.github.io/capy/README/ always mirrors the handbook.
-   - Other branches ship the files required to run the app (`index.html`,
-     `puzzle-generation.js`, `capy.json`) plus a branch-scoped README mirror at
-     `/README/index.html`.
+   - Other branches copy the runtime essentials—`index.html`, `capy.json`, and
+     every root-level `.js`/`.json` module (e.g. `render.js`,
+     `puzzle-generation.js`)—then run the same README conversion for a
+     branch-scoped mirror at `/README/index.html`.
 4. **Index generation.** The workflow rebuilds `branch.html`, surfacing the main
    deployment first followed by every active branch. Each card now keeps the
    layout intentionally simple: a preview link, branch and PR references, and
