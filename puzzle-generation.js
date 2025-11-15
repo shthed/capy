@@ -64,8 +64,22 @@ function toHex(value) {
   return value.toString(16).padStart(2, "0");
 }
 
-function accumulate(histogram, color) {
-  histogram.set(color, (histogram.get(color) || 0) + 1);
+function accumulate(counter, touchedColors, color, weight = 1, touchedCount = 0) {
+  if (color < 0 || !Number.isFinite(color)) {
+    return touchedCount;
+  }
+  if (color >= counter.length) {
+    return touchedCount;
+  }
+  const amount = Number.isFinite(weight) ? weight : 0;
+  if (amount === 0) {
+    return touchedCount;
+  }
+  if (counter[color] === 0) {
+    touchedColors[touchedCount++] = color;
+  }
+  counter[color] += amount;
+  return touchedCount;
 }
 
 function neighborIndexes(x, y, width, height) {
@@ -383,27 +397,46 @@ function performQuantization(algorithm, pixels, width, height, options) {
 
 function smoothAssignments(assignments, width, height, passes) {
   let current = new Uint16Array(assignments);
+  const totalPixels = width * height;
+  if (passes <= 0 || totalPixels === 0) {
+    return current;
+  }
+
+  let maxPaletteIndex = 0;
+  for (let i = 0; i < current.length; i++) {
+    if (current[i] > maxPaletteIndex) {
+      maxPaletteIndex = current[i];
+    }
+  }
+  const counter = new Uint32Array(maxPaletteIndex + 1);
+  const touchedColors = new Uint16Array(5);
+
   for (let pass = 0; pass < passes; pass++) {
-    const next = new Uint16Array(current);
+    const next = new Uint16Array(current.length);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const idx = y * width + x;
-        const histogram = new Map();
         const baseColor = current[idx];
-        histogram.set(baseColor, (histogram.get(baseColor) || 0) + 2);
-        if (x > 0) accumulate(histogram, current[idx - 1]);
-        if (x < width - 1) accumulate(histogram, current[idx + 1]);
-        if (y > 0) accumulate(histogram, current[idx - width]);
-        if (y < height - 1) accumulate(histogram, current[idx + width]);
+        let touchedCount = 0;
+        touchedCount = accumulate(counter, touchedColors, baseColor, 2, touchedCount);
+        if (x > 0) touchedCount = accumulate(counter, touchedColors, current[idx - 1], 1, touchedCount);
+        if (x < width - 1) touchedCount = accumulate(counter, touchedColors, current[idx + 1], 1, touchedCount);
+        if (y > 0) touchedCount = accumulate(counter, touchedColors, current[idx - width], 1, touchedCount);
+        if (y < height - 1) touchedCount = accumulate(counter, touchedColors, current[idx + width], 1, touchedCount);
         let bestColor = baseColor;
         let bestScore = -Infinity;
-        for (const [color, score] of histogram.entries()) {
+        for (let i = 0; i < touchedCount; i++) {
+          const color = touchedColors[i];
+          const score = counter[color];
           if (score > bestScore) {
             bestScore = score;
             bestColor = color;
           }
         }
         next[idx] = bestColor;
+        for (let i = 0; i < touchedCount; i++) {
+          counter[touchedColors[i]] = 0;
+        }
       }
     }
     current = next;
@@ -1026,6 +1059,8 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
     originalHeight: image.height,
   };
 }
+
+export { smoothAssignments as __smoothAssignmentsForTests };
 
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
   window.addEventListener("unload", () => {
