@@ -6,11 +6,11 @@ import { dirname, resolve } from 'node:path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const repoRoot = resolve(__dirname, '..');
-const configFile = resolve(repoRoot, 'playwright.config.js');
+const workspaceRoot = resolve(__dirname, '..');
+const configFile = resolve(workspaceRoot, 'playwright.config.js');
 
 const child = spawn('npx', ['playwright', 'test', `--config=${configFile}`], {
-  cwd: repoRoot,
+  cwd: workspaceRoot,
   stdio: 'inherit',
   shell: false,
 });

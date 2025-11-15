@@ -404,6 +404,14 @@
         transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
       }
 
+      #commandRail .menu-button {
+        padding: calc(10px * var(--ui-scale)) calc(18px * var(--ui-scale));
+        border-radius: calc(14px * var(--ui-scale));
+        gap: calc(8px * var(--ui-scale));
+        font-size: calc(15px * var(--ui-scale));
+        font-weight: 600;
+      }
+
       #commandRail button.active {
         background: color-mix(in srgb, var(--theme-command-active-bg) 70%, transparent);
         border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
@@ -413,6 +421,10 @@
       #commandRail button .icon {
         font-size: 1.05rem;
         line-height: 1;
+      }
+
+      #commandRail .menu-button .icon {
+        font-size: 1.25rem;
       }
 
       #commandRail .label {
@@ -449,6 +461,10 @@
 
       body.compact-commands #commandRail .label {
         display: none;
+      }
+
+      body.compact-commands #commandRail .menu-button .label {
+        display: inline;
       }
 
       body[data-orientation="portrait"] #paletteDock {
@@ -628,11 +644,11 @@
       }
 
 
-        #generatorSheet .detail-callout {
+        #settingsPanel-generator .detail-callout {
           text-align: left;
         }
 
-        #generatorSheet .detail-picker {
+        #settingsPanel-generator .detail-picker {
           justify-content: flex-start;
         }
       button {
@@ -1286,6 +1302,67 @@
         letter-spacing: 0.02em;
       }
 
+      .quick-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: calc(10px * var(--ui-scale));
+        align-items: stretch;
+      }
+
+      .quick-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: calc(8px * var(--ui-scale));
+        padding: calc(10px * var(--ui-scale)) calc(18px * var(--ui-scale));
+        border-radius: calc(14px * var(--ui-scale));
+        border: 1px solid var(--theme-sheet-button-border);
+        background: var(--theme-sheet-button-bg);
+        color: var(--theme-sheet-button-text);
+        font-weight: 600;
+        font-size: 0.95rem;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease,
+          box-shadow 0.16s ease, transform 0.16s ease;
+        box-shadow: none;
+      }
+
+      .quick-action .icon {
+        font-size: 1.1rem;
+      }
+
+      .quick-action .label {
+        white-space: nowrap;
+      }
+
+      .quick-action.active {
+        background: color-mix(in srgb, var(--theme-command-active-bg) 70%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
+        color: var(--theme-command-active-text);
+      }
+
+      .quick-action:not(:disabled):hover,
+      .quick-action:not(:disabled):focus-visible {
+        background: color-mix(in srgb, var(--theme-command-active-bg) 55%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
+        color: var(--theme-command-active-text);
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.28);
+        transform: translateY(-1px);
+      }
+
+      .quick-action:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--theme-command-active-border) 65%, transparent);
+        outline-offset: 3px;
+      }
+
+      .quick-action:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        box-shadow: none;
+        transform: none;
+      }
+
       .save-manager {
         display: grid;
         gap: calc(12px * var(--ui-scale));
@@ -1626,75 +1703,17 @@
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
         <button
-          id="previewToggle"
-          type="button"
-          data-testid="preview-toggle"
-          aria-label="Show preview"
-          title="Show preview"
-          disabled
-        >
-          <span class="icon" aria-hidden="true">🖼</span>
-          <span class="label">Preview</span>
-        </button>
-        <button
-          id="generatorButton"
-          type="button"
-          data-testid="generator-button"
-          aria-label="Generator options"
-          title="Generator options"
-        >
-          <span class="icon" aria-hidden="true">🎛</span>
-          <span class="label">Generator</span>
-        </button>
-        <button
-          id="fullscreenButton"
-          type="button"
-          data-testid="fullscreen-button"
-          aria-label="Enter fullscreen"
-          title="Enter fullscreen"
-        >
-          <span class="icon" aria-hidden="true">⛶</span>
-          <span class="label">Fullscreen</span>
-        </button>
-        <button
-          id="importButton"
-          type="button"
-          data-testid="import-button"
-          aria-label="Import"
-          title="Import"
-        >
-          <span class="icon" aria-hidden="true">⬆</span>
-          <span class="label">Import</span>
-        </button>
-        <button
-          id="saveManagerButton"
-          type="button"
-          data-testid="save-manager-button"
-          aria-label="Save manager"
-          title="Save manager"
-        >
-          <span class="icon" aria-hidden="true">💾</span>
-          <span class="label">Saves</span>
-        </button>
-        <button
-          id="helpButton"
-          type="button"
-          data-testid="help-button"
-          aria-label="Help &amp; shortcuts"
-          title="Help &amp; shortcuts"
-        >
-          <span class="icon" aria-hidden="true">ℹ</span>
-          <span class="label">Help</span>
-        </button>
-        <button
           id="settingsButton"
+          class="menu-button"
           type="button"
           data-testid="settings-button"
-          aria-label="Settings"
-          title="Settings"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          aria-label="Open settings and tools"
+          title="Open settings and tools"
         >
           <span class="icon" aria-hidden="true">⚙</span>
-          <span class="label">Settings</span>
+          <span class="label">Settings &amp; tools</span>
         </button>
       </header>
       <div id="viewport">
@@ -1722,309 +1741,6 @@
     </div>
     <input id="fileInput" type="file" accept=".json,.capy,image/*" hidden />
     <div
-      id="saveManagerSheet"
-      class="sheet hidden"
-      role="dialog"
-      aria-labelledby="saveManagerTitle"
-      aria-hidden="true"
-    >
-      <div class="sheet-header">
-        <h2 id="saveManagerTitle">Manage saves</h2>
-        <button type="button" class="close-button" data-sheet-close="saves">Close</button>
-      </div>
-      <div class="sheet-body">
-        <section class="sheet-section" aria-labelledby="saveStartHeading">
-          <h3 id="saveStartHeading" class="visually-hidden">Puzzle sources</h3>
-          <div class="save-start-actions">
-            <button
-              id="selectImage"
-              type="button"
-              aria-label="Upload image or JSON puzzle"
-            >
-              Upload Image
-            </button>
-            <button
-              id="samplePuzzle"
-              type="button"
-              data-action="load-sample"
-              aria-label="Load capybara sample puzzle"
-            >
-              Load capybara sample
-            </button>
-          </div>
-        </section>
-        <section
-          class="sheet-section save-manager"
-          role="group"
-          aria-labelledby="saveManagerTitle"
-          data-save-section="dialog"
-        >
-          <div
-            class="save-manager-list"
-            data-save-list
-            aria-live="polite"
-            aria-labelledby="saveManagerTitle"
-            role="list"
-          ></div>
-          <p class="save-manager-empty" data-save-empty hidden>
-            No saves yet. Create one above to start autosaving progress.
-          </p>
-          <div class="save-manager-actions">
-            <button type="button" data-save-snapshot disabled>Save current puzzle</button>
-            <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
-            <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
-          </div>
-        </section>
-        <section class="sheet-section" aria-labelledby="storageHeading">
-          <h3 id="storageHeading">Save storage</h3>
-          <p id="saveStorageSummary" class="control-note"></p>
-          <label class="control">
-            <span>Stored image size <output data-for="sourceImageLimit">1 MB</output></span>
-            <select id="sourceImageLimit">
-              <option value="262144">256 KB</option>
-              <option value="524288">512 KB</option>
-              <option value="1048576" selected>1 MB</option>
-              <option value="2097152">2 MB</option>
-              <option value="5242880">5 MB</option>
-            </select>
-          </label>
-          <p class="control-note">
-            Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate
-            or import.
-          </p>
-          <div class="log-actions">
-            <button id="deleteAllSaves" type="button">Delete all saves</button>
-          </div>
-        </section>
-      </div>
-    </div>
-    <div
-      id="helpSheet"
-      class="sheet hidden"
-      role="dialog"
-      aria-labelledby="helpTitle"
-      aria-hidden="true"
-    >
-      <div class="sheet-header">
-        <h2 id="helpTitle">Help &amp; shortcuts</h2>
-        <button type="button" class="close-button" data-sheet-close="help">Close</button>
-      </div>
-      <div class="sheet-body">
-        <section class="sheet-section" aria-labelledby="commandsHeading">
-          <h3 id="commandsHeading">Command buttons</h3>
-          <dl class="command-list">
-            <dt>🖼 Preview</dt>
-            <dd>Toggle the finished artwork overlay to compare your progress.</dd>
-            <dt>🎛 Generator</dt>
-            <dd>
-              Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor
-              generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation.
-            </dd>
-            <dt>🎚 Detail</dt>
-            <dd>
-              Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes,
-              minimum region areas, resize targets, and the region counts noted above.
-            </dd>
-            <dt>⛶ Fullscreen</dt>
-            <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
-            <dt>⬆ Import</dt>
-            <dd>Load a new image or JSON puzzle from disk.</dd>
-            <dt>💾 Saves</dt>
-            <dd>Manage snapshots — load, rename, export, or delete stored games.</dd>
-            <dt>ℹ Help</dt>
-            <dd>Open this guide and inspect the live debug log.</dd>
-            <dt>⚙ Settings</dt>
-            <dd>
-              Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface
-              scale. Advanced options expose accessibility tweaks for the hint animations.
-            </dd>
-          </dl>
-        </section>
-        <section class="sheet-section" aria-labelledby="controlsHeading">
-          <h3 id="controlsHeading">Canvas controls</h3>
-          <ul class="control-list">
-            <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
-            <li><kbd>Right click</kbd> Select the colour under the pointer.</li>
-            <li>Select a palette swatch to set the active colour and flash every matching region.</li>
-            <li>Enable Easy difficulty in Settings to let clicks auto-select the tapped region's colour.</li>
-            <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
-            <li><kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas.</li>
-            <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
-          </ul>
-        </section>
-        <section class="sheet-section" aria-labelledby="readmeHeading">
-          <h3 id="readmeHeading">Project README</h3>
-          <p class="control-note">
-            Loads the live documentation from
-            <a href="https://shthed.github.io/capy/README" target="_blank" rel="noreferrer noopener"
-              >https://shthed.github.io/capy/README</a
-            >
-            so you can review gameplay notes and contributor guidance without leaving the app.
-          </p>
-          <p class="control-note" data-readme-status role="status">Loading README…</p>
-          <p class="control-note" data-readme-error role="alert" hidden></p>
-          <article class="readme-preview" data-readme-content hidden aria-live="polite"></article>
-        </section>
-        <section class="sheet-section" aria-labelledby="debugHeading">
-          <h3 id="debugHeading">Debug log</h3>
-          <p class="control-note">
-            Recent actions, selections, and generation events appear here while you play.
-          </p>
-          <div
-            id="debugLog"
-            class="debug-log"
-            role="log"
-            aria-live="polite"
-            aria-relevant="additions text"
-          ></div>
-          <div class="log-actions">
-            <button id="clearDebugLog" type="button">Clear log</button>
-          </div>
-        </section>
-      </div>
-    </div>
-    <div
-      id="generatorSheet"
-      class="sheet hidden"
-      role="dialog"
-      aria-labelledby="generatorTitle"
-      aria-hidden="true"
-    >
-      <div class="sheet-header">
-        <h2 id="generatorTitle">Puzzle generator</h2>
-        <button type="button" class="close-button" data-sheet-close="generator">Close</button>
-      </div>
-      <div class="sheet-body">
-        <div
-          class="generator-import-notice"
-          data-import-notice
-          role="status"
-          aria-live="polite"
-          hidden
-        >
-          <p class="generator-import-title">
-            <strong data-import-file></strong>
-          </p>
-          <p class="generator-import-description" data-import-description></p>
-          <div class="generator-import-actions">
-            <button id="confirmImport" type="button" data-import-confirm>Generate puzzle</button>
-            <button type="button" class="close-button" data-import-cancel>Cancel</button>
-          </div>
-        </div>
-        <section class="sheet-section" aria-labelledby="generatorHeading">
-          <h3 id="generatorHeading">Clustering &amp; detail</h3>
-          <p class="control-note">
-            Tune the colour clustering pipeline that powers new puzzles. These settings apply to fresh imports and the bundled
-            capybara sample when reloaded.
-          </p>
-          <div class="detail-callout">
-            <p class="detail-intro">Capybara sample detail presets</p>
-            <div class="detail-picker" role="group" aria-label="Capybara sample detail presets">
-              <button type="button" class="detail-chip" data-detail-level="low">Low</button>
-              <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
-              <button type="button" class="detail-chip" data-detail-level="high">High</button>
-            </div>
-            <p class="detail-caption" data-detail-caption></p>
-          </div>
-          <p class="control-note">
-            Switching presets updates every slider below and reloads the sample scene when it's active.
-          </p>
-          <label class="control">
-            <span>Colours <output data-for="colorCount">16</output></span>
-            <input id="colorCount" type="range" min="4" max="64" value="16" />
-          </label>
-          <label class="control">
-            <span>Regions <output data-for="minRegion">80 px²</output></span>
-            <input id="minRegion" type="range" min="1" max="600" value="80" />
-          </label>
-          <p class="control-note">Higher values merge smaller areas for fewer regions.</p>
-          <label class="control">
-            <span>Detail <output data-for="detailLevel">768 px</output></span>
-            <input id="detailLevel" type="range" min="256" max="1600" step="64" value="768" />
-          </label>
-          <p class="control-note">Controls the longest edge used when resizing the source image.</p>
-          <label class="control">
-            <span>Algorithm</span>
-            <select id="generationAlgorithm">
-              <option value="local-kmeans">Local palette clustering (k-means)</option>
-              <option value="local-posterize">Local posterize &amp; merge</option>
-            </select>
-          </label>
-          <p class="control-note">
-            Choose between local clustering pipelines now, with space for hosted services to appear as they become available.
-          </p>
-          <label class="control">
-            <span>Sample rate <output data-for="sampleRate">65%</output></span>
-            <input id="sampleRate" type="range" min="25" max="100" step="5" value="65" />
-          </label>
-          <p class="control-note">Lower values speed up clustering by sampling fewer pixels.</p>
-          <label class="control">
-            <span>Iterations <output data-for="kmeansIters">12</output></span>
-            <input id="kmeansIters" type="range" min="4" max="32" step="1" value="12" />
-          </label>
-          <p class="control-note">
-            Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process.
-          </p>
-          <label class="control">
-            <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
-            <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
-          </label>
-          <p class="control-note">
-            Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source.
-          </p>
-          <details class="advanced-options" id="generatorAdvanced">
-            <summary>Advanced options</summary>
-            <label class="control">
-              <span>Image description</span>
-              <textarea
-                id="imageDescription"
-                rows="3"
-                placeholder="Describe the image you want to generate"
-              ></textarea>
-            </label>
-            <p class="control-note">
-              Stored with saves and exports so you can revisit the inspiration later.
-            </p>
-            <p class="control-note">
-              <a
-                id="chatGptLink"
-                class="chatgpt-link"
-                href="https://chat.openai.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open ChatGPT to craft an image prompt <span aria-hidden="true">↗</span>
-              </a>
-            </p>
-          </details>
-        </section>
-      </div>
-      <div class="sheet-actions">
-        <button id="applyOptions" type="button" disabled>Apply changes</button>
-      </div>
-      <div
-        class="generator-progress"
-        data-generator-progress
-        role="status"
-        aria-live="polite"
-        hidden
-      >
-        <p class="generator-progress-message" data-generator-progress-message></p>
-        <div
-          class="generator-progress-meter"
-          data-generator-progress-meter
-          role="progressbar"
-          aria-label="Puzzle generation progress"
-          aria-valuemin="0"
-          aria-valuemax="100"
-          aria-valuenow="0"
-          aria-hidden="true"
-        >
-          <div class="generator-progress-bar" data-generator-progress-bar></div>
-        </div>
-      </div>
-    </div>
-    <div
       id="settingsSheet"
       class="sheet hidden"
       role="dialog"
@@ -2032,7 +1748,7 @@
       aria-hidden="true"
     >
       <div class="sheet-header">
-        <h2 id="settingsTitle">Settings</h2>
+        <h2 id="settingsTitle">Settings &amp; tools</h2>
         <button type="button" class="close-button" data-sheet-close="settings">Close</button>
       </div>
       <div class="sheet-body settings-body">
@@ -2086,6 +1802,42 @@
           >
             Appearance
           </button>
+          <button
+            type="button"
+            class="settings-tab"
+            id="settingsTab-generator"
+            data-settings-tab="generator"
+            role="tab"
+            aria-controls="settingsPanel-generator"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Generator
+          </button>
+          <button
+            type="button"
+            class="settings-tab"
+            id="settingsTab-saves"
+            data-settings-tab="saves"
+            role="tab"
+            aria-controls="settingsPanel-saves"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Saves
+          </button>
+          <button
+            type="button"
+            class="settings-tab"
+            id="settingsTab-help"
+            data-settings-tab="help"
+            role="tab"
+            aria-controls="settingsPanel-help"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Help &amp; logs
+          </button>
         </div>
         <div
           class="settings-panel"
@@ -2094,6 +1846,39 @@
           aria-labelledby="settingsTab-gameplay"
           data-settings-panel="gameplay"
         >
+          <section class="sheet-section" aria-labelledby="quickActionsHeading">
+            <h3 id="quickActionsHeading">Quick actions</h3>
+            <div class="quick-actions" role="group" aria-label="Puzzle quick actions">
+              <button
+                id="previewToggle"
+                type="button"
+                class="quick-action"
+                data-testid="preview-toggle"
+                aria-label="Show preview"
+                title="Show preview"
+                aria-pressed="false"
+                disabled
+              >
+                <span class="icon" aria-hidden="true">🖼</span>
+                <span class="label">Show preview</span>
+              </button>
+              <button
+                id="fullscreenButton"
+                type="button"
+                class="quick-action"
+                data-testid="fullscreen-button"
+                aria-label="Enter fullscreen"
+                title="Enter fullscreen"
+                aria-pressed="false"
+              >
+                <span class="icon" aria-hidden="true">⛶</span>
+                <span class="label">Enter fullscreen</span>
+              </button>
+            </div>
+            <p class="control-note">
+              Manage the reference preview and fullscreen view without leaving the puzzle.
+            </p>
+          </section>
           <section class="sheet-section" aria-labelledby="gameplayHeading">
             <h3 id="gameplayHeading">Gameplay</h3>
             <label class="toggle">
@@ -2112,11 +1897,13 @@
               <span>Difficulty</span>
               <select id="difficultySelect">
                 <option value="normal">Standard</option>
+                <option value="nearby">Nearby</option>
                 <option value="easy">Easy</option>
               </select>
             </label>
             <p class="control-note">
-              Easy mode lets you click any region to auto-select its colour before filling it.
+              Nearby mode lets you click adjacent colours (for example, colour 2 can also paint 1 or 3).
+              Easy mode auto-selects any colour you click before filling it.
             </p>
             <label class="control">
               <span>Sort Colours</span>
@@ -2345,14 +2132,348 @@
             <p class="control-note">Adjust the area surrounding the puzzle canvas.</p>
           </section>
         </div>
+        <div
+          class="settings-panel"
+          id="settingsPanel-generator"
+          role="tabpanel"
+          aria-labelledby="settingsTab-generator"
+          data-settings-panel="generator"
+          hidden
+          aria-hidden="true"
+        >
+          <div
+            class="generator-import-notice"
+            data-import-notice
+            role="status"
+            aria-live="polite"
+            hidden
+          >
+            <p class="generator-import-title">
+              <strong data-import-file></strong>
+            </p>
+            <p class="generator-import-description" data-import-description></p>
+            <div class="generator-import-actions">
+              <button id="confirmImport" type="button" data-import-confirm>Generate puzzle</button>
+              <button type="button" class="close-button" data-import-cancel>Cancel</button>
+            </div>
+          </div>
+          <section class="sheet-section" aria-labelledby="generatorHeading">
+            <h3 id="generatorHeading">Clustering &amp; detail</h3>
+            <p class="control-note">
+              Tune the colour clustering pipeline that powers new puzzles. These settings apply to fresh imports and the bundled
+              capybara sample when reloaded.
+            </p>
+            <div class="detail-callout">
+              <p class="detail-intro">Capybara sample detail presets</p>
+              <div class="detail-picker" role="group" aria-label="Capybara sample detail presets">
+                <button type="button" class="detail-chip" data-detail-level="low">Low</button>
+                <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
+                <button type="button" class="detail-chip" data-detail-level="high">High</button>
+              </div>
+              <p class="detail-caption" data-detail-caption></p>
+            </div>
+            <p class="control-note">
+              Switching presets updates every slider below and reloads the sample scene when it's active.
+            </p>
+            <label class="control">
+              <span>Colours <output data-for="colorCount">16</output></span>
+              <input id="colorCount" type="range" min="4" max="64" value="16" />
+            </label>
+            <label class="control">
+              <span>Regions <output data-for="minRegion">80 px²</output></span>
+              <input id="minRegion" type="range" min="1" max="600" value="80" />
+            </label>
+            <p class="control-note">Higher values merge smaller areas for fewer regions.</p>
+            <label class="control">
+              <span>Detail <output data-for="detailLevel">768 px</output></span>
+              <input id="detailLevel" type="range" min="256" max="1600" step="64" value="768" />
+            </label>
+            <p class="control-note">Controls the longest edge used when resizing the source image.</p>
+            <label class="control">
+              <span>Algorithm</span>
+              <select id="generationAlgorithm">
+                <option value="local-kmeans">Local palette clustering (k-means)</option>
+                <option value="local-posterize">Local posterize &amp; merge</option>
+              </select>
+            </label>
+            <p class="control-note">
+              Choose between local clustering pipelines now, with space for hosted services to appear as they become available.
+            </p>
+            <label class="control">
+              <span>Sample rate <output data-for="sampleRate">65%</output></span>
+              <input id="sampleRate" type="range" min="25" max="100" step="5" value="65" />
+            </label>
+            <p class="control-note">Lower values speed up clustering by sampling fewer pixels.</p>
+            <label class="control">
+              <span>Iterations <output data-for="kmeansIters">12</output></span>
+              <input id="kmeansIters" type="range" min="4" max="32" step="1" value="12" />
+            </label>
+            <p class="control-note">
+              Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process.
+            </p>
+            <label class="control">
+              <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
+              <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
+            </label>
+            <p class="control-note">
+              Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source.
+            </p>
+            <details class="advanced-options" id="generatorAdvanced">
+              <summary>Advanced options</summary>
+              <label class="control">
+                <span>Art prompt</span>
+                <textarea
+                  id="artPrompt"
+                  rows="3"
+                  placeholder="Summarise the idea behind this puzzle"
+                ></textarea>
+              </label>
+              <p class="control-note">
+                Stored with saves so you can revisit the inspiration that sparked the artwork.
+              </p>
+              <label class="control">
+                <span>Image description</span>
+                <textarea
+                  id="imageDescription"
+                  rows="3"
+                  placeholder="Describe the image you want to generate"
+                ></textarea>
+              </label>
+              <p class="control-note">
+                Stored with saves and exports so you can revisit the inspiration later.
+              </p>
+              <p class="control-note">
+                <a
+                  id="chatGptLink"
+                  class="chatgpt-link"
+                  href="https://chat.openai.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open ChatGPT to craft an image prompt <span aria-hidden="true">↗</span>
+                </a>
+              </p>
+            </details>
+          </section>
+          <form class="sheet-section" data-source-url-form>
+            <h3 id="sourceUrlHeading">Import from URL</h3>
+            <p class="control-note">Enter an https:// link to load an image directly.</p>
+            <label class="control">
+              <span>Image URL</span>
+              <input type="url" inputmode="url" data-source-url-input aria-describedby="sourceUrlHint sourceUrlError" />
+            </label>
+            <p class="control-note" id="sourceUrlHint" data-source-url-hint>
+              External sites must allow cross-origin image access.
+            </p>
+            <p class="control-note" id="sourceUrlError" data-source-url-error role="alert" hidden></p>
+            <div class="panel-actions">
+              <button type="submit" data-source-url-submit disabled>Load image</button>
+            </div>
+          </form>
+          <div class="sheet-actions">
+            <button id="applyOptions" type="button" disabled>Apply changes</button>
+          </div>
+          <div
+            class="generator-progress"
+            data-generator-progress
+            role="status"
+            aria-live="polite"
+            hidden
+          >
+            <p class="generator-progress-message" data-generator-progress-message></p>
+            <div
+              class="generator-progress-meter"
+              data-generator-progress-meter
+              role="progressbar"
+              aria-label="Puzzle generation progress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+              aria-hidden="true"
+            >
+              <div class="generator-progress-bar" data-generator-progress-bar></div>
+            </div>
+          </div>
+        </div>
+        <div
+          class="settings-panel"
+          id="settingsPanel-saves"
+          role="tabpanel"
+          aria-labelledby="settingsTab-saves"
+          data-settings-panel="saves"
+          hidden
+          aria-hidden="true"
+        >
+          <section class="sheet-section" aria-labelledby="saveStartHeading">
+            <h3 id="saveStartHeading">Start a puzzle</h3>
+            <div class="save-start-actions">
+              <button
+                id="selectImage"
+                type="button"
+                aria-label="Upload image or JSON puzzle"
+              >
+                Upload Image
+              </button>
+              <button
+                id="samplePuzzle"
+                type="button"
+                data-action="load-sample"
+                aria-label="Load capybara sample puzzle"
+              >
+                Load capybara sample
+              </button>
+            </div>
+          </section>
+          <section
+            class="sheet-section save-manager"
+            role="group"
+            aria-labelledby="saveManagerHeading"
+            data-save-section="dialog"
+          >
+            <h3 id="saveManagerHeading">Your saves</h3>
+            <div
+              class="save-manager-list"
+              data-save-list
+              aria-live="polite"
+              aria-labelledby="saveManagerHeading"
+              role="list"
+            ></div>
+            <p class="save-manager-empty" data-save-empty hidden>
+              No saves yet. Create one above to start autosaving progress.
+            </p>
+            <div class="save-manager-actions">
+              <button type="button" data-save-snapshot disabled>Save current puzzle</button>
+              <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
+              <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
+            </div>
+          </section>
+          <section class="sheet-section" aria-labelledby="storageHeading">
+            <h3 id="storageHeading">Save storage</h3>
+            <p id="saveStorageSummary" class="control-note"></p>
+            <label class="control">
+              <span>Stored image size <output data-for="sourceImageLimit">1 MB</output></span>
+              <select id="sourceImageLimit">
+                <option value="262144">256 KB</option>
+                <option value="524288">512 KB</option>
+                <option value="1048576" selected>1 MB</option>
+                <option value="2097152">2 MB</option>
+                <option value="5242880">5 MB</option>
+              </select>
+            </label>
+            <p class="control-note">
+              Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate
+              or import.
+            </p>
+            <div class="log-actions">
+              <button id="deleteAllSaves" type="button">Delete all saves</button>
+            </div>
+          </section>
+        </div>
+        <div
+          class="settings-panel"
+          id="settingsPanel-help"
+          role="tabpanel"
+          aria-labelledby="settingsTab-help"
+          data-settings-panel="help"
+          hidden
+          aria-hidden="true"
+        >
+          <section class="sheet-section" aria-labelledby="commandsHeading">
+            <h3 id="commandsHeading">Command buttons</h3>
+            <dl class="command-list">
+              <dt>🖼 Preview</dt>
+              <dd>Toggle the finished artwork overlay to compare your progress.</dd>
+              <dt>🎛 Generator</dt>
+              <dd>
+                Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor
+                generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation.
+              </dd>
+              <dt>🎚 Detail</dt>
+              <dd>
+                Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes,
+                minimum region areas, resize targets, and the region counts noted above.
+              </dd>
+              <dt>⛶ Fullscreen</dt>
+              <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
+              <dt>⬆ Import</dt>
+              <dd>Load a new image or JSON puzzle from disk.</dd>
+              <dt>💾 Saves</dt>
+              <dd>Manage snapshots — load, rename, export, or delete stored games.</dd>
+              <dt>ℹ Help</dt>
+              <dd>Open this guide and inspect the live debug log.</dd>
+              <dt>⚙ Settings</dt>
+              <dd>
+                Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface
+                scale. Advanced options expose accessibility tweaks for the hint animations.
+              </dd>
+            </dl>
+          </section>
+          <section class="sheet-section" aria-labelledby="controlsHeading">
+            <h3 id="controlsHeading">Canvas controls</h3>
+            <ul class="control-list">
+              <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
+              <li><kbd>Right click</kbd> Select the colour under the pointer.</li>
+              <li>Select a palette swatch to set the active colour and flash every matching region.</li>
+              <li>Enable Easy difficulty in Settings to let clicks auto-select the tapped region's colour.</li>
+              <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
+              <li><kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas.</li>
+              <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
+            </ul>
+          </section>
+          <section class="sheet-section" aria-labelledby="readmeHeading">
+            <h3 id="readmeHeading">Project README</h3>
+            <p class="control-note">
+              Loads the live documentation from
+              <a href="https://shthed.github.io/capy/README" target="_blank" rel="noreferrer noopener"
+                >https://shthed.github.io/capy/README</a
+              >
+              so you can review gameplay notes and contributor guidance without leaving the app.
+            </p>
+            <p class="control-note" data-readme-status role="status">Loading README…</p>
+            <p class="control-note" data-readme-error role="alert" hidden></p>
+            <article class="readme-preview" data-readme-content hidden aria-live="polite"></article>
+          </section>
+          <section class="sheet-section" aria-labelledby="debugHeading">
+            <h3 id="debugHeading">Debug log</h3>
+            <p class="control-note">
+              Recent actions, selections, and generation events appear here while you play.
+            </p>
+            <div
+              id="debugLog"
+              class="debug-log"
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions text"
+            ></div>
+            <div class="log-actions">
+              <button id="clearDebugLog" type="button">Clear log</button>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
-        <script type="module">
-      import {
-        createRendererController,
-        createWebGLRenderer,
-        createSvgRenderer,
-      } from "./render.js";
+    <script src="./render.js"></script>
+        <script>
+      (() => {
+        const BOOTSTRAP_VERSION = "2024-07-28";
+        const SENTINEL_READY = `ready:${BOOTSTRAP_VERSION}`;
+        if (window.__capyRendererBootstrapVersion === SENTINEL_READY) {
+          return;
+        }
+        let bootstrapSucceeded = false;
+        try {
+          window.__capyRendererBootstrapVersion = `pending:${BOOTSTRAP_VERSION}`;
+          const rendererApi = window.capyRenderer || {};
+          function requireRendererExport(name) {
+            const exportValue = rendererApi[name] || window[name];
+            if (typeof exportValue !== "function") {
+              throw new Error(`Renderer export unavailable: ${name}`);
+            }
+            return exportValue;
+          }
+          const createRendererController = requireRendererExport("createRendererController");
+          const createWebGLRenderer = requireRendererExport("createWebGLRenderer");
+          const createSvgRenderer = requireRendererExport("createSvgRenderer");
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
       const commandRail = document.getElementById("commandRail");
@@ -2369,12 +2490,7 @@
       const startSaveManagerSection = document.getElementById("saveManagerSection");
       const previewToggle = document.getElementById("previewToggle");
       const fullscreenButton = document.getElementById("fullscreenButton");
-      const importButton = document.getElementById("importButton");
-      const saveManagerButton = document.getElementById("saveManagerButton");
-      const generatorButton = document.getElementById("generatorButton");
       const settingsButton = document.getElementById("settingsButton");
-      const helpButton = document.getElementById("helpButton");
-      const generatorSheet = document.getElementById("generatorSheet");
       const settingsSheet = document.getElementById("settingsSheet");
       const settingsBody = settingsSheet?.querySelector(".sheet-body") || null;
       const settingsTabButtons = settingsSheet
@@ -2383,17 +2499,15 @@
       const settingsPanels = settingsSheet
         ? Array.from(settingsSheet.querySelectorAll("[data-settings-panel]"))
         : [];
+      const generatorPanel = settingsSheet?.querySelector('[data-settings-panel="generator"]') || null;
+      const helpPanel = settingsSheet?.querySelector('[data-settings-panel="help"]') || null;
       let activeSettingsTabId =
         settingsTabButtons.find((button) => button?.hasAttribute("data-settings-tab-default"))
           ?.dataset.settingsTab || (settingsTabButtons[0]?.dataset.settingsTab ?? null);
-      const helpSheet = document.getElementById("helpSheet");
-      const saveManagerSheet = document.getElementById("saveManagerSheet");
-      const sheetRegistry = [generatorSheet, settingsSheet, helpSheet, saveManagerSheet].filter(
-        Boolean
-      );
-      const readmeContentEl = helpSheet?.querySelector("[data-readme-content]") || null;
-      const readmeStatusEl = helpSheet?.querySelector("[data-readme-status]") || null;
-      const readmeErrorEl = helpSheet?.querySelector("[data-readme-error]") || null;
+      const sheetRegistry = [settingsSheet].filter(Boolean);
+      const readmeContentEl = helpPanel?.querySelector("[data-readme-content]") || null;
+      const readmeStatusEl = helpPanel?.querySelector("[data-readme-status]") || null;
+      const readmeErrorEl = helpPanel?.querySelector("[data-readme-error]") || null;
       const README_SOURCE_URL = "https://shthed.github.io/capy/README";
       let readmeLoadState = "idle";
       const debugLogEl = document.getElementById("debugLog");
@@ -2467,24 +2581,24 @@
       ]);
       const WARM_HUE_PIVOT_RADIANS = (40 * Math.PI) / 180;
       const generatorImportNotice =
-        generatorSheet?.querySelector("[data-import-notice]") || null;
-      const generatorImportFileEl = generatorSheet?.querySelector("[data-import-file]") || null;
+        generatorPanel?.querySelector("[data-import-notice]") || null;
+      const generatorImportFileEl = generatorPanel?.querySelector("[data-import-file]") || null;
       const generatorImportDescriptionEl =
-        generatorSheet?.querySelector("[data-import-description]") || null;
+        generatorPanel?.querySelector("[data-import-description]") || null;
       const confirmImportBtn = document.getElementById("confirmImport");
-      const cancelImportBtn = generatorSheet?.querySelector("[data-import-cancel]") || null;
-      const generatorUrlForm = generatorSheet?.querySelector("[data-source-url-form]") || null;
-      const generatorUrlInput = generatorSheet?.querySelector("[data-source-url-input]") || null;
-      const generatorUrlSubmit = generatorSheet?.querySelector("[data-source-url-submit]") || null;
-      const generatorUrlHint = generatorSheet?.querySelector("[data-source-url-hint]") || null;
-      const generatorUrlError = generatorSheet?.querySelector("[data-source-url-error]") || null;
-      const generatorProgressEl = generatorSheet?.querySelector("[data-generator-progress]") || null;
+      const cancelImportBtn = generatorPanel?.querySelector("[data-import-cancel]") || null;
+      const generatorUrlForm = generatorPanel?.querySelector("[data-source-url-form]") || null;
+      const generatorUrlInput = generatorPanel?.querySelector("[data-source-url-input]") || null;
+      const generatorUrlSubmit = generatorPanel?.querySelector("[data-source-url-submit]") || null;
+      const generatorUrlHint = generatorPanel?.querySelector("[data-source-url-hint]") || null;
+      const generatorUrlError = generatorPanel?.querySelector("[data-source-url-error]") || null;
+      const generatorProgressEl = generatorPanel?.querySelector("[data-generator-progress]") || null;
       const generatorProgressMessageEl =
-        generatorSheet?.querySelector("[data-generator-progress-message]") || null;
+        generatorPanel?.querySelector("[data-generator-progress-message]") || null;
       const generatorProgressMeterEl =
-        generatorSheet?.querySelector("[data-generator-progress-meter]") || null;
+        generatorPanel?.querySelector("[data-generator-progress-meter]") || null;
       const generatorProgressBarEl =
-        generatorSheet?.querySelector("[data-generator-progress-bar]") || null;
+        generatorPanel?.querySelector("[data-generator-progress-bar]") || null;
       const defaultProgressLabel =
         generatorProgressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
       const DEFAULT_PROGRESS_MESSAGE = "";
@@ -2500,14 +2614,14 @@
       let pendingSourceUrlLoad = false;
 
       // Sheet output mirrors we update while users drag sliders.
-      const generatorOutputs = generatorSheet
+      const generatorOutputs = generatorPanel
         ? {
-            colorCount: generatorSheet.querySelector('output[data-for="colorCount"]'),
-            minRegion: generatorSheet.querySelector('output[data-for="minRegion"]'),
-            detail: generatorSheet.querySelector('output[data-for="detailLevel"]'),
-            sample: generatorSheet.querySelector('output[data-for="sampleRate"]'),
-            iterations: generatorSheet.querySelector('output[data-for="kmeansIters"]'),
-            smoothing: generatorSheet.querySelector('output[data-for="smoothingPasses"]'),
+            colorCount: generatorPanel.querySelector('output[data-for="colorCount"]'),
+            minRegion: generatorPanel.querySelector('output[data-for="minRegion"]'),
+            detail: generatorPanel.querySelector('output[data-for="detailLevel"]'),
+            sample: generatorPanel.querySelector('output[data-for="sampleRate"]'),
+            iterations: generatorPanel.querySelector('output[data-for="kmeansIters"]'),
+            smoothing: generatorPanel.querySelector('output[data-for="smoothingPasses"]'),
           }
         : {};
       const sourceImageLimitOutput = document.querySelector('output[data-for="sourceImageLimit"]');
@@ -2585,7 +2699,7 @@
       const SOURCE_IMAGE_VARIANT_ORIGINAL = "original";
       const SOURCE_IMAGE_VARIANT_GENERATED = "generated";
       const DEFAULT_DIFFICULTY = "normal";
-      const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
+      const VALID_DIFFICULTY_LEVELS = new Set(["normal", "nearby", "easy"]);
       const MOUSE_BUTTON_KEYS = ["left", "middle", "right"];
       const MOUSE_BUTTON_LABELS = {
         left: "Left mouse button",
@@ -2853,7 +2967,7 @@
             if (!allowShortcutTarget) {
               return;
             }
-            applyZoom(wantsZoomIn ? 1.1 : 0.9);
+            applyZoom(wantsZoomIn ? 1.1 : 0.9, undefined, undefined, { defer: true });
           },
           { capture: true }
         );
@@ -3756,6 +3870,7 @@
         previewImageData: null,
         renderCache: createRenderCache(),
         rendering: { controller: null },
+        paletteAdjacency: new Map(),
         defaultGame: {
           id: DEFAULT_GAME_SOURCE.id,
           path: DEFAULT_GAME_SOURCE.path,
@@ -4541,9 +4656,12 @@
             }
             updatePreviewState();
           },
-          openGenerator: () => openSheet(generatorSheet),
-          openSettings: () => openSheet(settingsSheet),
-          openSaves: () => openSheet(saveManagerSheet),
+          openGenerator: () =>
+            showSettingsSheet({ tabId: "generator", focusTab: true, resetScroll: true, force: true }),
+          openSettings: () =>
+            showSettingsSheet({ tabId: activeSettingsTabId || "gameplay", resetScroll: false }),
+          openSaves: () =>
+            showSettingsSheet({ tabId: "saves", focusTab: true, resetScroll: true, force: true }),
           resetProgress: () => resetCurrentProgress(),
           fillRegion(regionId, options = {}) {
             if (!state.puzzle) {
@@ -4605,8 +4723,8 @@
           if (!hasSampleArtwork && !hasDefaultPuzzle) {
             return;
           }
-          if (saveManagerSheet && saveManagerSheet.contains(button)) {
-            closeSheet(saveManagerSheet);
+          if (settingsSheet && settingsSheet.contains(button)) {
+            closeSheet(settingsSheet);
           }
           loadSamplePuzzle({ detailLevel: state.sampleDetailLevel });
         });
@@ -4686,30 +4804,33 @@
 
       if (selectButton) {
         selectButton.addEventListener("click", () => {
-          if (saveManagerSheet && saveManagerSheet.contains(selectButton)) {
-            closeSheet(saveManagerSheet);
+          if (settingsSheet && !settingsSheet.classList.contains("hidden")) {
+            closeSheet(settingsSheet);
           }
           fileInput.click();
         });
       }
-      importButton.addEventListener("click", () => fileInput.click());
-      if (generatorButton) {
-        generatorButton.addEventListener("click", () => openSheet(generatorSheet));
-      }
-      settingsButton.addEventListener("click", () => openSheet(settingsSheet));
-      saveManagerButton.addEventListener("click", () => {
-        hideStartScreen();
-        openSheet(saveManagerSheet);
-      });
-      if (helpButton) {
-        helpButton.addEventListener("click", () => openSheet(helpSheet));
+      if (settingsButton) {
+        settingsButton.addEventListener("click", () => {
+          if (!settingsSheet) {
+            return;
+          }
+          const isHidden = settingsSheet.classList.contains("hidden");
+          if (isHidden) {
+            hideStartScreen();
+            showSettingsSheet({ tabId: activeSettingsTabId || "gameplay", resetScroll: false });
+          } else {
+            closeSheet(settingsSheet);
+            settingsButton.focus();
+          }
+        });
       }
 
       if (startHintCloseButton) {
         startHintCloseButton.addEventListener("click", () => {
           hideStartScreen();
-          if (saveManagerButton && !saveManagerButton.disabled) {
-            saveManagerButton.focus();
+          if (settingsButton) {
+            settingsButton.focus();
           }
         });
       }
@@ -4749,12 +4870,6 @@
           const target = event.currentTarget.getAttribute("data-sheet-close");
           if (target === "settings") {
             closeSheet(settingsSheet);
-          } else if (target === "generator") {
-            closeSheet(generatorSheet);
-          } else if (target === "help") {
-            closeSheet(helpSheet);
-          } else if (target === "saves") {
-            closeSheet(saveManagerSheet);
           }
         });
       }
@@ -4764,8 +4879,8 @@
           if (event.key === "Escape") {
             if (!startHint.classList.contains("hidden") && (state.puzzle || state.saves.length > 0)) {
               hideStartScreen();
-              if (saveManagerButton && !saveManagerButton.disabled) {
-                saveManagerButton.focus();
+              if (settingsButton) {
+                settingsButton.focus();
               }
             }
             return;
@@ -4870,11 +4985,13 @@
           const difficulty = resolveDifficulty(difficultySelect.value);
           state.settings.difficulty = difficulty;
           difficultySelect.value = difficulty;
-          logDebug(
-            difficulty === "easy"
-              ? "Difficulty set to Easy – clicks auto-select matching colours"
-              : "Difficulty set to Standard – clicks require the active colour"
-          );
+          let difficultyLog = "Difficulty set to Standard – clicks require the active colour";
+          if (difficulty === "nearby") {
+            difficultyLog = "Difficulty set to Nearby – clicks can hop to adjacent colours";
+          } else if (difficulty === "easy") {
+            difficultyLog = "Difficulty set to Easy – clicks auto-select matching colours";
+          }
+          logDebug(difficultyLog);
           scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-difficulty");
         });
@@ -5379,8 +5496,12 @@
           }
           return "already-filled";
         }
-        if (region.colorId !== state.activeColor) {
-          const difficulty = resolveDifficulty(state.settings.difficulty);
+        const difficulty = resolveDifficulty(state.settings.difficulty);
+        const allowAdjacentFill =
+          region.colorId !== state.activeColor &&
+          difficulty === "nearby" &&
+          areColorsAdjacent(state.activeColor, region.colorId);
+        if (region.colorId !== state.activeColor && !allowAdjacentFill) {
           if (difficulty === "easy") {
             activateColor(region.colorId, { flash: false });
           } else {
@@ -5403,7 +5524,8 @@
             return "mismatch";
           }
         }
-        if (region.colorId !== state.activeColor) {
+        const activeMatchesRegion = region.colorId === state.activeColor;
+        if (!activeMatchesRegion && !allowAdjacentFill) {
           logDebug(
             `Region ${region.id} expects ${describeColour(region.colorId, { includeCompleted: true })}; active colour is ${describeColour(state.activeColor, { includeCompleted: true })}`
           );
@@ -5421,10 +5543,16 @@
         updateProgress();
         updateCommandStates();
         scheduleAutosave("fill-region");
-        logDebug(
-          `Filled region ${region.id} with ${describeColour(region.colorId, { includeCompleted: true })} (${state.filled.size}/${state.puzzle.regions.length})`
-        );
-        if (state.settings.autoAdvance) {
+        if (allowAdjacentFill) {
+          logDebug(
+            `Filled region ${region.id} with ${describeColour(region.colorId, { includeCompleted: true })} via adjacent selection (${state.filled.size}/${state.puzzle.regions.length})`
+          );
+        } else {
+          logDebug(
+            `Filled region ${region.id} with ${describeColour(region.colorId, { includeCompleted: true })} (${state.filled.size}/${state.puzzle.regions.length})`
+          );
+        }
+        if (state.settings.autoAdvance && !allowAdjacentFill) {
           autoAdvanceColor(region.colorId);
         }
         refreshCustomCursorHighlight();
@@ -5615,27 +5743,12 @@
         }
         sheet.classList.remove("hidden");
         sheet.setAttribute("aria-hidden", "false");
-        if (sheet === helpSheet) {
+        if (sheet === settingsSheet && settingsButton) {
+          settingsButton.setAttribute("aria-expanded", "true");
+          settingsButton.classList.add("active");
+        }
+        if (sheet === settingsSheet && activeSettingsTabId === "help") {
           void ensureHelpReadmeLoaded();
-        } else if (sheet === generatorSheet) {
-          requestAnimationFrame(() => {
-            if (!generatorUrlInput) {
-              return;
-            }
-            if (
-              (!generatorUrlInput.value || generatorUrlInput.value.trim().length === 0) &&
-              state.sourceUrl &&
-              !isProbablyDataUrl(state.sourceUrl)
-            ) {
-              generatorUrlInput.value = state.sourceUrl;
-            }
-            clearSourceUrlError();
-            updateSourceUrlSubmitState();
-            generatorUrlInput.focus();
-            if (typeof generatorUrlInput.select === "function") {
-              generatorUrlInput.select();
-            }
-          });
         }
       }
 
@@ -5643,8 +5756,25 @@
         if (!sheet) return;
         sheet.classList.add("hidden");
         sheet.setAttribute("aria-hidden", "true");
-        if (sheet === generatorSheet) {
+        if (sheet === settingsSheet && settingsButton) {
+          settingsButton.setAttribute("aria-expanded", "false");
+          settingsButton.classList.remove("active");
+        }
+        if (sheet === settingsSheet) {
           clearPendingImport();
+        }
+      }
+
+      function showSettingsSheet(options = {}) {
+        if (!settingsSheet) {
+          return;
+        }
+        const { tabId = null, focusTab = false, resetScroll = true, force = false } = options;
+        openSheet(settingsSheet);
+        if (typeof tabId === "string" && tabId.length > 0) {
+          activateSettingsTab(tabId, { focusTab, resetScroll, force });
+        } else if (resetScroll && settingsBody) {
+          settingsBody.scrollTop = 0;
         }
       }
 
@@ -5686,12 +5816,20 @@
           previewToggle.setAttribute("aria-label", "Hide preview");
           previewToggle.title = "Hide preview";
           previewToggle.classList.add("active");
+          const label = previewToggle.querySelector(".label");
+          if (label) {
+            label.textContent = "Hide preview";
+          }
           hideCustomCursor();
         } else {
           previewToggle.setAttribute("aria-pressed", "false");
           previewToggle.setAttribute("aria-label", "Show preview");
           previewToggle.title = "Show preview";
           previewToggle.classList.remove("active");
+          const label = previewToggle.querySelector(".label");
+          if (label) {
+            label.textContent = "Show preview";
+          }
           refreshCustomCursorHighlight();
         }
         renderPuzzle();
@@ -5707,6 +5845,10 @@
         const icon = fullscreenButton.querySelector(".icon");
         if (icon) {
           icon.textContent = active ? "🗗" : "⛶";
+        }
+        const label = fullscreenButton.querySelector(".label");
+        if (label) {
+          label.textContent = active ? "Exit fullscreen" : "Enter fullscreen";
         }
         fullscreenButton.disabled = !document.fullscreenEnabled && !active;
       }
@@ -6022,9 +6164,6 @@
         for (const button of resetProgressButtons) {
           button.disabled = !hasPuzzle || state.filled.size === 0;
         }
-        if (saveManagerButton) {
-          saveManagerButton.disabled = false;
-        }
         if (startHintCloseButton) {
           startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
         }
@@ -6078,6 +6217,134 @@
         renderDebugLog();
       }
 
+      function formatConsoleValue(value) {
+        if (value instanceof Error) {
+          return value.stack || `${value.name || "Error"}: ${value.message || ""}`.trim();
+        }
+        const type = typeof value;
+        if (type === "string") {
+          return value;
+        }
+        if (type === "number" || type === "bigint" || type === "boolean") {
+          return String(value);
+        }
+        if (value === null) {
+          return "null";
+        }
+        if (value === undefined) {
+          return "undefined";
+        }
+        if (type === "function") {
+          return value.name ? `[Function ${value.name}]` : "[Function]";
+        }
+        try {
+          return JSON.stringify(value);
+        } catch (_error) {
+          return Object.prototype.toString.call(value);
+        }
+      }
+
+      function joinConsoleArguments(args) {
+        if (!Array.isArray(args) || args.length === 0) {
+          return "";
+        }
+        return args
+          .map((value) => {
+            try {
+              return formatConsoleValue(value);
+            } catch (_error) {
+              return "[unserializable]";
+            }
+          })
+          .filter((value) => value && typeof value === "string")
+          .join(" ");
+      }
+
+      function installConsoleErrorForwarder() {
+        if (installConsoleErrorForwarder.installed) {
+          return;
+        }
+        installConsoleErrorForwarder.installed = true;
+
+        const globalConsole = window.console;
+        if (globalConsole && typeof globalConsole === "object") {
+          const levels = [
+            ["error", "Error"],
+            ["warn", "Warning"],
+          ];
+          for (const [method, label] of levels) {
+            const original =
+              typeof globalConsole[method] === "function"
+                ? globalConsole[method].bind(globalConsole)
+                : null;
+            if (!original) {
+              continue;
+            }
+            globalConsole[method] = function forwardedConsoleMethod(...args) {
+              let result;
+              try {
+                result = original(...args);
+              } catch (_error) {
+                /* Swallow logging errors to avoid infinite loops. */
+              }
+              try {
+                const payload = joinConsoleArguments(args);
+                const message = payload ? `[${label}] ${payload}` : `[${label}]`;
+                logDebug(message);
+              } catch (_error) {
+                /* Ignore debug log failures. */
+              }
+              return result;
+            };
+          }
+        }
+
+        function recordErrorEvent(event, label) {
+          if (!event) return;
+          try {
+            const parts = [];
+            if (event.message) {
+              parts.push(event.message);
+            }
+            if (event.filename) {
+              const line = event.lineno != null ? event.lineno : null;
+              const column = event.colno != null ? event.colno : null;
+              const location =
+                line != null && column != null
+                  ? `${event.filename}:${line}:${column}`
+                  : line != null
+                  ? `${event.filename}:${line}`
+                  : event.filename;
+              parts.push(location);
+            }
+            if (event.reason && event.reason !== event.message) {
+              parts.push(formatConsoleValue(event.reason));
+            } else if (event.error) {
+              parts.push(formatConsoleValue(event.error));
+            }
+            const message = parts.length ? parts.join(" – ") : label;
+            logDebug(`[${label}] ${message}`);
+          } catch (_error) {
+            /* Ignore logging failures. */
+          }
+        }
+
+        window.addEventListener(
+          "error",
+          (event) => {
+            recordErrorEvent(event, "Unhandled Error");
+          },
+          true
+        );
+
+        window.addEventListener("unhandledrejection", (event) => {
+          recordErrorEvent(event, "Unhandled Promise Rejection");
+        });
+      }
+
+      installConsoleErrorForwarder.installed = false;
+      installConsoleErrorForwarder();
+
       function activateSettingsTab(tabId, options = {}) {
         if (!tabId || settingsTabButtons.length === 0) {
           return null;
@@ -6117,6 +6384,13 @@
         }
         if (focusTab) {
           button.focus();
+        }
+        if (tabId === "help") {
+          void ensureHelpReadmeLoaded();
+        } else if (tabId === "generator" && (changed || force)) {
+          requestAnimationFrame(() => {
+            focusGeneratorUrlInput();
+          });
         }
         return tabId;
       }
@@ -6835,6 +7109,25 @@
         }
       }
 
+      function focusGeneratorUrlInput() {
+        if (!generatorUrlInput) {
+          return;
+        }
+        if (
+          (!generatorUrlInput.value || generatorUrlInput.value.trim().length === 0) &&
+          state.sourceUrl &&
+          !isProbablyDataUrl(state.sourceUrl)
+        ) {
+          generatorUrlInput.value = state.sourceUrl;
+        }
+        clearSourceUrlError();
+        updateSourceUrlSubmitState();
+        generatorUrlInput.focus();
+        if (typeof generatorUrlInput.select === "function") {
+          generatorUrlInput.select();
+        }
+      }
+
       function handleSourceImageUrl(rawUrl) {
         const normalized = normalizeExternalImageUrl(rawUrl);
         if (!normalized) {
@@ -6880,19 +7173,21 @@
           return;
         }
         disableSampleAutoload();
-        if (!generatorSheet) {
+        if (!generatorPanel) {
           handleFile(file);
           return;
         }
         pendingImportFile = file;
         pendingImportAutoStart = shouldAutoImport(file);
         updateImportNotice();
-        openSheet(generatorSheet);
+        showSettingsSheet({ tabId: "generator", focusTab: true, resetScroll: true, force: true });
         requestAnimationFrame(() => {
           if (pendingImportAutoStart) {
             executePendingImport();
           } else if (confirmImportBtn && !confirmImportBtn.hidden) {
             confirmImportBtn.focus();
+          } else {
+            focusGeneratorUrlInput();
           }
         });
       }
@@ -7091,6 +7386,7 @@
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
+        state.paletteAdjacency = new Map();
         markFilledLayerDirty();
         state.sourceUrl = null;
         state.sourceTitle = null;
@@ -7809,6 +8105,7 @@
           regionMap,
         };
         state.puzzle = puzzle;
+        state.paletteAdjacency = buildPaletteAdjacency(palette);
         const sourceSnapshot = metadata.sourceImage ?? data.sourceImage;
         let sourceImageRecord = hydrateSourceImageSnapshot(sourceSnapshot, sourceDefaults, {
           onReady: () => {
@@ -9124,17 +9421,34 @@
         if (colorId == null) return;
         const swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
         if (!swatch) return;
-        const scrollBehavior =
-          prefersReducedMotionQuery && prefersReducedMotionQuery.matches ? "auto" : "smooth";
-        try {
-          swatch.scrollIntoView({
-            block: "nearest",
-            inline: "nearest",
-            behavior: scrollBehavior,
-          });
-        } catch (error) {
-          swatch.scrollIntoView();
+        const paletteWidth = paletteEl.clientWidth;
+        const maxScroll = Math.max(0, paletteEl.scrollWidth - paletteWidth);
+        if (maxScroll === 0) {
+          return;
         }
+        const swatchLeft = swatch.offsetLeft;
+        const swatchRight = swatchLeft + swatch.offsetWidth;
+        const currentLeft = paletteEl.scrollLeft;
+        const currentRight = currentLeft + paletteWidth;
+        let targetLeft = currentLeft;
+        if (swatchLeft < currentLeft) {
+          targetLeft = swatchLeft;
+        } else if (swatchRight > currentRight) {
+          targetLeft = swatchRight - paletteWidth;
+        }
+        targetLeft = Math.min(Math.max(targetLeft, 0), maxScroll);
+        if (targetLeft === currentLeft) {
+          return;
+        }
+        if (typeof paletteEl.scrollTo === "function") {
+          try {
+            paletteEl.scrollTo({ left: targetLeft, behavior: "auto" });
+            return;
+          } catch (error) {
+            // fall back to manual scrolling
+          }
+        }
+        paletteEl.scrollLeft = targetLeft;
       }
 
       function activateColor(colorId, options = {}) {
@@ -9785,13 +10099,13 @@
         const key = event.key;
         if (key === "+" || key === "=" || event.code === "Equal" || event.code === "NumpadAdd") {
           event.preventDefault();
-          applyZoom(1.1);
+          applyZoom(1.1, undefined, undefined, { defer: true });
           return;
         }
 
         if (key === "-" || event.code === "Minus" || event.code === "NumpadSubtract") {
           event.preventDefault();
-          applyZoom(0.9);
+          applyZoom(0.9, undefined, undefined, { defer: true });
         }
       }
 
@@ -9909,7 +10223,7 @@
         if (!Number.isFinite(multiplier) || Math.abs(multiplier - 1) < 0.001) {
           return;
         }
-        applyZoom(multiplier, event.clientX, event.clientY, { skipLog: true });
+        applyZoom(multiplier, event.clientX, event.clientY, { skipLog: true, defer: true });
         session.zoomChanged = true;
       }
 
@@ -10006,7 +10320,7 @@
         }
         if (action === "zoom-in" || action === "zoom-out") {
           const multiplier = action === "zoom-in" ? 1.15 : 0.85;
-          applyZoom(multiplier, event.clientX, event.clientY);
+          applyZoom(multiplier, event.clientX, event.clientY, { defer: true });
           return;
         }
       }
@@ -10579,8 +10893,9 @@
         const nextZoom = normalizeZoomValue(targetScale / baseScale, currentZoom);
         const significant = Math.abs(targetScale - currentScale) >= Math.max(0.01, currentScale * 0.001);
         viewState.zoom = nextZoom;
-        if (options.defer) {
-          scheduleViewTransform({ skipSizing: true });
+        const shouldDefer = options.defer !== undefined ? options.defer : true;
+        if (shouldDefer) {
+          scheduleViewTransform({ forceRender: true });
         } else {
           applyViewTransform({ skipSizing: true });
         }
@@ -10621,7 +10936,7 @@
         if (!Number.isFinite(multiplier) || Math.abs(multiplier - 1) < 0.001) {
           return;
         }
-        applyZoom(multiplier, event.clientX, event.clientY);
+        applyZoom(multiplier, event.clientX, event.clientY, { defer: true });
       }
 
       function applyViewTransform(options = {}) {
@@ -11083,6 +11398,76 @@
           }
         }
         return DEFAULT_DIFFICULTY;
+      }
+
+      function normalizeColorId(value) {
+        if (Number.isFinite(value)) {
+          return Number(value);
+        }
+        if (typeof value === "string" && value.trim()) {
+          const parsed = Number.parseInt(value, 10);
+          if (Number.isFinite(parsed)) {
+            return parsed;
+          }
+        }
+        return null;
+      }
+
+      function buildPaletteAdjacency(palette) {
+        const adjacency = new Map();
+        if (!Array.isArray(palette) || palette.length === 0) {
+          return adjacency;
+        }
+        const entries = [];
+        for (let index = 0; index < palette.length; index += 1) {
+          const entry = palette[index];
+          if (!entry) continue;
+          const normalizedId = normalizeColorId(entry.id);
+          if (normalizedId == null) continue;
+          entries.push({ id: normalizedId, index });
+        }
+        entries.sort((a, b) => {
+          if (a.id !== b.id) {
+            return a.id - b.id;
+          }
+          return a.index - b.index;
+        });
+        for (let i = 0; i < entries.length; i += 1) {
+          const currentId = entries[i].id;
+          if (!adjacency.has(currentId)) {
+            adjacency.set(currentId, new Set());
+          }
+          const neighbors = adjacency.get(currentId);
+          const prevId = entries[i - 1]?.id;
+          const nextId = entries[i + 1]?.id;
+          if (prevId != null) {
+            neighbors.add(prevId);
+          }
+          if (nextId != null) {
+            neighbors.add(nextId);
+          }
+        }
+        return adjacency;
+      }
+
+      function areColorsAdjacent(sourceId, targetId) {
+        const source = normalizeColorId(sourceId);
+        const target = normalizeColorId(targetId);
+        if (source == null || target == null) {
+          return false;
+        }
+        if (source === target) {
+          return true;
+        }
+        const adjacency = state.paletteAdjacency;
+        if (!adjacency || typeof adjacency.get !== "function") {
+          return false;
+        }
+        const neighbors = adjacency.get(source);
+        if (!neighbors || typeof neighbors.has !== "function") {
+          return false;
+        }
+        return neighbors.has(target);
       }
 
       function autoAdvanceColor(currentColorId) {
@@ -13181,6 +13566,14 @@
         if (value > max) return max;
         return value;
       }
+
+          bootstrapSucceeded = true;
+        } finally {
+          window.__capyRendererBootstrapVersion = bootstrapSucceeded
+            ? SENTINEL_READY
+            : undefined;
+        }
+      })();
 
     </script>
   </body>

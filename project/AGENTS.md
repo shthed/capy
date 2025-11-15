@@ -46,25 +46,26 @@ any feature or workflow changes you ship.
 ## Environment Setup
 
 1. Install Node.js 18 LTS or newer.
-2. Run `npm install` once to provision Playwright browsers and the lightweight
-   `http-server` used by local previews.
-3. Launch the site with `npm run dev` (serves the repo root at
-   http://localhost:8000).
+2. From the new workspace (`cd project`), run `npm install` once to provision
+   Playwright browsers and the lightweight `http-server` used by local
+   previews.
+3. Launch the site with `npm run dev` inside `project/` (serves the repo root
+   at http://localhost:8000).
 4. Tests and docs assume the app is reachable at port 8000; if you change it,
    update configuration files plus `TECH.md`.
 
 ## Testing Expectations
 
-- Primary test command: `npm test --silent` (currently prints a skip notice
-  while the Playwright suite is offline). Mention in the final response if you
-  cannot run it.
+- Primary test command: `npm test --silent` from within `project/` (currently
+  prints a skip notice while the Playwright suite is offline). Mention in the
+  final response if you cannot run it.
 - Playwright browsers are **not** preinstalled. Before running any tests or
   scripts that launch Playwright, execute
   `npx playwright install --with-deps chromium` to provision the Chromium
   bundle and avoid `browserType.launch` errors about missing executables.
 - Targeted smoke run: `npm run test:smoke` for iterating on
-  `tests/ui-review.spec.js`, which now performs a single Chromium page-load
-  check.
+  `project/tests/ui-review.spec.js`, which now performs a single Chromium
+  page-load check.
 - Workflow hygiene: When editing files under `.github/workflows/`, validate the
   YAML with `npx yaml-lint <file>` before committing.
 - UI verification: Keep Playwright expectations aligned with UI markup, palette

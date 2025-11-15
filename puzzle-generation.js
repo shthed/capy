@@ -64,17 +64,22 @@ function toHex(value) {
   return value.toString(16).padStart(2, "0");
 }
 
-function accumulate(histogram, color) {
-  histogram.set(color, (histogram.get(color) || 0) + 1);
-}
-
-function neighborIndexes(x, y, width, height) {
-  const neighbors = [];
-  if (x > 0) neighbors.push(y * width + (x - 1));
-  if (x < width - 1) neighbors.push(y * width + (x + 1));
-  if (y > 0) neighbors.push((y - 1) * width + x);
-  if (y < height - 1) neighbors.push((y + 1) * width + x);
-  return neighbors;
+function accumulate(counter, touchedColors, color, weight = 1, touchedCount = 0) {
+  if (color < 0 || !Number.isFinite(color)) {
+    return touchedCount;
+  }
+  if (color >= counter.length) {
+    return touchedCount;
+  }
+  const amount = Number.isFinite(weight) ? weight : 0;
+  if (amount === 0) {
+    return touchedCount;
+  }
+  if (counter[color] === 0) {
+    touchedColors[touchedCount++] = color;
+  }
+  counter[color] += amount;
+  return touchedCount;
 }
 
 function floodFill(width, height, indexMap) {
@@ -96,12 +101,33 @@ function floodFill(width, height, indexMap) {
         pixels.push(idx);
         const px = idx % width;
         const py = (idx / width) | 0;
-        const neighbors = neighborIndexes(px, py, width, height);
-        for (const n of neighbors) {
-          if (regionMap[n] !== -1) continue;
-          if (indexMap[n] !== colorId) continue;
-          regionMap[n] = regionId;
-          stack.push(n);
+        if (px > 0) {
+          const n = idx - 1;
+          if (regionMap[n] === -1 && indexMap[n] === colorId) {
+            regionMap[n] = regionId;
+            stack.push(n);
+          }
+        }
+        if (px < width - 1) {
+          const n = idx + 1;
+          if (regionMap[n] === -1 && indexMap[n] === colorId) {
+            regionMap[n] = regionId;
+            stack.push(n);
+          }
+        }
+        if (py > 0) {
+          const n = idx - width;
+          if (regionMap[n] === -1 && indexMap[n] === colorId) {
+            regionMap[n] = regionId;
+            stack.push(n);
+          }
+        }
+        if (py < height - 1) {
+          const n = idx + width;
+          if (regionMap[n] === -1 && indexMap[n] === colorId) {
+            regionMap[n] = regionId;
+            stack.push(n);
+          }
         }
       }
       regions.push({
@@ -118,6 +144,15 @@ function floodFill(width, height, indexMap) {
 
 function segmentRegions(width, height, assignments, minRegion) {
   const indexMap = new Uint16Array(assignments);
+  let maxColorId = 0;
+  for (let i = 0; i < indexMap.length; i++) {
+    if (indexMap[i] > maxColorId) {
+      maxColorId = indexMap[i];
+    }
+  }
+  const paletteSize = Math.max(1, maxColorId + 1);
+  const neighborCounter = new Uint32Array(paletteSize);
+  const touchedColors = new Uint16Array(paletteSize);
   let attempt = 0;
   let threshold = Math.max(1, minRegion);
   while (true) {
@@ -128,21 +163,71 @@ function segmentRegions(width, height, assignments, minRegion) {
     }
     let changed = false;
     for (const region of tiny) {
-      const colorVotes = new Map();
+      let touchedCount = 0;
       for (const idx of region.pixels) {
         const x = idx % width;
         const y = (idx / width) | 0;
-        const neighbors = neighborIndexes(x, y, width, height);
-        for (const n of neighbors) {
+        if (x > 0) {
+          const n = idx - 1;
           const color = indexMap[n];
-          if (color === region.colorId) continue;
-          colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
+          if (color !== region.colorId) {
+            touchedCount = accumulate(
+              neighborCounter,
+              touchedColors,
+              color,
+              1,
+              touchedCount
+            );
+          }
+        }
+        if (x < width - 1) {
+          const n = idx + 1;
+          const color = indexMap[n];
+          if (color !== region.colorId) {
+            touchedCount = accumulate(
+              neighborCounter,
+              touchedColors,
+              color,
+              1,
+              touchedCount
+            );
+          }
+        }
+        if (y > 0) {
+          const n = idx - width;
+          const color = indexMap[n];
+          if (color !== region.colorId) {
+            touchedCount = accumulate(
+              neighborCounter,
+              touchedColors,
+              color,
+              1,
+              touchedCount
+            );
+          }
+        }
+        if (y < height - 1) {
+          const n = idx + width;
+          const color = indexMap[n];
+          if (color !== region.colorId) {
+            touchedCount = accumulate(
+              neighborCounter,
+              touchedColors,
+              color,
+              1,
+              touchedCount
+            );
+          }
         }
       }
-      if (colorVotes.size === 0) continue;
+      if (touchedCount === 0) {
+        continue;
+      }
       let bestColor = region.colorId;
       let bestVotes = -1;
-      for (const [color, votes] of colorVotes.entries()) {
+      for (let i = 0; i < touchedCount; i++) {
+        const color = touchedColors[i];
+        const votes = neighborCounter[color];
         if (votes > bestVotes) {
           bestVotes = votes;
           bestColor = color;
@@ -153,6 +238,9 @@ function segmentRegions(width, height, assignments, minRegion) {
         for (const idx of region.pixels) {
           indexMap[idx] = bestColor;
         }
+      }
+      for (let i = 0; i < touchedCount; i++) {
+        neighborCounter[touchedColors[i]] = 0;
       }
     }
     attempt += 1;
@@ -383,27 +471,46 @@ function performQuantization(algorithm, pixels, width, height, options) {
 
 function smoothAssignments(assignments, width, height, passes) {
   let current = new Uint16Array(assignments);
+  const totalPixels = width * height;
+  if (passes <= 0 || totalPixels === 0) {
+    return current;
+  }
+
+  let maxPaletteIndex = 0;
+  for (let i = 0; i < current.length; i++) {
+    if (current[i] > maxPaletteIndex) {
+      maxPaletteIndex = current[i];
+    }
+  }
+  const counter = new Uint32Array(maxPaletteIndex + 1);
+  const touchedColors = new Uint16Array(5);
+
   for (let pass = 0; pass < passes; pass++) {
-    const next = new Uint16Array(current);
+    const next = new Uint16Array(current.length);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const idx = y * width + x;
-        const histogram = new Map();
         const baseColor = current[idx];
-        histogram.set(baseColor, (histogram.get(baseColor) || 0) + 2);
-        if (x > 0) accumulate(histogram, current[idx - 1]);
-        if (x < width - 1) accumulate(histogram, current[idx + 1]);
-        if (y > 0) accumulate(histogram, current[idx - width]);
-        if (y < height - 1) accumulate(histogram, current[idx + width]);
+        let touchedCount = 0;
+        touchedCount = accumulate(counter, touchedColors, baseColor, 2, touchedCount);
+        if (x > 0) touchedCount = accumulate(counter, touchedColors, current[idx - 1], 1, touchedCount);
+        if (x < width - 1) touchedCount = accumulate(counter, touchedColors, current[idx + 1], 1, touchedCount);
+        if (y > 0) touchedCount = accumulate(counter, touchedColors, current[idx - width], 1, touchedCount);
+        if (y < height - 1) touchedCount = accumulate(counter, touchedColors, current[idx + width], 1, touchedCount);
         let bestColor = baseColor;
         let bestScore = -Infinity;
-        for (const [color, score] of histogram.entries()) {
+        for (let i = 0; i < touchedCount; i++) {
+          const color = touchedColors[i];
+          const score = counter[color];
           if (score > bestScore) {
             bestScore = score;
             bestColor = color;
           }
         }
         next[idx] = bestColor;
+        for (let i = 0; i < touchedCount; i++) {
+          counter[touchedColors[i]] = 0;
+        }
       }
     }
     current = next;
@@ -587,7 +694,6 @@ const DEFAULT_GENERATION_ALGORITHM = "${DEFAULT_GENERATION_ALGORITHM}";
 const now = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
 ${clamp.toString()}
 ${accumulate.toString()}
-${neighborIndexes.toString()}
 ${floodFill.toString()}
 ${segmentRegions.toString()}
 ${finalizeGeneratedRegions.toString()}
@@ -1026,6 +1132,8 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
     originalHeight: image.height,
   };
 }
+
+export { smoothAssignments as __smoothAssignmentsForTests };
 
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
   window.addEventListener("unload", () => {
