@@ -1,15 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import * as puzzleGenerationModule from '../../puzzle-generation.js';
-
-const smoothAssignments =
-  puzzleGenerationModule.__smoothAssignmentsForTests ??
-  puzzleGenerationModule.default?.__smoothAssignmentsForTests;
-
-if (typeof smoothAssignments !== 'function') {
-  throw new TypeError('Expected __smoothAssignmentsForTests export from puzzle-generation.js');
-}
+import { __smoothAssignmentsForTests as smoothAssignments } from '../../puzzle-generation.js';
 
 function accumulateMap(histogram, color) {
   histogram.set(color, (histogram.get(color) || 0) + 1);
