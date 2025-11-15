@@ -9268,24 +9268,28 @@
         if (colorId == null) return;
         const swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
         if (!swatch) return;
-        const scrollBehavior =
-          prefersReducedMotionQuery && prefersReducedMotionQuery.matches ? "auto" : "smooth";
         const paletteWidth = paletteEl.clientWidth;
         const maxScroll = Math.max(0, paletteEl.scrollWidth - paletteWidth);
         if (maxScroll === 0) {
           return;
         }
-        const swatchRect = swatch.getBoundingClientRect();
-        const paletteRect = paletteEl.getBoundingClientRect();
-        const swatchCenterOffset =
-          swatchRect.left - paletteRect.left + swatchRect.width / 2 - paletteWidth / 2;
-        const targetLeft = Math.min(
-          Math.max(paletteEl.scrollLeft + swatchCenterOffset, 0),
-          maxScroll
-        );
+        const swatchLeft = swatch.offsetLeft;
+        const swatchRight = swatchLeft + swatch.offsetWidth;
+        const currentLeft = paletteEl.scrollLeft;
+        const currentRight = currentLeft + paletteWidth;
+        let targetLeft = currentLeft;
+        if (swatchLeft < currentLeft) {
+          targetLeft = swatchLeft;
+        } else if (swatchRight > currentRight) {
+          targetLeft = swatchRight - paletteWidth;
+        }
+        targetLeft = Math.min(Math.max(targetLeft, 0), maxScroll);
+        if (targetLeft === currentLeft) {
+          return;
+        }
         if (typeof paletteEl.scrollTo === "function") {
           try {
-            paletteEl.scrollTo({ left: targetLeft, behavior: scrollBehavior });
+            paletteEl.scrollTo({ left: targetLeft, behavior: "auto" });
             return;
           } catch (error) {
             // fall back to manual scrolling
