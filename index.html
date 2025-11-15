@@ -794,20 +794,77 @@
       .control {
         display: flex;
         flex-direction: column;
-        gap: calc(6px * var(--ui-scale));
+        gap: calc(8px * var(--ui-scale));
         font-size: 0.95rem;
       }
 
-      .control > span {
+      .control > span,
+      .control-header label span {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: calc(6px * var(--ui-scale));
         font-weight: 600;
       }
 
-      .control output {
+      .control output,
+      .control-header output {
         font-size: 0.85rem;
         color: rgba(148, 163, 184, 0.9);
+      }
+
+      .control-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: calc(8px * var(--ui-scale));
+      }
+
+      .control-header label {
+        cursor: pointer;
+        flex: 1 1 auto;
+      }
+
+      .control-range {
+        padding: calc(12px * var(--ui-scale));
+        border-radius: calc(14px * var(--ui-scale));
+        border: 1px solid color-mix(in srgb, var(--theme-sheet-button-border) 70%, transparent);
+        background: color-mix(in srgb, var(--theme-sheet-button-bg) 85%, transparent);
+      }
+
+      .control-range input[type="range"] {
+        width: 100%;
+        max-width: calc(260px * var(--ui-scale));
+      }
+
+      .control-reset {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: calc(4px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        border-radius: calc(10px * var(--ui-scale));
+        border: 1px solid color-mix(in srgb, var(--theme-sheet-button-border) 70%, transparent);
+        background: transparent;
+        color: var(--theme-muted-strong);
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+      }
+
+      .control-reset:hover:not(:disabled),
+      .control-reset:focus-visible:not(:disabled) {
+        color: var(--theme-sheet-button-hover-text);
+        background: var(--theme-sheet-button-hover-bg);
+        border-color: var(--theme-sheet-button-hover-border);
+        outline: none;
+      }
+
+      .control-reset:disabled {
+        opacity: 0.45;
+        cursor: default;
       }
 
       .mouse-control-group {
@@ -953,7 +1010,7 @@
       }
 
       .control-note {
-        margin-top: -8px;
+        margin: 0;
         font-size: 0.8rem;
         color: var(--theme-note-text);
       }
@@ -1206,8 +1263,6 @@
         min-height: 0;
         overflow-y: auto;
         padding-right: calc(4px * var(--ui-scale));
-        display: flex;
-        flex-direction: column;
       }
 
       .settings-tab:hover {
@@ -1234,9 +1289,19 @@
       }
 
       .settings-panel {
-        display: flex;
-        flex-direction: column;
+        display: grid;
         gap: calc(24px * var(--ui-scale));
+        grid-template-columns: minmax(0, 1fr);
+        align-content: start;
+      }
+
+      @media (min-width: 960px) {
+        .settings-panel {
+          grid-template-columns: repeat(
+            auto-fit,
+            minmax(calc(320px * var(--ui-scale)), 1fr)
+          );
+        }
       }
 
       .settings-panel[hidden] {
@@ -1357,37 +1422,49 @@
       }
 
       .sheet-section {
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-auto-rows: max-content;
+        grid-template-columns: minmax(0, 1fr);
         gap: calc(12px * var(--ui-scale));
+        align-content: start;
+      }
+
+      @media (min-width: 960px) {
+        .sheet-section {
+          grid-template-columns: repeat(
+            auto-fit,
+            minmax(calc(220px * var(--ui-scale)), 1fr)
+          );
+        }
       }
 
       .sheet-section h3 {
         margin: 0;
         font-size: 1.05rem;
         letter-spacing: 0.02em;
+        grid-column: 1 / -1;
+      }
+
+      .sheet-section > p,
+      .sheet-section > .quick-actions,
+      .sheet-section > .detail-callout,
+      .sheet-section > details,
+      .sheet-section > .mouse-control-group,
+      .sheet-section > .panel-actions,
+      .sheet-section > .save-start-actions {
+        grid-column: 1 / -1;
+      }
+
+      .settings-panel > .generator-import-notice,
+      .settings-panel > form,
+      .settings-panel > .sheet-actions,
+      .settings-panel > .generator-progress {
+        grid-column: 1 / -1;
       }
 
       @media (min-width: 720px) {
-        .settings-panel .control {
-          flex-direction: row;
-          align-items: center;
-          gap: calc(12px * var(--ui-scale));
-        }
-
-        .settings-panel .control > span {
-          flex: 0 0 calc(220px * var(--ui-scale));
-        }
-
-        .settings-panel .control input[type="range"],
-        .settings-panel .control select,
-        .settings-panel .control input[type="color"] {
-          flex: 1 1 auto;
-          width: auto;
-        }
-
-        .settings-panel .control output {
-          margin-inline-start: calc(6px * var(--ui-scale));
+        .settings-panel .control-range input[type="range"] {
+          max-width: calc(320px * var(--ui-scale));
         }
       }
 
@@ -1667,15 +1744,32 @@
       }
 
       .toggle {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 12px;
-        font-size: 0.95rem;
+        justify-content: flex-start;
+        gap: calc(8px * var(--ui-scale));
+        padding: calc(8px * var(--ui-scale)) calc(12px * var(--ui-scale));
+        border-radius: calc(12px * var(--ui-scale));
+        border: 1px solid color-mix(in srgb, var(--theme-sheet-button-border) 70%, transparent);
+        background: color-mix(in srgb, var(--theme-sheet-button-bg) 82%, transparent);
+        font-size: 0.9rem;
+        font-weight: 500;
+        line-height: 1.3;
+        transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
       }
 
       .toggle input {
-        width: 18px;
-        height: 18px;
+        width: calc(16px * var(--ui-scale));
+        height: calc(16px * var(--ui-scale));
+        flex: 0 0 auto;
+        accent-color: rgba(59, 130, 246, 0.9);
+      }
+
+      .toggle:hover,
+      .toggle:focus-within {
+        background: var(--theme-sheet-button-hover-bg);
+        border-color: var(--theme-sheet-button-hover-border);
+        color: var(--theme-sheet-button-hover-text);
       }
 
       .save-manager-list {
@@ -2045,16 +2139,56 @@
         >
           <section class="sheet-section" aria-labelledby="hintsControlsHeading">
             <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
-            <label class="control">
-              <span>Hint fade duration <output data-for="hintFadeDuration">1.2 s</output></span>
-              <input id="hintFadeDuration" type="range" min="400" max="2400" step="100" value="1200" />
-            </label>
-            <p class="control-note">Set how long hint highlights linger before fading out.</p>
-            <label class="control">
-              <span>Hint intensity <output data-for="hintIntensity">65%</output></span>
-              <input id="hintIntensity" type="range" min="20" max="90" step="5" value="65" />
-            </label>
-            <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="hintFadeDuration">
+                  <span>Hint fade duration <output data-for="hintFadeDuration">1.2 s</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="hintFadeDuration"
+                  data-reset-default="1200"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="hintFadeDuration"
+                type="range"
+                min="400"
+                max="2400"
+                step="100"
+                value="1200"
+                data-default="1200"
+              />
+            </div>
+            <p class="control-note">Set how long hint highlights linger before fading out. Default 1.2 s.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="hintIntensity">
+                  <span>Hint intensity <output data-for="hintIntensity">65%</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="hintIntensity"
+                  data-reset-default="65"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="hintIntensity"
+                type="range"
+                min="20"
+                max="90"
+                step="5"
+                value="65"
+                data-default="65"
+              />
+            </div>
+            <p class="control-note">Adjust the opacity used when flashing matching regions. Default 65%.</p>
           </section>
           <section class="sheet-section" aria-labelledby="hintTypesHeading">
             <h3 id="hintTypesHeading">Hint types</h3>
@@ -2177,8 +2311,20 @@
         >
           <section class="sheet-section" aria-labelledby="appearanceHeading">
             <h3 id="appearanceHeading">Appearance</h3>
-            <label class="control">
-              <span>Interface scale <output data-for="uiScale">75%</output></span>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="uiScale">
+                  <span>Interface scale <output data-for="uiScale">75%</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="uiScale"
+                  data-reset-default="0.75"
+                >
+                  Default
+                </button>
+              </div>
               <input
                 id="uiScale"
                 type="range"
@@ -2186,11 +2332,24 @@
                 max="3"
                 step="0.05"
                 value="0.75"
+                data-default="0.75"
               />
-            </label>
-            <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
-            <label class="control">
-              <span>Label size <output data-for="labelScale">100%</output></span>
+            </div>
+            <p class="control-note">Resize command buttons and labels without altering canvas zoom. Default 75%.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="labelScale">
+                  <span>Label size <output data-for="labelScale">100%</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="labelScale"
+                  data-reset-default="1"
+                >
+                  Default
+                </button>
+              </div>
               <input
                 id="labelScale"
                 type="range"
@@ -2198,11 +2357,24 @@
                 max="2"
                 step="0.05"
                 value="1"
+                data-default="1"
               />
-            </label>
-            <p class="control-note">Scale region numbers independently from the surrounding interface.</p>
-            <label class="control">
-              <span>Maximum zoom <output data-for="maxZoom">1200%</output></span>
+            </div>
+            <p class="control-note">Scale region numbers independently from the surrounding interface. Default 100%.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="maxZoom">
+                  <span>Maximum zoom <output data-for="maxZoom">1200%</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="maxZoom"
+                  data-reset-default="12"
+                >
+                  Default
+                </button>
+              </div>
               <input
                 id="maxZoom"
                 type="range"
@@ -2210,9 +2382,10 @@
                 max="30"
                 step="0.5"
                 value="12"
+                data-default="12"
               />
-            </label>
-            <p class="control-note">Limit how far the canvas can zoom in beyond the fitted view.</p>
+            </div>
+            <p class="control-note">Limit how far the canvas can zoom in beyond the fitted view. Default 1200%.</p>
             <label class="control">
               <span>Interface theme</span>
               <select id="uiTheme">
@@ -2290,20 +2463,78 @@
             <p class="control-note">
               Switching presets updates every slider below and reloads the sample scene when it's active.
             </p>
-            <label class="control">
-              <span>Colours <output data-for="colorCount">16</output></span>
-              <input id="colorCount" type="range" min="4" max="64" value="16" />
-            </label>
-            <label class="control">
-              <span>Regions <output data-for="minRegion">80 px²</output></span>
-              <input id="minRegion" type="range" min="1" max="600" value="80" />
-            </label>
-            <p class="control-note">Higher values merge smaller areas for fewer regions.</p>
-            <label class="control">
-              <span>Detail <output data-for="detailLevel">768 px</output></span>
-              <input id="detailLevel" type="range" min="256" max="1600" step="64" value="768" />
-            </label>
-            <p class="control-note">Controls the longest edge used when resizing the source image.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="colorCount">
+                  <span>Colours <output data-for="colorCount">16</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="colorCount"
+                  data-reset-default="16"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="colorCount"
+                type="range"
+                min="4"
+                max="64"
+                value="16"
+                data-default="16"
+              />
+            </div>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="minRegion">
+                  <span>Regions <output data-for="minRegion">80 px²</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="minRegion"
+                  data-reset-default="80"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="minRegion"
+                type="range"
+                min="1"
+                max="600"
+                value="80"
+                data-default="80"
+              />
+            </div>
+            <p class="control-note">Higher values merge smaller areas for fewer regions. Default 80 px².</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="detailLevel">
+                  <span>Detail <output data-for="detailLevel">768 px</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="detailLevel"
+                  data-reset-default="768"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="detailLevel"
+                type="range"
+                min="256"
+                max="1600"
+                step="64"
+                value="768"
+                data-default="768"
+              />
+            </div>
+            <p class="control-note">Controls the longest edge used when resizing the source image. Default 768 px.</p>
             <label class="control">
               <span>Algorithm</span>
               <select id="generationAlgorithm">
@@ -2314,24 +2545,84 @@
             <p class="control-note">
               Choose between local clustering pipelines now, with space for hosted services to appear as they become available.
             </p>
-            <label class="control">
-              <span>Sample rate <output data-for="sampleRate">65%</output></span>
-              <input id="sampleRate" type="range" min="25" max="100" step="5" value="65" />
-            </label>
-            <p class="control-note">Lower values speed up clustering by sampling fewer pixels.</p>
-            <label class="control">
-              <span>Iterations <output data-for="kmeansIters">12</output></span>
-              <input id="kmeansIters" type="range" min="4" max="32" step="1" value="12" />
-            </label>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="sampleRate">
+                  <span>Sample rate <output data-for="sampleRate">65%</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="sampleRate"
+                  data-reset-default="65"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="sampleRate"
+                type="range"
+                min="25"
+                max="100"
+                step="5"
+                value="65"
+                data-default="65"
+              />
+            </div>
+            <p class="control-note">Lower values speed up clustering by sampling fewer pixels. Default 65%.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="kmeansIters">
+                  <span>Iterations <output data-for="kmeansIters">12</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="kmeansIters"
+                  data-reset-default="12"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="kmeansIters"
+                type="range"
+                min="4"
+                max="32"
+                step="1"
+                value="12"
+                data-default="12"
+              />
+            </div>
             <p class="control-note">
-              Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process.
+              Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process. Default 12 iterations.
             </p>
-            <label class="control">
-              <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
-              <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
-            </label>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="smoothingPasses">
+                  <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="smoothingPasses"
+                  data-reset-default="1"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="smoothingPasses"
+                type="range"
+                min="0"
+                max="4"
+                step="1"
+                value="1"
+                data-default="1"
+              />
+            </div>
             <p class="control-note">
-              Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source.
+              Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source. Default 1 pass.
             </p>
             <details class="advanced-options" id="generatorAdvanced">
               <summary>Advanced options</summary>
@@ -2674,6 +2965,9 @@
       const sampleRateEl = document.getElementById("sampleRate");
       const kmeansItersEl = document.getElementById("kmeansIters");
       const smoothingEl = document.getElementById("smoothingPasses");
+      const sliderResetButtons = settingsSheet
+        ? Array.from(settingsSheet.querySelectorAll("[data-reset-target]"))
+        : [];
       const artPromptInput = document.getElementById("artPrompt");
       const imageDescriptionInput = document.getElementById("imageDescription");
       const sourceImageLimitSelect = document.getElementById("sourceImageLimit");
@@ -5356,6 +5650,73 @@
       kmeansItersEl.addEventListener("change", markOptionsDirty);
       smoothingEl.addEventListener("change", markOptionsDirty);
 
+      for (const button of sliderResetButtons) {
+        if (!button || !(button instanceof HTMLButtonElement)) {
+          continue;
+        }
+        const targetId = button.dataset.resetTarget;
+        if (!targetId) {
+          continue;
+        }
+        const input = document.getElementById(targetId);
+        if (!input || input.type !== "range") {
+          button.disabled = true;
+          continue;
+        }
+        const defaultValue =
+          button.dataset.resetDefault ??
+          input.getAttribute("data-default") ??
+          input.getAttribute("value") ??
+          input.defaultValue;
+        if (defaultValue == null || defaultValue === "") {
+          button.disabled = true;
+          continue;
+        }
+        let labelText = targetId;
+        const header = button.closest(".control-header");
+        const labelSpan = header ? header.querySelector("label span") : null;
+        if (labelSpan) {
+          const textParts = [];
+          for (const node of Array.from(labelSpan.childNodes)) {
+            if (node.nodeType === Node.TEXT_NODE) {
+              const value = String(node.textContent || "").trim();
+              if (value) {
+                textParts.push(value);
+              }
+            }
+          }
+          const fallback = labelSpan.textContent ? labelSpan.textContent.trim() : "";
+          if (textParts.length > 0) {
+            labelText = textParts.join(" ");
+          } else if (fallback) {
+            labelText = fallback;
+          }
+        }
+        const formatted = formatSliderDefaultValue(targetId, defaultValue);
+        if (formatted && formatted.trim()) {
+          button.setAttribute("aria-label", `Reset ${labelText} to ${formatted}`);
+          button.title = `Reset ${labelText} to ${formatted}`;
+        } else {
+          button.setAttribute("aria-label", `Reset ${labelText} to default`);
+          button.title = `Reset ${labelText} to default`;
+        }
+        const defaultString = String(defaultValue);
+        const updateDisabled = () => {
+          button.disabled = String(input.value) === defaultString;
+        };
+        button.addEventListener("click", () => {
+          if (button.disabled) {
+            return;
+          }
+          input.value = defaultString;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        input.addEventListener("input", updateDisabled);
+        input.addEventListener("change", updateDisabled);
+        updateDisabled();
+      }
+
       function hasFiles(event) {
         const types = event.dataTransfer?.types;
         if (!types) return false;
@@ -6937,6 +7298,53 @@
           const source = hintIntensityInput ? Number(hintIntensityInput.value) : state.settings.hintIntensity * 100;
           const intensity = normalizeHintIntensity(source);
           settingsOutputs.hintIntensity.textContent = `${Math.round(intensity * 100)}%`;
+        }
+      }
+
+      function formatSliderDefaultValue(id, rawValue) {
+        switch (id) {
+          case "hintFadeDuration": {
+            const duration = normalizeHintFadeDuration(rawValue);
+            return `${(duration / 1000).toFixed(1)} s`;
+          }
+          case "hintIntensity": {
+            const intensity = normalizeHintIntensity(rawValue);
+            return `${Math.round(intensity * 100)}%`;
+          }
+          case "uiScale": {
+            const numeric = Number(rawValue);
+            const scale = Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_UI_SCALE;
+            return `${Math.round(scale * 100)}%`;
+          }
+          case "labelScale": {
+            const numeric = Number(rawValue);
+            const scale = Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_LABEL_SCALE;
+            return `${Math.round(scale * 100)}%`;
+          }
+          case "maxZoom": {
+            const zoom = resolveMaxZoomCandidate(rawValue) ?? DEFAULT_MAX_VIEWPORT_ZOOM;
+            return `${Math.round(zoom * 100)}%`;
+          }
+          case "colorCount":
+          case "kmeansIters":
+          case "smoothingPasses": {
+            const numeric = Number(rawValue);
+            return Number.isFinite(numeric) ? String(Math.round(numeric)) : "";
+          }
+          case "minRegion": {
+            const numeric = Number(rawValue);
+            return Number.isFinite(numeric) ? `${Math.round(numeric)} px²` : "";
+          }
+          case "detailLevel": {
+            const numeric = Number(rawValue);
+            return Number.isFinite(numeric) ? `${Math.round(numeric)} px` : "";
+          }
+          case "sampleRate": {
+            const numeric = Number(rawValue);
+            return Number.isFinite(numeric) ? `${Math.round(numeric)}%` : "";
+          }
+          default:
+            return typeof rawValue === "string" ? rawValue : String(rawValue ?? "");
         }
       }
 
