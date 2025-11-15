@@ -5400,11 +5400,13 @@
           }
           return "already-filled";
         }
-        if (region.colorId !== state.activeColor) {
-          const difficulty = resolveDifficulty(state.settings.difficulty);
-          const allowAdjacent =
-            difficulty === "nearby" && areColorsAdjacent(state.activeColor, region.colorId);
-          if (difficulty === "easy" || allowAdjacent) {
+        const difficulty = resolveDifficulty(state.settings.difficulty);
+        const allowAdjacentFill =
+          region.colorId !== state.activeColor &&
+          difficulty === "nearby" &&
+          areColorsAdjacent(state.activeColor, region.colorId);
+        if (region.colorId !== state.activeColor && !allowAdjacentFill) {
+          if (difficulty === "easy") {
             activateColor(region.colorId, { flash: false });
           } else {
             const paletteColor = getPaletteEntry(region.colorId);
@@ -5426,7 +5428,8 @@
             return "mismatch";
           }
         }
-        if (region.colorId !== state.activeColor) {
+        const activeMatchesRegion = region.colorId === state.activeColor;
+        if (!activeMatchesRegion && !allowAdjacentFill) {
           logDebug(
             `Region ${region.id} expects ${describeColour(region.colorId, { includeCompleted: true })}; active colour is ${describeColour(state.activeColor, { includeCompleted: true })}`
           );
@@ -5444,10 +5447,16 @@
         updateProgress();
         updateCommandStates();
         scheduleAutosave("fill-region");
-        logDebug(
-          `Filled region ${region.id} with ${describeColour(region.colorId, { includeCompleted: true })} (${state.filled.size}/${state.puzzle.regions.length})`
-        );
-        if (state.settings.autoAdvance) {
+        if (allowAdjacentFill) {
+          logDebug(
+            `Filled region ${region.id} with ${describeColour(region.colorId, { includeCompleted: true })} via adjacent selection (${state.filled.size}/${state.puzzle.regions.length})`
+          );
+        } else {
+          logDebug(
+            `Filled region ${region.id} with ${describeColour(region.colorId, { includeCompleted: true })} (${state.filled.size}/${state.puzzle.regions.length})`
+          );
+        }
+        if (state.settings.autoAdvance && !allowAdjacentFill) {
           autoAdvanceColor(region.colorId);
         }
         refreshCustomCursorHighlight();
