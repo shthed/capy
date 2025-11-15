@@ -68,15 +68,6 @@ function accumulate(histogram, color) {
   histogram.set(color, (histogram.get(color) || 0) + 1);
 }
 
-function neighborIndexes(x, y, width, height) {
-  const neighbors = [];
-  if (x > 0) neighbors.push(y * width + (x - 1));
-  if (x < width - 1) neighbors.push(y * width + (x + 1));
-  if (y > 0) neighbors.push((y - 1) * width + x);
-  if (y < height - 1) neighbors.push((y + 1) * width + x);
-  return neighbors;
-}
-
 function floodFill(width, height, indexMap) {
   const regionMap = new Int32Array(width * height);
   regionMap.fill(-1);
@@ -96,12 +87,33 @@ function floodFill(width, height, indexMap) {
         pixels.push(idx);
         const px = idx % width;
         const py = (idx / width) | 0;
-        const neighbors = neighborIndexes(px, py, width, height);
-        for (const n of neighbors) {
-          if (regionMap[n] !== -1) continue;
-          if (indexMap[n] !== colorId) continue;
-          regionMap[n] = regionId;
-          stack.push(n);
+        if (px > 0) {
+          const n = idx - 1;
+          if (regionMap[n] === -1 && indexMap[n] === colorId) {
+            regionMap[n] = regionId;
+            stack.push(n);
+          }
+        }
+        if (px < width - 1) {
+          const n = idx + 1;
+          if (regionMap[n] === -1 && indexMap[n] === colorId) {
+            regionMap[n] = regionId;
+            stack.push(n);
+          }
+        }
+        if (py > 0) {
+          const n = idx - width;
+          if (regionMap[n] === -1 && indexMap[n] === colorId) {
+            regionMap[n] = regionId;
+            stack.push(n);
+          }
+        }
+        if (py < height - 1) {
+          const n = idx + width;
+          if (regionMap[n] === -1 && indexMap[n] === colorId) {
+            regionMap[n] = regionId;
+            stack.push(n);
+          }
         }
       }
       regions.push({
@@ -132,11 +144,33 @@ function segmentRegions(width, height, assignments, minRegion) {
       for (const idx of region.pixels) {
         const x = idx % width;
         const y = (idx / width) | 0;
-        const neighbors = neighborIndexes(x, y, width, height);
-        for (const n of neighbors) {
+        if (x > 0) {
+          const n = idx - 1;
           const color = indexMap[n];
-          if (color === region.colorId) continue;
-          colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
+          if (color !== region.colorId) {
+            colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
+          }
+        }
+        if (x < width - 1) {
+          const n = idx + 1;
+          const color = indexMap[n];
+          if (color !== region.colorId) {
+            colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
+          }
+        }
+        if (y > 0) {
+          const n = idx - width;
+          const color = indexMap[n];
+          if (color !== region.colorId) {
+            colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
+          }
+        }
+        if (y < height - 1) {
+          const n = idx + width;
+          const color = indexMap[n];
+          if (color !== region.colorId) {
+            colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
+          }
         }
       }
       if (colorVotes.size === 0) continue;
@@ -587,7 +621,6 @@ const DEFAULT_GENERATION_ALGORITHM = "${DEFAULT_GENERATION_ALGORITHM}";
 const now = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
 ${clamp.toString()}
 ${accumulate.toString()}
-${neighborIndexes.toString()}
 ${floodFill.toString()}
 ${segmentRegions.toString()}
 ${finalizeGeneratedRegions.toString()}
