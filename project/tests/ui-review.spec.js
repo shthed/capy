@@ -4,6 +4,7 @@ import {
   fillRegion,
   getActiveRenderer,
   getFilledCount,
+  getPerformanceMetrics,
   loadTestPuzzle,
   TEST_COLOR_IDS,
   TEST_REGION_IDS,
@@ -90,5 +91,26 @@ test.describe('Capy UI smoke check', () => {
     await saveEntry.locator('[data-action="load"]').click();
     await expect.poll(() => getFilledCount(page)).toBe(filledBeforeSave);
     await expect(saveEntry).toHaveAttribute('data-loaded', 'true');
+  });
+
+  test('records performance metrics around puzzle interactions', async ({ page }) => {
+    await loadTestPuzzle(page);
+
+    await fillRegion(page, TEST_REGION_IDS.sunlitBloom[0]);
+    await fillRegion(page, TEST_REGION_IDS.sunlitBloom[1]);
+
+    const metrics = await getPerformanceMetrics(page);
+    expect(metrics).not.toBeNull();
+
+    const durations = metrics?.durations ?? {};
+    expect(durations['app:boot']?.count ?? 0).toBeGreaterThan(0);
+    expect(durations['puzzle:hydrate']?.count ?? 0).toBeGreaterThan(0);
+    expect(durations['render:frame']?.count ?? 0).toBeGreaterThan(0);
+    expect(durations['interaction:fill']?.count ?? 0).toBeGreaterThan(0);
+
+    const fillStats = durations['interaction:fill'];
+    expect(fillStats?.last?.metadata?.regionId).toBe(TEST_REGION_IDS.sunlitBloom[1]);
+    expect(fillStats?.last?.metadata?.result).toBe('filled');
+    expect(fillStats?.last?.metadata?.filledCount ?? 0).toBeGreaterThan(0);
   });
 });

@@ -194,3 +194,13 @@ export async function getFilledCount(page) {
 export async function getActiveRenderer(page) {
   return page.evaluate(() => window.capyGenerator?.getRendererType?.() || null);
 }
+
+export async function getPerformanceMetrics(page) {
+  return page.evaluate(() => {
+    const snapshot = window.capyGenerator?.getPerformanceMetrics?.();
+    if (!snapshot) {
+      return null;
+    }
+    return snapshot;
+  });
+}

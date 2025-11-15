@@ -2733,6 +2733,35 @@
       let preventingBrowserZoom = false;
       const DOUBLE_TAP_GUARD_MS = 350;
 
+      const performanceMetrics = createPerformanceMetrics({
+        flushInterval: 8000,
+        maxEvents: 32,
+        maxSamples: 8,
+        now:
+          typeof performance !== "undefined" && typeof performance.now === "function"
+            ? () => performance.now()
+            : () => Date.now(),
+        onFlush(snapshot, reason = "update") {
+          if (!snapshot || !snapshot.durations) {
+            return;
+          }
+          const entries = [];
+          for (const [label, stats] of Object.entries(snapshot.durations)) {
+            if (!stats || !stats.count) continue;
+            entries.push(
+              `${label} avg ${stats.average.toFixed(1)}ms (p${stats.count}, max ${stats.max.toFixed(1)}ms)`
+            );
+          }
+          if (entries.length > 0) {
+            const context = reason === "interval" ? "interval" : reason;
+            console.info(`[Performance] ${context} – ${entries.join("; ")}`);
+          }
+        },
+      });
+      const bootPerformanceTimer = performanceMetrics.start("app:boot", {
+        stage: "initializing",
+      });
+
       function normalizeMouseClickAction(value, fallback = DEFAULT_MOUSE_CONTROLS.left.click) {
         if (typeof value === "string" && VALID_MOUSE_CLICK_ACTIONS.has(value)) {
           return value;
@@ -4685,6 +4714,21 @@
             }
             return attemptFillRegion({ region, regionId: region.id }, { label });
           },
+          getPerformanceMetrics() {
+            try {
+              return performanceMetrics?.getSummary?.() || null;
+            } catch (_error) {
+              return null;
+            }
+          },
+          logPerformanceMetrics(reason = "manual") {
+            try {
+              performanceMetrics?.flush?.(reason);
+              return performanceMetrics?.getSummary?.() || null;
+            } catch (_error) {
+              return null;
+            }
+          },
         };
       }
 
@@ -4704,6 +4748,13 @@
         suppressSettingsPersist = Math.max(0, suppressSettingsPersist - 1);
       }
       scheduleSettingsPersist({ immediate: true });
+      if (bootPerformanceTimer) {
+        bootPerformanceTimer.end({
+          renderer: state.rendering?.controller?.getRendererType?.() || state.settings.renderer || "unknown",
+          hasPuzzle: Boolean(state.puzzle),
+        });
+        performanceMetrics.flush("boot");
+      }
 
       if (paletteSortEl) {
         paletteSortEl.value = state.paletteSort;
@@ -5475,6 +5526,11 @@
           return "ignored";
         }
         const { region, regionId } = hit;
+        performanceMetrics.mark("interaction:fill:attempt", {
+          label,
+          regionId,
+          colorId: region.colorId,
+        });
         if (state.filled.has(regionId)) {
           const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
           if (remaining.length > 0) {
@@ -5494,6 +5550,12 @@
           } else {
             logDebug(`Region ${region.id} already filled; ignoring ${label}`);
           }
+          performanceMetrics.mark("interaction:fill:already-filled", {
+            label,
+            regionId,
+            colorId: region.colorId,
+            remaining: remaining.length,
+          });
           return "already-filled";
         }
         const difficulty = resolveDifficulty(state.settings.difficulty);
@@ -5521,6 +5583,13 @@
             logDebug(
               `Region ${region.id} expects ${describeColour(region.colorId, { includeCompleted: true })}; active colour is ${describeColour(state.activeColor, { includeCompleted: true })}`
             );
+            performanceMetrics.mark("interaction:fill:mismatch", {
+              label,
+              regionId,
+              colorId: region.colorId,
+              activeColor: state.activeColor,
+              reason: "difficulty-mismatch",
+            });
             return "mismatch";
           }
         }
@@ -5529,9 +5598,21 @@
           logDebug(
             `Region ${region.id} expects ${describeColour(region.colorId, { includeCompleted: true })}; active colour is ${describeColour(state.activeColor, { includeCompleted: true })}`
           );
+          performanceMetrics.mark("interaction:fill:mismatch", {
+            label,
+            regionId,
+            colorId: region.colorId,
+            activeColor: state.activeColor,
+            reason: "colour-mismatch",
+          });
           return "mismatch";
         }
         state.filled.add(regionId);
+        const fillTimer = performanceMetrics.start("interaction:fill", {
+          label,
+          regionId,
+          colorId: region.colorId,
+        });
         paintRegionToFilledLayer(regionId);
         renderPuzzle();
         renderPalette();
@@ -5556,6 +5637,14 @@
           autoAdvanceColor(region.colorId);
         }
         refreshCustomCursorHighlight();
+        if (fillTimer) {
+          fillTimer.end({
+            result: "filled",
+            filledCount: state.filled.size,
+            totalRegions: state.puzzle?.regions?.length || 0,
+          });
+        }
+        performanceMetrics.flush("interaction");
         return "filled";
       }
 
@@ -6195,6 +6284,213 @@
         }
         debugLogEl.appendChild(fragment);
         debugLogEl.scrollTop = 0;
+      }
+
+      function createPerformanceMetrics(options = {}) {
+        const {
+          now = () => Date.now(),
+          flushInterval = 0,
+          maxEvents = 24,
+          maxSamples = 6,
+          onFlush = null,
+        } = options || {};
+
+        const clock = typeof now === "function" ? now : () => Date.now();
+        const clampInteger = (value, fallback) => {
+          if (!Number.isFinite(value) || value <= 0) {
+            return fallback;
+          }
+          return Math.round(value);
+        };
+        const safeFlushInterval = Math.max(0, Number(flushInterval) || 0);
+        const maxEventCount = clampInteger(maxEvents, 24);
+        const maxSampleCount = clampInteger(maxSamples, 6);
+        const round = (value) => Math.round(value * 1000) / 1000;
+
+        const durations = new Map();
+        const events = [];
+        const startedAt = clock();
+        let lastUpdatedAt = startedAt;
+        let lastFlushAt = startedAt;
+
+        function normalizeMetadata(metadata) {
+          if (!metadata || typeof metadata !== "object") {
+            return undefined;
+          }
+          const clone = {};
+          for (const [key, value] of Object.entries(metadata)) {
+            if (value === undefined) continue;
+            if (
+              typeof value === "number" ||
+              typeof value === "string" ||
+              typeof value === "boolean" ||
+              value === null
+            ) {
+              clone[key] = value;
+            }
+          }
+          return Object.keys(clone).length > 0 ? clone : undefined;
+        }
+
+        function pushEvent(event) {
+          events.push(event);
+          if (events.length > maxEventCount) {
+            events.splice(0, events.length - maxEventCount);
+          }
+          lastUpdatedAt = event.at;
+        }
+
+        function maybeFlush() {
+          if (!safeFlushInterval) {
+            return;
+          }
+          const nowTs = clock();
+          if (nowTs - lastFlushAt >= safeFlushInterval) {
+            flush("interval");
+          }
+        }
+
+        function recordDuration(label, duration, metadata = undefined) {
+          if (!Number.isFinite(duration)) {
+            return;
+          }
+          const name = typeof label === "string" && label ? label : "unknown";
+          const stats = durations.get(name) || {
+            count: 0,
+            total: 0,
+            min: Number.POSITIVE_INFINITY,
+            max: 0,
+            last: null,
+            recent: [],
+          };
+          stats.count += 1;
+          stats.total += duration;
+          if (duration < stats.min) {
+            stats.min = duration;
+          }
+          if (duration > stats.max) {
+            stats.max = duration;
+          }
+          const at = clock();
+          const normalizedMetadata = normalizeMetadata(metadata);
+          const sample = {
+            at,
+            duration: round(duration),
+            metadata: normalizedMetadata,
+          };
+          stats.last = sample;
+          stats.recent.push(sample);
+          if (stats.recent.length > maxSampleCount) {
+            stats.recent.splice(0, stats.recent.length - maxSampleCount);
+          }
+          durations.set(name, stats);
+          pushEvent({
+            type: "duration",
+            name,
+            duration: round(duration),
+            metadata: normalizedMetadata,
+            at,
+          });
+          maybeFlush();
+        }
+
+        function start(label, metadata = undefined) {
+          const startAt = clock();
+          const baseMetadata = normalizeMetadata(metadata) || undefined;
+          return {
+            end(extra = undefined) {
+              const merged = baseMetadata ? { ...baseMetadata } : {};
+              const extraMetadata = normalizeMetadata(extra);
+              if (extraMetadata) {
+                Object.assign(merged, extraMetadata);
+              }
+              const duration = clock() - startAt;
+              recordDuration(label, duration, merged);
+              return duration;
+            },
+            cancel(reason = "cancelled") {
+              const at = clock();
+              const merged = baseMetadata ? { ...baseMetadata } : {};
+              merged.reason = reason;
+              pushEvent({
+                type: "cancelled",
+                name: typeof label === "string" && label ? label : "unknown",
+                at,
+                metadata: merged,
+              });
+              maybeFlush();
+            },
+          };
+        }
+
+        function mark(label, metadata = undefined) {
+          const at = clock();
+          pushEvent({
+            type: "mark",
+            name: typeof label === "string" && label ? label : "mark",
+            metadata: normalizeMetadata(metadata),
+            at,
+          });
+          maybeFlush();
+        }
+
+        function buildSummary() {
+          const durationSummary = {};
+          for (const [name, stats] of durations.entries()) {
+            const average = stats.count > 0 ? stats.total / stats.count : 0;
+            durationSummary[name] = {
+              count: stats.count,
+              total: round(stats.total),
+              average: round(average),
+              min: stats.min === Number.POSITIVE_INFINITY ? 0 : round(stats.min),
+              max: stats.count > 0 ? round(stats.max) : 0,
+              last: stats.last
+                ? {
+                    at: stats.last.at,
+                    duration: stats.last.duration,
+                    metadata: stats.last.metadata,
+                  }
+                : null,
+              recent: stats.recent.map((entry) => ({
+                at: entry.at,
+                duration: entry.duration,
+                metadata: entry.metadata,
+              })),
+            };
+          }
+          return {
+            startedAt,
+            lastUpdatedAt,
+            lastFlushAt,
+            durations: durationSummary,
+            events: events.map((event) => ({
+              type: event.type,
+              name: event.name,
+              at: event.at,
+              duration: event.duration != null ? round(event.duration) : undefined,
+              metadata: event.metadata,
+            })),
+          };
+        }
+
+        function flush(reason = "manual") {
+          lastFlushAt = clock();
+          if (typeof onFlush === "function") {
+            try {
+              onFlush(buildSummary(), reason);
+            } catch (error) {
+              console.warn("Performance summary handler failed", error);
+            }
+          }
+        }
+
+        return {
+          start,
+          mark,
+          record: recordDuration,
+          getSummary: buildSummary,
+          flush,
+        };
       }
 
       function logDebug(message) {
@@ -7978,6 +8274,16 @@
           setProgressMessage("idle");
           return false;
         }
+        const puzzleHydrationTimer = performanceMetrics.start("puzzle:hydrate", {
+          width: data.width,
+          height: data.height,
+          paletteCount: Array.isArray(data.palette) ? data.palette.length : 0,
+          regionCount: Array.isArray(data.regions) ? data.regions.length : 0,
+          title:
+            (typeof metadata.title === "string" && metadata.title.trim()) ||
+            (typeof data.title === "string" && data.title.trim()) ||
+            state.sourceTitle || null,
+        });
         let needsPixelHydration = false;
         for (const region of data.regions) {
           if (!Array.isArray(region.pixels) || region.pixels.length === 0) {
@@ -8207,6 +8513,13 @@
         }
         refreshSaveList();
         scheduleAutosave("puzzle-load", { immediate: true });
+        if (puzzleHydrationTimer) {
+          puzzleHydrationTimer.end({
+            renderer: state.rendering?.controller?.getRendererType?.() || state.settings.renderer || "unknown",
+            filledRegions: state.filled.size,
+          });
+        }
+        performanceMetrics.flush("puzzle-load");
         return true;
       }
 
@@ -8218,6 +8531,11 @@
           (typeof puzzle.title === "string" && puzzle.title.trim()) ||
           "Fixture puzzle";
         state.sourceTitle = resolvedTitle;
+        performanceMetrics.mark("puzzle:load-request", {
+          title: resolvedTitle,
+          paletteCount: Array.isArray(puzzle.palette) ? puzzle.palette.length : 0,
+          regionCount: Array.isArray(puzzle.regions) ? puzzle.regions.length : 0,
+        });
         const applied = applyPuzzleResult(puzzle, {
           options: getCurrentOptions(),
           filled: puzzle.filled,
@@ -8286,22 +8604,33 @@
         const cache = ensureRenderCache();
         const controller = state.rendering?.controller;
         if (!controller) return;
-        controller.renderFrame({
-          state,
-          cache,
-          metrics: { ...canvasMetrics },
-          previewCanvas,
-          previewCtx,
-          previewImageData: state.previewImageData,
-          previewVisible: state.previewVisible === true,
-          backgroundColor: state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX,
-          defaultBackgroundColor: DEFAULT_BACKGROUND_HEX,
-          renderPreview: () =>
-            controller.renderPreview({ state, previewCanvas, previewCtx }) || state.previewImageData,
-          setPreviewImageData: (imageData) => {
-            state.previewImageData = imageData || null;
-          },
+        const renderTimer = performanceMetrics.start("render:frame", {
+          renderer: controller.getRendererType?.() || state.settings.renderer || "unknown",
+          filledRegions: state.filled.size,
+          paletteCount: state.puzzle?.palette?.length || 0,
         });
+        try {
+          controller.renderFrame({
+            state,
+            cache,
+            metrics: { ...canvasMetrics },
+            previewCanvas,
+            previewCtx,
+            previewImageData: state.previewImageData,
+            previewVisible: state.previewVisible === true,
+            backgroundColor: state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX,
+            defaultBackgroundColor: DEFAULT_BACKGROUND_HEX,
+            renderPreview: () =>
+              controller.renderPreview({ state, previewCanvas, previewCtx }) || state.previewImageData,
+            setPreviewImageData: (imageData) => {
+              state.previewImageData = imageData || null;
+            },
+          });
+        } finally {
+          if (renderTimer) {
+            renderTimer.end({ previewVisible: state.previewVisible === true });
+          }
+        }
       }
 
       function renderPuzzleFrame({
