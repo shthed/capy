@@ -74,4 +74,4 @@ Playwright stores its reports under `playwright-report/` by default. After any r
 
 ## Want to Contribute?
 
-Capy is open source! If you’d like to help shape new features, fix bugs, or expand the documentation, start with the development guide in [`AGENTS.md`](./AGENTS.md) and dive into the technical deep-dive in [`TECH.md`](./TECH.md). All contributor tooling now lives under [`project/`](./project/), so switch into that workspace before running npm scripts or Playwright commands.
+Capy is open source! If you’d like to help shape new features, fix bugs, or expand the documentation, start with the development guide in [`AGENTS.md`](./AGENTS.md) and dive into the technical deep-dive in [`TECH.md`](./TECH.md). All contributor tooling now lives under [`project/`](./project/), so switch into that workspace before running npm scripts or Playwright commands. Runtime assets ship from [`runtime/`](./runtime/), which holds the single-page app (`index.html`), renderer bundle, generator module, and the bundled Capybara Springs fixture.
