@@ -63,6 +63,23 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 - **Canvas won’t move?** Hold <kbd>Space</kbd> while dragging, or switch to a two-finger pan on touch devices.
 - **WebGL option disabled?** If the WebGL renderer fails to initialise, Capy automatically falls back to Canvas 2D and disables the option—try updating graphics drivers or stick with Canvas/SVG on that device.
 
+## Automation Helpers
+
+Open the browser console (`F12`/`Ctrl` + `Shift` + `I`) and use `window.capyGenerator` to script quick QA flows without digging into internals:
+
+```js
+// Load the bundled Capybara Springs fixture and snap to preview mode.
+window.capyGenerator.loadPuzzleFixture("capybara-springs");
+window.capyGenerator.togglePreview(true);
+
+// Switch to a renderer, select colour #3, and fill a region programmatically.
+window.capyGenerator.setRenderer("canvas");
+window.capyGenerator.setActiveColor(3, { flash: true });
+window.capyGenerator.fillRegion(42, { ensureColor: true, label: "qa-fill" });
+```
+
+All helpers are documented in detail inside [`TECH.md`](./TECH.md#windowcapygenerator-api-reference) so automation scripts stay in sync with the public surface.
+
 ## Testing & QA
 
 Automated UI coverage now runs through Playwright so you can validate the end-to-end flow without manual setup. Install dependencies from the workspace by running `cd project && npm install` (this triggers `npx playwright install --with-deps chromium chromium-headless-shell` so the bundled browser binaries and system libraries are ready). If the suite reports missing browsers or libraries, rerun that install command manually before executing the scripts below:
