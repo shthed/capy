@@ -25,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          SAFE_BRANCH=$(printf '%s' "${HEAD_BRANCH}" | sed 's/[^a-zA-Z0-9_-]/-/g')
+          SAFE_BRANCH=$(printf '%s' "${HEAD_BRANCH}" | sed 's/[^a-zA-Z0-9._-]/-/g')
           echo "branch_slug=${SAFE_BRANCH}" >> "$GITHUB_OUTPUT"
 
   review:
@@ -103,7 +103,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-review-${{ github.event.workflow_run.head_branch }}-${{ github.run_id }}
+          name: ui-review-${{ needs.slug.outputs.branch_slug }}-${{ github.run_id }}
           path: artifacts/ui-review
           if-no-files-found: ignore
 
