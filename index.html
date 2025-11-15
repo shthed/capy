@@ -2112,11 +2112,13 @@
               <span>Difficulty</span>
               <select id="difficultySelect">
                 <option value="normal">Standard</option>
+                <option value="nearby">Nearby</option>
                 <option value="easy">Easy</option>
               </select>
             </label>
             <p class="control-note">
-              Easy mode lets you click any region to auto-select its colour before filling it.
+              Nearby mode lets you click adjacent colours (for example, colour 2 can also paint 1 or 3).
+              Easy mode auto-selects any colour you click before filling it.
             </p>
             <label class="control">
               <span>Sort Colours</span>
@@ -2601,7 +2603,7 @@
       const SOURCE_IMAGE_VARIANT_ORIGINAL = "original";
       const SOURCE_IMAGE_VARIANT_GENERATED = "generated";
       const DEFAULT_DIFFICULTY = "normal";
-      const VALID_DIFFICULTY_LEVELS = new Set(["normal", "easy"]);
+      const VALID_DIFFICULTY_LEVELS = new Set(["normal", "nearby", "easy"]);
       const MOUSE_BUTTON_KEYS = ["left", "middle", "right"];
       const MOUSE_BUTTON_LABELS = {
         left: "Left mouse button",
@@ -3772,6 +3774,7 @@
         previewImageData: null,
         renderCache: createRenderCache(),
         rendering: { controller: null },
+        paletteAdjacency: new Map(),
         defaultGame: {
           id: DEFAULT_GAME_SOURCE.id,
           path: DEFAULT_GAME_SOURCE.path,
@@ -4886,11 +4889,13 @@
           const difficulty = resolveDifficulty(difficultySelect.value);
           state.settings.difficulty = difficulty;
           difficultySelect.value = difficulty;
-          logDebug(
-            difficulty === "easy"
-              ? "Difficulty set to Easy – clicks auto-select matching colours"
-              : "Difficulty set to Standard – clicks require the active colour"
-          );
+          let difficultyLog = "Difficulty set to Standard – clicks require the active colour";
+          if (difficulty === "nearby") {
+            difficultyLog = "Difficulty set to Nearby – clicks can hop to adjacent colours";
+          } else if (difficulty === "easy") {
+            difficultyLog = "Difficulty set to Easy – clicks auto-select matching colours";
+          }
+          logDebug(difficultyLog);
           scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-difficulty");
         });
@@ -5397,7 +5402,9 @@
         }
         if (region.colorId !== state.activeColor) {
           const difficulty = resolveDifficulty(state.settings.difficulty);
-          if (difficulty === "easy") {
+          const allowAdjacent =
+            difficulty === "nearby" && areColorsAdjacent(state.activeColor, region.colorId);
+          if (difficulty === "easy" || allowAdjacent) {
             activateColor(region.colorId, { flash: false });
           } else {
             const paletteColor = getPaletteEntry(region.colorId);
@@ -7235,6 +7242,7 @@
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
+        state.paletteAdjacency = new Map();
         markFilledLayerDirty();
         state.sourceUrl = null;
         state.sourceTitle = null;
@@ -7953,6 +7961,7 @@
           regionMap,
         };
         state.puzzle = puzzle;
+        state.paletteAdjacency = buildPaletteAdjacency(palette);
         const sourceSnapshot = metadata.sourceImage ?? data.sourceImage;
         let sourceImageRecord = hydrateSourceImageSnapshot(sourceSnapshot, sourceDefaults, {
           onReady: () => {
@@ -11228,6 +11237,76 @@
           }
         }
         return DEFAULT_DIFFICULTY;
+      }
+
+      function normalizeColorId(value) {
+        if (Number.isFinite(value)) {
+          return Number(value);
+        }
+        if (typeof value === "string" && value.trim()) {
+          const parsed = Number.parseInt(value, 10);
+          if (Number.isFinite(parsed)) {
+            return parsed;
+          }
+        }
+        return null;
+      }
+
+      function buildPaletteAdjacency(palette) {
+        const adjacency = new Map();
+        if (!Array.isArray(palette) || palette.length === 0) {
+          return adjacency;
+        }
+        const entries = [];
+        for (let index = 0; index < palette.length; index += 1) {
+          const entry = palette[index];
+          if (!entry) continue;
+          const normalizedId = normalizeColorId(entry.id);
+          if (normalizedId == null) continue;
+          entries.push({ id: normalizedId, index });
+        }
+        entries.sort((a, b) => {
+          if (a.id !== b.id) {
+            return a.id - b.id;
+          }
+          return a.index - b.index;
+        });
+        for (let i = 0; i < entries.length; i += 1) {
+          const currentId = entries[i].id;
+          if (!adjacency.has(currentId)) {
+            adjacency.set(currentId, new Set());
+          }
+          const neighbors = adjacency.get(currentId);
+          const prevId = entries[i - 1]?.id;
+          const nextId = entries[i + 1]?.id;
+          if (prevId != null) {
+            neighbors.add(prevId);
+          }
+          if (nextId != null) {
+            neighbors.add(nextId);
+          }
+        }
+        return adjacency;
+      }
+
+      function areColorsAdjacent(sourceId, targetId) {
+        const source = normalizeColorId(sourceId);
+        const target = normalizeColorId(targetId);
+        if (source == null || target == null) {
+          return false;
+        }
+        if (source === target) {
+          return true;
+        }
+        const adjacency = state.paletteAdjacency;
+        if (!adjacency || typeof adjacency.get !== "function") {
+          return false;
+        }
+        const neighbors = adjacency.get(source);
+        if (!neighbors || typeof neighbors.has !== "function") {
+          return false;
+        }
+        return neighbors.has(target);
       }
 
       function autoAdvanceColor(currentColorId) {
