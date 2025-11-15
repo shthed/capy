@@ -42,7 +42,7 @@ function createFrameLogger(label) {
   };
 }
 
-export function createRendererController(canvas, options = {}) {
+function createRendererController(canvas, options = {}) {
   const { initialRenderer = "canvas2d", hooks = {}, renderers = {} } = options || {};
 
   const logger = typeof hooks?.log === "function" ? hooks.log : null;
@@ -333,7 +333,7 @@ export function createRendererController(canvas, options = {}) {
   return api;
 }
 
-export function createCanvas2dRenderer(canvas, hooks = {}) {
+function createCanvas2dRenderer(canvas, hooks = {}) {
   let context = null;
 
   const logger = typeof hooks?.log === "function" ? hooks.log : null;
@@ -699,7 +699,7 @@ void main() {
 }
 `;
 
-export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
+function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   const logger = typeof hooks?.log === "function" ? hooks.log : null;
   const logFrameDuration = createFrameLogger("webgl");
 
@@ -1757,7 +1757,7 @@ export function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   };
 }
 
-export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
+function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   if (!canvas || typeof document === "undefined") {
     return null;
   }
@@ -2316,4 +2316,27 @@ export function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     getContext,
     dispose,
   };
+}
+
+const rendererExports = {
+  createRendererController,
+  createCanvas2dRenderer,
+  createWebGLRenderer,
+  createSvgRenderer,
+};
+
+if (typeof globalThis !== "undefined") {
+  const target = globalThis;
+  if (typeof target.capyRenderer !== "object" || target.capyRenderer === null) {
+    target.capyRenderer = {};
+  }
+  Object.assign(target.capyRenderer, rendererExports);
+  target.createRendererController = createRendererController;
+  target.createCanvas2dRenderer = createCanvas2dRenderer;
+  target.createWebGLRenderer = createWebGLRenderer;
+  target.createSvgRenderer = createSvgRenderer;
+}
+
+if (typeof module !== "undefined" && typeof module.exports !== "undefined") {
+  module.exports = rendererExports;
 }

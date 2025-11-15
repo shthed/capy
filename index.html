@@ -2344,12 +2344,19 @@
         </div>
       </div>
     </div>
-        <script type="module">
-      import {
-        createRendererController,
-        createWebGLRenderer,
-        createSvgRenderer,
-      } from "./render.js";
+        <script src="./render.js"></script>
+        <script>
+      const rendererApi = window.capyRenderer || {};
+      function requireRendererExport(name) {
+        const exportValue = rendererApi[name] || window[name];
+        if (typeof exportValue !== "function") {
+          throw new Error(`Renderer export unavailable: ${name}`);
+        }
+        return exportValue;
+      }
+      const createRendererController = requireRendererExport("createRendererController");
+      const createWebGLRenderer = requireRendererExport("createWebGLRenderer");
+      const createSvgRenderer = requireRendererExport("createSvgRenderer");
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
       const commandRail = document.getElementById("commandRail");
