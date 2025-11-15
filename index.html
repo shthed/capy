@@ -4568,8 +4568,7 @@
             if (colorId == null) {
               return false;
             }
-            const { flash = false, redraw = true } = options;
-            return activateColor(colorId, { flash, redraw });
+            return activateColor(colorId, options);
           },
           /**
            * Reports the identifier of the currently active renderer backend.
@@ -4673,10 +4672,16 @@
           },
           /**
            * Hydrates the UI with one of the bundled puzzle fixtures.
-           * @param {object|string} puzzle Fixture identifier or payload.
+           * @param {object} puzzle Puzzle snapshot payload (for example, the parsed contents of `capy.json`).
            * @returns {boolean} True when the fixture loads successfully.
            */
           loadPuzzleFixture(puzzle) {
+            if (!puzzle || typeof puzzle !== "object") {
+              console.error(
+                "capyGenerator.loadPuzzleFixture expects a puzzle payload object (parse capy.json or another save first)."
+              );
+              return false;
+            }
             return loadPuzzleFixtureData(puzzle);
           },
           /**

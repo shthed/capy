@@ -69,7 +69,9 @@ Open the browser console (`F12`/`Ctrl` + `Shift` + `I`) and use `window.capyGene
 
 ```js
 // Load the bundled Capybara Springs fixture and snap to preview mode.
-window.capyGenerator.loadPuzzleFixture("capybara-springs");
+// (Top-level await works in modern devtools consoles.)
+const capyFixture = await fetch("capy.json").then((response) => response.json());
+window.capyGenerator.loadPuzzleFixture(capyFixture);
 window.capyGenerator.togglePreview(true);
 
 // Switch to a renderer, select colour #3, and fill a region programmatically.
