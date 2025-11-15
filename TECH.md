@@ -29,14 +29,14 @@ single `index.html` document—no build tools or extra runtime required.
   - `README.md` – Player-facing quick start and gameplay overview.
   - `TECH.md` – This technical reference.
 - **Testing & QA**
-  - `tests/ui-review.spec.js` – Playwright smoke test that loads the bundled site in Chromium and confirms the document title so we know the runtime boots.
-  - `artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
-  - **Playwright local setup** – Run `npx playwright install --with-deps chromium` after `npm install` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
+- `project/tests/ui-review.spec.js` – Playwright smoke test that loads the bundled site in Chromium and confirms the document title so we know the runtime boots.
+  - `project/artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
+  - **Playwright local setup** – Inside `project/`, run `npm install` followed by `npx playwright install --with-deps chromium` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
 - **Tooling & metadata**
-  - `package.json` – npm scripts plus the `http-server` dependency required to run the app locally.
-  - `package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
+  - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally.
+  - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
-  - `scripts/prepare-deploy-metadata.mjs` – Fetches recent pull requests and commits via the GitHub API to regenerate the deployment metadata consumed by branch previews.
+  - `project/scripts/prepare-deploy-metadata.mjs` – Fetches recent pull requests and commits via the GitHub API to regenerate the deployment metadata consumed by branch previews.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
@@ -215,7 +215,7 @@ Packing the region map trims payloads by more than half, avoiding `QuotaExceeded
 
 ## Testing & QA Checklist
 
-Playwright smoke coverage now exercises the bundled puzzle, first-paint interaction, and save/load completion flow. Run `npm test --silent` locally (it wraps `npx playwright test --config=playwright.config.js`) before merging. The first run may require `npx playwright install` plus the system dependencies listed in the Playwright output (`npx playwright install-deps` on Debian/Ubuntu) so Chromium can launch headlessly.
+Playwright smoke coverage now exercises the bundled puzzle, first-paint interaction, and save/load completion flow. From inside `project/`, run `npm test --silent` locally (it wraps `npx playwright test --config=playwright.config.js`) before merging. The first run may require `npx playwright install` plus the system dependencies listed in the Playwright output (`npx playwright install-deps` on Debian/Ubuntu) so Chromium can launch headlessly.
 
 Supplement the automated run with these manual checks when you change gameplay, rendering, or onboarding flows:
 
@@ -227,6 +227,7 @@ Supplement the automated run with these manual checks when you change gameplay, 
 Local workflow:
 
 ```bash
+cd project
 npm install
 npm run dev
 ```
