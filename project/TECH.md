@@ -19,24 +19,25 @@ single `index.html` document—no build tools or extra runtime required.
 
 ## Repository Map
 
-- **Core application**
+- **Core application (repository root)**
   - `index.html` – Single-file UI, styles, and generator logic powering the colouring experience.
   - `render.js` – Renderer controller plus Canvas2D, WebGL, and SVG backends; manages the active drawing pipeline and exposes
     hooks for swapping or extending renderers at runtime.
   - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the single-page runtime.
   - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, and metadata assembly off the main thread.
-- **Documentation**
-  - `README.md` – Player-facing quick start and gameplay overview.
+- **Project workspace (`project/`)**
+  - `README.md` – Player-facing quick start and gameplay overview that now doubles as the handbook for contributors working inside the workspace.
   - `TECH.md` – This technical reference.
+  - `AGENTS.md` – Development workflow expectations and automation notes.
+  - `package.json` / `package-lock.json` – npm scripts plus the locked dependency tree required to run the tooling stack; execute commands from inside `project/`.
+  - `playwright.config.js` – Smoke-test configuration wired to serve the parent directory before launching checks.
+  - `scripts/` – Utilities such as `prepare-deploy-metadata.mjs` and the Playwright launcher now referenced relative to the workspace root.
+  - `tests/` – Playwright smoke tests (`ui-review.spec.js`) scoped to the single runtime; point new specs here.
+  - `node_modules/` – Local dependency installs. This directory remains ignored in git but lives alongside the workspace metadata for clarity.
 - **Testing & QA**
-  - `tests/ui-review.spec.js` – Playwright smoke test that loads the bundled site in Chromium and confirms the document title so we know the runtime boots.
-  - `artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
-  - **Playwright local setup** – Run `npx playwright install --with-deps chromium` after `npm install` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
-- **Tooling & metadata**
-  - `package.json` – npm scripts plus the `http-server` dependency required to run the app locally.
-  - `package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
-  - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
-  - `scripts/prepare-deploy-metadata.mjs` – Fetches recent pull requests and commits via the GitHub API to regenerate the deployment metadata consumed by branch previews.
+  - `project/tests/ui-review.spec.js` – Playwright smoke test that loads the bundled site in Chromium and confirms the document title so we know the runtime boots.
+  - `project/artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
+  - **Playwright local setup** – From within `project/`, run `npx playwright install --with-deps chromium` after `npm install` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.

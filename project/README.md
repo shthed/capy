@@ -13,6 +13,11 @@ Bring any image to life as a paint-by-numbers puzzle directly in your browser. C
 
 Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on the page or choose **Import** from the command rail. Capy immediately rebuilds the puzzle using that artwork.
 
+## Repository Layout
+
+- **Game runtime (repository root)** – `index.html`, `render.js`, `puzzle-generation.js`, and `capy.json` ship the playable single-page app. Keep the root focused on these files so branch deployments stay lean and easy to diff.
+- **Project workspace (`project/`)** – Tooling, documentation, Playwright tests, npm metadata, and development configuration now live under this folder. Run all contributor-facing commands from here.
+
 ## Game Highlights
 
 - **Instant puzzle import** – Drag-and-drop images or previously exported Capy puzzles to start colouring right away.
@@ -65,7 +70,7 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 
 ## Testing & QA
 
-Automated UI coverage now runs through Playwright so you can validate the end-to-end flow without manual setup. Install dependencies once with `npm install`, then use the scripts below depending on the depth of feedback you need:
+Automated UI coverage now runs through Playwright so you can validate the end-to-end flow without manual setup. Change into the workspace folder (`cd project`) and install dependencies once with `npm install`, then use the scripts below depending on the depth of feedback you need:
 
 - `npm test` – launches the local dev server and executes the Playwright smoke check (Chromium desktop) using `playwright.config.js`.
 - `npm run test:smoke` – targets the same Chromium project for quick iteration.
