@@ -79,7 +79,7 @@ jobs:
 
           generate_readme_html() {
             local target_root="$1"
-            local source_file="../README.md"
+            local source_file="../project/README.md"
 
             if [ ! -f "$source_file" ]; then
               echo "README.md not found; skipping HTML conversion" >&2
@@ -91,7 +91,7 @@ jobs:
             rm -rf "$output_dir"
             mkdir -p "$output_dir"
 
-            if ! node ../scripts/build-pages-site.mjs --source "$source_file" --output "$output_file" --mode gfm --context "${GITHUB_REPOSITORY}"; then
+            if ! node ../project/scripts/build-pages-site.mjs --source "$source_file" --output "$output_file" --mode gfm --context "${GITHUB_REPOSITORY}"; then
               echo "Warning: README markdown to HTML conversion failed" >&2
               return 0
             fi

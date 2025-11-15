@@ -8,6 +8,9 @@ on:
 
 jobs:
   verify:
+    defaults:
+      run:
+        working-directory: project
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,6 +19,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: project/package-lock.json
 
       - name: Install dependencies
         run: |
