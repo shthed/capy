@@ -44,6 +44,7 @@ single `index.html` document—no build tools or extra runtime required.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
+  - `.github/workflows/cleanup-branches.yml` – Nightly job (also invoked after every deployment run) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days.
 
 ## Deployment & Branch Previews
 
