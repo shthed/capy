@@ -593,7 +593,10 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        will-change: width, height;
+        --zoom: 1;
+        transform: scale3d(var(--zoom), var(--zoom), 1);
+        transform-origin: center;
+        will-change: transform, width, height;
       }
 
       #viewport::before {
@@ -2557,6 +2560,7 @@
         "settings-region-labels",
         "settings-theme",
         "settings-mouse-controls",
+        "settings-palette-sort",
         "background-colour",
         "stage-background-colour",
       ]);
@@ -3429,6 +3433,7 @@
       };
 
       const canvasMetrics = {
+        baseDisplayScale: 1,
         displayScale: 1,
         pixelRatio: 1,
         renderScale: 1,
@@ -3442,6 +3447,8 @@
       let pendingViewTransform = null;
       let viewTransformFrame = null;
       let cancelViewTransformFrame = null;
+      const ZOOM_RENDER_DEBOUNCE_MS = 80;
+      let pendingZoomRender = null;
 
       function clampViewPanToPuzzleBounds() {
         let changed = false;
@@ -3524,19 +3531,29 @@
         if (!state.puzzle || !puzzleCanvas) {
           return false;
         }
-        const nextDisplayScale = computeDisplayScale();
+        const baseDisplayScale =
+          Number.isFinite(viewState.baseScale) && viewState.baseScale > 0 ? viewState.baseScale : 1;
+        const zoom = normalizeZoomValue(viewState.zoom > 0 ? viewState.zoom : 1, 1);
+        const { minScale, maxScale } = getScaleBounds(baseDisplayScale);
+        const displayScale = clamp(baseDisplayScale * zoom, minScale, maxScale);
         const pixelRatio = getDevicePixelRatio();
-        const renderScale = nextDisplayScale * pixelRatio;
+        const nativeScale = Math.max(displayScale, 1);
+        const renderScale = nativeScale * pixelRatio;
         const pixelWidth = Math.max(1, Math.round(state.puzzle.width * renderScale));
         const pixelHeight = Math.max(1, Math.round(state.puzzle.height * renderScale));
-        const displayWidth = Math.max(1, state.puzzle.width * nextDisplayScale);
-        const displayHeight = Math.max(1, state.puzzle.height * nextDisplayScale);
+        const displayWidth = Math.max(1, state.puzzle.width * baseDisplayScale);
+        const displayHeight = Math.max(1, state.puzzle.height * baseDisplayScale);
         const changed =
-          Math.abs(nextDisplayScale - canvasMetrics.displayScale) > 0.0001 ||
+          Math.abs(baseDisplayScale - canvasMetrics.baseDisplayScale) > 0.0001 ||
+          Math.abs(displayScale - canvasMetrics.displayScale) > 0.0001 ||
+          Math.abs(renderScale - canvasMetrics.renderScale) > 0.0001 ||
+          Math.abs(pixelRatio - canvasMetrics.pixelRatio) > 0.0001 ||
+          Math.abs(displayWidth - canvasMetrics.displayWidth) > 0.0001 ||
+          Math.abs(displayHeight - canvasMetrics.displayHeight) > 0.0001 ||
           canvasMetrics.pixelWidth !== pixelWidth ||
-          canvasMetrics.pixelHeight !== pixelHeight ||
-          Math.abs(pixelRatio - canvasMetrics.pixelRatio) > 0.0001;
-        canvasMetrics.displayScale = nextDisplayScale;
+          canvasMetrics.pixelHeight !== pixelHeight;
+        canvasMetrics.baseDisplayScale = baseDisplayScale;
+        canvasMetrics.displayScale = displayScale;
         canvasMetrics.pixelRatio = pixelRatio;
         canvasMetrics.renderScale = renderScale;
         canvasMetrics.pixelWidth = pixelWidth;
@@ -3768,10 +3785,14 @@
       const storedUserSettings = loadUserSettings();
       if (storedUserSettings) {
         hasStoredUserSettings = true;
+        const { paletteSort: storedPaletteSort, ...restStoredSettings } = storedUserSettings;
         state.settings = {
           ...state.settings,
-          ...storedUserSettings,
+          ...restStoredSettings,
         };
+        if (typeof storedPaletteSort === "string" && storedPaletteSort) {
+          state.paletteSort = storedPaletteSort;
+        }
       }
 
       const unavailableRenderers = new Set();
@@ -9855,6 +9876,8 @@
         renderPalette();
         renderPuzzle();
         refreshCustomCursorHighlight();
+        scheduleSettingsPersist({ immediate: true });
+        scheduleAutosave("settings-palette-sort");
         if (!skipLog) {
           const label =
             next === "spectrum"
@@ -10704,8 +10727,19 @@
         if (shouldDefer) {
           scheduleViewTransform({ forceRender: true });
         } else {
-          applyViewTransform({ forceRender: true });
+          applyViewTransform({ skipSizing: true });
         }
+        if (pendingZoomRender != null) {
+          clearTimeout(pendingZoomRender);
+        }
+        const scheduleTimeout =
+          typeof window !== "undefined" && typeof window.setTimeout === "function"
+            ? window.setTimeout.bind(window)
+            : setTimeout;
+        pendingZoomRender = scheduleTimeout(() => {
+          pendingZoomRender = null;
+          applyViewTransform({ forceRender: true });
+        }, ZOOM_RENDER_DEBOUNCE_MS);
         if (significant && !options.skipLog) {
           logDebug(`Zoom set to ${(targetScale * 100).toFixed(0)}%`);
         }
@@ -10747,6 +10781,10 @@
         if (canvasStage) {
           canvasStage.style.setProperty("--pan-x", `${viewState.panX}px`);
           canvasStage.style.setProperty("--pan-y", `${viewState.panY}px`);
+        }
+        if (canvasTransform) {
+          const zoomFactor = normalizeZoomValue(viewState.zoom > 0 ? viewState.zoom : 1, 1);
+          canvasTransform.style.setProperty("--zoom", `${zoomFactor}`);
         }
         invalidateCanvasRect();
         if (!state.puzzle) {
@@ -11558,7 +11596,7 @@
         const artPrompt = typeof base.artPrompt === "string" ? base.artPrompt : "";
         const imageDescription =
           typeof base.imageDescription === "string" ? base.imageDescription : "";
-        return {
+        const snapshot = {
           autoAdvance: base.autoAdvance !== false,
           animateHints: base.animateHints !== false,
           hintTypes,
@@ -11576,6 +11614,20 @@
           stageBackgroundColor,
           mouseControls,
         };
+        const paletteSortSource =
+          typeof base.paletteSort === "string"
+            ? base.paletteSort
+            : typeof state?.paletteSort === "string"
+            ? state.paletteSort
+            : null;
+        if (paletteSortSource) {
+          const normalizedSort =
+            LEGACY_PALETTE_SORT_ALIASES.get(paletteSortSource) || paletteSortSource;
+          if (ALLOWED_PALETTE_SORT_MODES.has(normalizedSort)) {
+            snapshot.paletteSort = normalizedSort;
+          }
+        }
+        return snapshot;
       }
 
       function persistUserSettings(snapshot) {
@@ -11745,6 +11797,15 @@
           normalized.mouseControls = cloneMouseControls(
             normalizeMouseControls(payload.mouseControls, DEFAULT_MOUSE_CONTROLS)
           );
+        }
+        if (payload.paletteSort != null) {
+          const candidate =
+            typeof payload.paletteSort === "string" ? payload.paletteSort : "";
+          const normalizedSort =
+            LEGACY_PALETTE_SORT_ALIASES.get(candidate) || candidate;
+          if (ALLOWED_PALETTE_SORT_MODES.has(normalizedSort)) {
+            normalized.paletteSort = normalizedSort;
+          }
         }
         return Object.keys(normalized).length > 0 ? normalized : null;
       }
