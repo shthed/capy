@@ -13,18 +13,29 @@ Capy turns any bitmap image into a colour-by-number puzzle entirely in the
 browser. Drop a file (or load one via the hidden file picker) and the app will
 resize it, run the selected quantization pipeline (k-means palette clustering or
 the new posterize-and-merge pass) to build a discrete palette, merge tiny
-regions, and paint a canvas you can immediately play. An instant preview toggle,
-hint tools, a save manager, and a configurable generator all live inside a
-single `runtime/index.html` document—no build tools or extra runtime required.
+regions, and paint a canvas you can immediately play. The runtime now boots from
+ES modules under `project/src/runtime/`: `index.html` ships the static shell and
+loads `index.js` with `<script type="module">`, which in turn pulls in renderer
+bootstrap, save management, and interaction wiring modules before handing off to
+the generator worker. The modular layout keeps the UI responsive while letting
+contributors iterate on discrete subsystems without editing a monolithic
+document.
 
 ## Repository Map
 
-- **Runtime (`runtime/`)**
-  - `index.html` – Single-file UI, styles, and generator logic powering the colouring experience.
-  - `render.js` – Renderer controller plus Canvas2D, WebGL, and SVG backends; manages the active drawing pipeline and exposes
-    hooks for swapping or extending renderers at runtime.
-  - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the single-page runtime.
-  - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, and metadata assembly off the main thread.
+- **Runtime source (`project/src/runtime/`)**
+  - `index.js` – Entry point that hydrates the DOM, restores state, and kicks off the renderer/bootstrap pipeline.
+  - `renderer-bootstrap.js` – Coordinates renderer registration, wiring the Canvas2D, WebGL, and SVG backends exposed by `runtime/render.js`.
+  - `save-manager.js` – Encapsulates autosave, manual snapshot, and export flows so persistence stays isolated from UI bindings.
+  - `interaction-handlers.js` – Centralises pointer, keyboard, and gesture listeners, exposing helpers consumed by the renderer bootstrap.
+  - `state.js` – Houses shared runtime state (settings, view transforms, palette metadata) consumed across modules.
+- **Built runtime (`runtime/`)**
+  - `index.html` – Static host document that links styles, stamps initial markup, and imports `./src/runtime/index.js` as an ES module.
+  - `render.js` – Renderer controller plus Canvas2D, WebGL, and SVG backends; manages the active drawing pipeline and exposes hooks for swapping or extending renderers at runtime.
+  - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the modular runtime payload.
+  - `puzzle-generation.js` – Worker-ready generator module emitted by the build step; handles colour quantization, segmentation, and metadata assembly off the main thread.
+
+  `index.js` stitches the runtime together: it imports the renderer bootstrap to initialise backends, hands state and DOM helpers to the save manager so autosaves and exports stay reactive, and delegates all pointer/keyboard wiring to the interaction handlers before resolving puzzle generation promises.
 - **Documentation**
   - `README.md` – Player-facing quick start and gameplay overview.
   - `TECH.md` – This technical reference.
@@ -34,13 +45,14 @@ single `runtime/index.html` document—no build tools or extra runtime required.
   - `project/artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
   - **Playwright local setup** – Inside `project/`, run `npm install` followed by `npx playwright install --with-deps chromium` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
 - **Tooling & metadata**
-  - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally.
+  - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally; `npm run dev` now runs the build watcher before serving `runtime/` at http://localhost:8000.
   - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
   - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn `README.md` into `/README/index.html` and keep embedded docs mirrored in previews.
   - `project/scripts/render-branch-page.mjs` – Static HTML builder for `branch.html`, fed by deployment metadata so previews stay discoverable.
   - `project/scripts/prepare-deploy-metadata.mjs` – Fetches recent pull requests and commits via the GitHub API to regenerate the deployment metadata consumed by branch previews.
   - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
+  - `project/scripts/build.js` – Bundler/asset copier that compiles `project/src/runtime/` into `runtime/`; accepts `--watch` for `npm run dev` and `--mode=production` for deployment builds.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
