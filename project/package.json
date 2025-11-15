@@ -5,9 +5,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "http-server -c-1 .. -p 8000",
+    "dev": "http-server -c-1 ../runtime -p 8000",
     "test": "node ./scripts/run-tests.js",
-    "test:smoke": "playwright test --config=playwright.config.js --project=chromium"
+    "test:smoke": "playwright test --config=playwright.config.js --project=chromium",
+    "setup:playwright": "npx playwright install --with-deps chromium"
   },
   "devDependencies": {
     "@playwright/test": "^1.43.1",
@@ -15,6 +16,5 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "postinstall": "npx playwright install --with-deps chromium chromium-headless-shell"
+  }
 }
