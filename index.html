@@ -2347,12 +2347,28 @@
         </div>
       </div>
     </div>
-        <script type="module">
-      import {
-        createRendererController,
-        createWebGLRenderer,
-        createSvgRenderer,
-      } from "./render.js";
+        <script src="./render.js"></script>
+        <script>
+      (() => {
+        const BOOTSTRAP_VERSION = "2024-07-28";
+        const SENTINEL_READY = `ready:${BOOTSTRAP_VERSION}`;
+        if (window.__capyRendererBootstrapVersion === SENTINEL_READY) {
+          return;
+        }
+        let bootstrapSucceeded = false;
+        try {
+          window.__capyRendererBootstrapVersion = `pending:${BOOTSTRAP_VERSION}`;
+          const rendererApi = window.capyRenderer || {};
+          function requireRendererExport(name) {
+            const exportValue = rendererApi[name] || window[name];
+            if (typeof exportValue !== "function") {
+              throw new Error(`Renderer export unavailable: ${name}`);
+            }
+            return exportValue;
+          }
+          const createRendererController = requireRendererExport("createRendererController");
+          const createWebGLRenderer = requireRendererExport("createWebGLRenderer");
+          const createSvgRenderer = requireRendererExport("createSvgRenderer");
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
       const commandRail = document.getElementById("commandRail");
@@ -2853,7 +2869,7 @@
             if (!allowShortcutTarget) {
               return;
             }
-            applyZoom(wantsZoomIn ? 1.1 : 0.9);
+            applyZoom(wantsZoomIn ? 1.1 : 0.9, undefined, undefined, { defer: true });
           },
           { capture: true }
         );
@@ -6077,6 +6093,134 @@
         }
         renderDebugLog();
       }
+
+      function formatConsoleValue(value) {
+        if (value instanceof Error) {
+          return value.stack || `${value.name || "Error"}: ${value.message || ""}`.trim();
+        }
+        const type = typeof value;
+        if (type === "string") {
+          return value;
+        }
+        if (type === "number" || type === "bigint" || type === "boolean") {
+          return String(value);
+        }
+        if (value === null) {
+          return "null";
+        }
+        if (value === undefined) {
+          return "undefined";
+        }
+        if (type === "function") {
+          return value.name ? `[Function ${value.name}]` : "[Function]";
+        }
+        try {
+          return JSON.stringify(value);
+        } catch (_error) {
+          return Object.prototype.toString.call(value);
+        }
+      }
+
+      function joinConsoleArguments(args) {
+        if (!Array.isArray(args) || args.length === 0) {
+          return "";
+        }
+        return args
+          .map((value) => {
+            try {
+              return formatConsoleValue(value);
+            } catch (_error) {
+              return "[unserializable]";
+            }
+          })
+          .filter((value) => value && typeof value === "string")
+          .join(" ");
+      }
+
+      function installConsoleErrorForwarder() {
+        if (installConsoleErrorForwarder.installed) {
+          return;
+        }
+        installConsoleErrorForwarder.installed = true;
+
+        const globalConsole = window.console;
+        if (globalConsole && typeof globalConsole === "object") {
+          const levels = [
+            ["error", "Error"],
+            ["warn", "Warning"],
+          ];
+          for (const [method, label] of levels) {
+            const original =
+              typeof globalConsole[method] === "function"
+                ? globalConsole[method].bind(globalConsole)
+                : null;
+            if (!original) {
+              continue;
+            }
+            globalConsole[method] = function forwardedConsoleMethod(...args) {
+              let result;
+              try {
+                result = original(...args);
+              } catch (_error) {
+                /* Swallow logging errors to avoid infinite loops. */
+              }
+              try {
+                const payload = joinConsoleArguments(args);
+                const message = payload ? `[${label}] ${payload}` : `[${label}]`;
+                logDebug(message);
+              } catch (_error) {
+                /* Ignore debug log failures. */
+              }
+              return result;
+            };
+          }
+        }
+
+        function recordErrorEvent(event, label) {
+          if (!event) return;
+          try {
+            const parts = [];
+            if (event.message) {
+              parts.push(event.message);
+            }
+            if (event.filename) {
+              const line = event.lineno != null ? event.lineno : null;
+              const column = event.colno != null ? event.colno : null;
+              const location =
+                line != null && column != null
+                  ? `${event.filename}:${line}:${column}`
+                  : line != null
+                  ? `${event.filename}:${line}`
+                  : event.filename;
+              parts.push(location);
+            }
+            if (event.reason && event.reason !== event.message) {
+              parts.push(formatConsoleValue(event.reason));
+            } else if (event.error) {
+              parts.push(formatConsoleValue(event.error));
+            }
+            const message = parts.length ? parts.join(" – ") : label;
+            logDebug(`[${label}] ${message}`);
+          } catch (_error) {
+            /* Ignore logging failures. */
+          }
+        }
+
+        window.addEventListener(
+          "error",
+          (event) => {
+            recordErrorEvent(event, "Unhandled Error");
+          },
+          true
+        );
+
+        window.addEventListener("unhandledrejection", (event) => {
+          recordErrorEvent(event, "Unhandled Promise Rejection");
+        });
+      }
+
+      installConsoleErrorForwarder.installed = false;
+      installConsoleErrorForwarder();
 
       function activateSettingsTab(tabId, options = {}) {
         if (!tabId || settingsTabButtons.length === 0) {
@@ -9785,13 +9929,13 @@
         const key = event.key;
         if (key === "+" || key === "=" || event.code === "Equal" || event.code === "NumpadAdd") {
           event.preventDefault();
-          applyZoom(1.1);
+          applyZoom(1.1, undefined, undefined, { defer: true });
           return;
         }
 
         if (key === "-" || event.code === "Minus" || event.code === "NumpadSubtract") {
           event.preventDefault();
-          applyZoom(0.9);
+          applyZoom(0.9, undefined, undefined, { defer: true });
         }
       }
 
@@ -9909,7 +10053,7 @@
         if (!Number.isFinite(multiplier) || Math.abs(multiplier - 1) < 0.001) {
           return;
         }
-        applyZoom(multiplier, event.clientX, event.clientY, { skipLog: true });
+        applyZoom(multiplier, event.clientX, event.clientY, { skipLog: true, defer: true });
         session.zoomChanged = true;
       }
 
@@ -10006,7 +10150,7 @@
         }
         if (action === "zoom-in" || action === "zoom-out") {
           const multiplier = action === "zoom-in" ? 1.15 : 0.85;
-          applyZoom(multiplier, event.clientX, event.clientY);
+          applyZoom(multiplier, event.clientX, event.clientY, { defer: true });
           return;
         }
       }
@@ -10579,8 +10723,9 @@
         const nextZoom = normalizeZoomValue(targetScale / baseScale, currentZoom);
         const significant = Math.abs(targetScale - currentScale) >= Math.max(0.01, currentScale * 0.001);
         viewState.zoom = nextZoom;
-        if (options.defer) {
-          scheduleViewTransform({ skipSizing: true });
+        const shouldDefer = options.defer !== undefined ? options.defer : true;
+        if (shouldDefer) {
+          scheduleViewTransform({ forceRender: true });
         } else {
           applyViewTransform({ skipSizing: true });
         }
@@ -10621,7 +10766,7 @@
         if (!Number.isFinite(multiplier) || Math.abs(multiplier - 1) < 0.001) {
           return;
         }
-        applyZoom(multiplier, event.clientX, event.clientY);
+        applyZoom(multiplier, event.clientX, event.clientY, { defer: true });
       }
 
       function applyViewTransform(options = {}) {
@@ -13181,6 +13326,14 @@
         if (value > max) return max;
         return value;
       }
+
+          bootstrapSucceeded = true;
+        } finally {
+          window.__capyRendererBootstrapVersion = bootstrapSucceeded
+            ? SENTINEL_READY
+            : undefined;
+        }
+      })();
 
     </script>
   </body>
