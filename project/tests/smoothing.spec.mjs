@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { __smoothAssignmentsForTests as smoothAssignments } from '../../puzzle-generation.js';
+import { __smoothAssignmentsForTests as smoothAssignments } from '../../runtime/puzzle-generation.js';
 
 function accumulateMap(histogram, color) {
   histogram.set(color, (histogram.get(color) || 0) + 1);
