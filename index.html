@@ -2346,17 +2346,26 @@
     </div>
         <script src="./render.js"></script>
         <script>
-      const rendererApi = window.capyRenderer || {};
-      function requireRendererExport(name) {
-        const exportValue = rendererApi[name] || window[name];
-        if (typeof exportValue !== "function") {
-          throw new Error(`Renderer export unavailable: ${name}`);
+      (() => {
+        const BOOTSTRAP_VERSION = "2024-07-28";
+        const SENTINEL_READY = `ready:${BOOTSTRAP_VERSION}`;
+        if (window.__capyRendererBootstrapVersion === SENTINEL_READY) {
+          return;
         }
-        return exportValue;
-      }
-      const createRendererController = requireRendererExport("createRendererController");
-      const createWebGLRenderer = requireRendererExport("createWebGLRenderer");
-      const createSvgRenderer = requireRendererExport("createSvgRenderer");
+        let bootstrapSucceeded = false;
+        try {
+          window.__capyRendererBootstrapVersion = `pending:${BOOTSTRAP_VERSION}`;
+          const rendererApi = window.capyRenderer || {};
+          function requireRendererExport(name) {
+            const exportValue = rendererApi[name] || window[name];
+            if (typeof exportValue !== "function") {
+              throw new Error(`Renderer export unavailable: ${name}`);
+            }
+            return exportValue;
+          }
+          const createRendererController = requireRendererExport("createRendererController");
+          const createWebGLRenderer = requireRendererExport("createWebGLRenderer");
+          const createSvgRenderer = requireRendererExport("createSvgRenderer");
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
       const commandRail = document.getElementById("commandRail");
@@ -13256,6 +13265,14 @@
         if (value > max) return max;
         return value;
       }
+
+          bootstrapSucceeded = true;
+        } finally {
+          window.__capyRendererBootstrapVersion = bootstrapSucceeded
+            ? SENTINEL_READY
+            : undefined;
+        }
+      })();
 
     </script>
   </body>
