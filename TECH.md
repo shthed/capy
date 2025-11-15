@@ -33,7 +33,7 @@ single `runtime/index.html` document—no build tools or extra runtime required.
   - `project/tests/render-controller.spec.js` – Node-based unit coverage that mocks renderer registrations and asserts the controller's fallback hooks, chosen instead of a TypeScript port for `render.js` so we can exercise the tricky activation paths directly.
   - `project/scripts/run-tests.js` – Harness invoked by `npm test --silent`; prints the current suite status (skip notice while automated checks stay offline) and exits with CI-friendly codes.
   - `project/artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
-  - **Playwright local setup** – Inside `project/`, run `npm install` followed by `npx playwright install --with-deps chromium` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
+  - **Playwright local setup** – Inside `project/`, run `npm install` followed by `npm run setup:playwright` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
 - **Tooling & metadata**
   - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally.
   - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
@@ -221,7 +221,7 @@ Packing the region map trims payloads by more than half, avoiding `QuotaExceeded
 
 ## Testing & QA Checklist
 
-Playwright smoke coverage now exercises the bundled puzzle, first-paint interaction, and save/load completion flow. From inside `project/`, run `npm test --silent` locally (it wraps `npx playwright test --config=playwright.config.js`) before merging. The first run may require `npx playwright install` plus the system dependencies listed in the Playwright output (`npx playwright install-deps` on Debian/Ubuntu) so Chromium can launch headlessly.
+Playwright smoke coverage now exercises the bundled puzzle, first-paint interaction, and save/load completion flow. From inside `project/`, run `npm test --silent` locally (it wraps `npx playwright test --config=playwright.config.js`) before merging. The first run may require `npm run setup:playwright` plus the system dependencies listed in the Playwright output (`npx playwright install-deps` on Debian/Ubuntu) so Chromium can launch headlessly.
 
 Supplement the automated run with these manual checks when you change gameplay, rendering, or onboarding flows:
 
@@ -235,6 +235,7 @@ Local workflow:
 ```bash
 cd project
 npm install
+npm run setup:playwright  # Only required when running Playwright locally
 npm run dev
 ```
 
