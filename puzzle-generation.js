@@ -144,6 +144,15 @@ function floodFill(width, height, indexMap) {
 
 function segmentRegions(width, height, assignments, minRegion) {
   const indexMap = new Uint16Array(assignments);
+  let maxColorId = 0;
+  for (let i = 0; i < indexMap.length; i++) {
+    if (indexMap[i] > maxColorId) {
+      maxColorId = indexMap[i];
+    }
+  }
+  const paletteSize = Math.max(1, maxColorId + 1);
+  const neighborCounter = new Uint32Array(paletteSize);
+  const touchedColors = new Uint16Array(paletteSize);
   let attempt = 0;
   let threshold = Math.max(1, minRegion);
   while (true) {
@@ -154,7 +163,7 @@ function segmentRegions(width, height, assignments, minRegion) {
     }
     let changed = false;
     for (const region of tiny) {
-      const colorVotes = new Map();
+      let touchedCount = 0;
       for (const idx of region.pixels) {
         const x = idx % width;
         const y = (idx / width) | 0;
@@ -162,35 +171,63 @@ function segmentRegions(width, height, assignments, minRegion) {
           const n = idx - 1;
           const color = indexMap[n];
           if (color !== region.colorId) {
-            colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
+            touchedCount = accumulate(
+              neighborCounter,
+              touchedColors,
+              color,
+              1,
+              touchedCount
+            );
           }
         }
         if (x < width - 1) {
           const n = idx + 1;
           const color = indexMap[n];
           if (color !== region.colorId) {
-            colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
+            touchedCount = accumulate(
+              neighborCounter,
+              touchedColors,
+              color,
+              1,
+              touchedCount
+            );
           }
         }
         if (y > 0) {
           const n = idx - width;
           const color = indexMap[n];
           if (color !== region.colorId) {
-            colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
+            touchedCount = accumulate(
+              neighborCounter,
+              touchedColors,
+              color,
+              1,
+              touchedCount
+            );
           }
         }
         if (y < height - 1) {
           const n = idx + width;
           const color = indexMap[n];
           if (color !== region.colorId) {
-            colorVotes.set(color, (colorVotes.get(color) || 0) + 1);
+            touchedCount = accumulate(
+              neighborCounter,
+              touchedColors,
+              color,
+              1,
+              touchedCount
+            );
           }
         }
       }
-      if (colorVotes.size === 0) continue;
+      if (touchedCount === 0) {
+        continue;
+      }
       let bestColor = region.colorId;
       let bestVotes = -1;
-      for (const [color, votes] of colorVotes.entries()) {
+      for (let i = 0; i < touchedCount; i++) {
+        const color = touchedColors[i];
+        const votes = neighborCounter[color];
         if (votes > bestVotes) {
           bestVotes = votes;
           bestColor = color;
@@ -201,6 +238,9 @@ function segmentRegions(width, height, assignments, minRegion) {
         for (const idx of region.pixels) {
           indexMap[idx] = bestColor;
         }
+      }
+      for (let i = 0; i < touchedCount; i++) {
+        neighborCounter[touchedColors[i]] = 0;
       }
     }
     attempt += 1;
