@@ -6,6 +6,7 @@ import {
   getFilledCount,
   getPerformanceMetrics,
   loadTestPuzzle,
+  resetPerformanceMetrics,
   TEST_COLOR_IDS,
   TEST_REGION_IDS,
 } from './utils/fixtures.js';
@@ -96,6 +97,13 @@ test.describe('Capy UI smoke check', () => {
   test('records performance metrics around puzzle interactions', async ({ page }) => {
     await loadTestPuzzle(page);
 
+    const bootSnapshot = await getPerformanceMetrics(page);
+    expect(bootSnapshot?.durations?.['app:boot']?.count ?? 0).toBeGreaterThan(0);
+    expect(bootSnapshot?.durations?.['puzzle:hydrate']?.count ?? 0).toBeGreaterThan(0);
+
+    await resetPerformanceMetrics(page);
+    await loadTestPuzzle(page);
+
     await fillRegion(page, TEST_REGION_IDS.sunlitBloom[0]);
     await fillRegion(page, TEST_REGION_IDS.sunlitBloom[1]);
 
@@ -103,7 +111,6 @@ test.describe('Capy UI smoke check', () => {
     expect(metrics).not.toBeNull();
 
     const durations = metrics?.durations ?? {};
-    expect(durations['app:boot']?.count ?? 0).toBeGreaterThan(0);
     expect(durations['puzzle:hydrate']?.count ?? 0).toBeGreaterThan(0);
     expect(durations['render:frame']?.count ?? 0).toBeGreaterThan(0);
     expect(durations['interaction:fill']?.count ?? 0).toBeGreaterThan(0);

@@ -204,3 +204,15 @@ export async function getPerformanceMetrics(page) {
     return snapshot;
   });
 }
+
+export async function resetPerformanceMetrics(page) {
+  await page.waitForFunction(() => Boolean(window.capyGenerator?.resetPerformanceMetrics));
+  return page.evaluate(() => {
+    try {
+      return window.capyGenerator?.resetPerformanceMetrics?.() ?? null;
+    } catch (error) {
+      console.warn('Failed to reset performance metrics', error);
+      return null;
+    }
+  });
+}

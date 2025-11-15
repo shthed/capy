@@ -4729,6 +4729,13 @@
               return null;
             }
           },
+          resetPerformanceMetrics() {
+            try {
+              return performanceMetrics?.reset?.() || null;
+            } catch (_error) {
+              return null;
+            }
+          },
         };
       }
 
@@ -6309,7 +6316,7 @@
 
         const durations = new Map();
         const events = [];
-        const startedAt = clock();
+        let startedAt = clock();
         let lastUpdatedAt = startedAt;
         let lastFlushAt = startedAt;
 
@@ -6484,12 +6491,23 @@
           }
         }
 
+        function resetMetrics() {
+          durations.clear();
+          events.length = 0;
+          const nowTs = clock();
+          startedAt = nowTs;
+          lastUpdatedAt = nowTs;
+          lastFlushAt = nowTs;
+          return buildSummary();
+        }
+
         return {
           start,
           mark,
           record: recordDuration,
           getSummary: buildSummary,
           flush,
+          reset: resetMetrics,
         };
       }
 
