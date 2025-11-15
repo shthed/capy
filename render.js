@@ -1578,6 +1578,7 @@ function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
   } finally {
     logFrameDuration(getTimestamp() - start);
   }
+  }
 
   function renderPreview(args = {}) {
     if (typeof hooks.renderPreview === "function") {
