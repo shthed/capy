@@ -29,7 +29,12 @@ single `index.html` document—no build tools or extra runtime required.
   - `README.md` – Player-facing quick start and gameplay overview.
   - `TECH.md` – This technical reference.
 - **Testing & QA**
-  - `project/tests/ui-review.spec.js` – Playwright smoke test that loads the bundled site in Chromium and confirms the document title so we know the runtime boots.
+  - `project/tests/ui-review.spec.js` – Playwright smoke suite that boots Chromium, seeds an automation puzzle, and covers renderer toggles, palette counters, and save/load flows via the shared fixtures.
+    - Confirms the document title after navigation so we know the runtime boots.
+    - Opens the Appearance tab to switch between Canvas 2D and SVG renderers, asserting the active backend through `window.capyGenerator`.
+    - Paints regions from the automation fixture to verify palette `data-remaining` attributes and tooltips update as colours complete.
+    - Exercises the Saves tab to create a manual snapshot and reload it, ensuring filled-region progress is restored.
+  - `project/tests/utils/fixtures.js` – Helper builders that reset storage, inject the multi-region puzzle fixture, and expose helpers for renderer, palette, and fill assertions used by `ui-review.spec.js`.
   - `project/scripts/run-tests.js` – Harness invoked by `npm test --silent`; prints the current suite status (skip notice while automated checks stay offline) and exits with CI-friendly codes.
   - `project/artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
   - **Playwright local setup** – Inside `project/`, run `npm install` followed by `npx playwright install --with-deps chromium` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
