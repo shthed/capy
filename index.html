@@ -404,6 +404,14 @@
         transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
       }
 
+      #commandRail .menu-button {
+        padding: calc(10px * var(--ui-scale)) calc(18px * var(--ui-scale));
+        border-radius: calc(14px * var(--ui-scale));
+        gap: calc(8px * var(--ui-scale));
+        font-size: calc(15px * var(--ui-scale));
+        font-weight: 600;
+      }
+
       #commandRail button.active {
         background: color-mix(in srgb, var(--theme-command-active-bg) 70%, transparent);
         border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
@@ -413,6 +421,10 @@
       #commandRail button .icon {
         font-size: 1.05rem;
         line-height: 1;
+      }
+
+      #commandRail .menu-button .icon {
+        font-size: 1.25rem;
       }
 
       #commandRail .label {
@@ -449,6 +461,10 @@
 
       body.compact-commands #commandRail .label {
         display: none;
+      }
+
+      body.compact-commands #commandRail .menu-button .label {
+        display: inline;
       }
 
       body[data-orientation="portrait"] #paletteDock {
@@ -1286,6 +1302,67 @@
         letter-spacing: 0.02em;
       }
 
+      .quick-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: calc(10px * var(--ui-scale));
+        align-items: stretch;
+      }
+
+      .quick-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: calc(8px * var(--ui-scale));
+        padding: calc(10px * var(--ui-scale)) calc(18px * var(--ui-scale));
+        border-radius: calc(14px * var(--ui-scale));
+        border: 1px solid var(--theme-sheet-button-border);
+        background: var(--theme-sheet-button-bg);
+        color: var(--theme-sheet-button-text);
+        font-weight: 600;
+        font-size: 0.95rem;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease,
+          box-shadow 0.16s ease, transform 0.16s ease;
+        box-shadow: none;
+      }
+
+      .quick-action .icon {
+        font-size: 1.1rem;
+      }
+
+      .quick-action .label {
+        white-space: nowrap;
+      }
+
+      .quick-action.active {
+        background: color-mix(in srgb, var(--theme-command-active-bg) 70%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
+        color: var(--theme-command-active-text);
+      }
+
+      .quick-action:not(:disabled):hover,
+      .quick-action:not(:disabled):focus-visible {
+        background: color-mix(in srgb, var(--theme-command-active-bg) 55%, transparent);
+        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
+        color: var(--theme-command-active-text);
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.28);
+        transform: translateY(-1px);
+      }
+
+      .quick-action:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--theme-command-active-border) 65%, transparent);
+        outline-offset: 3px;
+      }
+
+      .quick-action:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        box-shadow: none;
+        transform: none;
+      }
+
       .save-manager {
         display: grid;
         gap: calc(12px * var(--ui-scale));
@@ -1626,75 +1703,17 @@
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
         <button
-          id="previewToggle"
-          type="button"
-          data-testid="preview-toggle"
-          aria-label="Show preview"
-          title="Show preview"
-          disabled
-        >
-          <span class="icon" aria-hidden="true">🖼</span>
-          <span class="label">Preview</span>
-        </button>
-        <button
-          id="generatorButton"
-          type="button"
-          data-testid="generator-button"
-          aria-label="Generator options"
-          title="Generator options"
-        >
-          <span class="icon" aria-hidden="true">🎛</span>
-          <span class="label">Generator</span>
-        </button>
-        <button
-          id="fullscreenButton"
-          type="button"
-          data-testid="fullscreen-button"
-          aria-label="Enter fullscreen"
-          title="Enter fullscreen"
-        >
-          <span class="icon" aria-hidden="true">⛶</span>
-          <span class="label">Fullscreen</span>
-        </button>
-        <button
-          id="importButton"
-          type="button"
-          data-testid="import-button"
-          aria-label="Import"
-          title="Import"
-        >
-          <span class="icon" aria-hidden="true">⬆</span>
-          <span class="label">Import</span>
-        </button>
-        <button
-          id="saveManagerButton"
-          type="button"
-          data-testid="save-manager-button"
-          aria-label="Save manager"
-          title="Save manager"
-        >
-          <span class="icon" aria-hidden="true">💾</span>
-          <span class="label">Saves</span>
-        </button>
-        <button
-          id="helpButton"
-          type="button"
-          data-testid="help-button"
-          aria-label="Help &amp; shortcuts"
-          title="Help &amp; shortcuts"
-        >
-          <span class="icon" aria-hidden="true">ℹ</span>
-          <span class="label">Help</span>
-        </button>
-        <button
           id="settingsButton"
+          class="menu-button"
           type="button"
           data-testid="settings-button"
-          aria-label="Settings"
-          title="Settings"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          aria-label="Open settings and tools"
+          title="Open settings and tools"
         >
           <span class="icon" aria-hidden="true">⚙</span>
-          <span class="label">Settings</span>
+          <span class="label">Settings &amp; tools</span>
         </button>
       </header>
       <div id="viewport">
@@ -1827,6 +1846,39 @@
           aria-labelledby="settingsTab-gameplay"
           data-settings-panel="gameplay"
         >
+          <section class="sheet-section" aria-labelledby="quickActionsHeading">
+            <h3 id="quickActionsHeading">Quick actions</h3>
+            <div class="quick-actions" role="group" aria-label="Puzzle quick actions">
+              <button
+                id="previewToggle"
+                type="button"
+                class="quick-action"
+                data-testid="preview-toggle"
+                aria-label="Show preview"
+                title="Show preview"
+                aria-pressed="false"
+                disabled
+              >
+                <span class="icon" aria-hidden="true">🖼</span>
+                <span class="label">Show preview</span>
+              </button>
+              <button
+                id="fullscreenButton"
+                type="button"
+                class="quick-action"
+                data-testid="fullscreen-button"
+                aria-label="Enter fullscreen"
+                title="Enter fullscreen"
+                aria-pressed="false"
+              >
+                <span class="icon" aria-hidden="true">⛶</span>
+                <span class="label">Enter fullscreen</span>
+              </button>
+            </div>
+            <p class="control-note">
+              Manage the reference preview and fullscreen view without leaving the puzzle.
+            </p>
+          </section>
           <section class="sheet-section" aria-labelledby="gameplayHeading">
             <h3 id="gameplayHeading">Gameplay</h3>
             <label class="toggle">
@@ -2436,11 +2488,7 @@
       const startSaveManagerSection = document.getElementById("saveManagerSection");
       const previewToggle = document.getElementById("previewToggle");
       const fullscreenButton = document.getElementById("fullscreenButton");
-      const importButton = document.getElementById("importButton");
-      const saveManagerButton = document.getElementById("saveManagerButton");
-      const generatorButton = document.getElementById("generatorButton");
       const settingsButton = document.getElementById("settingsButton");
-      const helpButton = document.getElementById("helpButton");
       const settingsSheet = document.getElementById("settingsSheet");
       const settingsBody = settingsSheet?.querySelector(".sheet-body") || null;
       const settingsTabButtons = settingsSheet
@@ -4759,30 +4807,27 @@
           fileInput.click();
         });
       }
-      importButton.addEventListener("click", () => fileInput.click());
-      if (generatorButton) {
-        generatorButton.addEventListener("click", () => {
-          showSettingsSheet({ tabId: "generator", focusTab: true, resetScroll: true });
-        });
-      }
-      settingsButton.addEventListener("click", () => {
-        showSettingsSheet({ tabId: activeSettingsTabId || "gameplay", resetScroll: false });
-      });
-      saveManagerButton.addEventListener("click", () => {
-        hideStartScreen();
-        showSettingsSheet({ tabId: "saves", focusTab: true, resetScroll: true });
-      });
-      if (helpButton) {
-        helpButton.addEventListener("click", () => {
-          showSettingsSheet({ tabId: "help", focusTab: true, resetScroll: true });
+      if (settingsButton) {
+        settingsButton.addEventListener("click", () => {
+          if (!settingsSheet) {
+            return;
+          }
+          const isHidden = settingsSheet.classList.contains("hidden");
+          if (isHidden) {
+            hideStartScreen();
+            showSettingsSheet({ tabId: activeSettingsTabId || "gameplay", resetScroll: false });
+          } else {
+            closeSheet(settingsSheet);
+            settingsButton.focus();
+          }
         });
       }
 
       if (startHintCloseButton) {
         startHintCloseButton.addEventListener("click", () => {
           hideStartScreen();
-          if (saveManagerButton && !saveManagerButton.disabled) {
-            saveManagerButton.focus();
+          if (settingsButton) {
+            settingsButton.focus();
           }
         });
       }
@@ -4831,8 +4876,8 @@
           if (event.key === "Escape") {
             if (!startHint.classList.contains("hidden") && (state.puzzle || state.saves.length > 0)) {
               hideStartScreen();
-              if (saveManagerButton && !saveManagerButton.disabled) {
-                saveManagerButton.focus();
+              if (settingsButton) {
+                settingsButton.focus();
               }
             }
             return;
@@ -5682,6 +5727,10 @@
         }
         sheet.classList.remove("hidden");
         sheet.setAttribute("aria-hidden", "false");
+        if (sheet === settingsSheet && settingsButton) {
+          settingsButton.setAttribute("aria-expanded", "true");
+          settingsButton.classList.add("active");
+        }
         if (sheet === settingsSheet && activeSettingsTabId === "help") {
           void ensureHelpReadmeLoaded();
         }
@@ -5691,6 +5740,10 @@
         if (!sheet) return;
         sheet.classList.add("hidden");
         sheet.setAttribute("aria-hidden", "true");
+        if (sheet === settingsSheet && settingsButton) {
+          settingsButton.setAttribute("aria-expanded", "false");
+          settingsButton.classList.remove("active");
+        }
         if (sheet === settingsSheet) {
           clearPendingImport();
         }
@@ -5747,12 +5800,20 @@
           previewToggle.setAttribute("aria-label", "Hide preview");
           previewToggle.title = "Hide preview";
           previewToggle.classList.add("active");
+          const label = previewToggle.querySelector(".label");
+          if (label) {
+            label.textContent = "Hide preview";
+          }
           hideCustomCursor();
         } else {
           previewToggle.setAttribute("aria-pressed", "false");
           previewToggle.setAttribute("aria-label", "Show preview");
           previewToggle.title = "Show preview";
           previewToggle.classList.remove("active");
+          const label = previewToggle.querySelector(".label");
+          if (label) {
+            label.textContent = "Show preview";
+          }
           refreshCustomCursorHighlight();
         }
         renderPuzzle();
@@ -5768,6 +5829,10 @@
         const icon = fullscreenButton.querySelector(".icon");
         if (icon) {
           icon.textContent = active ? "🗗" : "⛶";
+        }
+        const label = fullscreenButton.querySelector(".label");
+        if (label) {
+          label.textContent = active ? "Exit fullscreen" : "Enter fullscreen";
         }
         fullscreenButton.disabled = !document.fullscreenEnabled && !active;
       }
@@ -6082,9 +6147,6 @@
         }
         for (const button of resetProgressButtons) {
           button.disabled = !hasPuzzle || state.filled.size === 0;
-        }
-        if (saveManagerButton) {
-          saveManagerButton.disabled = false;
         }
         if (startHintCloseButton) {
           startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
