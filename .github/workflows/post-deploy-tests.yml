@@ -50,11 +50,14 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
+          cache-dependency-path: project/package-lock.json
 
       - name: Install dependencies
+        working-directory: project
         run: npm ci
 
       - name: Install Playwright browsers
+        working-directory: project
         run: npx playwright install --with-deps
 
       - name: Derive Pages preview URL
@@ -77,6 +80,7 @@ jobs:
           echo "Preview URL: ${PREVIEW_URL}"
 
       - name: Prepare UI review artifacts directory
+        working-directory: project
         run: |
           set -euo pipefail
           rm -rf artifacts/ui-review
@@ -85,11 +89,13 @@ jobs:
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
           PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.preview_url }}
+        working-directory: project
         run: npm test --silent
 
       - name: Detect UI review artifacts
         id: artifact-check
         if: always()
+        working-directory: project
         run: |
           set -euo pipefail
 
@@ -104,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ui-review-${{ needs.slug.outputs.branch_slug }}-${{ github.run_id }}
-          path: artifacts/ui-review
+          path: project/artifacts/ui-review
           if-no-files-found: ignore
 
       - name: Share preview and screenshots on PR
