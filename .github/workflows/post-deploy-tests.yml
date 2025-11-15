@@ -103,7 +103,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-review-${{ github.event.workflow_run.head_branch }}-${{ github.run_id }}
+          name: ui-review-${{ needs.slug.outputs.branch_slug }}-${{ github.run_id }}
           path: artifacts/ui-review
           if-no-files-found: ignore
 
