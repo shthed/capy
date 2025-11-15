@@ -65,7 +65,7 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 
 ## Testing & QA
 
-Automated UI coverage now runs through Playwright so you can validate the end-to-end flow without manual setup. Install dependencies once with `npm install` (this triggers `npx playwright install --with-deps chromium chromium-headless-shell` so the bundled browsers are ready). If the suite reports missing browsers, rerun that install command manually before executing the scripts below:
+Automated UI coverage now runs through Playwright so you can validate the end-to-end flow without manual setup. Install dependencies once with `npm install` (this triggers `npx playwright install chromium chromium-headless-shell` so the bundled browsers are ready). If the suite reports missing browsers, rerun that install command manually before executing the scripts below:
 
 - `npm test` – launches the local dev server and executes the Playwright smoke check (Chromium desktop) using `playwright.config.js`.
 - `npm run test:smoke` – targets the same Chromium project for quick iteration.
