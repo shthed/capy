@@ -65,10 +65,11 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 
 ## Testing & QA
 
-Automated UI coverage now runs through Playwright so you can validate the end-to-end flow without manual setup. Install dependencies from the workspace by running `cd project && npm install` (this triggers `npx playwright install --with-deps chromium chromium-headless-shell` so the bundled browser binaries and system libraries are ready). If the suite reports missing browsers or libraries, rerun that install command manually before executing the scripts below:
+Automated coverage now includes targeted generator unit tests plus a Playwright smoke check so you can validate both the segmentation pipeline and the end-to-end flow without manual setup. Install dependencies from the workspace by running `cd project && npm install` (this triggers `npx playwright install --with-deps chromium chromium-headless-shell` so the bundled browser binaries and system libraries are ready). If the suite reports missing browsers or libraries, rerun that install command manually before executing the scripts below:
 
-- `npm test` – from inside `project/`, launches the local dev server and executes the Playwright smoke check (Chromium desktop) using `playwright.config.js`.
-- `npm run test:smoke` – from inside `project/`, targets the same Chromium project for quick iteration.
+- `npm test` – from inside `project/`, runs the Node test runner across the generator specs (including the fixtures under `project/tests/fixtures/`) before handing off to the Playwright smoke check configured in `playwright.config.js`.
+- `node --test tests/generator.spec.js tests/smoothing.spec.mjs` – from inside `project/`, executes just the Node-based generator tests when you want to iterate without launching Playwright.
+- `npm run test:smoke` – from inside `project/`, targets the Chromium Playwright project for quick iteration.
 
 Playwright stores its reports under `playwright-report/` by default. After any run you can open the latest results with `npx playwright show-report` to review traces, screenshots, and console output.
 
