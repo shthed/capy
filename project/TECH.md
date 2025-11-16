@@ -158,7 +158,9 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 
 - **Algorithms.** The generator select box maps to `GENERATION_ALGORITHM_CATALOG` inside `puzzle-generation.js`. `local-kmeans`
   runs k-means clustering with user-controlled sampling and iteration counts. `local-posterize` bins pixels into evenly spaced
-  RGB buckets, averages each bucket, and assigns pixels to the closest surviving colours. New entries can represent hosted
+  RGB buckets, averages each bucket, and assigns pixels to the closest surviving colours. `organic-slic` scatters jittered grid
+  seeds and performs a spatially aware k-means pass (similar to SLIC superpixels) to cluster nearby colours together, rounding
+  region boundaries and keeping gradients smoother for more natural, curved islands. New entries can represent hosted
   services—UI copy stays service-agnostic so remote providers can drop in without layout tweaks.
 - **Iterations.** Iterations rerun the clustering loop. Higher counts push centroids closer to their most representative
   pixels, improving palette fidelity at the cost of longer runs.
