@@ -721,6 +721,7 @@
               <select id="generationAlgorithm">
                 <option value="local-kmeans">Local palette clustering (k-means)</option>
                 <option value="local-posterize">Local posterize &amp; merge</option>
+                <option value="organic-slic">Organic superpixels (curved gradients)</option>
               </select>
             </label>
             <p class="control-note">
@@ -1269,7 +1270,11 @@
       const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
-      const VALID_GENERATION_ALGORITHMS = new Set(["local-kmeans", "local-posterize"]);
+      const VALID_GENERATION_ALGORITHMS = new Set([
+        "local-kmeans",
+        "local-posterize",
+        "organic-slic",
+      ]);
       const VALID_UI_THEMES = new Set(["dark", "light", "colorful"]);
       const DEFAULT_HINT_FADE_DURATION = 1200;
       const MIN_HINT_FADE_DURATION = 400;
