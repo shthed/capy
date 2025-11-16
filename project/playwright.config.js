@@ -4,6 +4,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 const artifactsDir = path.resolve('artifacts/ui-review');
 
+if (!fs.existsSync(artifactsDir)) {
+  fs.mkdirSync(artifactsDir, { recursive: true });
+}
+
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
