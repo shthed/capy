@@ -13,6 +13,10 @@ Bring any image to life as a paint-by-numbers puzzle directly in your browser. C
 
 Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on the page or choose **Import** from the command rail. Capy immediately rebuilds the puzzle using that artwork.
 
+## Offline play and installs
+
+Capy ships a small service worker (`service-worker.js`) that precaches the runtime the first time you load the site over HTTPS. Once those assets are cached you can keep painting offline, add the page to a home screen, or relaunch in a dead-spot without losing progress. The cache only covers same-origin requests (plus the `https://capy.local/` alias); clearing site data in your browser removes the offline copy and resets the worker. If a fresh deployment looks stale, force-reload once to refresh the cache before continuing.
+
 ## Game Highlights
 
 - **Instant puzzle import** – Drag-and-drop images or previously exported Capy puzzles to start colouring right away.
@@ -90,6 +94,10 @@ Automated coverage now runs through a shared Node + Playwright harness so you ca
 - `npm run test:smoke` – from inside `project/`, targets the same Chromium project for quick iteration.
 
 Playwright stores its reports under `playwright-report/` by default. After any run you can open the latest results with `npx playwright show-report` to review traces, screenshots, and console output.
+
+## Develop and host locally
+
+Want to self-host the runtime or hack on the playground? Everything runs without a build step. Install dependencies inside the contributor workspace with `cd project && npm install`, then serve the repository root at http://localhost:8000 with `npm run dev` (from inside `project/`). The command uses `http-server` with caching disabled so edits in `index.html`, `render.js`, or `puzzle-generation.js` reload immediately while still exercising the service worker flow.
 
 ## Want to Contribute?
 
