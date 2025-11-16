@@ -118,6 +118,7 @@ jobs:
 
             ESSENTIAL_FILES=(
               "index.html"
+              "styles.css"
               "capy.json"
             )
 
@@ -158,6 +159,7 @@ jobs:
             JS_INCLUDE_RULES=(
               "--include=*/"
               "--include=*.js"
+              "--include=*.css"
               "--include=*.json"
               "--exclude=*"
             )
