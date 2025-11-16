@@ -1426,6 +1426,10 @@ body[data-theme="light"] .generator-progress-meter {
   gap: calc(12px * var(--ui-scale));
 }
 
+.save-manager > * {
+  grid-column: 1 / -1;
+}
+
 .save-start-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1662,11 +1666,18 @@ body[data-theme="light"] .readme-preview pre {
 .save-entry {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   padding: 14px;
   border-radius: 16px;
   background: rgba(15, 23, 42, 0.75);
   border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.save-entry-body {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) 1fr;
+  gap: 12px;
+  align-items: stretch;
 }
 
 .save-entry header {
@@ -1698,6 +1709,44 @@ body[data-theme="light"] .readme-preview pre {
   box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35);
 }
 
+.save-entry-preview {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(14, 165, 233, 0.2));
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  min-height: 110px;
+}
+
+.save-entry-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.save-entry-preview--compact {
+  min-width: 120px;
+  max-width: 160px;
+  min-height: 90px;
+}
+
+.save-entry-preview-fallback {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--theme-caption-text);
+  font-size: 0.85rem;
+  padding: 12px;
+  text-align: center;
+}
+
+.save-entry-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .save-entry-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1726,6 +1775,20 @@ body[data-theme="light"] .readme-preview pre {
   padding: 8px 12px;
 }
 
+.game-option-layout {
+  display: grid;
+  grid-template-columns: minmax(96px, 30%) 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.game-option-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
 @media (max-width: 1024px) {
   #commandRail {
     flex-wrap: wrap;
@@ -1741,6 +1804,19 @@ body[data-theme="light"] .readme-preview pre {
 
   body[data-orientation="portrait"] #viewport {
     padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
+  }
+
+  .save-entry-body {
+    grid-template-columns: 1fr;
+  }
+
+  .save-entry-preview--compact,
+  .save-entry-preview {
+    max-width: none;
+  }
+
+  .game-option-layout {
+    grid-template-columns: 1fr;
   }
 
   #paletteDock {

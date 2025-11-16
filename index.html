@@ -10999,6 +10999,55 @@
         return compactPuzzleSnapshot(snapshot) || snapshot;
       }
 
+      function captureSavePreview() {
+        if (!previewCanvas || !previewCanvas.width || !previewCanvas.height) {
+          return null;
+        }
+        try {
+          const largestSide = Math.max(previewCanvas.width, previewCanvas.height);
+          const targetMax = 320;
+          const scale = largestSide > targetMax ? targetMax / largestSide : 1;
+          const width = Math.max(1, Math.round(previewCanvas.width * scale));
+          const height = Math.max(1, Math.round(previewCanvas.height * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return null;
+          const bg = state.settings?.stageBackgroundColor || DEFAULT_STAGE_BACKGROUND_HEX;
+          ctx.fillStyle = bg;
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(previewCanvas, 0, 0, width, height);
+          let dataUrl = null;
+          try {
+            dataUrl = canvas.toDataURL("image/webp", 0.85);
+          } catch (error) {
+            try {
+              dataUrl = canvas.toDataURL("image/png");
+            } catch (fallbackError) {
+              console.warn("Failed to encode save preview", fallbackError);
+              return null;
+            }
+          }
+          const bytes = estimateDataUrlBytes(dataUrl);
+          if (bytes && bytes > 800000) {
+            return null;
+          }
+          return dataUrl;
+        } catch (error) {
+          console.warn("Failed to capture save preview", error);
+          return null;
+        }
+      }
+
+      function applyPreviewToEntry(entry) {
+        if (!entry || typeof entry !== "object") return;
+        const preview = captureSavePreview();
+        if (preview) {
+          entry.preview = preview;
+        }
+      }
+
       function isSettingsAutosaveReason(reason) {
         return typeof reason === "string" && SETTINGS_AUTOSAVE_REASONS.has(reason);
       }
@@ -11359,6 +11408,7 @@
         } else {
           delete entry.settings;
         }
+        applyPreviewToEntry(entry);
         state.loadedSaveId = activeSaveId;
         state.saves = [entry, ...state.saves.filter((item) => item.id !== activeSaveId)];
         persistSaves();
@@ -12005,23 +12055,26 @@
 
 
 
-      function encodeSaveStorageEntry(entry) {
-        if (!entry || typeof entry !== "object") return null;
-        const data = encodeStoredSnapshot(entry.data);
-        if (!data) return null;
-        const storageEntry = {
-          id: entry.id,
-          timestamp: entry.timestamp,
-          data,
-        };
-        if (entry.settings && typeof entry.settings === "object") {
-          storageEntry.settings = entry.settings;
+        function encodeSaveStorageEntry(entry) {
+          if (!entry || typeof entry !== "object") return null;
+          const data = encodeStoredSnapshot(entry.data);
+          if (!data) return null;
+          const storageEntry = {
+            id: entry.id,
+            timestamp: entry.timestamp,
+            data,
+          };
+          if (entry.settings && typeof entry.settings === "object") {
+            storageEntry.settings = entry.settings;
+          }
+          if (typeof entry.title === "string" && entry.title.trim()) {
+            storageEntry.title = entry.title.trim();
+          }
+          if (typeof entry.preview === "string" && entry.preview.startsWith("data:")) {
+            storageEntry.preview = entry.preview;
+          }
+          return storageEntry;
         }
-        if (typeof entry.title === "string" && entry.title.trim()) {
-          storageEntry.title = entry.title.trim();
-        }
-        return storageEntry;
-      }
 
       function decodeSaveStorageEntry(entry) {
         if (!entry || typeof entry !== "object") return null;
@@ -12032,19 +12085,22 @@
           timestamp: entry.timestamp,
           data: puzzle,
         };
-        if (settings && typeof settings === "object") {
-          decoded.settings = settings;
-        } else if (entry.settings && typeof entry.settings === "object") {
-          const snapshot = getUserSettingsSnapshot(entry.settings);
-          if (snapshot) {
-            decoded.settings = snapshot;
+          if (settings && typeof settings === "object") {
+            decoded.settings = settings;
+          } else if (entry.settings && typeof entry.settings === "object") {
+            const snapshot = getUserSettingsSnapshot(entry.settings);
+            if (snapshot) {
+              decoded.settings = snapshot;
+            }
           }
+          if (typeof entry.title === "string" && entry.title.trim()) {
+            decoded.title = entry.title.trim();
+          }
+          if (typeof entry.preview === "string" && entry.preview.startsWith("data:")) {
+            decoded.preview = entry.preview;
+          }
+          return decoded;
         }
-        if (typeof entry.title === "string" && entry.title.trim()) {
-          decoded.title = entry.title.trim();
-        }
-        return decoded;
-      }
 
       function createGameSaveManager() {
         const key = SAVE_STORAGE_KEY;
@@ -12185,12 +12241,10 @@
         function subscribe(listener) {
           if (typeof listener !== "function") return () => {};
           subscribers.add(listener);
-          if (cache.length) {
-            try {
-              listener(cache.slice());
-            } catch (error) {
-              console.error("Save manager listener failed", error);
-            }
+          try {
+            listener(cache.slice());
+          } catch (error) {
+            console.error("Save manager listener failed", error);
           }
           return () => subscribers.delete(listener);
         }
@@ -12265,6 +12319,7 @@
           } else {
             delete entry.settings;
           }
+          applyPreviewToEntry(entry);
           state.loadedSaveId = activeSaveId;
           state.saves = [entry, ...state.saves.filter((item) => item.id !== activeSaveId)];
           logDebug(`Updated save: ${entry.title}`);
@@ -12279,6 +12334,7 @@
           if (settingsSnapshot) {
             entry.settings = settingsSnapshot;
           }
+          applyPreviewToEntry(entry);
           state.loadedSaveId = id;
           state.saves.unshift(entry);
           logDebug(`Saved snapshot: ${entry.title}`);
@@ -12321,6 +12377,15 @@
         if (storageLabel) {
           ariaLabelParts.push(`Storage ${storageLabel}`);
         }
+        let previewUrl = null;
+        if (typeof entry?.preview === "string" && entry.preview.startsWith("data:")) {
+          previewUrl = entry.preview;
+        } else if (
+          typeof entry?.data?.sourceImage?.dataUrl === "string" &&
+          entry.data.sourceImage.dataUrl.startsWith("data:")
+        ) {
+          previewUrl = entry.data.sourceImage.dataUrl;
+        }
         return {
           id: entry?.id,
           title,
@@ -12329,6 +12394,7 @@
           timestampLabel,
           storageBytes,
           storageLabel,
+          previewUrl,
           ariaLabel: ariaLabelParts.join(" – "),
         };
       }
@@ -12341,6 +12407,29 @@
         return button;
       }
 
+      function createSavePreviewElement(metadata, options = {}) {
+        const { compact = false } = options;
+        const preview = document.createElement("div");
+        preview.className = "save-entry-preview";
+        if (compact) {
+          preview.classList.add("save-entry-preview--compact");
+        }
+        if (metadata.previewUrl) {
+          const image = document.createElement("img");
+          image.loading = "lazy";
+          image.decoding = "async";
+          image.src = metadata.previewUrl;
+          image.alt = metadata.title ? `${metadata.title} preview` : "Puzzle preview";
+          preview.appendChild(image);
+        } else {
+          const fallback = document.createElement("span");
+          fallback.className = "save-entry-preview-fallback";
+          fallback.textContent = "Preview unavailable";
+          preview.appendChild(fallback);
+        }
+        return preview;
+      }
+
       function createSaveSelectionItem(entry) {
         const metadata = describeSaveEntry(entry);
         const item = document.createElement("li");
@@ -12349,13 +12438,20 @@
         button.type = "button";
         button.className = "game-option-button";
         button.dataset.gameId = metadata.id;
+        const layout = document.createElement("div");
+        layout.className = "game-option-layout";
+        const preview = createSavePreviewElement(metadata, { compact: true });
+        const copy = document.createElement("div");
+        copy.className = "game-option-copy";
         const title = document.createElement("span");
         title.className = "game-option-title";
         title.textContent = metadata.title;
         const progress = document.createElement("span");
         progress.className = "game-option-meta";
         progress.textContent = metadata.progressText;
-        button.append(title, progress);
+        copy.append(title, progress);
+        layout.append(preview, copy);
+        button.append(layout);
         if (metadata.timestampLabel) {
           const time = document.createElement("span");
           time.className = "game-option-meta";
@@ -12412,12 +12508,18 @@
           createSaveActionButton("export", "Export"),
           createSaveActionButton("delete", "Delete"),
         );
-        item.append(header, meta, actions);
+        const content = document.createElement("div");
+        content.className = "save-entry-content";
+        content.append(header, meta, actions);
+        const body = document.createElement("div");
+        body.className = "save-entry-body";
+        body.append(createSavePreviewElement(metadata), content);
+        item.append(body);
         if (isLoaded) {
           const status = document.createElement("div");
           status.className = "save-entry-status";
           status.textContent = "Autosaving this slot";
-          item.appendChild(status);
+          content.appendChild(status);
         }
         return item;
       }
