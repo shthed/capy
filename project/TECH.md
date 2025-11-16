@@ -20,13 +20,15 @@ and paint a canvas you can immediately play. Everything ships as a static
 ## Repository Map
 
 - **Runtime (repository root)**
-  - `index.html` – Single-page host document containing markup, styles, and wiring for renderer selection, saves, generator controls, and automation helpers.
+  - `index.html` – Single-page host document containing markup and wiring for renderer selection, saves, generator controls, and automation helpers.
+  - `styles.css` – Primary stylesheet housing theme tokens, responsive layout rules, and component styles (preboot UI scale variables stay inline in `index.html`).
   - `render.js` – Renderer controller plus Canvas2D, WebGL, and SVG backends (including the GPU-accelerated outline/text pipeline); manages the active drawing pipeline and exposes hooks for swapping or extending renderers at runtime.
   - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the runtime payload.
   - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, smoothing, and metadata assembly off the main thread.
 - **Documentation**
   - `README.md` – Player-facing quick start and gameplay overview.
   - `TECH.md` – This technical reference.
+  - `project/STYLEGUIDE.md` – CSS conventions, load-order expectations, and maintenance tips for the runtime stylesheet.
 - **Testing & QA**
   - `project/tests/ui-review.spec.js` – Playwright smoke suite that loads the bundled runtime, switches between renderers, paints automation fixtures, and exercises saves reloads.
   - `project/tests/render-controller.spec.js` – Node-based unit coverage that mocks renderer registrations and asserts the controller's fallback hooks and error paths.
@@ -63,8 +65,10 @@ source):
    directory for non-`main` deployments.
 3. **Content sync.**
    - `main` clears the deployment working tree (leaving `.git`) and copies the
-     runtime payload from the repository root into the root of `gh-pages`, then regenerates
-     `/README/index.html` with `project/scripts/build-pages-site.mjs` so
+     runtime payload from the repository root (`index.html`, `styles.css`,
+     `render.js`, `puzzle-generation.js`, and `capy.json`) into the root of
+     `gh-pages`, then regenerates `/README/index.html` with
+     `project/scripts/build-pages-site.mjs` so
      https://shthed.github.io/capy/README/ always mirrors the handbook.
    - Other branches mirror the same runtime payload inside their
      branch-specific directories before running the README conversion for a
@@ -79,7 +83,10 @@ source):
 
 Tweaking the deployment:
 
-- Adjust exclusion patterns or published files inside the `rsync` steps.
+- Adjust exclusion patterns or published files inside the `rsync` steps. When
+  adding new runtime assets, update the `ESSENTIAL_FILES`/include lists in
+  `.github/workflows/deploy-branch.yml` so branch previews ship the same payload
+  as `main`.
 - Change the slug format in the sanitisation helper if branch naming needs to
   support additional characters.
 - Modify the GitHub API pagination values in the index-building script to show
