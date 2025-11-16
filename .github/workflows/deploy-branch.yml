@@ -79,7 +79,7 @@ jobs:
 
           generate_readme_html() {
             local target_root="$1"
-            local source_file="../project/README.md"
+            local source_file="../README.md"
 
             if [ ! -f "$source_file" ]; then
               echo "README.md not found; skipping HTML conversion" >&2

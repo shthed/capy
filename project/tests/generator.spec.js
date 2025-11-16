@@ -5,7 +5,7 @@ import {
   __segmentRegionsForTests as segmentRegions,
   __smoothAssignmentsForTests as smoothAssignments,
   createPuzzleData,
-} from '../../runtime/puzzle-generation.js';
+} from '../../puzzle-generation.js';
 import {
   smoothingOutlierFixture,
   segmentationMergeFixture,

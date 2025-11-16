@@ -14,12 +14,12 @@ browser. Drop a file (or load one via the hidden file picker) and the app will
 resize it, run the selected quantization pipeline (k-means palette clustering or
 the posterize-and-merge pass) to build a discrete palette, merge tiny regions,
 and paint a canvas you can immediately play. Everything ships as a static
-runtime under `runtime/` so the single-page app can be served directly without a
-build step.
+ runtime files in the repository root so the single-page app can be served directly without a
+ build step.
 
 ## Repository Map
 
-- **Runtime (`runtime/`)**
+- **Runtime (repository root)**
   - `index.html` – Single-page host document containing markup, styles, and wiring for renderer selection, saves, generator controls, and automation helpers.
   - `render.js` – Renderer controller plus Canvas2D, WebGL, and SVG backends (including the GPU-accelerated outline/text pipeline); manages the active drawing pipeline and exposes hooks for swapping or extending renderers at runtime.
   - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the runtime payload.
@@ -35,7 +35,7 @@ build step.
   - `project/artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
   - **Playwright local setup** – Inside `project/`, run `npm install` followed by `npm run setup:playwright` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
 - **Tooling & metadata**
-  - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally; `npm run dev` serves `runtime/` at http://localhost:8000.
+  - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally; `npm run dev` serves the repository root at http://localhost:8000.
   - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
   - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn `README.md` into `/README/index.html` and keep embedded docs mirrored in previews.
@@ -63,10 +63,10 @@ source):
    directory for non-`main` deployments.
 3. **Content sync.**
    - `main` clears the deployment working tree (leaving `.git`) and copies the
-     entire `runtime/` directory into the root of `gh-pages`, then regenerates
+     runtime payload from the repository root into the root of `gh-pages`, then regenerates
      `/README/index.html` with `project/scripts/build-pages-site.mjs` so
      https://shthed.github.io/capy/README/ always mirrors the handbook.
-   - Other branches mirror the same `runtime/` payload inside their
+   - Other branches mirror the same runtime payload inside their
      branch-specific directories before running the README conversion for a
      scoped `/README/index.html`.
 4. **Index generation.** The workflow rebuilds `branch.html`, surfacing the main
@@ -144,7 +144,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 
 ### Generator algorithms & tuning
 
-- **Algorithms.** The generator select box maps to `GENERATION_ALGORITHM_CATALOG` inside `runtime/puzzle-generation.js`. `local-kmeans`
+- **Algorithms.** The generator select box maps to `GENERATION_ALGORITHM_CATALOG` inside `puzzle-generation.js`. `local-kmeans`
   runs k-means clustering with user-controlled sampling and iteration counts. `local-posterize` bins pixels into evenly spaced
   RGB buckets, averages each bucket, and assigns pixels to the closest surviving colours. New entries can represent hosted
   services—UI copy stays service-agnostic so remote providers can drop in without layout tweaks.
@@ -178,7 +178,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 
 ### Code Architecture Tour
 
-- **Single-file app shell.** `runtime/index.html` owns markup, styles, and logic. The inline script is segmented into DOM caches, global state, event wiring, puzzle rendering, generation helpers, and persistence utilities—each called out in a developer-map comment.
+- **Single-file app shell.** `index.html` owns markup, styles, and logic. The inline script is segmented into DOM caches, global state, event wiring, puzzle rendering, generation helpers, and persistence utilities—each called out in a developer-map comment.
 - **Preboot viewport metrics.** A blocking `<script>` in the `<head>` seeds UI scale variables, viewport padding, and the orientation/compact flags before the stylesheet paints; a companion snippet at the top of `<body>` mirrors those attributes so the runtime boot avoids first-paint jumps when `handleViewportChange` recalculates metrics.
 - **Public testing surface.** `window.capyGenerator` exposes helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so automation and manual experiments can orchestrate the app without touching internals. Recent renderer work also surfaced `getRendererType()`, `listRenderers()`, `setRenderer(type)`, `registerRenderer(type, factory)`, and `unregisterRenderer(type)` so tests can assert the active backend or load experimental renderers without patching private state.
 - **Pan/zoom subsystem.** `viewState` tracks transforms for `#canvasStage` and `#canvasTransform`; helpers like `applyZoom`, `resetView`, and `applyViewTransform` keep navigation smooth across wheel, keyboard, and drag gestures.
