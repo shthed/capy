@@ -66,73 +66,7 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
     <title>Image to Color-by-Number</title>
-    <script>
-      (function () {
-        const root = document.documentElement;
-        if (!root || typeof window === "undefined") return;
-        const SETTINGS_STORAGE_KEY = "capy.settings.v1";
-        const DEFAULT_UI_SCALE = 0.75;
-        const MIN_UI_SCALE = 0.2;
-        const MAX_UI_SCALE = 3;
-        const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-        let userScale = DEFAULT_UI_SCALE;
-        try {
-          const raw = window.localStorage?.getItem(SETTINGS_STORAGE_KEY);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            const payload =
-              parsed && typeof parsed === "object"
-                ? parsed.settings && typeof parsed.settings === "object"
-                  ? parsed.settings
-                  : parsed
-                : null;
-            let candidate = payload && payload.uiScale != null ? Number(payload.uiScale) : NaN;
-            if (!Number.isFinite(candidate) && payload && typeof payload.uiScale === "string") {
-              const trimmed = payload.uiScale.trim();
-              if (trimmed.endsWith("%")) {
-                candidate = Number(trimmed.slice(0, -1)) / 100;
-              }
-            }
-            if (Number.isFinite(candidate) && candidate > 0) {
-              if (candidate > MAX_UI_SCALE && candidate <= MAX_UI_SCALE * 100) {
-                candidate /= 100;
-              }
-              userScale = clamp(candidate, MIN_UI_SCALE, MAX_UI_SCALE);
-            }
-          }
-        } catch (_error) {
-          /* localStorage may be unavailable; fall back to defaults. */
-        }
-        root.style.setProperty("--ui-scale-user", String(userScale));
-        const viewport = window.visualViewport;
-        const width = Math.round(
-          (viewport && viewport.width) || window.innerWidth || root.clientWidth || 0
-        );
-        const height = Math.round(
-          (viewport && viewport.height) || window.innerHeight || root.clientHeight || 0
-        );
-        const minSide = Math.max(1, Math.min(width, height));
-        const autoScale = Math.min(1.1, Math.max(0.6, minSide / 880));
-        root.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
-        const combined = Math.min(1.8, Math.max(0.35, userScale * autoScale));
-        root.style.setProperty("--ui-scale", combined.toFixed(4));
-        const orientation = width >= height ? "landscape" : "portrait";
-        const padding =
-          orientation === "portrait"
-            ? Math.min(28, Math.max(16, Math.round(minSide * 0.06)))
-            : 32;
-        root.style.setProperty("--app-width", `${width}px`);
-        root.style.setProperty("--app-height", `${height}px`);
-        root.style.setProperty("--viewport-padding", `${padding}px`);
-        const compactCommands = width < 720 || height < 540;
-        root.dataset.orientation = orientation;
-        root.dataset.compactCommands = compactCommands ? "true" : "false";
-        window.__capyPrebootMetrics = {
-          orientation,
-          compactCommands,
-        };
-      })();
-    </script>
+    <script type="module" src="./runtime.js"></script>
     <style>
       :root {
         --ui-scale-user: 0.75;
@@ -149,28 +83,10 @@
 
   </head>
   <body data-theme="dark">
-    <script>
-      (function () {
-        if (typeof window === "undefined" || !document.body) {
-          return;
-        }
-        const metrics = window.__capyPrebootMetrics || {};
-        if (metrics.orientation) {
-          document.body.dataset.orientation = metrics.orientation;
-          document.documentElement.dataset.orientation = metrics.orientation;
-        }
-        if (typeof metrics.compactCommands === "boolean") {
-          document.body.classList.toggle("compact-commands", metrics.compactCommands);
-          document.documentElement.dataset.compactCommands = metrics.compactCommands
-            ? "true"
-            : "false";
-        }
-        try {
-          delete window.__capyPrebootMetrics;
-        } catch (_error) {
-          window.__capyPrebootMetrics = undefined;
-        }
-      })();
+    <script type="module">
+      import { applyPrebootMetrics } from "./runtime.js";
+
+      applyPrebootMetrics();
     </script>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
@@ -1124,28 +1040,23 @@
         </div>
       </div>
     </div>
-    <script src="./render.js"></script>
-        <script>
-      (() => {
-        const BOOTSTRAP_VERSION = "2024-07-28";
-        const SENTINEL_READY = `ready:${BOOTSTRAP_VERSION}`;
-        if (window.__capyRendererBootstrapVersion === SENTINEL_READY) {
-          return;
-        }
-        let bootstrapSucceeded = false;
-        try {
-          window.__capyRendererBootstrapVersion = `pending:${BOOTSTRAP_VERSION}`;
-          const rendererApi = window.capyRenderer || {};
-          function requireRendererExport(name) {
-            const exportValue = rendererApi[name] || window[name];
-            if (typeof exportValue !== "function") {
-              throw new Error(`Renderer export unavailable: ${name}`);
-            }
-            return exportValue;
+      <script type="module" src="./render.js"></script>
+      <script type="module">
+        import {
+          beginRendererBootstrap,
+          completeRendererBootstrap,
+          createRendererController,
+          createSvgRenderer,
+          createWebGLRenderer,
+        } from "./runtime.js";
+
+        (() => {
+          const skipBootstrap = beginRendererBootstrap();
+          if (skipBootstrap) {
+            return;
           }
-          const createRendererController = requireRendererExport("createRendererController");
-          const createWebGLRenderer = requireRendererExport("createWebGLRenderer");
-          const createSvgRenderer = requireRendererExport("createSvgRenderer");
+          let bootstrapSucceeded = false;
+          try {
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
       const commandRail = document.getElementById("commandRail");
@@ -12859,9 +12770,7 @@
 
           bootstrapSucceeded = true;
         } finally {
-          window.__capyRendererBootstrapVersion = bootstrapSucceeded
-            ? SENTINEL_READY
-            : undefined;
+          completeRendererBootstrap(bootstrapSucceeded);
         }
       })();
 
