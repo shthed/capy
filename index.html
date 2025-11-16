@@ -104,6 +104,22 @@
           <span class="label">Settings &amp; tools</span>
         </button>
       </header>
+      <section
+        id="startHint"
+        class="hidden"
+        role="region"
+        aria-label="Getting started"
+        aria-hidden="true"
+        tabindex="0"
+      >
+        <p class="start-hint-copy">
+          Drop an image or JSON puzzle anywhere on the window, press Enter here to pick a file, or open Settings &amp;
+          tools to try the bundled capybara sample.
+        </p>
+        <div class="start-hint-actions">
+          <button id="closeStartHint" type="button">Open settings</button>
+        </div>
+      </section>
       <div id="viewport">
         <div id="canvasStage">
           <div id="canvasTransform">
@@ -915,6 +931,7 @@
             class="sheet-section save-manager"
             role="group"
             aria-labelledby="saveManagerHeading"
+            id="saveManagerSection"
             data-save-section="dialog"
           >
             <h3 id="saveManagerHeading">Your saves</h3>

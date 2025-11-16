@@ -239,6 +239,51 @@ body.panning {
   grid-template-rows: 1fr auto;
 }
 
+#startHint {
+  position: absolute;
+  left: var(--viewport-padding);
+  bottom: var(--viewport-padding);
+  max-width: min(480px, calc(100% - (var(--viewport-padding) * 2)));
+  padding: 16px;
+  background: var(--theme-hint-body-bg);
+  color: var(--theme-hint-body-text);
+  border: 1px solid var(--theme-hint-body-border);
+  border-radius: 14px;
+  box-shadow: var(--theme-sheet-shadow);
+  display: grid;
+  gap: 12px;
+  outline: none;
+}
+
+#startHint.hidden {
+  display: none;
+}
+
+.start-hint-copy {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.start-hint-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.start-hint-actions button {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--theme-sheet-button-border);
+  background: var(--theme-sheet-button-bg);
+  color: var(--theme-sheet-button-text);
+  cursor: pointer;
+}
+
+.start-hint-actions button:hover {
+  background: var(--theme-sheet-button-hover-bg);
+  border-color: var(--theme-sheet-button-hover-border);
+  color: var(--theme-sheet-button-hover-text);
+}
+
 @supports (height: 100dvh) {
   #app {
     height: min(var(--app-height, 100dvh), 100dvh);
