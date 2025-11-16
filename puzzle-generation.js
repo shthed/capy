@@ -1133,7 +1133,10 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
   };
 }
 
-export { smoothAssignments as __smoothAssignmentsForTests };
+export {
+  smoothAssignments as __smoothAssignmentsForTests,
+  segmentRegions as __segmentRegionsForTests,
+};
 
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
   window.addEventListener("unload", () => {
