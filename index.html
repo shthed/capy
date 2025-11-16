@@ -1284,79 +1284,93 @@
         return { root, update: component.update, on: component.on, sortControl };
       }
 
-      function createSaveManagerComponent(section) {
-        if (!section) {
-          return { update() {}, on() {}, root: null };
-        }
-        const list = section.querySelector("[data-save-list]");
-        const empty = section.querySelector("[data-save-empty]");
-        const saveButton = section.querySelector("[data-save-snapshot]");
-        const resetButton = section.querySelector("[data-reset-progress]");
-        const downloadButton = section.querySelector("#downloadJson");
+        function createSaveManagerComponent(section) {
+          if (!section) {
+            return { update() {}, on() {}, root: null };
+          }
+          const list = section.querySelector("[data-save-list]");
+          const empty = section.querySelector("[data-save-empty]");
+          const saveButton = section.querySelector("[data-save-snapshot]");
+          const resetButton = section.querySelector("[data-reset-progress]");
+          const downloadButton = section.querySelector("#downloadJson");
+          const defaultEmptyMessage =
+            "No saves yet. Create one above to start autosaving progress.";
+          let currentEntries = [];
+          let hasPuzzle = false;
+          let hasProgress = false;
 
-        const component = createComponent(section, ({ props, emit }) => {
-          const entries = Array.isArray(props.entries) ? props.entries : [];
-          if (list) {
-            list.innerHTML = "";
-            if (entries.length > 0) {
-              const fragment = document.createDocumentFragment();
-              for (const entry of entries) {
-                fragment.appendChild(createSaveManagementItem(entry));
-              }
-              list.appendChild(fragment);
-            }
-          }
-          if (empty) {
-            empty.hidden = entries.length > 0;
-            if (entries.length === 0) {
-              empty.textContent = props.emptyMessage ||
-                "No saves yet. Create one above to start autosaving progress.";
-            }
-          }
-          const hasPuzzle = Boolean(props.hasPuzzle);
-          const hasProgress = Boolean(props.hasProgress);
-          if (saveButton) {
-            saveButton.disabled = !hasPuzzle;
-          }
-          if (resetButton) {
-            resetButton.disabled = !hasPuzzle || !hasProgress;
-          }
-          if (downloadButton) {
-            downloadButton.disabled = !hasPuzzle;
-          }
-        });
-
-        if (list) {
-          list.addEventListener("click", (event) => {
-            const target = event.target;
-            if (!(target instanceof HTMLElement)) return;
-            const explicitId = target.getAttribute("data-target-id");
-            let id = explicitId || null;
-            if (!id) {
-              const entryEl = target.closest("[data-save-id]");
-              if (entryEl) {
-                id = entryEl.getAttribute("data-save-id");
+          const component = createComponent(section, ({ props, emit }) => {
+            const nextEntriesProvided = Array.isArray(props.entries);
+            if (nextEntriesProvided) {
+              currentEntries = props.entries;
+              if (list) {
+                list.innerHTML = "";
+                if (currentEntries.length > 0) {
+                  const fragment = document.createDocumentFragment();
+                  for (const entry of currentEntries) {
+                    fragment.appendChild(createSaveManagementItem(entry));
+                  }
+                  list.appendChild(fragment);
+                }
               }
             }
-            if (!id) return;
-            const action = target.dataset.action;
-            if (action) {
-              component.emit("action", { id, action });
+
+            const entriesForEmptyState = currentEntries;
+            const emptyMessage =
+              typeof props.emptyMessage === "string" && props.emptyMessage.trim()
+                ? props.emptyMessage
+                : defaultEmptyMessage;
+            if (empty) {
+              empty.hidden = entriesForEmptyState.length > 0;
+              if (entriesForEmptyState.length === 0) {
+                empty.textContent = emptyMessage;
+              }
+            }
+
+            hasPuzzle = props.hasPuzzle ?? hasPuzzle;
+            hasProgress = props.hasProgress ?? hasProgress;
+            if (saveButton) {
+              saveButton.disabled = !hasPuzzle;
+            }
+            if (resetButton) {
+              resetButton.disabled = !hasPuzzle || !hasProgress;
+            }
+            if (downloadButton) {
+              downloadButton.disabled = !hasPuzzle;
             }
           });
-        }
-        if (saveButton) {
-          saveButton.addEventListener("click", () => component.emit("save"));
-        }
-        if (resetButton) {
-          resetButton.addEventListener("click", () => component.emit("reset"));
-        }
-        if (downloadButton) {
-          downloadButton.addEventListener("click", () => component.emit("download"));
-        }
 
-        return { root: section, update: component.update, on: component.on };
-      }
+          if (list) {
+            list.addEventListener("click", (event) => {
+              const target = event.target;
+              if (!(target instanceof HTMLElement)) return;
+              const explicitId = target.getAttribute("data-target-id");
+              let id = explicitId || null;
+              if (!id) {
+                const entryEl = target.closest("[data-save-id]");
+                if (entryEl) {
+                  id = entryEl.getAttribute("data-save-id");
+                }
+              }
+              if (!id) return;
+              const action = target.dataset.action;
+              if (action) {
+                component.emit("action", { id, action });
+              }
+            });
+          }
+          if (saveButton) {
+            saveButton.addEventListener("click", () => component.emit("save"));
+          }
+          if (resetButton) {
+            resetButton.addEventListener("click", () => component.emit("reset"));
+          }
+          if (downloadButton) {
+            downloadButton.addEventListener("click", () => component.emit("download"));
+          }
+
+          return { root: section, update: component.update, on: component.on };
+        }
 
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
@@ -5423,18 +5437,17 @@
         return false;
       }
 
-      function updateCommandStates() {
-        const hasPuzzle = Boolean(state.puzzle);
-        previewToggle.disabled = !hasPuzzle;
-        saveManagerComponent.update({
-          entries: Array.isArray(state.saves) ? state.saves : [],
-          hasPuzzle,
-          hasProgress: state.filled.size > 0,
-        });
-        if (startHintCloseButton) {
-          startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
+        function updateCommandStates() {
+          const hasPuzzle = Boolean(state.puzzle);
+          previewToggle.disabled = !hasPuzzle;
+          saveManagerComponent.update({
+            hasPuzzle,
+            hasProgress: state.filled.size > 0,
+          });
+          if (startHintCloseButton) {
+            startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
+          }
         }
-      }
 
       function renderDebugLog() {
         if (!debugLogEl) return;
