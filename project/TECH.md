@@ -5,7 +5,9 @@ to `/automation-<slug>/`). Repository: https://github.com/shthed/capy.
 
 This document collects all technical, architectural, and QA details that were
 previously tracked in the README. Keep it accurate alongside feature work so
-both contributors and automation agents have a single source of truth.
+both contributors and automation agents have a single source of truth. New
+developers should start with `project/ONBOARDING.md` for setup and workflow
+expectations before diving into the deeper references below.
 
 ## Project Overview
 
