@@ -1230,6 +1230,18 @@
       const LEGACY_AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const SETTINGS_STORAGE_KEY = "capy.settings.v1";
+      const RUNTIME_CACHE_NAME = "capy-offline-cache-v2";
+      const CACHE_ORIGIN = "https://capy.local";
+      const SOURCE_IMAGE_CACHE_PREFIX = "source-images/";
+      const RUNTIME_CACHE_ASSETS = [
+        "./",
+        "./index.html",
+        "./styles.css",
+        "./runtime.js",
+        "./render.js",
+        "./puzzle-generation.js",
+        "./capy.json",
+      ];
       const SETTINGS_AUTOSAVE_REASONS = new Set([
         "settings-renderer",
         "settings-auto-advance",
@@ -1350,6 +1362,121 @@
       const bootPerformanceTimer = performanceMetrics.start("app:boot", {
         stage: "initializing",
       });
+
+      function buildCacheRequest(cacheKey) {
+        const key = typeof cacheKey === "string" ? cacheKey.replace(/^\/+/, "") : "";
+        const url = `${CACHE_ORIGIN.replace(/\/$/, "")}/${key}`;
+        return new Request(url);
+      }
+
+      async function warmRuntimeCache() {
+        if (typeof caches === "undefined" || typeof caches.open !== "function") {
+          return;
+        }
+        try {
+          const cache = await caches.open(RUNTIME_CACHE_NAME);
+          await cache.addAll(RUNTIME_CACHE_ASSETS);
+        } catch (error) {
+          console.warn("Failed to warm runtime cache", error);
+        }
+      }
+
+      function registerServiceWorker() {
+        if (typeof navigator === "undefined" || !navigator.serviceWorker) {
+          return;
+        }
+        navigator.serviceWorker
+          .register("./service-worker.js")
+          .then((registration) => {
+            if (registration && typeof registration.update === "function") {
+              registration.update();
+            }
+          })
+          .catch((error) => {
+            console.warn("Service worker registration failed", error);
+          });
+      }
+
+      async function cacheSourceImageBlob(blob, options = {}) {
+        if (!blob || typeof caches === "undefined" || typeof caches.open !== "function") {
+          return null;
+        }
+        try {
+          const cache = await caches.open(RUNTIME_CACHE_NAME);
+          const cacheKey =
+            typeof options.cacheKey === "string" && options.cacheKey.trim()
+              ? options.cacheKey.trim()
+              : `${SOURCE_IMAGE_CACHE_PREFIX}${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const request = buildCacheRequest(cacheKey);
+          const response = new Response(blob, {
+            headers: { "Content-Type": blob.type || "application/octet-stream" },
+          });
+          await cache.put(request, response);
+          return cacheKey;
+        } catch (error) {
+          console.warn("Unable to cache source image", error);
+          return null;
+        }
+      }
+
+      async function cacheSourceImageDataUrl(dataUrl, options = {}) {
+        if (typeof dataUrl !== "string" || !dataUrl) {
+          return null;
+        }
+        try {
+          const response = await fetch(dataUrl);
+          const blob = await response.blob();
+          return cacheSourceImageBlob(blob, options);
+        } catch (error) {
+          console.warn("Unable to cache data URL", error);
+          return null;
+        }
+      }
+
+      async function cacheSourceImageUrl(url, options = {}) {
+        if (typeof caches === "undefined" || typeof caches.open !== "function" || !url) {
+          return null;
+        }
+        try {
+          const response = await fetch(url, { mode: "cors" });
+          if (!response || !response.ok) {
+            return null;
+          }
+          const cacheKey =
+            typeof options.cacheKey === "string" && options.cacheKey.trim()
+              ? options.cacheKey.trim()
+              : `${SOURCE_IMAGE_CACHE_PREFIX}${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const cache = await caches.open(RUNTIME_CACHE_NAME);
+          await cache.put(buildCacheRequest(cacheKey), response.clone());
+          return cacheKey;
+        } catch (error) {
+          console.warn("Unable to cache external image", error);
+          return null;
+        }
+      }
+
+      async function readCachedSourceImage(cacheKey) {
+        if (typeof caches === "undefined" || typeof caches.open !== "function") {
+          return null;
+        }
+        const normalizedKey = typeof cacheKey === "string" ? cacheKey.trim() : "";
+        if (!normalizedKey) {
+          return null;
+        }
+        try {
+          const cache = await caches.open(RUNTIME_CACHE_NAME);
+          const match = await cache.match(buildCacheRequest(normalizedKey));
+          if (!match) {
+            return null;
+          }
+          const blob = await match.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          return { blob, objectUrl };
+        } catch (error) {
+          console.warn("Unable to read cached image", error);
+          return null;
+        }
+      }
 
       function normalizeMouseClickAction(value, fallback = DEFAULT_MOUSE_CONTROLS.left.click) {
         if (typeof value === "string" && VALID_MOUSE_CLICK_ACTIONS.has(value)) {
@@ -2465,6 +2592,8 @@
         filled: new Set(),
         sourceUrl: null,
         sourceTitle: null,
+        sourceCacheKey: null,
+        lastFileHandle: null,
         lastOptions: null,
         sampleDetailLevel: DEFAULT_SAMPLE_DETAIL,
         paletteSort: "region",
@@ -2503,6 +2632,9 @@
         sampleArtwork: null,
         paletteDisplayNumbers: new Map(),
       };
+
+      registerServiceWorker();
+      warmRuntimeCache();
 
       const storedUserSettings = loadUserSettings();
       if (storedUserSettings) {
@@ -3577,11 +3709,14 @@
       }
 
       if (selectButton) {
-        selectButton.addEventListener("click", () => {
+        selectButton.addEventListener("click", async () => {
           if (settingsSheet && !settingsSheet.classList.contains("hidden")) {
             closeSheet(settingsSheet);
           }
-          fileInput.click();
+          const handled = await openLocalFileWithPicker();
+          if (!handled) {
+            fileInput.click();
+          }
         });
       }
       if (settingsButton) {
@@ -3649,7 +3784,7 @@
       }
 
       if (startHint) {
-        startHint.addEventListener("keydown", (event) => {
+        startHint.addEventListener("keydown", async (event) => {
           if (event.key === "Escape") {
             if (!startHint.classList.contains("hidden") && (state.puzzle || state.saves.length > 0)) {
               hideStartScreen();
@@ -3661,7 +3796,10 @@
           }
           if ((event.key === "Enter" || event.key === " ") && event.target === startHint) {
             event.preventDefault();
-            fileInput.click();
+            const handled = await openLocalFileWithPicker();
+            if (!handled) {
+              fileInput.click();
+            }
           }
         });
       }
@@ -6315,13 +6453,59 @@
         });
       }
 
+      async function openLocalFileWithPicker() {
+        if (typeof window.showOpenFilePicker !== "function") {
+          return false;
+        }
+        try {
+          const [handle] = await window.showOpenFilePicker({
+            excludeAcceptAllOption: false,
+            multiple: false,
+            types: [
+              {
+                description: "Images or Capy saves",
+                accept: {
+                  "application/json": [".json", ".capy"],
+                  "image/*": [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".avif"],
+                },
+              },
+            ],
+          });
+          if (!handle) {
+            return false;
+          }
+          let permission =
+            typeof handle.queryPermission === "function"
+              ? await handle.queryPermission({ mode: "read" })
+              : "granted";
+          if (permission === "prompt" && typeof handle.requestPermission === "function") {
+            permission = await handle.requestPermission({ mode: "read" });
+          }
+          if (permission !== "granted") {
+            return false;
+          }
+          const file = await handle.getFile();
+          if (file) {
+            state.lastFileHandle = handle;
+            prepareImport(file);
+            return true;
+          }
+        } catch (error) {
+          if (error && error.name === "AbortError") {
+            return true;
+          }
+          console.warn("File picker unavailable", error);
+        }
+        return false;
+      }
+
       function prepareImport(file) {
         if (!file) {
           return;
         }
         disableSampleAutoload();
         if (!generatorPanel) {
-          handleFile(file);
+          void handleFile(file);
           return;
         }
         pendingImportFile = file;
@@ -6348,10 +6532,10 @@
           confirmImportBtn.disabled = true;
         }
         clearPendingImport();
-        handleFile(file);
+        void handleFile(file);
       }
 
-      function handleFile(file) {
+      async function handleFile(file) {
         disableSampleAutoload();
         if (isJsonFile(file)) {
           resetPuzzleUI();
@@ -6408,29 +6592,51 @@
           return;
         }
         resetPuzzleUI();
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result;
-          if (typeof result === "string") {
-            state.sourceUrl = result;
-            state.sourceTitle = file.name || "Imported image";
-            hideStartScreen();
-            logDebug(`Generating puzzle from image: ${state.sourceTitle}`);
-            loadImage(result);
-          } else {
-            console.error("Unsupported file format");
-            setProgressMessage("idle");
-          }
-        };
-        reader.onerror = () => {
-          console.error("Unable to read that file.");
-          setProgressMessage("idle");
-        };
-        reader.readAsDataURL(file);
+        const title = file.name || "Imported image";
+        const safeTitle = title.replace(/[^a-z0-9._-]+/gi, "-");
+        let cacheKey = null;
+        if (file && typeof file.size === "number" && file.size > 0) {
+          cacheKey = await cacheSourceImageBlob(file, {
+            cacheKey: `${SOURCE_IMAGE_CACHE_PREFIX}${Date.now()}-${safeTitle || "local-image"}`,
+          });
+        }
+        const objectUrl = URL.createObjectURL(file);
+        state.sourceUrl = cacheKey ? buildCacheRequest(cacheKey).url : objectUrl;
+        state.sourceTitle = title;
+        hideStartScreen();
+        logDebug(`Generating puzzle from image: ${state.sourceTitle}`);
+        loadImage(objectUrl, {
+          cacheKey,
+          originalUrl: title,
+          sourceBytes: typeof file.size === "number" ? file.size : null,
+          sourceMimeType: file.type || null,
+          sourceBlob: file,
+          onSuccess: () => {
+            if (cacheKey) {
+              state.sourceCacheKey = cacheKey;
+            }
+            URL.revokeObjectURL(objectUrl);
+          },
+          onError: () => {
+            URL.revokeObjectURL(objectUrl);
+          },
+        });
       }
 
       function loadImage(url, loadOptions = {}) {
-        const { logMessage, completionMessage, skipDefaultLog, onError, onSuccess } = loadOptions;
+        const {
+          logMessage,
+          completionMessage,
+          skipDefaultLog,
+          onError,
+          onSuccess,
+          cacheKey: providedCacheKey = null,
+          originalUrl = null,
+          sourceBytes = null,
+          sourceMimeType = null,
+          sourceBlob = null,
+          allowCache = true,
+        } = loadOptions;
         if (logMessage) {
           logDebug(logMessage);
         }
@@ -6450,32 +6656,78 @@
               }
               return;
             }
-            if (!isProbablyDataUrl(url)) {
-              const originalWidth = Number.isFinite(data.originalWidth)
-                ? data.originalWidth
-                : Number.isFinite(img.naturalWidth) && img.naturalWidth > 0
-                ? img.naturalWidth
-                : data.width;
-              const originalHeight = Number.isFinite(data.originalHeight)
-                ? data.originalHeight
-                : Number.isFinite(img.naturalHeight) && img.naturalHeight > 0
-                ? img.naturalHeight
-                : data.height;
-              const scale =
-                Number.isFinite(originalWidth) && originalWidth > 0 && Number.isFinite(data.width) && data.width > 0
-                  ? data.width / originalWidth
-                  : 1;
-              data.sourceImage = {
-                url,
-                bytes: null,
-                mimeType: null,
-                width: data.width,
-                height: data.height,
-                originalWidth,
-                originalHeight,
-                scale,
-                variant: SOURCE_IMAGE_VARIANT_ORIGINAL,
-              };
+            const normalizedOriginal = normalizeSourceImageSnapshot(data.sourceImage, {
+              width: data.width,
+              height: data.height,
+              originalWidth: Number.isFinite(data.originalWidth) ? data.originalWidth : data.width,
+              originalHeight: Number.isFinite(data.originalHeight) ? data.originalHeight : data.height,
+            });
+            let cacheKey = providedCacheKey || normalizedOriginal?.cacheKey || null;
+            let bytes = Number.isFinite(sourceBytes) ? sourceBytes : normalizedOriginal?.bytes ?? null;
+            let mimeType = sourceMimeType || normalizedOriginal?.mimeType || null;
+            if (!cacheKey && allowCache && normalizedOriginal?.dataUrl) {
+              cacheKey = await cacheSourceImageDataUrl(normalizedOriginal.dataUrl, {
+                cacheKey,
+              });
+              if (cacheKey) {
+                normalizedOriginal.dataUrl = null;
+              }
+            }
+            if (!cacheKey && allowCache && sourceBlob instanceof Blob) {
+              cacheKey = await cacheSourceImageBlob(sourceBlob, {
+                cacheKey: providedCacheKey,
+              });
+            } else if (!cacheKey && allowCache && !isProbablyDataUrl(url)) {
+              cacheKey = await cacheSourceImageUrl(url, { cacheKey: providedCacheKey });
+            }
+            const originalWidth = Number.isFinite(normalizedOriginal?.originalWidth)
+              ? normalizedOriginal.originalWidth
+              : Number.isFinite(img.naturalWidth) && img.naturalWidth > 0
+              ? img.naturalWidth
+              : data.width;
+            const originalHeight = Number.isFinite(normalizedOriginal?.originalHeight)
+              ? normalizedOriginal.originalHeight
+              : Number.isFinite(img.naturalHeight) && img.naturalHeight > 0
+              ? img.naturalHeight
+              : data.height;
+            const scale =
+              Number.isFinite(originalWidth) && originalWidth > 0 && Number.isFinite(data.width) && data.width > 0
+                ? data.width / originalWidth
+                : 1;
+            const sourceImagePayload = normalizedOriginal
+              ? { ...normalizedOriginal }
+              : {
+                  url: originalUrl || url,
+                  bytes: null,
+                  mimeType: null,
+                  width: data.width,
+                  height: data.height,
+                  originalWidth,
+                  originalHeight,
+                  scale,
+                  variant: SOURCE_IMAGE_VARIANT_ORIGINAL,
+                };
+            sourceImagePayload.url =
+              sourceImagePayload.url || normalizedOriginal?.url || originalUrl || url || null;
+            sourceImagePayload.cacheKey = sourceImagePayload.cacheKey || cacheKey || null;
+            if (bytes != null) {
+              sourceImagePayload.bytes = bytes;
+            }
+            if (!sourceImagePayload.mimeType && mimeType) {
+              sourceImagePayload.mimeType = mimeType;
+            }
+            sourceImagePayload.width = sourceImagePayload.width || data.width;
+            sourceImagePayload.height = sourceImagePayload.height || data.height;
+            sourceImagePayload.originalWidth = sourceImagePayload.originalWidth || originalWidth;
+            sourceImagePayload.originalHeight = sourceImagePayload.originalHeight || originalHeight;
+            sourceImagePayload.scale =
+              sourceImagePayload.scale ||
+              (sourceImagePayload.width && sourceImagePayload.originalWidth
+                ? sourceImagePayload.width / sourceImagePayload.originalWidth
+                : scale);
+            data.sourceImage = sourceImagePayload;
+            if (sourceImagePayload.cacheKey) {
+              state.sourceCacheKey = sourceImagePayload.cacheKey;
             }
             const title = state.sourceTitle || "Generated puzzle";
             const applied = applyPuzzleResult(data, {
@@ -6537,6 +6789,7 @@
         markFilledLayerDirty();
         state.sourceUrl = null;
         state.sourceTitle = null;
+        state.sourceCacheKey = null;
         if (paletteEl) {
           paletteEl.innerHTML = "";
         }
@@ -6862,6 +7115,10 @@
         const sourceObject = snapshot && typeof snapshot === "object" ? snapshot : null;
         let dataUrl = null;
         let url = null;
+        let cacheKey =
+          typeof sourceObject?.cacheKey === "string" && sourceObject.cacheKey.trim()
+            ? sourceObject.cacheKey.trim()
+            : null;
         if (typeof snapshot === "string") {
           const trimmed = snapshot.trim();
           if (!trimmed) {
@@ -6981,6 +7238,7 @@
           originalWidth: originalWidth || width || defaultWidth || null,
           originalHeight: originalHeight || height || defaultHeight || null,
           scale: resolvedScale,
+          cacheKey,
           variant:
             variant === SOURCE_IMAGE_VARIANT_GENERATED
               ? SOURCE_IMAGE_VARIANT_GENERATED
@@ -7001,6 +7259,7 @@
           snapshot: normalized,
           image,
           ready: false,
+          objectUrl: null,
         };
         const finalize = () => {
           record.ready = true;
@@ -7020,6 +7279,20 @@
         image.onerror = (error) => {
           console.warn("Failed to load stored source image", error);
         };
+        if (normalized.cacheKey) {
+          readCachedSourceImage(normalized.cacheKey)
+            .then((cached) => {
+              if (!cached || !cached.objectUrl) {
+                return null;
+              }
+              record.objectUrl = cached.objectUrl;
+              image.src = cached.objectUrl;
+              return null;
+            })
+            .catch((error) => {
+              console.warn("Unable to hydrate cached source image", error);
+            });
+        }
         const source = normalized.dataUrl || normalized.url;
         if (source) {
           try {
@@ -7284,6 +7557,7 @@
           }
         }
         puzzle.sourceImage = sourceImageRecord;
+        state.sourceCacheKey = sourceImageRecord?.cacheKey || null;
         state.renderCache = createRenderCache();
         state.puzzle.backgroundColor = backgroundHex;
         state.activeColor =
