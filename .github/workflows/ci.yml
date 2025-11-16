@@ -8,6 +8,9 @@ on:
 
 jobs:
   verify:
+    defaults:
+      run:
+        working-directory: project
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
