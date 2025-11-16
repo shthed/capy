@@ -155,6 +155,11 @@ const parseCommitDate = (branch) => {
   return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
 };
 
+const encodeRefPath = (ref) => ref.split('/')
+  .filter((segment) => segment.length > 0)
+  .map((segment) => encodeURIComponent(segment))
+  .join('/');
+
 const main = async () => {
   const repoInfo = await fetchRepository();
   const defaultBranch = repoInfo?.default_branch ?? 'main';
@@ -219,7 +224,7 @@ const main = async () => {
     }
 
     console.log(`cleanup-branches: deleting ${branchName} (last commit ${dateIso}).`);
-    await request(`${baseUrl}/git/refs/heads/${encodeURIComponent(branchName)}`, { method: 'DELETE', retries: 0 });
+    await request(`${baseUrl}/git/refs/heads/${encodeRefPath(branchName)}`, { method: 'DELETE', retries: 0 });
     deletedCount += 1;
   }
 
