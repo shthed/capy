@@ -8,6 +8,9 @@ any feature or workflow changes you ship.
 
 ## Development Workflow
 
+- **Read onboarding.** Start by skimming `ONBOARDING.md` so you follow the
+  expected setup steps, manual QA flow, and documentation touchpoints before
+  touching the runtime.
 - **Branch naming.** Create short-lived branches named `automation/<change>` so
   QA notes and preview URLs map directly to the experiment under review.
 - **Draft PRs early.** Open a draft PR as soon as you push. CI logs, manual QA
