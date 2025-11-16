@@ -140,6 +140,11 @@
         <button type="button" class="close-button" data-sheet-close="settings">Close</button>
       </div>
       <div class="sheet-body">
+        <div class="sheet-actions" aria-label="Import an image or puzzle">
+          <button id="settingsUploadButton" type="button" aria-label="Upload image or JSON puzzle">
+            Upload Image
+          </button>
+        </div>
         <div class="settings-body">
           <div class="settings-tabs" role="tablist" aria-label="Settings categories">
             <button
@@ -1063,6 +1068,7 @@
       const commandRail = document.getElementById("commandRail");
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
+      const settingsUploadButton = document.getElementById("settingsUploadButton");
       const sampleButtons = Array.from(document.querySelectorAll('[data-action="load-sample"]'));
       const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
       const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
@@ -3713,16 +3719,21 @@
         });
       }
 
+      const requestUpload = async () => {
+        if (settingsSheet && !settingsSheet.classList.contains("hidden")) {
+          closeSheet(settingsSheet);
+        }
+        const handled = await openLocalFileWithPicker();
+        if (!handled) {
+          fileInput.click();
+        }
+      };
+
       if (selectButton) {
-        selectButton.addEventListener("click", async () => {
-          if (settingsSheet && !settingsSheet.classList.contains("hidden")) {
-            closeSheet(settingsSheet);
-          }
-          const handled = await openLocalFileWithPicker();
-          if (!handled) {
-            fileInput.click();
-          }
-        });
+        selectButton.addEventListener("click", requestUpload);
+      }
+      if (settingsUploadButton) {
+        settingsUploadButton.addEventListener("click", requestUpload);
       }
       if (settingsButton) {
         settingsButton.addEventListener("click", () => {
