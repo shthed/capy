@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Deploy GitHub Pages previews"]
+    types: [completed]
 
 permissions:
   contents: write
@@ -13,6 +16,7 @@ permissions:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
