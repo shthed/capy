@@ -104,6 +104,22 @@
           <span class="label">Settings &amp; tools</span>
         </button>
       </header>
+      <section
+        id="startHint"
+        class="hidden"
+        role="region"
+        aria-label="Getting started"
+        aria-hidden="true"
+        tabindex="0"
+      >
+        <p class="start-hint-copy">
+          Drop an image or JSON puzzle anywhere on the window, press Enter here to pick a file, or open Settings &amp;
+          tools to try the bundled capybara sample.
+        </p>
+        <div class="start-hint-actions">
+          <button id="closeStartHint" type="button">Open settings</button>
+        </div>
+      </section>
       <div id="viewport">
         <div id="canvasStage">
           <div id="canvasTransform">
@@ -921,6 +937,7 @@
             class="sheet-section save-manager"
             role="group"
             aria-labelledby="saveManagerHeading"
+            id="saveManagerSection"
             data-save-section="dialog"
           >
             <h3 id="saveManagerHeading">Your saves</h3>
@@ -1062,7 +1079,322 @@
             return;
           }
           let bootstrapSucceeded = false;
-          try {
+      try {
+      function createComponent(root, render) {
+        if (!root) {
+          return {
+            update() {},
+            on() {},
+            emit() {},
+            get root() {
+              return null;
+            },
+          };
+        }
+        let currentProps = {};
+        function emit(type, detail) {
+          root.dispatchEvent(new CustomEvent(type, { detail }));
+        }
+        function on(type, handler) {
+          root.addEventListener(type, handler);
+          return () => root.removeEventListener(type, handler);
+        }
+        function update(props = {}) {
+          currentProps = props;
+          render({ props: currentProps, emit });
+        }
+        return { update, on, emit, root, get props() { return currentProps; } };
+      }
+
+      function createSettingsTabsComponent(sheetEl) {
+        if (!sheetEl) {
+          return {
+            root: null,
+            update() {},
+            on() {},
+            activate() {
+              return null;
+            },
+            focusIndex() {
+              return null;
+            },
+            getActiveTabId() {
+              return null;
+            },
+            getTabCount() {
+              return 0;
+            },
+          };
+        }
+        const tabButtons = Array.from(sheetEl.querySelectorAll("[data-settings-tab]"));
+        const tabPanels = Array.from(sheetEl.querySelectorAll("[data-settings-panel]"));
+        const scrollContainer =
+          sheetEl.querySelector("[data-settings-scroll]") || sheetEl.querySelector(".sheet-body") || null;
+        const defaultTabId =
+          tabButtons.find((button) => button?.hasAttribute("data-settings-tab-default"))?.dataset.settingsTab ||
+          (tabButtons[0]?.dataset.settingsTab ?? null);
+        let activeTabId = defaultTabId;
+
+        const component = createComponent(sheetEl, ({ props, emit }) => {
+          const {
+            activeId = activeTabId,
+            focusTab = false,
+            force = false,
+            resetScroll = false,
+          } = props;
+          const tabId = activeId || defaultTabId;
+          const button = tabButtons.find((candidate) => candidate?.dataset.settingsTab === tabId);
+          const panel = tabPanels.find((candidate) => candidate?.dataset.settingsPanel === tabId);
+          if (!button || !panel) {
+            return;
+          }
+          const changed = force || activeTabId !== tabId;
+          activeTabId = tabId;
+          for (const candidate of tabButtons) {
+            const selected = candidate === button;
+            candidate.setAttribute("aria-selected", selected ? "true" : "false");
+            candidate.setAttribute("tabindex", selected ? "0" : "-1");
+          }
+          for (const candidate of tabPanels) {
+            const isTarget = candidate === panel;
+            candidate.hidden = !isTarget;
+            candidate.setAttribute("aria-hidden", isTarget ? "false" : "true");
+          }
+          if (scrollContainer && (resetScroll || changed)) {
+            scrollContainer.scrollTop = 0;
+          }
+          if (focusTab) {
+            button.focus();
+          }
+          emit("change", { tabId, changed, force });
+        });
+
+        if (tabButtons.length > 0) {
+          tabButtons.forEach((button, index) => {
+            button.addEventListener("click", () => {
+              component.update({ activeId: button.dataset.settingsTab, resetScroll: true });
+            });
+            button.addEventListener("keydown", (event) => {
+              switch (event.key) {
+                case "ArrowRight":
+                case "ArrowDown":
+                  event.preventDefault();
+                  focusIndex(index + 1, { resetScroll: true });
+                  break;
+                case "ArrowLeft":
+                case "ArrowUp":
+                  event.preventDefault();
+                  focusIndex(index - 1, { resetScroll: true });
+                  break;
+                case "Home":
+                  event.preventDefault();
+                  focusIndex(0, { resetScroll: true });
+                  break;
+                case "End":
+                  event.preventDefault();
+                  focusIndex(tabButtons.length - 1, { resetScroll: true });
+                  break;
+                default:
+                  break;
+              }
+            });
+          });
+        }
+
+        function focusIndex(index, options = {}) {
+          if (tabButtons.length === 0) {
+            return null;
+          }
+          const length = tabButtons.length;
+          const normalized = ((index % length) + length) % length;
+          const target = tabButtons[normalized];
+          const tabId = target?.dataset.settingsTab;
+          if (tabId) {
+            component.update({ activeId: tabId, focusTab: true, ...options });
+          }
+          return tabId || null;
+        }
+
+        return {
+          root: sheetEl,
+          update: component.update,
+          on: component.on,
+          getActiveTabId() {
+            return activeTabId;
+          },
+          getTabCount() {
+            return tabButtons.length;
+          },
+          activate(tabId, options = {}) {
+            const nextTab = tabId || activeTabId || defaultTabId;
+            component.update({ activeId: nextTab, ...options });
+            return nextTab;
+          },
+          focusIndex,
+        };
+      }
+
+      function createPaletteDockComponent({ root, sortControl }) {
+        const component = createComponent(root, ({ props, emit }) => {
+          if (!root) return;
+          const entries = Array.isArray(props.entries) ? props.entries : [];
+          root.innerHTML = "";
+          if (sortControl) {
+            sortControl.disabled = entries.length === 0;
+            if (props.sortMode && sortControl.value !== props.sortMode) {
+              sortControl.value = props.sortMode;
+            }
+          }
+          if (entries.length === 0) {
+            return;
+          }
+          for (const entry of entries) {
+            const swatch = document.createElement("button");
+            swatch.type = "button";
+            swatch.className = "swatch";
+            swatch.dataset.testid = "palette-swatch";
+            swatch.dataset.colorId = String(entry.id);
+            swatch.dataset.remaining = String(entry.remaining);
+            swatch.dataset.total = String(entry.total);
+            swatch.dataset.name = entry.label;
+            swatch.dataset.displayIndex = String(entry.displayNumber);
+            swatch.setAttribute("role", "listitem");
+            swatch.setAttribute("aria-label", entry.ariaLabel);
+            swatch.title = entry.title;
+            if (entry.isActive) {
+              swatch.classList.add("active");
+            }
+            swatch.style.setProperty("--swatch-color", entry.hex || "transparent");
+            swatch.style.setProperty("--swatch-label-color", entry.styles.color);
+            swatch.style.setProperty("--swatch-outline", entry.styles.outline);
+            swatch.style.setProperty("--swatch-label-shadow", entry.styles.shadow);
+            const label = document.createElement("span");
+            label.className = "label";
+            const number = document.createElement("strong");
+            number.textContent = String(entry.displayNumber);
+            label.appendChild(number);
+            swatch.appendChild(label);
+            const tooltip = document.createElement("span");
+            tooltip.id = entry.tooltipId;
+            tooltip.className = "swatch-tooltip";
+            tooltip.textContent = entry.tooltip;
+            swatch.appendChild(tooltip);
+            swatch.setAttribute("aria-describedby", entry.tooltipId);
+            swatch.addEventListener("click", () => emit("select", { colorId: entry.id }));
+            swatch.addEventListener("pointerdown", (event) => {
+              if (event.button === 2) {
+                event.preventDefault();
+                emit("select", { colorId: entry.id });
+              }
+            });
+            swatch.addEventListener("contextmenu", (event) => {
+              event.preventDefault();
+              emit("select", { colorId: entry.id });
+            });
+            root.appendChild(swatch);
+          }
+        });
+
+        if (root) {
+          root.addEventListener("wheel", (event) => emitPaletteWheel(event, root), { passive: false });
+        }
+
+        function emitPaletteWheel(event, target) {
+          if (!target) return;
+          handlePaletteWheel(event, target);
+        }
+
+        return { root, update: component.update, on: component.on, sortControl };
+      }
+
+        function createSaveManagerComponent(section) {
+          if (!section) {
+            return { update() {}, on() {}, root: null };
+          }
+          const list = section.querySelector("[data-save-list]");
+          const empty = section.querySelector("[data-save-empty]");
+          const saveButton = section.querySelector("[data-save-snapshot]");
+          const resetButton = section.querySelector("[data-reset-progress]");
+          const downloadButton = section.querySelector("#downloadJson");
+          const defaultEmptyMessage =
+            "No saves yet. Create one above to start autosaving progress.";
+          let currentEntries = [];
+          let hasPuzzle = false;
+          let hasProgress = false;
+
+          const component = createComponent(section, ({ props, emit }) => {
+            const nextEntriesProvided = Array.isArray(props.entries);
+            if (nextEntriesProvided) {
+              currentEntries = props.entries;
+              if (list) {
+                list.innerHTML = "";
+                if (currentEntries.length > 0) {
+                  const fragment = document.createDocumentFragment();
+                  for (const entry of currentEntries) {
+                    fragment.appendChild(createSaveManagementItem(entry));
+                  }
+                  list.appendChild(fragment);
+                }
+              }
+            }
+
+            const entriesForEmptyState = currentEntries;
+            const emptyMessage =
+              typeof props.emptyMessage === "string" && props.emptyMessage.trim()
+                ? props.emptyMessage
+                : defaultEmptyMessage;
+            if (empty) {
+              empty.hidden = entriesForEmptyState.length > 0;
+              if (entriesForEmptyState.length === 0) {
+                empty.textContent = emptyMessage;
+              }
+            }
+
+            hasPuzzle = props.hasPuzzle ?? hasPuzzle;
+            hasProgress = props.hasProgress ?? hasProgress;
+            if (saveButton) {
+              saveButton.disabled = !hasPuzzle;
+            }
+            if (resetButton) {
+              resetButton.disabled = !hasPuzzle || !hasProgress;
+            }
+            if (downloadButton) {
+              downloadButton.disabled = !hasPuzzle;
+            }
+          });
+
+          if (list) {
+            list.addEventListener("click", (event) => {
+              const target = event.target;
+              if (!(target instanceof HTMLElement)) return;
+              const explicitId = target.getAttribute("data-target-id");
+              let id = explicitId || null;
+              if (!id) {
+                const entryEl = target.closest("[data-save-id]");
+                if (entryEl) {
+                  id = entryEl.getAttribute("data-save-id");
+                }
+              }
+              if (!id) return;
+              const action = target.dataset.action;
+              if (action) {
+                component.emit("action", { id, action });
+              }
+            });
+          }
+          if (saveButton) {
+            saveButton.addEventListener("click", () => component.emit("save"));
+          }
+          if (resetButton) {
+            resetButton.addEventListener("click", () => component.emit("reset"));
+          }
+          if (downloadButton) {
+            downloadButton.addEventListener("click", () => component.emit("download"));
+          }
+
+          return { root: section, update: component.update, on: component.on };
+        }
+
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
       const commandRail = document.getElementById("commandRail");
@@ -1082,27 +1414,27 @@
       const fullscreenButton = document.getElementById("fullscreenButton");
       const settingsButton = document.getElementById("settingsButton");
       const settingsSheet = document.getElementById("settingsSheet");
-      const settingsBody =
-        settingsSheet?.querySelector("[data-settings-scroll]") ||
-        settingsSheet?.querySelector(".sheet-body") ||
-        null;
-      const settingsTabButtons = settingsSheet
-        ? Array.from(settingsSheet.querySelectorAll("[data-settings-tab]"))
-        : [];
-      const settingsPanels = settingsSheet
-        ? Array.from(settingsSheet.querySelectorAll("[data-settings-panel]"))
-        : [];
+      const settingsTabs = createSettingsTabsComponent(settingsSheet);
+      let activeSettingsTabId = settingsTabs.getActiveTabId();
       const generatorPanel = settingsSheet?.querySelector('[data-settings-panel="generator"]') || null;
       const helpPanel = settingsSheet?.querySelector('[data-settings-panel="help"]') || null;
-      let activeSettingsTabId =
-        settingsTabButtons.find((button) => button?.hasAttribute("data-settings-tab-default"))
-          ?.dataset.settingsTab || (settingsTabButtons[0]?.dataset.settingsTab ?? null);
       const sheetRegistry = [settingsSheet].filter(Boolean);
       const readmeContentEl = helpPanel?.querySelector("[data-readme-content]") || null;
       const readmeStatusEl = helpPanel?.querySelector("[data-readme-status]") || null;
       const readmeErrorEl = helpPanel?.querySelector("[data-readme-error]") || null;
       const README_SOURCE_URL = "https://shthed.github.io/capy/README";
       let readmeLoadState = "idle";
+      settingsTabs.on("change", (event) => {
+        const { tabId, changed, force } = event.detail || {};
+        activeSettingsTabId = tabId;
+        if (tabId === "help") {
+          void ensureHelpReadmeLoaded();
+        } else if (tabId === "generator" && (changed || force)) {
+          requestAnimationFrame(() => {
+            focusGeneratorUrlInput();
+          });
+        }
+      });
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
       const saveStorageSummary = document.getElementById("saveStorageSummary");
@@ -1156,13 +1488,19 @@
       const sourceImageLimitSelect = document.getElementById("sourceImageLimit");
       const chatGptLink = document.getElementById("chatGptLink");
       const applyBtn = document.getElementById("applyOptions");
-      const downloadBtn = document.getElementById("downloadJson");
-      const saveSnapshotButtons = Array.from(document.querySelectorAll("[data-save-snapshot]"));
-      const resetProgressButtons = Array.from(document.querySelectorAll("[data-reset-progress]"));
-      const saveListContainers = Array.from(document.querySelectorAll("[data-save-list]"));
-      const saveListEmptyStates = Array.from(document.querySelectorAll("[data-save-empty]"));
-      const paletteEl = document.getElementById("palette");
-      const paletteSortEl = document.getElementById("paletteSort");
+      const saveManagerComponent = createSaveManagerComponent(
+        document.querySelector('[data-save-section="dialog"]')
+      );
+      const paletteDock = createPaletteDockComponent({
+        root: document.getElementById("palette"),
+        sortControl: document.getElementById("paletteSort"),
+      });
+      const paletteSortEl = paletteDock.sortControl;
+      paletteDock.on("select", (event) => {
+        const { colorId } = event?.detail || {};
+        if (colorId == null) return;
+        activateColor(colorId);
+      });
       const ALLOWED_PALETTE_SORT_MODES = new Set([
         "region",
         "remaining",
@@ -3684,51 +4022,6 @@
           console.error("Failed to preload default puzzle metadata", error);
         });
 
-      if (settingsTabButtons.length > 0) {
-        settingsTabButtons.forEach((button, index) => {
-          button.addEventListener("click", () => {
-            const tabId = button.dataset.settingsTab;
-            if (tabId) {
-              activateSettingsTab(tabId, { resetScroll: true });
-            }
-          });
-          button.addEventListener("keydown", (event) => {
-            switch (event.key) {
-              case "ArrowRight":
-              case "ArrowDown":
-                event.preventDefault();
-                focusSettingsTabRelative(index, 1, { resetScroll: true });
-                break;
-              case "ArrowLeft":
-              case "ArrowUp":
-                event.preventDefault();
-                focusSettingsTabRelative(index, -1, { resetScroll: true });
-                break;
-              case "Home":
-                event.preventDefault();
-                focusSettingsTab(0, { resetScroll: true });
-                break;
-              case "End":
-                event.preventDefault();
-                focusSettingsTab(settingsTabButtons.length - 1, { resetScroll: true });
-                break;
-              default:
-                break;
-            }
-          });
-        });
-      }
-
-      const requestUpload = async () => {
-        if (settingsSheet && !settingsSheet.classList.contains("hidden")) {
-          closeSheet(settingsSheet);
-        }
-        const handled = await openLocalFileWithPicker();
-        if (!handled) {
-          fileInput.click();
-        }
-      };
-
       if (selectButton) {
         selectButton.addEventListener("click", requestUpload);
       }
@@ -4060,10 +4353,6 @@
         });
       }
 
-      if (paletteEl) {
-        paletteEl.addEventListener("wheel", handlePaletteWheel, { passive: false });
-      }
-
       previewToggle.addEventListener("click", () => {
         state.previewVisible = !state.previewVisible;
         updatePreviewState();
@@ -4076,7 +4365,7 @@
         regenerateFromSource();
       });
 
-      downloadBtn.addEventListener("click", () => {
+      saveManagerComponent.on("download", () => {
         if (!state.puzzle) return;
         const payload = serializeCurrentPuzzle();
         const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -4095,52 +4384,36 @@
         logDebug("Exported puzzle JSON");
       });
 
-      for (const button of saveSnapshotButtons) {
-        button.addEventListener("click", () => {
-          if (!state.puzzle) return;
-          saveCurrentSnapshot();
-        });
-      }
+      saveManagerComponent.on("save", () => {
+        if (!state.puzzle) return;
+        saveCurrentSnapshot();
+      });
 
-      for (const button of resetProgressButtons) {
-        button.addEventListener("click", () => {
-          if (!state.puzzle) return;
-          if (state.filled.size === 0) return;
-          const confirmed = window.confirm(
-            "Reset progress on this puzzle? All filled regions will be cleared."
-          );
-          if (!confirmed) {
-            return;
-          }
-          resetCurrentProgress();
-        });
-      }
-
-      function handleSaveListClick(event) {
-        const target = event.target;
-        if (!(target instanceof HTMLElement)) return;
-        const explicitId = target.getAttribute("data-target-id");
-        let id = explicitId || null;
-        if (!id) {
-          const entryEl = target.closest("[data-save-id]");
-          if (!entryEl) return;
-          id = entryEl.getAttribute("data-save-id");
+      saveManagerComponent.on("reset", () => {
+        if (!state.puzzle) return;
+        if (state.filled.size === 0) return;
+        const confirmed = window.confirm(
+          "Reset progress on this puzzle? All filled regions will be cleared."
+        );
+        if (!confirmed) {
+          return;
         }
-        if (!id) return;
-        if (target.dataset.action === "load") {
+        resetCurrentProgress();
+      });
+
+      saveManagerComponent.on("action", (event) => {
+        const { action, id } = event?.detail || {};
+        if (!id || !action) return;
+        if (action === "load") {
           loadSaveEntry(id);
-        } else if (target.dataset.action === "delete") {
+        } else if (action === "delete") {
           deleteSaveEntry(id);
-        } else if (target.dataset.action === "export") {
+        } else if (action === "export") {
           exportSaveEntry(id);
-        } else if (target.dataset.action === "rename") {
+        } else if (action === "rename") {
           renameSaveEntry(id);
         }
-      }
-
-      for (const list of saveListContainers) {
-        list.addEventListener("click", handleSaveListClick);
-      }
+      });
 
       colorCountEl.addEventListener("input", updateOptionOutputs);
       minRegionEl.addEventListener("input", updateOptionOutputs);
@@ -4806,8 +5079,8 @@
         openSheet(settingsSheet);
         if (typeof tabId === "string" && tabId.length > 0) {
           activateSettingsTab(tabId, { focusTab, resetScroll, force });
-        } else if (resetScroll && settingsBody) {
-          settingsBody.scrollTop = 0;
+        } else if (resetScroll) {
+          activateSettingsTab(activeSettingsTabId, { resetScroll: true, force: true });
         }
       }
 
@@ -5187,20 +5460,17 @@
         return false;
       }
 
-      function updateCommandStates() {
-        const hasPuzzle = Boolean(state.puzzle);
-        previewToggle.disabled = !hasPuzzle;
-        downloadBtn.disabled = !hasPuzzle;
-        for (const button of saveSnapshotButtons) {
-          button.disabled = !hasPuzzle;
+        function updateCommandStates() {
+          const hasPuzzle = Boolean(state.puzzle);
+          previewToggle.disabled = !hasPuzzle;
+          saveManagerComponent.update({
+            hasPuzzle,
+            hasProgress: state.filled.size > 0,
+          });
+          if (startHintCloseButton) {
+            startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
+          }
         }
-        for (const button of resetProgressButtons) {
-          button.disabled = !hasPuzzle || state.filled.size === 0;
-        }
-        if (startHintCloseButton) {
-          startHintCloseButton.hidden = !hasPuzzle && state.saves.length === 0;
-        }
-      }
 
       function renderDebugLog() {
         if (!debugLogEl) return;
@@ -5597,78 +5867,22 @@
       installConsoleErrorForwarder();
 
       function activateSettingsTab(tabId, options = {}) {
-        if (!tabId || settingsTabButtons.length === 0) {
+        if (!settingsTabs.root) {
           return null;
         }
-        const { focusTab = false, force = false, resetScroll = false } = options;
-        const button = settingsTabButtons.find(
-          (candidate) => candidate?.dataset.settingsTab === tabId
-        );
-        const panel = settingsPanels.find((candidate) => candidate?.dataset.settingsPanel === tabId);
-        if (!button || !panel) {
-          return null;
-        }
-        const previousTabId = activeSettingsTabId;
-        const changed = previousTabId !== tabId;
-        if (!force && !changed) {
-          if (resetScroll && settingsBody) {
-            settingsBody.scrollTop = 0;
-          }
-          if (focusTab) {
-            button.focus();
-          }
-          return tabId;
-        }
-        activeSettingsTabId = tabId;
-        for (const candidate of settingsTabButtons) {
-          const selected = candidate === button;
-          candidate.setAttribute("aria-selected", selected ? "true" : "false");
-          candidate.setAttribute("tabindex", selected ? "0" : "-1");
-        }
-        for (const candidate of settingsPanels) {
-          const isTarget = candidate === panel;
-          candidate.hidden = !isTarget;
-          candidate.setAttribute("aria-hidden", isTarget ? "false" : "true");
-        }
-        if (settingsBody && (resetScroll || changed)) {
-          settingsBody.scrollTop = 0;
-        }
-        if (focusTab) {
-          button.focus();
-        }
-        if (tabId === "help") {
-          void ensureHelpReadmeLoaded();
-        } else if (tabId === "generator" && (changed || force)) {
-          requestAnimationFrame(() => {
-            focusGeneratorUrlInput();
-          });
-        }
-        return tabId;
+        const resolved = settingsTabs.activate(tabId, options);
+        return resolved;
       }
 
       function focusSettingsTab(index, options = {}) {
-        if (settingsTabButtons.length === 0) {
+        if (!settingsTabs.root) {
           return null;
         }
-        const length = settingsTabButtons.length;
-        const normalized = ((index % length) + length) % length;
-        const button = settingsTabButtons[normalized];
-        if (!button) {
-          return null;
-        }
-        const tabId = button.dataset.settingsTab;
-        if (tabId) {
-          activateSettingsTab(tabId, {
-            focusTab: true,
-            resetScroll: options.resetScroll ?? true,
-            force: options.force ?? false,
-          });
-        }
-        return tabId;
+        return settingsTabs.focusIndex(index, options);
       }
 
       function focusSettingsTabRelative(currentIndex, delta, options = {}) {
-        if (settingsTabButtons.length === 0) {
+        if (!settingsTabs.root) {
           return null;
         }
         return focusSettingsTab(currentIndex + delta, options);
@@ -6806,16 +7020,7 @@
         state.sourceUrl = null;
         state.sourceTitle = null;
         state.sourceCacheKey = null;
-        if (paletteEl) {
-          paletteEl.innerHTML = "";
-        }
-        if (paletteSortEl) {
-          paletteSortEl.disabled = true;
-          const target = state.paletteSort || "region";
-          if (paletteSortEl.value !== target) {
-            paletteSortEl.value = target;
-          }
-        }
+        paletteDock.update({ entries: [], sortMode: state.paletteSort });
         setProgressMessage("loading");
         const resetCtx = state.rendering?.controller?.getContext?.() || puzzleCanvas?.getContext?.("2d");
         if (resetCtx) {
@@ -8908,6 +9113,7 @@
 
       
       function scrollPaletteToColor(colorId) {
+        const paletteEl = paletteDock.root;
         if (!paletteEl) return;
         if (colorId == null) return;
         const swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
@@ -9144,24 +9350,13 @@
       }
 
       function renderPalette() {
-        if (!paletteEl) return;
-        paletteEl.innerHTML = "";
-        let displayNumbers =
-          state?.paletteDisplayNumbers instanceof Map ? state.paletteDisplayNumbers : null;
-        if (!displayNumbers) {
-          displayNumbers = new Map();
-          state.paletteDisplayNumbers = displayNumbers;
-        } else {
-          displayNumbers.clear();
-        }
-        if (!state.puzzle) {
-          if (paletteSortEl) {
-            paletteSortEl.disabled = true;
-            const target = state.paletteSort || "region";
-            if (paletteSortEl.value !== target) {
-              paletteSortEl.value = target;
-            }
-          }
+        const paletteElement = paletteDock.root;
+        const displayNumbers =
+          state?.paletteDisplayNumbers instanceof Map ? state.paletteDisplayNumbers : new Map();
+        displayNumbers.clear();
+        state.paletteDisplayNumbers = displayNumbers;
+        if (!state.puzzle || !paletteElement) {
+          paletteDock.update({ entries: [], sortMode: state.paletteSort });
           return;
         }
         const {
@@ -9171,97 +9366,45 @@
           sortMode,
           getNameData,
         } = getPaletteEntryOrder({ includeCompleted: true });
-        let displayIndex = 0;
-        for (const color of allPaletteEntries) {
-          displayIndex += 1;
-          displayNumbers.set(color.id, displayIndex);
-        }
-        const paletteEntries = allPaletteEntries.filter(
-          (color) => (remainingByColor.get(color.id) || 0) > 0
-        );
-        if (paletteEntries.length === 0) {
-          if (paletteSortEl) {
-            paletteSortEl.disabled = true;
-          }
-          return;
-        }
-        if (paletteSortEl) {
-          paletteSortEl.disabled = false;
-          if (paletteSortEl.value !== sortMode) {
-            paletteSortEl.value = sortMode;
-          }
-        }
-
-        for (const color of paletteEntries) {
-          const remaining = remainingByColor.get(color.id) || 0;
-          if (remaining <= 0) {
-            continue;
-          }
-          const total = totalByColor.get(color.id) || 0;
+        allPaletteEntries.forEach((color, index) => {
+          displayNumbers.set(color.id, index + 1);
+        });
+        const paletteEntries = allPaletteEntries
+          .map((color) => ({
+            color,
+            remaining: remainingByColor.get(color.id) || 0,
+            total: totalByColor.get(color.id) || 0,
+          }))
+          .filter((entry) => entry.remaining > 0);
+        const renderedEntries = paletteEntries.map((entry) => {
+          const { color, remaining, total } = entry;
           const { text: rawLabelText } = getNameData(color);
           const regionWord = remaining === 1 ? "region" : "regions";
           const totalWord = total === 1 ? "region" : "regions";
           const tooltipText = `${remaining} ${regionWord} left`;
           const ariaSummary = `${remaining} of ${total} ${totalWord} remaining.`;
           const displayNumber =
-            displayNumbers.has(color.id)
-              ? displayNumbers.get(color.id)
-              : color.id != null
-              ? color.id
-              : displayNumbers.size + 1;
+            displayNumbers.get(color.id) ?? (color.id != null ? color.id : displayNumbers.size + 1);
           const labelText =
             rawLabelText === `Colour ${color.id}` ? `Colour ${displayNumber}` : rawLabelText;
           displayNumbers.set(color.id, displayNumber);
-          const swatch = document.createElement("button");
-          swatch.type = "button";
-          swatch.className = "swatch";
-          swatch.dataset.testid = "palette-swatch";
-          swatch.dataset.colorId = String(color.id);
-          swatch.dataset.remaining = String(remaining);
-          swatch.dataset.total = String(total);
-          swatch.dataset.name = labelText;
-          swatch.dataset.displayIndex = String(displayNumber);
-          swatch.setAttribute("role", "listitem");
-          swatch.setAttribute(
-            "aria-label",
-            `Colour ${displayNumber}: ${labelText}. ${ariaSummary}`
-          );
-          swatch.title = `${labelText} · ${tooltipText} (${total} total)`;
-          if (state.activeColor === color.id) swatch.classList.add("active");
-          swatch.style.setProperty("--swatch-color", color.hex || "transparent");
-          const labelStyles = computeSwatchLabelStyles(color.hex);
-          swatch.style.setProperty("--swatch-label-color", labelStyles.color);
-          swatch.style.setProperty("--swatch-outline", labelStyles.outline);
-          swatch.style.setProperty("--swatch-label-shadow", labelStyles.shadow);
-          const label = document.createElement("span");
-          label.className = "label";
-          const number = document.createElement("strong");
-          number.textContent = String(displayNumber);
-          label.appendChild(number);
-          swatch.appendChild(label);
           const tooltipId = `swatchTooltip-${color.id}`;
-          const tooltip = document.createElement("span");
-          tooltip.id = tooltipId;
-          tooltip.className = "swatch-tooltip";
-          tooltip.textContent = tooltipText;
-          swatch.appendChild(tooltip);
-          swatch.setAttribute("aria-describedby", tooltipId);
-          swatch.addEventListener("click", () => {
-            activateColor(color.id);
-          });
-          swatch.addEventListener("pointerdown", (event) => {
-            if (event.button !== 2) {
-              return;
-            }
-            event.preventDefault();
-            activateColor(color.id);
-          });
-          swatch.addEventListener("contextmenu", (event) => {
-            event.preventDefault();
-            activateColor(color.id);
-          });
-          paletteEl.appendChild(swatch);
-        }
+          return {
+            id: color.id,
+            hex: color.hex,
+            remaining,
+            total,
+            label: labelText,
+            displayNumber,
+            tooltip: tooltipText,
+            tooltipId,
+            ariaLabel: `Colour ${displayNumber}: ${labelText}. ${ariaSummary}`,
+            title: `${labelText} · ${tooltipText} (${total} total)`,
+            styles: computeSwatchLabelStyles(color.hex),
+            isActive: state.activeColor === color.id,
+          };
+        });
+        paletteDock.update({ entries: renderedEntries, sortMode });
       }
 
       function getColorDisplayNumber(colorId, options = {}) {
@@ -9302,7 +9445,8 @@
         return "colour";
       }
 
-      function handlePaletteWheel(event) {
+      function handlePaletteWheel(event, target = paletteDock.root) {
+        const paletteEl = target;
         if (!paletteEl) return;
         if (event.defaultPrevented) return;
         if (event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -11072,6 +11216,7 @@
       }
 
       function flashPaletteSwatch(colorId, options = {}) {
+        const paletteEl = paletteDock.root;
         if (!paletteEl) return;
         const swatch = paletteEl.querySelector(`.swatch[data-color-id="${colorId}"]`);
         if (!swatch) return;
@@ -12763,27 +12908,11 @@
 
       function refreshSaveList() {
         const manualEntries = Array.isArray(state.saves) ? state.saves : [];
-        const hasEntries = manualEntries.length > 0;
-        for (const list of saveListContainers) {
-          if (!list) continue;
-          list.innerHTML = "";
-          if (hasEntries) {
-            const fragment = document.createDocumentFragment();
-            for (const entry of manualEntries) {
-              fragment.appendChild(createSaveManagementItem(entry));
-            }
-            list.appendChild(fragment);
-          }
-        }
-        for (const emptyState of saveListEmptyStates) {
-          if (!emptyState) continue;
-          if (hasEntries) {
-            emptyState.hidden = true;
-          } else {
-            emptyState.hidden = false;
-            emptyState.textContent = "No saves yet. Create one above to start autosaving progress.";
-          }
-        }
+        saveManagerComponent.update({
+          entries: manualEntries,
+          hasPuzzle: Boolean(state.puzzle),
+          hasProgress: state.filled.size > 0,
+        });
         updateCommandStates();
         refreshGameSelection();
       }
