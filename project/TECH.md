@@ -136,7 +136,7 @@ Tweaking the deployment:
 - **Progress persistence.** Every stroke rewrites the active save slot; additional manual snapshots live in the **Saves** tab with rename/export/delete controls. Storage quota usage stays visible there, and the legacy autosave bucket migrates into a manual slot on first launch.
 - **Previewed snapshots.** Saves capture a downscaled preview thumbnail (rendered from the current preview canvas) so save cards and start-screen entries stay visually recognizable after a reload.
 - **Startup restore priority.** Launching the app resumes from the most recent save (preferring the active slot) and falls back to the bundled sample only when nothing is stored.
-- **Settings persistence.** Gameplay, hint, control, and appearance preferences now sync to `localStorage` (`capy.settings.v1`) so `capy.json` only ships puzzle data. Settings writes commit immediately so UI tweaks survive reloads even if puzzle autosave is still pending, and puzzle loads leave those stored preferences intact. Palette sorting mode selections share the same store, so switching to options like **Sort Colours → Spectrum** survives a refresh.
+- **Settings persistence.** Gameplay, hint, control, and appearance preferences now sync to `localStorage` (`capy.settings.v1`) so `capy.json` only ships puzzle data. Settings writes commit immediately so UI tweaks survive reloads even if puzzle autosave is still pending, and puzzle loads leave those stored preferences intact. Palette sorting mode selections share the same store, so switching to options like **Sort Colours → Spectrum** survives a refresh. The Settings dialog also records whether it was open so the sheet can reopen automatically after a reload.
 
 ### Detail Presets
 

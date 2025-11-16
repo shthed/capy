@@ -2534,6 +2534,7 @@
           showRegionLabels: true,
           theme: DEFAULT_UI_THEME,
           renderer: "canvas2d",
+          settingsSheetOpen: false,
           mouseControls: cloneMouseControls(DEFAULT_MOUSE_CONTROLS),
         },
         previewVisible: false,
@@ -3678,6 +3679,13 @@
         });
       }
 
+      if (state.settings?.settingsSheetOpen && settingsSheet) {
+        hideStartScreen();
+        requestAnimationFrame(() => {
+          showSettingsSheet({ resetScroll: false, force: true });
+        });
+      }
+
       if (settingsSheetHeader) {
         settingsSheetHeader.addEventListener("pointerdown", beginSettingsSheetDrag);
         settingsSheetHeader.addEventListener("pointermove", moveSettingsSheet);
@@ -4698,6 +4706,14 @@
         }
       }
 
+      function setSettingsSheetOpenState(isOpen) {
+        if (!state?.settings) return;
+        const resolved = Boolean(isOpen);
+        if (state.settings.settingsSheetOpen === resolved) return;
+        state.settings.settingsSheetOpen = resolved;
+        scheduleSettingsPersist({ immediate: true });
+      }
+
       function openSheet(sheet) {
         if (!sheet) return;
         for (const candidate of sheetRegistry) {
@@ -4713,6 +4729,9 @@
         }
         if (sheet === settingsSheet && helpPanel && readmeLoadState === "idle") {
           void ensureHelpReadmeLoaded();
+        }
+        if (sheet === settingsSheet) {
+          setSettingsSheetOpenState(true);
         }
       }
 
@@ -4767,6 +4786,7 @@
           settingsButton.classList.remove("active");
         }
         if (sheet === settingsSheet) {
+          setSettingsSheetOpenState(false);
           clearPendingImport();
         }
       }
@@ -11215,6 +11235,7 @@
           stageBackgroundColor,
           mouseControls,
           launcherPosition,
+          settingsSheetOpen: base.settingsSheetOpen === true,
         };
         const paletteSortSource =
           typeof base.paletteSort === "string"
@@ -11369,6 +11390,9 @@
         }
         if (payload.showRegionLabels != null) {
           normalized.showRegionLabels = payload.showRegionLabels !== false;
+        }
+        if (payload.settingsSheetOpen != null) {
+          normalized.settingsSheetOpen = payload.settingsSheetOpen === true;
         }
         if (payload.theme != null) {
           const themeCandidate =
