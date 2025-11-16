@@ -20,6 +20,8 @@ any feature or workflow changes you ship.
   by hand, run the workflow from `main`, set the `target_branch` input to the
   branch you need, and tick `allow_without_pr` only if you intentionally want to
   publish a branch without an open review.
+- **Implementation simplicity.** Prefer straightforward solutions over clever
+  abstractions; keep changes minimal and lines of code lean.
 - **Manual smoke tests.** Exercise puzzle load, palette selection, painting, and
   save/load flows in at least one desktop and one mobile browser before
   requesting review.
