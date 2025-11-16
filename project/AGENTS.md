@@ -27,6 +27,10 @@ any feature or workflow changes you ship.
 - **Surface follow-ups.** When you discover gaps during reviews, log them in
   the root `TODO.md` (for actionable items) or `ROADMAP.md` (for longer-term
   direction) so context is visible without chasing issues.
+- **Repository reviews.** When running a repo-wide review, reconcile any drift
+  between the runtime and handbook docs (`TECH.md`, `README.md`), refresh
+  `TODO.md`/`ROADMAP.md` with the findings, and keep the zero-build constraint
+  in mind before proposing new tooling.
 - **Manual smoke tests.** Exercise puzzle load, palette selection, painting, and
   save/load flows in at least one desktop and one mobile browser before
   requesting review.

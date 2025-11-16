@@ -13,9 +13,9 @@ Capy turns any bitmap image into a colour-by-number puzzle entirely in the
 browser. Drop a file (or load one via the hidden file picker) and the app will
 resize it, run the selected quantization pipeline (k-means palette clustering or
 the posterize-and-merge pass) to build a discrete palette, merge tiny regions,
-and paint a canvas you can immediately play. Everything ships as a static
- runtime files in the repository root so the single-page app can be served directly without a
- build step.
+and paint a canvas you can immediately play. Everything ships as static runtime
+files in the repository root so the single-page app can be served directly
+without a build step.
 Offline play stays supported via a minimal service worker (`service-worker.js`)
 that precaches the runtime payload and reuses a shared Cache Storage bucket for
 downloaded or user-selected source images. Imported images are stored under
@@ -60,6 +60,21 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
 - **Cache hygiene.** The service worker (`service-worker.js`) caches every same-origin GET request (and `https://capy.local/` requests) without eviction. Add safeguards before shipping larger assets or new fetch endpoints so Cache Storage does not grow unbounded.
 - **Automation coverage.** The shared Node + Playwright harness remains the expected entry point (`npm test --silent`), but CI currently only validates installs. Manual smoke checks stay required until the hosted automation suite returns.
 - **Documentation sources.** Planning and work intake now live in `ROADMAP.md` (direction) and `TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts.
+
+## Repository Review Findings
+
+- **Renderer structure.** `render.js` houses the renderer controller plus the Canvas2D, WebGL, and SVG implementations in a
+  single ~2,300-line module. Its controller also owns renderer registration, fallback selection, and per-frame metrics logging,
+  which makes swaps risky without tighter module seams.
+- **Preboot + settings.** `runtime.js` performs preboot sizing and UI-scale selection before the app loads, pulling stored
+  settings from `localStorage` when available and falling back to defaults otherwise. Pair this with tests that cover missing or
+  malformed settings data so boot-time CSS variables stay predictable.
+- **Offline cache risk.** `service-worker.js` precaches the runtime payload and then caches every same-origin GET (plus
+  `https://capy.local/`) without eviction or size limits. Add Cache Storage quotas or scoping before growing assets or
+  introducing new fetch targets so user storage cannot balloon.
+- **Automation entry point.** `project/scripts/run-tests.js` still drives the Node generator specs and Playwright UI smoke tests,
+  but the workflow in `.github/workflows/ci.yml` currently serves as a placeholder. Decide whether to re-enable the Playwright
+  portion in CI or gate it behind an environment flag so coverage expectations match automation reality.
 
 ## Deployment & Branch Previews
 
