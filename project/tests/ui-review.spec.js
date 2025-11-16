@@ -25,7 +25,7 @@ test.describe('Capy UI smoke check', () => {
 
   test('allows switching renderer modes', async ({ page }) => {
     await loadTestPuzzle(page);
-    await expect.poll(() => getActiveRenderer(page)).toBe('canvas2d');
+    await expect.poll(() => getActiveRenderer(page)).toBe('svg');
 
     await page.getByTestId('settings-button').click();
     await page.locator('[data-settings-tab="appearance"]').click();
@@ -33,13 +33,13 @@ test.describe('Capy UI smoke check', () => {
     const rendererSelect = page.locator('#rendererMode');
     await expect(rendererSelect).toBeVisible();
 
-    await rendererSelect.selectOption('svg');
-    await expect.poll(() => getActiveRenderer(page)).toBe('svg');
-    await expect(page.locator('#canvasStage')).toHaveAttribute('data-renderer', 'svg');
-
     await rendererSelect.selectOption('canvas2d');
     await expect.poll(() => getActiveRenderer(page)).toBe('canvas2d');
     await expect(page.locator('#canvasStage')).toHaveAttribute('data-renderer', 'canvas2d');
+
+    await rendererSelect.selectOption('svg');
+    await expect.poll(() => getActiveRenderer(page)).toBe('svg');
+    await expect(page.locator('#canvasStage')).toHaveAttribute('data-renderer', 'svg');
   });
 
   test('updates palette selection feedback after painting', async ({ page }) => {

@@ -101,7 +101,7 @@ function buildBasePuzzle() {
     stageBackgroundColor: '#020617',
     filled: [],
     settings: {
-      renderer: 'canvas2d',
+      renderer: 'svg',
     },
   };
 }
