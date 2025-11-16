@@ -88,10 +88,12 @@ source):
 1. **PR gate.** The workflow exits early unless the branch has an open PR.
    `main` is the exception—it always deploys. Manual runs can opt-in to deploy
    without an open review by setting the `allow_without_pr` input.
-2. **Checkout & sanitise.** The action checks out the source branch and the
-   `gh-pages` deployment branch, converts branch names into URL-safe slugs
-   (e.g., `automation/feature` → `automation-feature`), and creates a matching
-   directory for non-`main` deployments.
+2. **Checkout & sanitise.** The action checks out the source branch (with a
+   shallow fetch for faster starts) and the `gh-pages` deployment branch,
+   converts branch names into URL-safe slugs (e.g., `automation/feature` →
+   `automation-feature`), and creates a matching directory for non-`main`
+   deployments. Concurrency keys include the branch name so parallel deployments
+   for different branches no longer queue behind each other.
 3. **Content sync.**
    - `main` clears the deployment working tree (leaving `.git`) and copies the
      runtime payload from the repository root (`index.html`, `styles.css`,
@@ -109,6 +111,10 @@ source):
    stay in ISO format so the page can render without client-side scripts).
 5. **Cleanup.** Branch directories without open PRs are deleted on each run so
    deployments disappear automatically once work merges or closes.
+
+If the sync step finds nothing new to commit, it records `has_changes=false`
+and skips the Pages packaging/deploy phases to avoid wasting artifact time while
+still reporting the preview URL from the previous publish.
 
 Tweaking the deployment:
 
