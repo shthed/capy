@@ -65,7 +65,7 @@
   --theme-palette-dock-bg: rgba(2, 6, 23, 0.94);
   --theme-palette-dock-border: rgba(15, 23, 42, 0.85);
   --command-rail-top: calc(env(safe-area-inset-top, 0px) + 12px);
-  --command-rail-height: calc(40px * var(--ui-scale));
+  --command-rail-height: calc(64px * var(--ui-scale));
   --stage-background: var(--theme-body-bg);
 }
 
@@ -246,76 +246,66 @@ body.panning {
 }
 
 #commandRail {
-  position: absolute;
+  position: fixed;
   top: var(--command-rail-top);
-  left: calc(env(safe-area-inset-left, 0px) + 12px);
-  display: flex;
-  align-items: center;
-  gap: calc(6px * var(--ui-scale));
+  left: auto;
+  right: calc(env(safe-area-inset-right, 0px) + 14px);
+  display: block;
   padding: 0;
   margin: 0;
   border: 0;
   background: none;
   box-shadow: none;
   backdrop-filter: none;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  touch-action: manipulation;
-  z-index: 3;
-  scrollbar-width: none;
-  width: max-content;
-  max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px);
-}
-
-#commandRail::-webkit-scrollbar {
-  display: none;
+  touch-action: none;
+  z-index: 6;
+  width: auto;
+  height: auto;
 }
 
 #commandRail button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: calc(6px * var(--ui-scale));
-  padding: calc(4px * var(--ui-scale)) calc(10px * var(--ui-scale));
-  border-radius: calc(6px * var(--ui-scale));
+  padding: calc(6px * var(--ui-scale));
+  border-radius: calc(16px * var(--ui-scale));
   border: 1px solid color-mix(in srgb, var(--theme-command-border) 60%, transparent);
   background: color-mix(in srgb, var(--theme-command-bg) 88%, transparent);
   color: var(--theme-command-text);
   font-size: calc(14px * var(--ui-scale));
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   flex: 0 0 auto;
-  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease,
+    transform 140ms ease;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
 }
 
-#commandRail .menu-button {
-  padding: calc(10px * var(--ui-scale)) calc(18px * var(--ui-scale));
-  border-radius: calc(14px * var(--ui-scale));
-  gap: calc(8px * var(--ui-scale));
-  font-size: calc(15px * var(--ui-scale));
-  font-weight: 600;
+#commandRail .settings-launcher {
+  width: calc(64px * var(--ui-scale));
+  height: calc(64px * var(--ui-scale));
+  border-radius: 50%;
+  padding: calc(12px * var(--ui-scale));
+  backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--theme-command-bg) 96%, transparent);
 }
 
 #commandRail button.active {
   background: color-mix(in srgb, var(--theme-command-active-bg) 70%, transparent);
   border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
   color: var(--theme-command-active-text);
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--theme-command-active-bg) 50%, transparent);
 }
 
 #commandRail button .icon {
-  font-size: 1.05rem;
+  font-size: 1.45rem;
   line-height: 1;
 }
 
-#commandRail .menu-button .icon {
-  font-size: 1.25rem;
-}
-
-#commandRail .label {
-  font-size: calc(13px * var(--ui-scale));
-  line-height: 1;
-  white-space: nowrap;
+#commandRail button .label {
+  display: none;
 }
 
 #commandRail button:not(:disabled):hover,
@@ -323,6 +313,7 @@ body.panning {
   background: color-mix(in srgb, var(--theme-command-active-bg) 55%, transparent);
   border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
   color: var(--theme-command-active-text);
+  transform: translate3d(0, -1px, 0);
 }
 
 #commandRail button:focus-visible {
@@ -333,23 +324,12 @@ body.panning {
 #commandRail button:disabled {
   background: color-mix(in srgb, var(--theme-command-disabled-bg) 70%, transparent);
   border-color: color-mix(in srgb, var(--theme-command-disabled-border) 70%, transparent);
-  color: var(--theme-command-disabled-text);
+  color: color-mix(in srgb, var(--theme-command-disabled-text) 95%, transparent);
+  box-shadow: none;
 }
 
-body[data-orientation="portrait"] #commandRail {
-  gap: calc(4px * var(--ui-scale));
-}
-
-body.compact-commands #commandRail {
-  gap: calc(4px * var(--ui-scale));
-}
-
-body.compact-commands #commandRail .label {
-  display: none;
-}
-
-body.compact-commands #commandRail .menu-button .label {
-  display: inline;
+#commandRail.dragging {
+  cursor: grabbing;
 }
 
 body[data-orientation="portrait"] #paletteDock {
@@ -1014,16 +994,13 @@ input[type="color"]::-moz-color-swatch {
 }
 
 .sheet {
+  --sheet-translate-x: -50%;
+  --sheet-translate-y: -50%;
   position: fixed;
-  top: calc(
-    env(safe-area-inset-top, 0px) +
-      var(--rail-padding-block) +
-      var(--command-rail-height) +
-      calc(12px * var(--ui-scale))
-  );
-  right: calc(env(safe-area-inset-right, 0px) + 20px);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
-  width: min(720px, calc(100vw - 40px));
+  left: 50%;
+  top: 50%;
+  width: min(820px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 120px));
   padding: calc(18px * var(--ui-scale));
   display: flex;
   flex-direction: column;
@@ -1034,7 +1011,7 @@ input[type="color"]::-moz-color-swatch {
   box-shadow: var(--theme-sheet-shadow);
   z-index: 6;
   opacity: 1;
-  transform: translate3d(0, 0, 0);
+  transform: translate3d(var(--sheet-translate-x), var(--sheet-translate-y), 0);
   transition: opacity 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
@@ -1042,7 +1019,12 @@ input[type="color"]::-moz-color-swatch {
   opacity: 0;
   pointer-events: none;
   visibility: hidden;
-  transform: translate3d(0, 12px, 0);
+  transform: translate3d(var(--sheet-translate-x), calc(var(--sheet-translate-y) + 12px), 0);
+}
+
+.sheet[data-free-position="true"] {
+  --sheet-translate-x: 0;
+  --sheet-translate-y: 0;
 }
 
 .sheet-header {
@@ -1050,6 +1032,12 @@ input[type="color"]::-moz-color-swatch {
   align-items: center;
   justify-content: space-between;
   gap: calc(10px * var(--ui-scale));
+  cursor: grab;
+  user-select: none;
+}
+
+.sheet.dragging .sheet-header {
+  cursor: grabbing;
 }
 
 .sheet-header h2 {
