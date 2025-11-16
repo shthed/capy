@@ -5,7 +5,9 @@ to `/automation-<slug>/`). Repository: https://github.com/shthed/capy.
 
 This document collects all technical, architectural, and QA details that were
 previously tracked in the README. Keep it accurate alongside feature work so
-both contributors and automation agents have a single source of truth.
+both contributors and automation agents have a single source of truth. New
+developers should start with `project/ONBOARDING.md` for setup and workflow
+expectations before diving into the deeper references below.
 
 ## Project Overview
 
@@ -13,9 +15,9 @@ Capy turns any bitmap image into a colour-by-number puzzle entirely in the
 browser. Drop a file (or load one via the hidden file picker) and the app will
 resize it, run the selected quantization pipeline (k-means palette clustering or
 the posterize-and-merge pass) to build a discrete palette, merge tiny regions,
-and paint a canvas you can immediately play. Everything ships as a static
- runtime files in the repository root so the single-page app can be served directly without a
- build step.
+and paint a canvas you can immediately play. Everything ships as static runtime
+files in the repository root so the single-page app can be served directly
+without a build step.
 Offline play stays supported via a minimal service worker (`service-worker.js`)
 that precaches the runtime payload and reuses a shared Cache Storage bucket for
 downloaded or user-selected source images. Imported images are stored under
@@ -52,7 +54,29 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
-  - `.github/workflows/cleanup-branches.yml` – Nightly job (also invoked after every deployment run) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days.
+  - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days.
+
+## Project Health Snapshot
+
+- **Zero-build runtime.** The app still ships as plain HTML/JS/CSS and must remain directly loadable without bundling. Optimisations should respect this constraint and avoid minified dependency drops.
+- **Cache hygiene.** The service worker (`service-worker.js`) caches every same-origin GET request (and `https://capy.local/` requests) without eviction. Add safeguards before shipping larger assets or new fetch endpoints so Cache Storage does not grow unbounded.
+- **Automation coverage.** The shared Node + Playwright harness remains the expected entry point (`npm test --silent`), but CI currently only validates installs. Manual smoke checks stay required until the hosted automation suite returns.
+- **Documentation sources.** Planning and work intake now live in `ROADMAP.md` (direction) and `TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts.
+
+## Repository Review Findings
+
+- **Renderer structure.** `render.js` houses the renderer controller plus the Canvas2D, WebGL, and SVG implementations in a
+  single ~2,300-line module. Its controller also owns renderer registration, fallback selection, and per-frame metrics logging,
+  which makes swaps risky without tighter module seams.
+- **Preboot + settings.** `runtime.js` performs preboot sizing and UI-scale selection before the app loads, pulling stored
+  settings from `localStorage` when available and falling back to defaults otherwise. Pair this with tests that cover missing or
+  malformed settings data so boot-time CSS variables stay predictable.
+- **Offline cache risk.** `service-worker.js` precaches the runtime payload and then caches every same-origin GET (plus
+  `https://capy.local/`) without eviction or size limits. Add Cache Storage quotas or scoping before growing assets or
+  introducing new fetch targets so user storage cannot balloon.
+- **Automation entry point.** `project/scripts/run-tests.js` still drives the Node generator specs and Playwright UI smoke tests,
+  but the workflow in `.github/workflows/ci.yml` currently serves as a placeholder. Decide whether to re-enable the Playwright
+  portion in CI or gate it behind an environment flag so coverage expectations match automation reality.
 
 ## Deployment & Branch Previews
 
@@ -64,10 +88,12 @@ source):
 1. **PR gate.** The workflow exits early unless the branch has an open PR.
    `main` is the exception—it always deploys. Manual runs can opt-in to deploy
    without an open review by setting the `allow_without_pr` input.
-2. **Checkout & sanitise.** The action checks out the source branch and the
-   `gh-pages` deployment branch, converts branch names into URL-safe slugs
-   (e.g., `automation/feature` → `automation-feature`), and creates a matching
-   directory for non-`main` deployments.
+2. **Checkout & sanitise.** The action checks out the source branch (with a
+   shallow fetch for faster starts) and the `gh-pages` deployment branch,
+   converts branch names into URL-safe slugs (e.g., `automation/feature` →
+   `automation-feature`), and creates a matching directory for non-`main`
+   deployments. Concurrency keys include the branch name so parallel deployments
+   for different branches no longer queue behind each other.
 3. **Content sync.**
    - `main` clears the deployment working tree (leaving `.git`) and copies the
      runtime payload from the repository root (`index.html`, `styles.css`,
@@ -85,6 +111,10 @@ source):
    stay in ISO format so the page can render without client-side scripts).
 5. **Cleanup.** Branch directories without open PRs are deleted on each run so
    deployments disappear automatically once work merges or closes.
+
+If the sync step finds nothing new to commit, it records `has_changes=false`
+and skips the Pages packaging/deploy phases to avoid wasting artifact time while
+still reporting the preview URL from the previous publish.
 
 Tweaking the deployment:
 
@@ -158,7 +188,9 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 
 - **Algorithms.** The generator select box maps to `GENERATION_ALGORITHM_CATALOG` inside `puzzle-generation.js`. `local-kmeans`
   runs k-means clustering with user-controlled sampling and iteration counts. `local-posterize` bins pixels into evenly spaced
-  RGB buckets, averages each bucket, and assigns pixels to the closest surviving colours. New entries can represent hosted
+  RGB buckets, averages each bucket, and assigns pixels to the closest surviving colours. `organic-slic` scatters jittered grid
+  seeds and performs a spatially aware k-means pass (similar to SLIC superpixels) to cluster nearby colours together, rounding
+  region boundaries and keeping gradients smoother for more natural, curved islands. New entries can represent hosted
   services—UI copy stays service-agnostic so remote providers can drop in without layout tweaks.
 - **Iterations.** Iterations rerun the clustering loop. Higher counts push centroids closer to their most representative
   pixels, improving palette fidelity at the cost of longer runs.
@@ -198,6 +230,17 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 - **Preboot viewport metrics.** A blocking `<script>` in the `<head>` seeds UI scale variables, viewport padding, and the orientation/compact flags before the stylesheet paints; a companion snippet at the top of `<body>` mirrors those attributes so the runtime boot avoids first-paint jumps when `handleViewportChange` recalculates metrics.
 - **Public testing surface.** `window.capyGenerator` exposes helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so automation and manual experiments can orchestrate the app without touching internals. Recent renderer work also surfaced `getRendererType()`, `listRenderers()`, `setRenderer(type)`, `registerRenderer(type, factory)`, and `unregisterRenderer(type)` so tests can assert the active backend or load experimental renderers without patching private state.
 - **Pan/zoom subsystem.** `viewState` tracks transforms for `#canvasStage` and `#canvasTransform`; helpers like `applyZoom`, `resetView`, and `applyViewTransform` keep navigation smooth across wheel, keyboard, and drag gestures.
+
+### Compact UI patterns (no framework)
+
+The runtime must stay build-free and avoid shipping large bundled frameworks. To trim UI code without pulling in minified dependencies:
+
+- **Lean on `<template>` clones.** Define reusable fragments (e.g., palette items or save rows) in `index.html`, call `template.content.cloneNode(true)`, and toggle `dataset` flags or text content during hydration instead of re-creating DOM trees by hand.
+- **Delegate events.** Attach a single listener to the container (palette rail, save list, settings tabs) and branch on `event.target.closest('[data-action="..."]')` so new buttons can be added in markup without extra wiring.
+- **Small helper utilities only.** When repetition is unavoidable, add a tiny helper (e.g., `renderList(container, items, renderItem)`) in a shared module and reuse it rather than adopting a state library. Keep helpers self-contained and tree-shake-free.
+- **Limit inline state.** Store UI state on elements via `dataset` or `aria-*` attributes and derive rendering from those flags so refresh functions can stay short and predictable.
+
+These patterns keep the DOM logic compact while preserving the zero-build, zero-framework runtime constraints.
  - **Puzzle rendering pipeline.** `renderPuzzle` composites the stored base image first, then fills an offscreen mask covering every unfinished region so the original art shows through as you paint. The mask rasterizes into the cached `filledLayer`, outlines still blit from the stroke cache, and `drawNumbers` overlays remaining labels. Label layout caches include a rounded zoom key derived from the current display-to-base scale ratio, shrink the minimum font size relative to that zoom factor, and expand their attempt list at higher zoom so thin regions surface labels once there is enough on-screen room without sacrificing base zoom legibility. Visual feedback continues to leverage `flashColorRegions` and `paintRegions` for hints. The renderer controller proxies those calls to Canvas2D, WebGL, or SVG backends—WebGL uploads the stored base image alongside the cached layers as textures, tracks incremental fills so textures refresh immediately, and preserves the last good upload when a transfer fails so the screen never flashes blank, while the SVG renderer mounts the base image under its region mask before emitting `<path>` nodes so vector output stays crisp at any zoom. Each renderer samples its frame times and prints rolling averages to the browser console once per second so you can spot performance regressions while debugging pan and zoom flows.
 - **Generation & segmentation.** `createPuzzleData` looks up the requested generator in `GENERATION_ALGORITHM_CATALOG`, runs the matching quantizer via `performQuantization` (k-means or the posterize-and-merge pipeline today, with scaffolding for future services), smooths assignments, and then calls `segmentRegions`. Before returning it compresses the resized source image to a data URL honouring the “Stored image size” limit so the original art ships with saves and exports; when a remote URL is supplied we skip compression and store just the resolved link so saves refetch the bitmap on demand. Regeneration and fixtures reuse the same entry point.
 - **Persistence helpers.** `persistSaves`, `loadSavedEntries`, and `serializeCurrentPuzzle` manage puzzle snapshots while `getUserSettingsSnapshot`/`persistUserSettings` keep preferences on their own track; exports now ship puzzle data without bundling user settings.
@@ -340,6 +383,4 @@ Run the preview at http://localhost:8000 and exercise the checks above across mu
 
 ## Open Follow-Ups
 
-- [ ] Restore artwork documentation once a new segmentation pipeline is ready for publication.
-- [ ] Expand the automated smoke test suite as new renderer types or UI flows ship.
-- [ ] Draft a GitHub issue template for the weekly Automation Sync summary and link it from the contributor guide.
+Active work now lives in the root [`TODO.md`](../TODO.md) (actionable tasks) and [`ROADMAP.md`](../ROADMAP.md) (direction). Update those files when behaviour changes or milestones land so this guide can stay focused on architecture and gameplay references.

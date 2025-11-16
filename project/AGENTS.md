@@ -21,7 +21,16 @@ any feature or workflow changes you ship.
   branch you need, and tick `allow_without_pr` only if you intentionally want to
   publish a branch without an open review.
 - **Implementation simplicity.** Prefer straightforward solutions over clever
-  abstractions; keep changes minimal and lines of code lean.
+  abstractions; keep changes minimal and lines of code lean. Reach first for
+  native patterns (template cloning, event delegation, `dataset` flags) before
+  introducing new libraries.
+- **Surface follow-ups.** When you discover gaps during reviews, log them in
+  the root `TODO.md` (for actionable items) or `ROADMAP.md` (for longer-term
+  direction) so context is visible without chasing issues.
+- **Repository reviews.** When running a repo-wide review, reconcile any drift
+  between the runtime and handbook docs (`TECH.md`, `README.md`), refresh
+  `TODO.md`/`ROADMAP.md` with the findings, and keep the zero-build constraint
+  in mind before proposing new tooling.
 - **Manual smoke tests.** Exercise puzzle load, palette selection, painting, and
   save/load flows in at least one desktop and one mobile browser before
   requesting review.
@@ -91,6 +100,9 @@ any feature or workflow changes you ship.
 - **Runtime constraints.** Keep the runtime build-free: the shipped HTML and
   modules must stay directly loadable without introducing bundlers or new build
   steps. Optimisations should preserve the zero-build flow.
+- **Documentation anchors.** Sync `TECH.md`, `ROADMAP.md`, and `TODO.md` with
+  any change that affects runtime behaviour, QA coverage, or planning so
+  contributors land on a single, current source of truth.
 
 ## Automation & Git Preferences
 

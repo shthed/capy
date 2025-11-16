@@ -23,6 +23,11 @@ const GENERATION_ALGORITHMS = {
     label: "Local posterize & merge",
     mode: "local",
   },
+  "organic-slic": {
+    id: "organic-slic",
+    label: "Organic superpixels (curved gradients)",
+    mode: "local",
+  },
 };
 
 export const GENERATION_ALGORITHM_CATALOG = Object.freeze(
@@ -52,6 +57,7 @@ function normalizeAlgorithm(value) {
     switch (key) {
       case "local-kmeans":
       case "local-posterize":
+      case "organic-slic":
         return key;
       default:
         break;
@@ -451,9 +457,120 @@ function posterizeQuantize(pixels, width, height, targetColors) {
   return { centroids, assignments };
 }
 
+function organicQuantize(pixels, width, height, targetColors) {
+  const totalPixels = Math.max(1, width * height);
+  const clusterCount = Math.max(1, Math.round(targetColors));
+  const step = Math.max(4, Math.sqrt(totalPixels / clusterCount));
+  const centroids = [];
+  const halfStep = step / 2;
+  for (let y = halfStep; y < height && centroids.length < clusterCount; y += step) {
+    for (let x = halfStep; x < width && centroids.length < clusterCount; x += step) {
+      const px = Math.min(width - 1, Math.round(x));
+      const py = Math.min(height - 1, Math.round(y));
+      const base = (py * width + px) * 4;
+      centroids.push([
+        pixels[base],
+        pixels[base + 1],
+        pixels[base + 2],
+        px,
+        py,
+      ]);
+    }
+  }
+
+  while (centroids.length < clusterCount) {
+    const px = Math.floor(Math.random() * width);
+    const py = Math.floor(Math.random() * height);
+    const base = (py * width + px) * 4;
+    centroids.push([
+      pixels[base],
+      pixels[base + 1],
+      pixels[base + 2],
+      px,
+      py,
+    ]);
+  }
+
+  const labels = new Int32Array(totalPixels);
+  const distances = new Float32Array(totalPixels);
+  const spatialWeight = 10;
+  const iterations = 4;
+  const searchRadius = step * 2;
+
+  for (let iter = 0; iter < iterations; iter++) {
+    labels.fill(-1);
+    distances.fill(Infinity);
+    const sums = new Array(centroids.length).fill(null).map(() => [0, 0, 0, 0, 0, 0]);
+
+    for (let c = 0; c < centroids.length; c++) {
+      const [cr, cg, cb, cx, cy] = centroids[c];
+      const minX = Math.max(0, Math.floor(cx - searchRadius));
+      const maxX = Math.min(width - 1, Math.ceil(cx + searchRadius));
+      const minY = Math.max(0, Math.floor(cy - searchRadius));
+      const maxY = Math.min(height - 1, Math.ceil(cy + searchRadius));
+      for (let y = minY; y <= maxY; y++) {
+        const rowOffset = y * width;
+        for (let x = minX; x <= maxX; x++) {
+          const idx = rowOffset + x;
+          const base = idx * 4;
+          const dr = pixels[base] - cr;
+          const dg = pixels[base + 1] - cg;
+          const db = pixels[base + 2] - cb;
+          const colorDist = dr * dr + dg * dg + db * db;
+          const spatialDist = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+          const distance = colorDist + (spatialWeight * spatialDist) / (step * step);
+          if (distance < distances[idx]) {
+            distances[idx] = distance;
+            labels[idx] = c;
+          }
+        }
+      }
+    }
+
+    for (let idx = 0; idx < totalPixels; idx++) {
+      const label = labels[idx];
+      if (label < 0) continue;
+      const base = idx * 4;
+      const bucket = sums[label];
+      bucket[0] += pixels[base];
+      bucket[1] += pixels[base + 1];
+      bucket[2] += pixels[base + 2];
+      bucket[3] += idx % width;
+      bucket[4] += (idx / width) | 0;
+      bucket[5] += 1;
+    }
+
+    for (let c = 0; c < centroids.length; c++) {
+      const bucket = sums[c];
+      if (bucket[5] === 0) continue;
+      centroids[c][0] = bucket[0] / bucket[5];
+      centroids[c][1] = bucket[1] / bucket[5];
+      centroids[c][2] = bucket[2] / bucket[5];
+      centroids[c][3] = bucket[3] / bucket[5];
+      centroids[c][4] = bucket[4] / bucket[5];
+    }
+  }
+
+  const rounded = centroids.map((c) => [
+    Math.round(clamp(c[0], 0, 255)),
+    Math.round(clamp(c[1], 0, 255)),
+    Math.round(clamp(c[2], 0, 255)),
+  ]);
+
+  const assignments = new Uint16Array(totalPixels);
+  for (let i = 0; i < totalPixels; i++) {
+    const label = labels[i];
+    assignments[i] = label >= 0 && label < rounded.length ? label : 0;
+  }
+
+  return { centroids: rounded, assignments };
+}
+
 function performQuantization(algorithm, pixels, width, height, options) {
   const resolved = normalizeAlgorithm(algorithm);
   switch (resolved) {
+    case "organic-slic":
+      return organicQuantize(pixels, width, height, options.targetColors);
     case "local-posterize":
       return posterizeQuantize(pixels, width, height, options.targetColors);
     case "local-kmeans":
@@ -700,6 +817,7 @@ ${finalizeGeneratedRegions.toString()}
 ${serializeAssignments.toString()}
 ${kmeansQuantize.toString()}
 ${posterizeQuantize.toString()}
+${organicQuantize.toString()}
 ${normalizeAlgorithm.toString()}
 ${performQuantization.toString()}
 ${smoothAssignments.toString()}
