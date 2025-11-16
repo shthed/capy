@@ -86,6 +86,10 @@ any feature or workflow changes you ship.
 - Add or refresh screenshots, segmentation guides, and UI walkthroughs when
   you alter major flows.
 
+- **Runtime constraints.** Keep the runtime build-free: the shipped HTML and
+  modules must stay directly loadable without introducing bundlers or new build
+  steps. Optimisations should preserve the zero-build flow.
+
 ## Automation & Git Preferences
 
 - Sync with `main` (`git fetch --all --prune`) before starting work.
