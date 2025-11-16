@@ -63,15 +63,34 @@ Want to paint your own scene? Drop an image (PNG, JPG, WebP, GIF) anywhere on th
 - **Canvas won’t move?** Hold <kbd>Space</kbd> while dragging, or switch to a two-finger pan on touch devices.
 - **WebGL option disabled?** If the WebGL renderer fails to initialise, Capy automatically falls back to Canvas 2D and disables the option—try updating graphics drivers or stick with Canvas/SVG on that device.
 
+## Automation Helpers
+
+Open the browser console (`F12`/`Ctrl` + `Shift` + `I`) and use `window.capyGenerator` to script quick QA flows without digging into internals:
+
+```js
+// Load the bundled Capybara Springs fixture and snap to preview mode.
+// (Top-level await works in modern devtools consoles.)
+const capyFixture = await fetch("capy.json").then((response) => response.json());
+window.capyGenerator.loadPuzzleFixture(capyFixture);
+window.capyGenerator.togglePreview(true);
+
+// Switch to a renderer, select colour #3, and fill a region programmatically.
+window.capyGenerator.setRenderer("canvas");
+window.capyGenerator.setActiveColor(3, { flash: true });
+window.capyGenerator.fillRegion(42, { ensureColor: true, label: "qa-fill" });
+```
+
+All helpers are documented in detail inside [`TECH.md`](./TECH.md#windowcapygenerator-api-reference) so automation scripts stay in sync with the public surface.
+
 ## Testing & QA
 
-Automated UI coverage now runs through Playwright so you can validate the end-to-end flow without manual setup. Install dependencies from the workspace by running `cd project && npm install`, then provision the Chromium bundle when you need UI smoke tests with `npm run setup:playwright` (inside `project/`). If the suite reports missing browsers or libraries, rerun that setup command before executing the scripts below:
+Automated coverage now runs through a shared Node + Playwright harness so you can validate generator logic and the end-to-end flow without manual setup. Install dependencies from the workspace by running `cd project && npm install`, then provision the Chromium bundle when you need UI smoke tests with `npm run setup:playwright` (inside `project/`). If the suite reports missing browsers or libraries, rerun that setup command before executing the scripts below:
 
-- `npm test` – from inside `project/`, launches the local dev server and executes the Playwright smoke check (Chromium desktop) using `playwright.config.js`.
+- `npm test` – from inside `project/`, runs the Node generator tests before launching the local dev server and executing the Playwright smoke check (Chromium desktop) using `playwright.config.js`.
 - `npm run test:smoke` – from inside `project/`, targets the same Chromium project for quick iteration.
 
 Playwright stores its reports under `playwright-report/` by default. After any run you can open the latest results with `npx playwright show-report` to review traces, screenshots, and console output.
 
 ## Want to Contribute?
 
-Capy is open source! If you’d like to help shape new features, fix bugs, or expand the documentation, start with the development guide in [`AGENTS.md`](./AGENTS.md) and dive into the technical deep-dive in [`TECH.md`](./TECH.md). All contributor tooling now lives under [`project/`](./project/), so switch into that workspace before running npm scripts or Playwright commands. Runtime assets ship from [`runtime/`](./runtime/), which holds the single-page app (`index.html`), renderer bundle, generator module, and the bundled Capybara Springs fixture.
+Capy is open source! If you’d like to help shape new features, fix bugs, or expand the documentation, start with the development guide in [`AGENTS.md`](./AGENTS.md) and dive into the technical deep-dive in [`TECH.md`](./TECH.md). All contributor tooling now lives under [`project/`](./project/), so switch into that workspace before running npm scripts or Playwright commands. Runtime assets ship from the repository root (`index.html`, `render.js`, `puzzle-generation.js`, and `capy.json`), which bundle the single-page app plus the Capybara Springs fixture.

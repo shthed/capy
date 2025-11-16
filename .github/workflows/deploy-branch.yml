@@ -109,20 +109,60 @@ jobs:
             "--exclude=.DS_Store"
           )
 
-          RUNTIME_SOURCE="../runtime"
-          if [ ! -d "$RUNTIME_SOURCE" ]; then
-            echo "Runtime directory $RUNTIME_SOURCE not found during deployment" >&2
-            exit 1
-          fi
-
           if [ "$TARGET_DIR" = "." ]; then
-            find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
-            rsync -a --delete "${RSYNC_ARGS[@]}" "$RUNTIME_SOURCE/" ./
+            rsync -a "${RSYNC_ARGS[@]}" ../ ./
             generate_readme_html "."
           else
             rm -rf "$TARGET_DIR"
             mkdir -p "$TARGET_DIR"
-            rsync -a --delete "${RSYNC_ARGS[@]}" "$RUNTIME_SOURCE/" "$TARGET_DIR/"
+
+            ESSENTIAL_FILES=(
+              "index.html"
+              "capy.json"
+            )
+
+            ROOT_JS_FILES=()
+            while IFS= read -r -d '' js_path; do
+              js_file="${js_path#../}"
+              case "$js_file" in
+                "" | "playwright.config.js")
+                  continue
+                  ;;
+              esac
+              ROOT_JS_FILES+=("$js_file")
+            done < <(find .. -maxdepth 1 -mindepth 1 -type f -name '*.js' -print0)
+
+            if [ "${#ROOT_JS_FILES[@]}" -gt 0 ]; then
+              IFS=$'\n' ROOT_JS_FILES=($(printf '%s\n' "${ROOT_JS_FILES[@]}" | LC_ALL=C sort -u))
+              IFS=$' \t\n'
+              for js_file in "${ROOT_JS_FILES[@]}"; do
+                ESSENTIAL_FILES+=("$js_file")
+              done
+            fi
+
+            for file in "${ESSENTIAL_FILES[@]}"; do
+              if [ -e "../$file" ]; then
+                cp -a "../$file" "$TARGET_DIR/"
+              else
+                echo "Warning: required file $file not found during branch deployment sync" >&2
+              fi
+            done
+
+            JS_SYNC_EXCLUDES=(
+              "--exclude=node_modules/"
+              "--exclude=pages/"
+              "--exclude=preview/"
+              "--exclude=project/"
+            )
+
+            JS_INCLUDE_RULES=(
+              "--include=*/"
+              "--include=*.js"
+              "--include=*.json"
+              "--exclude=*"
+            )
+
+            rsync -a "${RSYNC_ARGS[@]}" "${JS_SYNC_EXCLUDES[@]}" "${JS_INCLUDE_RULES[@]}" ../ "$TARGET_DIR/"
             generate_readme_html "$TARGET_DIR"
           fi
 

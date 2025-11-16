@@ -831,6 +831,7 @@ function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     baseSnapshotKey: null,
     lastRenderScale: null,
     lastFilledCount: null,
+    lastLabelSettingsSignature: null,
   };
 
   let currentMetrics = payload && payload.metrics ? { ...payload.metrics } : null;
@@ -1343,6 +1344,7 @@ function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       uploadState.overlayDirty = true;
       uploadState.numbersHasContent = false;
       uploadState.overlayHasContent = false;
+      uploadState.lastLabelSettingsSignature = null;
     }
 
     const { context: numbersContext, resized: numbersResized } = ensureNumbersSurface(
@@ -1376,6 +1378,13 @@ function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     ) {
       uploadState.numbersDirty = true;
       uploadState.lastRenderScale = renderScale;
+    }
+
+    const labelSettingsSignature =
+      cache && cache.labelSettingsSignature != null ? cache.labelSettingsSignature : null;
+    if (uploadState.lastLabelSettingsSignature !== labelSettingsSignature) {
+      uploadState.lastLabelSettingsSignature = labelSettingsSignature;
+      uploadState.numbersDirty = true;
     }
 
     const filledCount = getFilledCount(state);
@@ -1860,6 +1869,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     filledHash: null,
     filledSize: 0,
     dataUrl: "",
+    labelSettingsSignature: null,
   };
 
   function resize(metrics = {}) {
@@ -1953,6 +1963,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     }
 
     if (!cache || !cache.ready) {
+      numbersSurface.labelSettingsSignature = null;
       numbersImage.removeAttribute("href");
       numbersImage.style.display = "none";
       return null;
@@ -2119,6 +2130,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
       numbersSurface.width !== pixelWidth || numbersSurface.height !== pixelHeight;
     const ctx = ensureNumbersSurface(pixelWidth, pixelHeight);
     if (!ctx) {
+      numbersSurface.labelSettingsSignature = null;
       numbersImage.removeAttribute("href");
       numbersImage.style.display = "none";
       return;
@@ -2135,6 +2147,11 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
       dirty = true;
     } else if (filledState.hash && numbersSurface.filledHash !== filledState.hash) {
       numbersSurface.filledHash = filledState.hash;
+      dirty = true;
+    }
+    const labelSignature = cache?.labelSettingsSignature ?? null;
+    if (numbersSurface.labelSettingsSignature !== labelSignature) {
+      numbersSurface.labelSettingsSignature = labelSignature;
       dirty = true;
     }
     if (sizeChanged) {
