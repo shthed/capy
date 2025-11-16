@@ -2624,7 +2624,7 @@
           imageDescription: "",
           showRegionLabels: true,
           theme: DEFAULT_UI_THEME,
-          renderer: "canvas2d",
+          renderer: "svg",
           mouseControls: cloneMouseControls(DEFAULT_MOUSE_CONTROLS),
         },
         previewVisible: false,
@@ -2688,6 +2688,7 @@
               drawNumbers(context);
             }
           },
+          getLabelPlacements: ({ cache }) => computeLabelPlacements(cache),
           clearContext: ({ context }) => clearContext(context),
           onRendererChange: handleRendererChange,
         },
@@ -7875,38 +7876,48 @@
         context.restore();
       }
 
-      function drawNumbers(ctx) {
-        if (!state.puzzle || !ctx) return;
-        if (state.settings.showRegionLabels === false) return;
-        const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+      function computeLabelPlacements(cache) {
+        const placements = [];
+        const signature = computeLabelSettingsSignature();
+        if (!state.puzzle || state.settings.showRegionLabels === false) {
+          return { placements, signature };
+        }
         const puzzleWidth = state.puzzle?.width || 0;
         const puzzleHeight = state.puzzle?.height || 0;
         const regionMap = state.puzzle?.regionMap || null;
         const hasRegionMap =
           regionMap && puzzleWidth > 0 && puzzleHeight > 0 && regionMap.length === puzzleWidth * puzzleHeight;
-        withRenderScale(ctx, scale, () => {
-          const fallbackNumberInk = backgroundInk.number;
-          const fallbackOutlineInk = backgroundInk.outline;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.lineJoin = "round";
-          ctx.lineCap = "round";
-          ctx.strokeStyle = fallbackOutlineInk;
-          for (const region of state.puzzle.regions) {
-            if (!region || state.filled.has(region.id)) continue;
-            const text = getRegionLabelText(region);
-            if (!text) continue;
-            let fontSize = computeRegionLabelFontSize(region, text);
-            if (!Number.isFinite(fontSize) || fontSize <= 0) {
-              continue;
-            }
-            let bounds = null;
-            if (puzzleWidth > 0) {
-              bounds = ensureRegionBounds(region, puzzleWidth);
-            }
-            let metrics = measureLabelMetrics(text, fontSize);
-            let center = null;
-            if (metrics && hasRegionMap) {
+        const fallbackNumberInk = backgroundInk.number;
+        const fallbackOutlineInk = backgroundInk.outline;
+        for (const region of state.puzzle.regions) {
+          if (!region || state.filled.has(region.id)) continue;
+          const text = getRegionLabelText(region);
+          if (!text) continue;
+          let fontSize = computeRegionLabelFontSize(region, text);
+          if (!Number.isFinite(fontSize) || fontSize <= 0) {
+            continue;
+          }
+          const bounds = puzzleWidth > 0 ? ensureRegionBounds(region, puzzleWidth) : region.bounds ?? null;
+          let metrics = measureLabelMetrics(text, fontSize);
+          let center = null;
+          if (metrics && hasRegionMap) {
+            center = findRegionLabelAnchor(
+              region,
+              metrics.halfWidth,
+              metrics.halfHeight,
+              bounds,
+              puzzleWidth,
+              puzzleHeight,
+              regionMap
+            );
+            let attempts = 0;
+            while (!center && attempts < 5 && fontSize > 0.5) {
+              attempts += 1;
+              fontSize = Math.max(fontSize * 0.85, fontSize - 0.75);
+              metrics = measureLabelMetrics(text, fontSize);
+              if (!metrics) {
+                break;
+              }
               center = findRegionLabelAnchor(
                 region,
                 metrics.halfWidth,
@@ -7916,41 +7927,59 @@
                 puzzleHeight,
                 regionMap
               );
-              let attempts = 0;
-              while (!center && attempts < 5 && fontSize > 0.5) {
-                attempts += 1;
-                fontSize = Math.max(fontSize * 0.85, fontSize - 0.75);
-                metrics = measureLabelMetrics(text, fontSize);
-                if (!metrics) {
-                  break;
-                }
-                center = findRegionLabelAnchor(
-                  region,
-                  metrics.halfWidth,
-                  metrics.halfHeight,
-                  bounds,
-                  puzzleWidth,
-                  puzzleHeight,
-                  regionMap
-                );
-              }
             }
-            if (!center) {
-              center = getRegionCenter(region);
-              metrics = metrics || measureLabelMetrics(text, fontSize);
-            }
-            if (!center || !metrics) continue;
-            const paletteColor = getPaletteEntry(region.colorId);
-            const regionInk =
-              paletteColor?.hex && typeof paletteColor.hex === "string"
-                ? rgbaFromHex(paletteColor.hex, 1)
-                : fallbackNumberInk;
-            const strokeWidth = computeRegionLabelStrokeWidth(fontSize);
-            ctx.fillStyle = regionInk;
+          }
+          if (!center) {
+            center = getRegionCenter(region);
+            metrics = metrics || measureLabelMetrics(text, fontSize);
+          }
+          if (!center || !metrics) continue;
+          const paletteColor = getPaletteEntry(region.colorId);
+          const regionInk =
+            paletteColor?.hex && typeof paletteColor.hex === "string"
+              ? rgbaFromHex(paletteColor.hex, 1)
+              : fallbackNumberInk;
+          const strokeWidth = computeRegionLabelStrokeWidth(fontSize);
+          placements.push({
+            id: region.id,
+            colorId: region.colorId,
+            text,
+            fontSize,
+            strokeWidth,
+            x: center.x,
+            y: center.y,
+            fill: regionInk,
+            stroke: fallbackOutlineInk,
+          });
+        }
+        return { placements, signature };
+      }
+
+      function drawNumbers(ctx) {
+        if (!state.puzzle || !ctx) return;
+        if (state.settings.showRegionLabels === false) return;
+        const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+        const cache = state.renderCache || null;
+        const { placements } = computeLabelPlacements(cache);
+        if (placements.length === 0) {
+          return;
+        }
+        withRenderScale(ctx, scale, () => {
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          for (const placement of placements) {
+            const fontSize = Number.isFinite(placement.fontSize) ? placement.fontSize : 10;
+            const strokeWidth = Number.isFinite(placement.strokeWidth)
+              ? placement.strokeWidth
+              : computeRegionLabelStrokeWidth(fontSize);
+            ctx.fillStyle = placement.fill || backgroundInk.number;
+            ctx.strokeStyle = placement.stroke || backgroundInk.outline;
             ctx.font = `${fontSize}px "Inter", "Segoe UI", sans-serif`;
             ctx.lineWidth = strokeWidth;
-            ctx.strokeText(text, center.x, center.y);
-            ctx.fillText(text, center.x, center.y);
+            ctx.strokeText(placement.text, placement.x, placement.y);
+            ctx.fillText(placement.text, placement.x, placement.y);
           }
         });
       }

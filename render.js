@@ -1799,7 +1799,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   const baseImage = document.createElementNS(NS, "image");
   const filledGroup = document.createElementNS(NS, "g");
   const outlineGroup = document.createElementNS(NS, "g");
-  const numbersImage = document.createElementNS(NS, "image");
+  const numbersGroup = document.createElementNS(NS, "g");
   const overlayGroup = document.createElementNS(NS, "g");
   const previewImage = document.createElementNS(NS, "image");
 
@@ -1808,9 +1808,10 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   baseImage.style.pointerEvents = "none";
   filledGroup.setAttribute("fill-rule", "nonzero");
   outlineGroup.setAttribute("fill", "none");
-  numbersImage.setAttribute("preserveAspectRatio", "none");
-  numbersImage.style.display = "none";
-  numbersImage.style.pointerEvents = "none";
+  numbersGroup.style.display = "none";
+  numbersGroup.style.pointerEvents = "none";
+  numbersGroup.style.paintOrder = "stroke fill";
+  numbersGroup.setAttribute("fill", "none");
   overlayGroup.style.pointerEvents = "none";
   previewImage.setAttribute("preserveAspectRatio", "none");
   previewImage.style.display = "none";
@@ -1819,7 +1820,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   svg.appendChild(baseImage);
   svg.appendChild(filledGroup);
   svg.appendChild(outlineGroup);
-  svg.appendChild(numbersImage);
+  svg.appendChild(numbersGroup);
   svg.appendChild(overlayGroup);
   svg.appendChild(previewImage);
 
@@ -1853,19 +1854,6 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   let baseImageHref = "";
 
   const regionElements = new Map();
-
-  const numbersSurface = {
-    canvas: null,
-    context: null,
-    width: 0,
-    height: 0,
-    cacheVersion: null,
-    filledRef: null,
-    filledHash: null,
-    filledSize: 0,
-    dataUrl: "",
-    labelSettingsSignature: null,
-  };
 
   function resize(metrics = {}) {
     currentMetrics = metrics ? { ...metrics } : null;
@@ -1928,7 +1916,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
       baseImage.style.display = "none";
       filledGroup.style.display = "none";
       outlineGroup.style.display = "none";
-      numbersImage.style.display = "none";
+      numbersGroup.style.display = "none";
       return null;
     }
 
@@ -1937,30 +1925,14 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     baseImage.style.display = "none";
     filledGroup.style.display = "";
     outlineGroup.style.display = "";
+    numbersGroup.style.display = "";
 
-    const puzzleImage = state?.puzzle?.sourceImage || null;
-    const readyImage = puzzleImage && puzzleImage.ready ? puzzleImage.image || null : null;
-    const snapshot = puzzleImage?.snapshot || puzzleImage || null;
-    const sourceHref =
-      readyImage && typeof snapshot?.dataUrl === "string" && snapshot.dataUrl ? snapshot.dataUrl : "";
-    if (readyImage && sourceHref) {
-      if (baseImageHref !== sourceHref) {
-        baseImage.setAttribute("href", sourceHref);
-        baseImageHref = sourceHref;
-      }
-      baseImage.style.display = "";
-    } else {
-      if (baseImageHref) {
-        baseImage.removeAttribute("href");
-        baseImageHref = "";
-      }
-      baseImage.style.display = "none";
-    }
+    baseImage.removeAttribute("href");
+    baseImage.style.display = "none";
 
     if (!cache || !cache.ready) {
-      numbersSurface.labelSettingsSignature = null;
-      numbersImage.removeAttribute("href");
-      numbersImage.style.display = "none";
+      numbersGroup.replaceChildren();
+      numbersGroup.style.display = "none";
       return null;
     }
 
@@ -1972,8 +1944,6 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
       backgroundRect.setAttribute("height", String(contentHeight));
       baseImage.setAttribute("width", String(contentWidth));
       baseImage.setAttribute("height", String(contentHeight));
-      numbersImage.setAttribute("width", String(contentWidth));
-      numbersImage.setAttribute("height", String(contentHeight));
       previewImage.setAttribute("width", String(contentWidth));
       previewImage.setAttribute("height", String(contentHeight));
     }
@@ -1985,11 +1955,12 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     }
 
     const filledState = getFilledState(state?.filled);
+    const paletteById = buildPaletteMap(state?.puzzle?.palette);
     const overlayFill =
       typeof backgroundColor === "string" && backgroundColor
         ? backgroundColor
         : "rgba(248, 250, 252, 1)";
-    updateFilledPaths(filledState, overlayFill);
+    updateFilledPaths(filledState, overlayFill, paletteById);
 
     const strokeColor = computeInkStyles(backgroundColor).outline;
     const strokeWidth = cache?.strokeWidth > 0 ? cache.strokeWidth : 1;
@@ -1999,7 +1970,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
       lastStrokeWidth = strokeWidth;
     }
 
-    updateNumbersLayer({ state, cache, metrics }, filledState);
+    updateNumbersLayer({ state, cache, metrics }, filledState, paletteById);
 
     return null;
   }
@@ -2052,8 +2023,8 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   function dispose() {
     overlayGroup.replaceChildren();
     regionElements.clear();
-    numbersImage.removeAttribute("href");
-    numbersImage.style.display = "none";
+    numbersGroup.replaceChildren();
+    numbersGroup.style.display = "none";
     previewImage.removeAttribute("href");
     previewImage.style.display = "none";
     baseImage.removeAttribute("href");
@@ -2061,12 +2032,6 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     baseImageHref = "";
     if (svg.parentNode) {
       svg.parentNode.removeChild(svg);
-    }
-    if (numbersSurface.canvas) {
-      numbersSurface.canvas.width = 0;
-      numbersSurface.canvas.height = 0;
-      numbersSurface.context = null;
-      numbersSurface.dataUrl = "";
     }
     if (appliedHostPosition) {
       host.style.position = originalHostPosition;
@@ -2080,101 +2045,39 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     }
   }
 
-  function ensureNumbersSurface(width, height) {
-    const w = Math.max(1, Math.round(width));
-    const h = Math.max(1, Math.round(height));
-    if (!numbersSurface.canvas) {
-      numbersSurface.canvas = document.createElement("canvas");
-      numbersSurface.context = null;
-    }
-    if (numbersSurface.canvas.width !== w || numbersSurface.canvas.height !== h) {
-      numbersSurface.canvas.width = w;
-      numbersSurface.canvas.height = h;
-      numbersSurface.context = null;
-    }
-    if (!numbersSurface.context) {
-      try {
-        numbersSurface.context = numbersSurface.canvas.getContext("2d");
-      } catch (error) {
-        numbersSurface.context = null;
-      }
-      if (numbersSurface.context) {
-        numbersSurface.context.imageSmoothingEnabled = false;
-      }
-    }
-    numbersSurface.width = w;
-    numbersSurface.height = h;
-    return numbersSurface.context;
-  }
-
-  function clearCanvasContext(ctx) {
-    if (!ctx) {
-      return;
-    }
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    ctx.restore();
-  }
-
-  function updateNumbersLayer(contextArgs, filledState) {
+  function updateNumbersLayer(contextArgs, filledState, paletteById) {
     const { state, cache, metrics } = contextArgs;
-    const pixelWidth = Math.max(1, Math.round(metrics?.pixelWidth ?? currentPixelWidth));
-    const pixelHeight = Math.max(1, Math.round(metrics?.pixelHeight ?? currentPixelHeight));
-    const sizeChanged =
-      numbersSurface.width !== pixelWidth || numbersSurface.height !== pixelHeight;
-    const ctx = ensureNumbersSurface(pixelWidth, pixelHeight);
-    if (!ctx) {
-      numbersSurface.labelSettingsSignature = null;
-      numbersImage.removeAttribute("href");
-      numbersImage.style.display = "none";
+    numbersGroup.replaceChildren();
+    const placementResult =
+      typeof hooks.getLabelPlacements === "function"
+        ? hooks.getLabelPlacements({ state, cache, metrics })
+        : null;
+    const placements = placementResult?.placements || [];
+    if (placements.length === 0) {
+      numbersGroup.style.display = "none";
       return;
     }
-    let dirty = false;
-    if (numbersSurface.cacheVersion !== cache.version) {
-      numbersSurface.cacheVersion = cache.version;
-      dirty = true;
-    }
-    if (numbersSurface.filledRef !== filledState.ref || numbersSurface.filledSize !== filledState.size) {
-      numbersSurface.filledRef = filledState.ref;
-      numbersSurface.filledSize = filledState.size;
-      numbersSurface.filledHash = filledState.hash || null;
-      dirty = true;
-    } else if (filledState.hash && numbersSurface.filledHash !== filledState.hash) {
-      numbersSurface.filledHash = filledState.hash;
-      dirty = true;
-    }
-    const labelSignature = cache?.labelSettingsSignature ?? null;
-    if (numbersSurface.labelSettingsSignature !== labelSignature) {
-      numbersSurface.labelSettingsSignature = labelSignature;
-      dirty = true;
-    }
-    if (sizeChanged) {
-      dirty = true;
-    }
-    if (dirty) {
-      clearCanvasContext(ctx);
-      if (typeof hooks.drawNumbersLayer === "function") {
-        try {
-          hooks.drawNumbersLayer({ context: ctx, state, cache, metrics });
-        } catch (error) {
-          console.warn("Numbers layer hook failed", error);
-        }
-      }
-      let href = "";
-      try {
-        href = ctx.canvas.toDataURL("image/png");
-      } catch (error) {
-        href = "";
-      }
-      numbersSurface.dataUrl = href;
-    }
-    if (numbersSurface.dataUrl) {
-      numbersImage.setAttribute("href", numbersSurface.dataUrl);
-      numbersImage.style.display = "";
-    } else {
-      numbersImage.removeAttribute("href");
-      numbersImage.style.display = "none";
+    const colorCache = paletteById || new Map();
+    numbersGroup.style.display = "";
+    for (const placement of placements) {
+      if (!placement || !placement.text) continue;
+      const text = document.createElementNS(NS, "text");
+      text.textContent = placement.text;
+      text.setAttribute("x", formatNumber(placement.x));
+      text.setAttribute("y", formatNumber(placement.y));
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("dominant-baseline", "middle");
+      const fontSize = Number.isFinite(placement.fontSize) ? placement.fontSize : 10;
+      const strokeWidth = Number.isFinite(placement.strokeWidth) ? placement.strokeWidth : 0.2;
+      const regionColor = colorCache.get(placement.colorId) || null;
+      const fill = placement.fill || regionColor || "rgba(15, 23, 42, 0.95)";
+      const stroke = placement.stroke || "rgba(15, 23, 42, 0.65)";
+      text.setAttribute("fill", fill);
+      text.setAttribute("stroke", stroke);
+      text.setAttribute("stroke-width", formatNumber(strokeWidth));
+      text.setAttribute("font-size", formatNumber(fontSize));
+      text.setAttribute("font-family", "Inter, 'Segoe UI', sans-serif");
+      numbersGroup.appendChild(text);
     }
   }
 
@@ -2260,19 +2163,35 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     return { set: new Set(), ref: null, size: 0, hash: null };
   }
 
-  function updateFilledPaths(filledState, overlayColor) {
+  function updateFilledPaths(filledState, overlayColor, paletteById) {
     const overlayFill =
       typeof overlayColor === "string" && overlayColor ? overlayColor : "rgba(248, 250, 252, 1)";
+    const palette = paletteById || new Map();
     regionElements.forEach((entry, id) => {
       if (!entry?.fillPath) {
         return;
       }
-      if (filledState.set.has(id)) {
-        entry.fillPath.setAttribute("fill", "none");
-      } else {
-        entry.fillPath.setAttribute("fill", overlayFill);
-      }
+      const fillColor = filledState.set.has(id)
+        ? palette.get(entry.geometry?.colorId) || overlayFill
+        : overlayFill;
+      entry.fillPath.setAttribute("fill", fillColor);
     });
+  }
+
+  function buildPaletteMap(palette) {
+    const map = new Map();
+    if (!Array.isArray(palette)) {
+      return map;
+    }
+    for (const entry of palette) {
+      if (!entry || !Number.isFinite(entry.id)) {
+        continue;
+      }
+      if (typeof entry.hex === "string" && entry.hex) {
+        map.set(entry.id, entry.hex);
+      }
+    }
+    return map;
   }
 
   function updateOutlineStyle(color, strokeWidth) {
