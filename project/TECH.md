@@ -12,29 +12,32 @@ both contributors and automation agents have a single source of truth.
 Capy turns any bitmap image into a colour-by-number puzzle entirely in the
 browser. Drop a file (or load one via the hidden file picker) and the app will
 resize it, run the selected quantization pipeline (k-means palette clustering or
-the new posterize-and-merge pass) to build a discrete palette, merge tiny
-regions, and paint a canvas you can immediately play. An instant preview toggle,
-hint tools, a save manager, and a configurable generator all live inside a
-single `index.html` document—no build tools or extra runtime required.
+the posterize-and-merge pass) to build a discrete palette, merge tiny regions,
+and paint a canvas you can immediately play. Everything ships as a static
+ runtime files in the repository root so the single-page app can be served directly without a
+ build step.
 
 ## Repository Map
 
-- **Core application**
-  - `index.html` – Single-file UI, styles, and generator logic powering the colouring experience.
-  - `render.js` – Renderer controller plus Canvas2D, WebGL, and SVG backends; manages the active drawing pipeline and exposes
-    hooks for swapping or extending renderers at runtime.
-  - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the single-page runtime.
-  - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, and metadata assembly off the main thread.
+- **Runtime (repository root)**
+  - `index.html` – Single-page host document containing markup and wiring for renderer selection, saves, generator controls, and automation helpers.
+  - `styles.css` – Primary stylesheet housing theme tokens, responsive layout rules, and component styles (preboot UI scale variables stay inline in `index.html`).
+  - `render.js` – Renderer controller plus Canvas2D, WebGL, and SVG backends (including the GPU-accelerated outline/text pipeline); manages the active drawing pipeline and exposes hooks for swapping or extending renderers at runtime.
+  - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the runtime payload.
+  - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, smoothing, and metadata assembly off the main thread.
 - **Documentation**
   - `README.md` – Player-facing quick start and gameplay overview.
   - `TECH.md` – This technical reference.
+  - `project/STYLEGUIDE.md` – CSS conventions, load-order expectations, and maintenance tips for the runtime stylesheet.
 - **Testing & QA**
-  - `project/tests/ui-review.spec.js` – Playwright smoke test that loads the bundled site in Chromium and confirms the document title so we know the runtime boots.
-  - `project/scripts/run-tests.js` – Harness invoked by `npm test --silent`; prints the current suite status (skip notice while automated checks stay offline) and exits with CI-friendly codes.
+  - `project/tests/ui-review.spec.js` – Playwright smoke suite that loads the bundled runtime, switches between renderers, paints automation fixtures, and exercises saves reloads.
+  - `project/tests/render-controller.spec.js` – Node-based unit coverage that mocks renderer registrations and asserts the controller's fallback hooks and error paths.
+  - `project/tests/generator.spec.js` / `project/tests/smoothing.spec.mjs` – Node-driven generator coverage with typed-array fixtures under `project/tests/fixtures/` plus shared helpers in `project/tests/utils/fixtures.js`.
+  - `project/scripts/run-tests.js` – Harness invoked by `npm test --silent`; runs the Node test runner before handing off to Playwright so both suites share a single entry point and exit code.
   - `project/artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
-  - **Playwright local setup** – Inside `project/`, run `npm install` followed by `npx playwright install --with-deps chromium` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
+  - **Playwright local setup** – Inside `project/`, run `npm install` followed by `npm run setup:playwright` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
 - **Tooling & metadata**
-  - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally.
+  - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally; `npm run dev` serves the repository root at http://localhost:8000.
   - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
   - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn `README.md` into `/README/index.html` and keep embedded docs mirrored in previews.
@@ -61,15 +64,15 @@ source):
    (e.g., `automation/feature` → `automation-feature`), and creates a matching
    directory for non-`main` deployments.
 3. **Content sync.**
-   - `main` copies the full runtime (minus excluded directories like
-     `node_modules`, Playwright reports, and other transient artifacts) straight
-     to the root of `gh-pages` and regenerates `/README/index.html` with
+   - `main` clears the deployment working tree (leaving `.git`) and copies the
+     runtime payload from the repository root (`index.html`, `styles.css`,
+     `render.js`, `puzzle-generation.js`, and `capy.json`) into the root of
+     `gh-pages`, then regenerates `/README/index.html` with
      `project/scripts/build-pages-site.mjs` so
      https://shthed.github.io/capy/README/ always mirrors the handbook.
-   - Other branches copy the runtime essentials—`index.html`, `capy.json`, and
-     every root-level `.js`/`.json` module (e.g. `render.js`,
-     `puzzle-generation.js`)—then run the same README conversion for a
-     branch-scoped mirror at `/README/index.html`.
+   - Other branches mirror the same runtime payload inside their
+     branch-specific directories before running the README conversion for a
+     scoped `/README/index.html`.
 4. **Index generation.** The workflow rebuilds `branch.html`, surfacing the main
    deployment first followed by every active branch. Each card now keeps the
    layout intentionally simple: a preview link, branch and PR references, and
@@ -80,7 +83,10 @@ source):
 
 Tweaking the deployment:
 
-- Adjust exclusion patterns or published files inside the `rsync` steps.
+- Adjust exclusion patterns or published files inside the `rsync` steps. When
+  adding new runtime assets, update the `ESSENTIAL_FILES`/include lists in
+  `.github/workflows/deploy-branch.yml` so branch previews ship the same payload
+  as `main`.
 - Change the slug format in the sanitisation helper if branch naming needs to
   support additional characters.
 - Modify the GitHub API pagination values in the index-building script to show
@@ -160,7 +166,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 - **Command rail** – A single Settings & tools button stays fixed to the header, eliminating scroll while keeping safe-area padding. Opening it jumps straight into the slide-over; the Gameplay tab’s Quick actions expose the preview toggle and fullscreen control alongside the usual gameplay preferences.
 - **Viewport canvas** – Hosts the interactive puzzle (`data-testid="puzzle-canvas"`). Renders outlines, numbers, and filled regions; supports smooth pan + zoom and respects auto-advance and hint animation toggles. Drag to reposition, scroll/pinch/double-tap to zoom; mobile gestures feed directly into the stage.
 - **Preview mode** – Temporarily renders every region in its target colour for quick comparisons.
-- **Settings & tools menu** – Slides in beside the playfield so you can keep painting while adjusting sliders. Tabs cover Gameplay, Hints, Controls, Appearance, Generator, Saves, and Help & logs so related toggles stay visible on smaller screens. The Gameplay tab now opens with Quick actions for the preview toggle and fullscreen control before diving into palette sorting, auto-advance, difficulty, hint animations, overlay intensity, interface scaling, renderer swaps, and mouse mappings. The Generator tab mirrors clustering sliders, detail presets, remote URL imports, and advanced metadata (art prompts, image descriptions). The Saves tab manages manual snapshots, exports, deletion, and the stored-image size cap, while Help & logs hosts command descriptions, gesture tips, the embedded README, and the live debug console. Palette sorting modes include region number, remaining regions, colour name, a rainbow spectrum order based on OKLCH hue, a warm→cool temperature pass, and perceptual lightness (legacy hue/brightness selections migrate to spectrum/lightness automatically).
+- **Settings & tools menu** – Slides in beside the playfield so you can keep painting while adjusting sliders. A fixed vertical tab rail now sits on the left while the active panel scrolls independently on the right, and the content within each panel flows through a responsive grid so wide viewports spill settings across two columns without sacrificing headings. Tabs still cover Gameplay, Hints, Controls, Appearance, Generator, Saves, and Help & logs so related toggles stay visible on smaller screens. The Gameplay tab opens with Quick actions for the preview toggle and fullscreen control before diving into palette sorting, auto-advance, difficulty, hint animations, overlay intensity, interface scaling, renderer swaps, and mouse mappings. The Generator tab mirrors clustering sliders, detail presets, remote URL imports, and advanced metadata (art prompts, image descriptions). The Saves tab manages manual snapshots, exports, deletion, and the stored-image size cap, while Help & logs hosts command descriptions, gesture tips, the embedded README, and the live debug console. Palette sorting modes include region number, remaining regions, colour name, a rainbow spectrum order based on OKLCH hue, a warm→cool temperature pass, and perceptual lightness (legacy hue/brightness selections migrate to spectrum/lightness automatically). Sheet surfaces now lean on the minimal-library palette: darker themes use `rgba(9, 13, 24, 0.94)` with a desaturated slate border, while the light theme sticks to near-solid white with cool-gray outlines. Hover, active, and focus states pull from the refreshed `--theme-sheet-button-hover-*`, `--theme-sheet-button-active-*`, and `--theme-sheet-focus-ring` tokens so tabs and close buttons stay AA-compliant without the previous heavy blur. Toggle switches adopt compact pill styling and range sliders live in bordered cards with short tracks plus **Default** buttons that snap back to the recommended presets (for example 1.2 s hint fades or 65 % sampling), keeping adjustments reachable without stretching across the full sheet.
 - **Detail presets** – Onboarding hints and Settings surface the active preset with live captions describing colours, min region size, resize edge, and approximate region counts.
 - **Start screen** – Launch puzzles, reload the sample, and highlight manual snapshot tips. **Choose an image** triggers the system picker; the **Load capybara sample** shortcut mirrors the Generator tab’s detail presets, and resets remain available from the Saves tab once the menu is open.
 - **Palette dock** – Horizontal scroller anchored to the bottom. Flat colour tiles adjust label contrast automatically, collapse completed colours, and expose tooltips plus `data-color-id` attributes for automation. Completed swatches drop from the picker without renumbering the remaining entries so labels and hints keep stable references.
@@ -179,8 +185,8 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 
 ### Code Architecture Tour
 
-- **Single-file app shell.** `index.html` owns markup, styles, and logic. The inline script is segmented into DOM caches, global state, event wiring, puzzle rendering, generation helpers, and persistence utilities—each called out in a developer-map comment.
-- **Preboot viewport metrics.** A blocking `<script>` in the `<head>` seeds UI scale variables, viewport padding, and the orientation/compact flags before the stylesheet paints; a companion snippet at the top of `<body>` mirrors those attributes so the runtime boot avoids first-paint jumps when `handleViewportChange` recalculates metrics.
+- **App shell + bootstrap.** `index.html` still owns markup, styles, and the main runtime, while `runtime.js` runs first to stash viewport metrics, UI scale defaults, and renderer bootstrap sentinels on `window.__capyPrebootMetrics` before the inline script picks up.
+- **Preboot viewport metrics.** `runtime.js` computes UI scale variables, viewport padding, and the orientation/compact flags before the stylesheet paints, pushing them into `:root` and onto `window.__capyPrebootMetrics`; the inline runtime consumes and reapplies the metrics at the top of `<body>` so `handleViewportChange` avoids first-paint jumps.
 - **Public testing surface.** `window.capyGenerator` exposes helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so automation and manual experiments can orchestrate the app without touching internals. Recent renderer work also surfaced `getRendererType()`, `listRenderers()`, `setRenderer(type)`, `registerRenderer(type, factory)`, and `unregisterRenderer(type)` so tests can assert the active backend or load experimental renderers without patching private state.
 - **Pan/zoom subsystem.** `viewState` tracks transforms for `#canvasStage` and `#canvasTransform`; helpers like `applyZoom`, `resetView`, and `applyViewTransform` keep navigation smooth across wheel, keyboard, and drag gestures.
  - **Puzzle rendering pipeline.** `renderPuzzle` composites the stored base image first, then fills an offscreen mask covering every unfinished region so the original art shows through as you paint. The mask rasterizes into the cached `filledLayer`, outlines still blit from the stroke cache, and `drawNumbers` overlays remaining labels. Label layout caches include a rounded zoom key derived from the current display-to-base scale ratio, shrink the minimum font size relative to that zoom factor, and expand their attempt list at higher zoom so thin regions surface labels once there is enough on-screen room without sacrificing base zoom legibility. Visual feedback continues to leverage `flashColorRegions` and `paintRegions` for hints. The renderer controller proxies those calls to Canvas2D, WebGL, or SVG backends—WebGL uploads the stored base image alongside the cached layers as textures, tracks incremental fills so textures refresh immediately, and preserves the last good upload when a transfer fails so the screen never flashes blank, while the SVG renderer mounts the base image under its region mask before emitting `<path>` nodes so vector output stays crisp at any zoom. Each renderer samples its frame times and prints rolling averages to the browser console once per second so you can spot performance regressions while debugging pan and zoom flows.
@@ -303,7 +309,7 @@ Packing the region map trims payloads by more than half, avoiding `QuotaExceeded
 
 ## Testing & QA Checklist
 
-Playwright smoke coverage now exercises the bundled puzzle, first-paint interaction, and save/load completion flow. From inside `project/`, run `npm test --silent` locally (it wraps `npx playwright test --config=playwright.config.js`) before merging. The first run may require `npx playwright install` plus the system dependencies listed in the Playwright output (`npx playwright install-deps` on Debian/Ubuntu) so Chromium can launch headlessly.
+Playwright smoke coverage now exercises the bundled puzzle, first-paint interaction, and save/load completion flow. From inside `project/`, run `npm test --silent` locally (it wraps `npx playwright test --config=playwright.config.js`) before merging. The first run may require `npm run setup:playwright` plus the system dependencies listed in the Playwright output (`npx playwright install-deps` on Debian/Ubuntu) so Chromium can launch headlessly.
 
 Supplement the automated run with these manual checks when you change gameplay, rendering, or onboarding flows:
 
@@ -317,6 +323,7 @@ Local workflow:
 ```bash
 cd project
 npm install
+npm run setup:playwright  # Only required when running Playwright locally
 npm run dev
 ```
 

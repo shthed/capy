@@ -17,6 +17,9 @@
       manual saves, and exports live alongside serializeCurrentPuzzle.
     - External API: window.capyGenerator exposes devtools entry points; keep signatures stable when
       reorganizing internal wiring.
+    - Bootstrap: runtime.js seeds preboot viewport metrics and renderer bootstrap sentinels before
+      the inline runtime picks up, so CSS variables and compatibility guards are ready before first
+      paint.
 
     Script organization
     -------------------
@@ -25,7 +28,8 @@
     3. Generation + rendering pipeline (loadDefaultPuzzle, createPuzzleData, renderPuzzle, etc.).
     4. Palette interactions, keyboard/mouse handlers, and hint overlay animation loop.
     5. Autosave + storage encoding, save manager wiring, and UI refresh routines.
-    6. window.capyGenerator bindings exported last for manual QA tooling.
+    6. Runtime bootstrap lives in runtime.js to seed UI scale/compatibility hints ahead of paint.
+    7. window.capyGenerator bindings exported last for manual QA tooling.
 
     Function highlights
     -------------------
@@ -66,78 +70,9 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
     <title>Image to Color-by-Number</title>
-    <script>
-      (function () {
-        const root = document.documentElement;
-        if (!root || typeof window === "undefined") return;
-        const SETTINGS_STORAGE_KEY = "capy.settings.v1";
-        const DEFAULT_UI_SCALE = 0.75;
-        const MIN_UI_SCALE = 0.2;
-        const MAX_UI_SCALE = 3;
-        const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-        let userScale = DEFAULT_UI_SCALE;
-        try {
-          const raw = window.localStorage?.getItem(SETTINGS_STORAGE_KEY);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            const payload =
-              parsed && typeof parsed === "object"
-                ? parsed.settings && typeof parsed.settings === "object"
-                  ? parsed.settings
-                  : parsed
-                : null;
-            let candidate = payload && payload.uiScale != null ? Number(payload.uiScale) : NaN;
-            if (!Number.isFinite(candidate) && payload && typeof payload.uiScale === "string") {
-              const trimmed = payload.uiScale.trim();
-              if (trimmed.endsWith("%")) {
-                candidate = Number(trimmed.slice(0, -1)) / 100;
-              }
-            }
-            if (Number.isFinite(candidate) && candidate > 0) {
-              if (candidate > MAX_UI_SCALE && candidate <= MAX_UI_SCALE * 100) {
-                candidate /= 100;
-              }
-              userScale = clamp(candidate, MIN_UI_SCALE, MAX_UI_SCALE);
-            }
-          }
-        } catch (_error) {
-          /* localStorage may be unavailable; fall back to defaults. */
-        }
-        root.style.setProperty("--ui-scale-user", String(userScale));
-        const viewport = window.visualViewport;
-        const width = Math.round(
-          (viewport && viewport.width) || window.innerWidth || root.clientWidth || 0
-        );
-        const height = Math.round(
-          (viewport && viewport.height) || window.innerHeight || root.clientHeight || 0
-        );
-        const minSide = Math.max(1, Math.min(width, height));
-        const autoScale = Math.min(1.1, Math.max(0.6, minSide / 880));
-        root.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
-        const combined = Math.min(1.8, Math.max(0.35, userScale * autoScale));
-        root.style.setProperty("--ui-scale", combined.toFixed(4));
-        const orientation = width >= height ? "landscape" : "portrait";
-        const padding =
-          orientation === "portrait"
-            ? Math.min(28, Math.max(16, Math.round(minSide * 0.06)))
-            : 32;
-        root.style.setProperty("--app-width", `${width}px`);
-        root.style.setProperty("--app-height", `${height}px`);
-        root.style.setProperty("--viewport-padding", `${padding}px`);
-        const compactCommands = width < 720 || height < 540;
-        root.dataset.orientation = orientation;
-        root.dataset.compactCommands = compactCommands ? "true" : "false";
-        window.__capyPrebootMetrics = {
-          orientation,
-          compactCommands,
-        };
-      })();
-    </script>
+    <script type="module" src="./runtime.js"></script>
     <style>
       :root {
-        color-scheme: light dark;
-        font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui,
-          sans-serif;
         --ui-scale-user: 0.75;
         --ui-scale-auto: 1;
         --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
@@ -146,1559 +81,16 @@
         --viewport-padding: calc(32px * var(--ui-scale));
         --rail-padding-block: calc(10px * var(--ui-scale));
         --rail-padding-inline: calc(20px * var(--ui-scale));
-        --theme-body-bg: #000000;
-        --theme-body-color: #e2e8f0;
-        --theme-command-bg: rgba(15, 23, 42, 0.82);
-        --theme-command-border: rgba(148, 163, 184, 0.28);
-        --theme-command-text: rgba(226, 232, 240, 0.92);
-        --theme-command-active-bg: rgba(37, 99, 235, 0.28);
-        --theme-command-active-border: rgba(96, 165, 250, 0.55);
-        --theme-command-active-text: rgba(226, 232, 240, 1);
-        --theme-command-disabled-bg: rgba(15, 23, 42, 0.55);
-        --theme-command-disabled-border: rgba(71, 85, 105, 0.35);
-        --theme-command-disabled-text: rgba(148, 163, 184, 0.6);
-        --theme-sheet-bg: rgba(2, 6, 23, 0.95);
-        --theme-sheet-border: rgba(59, 130, 246, 0.4);
-        --theme-sheet-shadow: 0 32px 80px rgba(8, 47, 73, 0.45);
-        --theme-sheet-button-bg: rgba(148, 163, 184, 0.15);
-        --theme-sheet-button-text: rgba(226, 232, 240, 0.8);
-        --theme-sheet-button-border: rgba(148, 163, 184, 0.25);
-        --theme-debug-border: rgba(59, 130, 246, 0.35);
-        --theme-debug-bg: rgba(15, 23, 42, 0.85);
-        --theme-hint-overlay: rgba(15, 23, 42, 0.82);
-        --theme-hint-body-bg: rgba(2, 6, 23, 0.78);
-        --theme-hint-body-border: rgba(59, 130, 246, 0.35);
-        --theme-hint-body-text: rgba(226, 232, 240, 0.8);
-        --theme-preview-overlay: rgba(2, 6, 23, 0.9);
-        --theme-tooltip-bg: rgba(15, 23, 42, 0.9);
-        --theme-tooltip-border: rgba(15, 23, 42, 0.9);
-        --theme-keycap-bg: rgba(15, 23, 42, 0.65);
-        --theme-keycap-border: rgba(148, 163, 184, 0.35);
-        --theme-keycap-text: rgba(226, 232, 240, 0.9);
-        --theme-muted-strong: rgba(148, 163, 184, 0.9);
-        --theme-muted-text: rgba(226, 232, 240, 0.82);
-        --theme-caption-text: rgba(148, 163, 184, 0.85);
-        --theme-note-text: rgba(148, 163, 184, 0.8);
-        --theme-input-bg: rgba(15, 23, 42, 0.85);
-        --theme-input-border: rgba(148, 163, 184, 0.35);
-        --theme-preview-canvas-bg: rgba(15, 23, 42, 0.8);
-        --theme-preview-canvas-border: rgba(148, 163, 184, 0.3);
-        --theme-chip-bg: rgba(15, 23, 42, 0.65);
-        --theme-chip-border: rgba(148, 163, 184, 0.35);
-        --theme-chip-text: rgba(226, 232, 240, 0.85);
-        --theme-chip-hover-bg: rgba(37, 99, 235, 0.25);
-        --theme-chip-hover-text: rgba(226, 232, 240, 0.95);
-        --theme-chip-active-bg: rgba(59, 130, 246, 0.35);
-        --theme-chip-active-border: rgba(147, 197, 253, 0.6);
-        --theme-chip-active-text: rgba(226, 232, 240, 0.98);
-        --theme-palette-dock-bg: rgba(2, 6, 23, 0.94);
-        --theme-palette-dock-border: rgba(15, 23, 42, 0.85);
-        --command-rail-top: calc(env(safe-area-inset-top, 0px) + 12px);
-        --command-rail-height: calc(40px * var(--ui-scale));
-        --stage-background: var(--theme-body-bg);
-      }
-
-      body[data-theme="dark"] {
-        color-scheme: dark;
-      }
-
-      body[data-theme="light"] {
-        color-scheme: light;
-        --theme-body-bg: #f8fafc;
-        --theme-body-color: #0f172a;
-        --theme-command-bg: rgba(248, 250, 252, 0.9);
-        --theme-command-border: rgba(15, 23, 42, 0.18);
-        --theme-command-text: rgba(15, 23, 42, 0.86);
-        --theme-command-active-bg: rgba(59, 130, 246, 0.16);
-        --theme-command-active-border: rgba(37, 99, 235, 0.4);
-        --theme-command-active-text: rgba(15, 23, 42, 0.92);
-        --theme-command-disabled-bg: rgba(226, 232, 240, 0.75);
-        --theme-command-disabled-border: rgba(148, 163, 184, 0.32);
-        --theme-command-disabled-text: rgba(100, 116, 139, 0.7);
-        --theme-sheet-bg: rgba(255, 255, 255, 0.9);
-        --theme-sheet-border: rgba(15, 23, 42, 0.1);
-        --theme-sheet-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
-        --theme-sheet-button-bg: rgba(226, 232, 240, 0.85);
-        --theme-sheet-button-text: rgba(15, 23, 42, 0.75);
-        --theme-sheet-button-border: rgba(148, 163, 184, 0.35);
-        --theme-debug-border: rgba(96, 165, 250, 0.35);
-        --theme-debug-bg: rgba(226, 232, 240, 0.85);
-        --theme-hint-overlay: rgba(248, 250, 252, 0.9);
-        --theme-hint-body-bg: rgba(255, 255, 255, 0.95);
-        --theme-hint-body-border: rgba(96, 165, 250, 0.35);
-        --theme-hint-body-text: rgba(15, 23, 42, 0.78);
-        --theme-preview-overlay: rgba(15, 23, 42, 0.75);
-        --theme-tooltip-bg: rgba(15, 23, 42, 0.85);
-        --theme-tooltip-border: rgba(15, 23, 42, 0.85);
-        --theme-keycap-bg: rgba(226, 232, 240, 0.85);
-        --theme-keycap-border: rgba(148, 163, 184, 0.45);
-        --theme-keycap-text: rgba(15, 23, 42, 0.82);
-        --theme-muted-strong: rgba(71, 85, 105, 0.95);
-        --theme-muted-text: rgba(51, 65, 85, 0.85);
-        --theme-caption-text: rgba(100, 116, 139, 0.85);
-        --theme-note-text: rgba(100, 116, 139, 0.9);
-        --theme-input-bg: rgba(255, 255, 255, 0.95);
-        --theme-input-border: rgba(148, 163, 184, 0.35);
-        --theme-preview-canvas-bg: rgba(248, 250, 252, 0.95);
-        --theme-preview-canvas-border: rgba(148, 163, 184, 0.35);
-        --theme-chip-bg: rgba(226, 232, 240, 0.9);
-        --theme-chip-border: rgba(148, 163, 184, 0.35);
-        --theme-chip-text: rgba(30, 41, 59, 0.85);
-        --theme-chip-hover-bg: rgba(59, 130, 246, 0.25);
-        --theme-chip-hover-text: rgba(15, 23, 42, 0.85);
-        --theme-chip-active-bg: rgba(59, 130, 246, 0.35);
-        --theme-chip-active-border: rgba(37, 99, 235, 0.5);
-        --theme-chip-active-text: rgba(15, 23, 42, 0.85);
-        --theme-palette-dock-bg: rgba(255, 255, 255, 0.9);
-        --theme-palette-dock-border: rgba(148, 163, 184, 0.4);
-      }
-
-      body[data-theme="colorful"] {
-        color-scheme: dark;
-        --theme-body-bg: linear-gradient(145deg, #111827 0%, #1d1b52 40%, #6d1c8c 65%, #b91c1c 100%);
-        --theme-body-color: #f8fafc;
-        --theme-command-bg: rgba(30, 41, 59, 0.85);
-        --theme-command-border: rgba(244, 114, 182, 0.45);
-        --theme-command-text: rgba(248, 250, 252, 0.92);
-        --theme-command-active-bg: rgba(244, 114, 182, 0.28);
-        --theme-command-active-border: rgba(253, 186, 116, 0.75);
-        --theme-command-active-text: rgba(15, 23, 42, 0.95);
-        --theme-command-disabled-bg: rgba(30, 41, 59, 0.6);
-        --theme-command-disabled-border: rgba(148, 163, 184, 0.4);
-        --theme-command-disabled-text: rgba(226, 232, 240, 0.65);
-        --theme-sheet-bg: rgba(17, 24, 39, 0.92);
-        --theme-sheet-border: rgba(147, 51, 234, 0.45);
-        --theme-sheet-shadow: 0 38px 90px rgba(17, 24, 39, 0.6);
-        --theme-sheet-button-bg: rgba(244, 114, 182, 0.25);
-        --theme-sheet-button-text: rgba(248, 250, 252, 0.9);
-        --theme-sheet-button-border: rgba(253, 186, 116, 0.5);
-        --theme-debug-border: rgba(244, 114, 182, 0.35);
-        --theme-debug-bg: rgba(30, 41, 59, 0.82);
-        --theme-hint-overlay: rgba(17, 24, 39, 0.82);
-        --theme-hint-body-bg: rgba(30, 41, 59, 0.85);
-        --theme-hint-body-border: rgba(253, 186, 116, 0.5);
-        --theme-hint-body-text: rgba(248, 250, 252, 0.86);
-        --theme-preview-overlay: rgba(17, 24, 39, 0.88);
-        --theme-tooltip-bg: rgba(30, 41, 59, 0.92);
-        --theme-tooltip-border: rgba(147, 51, 234, 0.6);
-        --theme-keycap-bg: rgba(30, 41, 59, 0.7);
-        --theme-keycap-border: rgba(244, 114, 182, 0.45);
-        --theme-keycap-text: rgba(248, 250, 252, 0.9);
-        --theme-muted-strong: rgba(244, 114, 182, 0.85);
-        --theme-muted-text: rgba(253, 186, 116, 0.9);
-        --theme-caption-text: rgba(244, 114, 182, 0.85);
-        --theme-note-text: rgba(244, 114, 182, 0.82);
-        --theme-input-bg: rgba(30, 41, 59, 0.8);
-        --theme-input-border: rgba(244, 114, 182, 0.45);
-        --theme-preview-canvas-bg: rgba(30, 41, 59, 0.78);
-        --theme-preview-canvas-border: rgba(244, 114, 182, 0.45);
-        --theme-chip-bg: rgba(30, 41, 59, 0.78);
-        --theme-chip-border: rgba(244, 114, 182, 0.5);
-        --theme-chip-text: rgba(248, 250, 252, 0.9);
-        --theme-chip-hover-bg: rgba(244, 114, 182, 0.32);
-        --theme-chip-hover-text: rgba(15, 23, 42, 0.95);
-        --theme-chip-active-bg: rgba(253, 186, 116, 0.45);
-        --theme-chip-active-border: rgba(244, 114, 182, 0.65);
-        --theme-chip-active-text: rgba(15, 23, 42, 0.95);
-        --theme-palette-dock-bg: rgba(17, 24, 39, 0.88);
-        --theme-palette-dock-border: rgba(244, 114, 182, 0.4);
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      html {
-        touch-action: manipulation;
-      }
-
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-      }
-
-      body {
-        margin: 0;
-        min-height: 100vh;
-        min-height: 100dvh;
-        background: var(--stage-background);
-        color: var(--theme-body-color);
-        overflow: hidden;
-        font-size: calc(16px * var(--ui-scale));
-        touch-action: manipulation;
-        overscroll-behavior: none;
-      }
-
-      body.dragging {
-        cursor: copy;
-      }
-
-      body.panning {
-        cursor: grabbing;
-      }
-
-      #app {
-        position: relative;
-        width: min(var(--app-width, 100vw), 100vw);
-        height: min(var(--app-height, 100vh), 100vh);
-        overflow: hidden;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-rows: 1fr auto;
-      }
-
-      @supports (height: 100dvh) {
-        #app {
-          height: min(var(--app-height, 100dvh), 100dvh);
-        }
-      }
-
-      #commandRail {
-        position: absolute;
-        top: var(--command-rail-top);
-        left: calc(env(safe-area-inset-left, 0px) + 12px);
-        display: flex;
-        align-items: center;
-        gap: calc(6px * var(--ui-scale));
-        padding: 0;
-        margin: 0;
-        border: 0;
-        background: none;
-        box-shadow: none;
-        backdrop-filter: none;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        overflow-y: hidden;
-        touch-action: manipulation;
-        z-index: 3;
-        scrollbar-width: none;
-        width: max-content;
-        max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px);
-      }
-
-      #commandRail::-webkit-scrollbar {
-        display: none;
-      }
-
-      #commandRail button {
-        display: inline-flex;
-        align-items: center;
-        gap: calc(6px * var(--ui-scale));
-        padding: calc(4px * var(--ui-scale)) calc(10px * var(--ui-scale));
-        border-radius: calc(6px * var(--ui-scale));
-        border: 1px solid color-mix(in srgb, var(--theme-command-border) 60%, transparent);
-        background: color-mix(in srgb, var(--theme-command-bg) 88%, transparent);
-        color: var(--theme-command-text);
-        font-size: calc(14px * var(--ui-scale));
-        font-weight: 500;
-        line-height: 1;
-        white-space: nowrap;
-        flex: 0 0 auto;
-        transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
-      }
-
-      #commandRail .menu-button {
-        padding: calc(10px * var(--ui-scale)) calc(18px * var(--ui-scale));
-        border-radius: calc(14px * var(--ui-scale));
-        gap: calc(8px * var(--ui-scale));
-        font-size: calc(15px * var(--ui-scale));
-        font-weight: 600;
-      }
-
-      #commandRail button.active {
-        background: color-mix(in srgb, var(--theme-command-active-bg) 70%, transparent);
-        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
-        color: var(--theme-command-active-text);
-      }
-
-      #commandRail button .icon {
-        font-size: 1.05rem;
-        line-height: 1;
-      }
-
-      #commandRail .menu-button .icon {
-        font-size: 1.25rem;
-      }
-
-      #commandRail .label {
-        font-size: calc(13px * var(--ui-scale));
-        line-height: 1;
-        white-space: nowrap;
-      }
-
-      #commandRail button:not(:disabled):hover,
-      #commandRail button:not(:disabled):focus-visible {
-        background: color-mix(in srgb, var(--theme-command-active-bg) 55%, transparent);
-        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
-        color: var(--theme-command-active-text);
-      }
-
-      #commandRail button:focus-visible {
-        outline: 2px solid color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
-        outline-offset: 2px;
-      }
-
-      #commandRail button:disabled {
-        background: color-mix(in srgb, var(--theme-command-disabled-bg) 70%, transparent);
-        border-color: color-mix(in srgb, var(--theme-command-disabled-border) 70%, transparent);
-        color: var(--theme-command-disabled-text);
-      }
-
-      body[data-orientation="portrait"] #commandRail {
-        gap: calc(4px * var(--ui-scale));
-      }
-
-      body.compact-commands #commandRail {
-        gap: calc(4px * var(--ui-scale));
-      }
-
-      body.compact-commands #commandRail .label {
-        display: none;
-      }
-
-      body.compact-commands #commandRail .menu-button .label {
-        display: inline;
-      }
-
-      body[data-orientation="portrait"] #paletteDock {
-        gap: calc(10px * var(--ui-scale));
-      }
-
-      #viewport {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        display: grid;
-        place-items: center;
-        padding: calc(16px * var(--ui-scale));
-        padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
-        overflow: hidden;
-        background: none;
-        touch-action: none;
-        cursor: grab;
-      }
-
-      body[data-orientation="portrait"] #viewport {
-        padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
-      }
-
-      #canvasStage {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        --pan-x: 0px;
-        --pan-y: 0px;
-        transform: translate3d(calc(-50% + var(--pan-x)), calc(-50% + var(--pan-y)), 0);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        touch-action: none;
-        will-change: transform;
-        z-index: 1;
-        cursor: grab;
-      }
-
-      body.custom-cursor:not(.panning) #canvasStage {
-        cursor: none;
-      }
-
-      #pointerOverlay {
-        --cursor-x: -9999px;
-        --cursor-y: -9999px;
-        --cursor-ring: rgba(226, 232, 240, 0.95);
-        --cursor-fill: rgba(15, 23, 42, 0.55);
-        --cursor-swatch: transparent;
-        position: fixed;
-        top: 0;
-        left: 0;
-        z-index: 6;
-        pointer-events: none;
-        transform: translate3d(var(--cursor-x), var(--cursor-y), 0);
-        opacity: 0;
-        transition: opacity 0.12s ease;
-      }
-
-      #pointerOverlay.active {
-        opacity: 1;
-      }
-
-      body:not(.custom-cursor) #pointerOverlay {
-        opacity: 0;
-      }
-
-      body.panning #pointerOverlay,
-      body.dragging #pointerOverlay {
-        opacity: 0;
-      }
-
-      #pointerOverlay .pointer-indicator {
-        width: calc(20px * var(--ui-scale));
-        height: calc(20px * var(--ui-scale));
-        border-radius: 50%;
-        border: 2px solid var(--cursor-ring);
-        background: var(--cursor-fill);
-        box-shadow: 0 6px 14px rgba(2, 6, 23, 0.45), 0 0 0 1px rgba(15, 23, 42, 0.6);
-        transform: translate(-50%, -50%);
-        backdrop-filter: blur(4px);
-      }
-
-      #pointerOverlay.matching .pointer-indicator {
-        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.42), 0 8px 18px rgba(2, 6, 23, 0.4);
-      }
-
-      #pointerOverlay.mismatch .pointer-indicator {
-        box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.45), 0 8px 18px rgba(2, 6, 23, 0.4);
-      }
-
-      #pointerOverlay.filled .pointer-indicator {
-        box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.35), 0 8px 18px rgba(2, 6, 23, 0.4);
-      }
-
-      #pointerOverlay .pointer-tooltip {
-        display: inline-flex;
-        align-items: center;
-        gap: calc(6px * var(--ui-scale));
-        min-width: 0;
-        padding: calc(4px * var(--ui-scale)) calc(6px * var(--ui-scale));
-        border-radius: calc(6px * var(--ui-scale));
-        background: rgba(248, 250, 252, 0.95);
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        box-shadow: 0 12px 24px rgba(2, 6, 23, 0.25);
-        transform: translate(calc(-50% + 14px), calc(-50% + 20px));
-        font-size: calc(14px * var(--ui-scale));
-        line-height: 1;
-      }
-
-      #pointerOverlay.matching .pointer-tooltip {
-        border-color: rgba(34, 197, 94, 0.55);
-      }
-
-      #pointerOverlay.mismatch .pointer-tooltip {
-        border-color: rgba(248, 113, 113, 0.55);
-      }
-
-      #pointerOverlay.filled .pointer-tooltip {
-        border-color: rgba(148, 163, 184, 0.5);
-      }
-
-      #pointerOverlay .pointer-number {
-        font-weight: 600;
-        letter-spacing: 0.02em;
-        color: rgba(15, 23, 42, 0.88);
-        text-shadow: 0 0 4px rgba(15, 23, 42, 0.35);
-      }
-
-      #pointerOverlay .pointer-swatch {
-        width: calc(14px * var(--ui-scale));
-        height: calc(14px * var(--ui-scale));
-        border-radius: calc(4px * var(--ui-scale));
-        border: 1px solid rgba(148, 163, 184, 0.7);
-        background: var(--cursor-swatch);
-        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.4);
-      }
-
-      #canvasTransform {
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        --zoom: 1;
-        transform: scale3d(var(--zoom), var(--zoom), 1);
-        transform-origin: center;
-        will-change: transform, width, height;
-      }
-
-      #viewport::before {
-        content: none;
-      }
-
-      #puzzleCanvas {
-        max-width: 100%;
-        max-height: 100%;
-        width: auto;
-        height: auto;
-        border-radius: 0;
-        background: none;
-        border: none;
-        box-shadow: none;
-        image-rendering: pixelated;
-        touch-action: none;
-      }
-
-      canvas.renderer-surface {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: block;
-        pointer-events: none;
-        user-select: none;
-      }
-
-
-        #settingsPanel-generator .detail-callout {
-          text-align: left;
-        }
-
-        #settingsPanel-generator .detail-picker {
-          justify-content: flex-start;
-        }
-      button {
-        font: inherit;
-        border-radius: 999px;
-        border: none;
-        padding: calc(10px * var(--ui-scale)) calc(22px * var(--ui-scale));
-        background: rgba(96, 165, 250, 0.92);
-        color: #021027;
-        font-weight: 600;
-        cursor: pointer;
-        transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-      }
-
-      button:hover:not(:disabled) {
-        transform: translateY(-1px);
-        box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
-        background: rgba(147, 197, 253, 0.96);
-      }
-
-      button:disabled {
-        background: rgba(148, 163, 184, 0.35);
-        color: rgba(226, 232, 240, 0.7);
-        cursor: not-allowed;
-        box-shadow: none;
-      }
-
-        #paletteDock {
-          position: sticky;
-          bottom: 0;
-          left: 0;
-          right: 0;
-        width: 100%;
-        max-width: 100%;
-        display: flex;
-        flex-direction: column;
-        gap: calc(6px * var(--ui-scale));
-        align-items: stretch;
-        justify-content: flex-start;
-        padding: 0;
-        background: var(--theme-palette-dock-bg);
-        border-top: 1px solid var(--theme-palette-dock-border);
-        overflow: visible;
-          z-index: 3;
-        }
-
-        #palette {
-          flex: 1 1 auto;
-          min-width: 0;
-          width: 100%;
-          max-width: 100%;
-        display: flex;
-        gap: 0;
-        overflow-x: auto;
-        overflow-y: visible;
-        touch-action: pan-x;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: thin;
-        padding-block-end: calc(2px * var(--ui-scale));
-      }
-
-      #palette::-webkit-scrollbar {
-        height: calc(6px * var(--ui-scale));
-      }
-
-      #palette::-webkit-scrollbar-thumb {
-        background: rgba(148, 163, 184, 0.45);
-      }
-
-      .control select {
-        appearance: none;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        border-radius: calc(10px * var(--ui-scale));
-        background: rgba(15, 23, 42, 0.82);
-        color: inherit;
-        font: inherit;
-        padding: calc(6px * var(--ui-scale)) calc(28px * var(--ui-scale))
-          calc(6px * var(--ui-scale)) calc(12px * var(--ui-scale));
-        line-height: 1.2;
-        cursor: pointer;
-        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.35);
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
-        background-image: linear-gradient(45deg, transparent 50%, rgba(148, 163, 184, 0.75) 50%),
-          linear-gradient(135deg, rgba(148, 163, 184, 0.75) 50%, transparent 50%);
-        background-position: calc(100% - 18px) center, calc(100% - 12px) center;
-        background-size: calc(6px * var(--ui-scale)) calc(6px * var(--ui-scale));
-        background-repeat: no-repeat;
-        min-width: min(calc(220px * var(--ui-scale)), 100%);
-      }
-
-      .control select:focus {
-        outline: none;
-        border-color: rgba(96, 165, 250, 0.55);
-        box-shadow: 0 0 0 calc(2px * var(--ui-scale)) rgba(37, 99, 235, 0.25);
-      }
-
-      .control select:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
-        background-image: none;
-      }
-
-      body[data-theme="light"] .control select {
-        background: rgba(255, 255, 255, 0.95);
-        border-color: rgba(15, 23, 42, 0.18);
-        box-shadow: 0 1px 0 rgba(148, 163, 184, 0.35);
-        color: rgba(15, 23, 42, 0.86);
-        background-image: linear-gradient(45deg, transparent 50%, rgba(71, 85, 105, 0.65) 50%),
-          linear-gradient(135deg, rgba(71, 85, 105, 0.65) 50%, transparent 50%);
-      }
-
-      body[data-theme="light"] .control select:focus {
-        border-color: rgba(37, 99, 235, 0.45);
-        box-shadow: 0 0 0 calc(2px * var(--ui-scale)) rgba(59, 130, 246, 0.25);
-      }
-
-      body[data-theme="light"] .control select:disabled {
-        opacity: 0.75;
-        color: rgba(148, 163, 184, 0.8);
-      }
-
-      .control {
-        display: flex;
-        flex-direction: column;
-        gap: calc(6px * var(--ui-scale));
-        font-size: 0.95rem;
-      }
-
-      .control > span {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-weight: 600;
-      }
-
-      .control output {
-        font-size: 0.85rem;
-        color: rgba(148, 163, 184, 0.9);
-      }
-
-      .mouse-control-group {
-        display: flex;
-        flex-direction: column;
-        gap: calc(8px * var(--ui-scale));
-      }
-
-      .mouse-control-title {
-        font-weight: 600;
-        font-size: 0.95rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      .mouse-control-options {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(calc(180px * var(--ui-scale)), 1fr));
-        gap: calc(12px * var(--ui-scale));
-      }
-
-      .mouse-control-option {
-        flex: 1 1 auto;
-      }
-
-      details.advanced-options {
-        margin-top: calc(16px * var(--ui-scale));
-        padding: calc(12px * var(--ui-scale));
-        border-radius: calc(12px * var(--ui-scale));
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        background: rgba(15, 23, 42, 0.45);
-      }
-
-      details.advanced-options[open] {
-        background: rgba(15, 23, 42, 0.6);
-      }
-
-      details.advanced-options summary {
-        list-style: none;
-        cursor: pointer;
-        font-weight: 600;
-        margin-bottom: calc(8px * var(--ui-scale));
-        display: flex;
-        align-items: center;
-        gap: calc(6px * var(--ui-scale));
-      }
-
-      details.advanced-options summary::after {
-        content: "▾";
-        font-size: 0.85rem;
-        opacity: 0.7;
-        transform: rotate(0deg);
-        transition: transform 0.2s ease;
-      }
-
-      details.advanced-options[open] summary::after {
-        transform: rotate(180deg);
-      }
-
-      #imageDescription {
-        width: 100%;
-        min-height: calc(120px * var(--ui-scale));
-        padding: calc(10px * var(--ui-scale));
-        border-radius: calc(12px * var(--ui-scale));
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        background: rgba(15, 23, 42, 0.85);
-        color: inherit;
-        font: inherit;
-        resize: vertical;
-      }
-
-      #imageDescription:focus {
-        outline: none;
-        border-color: rgba(96, 165, 250, 0.7);
-        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
-      }
-
-      #imageDescription::placeholder {
-        color: rgba(148, 163, 184, 0.7);
-      }
-
-      .chatgpt-link {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35em;
-        font-weight: 600;
-        color: rgba(96, 165, 250, 0.95);
-        text-decoration: none;
-      }
-
-      .chatgpt-link:hover,
-      .chatgpt-link:focus-visible {
-        color: rgba(147, 197, 253, 0.95);
-        text-decoration: underline;
-        outline: none;
-      }
-
-      input[type="range"] {
-        -webkit-appearance: none;
-        appearance: none;
-        height: 6px;
-        border-radius: 999px;
-        background: rgba(51, 65, 85, 0.9);
-      }
-
-      input[type="range"]::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        background: rgba(96, 165, 250, 0.95);
-        border: none;
-        box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
-        cursor: pointer;
-      }
-
-      input[type="range"]::-moz-range-thumb {
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        background: rgba(96, 165, 250, 0.95);
-        border: none;
-        box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
-        cursor: pointer;
-      }
-
-      input[type="color"] {
-        width: 100%;
-        height: 38px;
-        border-radius: 12px;
-        border: 1px solid var(--theme-input-border);
-        background: var(--theme-input-bg);
-        padding: 0;
-        cursor: pointer;
-      }
-
-      input[type="color"]::-webkit-color-swatch,
-      input[type="color"]::-moz-color-swatch {
-        border: none;
-        border-radius: 10px;
-      }
-
-      .control-note {
-        margin-top: -8px;
-        font-size: 0.8rem;
-        color: var(--theme-note-text);
-      }
-
-      .panel-actions {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-      }
-
-      .panel-actions button {
-        border-radius: 12px;
-      }
-
-      #downloadJson {
-        width: 100%;
-        border-radius: 12px;
-        padding: 10px 0;
-      }
-
-      .swatch {
-        flex: 0 0 calc(72px * var(--ui-scale));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-width: calc(64px * var(--ui-scale));
-        min-height: calc(72px * var(--ui-scale));
-        padding: 0;
-        border: 0;
-        border-radius: 0;
-        background: var(--swatch-color, rgba(15, 23, 42, 0.85));
-        color: var(--swatch-label-color, rgba(248, 250, 252, 0.98));
-        text-align: center;
-        cursor: pointer;
-        box-shadow: inset 0 0 0 1px var(--swatch-outline, rgba(15, 23, 42, 0.6));
-        transition: box-shadow 0.18s ease;
-        position: relative;
-        overflow: visible;
-      }
-
-      .swatch:hover {
-        box-shadow: inset 0 0 0 2px var(--swatch-outline, rgba(15, 23, 42, 0.75));
-      }
-
-      .swatch:focus-visible {
-        outline: 2px solid rgba(148, 163, 184, 0.85);
-        outline-offset: -2px;
-      }
-
-      .swatch.active {
-        box-shadow: inset 0 0 0 3px rgba(96, 165, 250, 0.9);
-      }
-
-      .swatch.done {
-        opacity: 0.55;
-      }
-
-      .swatch.flash {
-        animation: swatchHintPulse 0.48s ease;
-      }
-
-      @keyframes swatchHintPulse {
-        0% {
-          box-shadow: inset 0 0 0 4px rgba(96, 165, 250, 0.85);
-        }
-        60% {
-          box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.4);
-        }
-        100% {
-          box-shadow: inset 0 0 0 1px var(--swatch-outline, rgba(15, 23, 42, 0.6));
-        }
-      }
-
-      .swatch .label {
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.05rem;
-        font-weight: 600;
-        line-height: 1.2;
-        max-width: 100%;
-        z-index: 1;
-        padding: 0;
-        color: inherit;
-      }
-
-      .swatch .swatch-tooltip {
-        position: absolute;
-        inset-inline: 50%;
-        bottom: calc(100% + 8px);
-        transform: translate(-50%, 4px) scale(0.98);
-        padding: calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));
-        border-radius: calc(8px * var(--ui-scale));
-        background: var(--theme-tooltip-bg);
-        color: rgba(248, 250, 252, 0.95);
-        font-size: 0.75rem;
-        font-weight: 500;
-        white-space: nowrap;
-        box-shadow: 0 6px 20px rgba(2, 6, 23, 0.45);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.16s ease, transform 0.16s ease;
-        z-index: 10;
-      }
-
-      .swatch .swatch-tooltip::after {
-        content: "";
-        position: absolute;
-        inset-inline-start: 50%;
-        top: 100%;
-        transform: translateX(-50%);
-        border-width: 6px 6px 0 6px;
-        border-style: solid;
-        border-color: var(--theme-tooltip-border) transparent transparent transparent;
-      }
-
-      .swatch:hover .swatch-tooltip,
-      .swatch:focus-visible .swatch-tooltip {
-        opacity: 1;
-        transform: translate(-50%, 0) scale(1);
-      }
-
-      .swatch .label > strong {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: calc(28px * var(--ui-scale));
-        padding: 0;
-        border-radius: 0;
-        border: 0;
-        background: transparent;
-        font-size: 1.15rem;
-        letter-spacing: 0.01em;
-        color: currentColor;
-        text-shadow: var(--swatch-label-shadow, none);
-      }
-
-      .sheet {
-        position: fixed;
-        top: calc(
-          env(safe-area-inset-top, 0px) +
-            var(--rail-padding-block) +
-            var(--command-rail-height) +
-            calc(16px * var(--ui-scale))
-        );
-        right: calc(env(safe-area-inset-right, 0px) + 24px);
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
-        width: min(380px, calc(100vw - 48px));
-        padding: 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 18px;
-        border-radius: 22px;
-        background: var(--theme-sheet-bg);
-        border: 1px solid var(--theme-sheet-border);
-        box-shadow: var(--theme-sheet-shadow);
-        backdrop-filter: blur(22px);
-        z-index: 6;
-        opacity: 1;
-        transition: opacity 0.2s ease;
-      }
-
-      .sheet.hidden {
-        opacity: 0;
-        pointer-events: none;
-        visibility: hidden;
-      }
-
-      .sheet-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-      }
-
-      .sheet-header h2 {
-        margin: 0;
-        font-size: 1.25rem;
-      }
-
-      .close-button {
-        padding: 6px 14px;
-        border-radius: 12px;
-        background: var(--theme-sheet-button-bg);
-        color: var(--theme-sheet-button-text);
-        border: 1px solid var(--theme-sheet-button-border);
-      }
-
-      .sheet-body {
-        display: flex;
-        flex-direction: column;
-        gap: 22px;
-        overflow-y: auto;
-        padding-right: 4px;
-      }
-
-      .settings-body {
-        gap: 18px;
-      }
-
-      .settings-tabs {
-        display: flex;
-        flex-wrap: wrap;
-        gap: calc(8px * var(--ui-scale));
-      }
-
-      .settings-tab {
-        flex: 1 1 120px;
-        padding: calc(8px * var(--ui-scale)) calc(12px * var(--ui-scale));
-        border-radius: calc(12px * var(--ui-scale));
-        border: 1px solid var(--theme-sheet-button-border);
-        background: var(--theme-sheet-button-bg);
-        color: var(--theme-sheet-button-text);
-        font-size: 0.95rem;
-        letter-spacing: 0.01em;
-        transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
-      }
-
-      body[data-theme="light"] .settings-tab {
-        background: rgba(226, 232, 240, 0.85);
-      }
-
-      .settings-tab[aria-selected="true"] {
-        background: var(--theme-command-active-bg);
-        border-color: var(--theme-command-active-border);
-        color: var(--theme-command-active-text);
-      }
-
-      .settings-tab:focus-visible {
-        outline: 2px solid rgba(96, 165, 250, 0.75);
-        outline-offset: 2px;
-      }
-
-      .settings-panel {
-        display: flex;
-        flex-direction: column;
-        gap: 22px;
-      }
-
-      .settings-panel[hidden] {
-        display: none;
-      }
-
-      .generator-import-notice,
-      .generator-progress {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        padding: calc(14px * var(--ui-scale));
-        border-radius: calc(18px * var(--ui-scale));
-      }
-
-      .generator-import-notice {
-        border: 1px solid rgba(59, 130, 246, 0.45);
-        background: rgba(59, 130, 246, 0.16);
-        color: var(--theme-command-text);
-      }
-
-      body[data-theme="light"] .generator-import-notice {
-        background: rgba(191, 219, 254, 0.75);
-        border-color: rgba(59, 130, 246, 0.35);
-      }
-
-      .generator-import-title {
-        margin: 0;
-        font-size: 1.05rem;
-        font-weight: 600;
-      }
-
-      .generator-import-title strong {
-        font-weight: 700;
-      }
-
-      .generator-import-description {
-        margin: 0;
-        font-size: 0.95rem;
-        color: var(--theme-caption-text);
-      }
-
-      .generator-import-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-      }
-
-      .generator-url-form {
-        display: grid;
-        gap: calc(12px * var(--ui-scale));
-      }
-
-      .generator-url-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: calc(12px * var(--ui-scale));
-        align-items: center;
-      }
-
-      .generator-url-actions button[type="submit"] {
-        flex: 0 0 auto;
-      }
-
-      .generator-url-error {
-        margin: 0;
-        font-weight: 600;
-        color: #f87171;
-      }
-
-      body[data-theme="light"] .generator-url-error {
-        color: #dc2626;
-      }
-
-      .generator-progress {
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        background: rgba(15, 23, 42, 0.6);
-        color: var(--theme-command-text);
-      }
-
-      body[data-theme="light"] .generator-progress {
-        background: rgba(226, 232, 240, 0.85);
-        border-color: rgba(148, 163, 184, 0.5);
-      }
-
-      .generator-progress-message {
-        margin: 0;
-        font-weight: 600;
-        letter-spacing: 0.01em;
-      }
-
-      .generator-progress-meter {
-        position: relative;
-        width: 100%;
-        height: calc(6px * var(--ui-scale));
-        border-radius: 999px;
-        background: rgba(148, 163, 184, 0.25);
-        overflow: hidden;
-        transition: opacity 0.25s ease;
-        opacity: 0;
-      }
-
-      .generator-progress-meter[aria-hidden="false"] {
-        opacity: 1;
-      }
-
-      body[data-theme="light"] .generator-progress-meter {
-        background: rgba(148, 163, 184, 0.35);
-      }
-
-      .generator-progress-bar {
-        width: 0%;
-        height: 100%;
-        border-radius: inherit;
-        background: rgba(59, 130, 246, 0.92);
-        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
-        transition: width 0.24s ease;
-      }
-
-      .sheet-section {
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-      }
-
-      .sheet-section h3 {
-        margin: 0;
-        font-size: 1.05rem;
-        letter-spacing: 0.02em;
-      }
-
-      .quick-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: calc(10px * var(--ui-scale));
-        align-items: stretch;
-      }
-
-      .quick-action {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: calc(8px * var(--ui-scale));
-        padding: calc(10px * var(--ui-scale)) calc(18px * var(--ui-scale));
-        border-radius: calc(14px * var(--ui-scale));
-        border: 1px solid var(--theme-sheet-button-border);
-        background: var(--theme-sheet-button-bg);
-        color: var(--theme-sheet-button-text);
-        font-weight: 600;
-        font-size: 0.95rem;
-        line-height: 1;
-        cursor: pointer;
-        transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease,
-          box-shadow 0.16s ease, transform 0.16s ease;
-        box-shadow: none;
-      }
-
-      .quick-action .icon {
-        font-size: 1.1rem;
-      }
-
-      .quick-action .label {
-        white-space: nowrap;
-      }
-
-      .quick-action.active {
-        background: color-mix(in srgb, var(--theme-command-active-bg) 70%, transparent);
-        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
-        color: var(--theme-command-active-text);
-      }
-
-      .quick-action:not(:disabled):hover,
-      .quick-action:not(:disabled):focus-visible {
-        background: color-mix(in srgb, var(--theme-command-active-bg) 55%, transparent);
-        border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
-        color: var(--theme-command-active-text);
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.28);
-        transform: translateY(-1px);
-      }
-
-      .quick-action:focus-visible {
-        outline: 2px solid color-mix(in srgb, var(--theme-command-active-border) 65%, transparent);
-        outline-offset: 3px;
-      }
-
-      .quick-action:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        box-shadow: none;
-        transform: none;
-      }
-
-      .save-manager {
-        display: grid;
-        gap: calc(12px * var(--ui-scale));
-      }
-
-      .save-start-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: calc(12px * var(--ui-scale));
-      }
-
-      .save-start-actions button {
-        flex: 1 1 180px;
-      }
-
-      .save-manager h2 {
-        margin: 0;
-        font-size: 1.1rem;
-      }
-
-      .save-manager-empty {
-        margin: 0;
-        font-size: 0.85rem;
-        color: var(--theme-caption-text);
-      }
-
-      .command-list {
-        display: grid;
-        grid-template-columns: minmax(0, auto) 1fr;
-        gap: 6px 12px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-
-      .command-list dt {
-        font-weight: 600;
-        color: var(--theme-muted-strong);
-        font-size: 0.95rem;
-      }
-
-      .command-list dd {
-        margin: 0;
-        font-size: 0.95rem;
-      }
-
-      .control-list {
-        margin: 0;
-        padding-left: 18px;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        font-size: 0.95rem;
-        list-style: none;
-      }
-
-      .readme-preview {
-        margin: 0;
-        padding: 16px;
-        border-radius: 16px;
-        border: 1px solid var(--theme-sheet-border);
-        background: var(--theme-sheet-bg);
-        color: var(--theme-body-color);
-        max-height: 320px;
-        overflow: auto;
-        font-size: 0.9rem;
-        line-height: 1.6;
-        white-space: normal;
-        word-break: break-word;
-      }
-
-      .readme-preview--plaintext {
-        white-space: pre-wrap;
-        font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco,
-          Consolas, 'Liberation Mono', 'Courier New', monospace;
-        font-size: 0.85rem;
-      }
-
-      .readme-preview h1,
-      .readme-preview h2,
-      .readme-preview h3,
-      .readme-preview h4,
-      .readme-preview h5,
-      .readme-preview h6 {
-        margin-top: 1.5em;
-        margin-bottom: 0.6em;
-      }
-
-      .readme-preview h1:first-child,
-      .readme-preview h2:first-child,
-      .readme-preview h3:first-child,
-      .readme-preview h4:first-child,
-      .readme-preview h5:first-child,
-      .readme-preview h6:first-child {
-        margin-top: 0;
-      }
-
-      .readme-preview p,
-      .readme-preview ul,
-      .readme-preview ol {
-        margin: 0 0 1em;
-      }
-
-      .readme-preview ul,
-      .readme-preview ol {
-        padding-left: 1.4em;
-      }
-
-      .readme-preview pre {
-        border-radius: 12px;
-        border: 1px solid var(--theme-debug-border);
-        background: rgba(15, 23, 42, 0.35);
-        padding: 12px;
-        white-space: pre-wrap;
-        overflow-x: auto;
-      }
-
-      body[data-theme="light"] .readme-preview pre {
-        background: rgba(226, 232, 240, 0.6);
-      }
-
-      .readme-preview a {
-        color: var(--theme-command-active-text);
-      }
-
-      .control-list kbd {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 1.4em;
-        padding: 2px 6px;
-        margin-right: 6px;
-        border-radius: 6px;
-        border: 1px solid var(--theme-keycap-border);
-        background: var(--theme-keycap-bg);
-        font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco,
-          Consolas, 'Liberation Mono', 'Courier New', monospace;
-        font-size: 0.85rem;
-        color: var(--theme-keycap-text);
-      }
-
-      .debug-log {
-        border-radius: 16px;
-        border: 1px solid var(--theme-debug-border);
-        background: var(--theme-debug-bg);
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        max-height: 240px;
-        overflow-y: auto;
-      }
-
-      .debug-log .log-entry {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 4px 10px;
-        align-items: baseline;
-        font-size: 0.9rem;
-      }
-
-      .debug-log time {
-        font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco,
-          Consolas, 'Liberation Mono', 'Courier New', monospace;
-        font-size: 0.8rem;
-        color: rgba(148, 163, 184, 0.9);
-      }
-
-      .debug-log span {
-        color: rgba(226, 232, 240, 0.95);
-      }
-
-      .log-empty {
-        margin: 0;
-        font-style: italic;
-        color: rgba(148, 163, 184, 0.8);
-      }
-
-      .log-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 12px;
-      }
-
-      .sheet-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 12px;
-      }
-
-      .toggle {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        font-size: 0.95rem;
-      }
-
-      .toggle input {
-        width: 18px;
-        height: 18px;
-      }
-
-      .save-manager-list {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        margin: 12px 0 0;
-        padding: 0;
-      }
-
-      .save-manager-actions {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        margin-top: 16px;
-      }
-
-      .save-manager-actions button {
-        width: 100%;
-      }
-
-      .save-entry {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding: 14px;
-        border-radius: 16px;
-        background: rgba(15, 23, 42, 0.75);
-        border: 1px solid rgba(59, 130, 246, 0.2);
-      }
-
-      .save-entry header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-      }
-
-      .save-entry-badge {
-        font-size: 0.7rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        padding: 2px 8px;
-        border-radius: 999px;
-        background: rgba(250, 204, 21, 0.2);
-        color: rgba(253, 224, 71, 0.9);
-        font-weight: 600;
-        white-space: nowrap;
-      }
-
-      .save-entry time {
-        font-size: 0.8rem;
-        color: rgba(148, 163, 184, 0.8);
-      }
-
-      .save-entry[data-loaded="true"] {
-        border-color: rgba(96, 165, 250, 0.6);
-        box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35);
-      }
-
-      .save-entry-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px 12px;
-        font-size: 0.9rem;
-        color: rgba(226, 232, 240, 0.9);
-      }
-
-      .save-entry-storage {
-        color: rgba(148, 197, 255, 0.95);
-      }
-
-      .save-entry-status {
-        font-size: 0.85rem;
-        color: rgba(96, 165, 250, 0.9);
-      }
-
-      .save-actions {
-        display: flex;
-        gap: 8px;
-      }
-
-      .save-actions button {
-        flex: 1;
-        border-radius: 10px;
-        padding: 8px 12px;
-      }
-
-      @media (max-width: 1024px) {
-        #commandRail {
-          flex-wrap: wrap;
-          justify-content: flex-start;
-        }
-      }
-
-      @media (max-width: 720px) {
-        #viewport {
-          padding: calc(12px * var(--ui-scale));
-          padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
-        }
-
-        body[data-orientation="portrait"] #viewport {
-          padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
-        }
-
-        #paletteDock {
-          flex-direction: column;
-          align-items: stretch;
-          gap: 12px;
-        }
       }
     </style>
+    <link rel="stylesheet" href="./styles.css" />
+
   </head>
   <body data-theme="dark">
-    <script>
-      (function () {
-        if (typeof window === "undefined" || !document.body) {
-          return;
-        }
-        const metrics = window.__capyPrebootMetrics || {};
-        if (metrics.orientation) {
-          document.body.dataset.orientation = metrics.orientation;
-          document.documentElement.dataset.orientation = metrics.orientation;
-        }
-        if (typeof metrics.compactCommands === "boolean") {
-          document.body.classList.toggle("compact-commands", metrics.compactCommands);
-          document.documentElement.dataset.compactCommands = metrics.compactCommands
-            ? "true"
-            : "false";
-        }
-        try {
-          delete window.__capyPrebootMetrics;
-        } catch (_error) {
-          window.__capyPrebootMetrics = undefined;
-        }
-      })();
+    <script type="module">
+      import { applyPrebootMetrics } from "./runtime.js";
+
+      applyPrebootMetrics();
     </script>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
@@ -1751,101 +143,103 @@
         <h2 id="settingsTitle">Settings &amp; tools</h2>
         <button type="button" class="close-button" data-sheet-close="settings">Close</button>
       </div>
-      <div class="sheet-body settings-body">
-        <div class="settings-tabs" role="tablist" aria-label="Settings categories">
-          <button
-            type="button"
-            class="settings-tab"
-            id="settingsTab-gameplay"
-            data-settings-tab="gameplay"
-            data-settings-tab-default="true"
-            role="tab"
-            aria-controls="settingsPanel-gameplay"
-            aria-selected="true"
-            tabindex="0"
-          >
-            Gameplay
-          </button>
-          <button
-            type="button"
-            class="settings-tab"
-            id="settingsTab-hints"
-            data-settings-tab="hints"
-            role="tab"
-            aria-controls="settingsPanel-hints"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            Hints
-          </button>
-          <button
-            type="button"
-            class="settings-tab"
-            id="settingsTab-controls"
-            data-settings-tab="controls"
-            role="tab"
-            aria-controls="settingsPanel-controls"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            Controls
-          </button>
-          <button
-            type="button"
-            class="settings-tab"
-            id="settingsTab-appearance"
-            data-settings-tab="appearance"
-            role="tab"
-            aria-controls="settingsPanel-appearance"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            Appearance
-          </button>
-          <button
-            type="button"
-            class="settings-tab"
-            id="settingsTab-generator"
-            data-settings-tab="generator"
-            role="tab"
-            aria-controls="settingsPanel-generator"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            Generator
-          </button>
-          <button
-            type="button"
-            class="settings-tab"
-            id="settingsTab-saves"
-            data-settings-tab="saves"
-            role="tab"
-            aria-controls="settingsPanel-saves"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            Saves
-          </button>
-          <button
-            type="button"
-            class="settings-tab"
-            id="settingsTab-help"
-            data-settings-tab="help"
-            role="tab"
-            aria-controls="settingsPanel-help"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            Help &amp; logs
-          </button>
-        </div>
-        <div
-          class="settings-panel"
-          id="settingsPanel-gameplay"
-          role="tabpanel"
-          aria-labelledby="settingsTab-gameplay"
-          data-settings-panel="gameplay"
-        >
+      <div class="sheet-body">
+        <div class="settings-body">
+          <div class="settings-tabs" role="tablist" aria-label="Settings categories">
+            <button
+              type="button"
+              class="settings-tab"
+              id="settingsTab-gameplay"
+              data-settings-tab="gameplay"
+              data-settings-tab-default="true"
+              role="tab"
+              aria-controls="settingsPanel-gameplay"
+              aria-selected="true"
+              tabindex="0"
+            >
+              Gameplay
+            </button>
+            <button
+              type="button"
+              class="settings-tab"
+              id="settingsTab-hints"
+              data-settings-tab="hints"
+              role="tab"
+              aria-controls="settingsPanel-hints"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Hints
+            </button>
+            <button
+              type="button"
+              class="settings-tab"
+              id="settingsTab-controls"
+              data-settings-tab="controls"
+              role="tab"
+              aria-controls="settingsPanel-controls"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Controls
+            </button>
+            <button
+              type="button"
+              class="settings-tab"
+              id="settingsTab-appearance"
+              data-settings-tab="appearance"
+              role="tab"
+              aria-controls="settingsPanel-appearance"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Appearance
+            </button>
+            <button
+              type="button"
+              class="settings-tab"
+              id="settingsTab-generator"
+              data-settings-tab="generator"
+              role="tab"
+              aria-controls="settingsPanel-generator"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Generator
+            </button>
+            <button
+              type="button"
+              class="settings-tab"
+              id="settingsTab-saves"
+              data-settings-tab="saves"
+              role="tab"
+              aria-controls="settingsPanel-saves"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Saves
+            </button>
+            <button
+              type="button"
+              class="settings-tab"
+              id="settingsTab-help"
+              data-settings-tab="help"
+              role="tab"
+              aria-controls="settingsPanel-help"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Help &amp; logs
+            </button>
+          </div>
+          <div class="settings-content" data-settings-scroll>
+            <div
+              class="settings-panel"
+              id="settingsPanel-gameplay"
+              role="tabpanel"
+              aria-labelledby="settingsTab-gameplay"
+              data-settings-panel="gameplay"
+            >
           <section class="sheet-section" aria-labelledby="quickActionsHeading">
             <h3 id="quickActionsHeading">Quick actions</h3>
             <div class="quick-actions" role="group" aria-label="Puzzle quick actions">
@@ -1930,16 +324,56 @@
         >
           <section class="sheet-section" aria-labelledby="hintsControlsHeading">
             <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
-            <label class="control">
-              <span>Hint fade duration <output data-for="hintFadeDuration">1.2 s</output></span>
-              <input id="hintFadeDuration" type="range" min="400" max="2400" step="100" value="1200" />
-            </label>
-            <p class="control-note">Set how long hint highlights linger before fading out.</p>
-            <label class="control">
-              <span>Hint intensity <output data-for="hintIntensity">65%</output></span>
-              <input id="hintIntensity" type="range" min="20" max="90" step="5" value="65" />
-            </label>
-            <p class="control-note">Adjust the opacity used when flashing matching regions.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="hintFadeDuration">
+                  <span>Hint fade duration <output data-for="hintFadeDuration">1.2 s</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="hintFadeDuration"
+                  data-reset-default="1200"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="hintFadeDuration"
+                type="range"
+                min="400"
+                max="2400"
+                step="100"
+                value="1200"
+                data-default="1200"
+              />
+            </div>
+            <p class="control-note">Set how long hint highlights linger before fading out. Default 1.2 s.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="hintIntensity">
+                  <span>Hint intensity <output data-for="hintIntensity">65%</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="hintIntensity"
+                  data-reset-default="65"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="hintIntensity"
+                type="range"
+                min="20"
+                max="90"
+                step="5"
+                value="65"
+                data-default="65"
+              />
+            </div>
+            <p class="control-note">Adjust the opacity used when flashing matching regions. Default 65%.</p>
           </section>
           <section class="sheet-section" aria-labelledby="hintTypesHeading">
             <h3 id="hintTypesHeading">Hint types</h3>
@@ -2062,8 +496,20 @@
         >
           <section class="sheet-section" aria-labelledby="appearanceHeading">
             <h3 id="appearanceHeading">Appearance</h3>
-            <label class="control">
-              <span>Interface scale <output data-for="uiScale">75%</output></span>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="uiScale">
+                  <span>Interface scale <output data-for="uiScale">75%</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="uiScale"
+                  data-reset-default="0.75"
+                >
+                  Default
+                </button>
+              </div>
               <input
                 id="uiScale"
                 type="range"
@@ -2071,11 +517,24 @@
                 max="3"
                 step="0.05"
                 value="0.75"
+                data-default="0.75"
               />
-            </label>
-            <p class="control-note">Resize command buttons and labels without altering canvas zoom.</p>
-            <label class="control">
-              <span>Label size <output data-for="labelScale">100%</output></span>
+            </div>
+            <p class="control-note">Resize command buttons and labels without altering canvas zoom. Default 75%.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="labelScale">
+                  <span>Label size <output data-for="labelScale">100%</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="labelScale"
+                  data-reset-default="1"
+                >
+                  Default
+                </button>
+              </div>
               <input
                 id="labelScale"
                 type="range"
@@ -2083,11 +542,24 @@
                 max="2"
                 step="0.05"
                 value="1"
+                data-default="1"
               />
-            </label>
-            <p class="control-note">Scale region numbers independently from the surrounding interface.</p>
-            <label class="control">
-              <span>Maximum zoom <output data-for="maxZoom">1200%</output></span>
+            </div>
+            <p class="control-note">Scale region numbers independently from the surrounding interface. Default 100%.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="maxZoom">
+                  <span>Maximum zoom <output data-for="maxZoom">1200%</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="maxZoom"
+                  data-reset-default="12"
+                >
+                  Default
+                </button>
+              </div>
               <input
                 id="maxZoom"
                 type="range"
@@ -2095,9 +567,10 @@
                 max="30"
                 step="0.5"
                 value="12"
+                data-default="12"
               />
-            </label>
-            <p class="control-note">Limit how far the canvas can zoom in beyond the fitted view.</p>
+            </div>
+            <p class="control-note">Limit how far the canvas can zoom in beyond the fitted view. Default 1200%.</p>
             <label class="control">
               <span>Interface theme</span>
               <select id="uiTheme">
@@ -2175,20 +648,78 @@
             <p class="control-note">
               Switching presets updates every slider below and reloads the sample scene when it's active.
             </p>
-            <label class="control">
-              <span>Colours <output data-for="colorCount">16</output></span>
-              <input id="colorCount" type="range" min="4" max="64" value="16" />
-            </label>
-            <label class="control">
-              <span>Regions <output data-for="minRegion">80 px²</output></span>
-              <input id="minRegion" type="range" min="1" max="600" value="80" />
-            </label>
-            <p class="control-note">Higher values merge smaller areas for fewer regions.</p>
-            <label class="control">
-              <span>Detail <output data-for="detailLevel">768 px</output></span>
-              <input id="detailLevel" type="range" min="256" max="1600" step="64" value="768" />
-            </label>
-            <p class="control-note">Controls the longest edge used when resizing the source image.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="colorCount">
+                  <span>Colours <output data-for="colorCount">16</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="colorCount"
+                  data-reset-default="16"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="colorCount"
+                type="range"
+                min="4"
+                max="64"
+                value="16"
+                data-default="16"
+              />
+            </div>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="minRegion">
+                  <span>Regions <output data-for="minRegion">80 px²</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="minRegion"
+                  data-reset-default="80"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="minRegion"
+                type="range"
+                min="1"
+                max="600"
+                value="80"
+                data-default="80"
+              />
+            </div>
+            <p class="control-note">Higher values merge smaller areas for fewer regions. Default 80 px².</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="detailLevel">
+                  <span>Detail <output data-for="detailLevel">768 px</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="detailLevel"
+                  data-reset-default="768"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="detailLevel"
+                type="range"
+                min="256"
+                max="1600"
+                step="64"
+                value="768"
+                data-default="768"
+              />
+            </div>
+            <p class="control-note">Controls the longest edge used when resizing the source image. Default 768 px.</p>
             <label class="control">
               <span>Algorithm</span>
               <select id="generationAlgorithm">
@@ -2199,24 +730,84 @@
             <p class="control-note">
               Choose between local clustering pipelines now, with space for hosted services to appear as they become available.
             </p>
-            <label class="control">
-              <span>Sample rate <output data-for="sampleRate">65%</output></span>
-              <input id="sampleRate" type="range" min="25" max="100" step="5" value="65" />
-            </label>
-            <p class="control-note">Lower values speed up clustering by sampling fewer pixels.</p>
-            <label class="control">
-              <span>Iterations <output data-for="kmeansIters">12</output></span>
-              <input id="kmeansIters" type="range" min="4" max="32" step="1" value="12" />
-            </label>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="sampleRate">
+                  <span>Sample rate <output data-for="sampleRate">65%</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="sampleRate"
+                  data-reset-default="65"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="sampleRate"
+                type="range"
+                min="25"
+                max="100"
+                step="5"
+                value="65"
+                data-default="65"
+              />
+            </div>
+            <p class="control-note">Lower values speed up clustering by sampling fewer pixels. Default 65%.</p>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="kmeansIters">
+                  <span>Iterations <output data-for="kmeansIters">12</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="kmeansIters"
+                  data-reset-default="12"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="kmeansIters"
+                type="range"
+                min="4"
+                max="32"
+                step="1"
+                value="12"
+                data-default="12"
+              />
+            </div>
             <p class="control-note">
-              Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process.
+              Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process. Default 12 iterations.
             </p>
-            <label class="control">
-              <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
-              <input id="smoothingPasses" type="range" min="0" max="4" step="1" value="1" />
-            </label>
+            <div class="control control-range">
+              <div class="control-header">
+                <label for="smoothingPasses">
+                  <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
+                </label>
+                <button
+                  type="button"
+                  class="control-reset"
+                  data-reset-target="smoothingPasses"
+                  data-reset-default="1"
+                >
+                  Default
+                </button>
+              </div>
+              <input
+                id="smoothingPasses"
+                type="range"
+                min="0"
+                max="4"
+                step="1"
+                value="1"
+                data-default="1"
+              />
+            </div>
             <p class="control-note">
-              Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source.
+              Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source. Default 1 pass.
             </p>
             <details class="advanced-options" id="generatorAdvanced">
               <summary>Advanced options</summary>
@@ -2450,30 +1041,26 @@
             </div>
           </section>
         </div>
+        </div>
       </div>
     </div>
-    <script src="./render.js"></script>
-        <script>
-      (() => {
-        const BOOTSTRAP_VERSION = "2024-07-28";
-        const SENTINEL_READY = `ready:${BOOTSTRAP_VERSION}`;
-        if (window.__capyRendererBootstrapVersion === SENTINEL_READY) {
-          return;
-        }
-        let bootstrapSucceeded = false;
-        try {
-          window.__capyRendererBootstrapVersion = `pending:${BOOTSTRAP_VERSION}`;
-          const rendererApi = window.capyRenderer || {};
-          function requireRendererExport(name) {
-            const exportValue = rendererApi[name] || window[name];
-            if (typeof exportValue !== "function") {
-              throw new Error(`Renderer export unavailable: ${name}`);
-            }
-            return exportValue;
+      <script type="module" src="./render.js"></script>
+      <script type="module">
+        import {
+          beginRendererBootstrap,
+          completeRendererBootstrap,
+          createRendererController,
+          createSvgRenderer,
+          createWebGLRenderer,
+        } from "./runtime.js";
+
+        (() => {
+          const skipBootstrap = beginRendererBootstrap();
+          if (skipBootstrap) {
+            return;
           }
-          const createRendererController = requireRendererExport("createRendererController");
-          const createWebGLRenderer = requireRendererExport("createWebGLRenderer");
-          const createSvgRenderer = requireRendererExport("createSvgRenderer");
+          let bootstrapSucceeded = false;
+          try {
       // Cached DOM references so we can wire handlers without repeated lookups.
       const appEl = document.getElementById("app");
       const commandRail = document.getElementById("commandRail");
@@ -2492,7 +1079,10 @@
       const fullscreenButton = document.getElementById("fullscreenButton");
       const settingsButton = document.getElementById("settingsButton");
       const settingsSheet = document.getElementById("settingsSheet");
-      const settingsBody = settingsSheet?.querySelector(".sheet-body") || null;
+      const settingsBody =
+        settingsSheet?.querySelector("[data-settings-scroll]") ||
+        settingsSheet?.querySelector(".sheet-body") ||
+        null;
       const settingsTabButtons = settingsSheet
         ? Array.from(settingsSheet.querySelectorAll("[data-settings-tab]"))
         : [];
@@ -2555,6 +1145,9 @@
       const sampleRateEl = document.getElementById("sampleRate");
       const kmeansItersEl = document.getElementById("kmeansIters");
       const smoothingEl = document.getElementById("smoothingPasses");
+      const sliderResetButtons = settingsSheet
+        ? Array.from(settingsSheet.querySelectorAll("[data-reset-target]"))
+        : [];
       const artPromptInput = document.getElementById("artPrompt");
       const imageDescriptionInput = document.getElementById("imageDescription");
       const sourceImageLimitSelect = document.getElementById("sourceImageLimit");
@@ -2732,6 +1325,35 @@
       let storageSummaryUpdateToken = 0;
       let preventingBrowserZoom = false;
       const DOUBLE_TAP_GUARD_MS = 350;
+
+      const performanceMetrics = createPerformanceMetrics({
+        flushInterval: 8000,
+        maxEvents: 32,
+        maxSamples: 8,
+        now:
+          typeof performance !== "undefined" && typeof performance.now === "function"
+            ? () => performance.now()
+            : () => Date.now(),
+        onFlush(snapshot, reason = "update") {
+          if (!snapshot || !snapshot.durations) {
+            return;
+          }
+          const entries = [];
+          for (const [label, stats] of Object.entries(snapshot.durations)) {
+            if (!stats || !stats.count) continue;
+            entries.push(
+              `${label} avg ${stats.average.toFixed(1)}ms (p${stats.count}, max ${stats.max.toFixed(1)}ms)`
+            );
+          }
+          if (entries.length > 0) {
+            const context = reason === "interval" ? "interval" : reason;
+            console.info(`[Performance] ${context} – ${entries.join("; ")}`);
+          }
+        },
+      });
+      const bootPerformanceTimer = performanceMetrics.start("app:boot", {
+        stage: "initializing",
+      });
 
       function normalizeMouseClickAction(value, fallback = DEFAULT_MOUSE_CONTROLS.left.click) {
         if (typeof value === "string" && VALID_MOUSE_CLICK_ACTIONS.has(value)) {
@@ -3095,6 +1717,7 @@
           outlineLayer: null,
           outlineLayerCtx: null,
           outlineLayerDirty: true,
+          labelSettingsSignature: null,
         };
       }
 
@@ -3211,16 +1834,19 @@
         const expectedWidth = state.puzzle.width;
         const expectedHeight = state.puzzle.height;
         const expectedVersion = state.puzzle.regions.length;
+        const expectedLabelSignature = computeLabelSettingsSignature();
         const force = options.force === true;
         const needsRebuild =
           force ||
           !cache.ready ||
           cache.width !== expectedWidth ||
           cache.height !== expectedHeight ||
-          cache.version !== expectedVersion;
+          cache.version !== expectedVersion ||
+          cache.labelSettingsSignature !== expectedLabelSignature;
         if (needsRebuild) {
           rebuildRenderCache(cache);
         }
+        cache.labelSettingsSignature = expectedLabelSignature;
         syncCacheMetrics(cache);
         state.renderCache = cache;
         return cache;
@@ -3242,6 +1868,7 @@
           cache.outlineLayerCtx = null;
           cache.outlineLayerDirty = true;
           cache.ready = false;
+          cache.labelSettingsSignature = null;
           return cache;
         }
         cache.width = state.puzzle.width;
@@ -4807,6 +3434,28 @@
             }
             return attemptFillRegion({ region, regionId: region.id }, { label });
           },
+          getPerformanceMetrics() {
+            try {
+              return performanceMetrics?.getSummary?.() || null;
+            } catch (_error) {
+              return null;
+            }
+          },
+          logPerformanceMetrics(reason = "manual") {
+            try {
+              performanceMetrics?.flush?.(reason);
+              return performanceMetrics?.getSummary?.() || null;
+            } catch (_error) {
+              return null;
+            }
+          },
+          resetPerformanceMetrics() {
+            try {
+              return performanceMetrics?.reset?.() || null;
+            } catch (_error) {
+              return null;
+            }
+          },
         };
       }
 
@@ -4826,6 +3475,13 @@
         suppressSettingsPersist = Math.max(0, suppressSettingsPersist - 1);
       }
       scheduleSettingsPersist({ immediate: true });
+      if (bootPerformanceTimer) {
+        bootPerformanceTimer.end({
+          renderer: state.rendering?.controller?.getRendererType?.() || state.settings.renderer || "unknown",
+          hasPuzzle: Boolean(state.puzzle),
+        });
+        performanceMetrics.flush("boot");
+      }
 
       if (paletteSortEl) {
         paletteSortEl.value = state.paletteSort;
@@ -5359,6 +4015,73 @@
       kmeansItersEl.addEventListener("change", markOptionsDirty);
       smoothingEl.addEventListener("change", markOptionsDirty);
 
+      for (const button of sliderResetButtons) {
+        if (!button || !(button instanceof HTMLButtonElement)) {
+          continue;
+        }
+        const targetId = button.dataset.resetTarget;
+        if (!targetId) {
+          continue;
+        }
+        const input = document.getElementById(targetId);
+        if (!input || input.type !== "range") {
+          button.disabled = true;
+          continue;
+        }
+        const defaultValue =
+          button.dataset.resetDefault ??
+          input.getAttribute("data-default") ??
+          input.getAttribute("value") ??
+          input.defaultValue;
+        if (defaultValue == null || defaultValue === "") {
+          button.disabled = true;
+          continue;
+        }
+        let labelText = targetId;
+        const header = button.closest(".control-header");
+        const labelSpan = header ? header.querySelector("label span") : null;
+        if (labelSpan) {
+          const textParts = [];
+          for (const node of Array.from(labelSpan.childNodes)) {
+            if (node.nodeType === Node.TEXT_NODE) {
+              const value = String(node.textContent || "").trim();
+              if (value) {
+                textParts.push(value);
+              }
+            }
+          }
+          const fallback = labelSpan.textContent ? labelSpan.textContent.trim() : "";
+          if (textParts.length > 0) {
+            labelText = textParts.join(" ");
+          } else if (fallback) {
+            labelText = fallback;
+          }
+        }
+        const formatted = formatSliderDefaultValue(targetId, defaultValue);
+        if (formatted && formatted.trim()) {
+          button.setAttribute("aria-label", `Reset ${labelText} to ${formatted}`);
+          button.title = `Reset ${labelText} to ${formatted}`;
+        } else {
+          button.setAttribute("aria-label", `Reset ${labelText} to default`);
+          button.title = `Reset ${labelText} to default`;
+        }
+        const defaultString = String(defaultValue);
+        const updateDisabled = () => {
+          button.disabled = String(input.value) === defaultString;
+        };
+        button.addEventListener("click", () => {
+          if (button.disabled) {
+            return;
+          }
+          input.value = defaultString;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        input.addEventListener("input", updateDisabled);
+        input.addEventListener("change", updateDisabled);
+        updateDisabled();
+      }
+
       function hasFiles(event) {
         const types = event.dataTransfer?.types;
         if (!types) return false;
@@ -5597,6 +4320,11 @@
           return "ignored";
         }
         const { region, regionId } = hit;
+        performanceMetrics.mark("interaction:fill:attempt", {
+          label,
+          regionId,
+          colorId: region.colorId,
+        });
         if (state.filled.has(regionId)) {
           const remaining = getRegionsByColor(region.colorId, { includeFilled: false });
           if (remaining.length > 0) {
@@ -5616,6 +4344,12 @@
           } else {
             logDebug(`Region ${region.id} already filled; ignoring ${label}`);
           }
+          performanceMetrics.mark("interaction:fill:already-filled", {
+            label,
+            regionId,
+            colorId: region.colorId,
+            remaining: remaining.length,
+          });
           return "already-filled";
         }
         const difficulty = resolveDifficulty(state.settings.difficulty);
@@ -5643,6 +4377,13 @@
             logDebug(
               `Region ${region.id} expects ${describeColour(region.colorId, { includeCompleted: true })}; active colour is ${describeColour(state.activeColor, { includeCompleted: true })}`
             );
+            performanceMetrics.mark("interaction:fill:mismatch", {
+              label,
+              regionId,
+              colorId: region.colorId,
+              activeColor: state.activeColor,
+              reason: "difficulty-mismatch",
+            });
             return "mismatch";
           }
         }
@@ -5651,9 +4392,21 @@
           logDebug(
             `Region ${region.id} expects ${describeColour(region.colorId, { includeCompleted: true })}; active colour is ${describeColour(state.activeColor, { includeCompleted: true })}`
           );
+          performanceMetrics.mark("interaction:fill:mismatch", {
+            label,
+            regionId,
+            colorId: region.colorId,
+            activeColor: state.activeColor,
+            reason: "colour-mismatch",
+          });
           return "mismatch";
         }
         state.filled.add(regionId);
+        const fillTimer = performanceMetrics.start("interaction:fill", {
+          label,
+          regionId,
+          colorId: region.colorId,
+        });
         paintRegionToFilledLayer(regionId);
         renderPuzzle();
         renderPalette();
@@ -5678,6 +4431,14 @@
           autoAdvanceColor(region.colorId);
         }
         refreshCustomCursorHighlight();
+        if (fillTimer) {
+          fillTimer.end({
+            result: "filled",
+            filledCount: state.filled.size,
+            totalRegions: state.puzzle?.regions?.length || 0,
+          });
+        }
+        performanceMetrics.flush("interaction");
         return "filled";
       }
 
@@ -6319,6 +5080,224 @@
         debugLogEl.scrollTop = 0;
       }
 
+      function createPerformanceMetrics(options = {}) {
+        const {
+          now = () => Date.now(),
+          flushInterval = 0,
+          maxEvents = 24,
+          maxSamples = 6,
+          onFlush = null,
+        } = options || {};
+
+        const clock = typeof now === "function" ? now : () => Date.now();
+        const clampInteger = (value, fallback) => {
+          if (!Number.isFinite(value) || value <= 0) {
+            return fallback;
+          }
+          return Math.round(value);
+        };
+        const safeFlushInterval = Math.max(0, Number(flushInterval) || 0);
+        const maxEventCount = clampInteger(maxEvents, 24);
+        const maxSampleCount = clampInteger(maxSamples, 6);
+        const round = (value) => Math.round(value * 1000) / 1000;
+
+        const durations = new Map();
+        const events = [];
+        let startedAt = clock();
+        let lastUpdatedAt = startedAt;
+        let lastFlushAt = startedAt;
+
+        function normalizeMetadata(metadata) {
+          if (!metadata || typeof metadata !== "object") {
+            return undefined;
+          }
+          const clone = {};
+          for (const [key, value] of Object.entries(metadata)) {
+            if (value === undefined) continue;
+            if (
+              typeof value === "number" ||
+              typeof value === "string" ||
+              typeof value === "boolean" ||
+              value === null
+            ) {
+              clone[key] = value;
+            }
+          }
+          return Object.keys(clone).length > 0 ? clone : undefined;
+        }
+
+        function pushEvent(event) {
+          events.push(event);
+          if (events.length > maxEventCount) {
+            events.splice(0, events.length - maxEventCount);
+          }
+          lastUpdatedAt = event.at;
+        }
+
+        function maybeFlush() {
+          if (!safeFlushInterval) {
+            return;
+          }
+          const nowTs = clock();
+          if (nowTs - lastFlushAt >= safeFlushInterval) {
+            flush("interval");
+          }
+        }
+
+        function recordDuration(label, duration, metadata = undefined) {
+          if (!Number.isFinite(duration)) {
+            return;
+          }
+          const name = typeof label === "string" && label ? label : "unknown";
+          const stats = durations.get(name) || {
+            count: 0,
+            total: 0,
+            min: Number.POSITIVE_INFINITY,
+            max: 0,
+            last: null,
+            recent: [],
+          };
+          stats.count += 1;
+          stats.total += duration;
+          if (duration < stats.min) {
+            stats.min = duration;
+          }
+          if (duration > stats.max) {
+            stats.max = duration;
+          }
+          const at = clock();
+          const normalizedMetadata = normalizeMetadata(metadata);
+          const sample = {
+            at,
+            duration: round(duration),
+            metadata: normalizedMetadata,
+          };
+          stats.last = sample;
+          stats.recent.push(sample);
+          if (stats.recent.length > maxSampleCount) {
+            stats.recent.splice(0, stats.recent.length - maxSampleCount);
+          }
+          durations.set(name, stats);
+          pushEvent({
+            type: "duration",
+            name,
+            duration: round(duration),
+            metadata: normalizedMetadata,
+            at,
+          });
+          maybeFlush();
+        }
+
+        function start(label, metadata = undefined) {
+          const startAt = clock();
+          const baseMetadata = normalizeMetadata(metadata) || undefined;
+          return {
+            end(extra = undefined) {
+              const merged = baseMetadata ? { ...baseMetadata } : {};
+              const extraMetadata = normalizeMetadata(extra);
+              if (extraMetadata) {
+                Object.assign(merged, extraMetadata);
+              }
+              const duration = clock() - startAt;
+              recordDuration(label, duration, merged);
+              return duration;
+            },
+            cancel(reason = "cancelled") {
+              const at = clock();
+              const merged = baseMetadata ? { ...baseMetadata } : {};
+              merged.reason = reason;
+              pushEvent({
+                type: "cancelled",
+                name: typeof label === "string" && label ? label : "unknown",
+                at,
+                metadata: merged,
+              });
+              maybeFlush();
+            },
+          };
+        }
+
+        function mark(label, metadata = undefined) {
+          const at = clock();
+          pushEvent({
+            type: "mark",
+            name: typeof label === "string" && label ? label : "mark",
+            metadata: normalizeMetadata(metadata),
+            at,
+          });
+          maybeFlush();
+        }
+
+        function buildSummary() {
+          const durationSummary = {};
+          for (const [name, stats] of durations.entries()) {
+            const average = stats.count > 0 ? stats.total / stats.count : 0;
+            durationSummary[name] = {
+              count: stats.count,
+              total: round(stats.total),
+              average: round(average),
+              min: stats.min === Number.POSITIVE_INFINITY ? 0 : round(stats.min),
+              max: stats.count > 0 ? round(stats.max) : 0,
+              last: stats.last
+                ? {
+                    at: stats.last.at,
+                    duration: stats.last.duration,
+                    metadata: stats.last.metadata,
+                  }
+                : null,
+              recent: stats.recent.map((entry) => ({
+                at: entry.at,
+                duration: entry.duration,
+                metadata: entry.metadata,
+              })),
+            };
+          }
+          return {
+            startedAt,
+            lastUpdatedAt,
+            lastFlushAt,
+            durations: durationSummary,
+            events: events.map((event) => ({
+              type: event.type,
+              name: event.name,
+              at: event.at,
+              duration: event.duration != null ? round(event.duration) : undefined,
+              metadata: event.metadata,
+            })),
+          };
+        }
+
+        function flush(reason = "manual") {
+          lastFlushAt = clock();
+          if (typeof onFlush === "function") {
+            try {
+              onFlush(buildSummary(), reason);
+            } catch (error) {
+              console.warn("Performance summary handler failed", error);
+            }
+          }
+        }
+
+        function resetMetrics() {
+          durations.clear();
+          events.length = 0;
+          const nowTs = clock();
+          startedAt = nowTs;
+          lastUpdatedAt = nowTs;
+          lastFlushAt = nowTs;
+          return buildSummary();
+        }
+
+        return {
+          start,
+          mark,
+          record: recordDuration,
+          getSummary: buildSummary,
+          flush,
+          reset: resetMetrics,
+        };
+      }
+
       function logDebug(message) {
         if (message == null) return;
         const now = new Date();
@@ -6567,6 +5546,9 @@
           uiScaleInput.value = String(resolved);
         }
         updateOptionOutputs();
+        if (changed) {
+          renderPuzzle();
+        }
         if (changed && !skipLog) {
           logDebug(`Interface scale set to ${Math.round(resolved * 100)}%`);
         }
@@ -6940,6 +5922,53 @@
           const source = hintIntensityInput ? Number(hintIntensityInput.value) : state.settings.hintIntensity * 100;
           const intensity = normalizeHintIntensity(source);
           settingsOutputs.hintIntensity.textContent = `${Math.round(intensity * 100)}%`;
+        }
+      }
+
+      function formatSliderDefaultValue(id, rawValue) {
+        switch (id) {
+          case "hintFadeDuration": {
+            const duration = normalizeHintFadeDuration(rawValue);
+            return `${(duration / 1000).toFixed(1)} s`;
+          }
+          case "hintIntensity": {
+            const intensity = normalizeHintIntensity(rawValue);
+            return `${Math.round(intensity * 100)}%`;
+          }
+          case "uiScale": {
+            const numeric = Number(rawValue);
+            const scale = Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_UI_SCALE;
+            return `${Math.round(scale * 100)}%`;
+          }
+          case "labelScale": {
+            const numeric = Number(rawValue);
+            const scale = Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_LABEL_SCALE;
+            return `${Math.round(scale * 100)}%`;
+          }
+          case "maxZoom": {
+            const zoom = resolveMaxZoomCandidate(rawValue) ?? DEFAULT_MAX_VIEWPORT_ZOOM;
+            return `${Math.round(zoom * 100)}%`;
+          }
+          case "colorCount":
+          case "kmeansIters":
+          case "smoothingPasses": {
+            const numeric = Number(rawValue);
+            return Number.isFinite(numeric) ? String(Math.round(numeric)) : "";
+          }
+          case "minRegion": {
+            const numeric = Number(rawValue);
+            return Number.isFinite(numeric) ? `${Math.round(numeric)} px²` : "";
+          }
+          case "detailLevel": {
+            const numeric = Number(rawValue);
+            return Number.isFinite(numeric) ? `${Math.round(numeric)} px` : "";
+          }
+          case "sampleRate": {
+            const numeric = Number(rawValue);
+            return Number.isFinite(numeric) ? `${Math.round(numeric)}%` : "";
+          }
+          default:
+            return typeof rawValue === "string" ? rawValue : String(rawValue ?? "");
         }
       }
 
@@ -8100,6 +7129,16 @@
           setProgressMessage("idle");
           return false;
         }
+        const puzzleHydrationTimer = performanceMetrics.start("puzzle:hydrate", {
+          width: data.width,
+          height: data.height,
+          paletteCount: Array.isArray(data.palette) ? data.palette.length : 0,
+          regionCount: Array.isArray(data.regions) ? data.regions.length : 0,
+          title:
+            (typeof metadata.title === "string" && metadata.title.trim()) ||
+            (typeof data.title === "string" && data.title.trim()) ||
+            state.sourceTitle || null,
+        });
         let needsPixelHydration = false;
         for (const region of data.regions) {
           if (!Array.isArray(region.pixels) || region.pixels.length === 0) {
@@ -8329,6 +7368,13 @@
         }
         refreshSaveList();
         scheduleAutosave("puzzle-load", { immediate: true });
+        if (puzzleHydrationTimer) {
+          puzzleHydrationTimer.end({
+            renderer: state.rendering?.controller?.getRendererType?.() || state.settings.renderer || "unknown",
+            filledRegions: state.filled.size,
+          });
+        }
+        performanceMetrics.flush("puzzle-load");
         return true;
       }
 
@@ -8340,6 +7386,11 @@
           (typeof puzzle.title === "string" && puzzle.title.trim()) ||
           "Fixture puzzle";
         state.sourceTitle = resolvedTitle;
+        performanceMetrics.mark("puzzle:load-request", {
+          title: resolvedTitle,
+          paletteCount: Array.isArray(puzzle.palette) ? puzzle.palette.length : 0,
+          regionCount: Array.isArray(puzzle.regions) ? puzzle.regions.length : 0,
+        });
         const applied = applyPuzzleResult(puzzle, {
           options: getCurrentOptions(),
           filled: puzzle.filled,
@@ -8408,22 +7459,33 @@
         const cache = ensureRenderCache();
         const controller = state.rendering?.controller;
         if (!controller) return;
-        controller.renderFrame({
-          state,
-          cache,
-          metrics: { ...canvasMetrics },
-          previewCanvas,
-          previewCtx,
-          previewImageData: state.previewImageData,
-          previewVisible: state.previewVisible === true,
-          backgroundColor: state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX,
-          defaultBackgroundColor: DEFAULT_BACKGROUND_HEX,
-          renderPreview: () =>
-            controller.renderPreview({ state, previewCanvas, previewCtx }) || state.previewImageData,
-          setPreviewImageData: (imageData) => {
-            state.previewImageData = imageData || null;
-          },
+        const renderTimer = performanceMetrics.start("render:frame", {
+          renderer: controller.getRendererType?.() || state.settings.renderer || "unknown",
+          filledRegions: state.filled.size,
+          paletteCount: state.puzzle?.palette?.length || 0,
         });
+        try {
+          controller.renderFrame({
+            state,
+            cache,
+            metrics: { ...canvasMetrics },
+            previewCanvas,
+            previewCtx,
+            previewImageData: state.previewImageData,
+            previewVisible: state.previewVisible === true,
+            backgroundColor: state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX,
+            defaultBackgroundColor: DEFAULT_BACKGROUND_HEX,
+            renderPreview: () =>
+              controller.renderPreview({ state, previewCanvas, previewCtx }) || state.previewImageData,
+            setPreviewImageData: (imageData) => {
+              state.previewImageData = imageData || null;
+            },
+          });
+        } finally {
+          if (renderTimer) {
+            renderTimer.end({ previewVisible: state.previewVisible === true });
+          }
+        }
       }
 
       function renderPuzzleFrame({
@@ -8605,6 +7667,27 @@
             ctx.fillText(text, center.x, center.y);
           }
         });
+      }
+
+      function computeLabelSettingsSignature() {
+        const settings = state?.settings || {};
+        const labelsVisible = settings.showRegionLabels !== false;
+        const rawLabelScale =
+          Number.isFinite(settings.labelScale) && settings.labelScale > 0
+            ? settings.labelScale
+            : DEFAULT_LABEL_SCALE;
+        const labelScale = clamp(rawLabelScale, 0.2, 2);
+        const rawUiScale =
+          Number.isFinite(settings.uiScale) && settings.uiScale > 0
+            ? settings.uiScale
+            : DEFAULT_UI_SCALE;
+        const uiScale = clamp(rawUiScale, 0.2, 3);
+        const scaleFactorRaw = uiScale / DEFAULT_UI_SCALE;
+        const scaleFactor =
+          Number.isFinite(scaleFactorRaw) && scaleFactorRaw > 0 ? scaleFactorRaw : 1;
+        return [labelsVisible ? "on" : "off", labelScale.toFixed(4), scaleFactor.toFixed(4)].join(
+          "|"
+        );
       }
 
       function computeRegionLabelFontSize(region, labelText = "") {
@@ -13691,9 +12774,7 @@
 
           bootstrapSucceeded = true;
         } finally {
-          window.__capyRendererBootstrapVersion = bootstrapSucceeded
-            ? SENTINEL_READY
-            : undefined;
+          completeRendererBootstrap(bootstrapSucceeded);
         }
       })();
 

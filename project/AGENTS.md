@@ -49,8 +49,8 @@ any feature or workflow changes you ship.
 2. From the new workspace (`cd project`), run `npm install` once to provision
    Playwright browsers and the lightweight `http-server` used by local
    previews.
-3. Launch the site with `npm run dev` inside `project/` (serves the repo root
-   at http://localhost:8000).
+3. Launch the site with `npm run dev` inside `project/` (serves the repository
+   root at http://localhost:8000).
 4. Tests and docs assume the app is reachable at port 8000; if you change it,
    update configuration files plus `TECH.md`.
 
@@ -135,9 +135,9 @@ any feature or workflow changes you ship.
 - Destinations: `main` publishes to the root of GitHub Pages. Other branches
   land in `/automation-<slug>/` directories using sanitised branch names (e.g.,
   `automation/feature` → `/automation-feature/`).
-- Contents: Each deployment ships `index.html`, `puzzle-generation.js`,
-  `capy.json`, and a generated `/README/index.html` so documentation mirrors the
-  branch.
+- Contents: Each deployment ships the runtime payload from the repository root
+  (`index.html`, `render.js`, `puzzle-generation.js`, and `capy.json`) plus a
+  generated `/README/index.html` so documentation mirrors the branch.
 - Index: `branch.html` lists `main` plus every deployed branch with preview,
   PR, commit, and timestamp metadata rendered in the viewer’s local timezone.
 - Cleanup: When a PR closes, the workflow prunes its corresponding deployment on

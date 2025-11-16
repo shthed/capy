@@ -1,13 +1,8 @@
-;(function (global) {
-  "use strict";
+"use strict";
 
-  if (global && global.capyRenderer && global.capyRenderer.__legacyLoaderVersion) {
-    return;
-  }
+const FRAME_LOG_INTERVAL_MS = 1000;
 
-  const FRAME_LOG_INTERVAL_MS = 1000;
-
-  function getTimestamp() {
+function getTimestamp() {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
     return performance.now();
   }
@@ -831,6 +826,7 @@ function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     baseSnapshotKey: null,
     lastRenderScale: null,
     lastFilledCount: null,
+    lastLabelSettingsSignature: null,
   };
 
   let currentMetrics = payload && payload.metrics ? { ...payload.metrics } : null;
@@ -1343,6 +1339,7 @@ function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       uploadState.overlayDirty = true;
       uploadState.numbersHasContent = false;
       uploadState.overlayHasContent = false;
+      uploadState.lastLabelSettingsSignature = null;
     }
 
     const { context: numbersContext, resized: numbersResized } = ensureNumbersSurface(
@@ -1376,6 +1373,13 @@ function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
     ) {
       uploadState.numbersDirty = true;
       uploadState.lastRenderScale = renderScale;
+    }
+
+    const labelSettingsSignature =
+      cache && cache.labelSettingsSignature != null ? cache.labelSettingsSignature : null;
+    if (uploadState.lastLabelSettingsSignature !== labelSettingsSignature) {
+      uploadState.lastLabelSettingsSignature = labelSettingsSignature;
+      uploadState.numbersDirty = true;
     }
 
     const filledCount = getFilledCount(state);
@@ -1860,6 +1864,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     filledHash: null,
     filledSize: 0,
     dataUrl: "",
+    labelSettingsSignature: null,
   };
 
   function resize(metrics = {}) {
@@ -1953,6 +1958,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     }
 
     if (!cache || !cache.ready) {
+      numbersSurface.labelSettingsSignature = null;
       numbersImage.removeAttribute("href");
       numbersImage.style.display = "none";
       return null;
@@ -2119,6 +2125,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
       numbersSurface.width !== pixelWidth || numbersSurface.height !== pixelHeight;
     const ctx = ensureNumbersSurface(pixelWidth, pixelHeight);
     if (!ctx) {
+      numbersSurface.labelSettingsSignature = null;
       numbersImage.removeAttribute("href");
       numbersImage.style.display = "none";
       return;
@@ -2135,6 +2142,11 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
       dirty = true;
     } else if (filledState.hash && numbersSurface.filledHash !== filledState.hash) {
       numbersSurface.filledHash = filledState.hash;
+      dirty = true;
+    }
+    const labelSignature = cache?.labelSettingsSignature ?? null;
+    if (numbersSurface.labelSettingsSignature !== labelSignature) {
+      numbersSurface.labelSettingsSignature = labelSignature;
       dirty = true;
     }
     if (sizeChanged) {
@@ -2326,33 +2338,28 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   };
 }
 
-  const rendererExports = {
-    createRendererController,
-    createCanvas2dRenderer,
-    createWebGLRenderer,
-    createSvgRenderer,
-  };
+const rendererExports = {
+  createRendererController,
+  createCanvas2dRenderer,
+  createWebGLRenderer,
+  createSvgRenderer,
+};
 
-  if (global && typeof global === "object") {
-    const target = global;
-    if (typeof target.capyRenderer !== "object" || target.capyRenderer === null) {
-      target.capyRenderer = {};
-    }
-    Object.assign(target.capyRenderer, rendererExports);
-    target.capyRenderer.__legacyLoaderVersion = "2024-07-28";
-    target.createRendererController = createRendererController;
-    target.createCanvas2dRenderer = createCanvas2dRenderer;
-    target.createWebGLRenderer = createWebGLRenderer;
-    target.createSvgRenderer = createSvgRenderer;
-  }
+const globalTarget = typeof globalThis === "object" ? globalThis : null;
 
-  if (typeof module !== "undefined" && typeof module.exports !== "undefined") {
-    module.exports = rendererExports;
+if (globalTarget) {
+  if (typeof globalTarget.capyRenderer !== "object" || globalTarget.capyRenderer === null) {
+    globalTarget.capyRenderer = {};
   }
-})(typeof globalThis !== "undefined"
-  ? globalThis
-  : typeof window !== "undefined"
-  ? window
-  : typeof self !== "undefined"
-  ? self
-  : this);
+  Object.assign(globalTarget.capyRenderer, rendererExports);
+  globalTarget.capyRenderer.__legacyLoaderVersion = "2024-07-28";
+}
+
+export {
+  createRendererController,
+  createCanvas2dRenderer,
+  createWebGLRenderer,
+  createSvgRenderer,
+};
+
+export default rendererExports;

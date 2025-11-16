@@ -84,13 +84,13 @@ All helpers are documented in detail inside [`TECH.md`](./TECH.md#windowcapygene
 
 ## Testing & QA
 
-Automated UI coverage now runs through Playwright so you can validate the end-to-end flow without manual setup. Install dependencies from the workspace by running `cd project && npm install` (this triggers `npx playwright install --with-deps chromium chromium-headless-shell` so the bundled browser binaries and system libraries are ready). If the suite reports missing browsers or libraries, rerun that install command manually before executing the scripts below:
+Automated coverage now runs through a shared Node + Playwright harness so you can validate generator logic and the end-to-end flow without manual setup. Install dependencies from the workspace by running `cd project && npm install`, then provision the Chromium bundle when you need UI smoke tests with `npm run setup:playwright` (inside `project/`). If the suite reports missing browsers or libraries, rerun that setup command before executing the scripts below:
 
-- `npm test` – from inside `project/`, launches the local dev server and executes the Playwright smoke check (Chromium desktop) using `playwright.config.js`.
+- `npm test` – from inside `project/`, runs the Node generator tests before launching the local dev server and executing the Playwright smoke check (Chromium desktop) using `playwright.config.js`.
 - `npm run test:smoke` – from inside `project/`, targets the same Chromium project for quick iteration.
 
 Playwright stores its reports under `playwright-report/` by default. After any run you can open the latest results with `npx playwright show-report` to review traces, screenshots, and console output.
 
 ## Want to Contribute?
 
-Capy is open source! If you’d like to help shape new features, fix bugs, or expand the documentation, start with the development guide in [`AGENTS.md`](./AGENTS.md) and dive into the technical deep-dive in [`TECH.md`](./TECH.md). All contributor tooling now lives under [`project/`](./project/), so switch into that workspace before running npm scripts or Playwright commands.
+Capy is open source! If you’d like to help shape new features, fix bugs, or expand the documentation, start with the development guide in [`AGENTS.md`](./AGENTS.md) and dive into the technical deep-dive in [`TECH.md`](./TECH.md). All contributor tooling now lives under [`project/`](./project/), so switch into that workspace before running npm scripts or Playwright commands. Runtime assets ship from the repository root (`index.html`, `styles.css`, `render.js`, `puzzle-generation.js`, and `capy.json`), which bundle the single-page app plus the Capybara Springs fixture. For CSS conventions and maintenance tips, see the new [`project/STYLEGUIDE.md`](./project/STYLEGUIDE.md).

@@ -36,6 +36,9 @@ jobs:
       github.event.workflow_run.head_branch != null &&
       github.event.workflow_run.head_branch != ''
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project
     concurrency:
       group: post-deploy-tests-${{ needs.slug.outputs.branch_slug }}
       cancel-in-progress: true

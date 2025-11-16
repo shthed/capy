@@ -1,6 +1,6 @@
 {
   "name": "capy-runtime",
   "private": true,
-  "description": "Static runtime assets for Capy; contributor tooling lives in ./project.",
+  "description": "Static runtime assets for Capy (index.html, render.js, puzzle-generation.js, capy.json); contributor tooling lives in ./project.",
   "type": "module"
 }
