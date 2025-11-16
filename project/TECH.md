@@ -16,6 +16,11 @@ the posterize-and-merge pass) to build a discrete palette, merge tiny regions,
 and paint a canvas you can immediately play. Everything ships as a static
  runtime files in the repository root so the single-page app can be served directly without a
  build step.
+Offline play stays supported via a minimal service worker (`service-worker.js`)
+that precaches the runtime payload and reuses a shared Cache Storage bucket for
+downloaded or user-selected source images. Imported images are stored under
+`source-images/<id>` cache entries so saves keep lightweight references (cache
+keys + URLs) instead of embedding large data URLs in `localStorage`.
 
 ## Repository Map
 
@@ -168,7 +173,11 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 - **Preview mode** – Temporarily renders every region in its target colour for quick comparisons.
 - **Settings & tools menu** – Slides in beside the playfield so you can keep painting while adjusting sliders. A fixed vertical tab rail now sits on the left while the active panel scrolls independently on the right, and the content within each panel flows through a responsive grid so wide viewports spill settings across two columns without sacrificing headings. Tabs still cover Gameplay, Hints, Controls, Appearance, Generator, Saves, and Help & logs so related toggles stay visible on smaller screens. The Gameplay tab opens with Quick actions for the preview toggle and fullscreen control before diving into palette sorting, auto-advance, difficulty, hint animations, overlay intensity, interface scaling, renderer swaps, and mouse mappings. The Generator tab mirrors clustering sliders, detail presets, remote URL imports, and advanced metadata (art prompts, image descriptions). The Saves tab manages manual snapshots, exports, deletion, and the stored-image size cap, while Help & logs hosts command descriptions, gesture tips, the embedded README, and the live debug console. Palette sorting modes include region number, remaining regions, colour name, a rainbow spectrum order based on OKLCH hue, a warm→cool temperature pass, and perceptual lightness (legacy hue/brightness selections migrate to spectrum/lightness automatically). Sheet surfaces now lean on the minimal-library palette: darker themes use `rgba(9, 13, 24, 0.94)` with a desaturated slate border, while the light theme sticks to near-solid white with cool-gray outlines. Hover, active, and focus states pull from the refreshed `--theme-sheet-button-hover-*`, `--theme-sheet-button-active-*`, and `--theme-sheet-focus-ring` tokens so tabs and close buttons stay AA-compliant without the previous heavy blur. Toggle switches adopt compact pill styling and range sliders live in bordered cards with short tracks plus **Default** buttons that snap back to the recommended presets (for example 1.2 s hint fades or 65 % sampling), keeping adjustments reachable without stretching across the full sheet.
 - **Detail presets** – Onboarding hints and Settings surface the active preset with live captions describing colours, min region size, resize edge, and approximate region counts.
-- **Start screen** – Launch puzzles, reload the sample, and highlight manual snapshot tips. **Choose an image** triggers the system picker; the **Load capybara sample** shortcut mirrors the Generator tab’s detail presets, and resets remain available from the Saves tab once the menu is open.
+- **Start screen** – Launch puzzles, reload the sample, and highlight manual snapshot tips. **Choose an image** now prefers the
+  File System Access picker (when supported) so users can grant read permissions for local files; it falls back to the hidden
+  `<input type="file">` for older browsers. Selected images are cached in the shared runtime cache instead of being serialised
+  to `localStorage`, so large files no longer overflow save storage. The **Load capybara sample** shortcut mirrors the Generator
+  tab’s detail presets, and resets remain available from the Saves tab once the menu is open.
 - **Palette dock** – Horizontal scroller anchored to the bottom. Flat colour tiles adjust label contrast automatically, collapse completed colours, and expose tooltips plus `data-color-id` attributes for automation. Completed swatches drop from the picker without renumbering the remaining entries so labels and hints keep stable references.
 
 ## Interaction & Architecture Notes
