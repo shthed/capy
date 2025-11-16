@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../../runtime/render.js');
+await import('../../render.js');
 
 const { createRendererController } = globalThis.capyRenderer;
 
