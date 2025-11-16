@@ -1012,14 +1012,13 @@ input[type="color"]::-moz-color-swatch {
   z-index: 6;
   opacity: 1;
   transform: translate3d(var(--sheet-translate-x), var(--sheet-translate-y), 0);
-  transition: opacity 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.12s ease, box-shadow 0.12s ease;
 }
 
 .sheet.hidden {
   opacity: 0;
   pointer-events: none;
   visibility: hidden;
-  transform: translate3d(var(--sheet-translate-x), calc(var(--sheet-translate-y) + 12px), 0);
 }
 
 .sheet[data-free-position="true"] {
@@ -1083,18 +1082,19 @@ input[type="color"]::-moz-color-swatch {
 .settings-content {
   display: flex;
   flex-direction: column;
-  gap: calc(32px * var(--ui-scale));
+  gap: calc(28px * var(--ui-scale));
   min-height: 0;
   overflow-y: auto;
-  padding-right: calc(6px * var(--ui-scale));
+  padding-right: calc(10px * var(--ui-scale));
 }
 
 .settings-section {
   display: grid;
   grid-template-columns:
-    minmax(calc(176px * var(--ui-scale)), calc(240px * var(--ui-scale)))
+    minmax(calc(200px * var(--ui-scale)), calc(260px * var(--ui-scale)))
     minmax(0, 1fr);
-  gap: calc(16px * var(--ui-scale));
+  column-gap: calc(20px * var(--ui-scale));
+  row-gap: calc(18px * var(--ui-scale));
   align-items: start;
 }
 
@@ -1102,12 +1102,13 @@ input[type="color"]::-moz-color-swatch {
   position: sticky;
   top: 0;
   align-self: start;
-  padding-top: calc(4px * var(--ui-scale));
-  padding-bottom: calc(6px * var(--ui-scale));
+  padding-top: calc(6px * var(--ui-scale));
+  padding-bottom: calc(10px * var(--ui-scale));
   background: var(--theme-sheet-bg);
   color: var(--theme-sheet-muted-text);
   font-weight: 600;
   letter-spacing: 0.01em;
+  z-index: 1;
 }
 
 .settings-section-heading h3 {

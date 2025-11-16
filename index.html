@@ -3681,9 +3681,7 @@
 
       if (state.settings?.settingsSheetOpen && settingsSheet) {
         hideStartScreen();
-        requestAnimationFrame(() => {
-          showSettingsSheet({ resetScroll: false, force: true });
-        });
+        showSettingsSheet({ resetScroll: false, force: true });
       }
 
       if (settingsSheetHeader) {
@@ -3691,6 +3689,19 @@
         settingsSheetHeader.addEventListener("pointermove", moveSettingsSheet);
         settingsSheetHeader.addEventListener("pointerup", endSettingsSheetDrag);
         settingsSheetHeader.addEventListener("pointercancel", endSettingsSheetDrag);
+      }
+
+      if (helpPanel && readmeLoadState === "idle") {
+        const scheduleReadmePrefetch = () => {
+          if (readmeLoadState === "idle") {
+            void ensureHelpReadmeLoaded();
+          }
+        };
+        if (typeof window?.requestIdleCallback === "function") {
+          window.requestIdleCallback(scheduleReadmePrefetch, { timeout: 1200 });
+        } else {
+          window.setTimeout(scheduleReadmePrefetch, 600);
+        }
       }
 
       if (startHintCloseButton) {
