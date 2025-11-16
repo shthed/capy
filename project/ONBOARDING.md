@@ -15,6 +15,9 @@ expectations.
 - **Primary tests:** `npm test --silent` from `project/` runs Node-based unit
   coverage first and hands off to Playwright. Use `npm run test:smoke` for the
   single-page Playwright load check while iterating.
+- **Terminal output:** Avoid dumping huge single-line outputs; remote shells
+  kill the session once any line exceeds ~4 KB. Prefer `rg`, `sed`, or
+  `cut -c1-200` to trim results before printing.
 - **Manual smoke:** Before shipping changes, exercise puzzle load, palette
   selection, painting, and save/load flows in both a desktop and mobile browser
   (emulated is fine) to mirror the release checklist.
