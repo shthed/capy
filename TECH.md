@@ -30,7 +30,7 @@ single `index.html` document—no build tools or extra runtime required.
   - `TECH.md` – This technical reference.
 - **Testing & QA**
   - `project/tests/generator.spec.js` – Node-based unit coverage for the segmentation pipeline. Uses synthetic fixtures to exercise palette smoothing, minimum-region merges, and integration via `createPuzzleData` without a DOM.
-  - `project/tests/ui-review.spec.js` – Playwright smoke test that loads the bundled site in Chromium and confirms the document title so we know the runtime boots.
+  - `project/tests/ui-review.pw.spec.js` – Playwright smoke test that loads the bundled site in Chromium and confirms the document title so we know the runtime boots.
   - `project/tests/fixtures/` – Typed-array fixtures shared by generator tests so edge cases like tiny palettes and segmentation smoothing are reproducible.
   - `project/scripts/run-tests.js` – Harness invoked by `npm test --silent`; runs the Node test runner before handing off to Playwright so both suites share a single entry point and exit code.
   - `project/artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.

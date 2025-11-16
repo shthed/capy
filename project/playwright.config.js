@@ -6,6 +6,7 @@ const artifactsDir = path.resolve('artifacts/ui-review');
 
 export default defineConfig({
   testDir: './tests',
+  testMatch: /.*\.pw\.spec\.(?:[cm]?js|ts)x?$/,
   fullyParallel: false,
   timeout: 60_000,
   expect: {
