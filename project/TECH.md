@@ -77,6 +77,10 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
 - **Automation entry point.** `project/scripts/run-tests.js` still drives the Node generator specs and Playwright UI smoke tests,
   but the workflow in `.github/workflows/ci.yml` currently serves as a placeholder. Decide whether to re-enable the Playwright
   portion in CI or gate it behind an environment flag so coverage expectations match automation reality.
+- **Workflow context guardrails.** GitHub parses the workflow `env:` blocks before it exposes the job-level `env.*` context, so
+  referencing `${{ env.SOME_VALUE }}` while defining the same block fails validation with `Unrecognized named-value: 'env'`.
+  Keep `env:` assignments limited to literals/contexts that GitHub resolves at parse time (such as `github.*`, `inputs.*`, or
+  direct strings) and reuse those exports inside the shell scripts to avoid invalid deployments.
 
 ## Deployment & Branch Previews
 
