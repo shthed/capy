@@ -4071,7 +4071,7 @@
           console.error("Failed to preload default puzzle metadata", error);
         });
 
-      async function requestUpload() {
+      window.requestUpload = async function requestUpload() {
         if (settingsSheet && !settingsSheet.classList.contains("hidden")) {
           closeSheet(settingsSheet);
         }
@@ -4079,14 +4079,13 @@
         if (!handled && fileInput) {
           fileInput.click();
         }
-      }
-      window.requestUpload = requestUpload;
+      };
 
       if (selectButton) {
-        selectButton.addEventListener("click", requestUpload);
+        selectButton.addEventListener("click", window.requestUpload);
       }
       if (settingsUploadButton) {
-        settingsUploadButton.addEventListener("click", requestUpload);
+        settingsUploadButton.addEventListener("click", window.requestUpload);
       }
 
       function beginSettingsLauncherDrag(event) {
