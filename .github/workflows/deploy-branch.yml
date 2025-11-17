@@ -42,11 +42,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
           COMMIT_TIMESTAMP: ${{ github.event.head_commit.timestamp || '' }}
-          TARGET_BRANCH: ${{ env.EFFECTIVE_BRANCH }}
         run: |
           set -euo pipefail
 
-          BRANCH_NAME="${TARGET_BRANCH}"
+          BRANCH_NAME="${EFFECTIVE_BRANCH}"
           SAFE_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g')
           TARGET_DIR="."
 
