@@ -92,16 +92,16 @@
       <header id="commandRail" aria-label="Game controls">
         <button
           id="settingsButton"
-          class="menu-button"
+          class="menu-button settings-launcher"
           type="button"
           data-testid="settings-button"
           aria-haspopup="dialog"
           aria-expanded="false"
-          aria-label="Open settings and tools"
-          title="Open settings and tools"
+          aria-label="Open settings"
+          title="Open settings"
         >
           <span class="icon" aria-hidden="true">⚙</span>
-          <span class="label">Settings &amp; tools</span>
+          <span class="label visually-hidden">Settings</span>
         </button>
       </header>
       <section
@@ -152,7 +152,7 @@
       aria-hidden="true"
     >
       <div class="sheet-header">
-        <h2 id="settingsTitle">Settings &amp; tools</h2>
+        <h2 id="settingsTitle">Settings</h2>
         <button type="button" class="close-button" data-sheet-close="settings">Close</button>
       </div>
       <div class="sheet-body">
@@ -162,101 +162,18 @@
           </button>
         </div>
         <div class="settings-body">
-          <div class="settings-tabs" role="tablist" aria-label="Settings categories">
-            <button
-              type="button"
-              class="settings-tab"
-              id="settingsTab-gameplay"
-              data-settings-tab="gameplay"
-              data-settings-tab-default="true"
-              role="tab"
-              aria-controls="settingsPanel-gameplay"
-              aria-selected="true"
-              tabindex="0"
-            >
-              Gameplay
-            </button>
-            <button
-              type="button"
-              class="settings-tab"
-              id="settingsTab-hints"
-              data-settings-tab="hints"
-              role="tab"
-              aria-controls="settingsPanel-hints"
-              aria-selected="false"
-              tabindex="-1"
-            >
-              Hints
-            </button>
-            <button
-              type="button"
-              class="settings-tab"
-              id="settingsTab-controls"
-              data-settings-tab="controls"
-              role="tab"
-              aria-controls="settingsPanel-controls"
-              aria-selected="false"
-              tabindex="-1"
-            >
-              Controls
-            </button>
-            <button
-              type="button"
-              class="settings-tab"
-              id="settingsTab-appearance"
-              data-settings-tab="appearance"
-              role="tab"
-              aria-controls="settingsPanel-appearance"
-              aria-selected="false"
-              tabindex="-1"
-            >
-              Appearance
-            </button>
-            <button
-              type="button"
-              class="settings-tab"
-              id="settingsTab-generator"
-              data-settings-tab="generator"
-              role="tab"
-              aria-controls="settingsPanel-generator"
-              aria-selected="false"
-              tabindex="-1"
-            >
-              Generator
-            </button>
-            <button
-              type="button"
-              class="settings-tab"
-              id="settingsTab-saves"
-              data-settings-tab="saves"
-              role="tab"
-              aria-controls="settingsPanel-saves"
-              aria-selected="false"
-              tabindex="-1"
-            >
-              Saves
-            </button>
-            <button
-              type="button"
-              class="settings-tab"
-              id="settingsTab-help"
-              data-settings-tab="help"
-              role="tab"
-              aria-controls="settingsPanel-help"
-              aria-selected="false"
-              tabindex="-1"
-            >
-              Help &amp; logs
-            </button>
-          </div>
           <div class="settings-content" data-settings-scroll>
-            <div
-              class="settings-panel"
-              id="settingsPanel-gameplay"
-              role="tabpanel"
-              aria-labelledby="settingsTab-gameplay"
-              data-settings-panel="gameplay"
-            >
+            <section class="settings-section" data-settings-section="gameplay">
+              <div class="settings-section-heading">
+                <h3 id="settingsHeading-gameplay" data-settings-heading>Gameplay</h3>
+              </div>
+              <div
+                class="settings-panel"
+                id="settingsPanel-gameplay"
+                role="group"
+                aria-labelledby="settingsHeading-gameplay"
+                data-settings-panel="gameplay"
+              >
           <section class="sheet-section" aria-labelledby="quickActionsHeading">
             <h3 id="quickActionsHeading">Quick actions</h3>
             <div class="quick-actions" role="group" aria-label="Puzzle quick actions">
@@ -330,15 +247,18 @@
             <p class="control-note">Choose how unfinished colours appear in the dock.</p>
           </section>
         </div>
-        <div
-          class="settings-panel"
-          id="settingsPanel-hints"
-          role="tabpanel"
-          aria-labelledby="settingsTab-hints"
-          data-settings-panel="hints"
-          hidden
-          aria-hidden="true"
-        >
+        </section>
+        <section class="settings-section" data-settings-section="hints">
+          <div class="settings-section-heading">
+            <h3 id="settingsHeading-hints" data-settings-heading>Hints</h3>
+          </div>
+          <div
+            class="settings-panel"
+            id="settingsPanel-hints"
+            role="group"
+            aria-labelledby="settingsHeading-hints"
+            data-settings-panel="hints"
+          >
           <section class="sheet-section" aria-labelledby="hintsControlsHeading">
             <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
             <div class="control control-range">
@@ -407,15 +327,18 @@
             <p class="control-note">Show a focused hint when you pause the pointer over a region.</p>
           </section>
         </div>
-        <div
-          class="settings-panel"
-          id="settingsPanel-controls"
-          role="tabpanel"
-          aria-labelledby="settingsTab-controls"
-          data-settings-panel="controls"
-          hidden
-          aria-hidden="true"
-        >
+        </section>
+        <section class="settings-section" data-settings-section="controls">
+          <div class="settings-section-heading">
+            <h3 id="settingsHeading-controls" data-settings-heading>Controls</h3>
+          </div>
+          <div
+            class="settings-panel"
+            id="settingsPanel-controls"
+            role="group"
+            aria-labelledby="settingsHeading-controls"
+            data-settings-panel="controls"
+          >
           <section class="sheet-section" aria-labelledby="mouseControlsHeading">
             <h3 id="mouseControlsHeading">Mouse controls</h3>
             <p class="control-note">
@@ -502,15 +425,18 @@
             </p>
           </section>
         </div>
-        <div
-          class="settings-panel"
-          id="settingsPanel-appearance"
-          role="tabpanel"
-          aria-labelledby="settingsTab-appearance"
-          data-settings-panel="appearance"
-          hidden
-          aria-hidden="true"
-        >
+        </section>
+        <section class="settings-section" data-settings-section="appearance">
+          <div class="settings-section-heading">
+            <h3 id="settingsHeading-appearance" data-settings-heading>Appearance</h3>
+          </div>
+          <div
+            class="settings-panel"
+            id="settingsPanel-appearance"
+            role="group"
+            aria-labelledby="settingsHeading-appearance"
+            data-settings-panel="appearance"
+          >
           <section class="sheet-section" aria-labelledby="appearanceHeading">
             <h3 id="appearanceHeading">Appearance</h3>
             <div class="control control-range">
@@ -622,15 +548,18 @@
             <p class="control-note">Adjust the area surrounding the puzzle canvas.</p>
           </section>
         </div>
-        <div
-          class="settings-panel"
-          id="settingsPanel-generator"
-          role="tabpanel"
-          aria-labelledby="settingsTab-generator"
-          data-settings-panel="generator"
-          hidden
-          aria-hidden="true"
-        >
+        </section>
+        <section class="settings-section" data-settings-section="generator">
+          <div class="settings-section-heading">
+            <h3 id="settingsHeading-generator" data-settings-heading>Generator</h3>
+          </div>
+          <div
+            class="settings-panel"
+            id="settingsPanel-generator"
+            role="group"
+            aria-labelledby="settingsHeading-generator"
+            data-settings-panel="generator"
+          >
           <div
             class="generator-import-notice"
             data-import-notice
@@ -900,19 +829,22 @@
               aria-valuenow="0"
               aria-hidden="true"
             >
-              <div class="generator-progress-bar" data-generator-progress-bar></div>
-            </div>
+            <div class="generator-progress-bar" data-generator-progress-bar></div>
           </div>
         </div>
-        <div
-          class="settings-panel"
-          id="settingsPanel-saves"
-          role="tabpanel"
-          aria-labelledby="settingsTab-saves"
-          data-settings-panel="saves"
-          hidden
-          aria-hidden="true"
-        >
+        </div>
+        </section>
+        <section class="settings-section" data-settings-section="saves">
+          <div class="settings-section-heading">
+            <h3 id="settingsHeading-saves" data-settings-heading>Saves</h3>
+          </div>
+          <div
+            class="settings-panel"
+            id="settingsPanel-saves"
+            role="group"
+            aria-labelledby="settingsHeading-saves"
+            data-settings-panel="saves"
+          >
           <section class="sheet-section" aria-labelledby="saveStartHeading">
             <h3 id="saveStartHeading">Start a puzzle</h3>
             <div class="save-start-actions">
@@ -979,15 +911,18 @@
             </div>
           </section>
         </div>
-        <div
-          class="settings-panel"
-          id="settingsPanel-help"
-          role="tabpanel"
-          aria-labelledby="settingsTab-help"
-          data-settings-panel="help"
-          hidden
-          aria-hidden="true"
-        >
+        </section>
+        <section class="settings-section" data-settings-section="help">
+          <div class="settings-section-heading">
+            <h3 id="settingsHeading-help" data-settings-heading>Help &amp; logs</h3>
+          </div>
+          <div
+            class="settings-panel"
+            id="settingsPanel-help"
+            role="group"
+            aria-labelledby="settingsHeading-help"
+            data-settings-panel="help"
+          >
           <section class="sheet-section" aria-labelledby="commandsHeading">
             <h3 id="commandsHeading">Command buttons</h3>
             <dl class="command-list">
@@ -1060,10 +995,12 @@
             </div>
           </section>
         </div>
-        </div>
+        </section>
       </div>
     </div>
-      <script type="module" src="./render.js"></script>
+  </div>
+  </div>
+    <script type="module" src="./render.js"></script>
       <script type="module">
         import {
           beginRendererBootstrap,
@@ -1414,8 +1351,11 @@
       const fullscreenButton = document.getElementById("fullscreenButton");
       const settingsButton = document.getElementById("settingsButton");
       const settingsSheet = document.getElementById("settingsSheet");
-      const settingsTabs = createSettingsTabsComponent(settingsSheet);
-      let activeSettingsTabId = settingsTabs.getActiveTabId();
+      const settingsSheetHeader = settingsSheet?.querySelector(".sheet-header") || null;
+      const settingsBody =
+        settingsSheet?.querySelector("[data-settings-scroll]") ||
+        settingsSheet?.querySelector(".sheet-body") ||
+        null;
       const generatorPanel = settingsSheet?.querySelector('[data-settings-panel="generator"]') || null;
       const helpPanel = settingsSheet?.querySelector('[data-settings-panel="help"]') || null;
       const sheetRegistry = [settingsSheet].filter(Boolean);
@@ -1424,17 +1364,6 @@
       const readmeErrorEl = helpPanel?.querySelector("[data-readme-error]") || null;
       const README_SOURCE_URL = "https://shthed.github.io/capy/README";
       let readmeLoadState = "idle";
-      settingsTabs.on("change", (event) => {
-        const { tabId, changed, force } = event.detail || {};
-        activeSettingsTabId = tabId;
-        if (tabId === "help") {
-          void ensureHelpReadmeLoaded();
-        } else if (tabId === "generator" && (changed || force)) {
-          requestAnimationFrame(() => {
-            focusGeneratorUrlInput();
-          });
-        }
-      });
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
       const saveStorageSummary = document.getElementById("saveStorageSummary");
@@ -1568,9 +1497,6 @@
             hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
           }
         : {};
-      if (activeSettingsTabId) {
-        activateSettingsTab(activeSettingsTabId, { force: true });
-      }
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const LEGACY_AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
@@ -1605,11 +1531,13 @@
         "settings-theme",
         "settings-mouse-controls",
         "settings-palette-sort",
+        "settings-launcher-position",
         "background-colour",
         "stage-background-colour",
       ]);
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
+      const DEFAULT_LAUNCHER_POSITION = { x: 0.92, y: 0.08 };
       const DEFAULT_UI_SCALE = 0.75;
       const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
@@ -2888,6 +2816,12 @@
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
       let lastCommandRailMetrics = { top: 0, height: 0 };
       let commandRailMeasureFrame = null;
+      let settingsLauncherDrag = null;
+      let settingsLauncherMoved = false;
+      let suppressSettingsClick = false;
+      let settingsLauncherPositionPx = null;
+      let settingsSheetPosition = null;
+      let settingsSheetDrag = null;
       let cursorHoverRegionId = null;
       let cursorLastClientX = null;
       let cursorLastClientY = null;
@@ -2903,7 +2837,15 @@
           return lastCommandRailMetrics;
         }
         const height = Math.max(0, Math.round(commandRail.offsetHeight || 0));
-        const top = Math.max(0, Math.round(commandRail.offsetTop || 0));
+        const measuredTop = Math.max(0, Math.round(commandRail.offsetTop || 0));
+        const computedTop =
+          typeof window !== "undefined" && document?.documentElement
+            ? Number.parseFloat(
+                window.getComputedStyle(document.documentElement).getPropertyValue("--command-rail-top")
+              )
+            : null;
+        const baselineTop = Number.isFinite(computedTop) ? computedTop : 12;
+        const top = clamp(measuredTop, baselineTop, baselineTop + 24);
         const rootStyle = document.documentElement?.style;
         if (rootStyle) {
           if (height > 0 && height !== lastCommandRailMetrics.height) {
@@ -2934,6 +2876,112 @@
         });
       }
 
+      function getLauncherSizeEstimate() {
+        if (settingsButton) {
+          const rect = settingsButton.getBoundingClientRect();
+          if (rect?.width > 0 && rect?.height > 0) {
+            return { width: rect.width, height: rect.height };
+          }
+        }
+        const uiScale = Number(state?.settings?.uiScale ?? DEFAULT_UI_SCALE) || DEFAULT_UI_SCALE;
+        const size = Math.max(36, 64 * clamp(uiScale, 0.2, 3));
+        return { width: size, height: size };
+      }
+
+      function clampLauncherPixels(left, top) {
+        const { width, height } = getLauncherSizeEstimate();
+        const viewportWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+        const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
+        const padding = Math.max(12, Math.round(14 * (Number(state?.settings?.uiScale ?? DEFAULT_UI_SCALE) || 1)));
+        const minLeft = padding;
+        const minTop = padding;
+        const maxLeft = Math.max(minLeft, viewportWidth - padding - width);
+        const maxTop = Math.max(minTop, viewportHeight - padding - height);
+        return {
+          left: clamp(left, minLeft, maxLeft),
+          top: clamp(top, minTop, maxTop),
+          width,
+          height,
+        };
+      }
+
+      function normalizeLauncherPositionFromPixels(rect) {
+        if (!rect || typeof rect !== "object") {
+          return normalizeLauncherPosition(state?.settings?.launcherPosition || DEFAULT_LAUNCHER_POSITION);
+        }
+        const viewportWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+        const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
+        const width = rect.width || getLauncherSizeEstimate().width;
+        const height = rect.height || getLauncherSizeEstimate().height;
+        const centerX = clamp((rect.left ?? 0) + width / 2, 0, viewportWidth);
+        const centerY = clamp((rect.top ?? 0) + height / 2, 0, viewportHeight);
+        return normalizeLauncherPosition({ x: centerX / viewportWidth, y: centerY / viewportHeight });
+      }
+
+      function resolveLauncherPixels(position) {
+        const normalized = normalizeLauncherPosition(position, DEFAULT_LAUNCHER_POSITION);
+        const { width, height } = getLauncherSizeEstimate();
+        const viewportWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+        const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
+        const left = normalized.x * viewportWidth - width / 2;
+        const top = normalized.y * viewportHeight - height / 2;
+        return clampLauncherPixels(left, top);
+      }
+
+      function applySettingsLauncherPosition(position = state?.settings?.launcherPosition) {
+        if (!commandRail) return null;
+        const resolved = resolveLauncherPixels(position || settingsLauncherPositionPx);
+        commandRail.style.left = `${resolved.left}px`;
+        commandRail.style.top = `${resolved.top}px`;
+        commandRail.style.right = "auto";
+        commandRail.style.bottom = "auto";
+        settingsLauncherPositionPx = { left: resolved.left, top: resolved.top, width: resolved.width, height: resolved.height };
+        if (state?.settings) {
+          state.settings.launcherPosition = normalizeLauncherPositionFromPixels(resolved);
+        }
+        syncCommandRailMetrics();
+        return resolved;
+      }
+
+      function clampSettingsSheetPosition(position = settingsSheetPosition) {
+        if (!settingsSheet) return null;
+        const rect = settingsSheet.getBoundingClientRect();
+        const viewportWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+        const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
+        const width = rect.width || settingsSheet.offsetWidth || 720;
+        const height = rect.height || settingsSheet.offsetHeight || 520;
+        const minVisible = Math.max(96, Math.min(200, Math.round(Math.min(width, height) * 0.4)));
+        const maxLeft = viewportWidth - minVisible;
+        const minLeft = minVisible - width;
+        const maxTop = viewportHeight - minVisible;
+        const minTop = minVisible - height;
+        const left = clamp(Math.round(position?.left ?? (viewportWidth - width) / 2), minLeft, maxLeft);
+        const top = clamp(Math.round(position?.top ?? (viewportHeight - height) / 2), minTop, maxTop);
+        return { left, top };
+      }
+
+      function setSettingsSheetPosition(position) {
+        if (!settingsSheet) return null;
+        const clamped = clampSettingsSheetPosition(position);
+        if (!clamped) return null;
+        settingsSheet.style.left = `${clamped.left}px`;
+        settingsSheet.style.top = `${clamped.top}px`;
+        settingsSheet.style.right = "auto";
+        settingsSheet.style.bottom = "auto";
+        settingsSheet.dataset.freePosition = "true";
+        settingsSheetPosition = clamped;
+        return clamped;
+      }
+
+      function ensureSettingsSheetPosition(options = {}) {
+        if (!settingsSheet) return null;
+        const { forceCenter = false } = options || {};
+        const nextPosition = forceCenter || !settingsSheetPosition
+          ? clampSettingsSheetPosition({ left: null, top: null })
+          : clampSettingsSheetPosition(settingsSheetPosition);
+        return setSettingsSheetPosition(nextPosition);
+      }
+
       // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
         puzzle: null,
@@ -2955,6 +3003,7 @@
           difficulty: DEFAULT_DIFFICULTY,
           backgroundColor: DEFAULT_BACKGROUND_HEX,
           stageBackgroundColor: DEFAULT_STAGE_BACKGROUND_HEX,
+          launcherPosition: { ...DEFAULT_LAUNCHER_POSITION },
           uiScale: DEFAULT_UI_SCALE,
           labelScale: DEFAULT_LABEL_SCALE,
           maxZoom: DEFAULT_MAX_VIEWPORT_ZOOM,
@@ -2963,6 +3012,7 @@
           showRegionLabels: true,
           theme: DEFAULT_UI_THEME,
           renderer: "canvas2d",
+          settingsSheetOpen: false,
           mouseControls: cloneMouseControls(DEFAULT_MOUSE_CONTROLS),
         },
         previewVisible: false,
@@ -3861,17 +3911,16 @@
             updatePreviewState();
           },
           /**
-           * Opens the Settings sheet focused on the Generator tab.
+           * Opens the Settings sheet focused on the Generator section.
            * @returns {void}
            */
           openGenerator: () =>
             showSettingsSheet({ tabId: "generator", focusTab: true, resetScroll: true, force: true }),
           /**
-           * Opens the Settings sheet using the most recent gameplay tab.
+           * Opens the Settings sheet and preserves the current scroll position.
            * @returns {void}
            */
-          openSettings: () =>
-            showSettingsSheet({ tabId: activeSettingsTabId || "gameplay", resetScroll: false }),
+          openSettings: () => showSettingsSheet({ resetScroll: false }),
           /**
            * Opens the Settings sheet focused on save management.
            * @returns {void}
@@ -4028,20 +4077,110 @@
       if (settingsUploadButton) {
         settingsUploadButton.addEventListener("click", requestUpload);
       }
+
+      function beginSettingsLauncherDrag(event) {
+        if (!settingsButton || !commandRail) return;
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        settingsLauncherMoved = false;
+        const rect = commandRail.getBoundingClientRect();
+        settingsLauncherDrag = {
+          id: event.pointerId,
+          offsetX: event.clientX - rect.left,
+          offsetY: event.clientY - rect.top,
+        };
+        commandRail.classList.add("dragging");
+        try {
+          settingsButton.setPointerCapture(event.pointerId);
+        } catch (_error) {
+          /* Pointer capture unavailable; dragging still works via pointermove. */
+        }
+      }
+
+      function moveSettingsLauncher(event) {
+        if (!settingsButton || !commandRail) return;
+        if (!settingsLauncherDrag || event.pointerId !== settingsLauncherDrag.id) return;
+        const left = event.clientX - settingsLauncherDrag.offsetX;
+        const top = event.clientY - settingsLauncherDrag.offsetY;
+        const clamped = clampLauncherPixels(left, top);
+        settingsLauncherMoved = true;
+        settingsLauncherPositionPx = clamped;
+        applySettingsLauncherPosition(normalizeLauncherPositionFromPixels(clamped));
+        event.preventDefault();
+      }
+
+      function endSettingsLauncherDrag(event) {
+        if (!settingsLauncherDrag || (event.pointerId != null && event.pointerId !== settingsLauncherDrag.id)) {
+          return;
+        }
+        commandRail.classList.remove("dragging");
+        try {
+          settingsButton?.releasePointerCapture?.(settingsLauncherDrag.id);
+        } catch (_error) {
+          /* ignore */
+        }
+        const rect = commandRail.getBoundingClientRect();
+        const normalized = normalizeLauncherPositionFromPixels(rect);
+        settingsLauncherPositionPx = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+        if (state?.settings) {
+          state.settings.launcherPosition = normalized;
+        }
+        settingsLauncherDrag = null;
+        if (settingsLauncherMoved) {
+          suppressSettingsClick = true;
+          window.setTimeout(() => {
+            suppressSettingsClick = false;
+          }, 140);
+          scheduleSettingsPersist({ immediate: true });
+          scheduleAutosave("settings-launcher-position");
+        }
+      }
       if (settingsButton) {
+        settingsButton.addEventListener("pointerdown", beginSettingsLauncherDrag);
+        settingsButton.addEventListener("pointermove", moveSettingsLauncher);
+        settingsButton.addEventListener("pointerup", endSettingsLauncherDrag);
+        settingsButton.addEventListener("pointercancel", endSettingsLauncherDrag);
         settingsButton.addEventListener("click", () => {
+          if (suppressSettingsClick) {
+            suppressSettingsClick = false;
+            return;
+          }
           if (!settingsSheet) {
             return;
           }
           const isHidden = settingsSheet.classList.contains("hidden");
           if (isHidden) {
             hideStartScreen();
-            showSettingsSheet({ tabId: activeSettingsTabId || "gameplay", resetScroll: false });
+            showSettingsSheet({ resetScroll: false });
           } else {
             closeSheet(settingsSheet);
             settingsButton.focus();
           }
         });
+      }
+
+      if (state.settings?.settingsSheetOpen && settingsSheet) {
+        hideStartScreen();
+        showSettingsSheet({ resetScroll: false, force: true });
+      }
+
+      if (settingsSheetHeader) {
+        settingsSheetHeader.addEventListener("pointerdown", beginSettingsSheetDrag);
+        settingsSheetHeader.addEventListener("pointermove", moveSettingsSheet);
+        settingsSheetHeader.addEventListener("pointerup", endSettingsSheetDrag);
+        settingsSheetHeader.addEventListener("pointercancel", endSettingsSheetDrag);
+      }
+
+      if (helpPanel && readmeLoadState === "idle") {
+        const scheduleReadmePrefetch = () => {
+          if (readmeLoadState === "idle") {
+            void ensureHelpReadmeLoaded();
+          }
+        };
+        if (typeof window?.requestIdleCallback === "function") {
+          window.requestIdleCallback(scheduleReadmePrefetch, { timeout: 1200 });
+        } else {
+          window.setTimeout(scheduleReadmePrefetch, 600);
+        }
       }
 
       if (startHintCloseButton) {
@@ -5040,6 +5179,14 @@
         }
       }
 
+      function setSettingsSheetOpenState(isOpen) {
+        if (!state?.settings) return;
+        const resolved = Boolean(isOpen);
+        if (state.settings.settingsSheetOpen === resolved) return;
+        state.settings.settingsSheetOpen = resolved;
+        scheduleSettingsPersist({ immediate: true });
+      }
+
       function openSheet(sheet) {
         if (!sheet) return;
         for (const candidate of sheetRegistry) {
@@ -5053,9 +5200,54 @@
           settingsButton.setAttribute("aria-expanded", "true");
           settingsButton.classList.add("active");
         }
-        if (sheet === settingsSheet && activeSettingsTabId === "help") {
+        if (sheet === settingsSheet && helpPanel && readmeLoadState === "idle") {
           void ensureHelpReadmeLoaded();
         }
+        if (sheet === settingsSheet) {
+          setSettingsSheetOpenState(true);
+        }
+      }
+
+      function beginSettingsSheetDrag(event) {
+        if (!settingsSheet || !settingsSheetHeader) return;
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        if (event.target?.closest?.(".close-button")) return;
+        const rect = settingsSheet.getBoundingClientRect();
+        settingsSheetDrag = {
+          id: event.pointerId,
+          offsetX: event.clientX - rect.left,
+          offsetY: event.clientY - rect.top,
+        };
+        settingsSheet.classList.add("dragging");
+        settingsSheet.dataset.freePosition = "true";
+        try {
+          settingsSheetHeader.setPointerCapture(event.pointerId);
+        } catch (_error) {
+          /* Ignore capture failures on unsupported browsers. */
+        }
+        event.preventDefault();
+      }
+
+      function moveSettingsSheet(event) {
+        if (!settingsSheetDrag || !settingsSheet) return;
+        if (event.pointerId !== settingsSheetDrag.id) return;
+        const left = event.clientX - settingsSheetDrag.offsetX;
+        const top = event.clientY - settingsSheetDrag.offsetY;
+        setSettingsSheetPosition({ left, top });
+        event.preventDefault();
+      }
+
+      function endSettingsSheetDrag(event) {
+        if (!settingsSheetDrag || (event.pointerId != null && event.pointerId !== settingsSheetDrag.id)) {
+          return;
+        }
+        settingsSheet.classList.remove("dragging");
+        try {
+          settingsSheetHeader?.releasePointerCapture?.(settingsSheetDrag.id);
+        } catch (_error) {
+          /* ignore */
+        }
+        settingsSheetDrag = null;
       }
 
       function closeSheet(sheet) {
@@ -5067,6 +5259,7 @@
           settingsButton.classList.remove("active");
         }
         if (sheet === settingsSheet) {
+          setSettingsSheetOpenState(false);
           clearPendingImport();
         }
       }
@@ -5077,10 +5270,14 @@
         }
         const { tabId = null, focusTab = false, resetScroll = true, force = false } = options;
         openSheet(settingsSheet);
+        ensureSettingsSheetPosition({ forceCenter: force || !settingsSheetPosition });
         if (typeof tabId === "string" && tabId.length > 0) {
-          activateSettingsTab(tabId, { focusTab, resetScroll, force });
-        } else if (resetScroll) {
-          activateSettingsTab(activeSettingsTabId, { resetScroll: true, force: true });
+          scrollSettingsPanelIntoView(tabId, { focus: focusTab, resetScroll });
+        } else if (resetScroll && settingsBody) {
+          settingsBody.scrollTop = 0;
+        }
+        if (helpPanel && readmeLoadState === "idle") {
+          void ensureHelpReadmeLoaded();
         }
       }
 
@@ -5238,6 +5435,16 @@
         }
         syncComputedUiScale();
         scheduleCommandRailMetricsSync();
+        applySettingsLauncherPosition(state?.settings?.launcherPosition);
+        if (settingsSheet) {
+          if (settingsSheet.classList.contains("hidden")) {
+            if (settingsSheetPosition) {
+              settingsSheetPosition = clampSettingsSheetPosition(settingsSheetPosition);
+            }
+          } else {
+            ensureSettingsSheetPosition();
+          }
+        }
         const changed = orientation !== lastViewportMetrics.orientation;
         const sizeChanged =
           visualWidth !== lastViewportMetrics.width || visualHeight !== lastViewportMetrics.height;
@@ -5866,26 +6073,41 @@
       installConsoleErrorForwarder.installed = false;
       installConsoleErrorForwarder();
 
-      function activateSettingsTab(tabId, options = {}) {
-        if (!settingsTabs.root) {
+      function scrollSettingsPanelIntoView(panelId, options = {}) {
+        if (!panelId || !settingsSheet || !settingsBody) {
           return null;
         }
-        const resolved = settingsTabs.activate(tabId, options);
-        return resolved;
-      }
-
-      function focusSettingsTab(index, options = {}) {
-        if (!settingsTabs.root) {
+        const { focus = false, resetScroll = false } = options;
+        const panel = settingsSheet.querySelector(`[data-settings-panel="${panelId}"]`);
+        if (!panel) {
           return null;
         }
-        return settingsTabs.focusIndex(index, options);
-      }
-
-      function focusSettingsTabRelative(currentIndex, delta, options = {}) {
-        if (!settingsTabs.root) {
-          return null;
+        const section = panel.closest("[data-settings-section]") || panel;
+        if (resetScroll) {
+          settingsBody.scrollTop = 0;
         }
-        return focusSettingsTab(currentIndex + delta, options);
+        if (typeof section.scrollIntoView === "function") {
+          section.scrollIntoView({ block: "start" });
+        }
+        const heading = section.querySelector("[data-settings-heading]") || section.querySelector("h3");
+        if (focus && heading) {
+          const previousTabIndex = heading.getAttribute("tabindex");
+          heading.setAttribute("tabindex", "-1");
+          heading.focus({ preventScroll: true });
+          if (previousTabIndex === null) {
+            heading.removeAttribute("tabindex");
+          } else {
+            heading.setAttribute("tabindex", previousTabIndex);
+          }
+        }
+        if (panelId === "help" && readmeLoadState === "idle") {
+          void ensureHelpReadmeLoaded();
+        } else if (panelId === "generator") {
+          requestAnimationFrame(() => {
+            focusGeneratorUrlInput();
+          });
+        }
+        return section;
       }
 
       function applyUiScale(scale, options = {}) {
@@ -5906,6 +6128,7 @@
         document.documentElement.style.setProperty("--ui-scale-user", String(resolved));
         syncComputedUiScale();
         scheduleCommandRailMetricsSync();
+        applySettingsLauncherPosition(state.settings.launcherPosition);
         if (uiScaleInput && Math.abs(Number(uiScaleInput.value) - resolved) > 0.001) {
           uiScaleInput.value = String(resolved);
         }
@@ -11434,13 +11657,72 @@
         return compactPuzzleSnapshot(snapshot) || snapshot;
       }
 
+      function captureSavePreview() {
+        if (!previewCanvas || !previewCanvas.width || !previewCanvas.height) {
+          return null;
+        }
+        try {
+          const largestSide = Math.max(previewCanvas.width, previewCanvas.height);
+          const targetMax = 320;
+          const scale = largestSide > targetMax ? targetMax / largestSide : 1;
+          const width = Math.max(1, Math.round(previewCanvas.width * scale));
+          const height = Math.max(1, Math.round(previewCanvas.height * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return null;
+          const bg = state.settings?.stageBackgroundColor || DEFAULT_STAGE_BACKGROUND_HEX;
+          ctx.fillStyle = bg;
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(previewCanvas, 0, 0, width, height);
+          let dataUrl = null;
+          try {
+            dataUrl = canvas.toDataURL("image/webp", 0.85);
+          } catch (error) {
+            try {
+              dataUrl = canvas.toDataURL("image/png");
+            } catch (fallbackError) {
+              console.warn("Failed to encode save preview", fallbackError);
+              return null;
+            }
+          }
+          const bytes = estimateDataUrlBytes(dataUrl);
+          if (bytes && bytes > 800000) {
+            return null;
+          }
+          return dataUrl;
+        } catch (error) {
+          console.warn("Failed to capture save preview", error);
+          return null;
+        }
+      }
+
+      function applyPreviewToEntry(entry) {
+        if (!entry || typeof entry !== "object") return;
+        const preview = captureSavePreview();
+        if (preview) {
+          entry.preview = preview;
+        }
+      }
+
       function isSettingsAutosaveReason(reason) {
         return typeof reason === "string" && SETTINGS_AUTOSAVE_REASONS.has(reason);
+      }
+
+      function normalizeLauncherPosition(input, fallback = DEFAULT_LAUNCHER_POSITION) {
+        const base = fallback && typeof fallback === "object" ? fallback : DEFAULT_LAUNCHER_POSITION;
+        const xCandidate = Number(input?.x);
+        const yCandidate = Number(input?.y);
+        const x = Number.isFinite(xCandidate) ? clamp(xCandidate, 0, 1) : base.x;
+        const y = Number.isFinite(yCandidate) ? clamp(yCandidate, 0, 1) : base.y;
+        return { x, y };
       }
 
       function getUserSettingsSnapshot(source = state?.settings) {
         if (!source || typeof source !== "object") return null;
         const base = source;
+        const launcherPosition = normalizeLauncherPosition(base.launcherPosition, DEFAULT_LAUNCHER_POSITION);
         const hintTypes = normalizeHintTypes(base.hintTypes, DEFAULT_HINT_TYPES);
         const hintFadeDuration = normalizeHintFadeDuration(base.hintFadeDuration);
         const hintIntensity = normalizeHintIntensity(base.hintIntensity);
@@ -11489,6 +11771,8 @@
           backgroundColor,
           stageBackgroundColor,
           mouseControls,
+          launcherPosition,
+          settingsSheetOpen: base.settingsSheetOpen === true,
         };
         const paletteSortSource =
           typeof base.paletteSort === "string"
@@ -11644,6 +11928,9 @@
         if (payload.showRegionLabels != null) {
           normalized.showRegionLabels = payload.showRegionLabels !== false;
         }
+        if (payload.settingsSheetOpen != null) {
+          normalized.settingsSheetOpen = payload.settingsSheetOpen === true;
+        }
         if (payload.theme != null) {
           const themeCandidate =
             typeof payload.theme === "string" ? payload.theme.trim().toLowerCase() : "";
@@ -11667,6 +11954,12 @@
           normalized.stageBackgroundColor = sanitizeHexColor(
             payload.stageBackgroundColor,
             DEFAULT_STAGE_BACKGROUND_HEX
+          );
+        }
+        if (payload.launcherPosition != null) {
+          normalized.launcherPosition = normalizeLauncherPosition(
+            payload.launcherPosition,
+            DEFAULT_LAUNCHER_POSITION
           );
         }
         if (payload.mouseControls != null) {
@@ -11794,6 +12087,7 @@
         } else {
           delete entry.settings;
         }
+        applyPreviewToEntry(entry);
         state.loadedSaveId = activeSaveId;
         state.saves = [entry, ...state.saves.filter((item) => item.id !== activeSaveId)];
         persistSaves();
@@ -12440,23 +12734,26 @@
 
 
 
-      function encodeSaveStorageEntry(entry) {
-        if (!entry || typeof entry !== "object") return null;
-        const data = encodeStoredSnapshot(entry.data);
-        if (!data) return null;
-        const storageEntry = {
-          id: entry.id,
-          timestamp: entry.timestamp,
-          data,
-        };
-        if (entry.settings && typeof entry.settings === "object") {
-          storageEntry.settings = entry.settings;
+        function encodeSaveStorageEntry(entry) {
+          if (!entry || typeof entry !== "object") return null;
+          const data = encodeStoredSnapshot(entry.data);
+          if (!data) return null;
+          const storageEntry = {
+            id: entry.id,
+            timestamp: entry.timestamp,
+            data,
+          };
+          if (entry.settings && typeof entry.settings === "object") {
+            storageEntry.settings = entry.settings;
+          }
+          if (typeof entry.title === "string" && entry.title.trim()) {
+            storageEntry.title = entry.title.trim();
+          }
+          if (typeof entry.preview === "string" && entry.preview.startsWith("data:")) {
+            storageEntry.preview = entry.preview;
+          }
+          return storageEntry;
         }
-        if (typeof entry.title === "string" && entry.title.trim()) {
-          storageEntry.title = entry.title.trim();
-        }
-        return storageEntry;
-      }
 
       function decodeSaveStorageEntry(entry) {
         if (!entry || typeof entry !== "object") return null;
@@ -12467,19 +12764,22 @@
           timestamp: entry.timestamp,
           data: puzzle,
         };
-        if (settings && typeof settings === "object") {
-          decoded.settings = settings;
-        } else if (entry.settings && typeof entry.settings === "object") {
-          const snapshot = getUserSettingsSnapshot(entry.settings);
-          if (snapshot) {
-            decoded.settings = snapshot;
+          if (settings && typeof settings === "object") {
+            decoded.settings = settings;
+          } else if (entry.settings && typeof entry.settings === "object") {
+            const snapshot = getUserSettingsSnapshot(entry.settings);
+            if (snapshot) {
+              decoded.settings = snapshot;
+            }
           }
+          if (typeof entry.title === "string" && entry.title.trim()) {
+            decoded.title = entry.title.trim();
+          }
+          if (typeof entry.preview === "string" && entry.preview.startsWith("data:")) {
+            decoded.preview = entry.preview;
+          }
+          return decoded;
         }
-        if (typeof entry.title === "string" && entry.title.trim()) {
-          decoded.title = entry.title.trim();
-        }
-        return decoded;
-      }
 
       function createGameSaveManager() {
         const key = SAVE_STORAGE_KEY;
@@ -12620,12 +12920,10 @@
         function subscribe(listener) {
           if (typeof listener !== "function") return () => {};
           subscribers.add(listener);
-          if (cache.length) {
-            try {
-              listener(cache.slice());
-            } catch (error) {
-              console.error("Save manager listener failed", error);
-            }
+          try {
+            listener(cache.slice());
+          } catch (error) {
+            console.error("Save manager listener failed", error);
           }
           return () => subscribers.delete(listener);
         }
@@ -12700,6 +12998,7 @@
           } else {
             delete entry.settings;
           }
+          applyPreviewToEntry(entry);
           state.loadedSaveId = activeSaveId;
           state.saves = [entry, ...state.saves.filter((item) => item.id !== activeSaveId)];
           logDebug(`Updated save: ${entry.title}`);
@@ -12714,6 +13013,7 @@
           if (settingsSnapshot) {
             entry.settings = settingsSnapshot;
           }
+          applyPreviewToEntry(entry);
           state.loadedSaveId = id;
           state.saves.unshift(entry);
           logDebug(`Saved snapshot: ${entry.title}`);
@@ -12756,6 +13056,15 @@
         if (storageLabel) {
           ariaLabelParts.push(`Storage ${storageLabel}`);
         }
+        let previewUrl = null;
+        if (typeof entry?.preview === "string" && entry.preview.startsWith("data:")) {
+          previewUrl = entry.preview;
+        } else if (
+          typeof entry?.data?.sourceImage?.dataUrl === "string" &&
+          entry.data.sourceImage.dataUrl.startsWith("data:")
+        ) {
+          previewUrl = entry.data.sourceImage.dataUrl;
+        }
         return {
           id: entry?.id,
           title,
@@ -12764,6 +13073,7 @@
           timestampLabel,
           storageBytes,
           storageLabel,
+          previewUrl,
           ariaLabel: ariaLabelParts.join(" – "),
         };
       }
@@ -12776,6 +13086,29 @@
         return button;
       }
 
+      function createSavePreviewElement(metadata, options = {}) {
+        const { compact = false } = options;
+        const preview = document.createElement("div");
+        preview.className = "save-entry-preview";
+        if (compact) {
+          preview.classList.add("save-entry-preview--compact");
+        }
+        if (metadata.previewUrl) {
+          const image = document.createElement("img");
+          image.loading = "lazy";
+          image.decoding = "async";
+          image.src = metadata.previewUrl;
+          image.alt = metadata.title ? `${metadata.title} preview` : "Puzzle preview";
+          preview.appendChild(image);
+        } else {
+          const fallback = document.createElement("span");
+          fallback.className = "save-entry-preview-fallback";
+          fallback.textContent = "Preview unavailable";
+          preview.appendChild(fallback);
+        }
+        return preview;
+      }
+
       function createSaveSelectionItem(entry) {
         const metadata = describeSaveEntry(entry);
         const item = document.createElement("li");
@@ -12784,13 +13117,20 @@
         button.type = "button";
         button.className = "game-option-button";
         button.dataset.gameId = metadata.id;
+        const layout = document.createElement("div");
+        layout.className = "game-option-layout";
+        const preview = createSavePreviewElement(metadata, { compact: true });
+        const copy = document.createElement("div");
+        copy.className = "game-option-copy";
         const title = document.createElement("span");
         title.className = "game-option-title";
         title.textContent = metadata.title;
         const progress = document.createElement("span");
         progress.className = "game-option-meta";
         progress.textContent = metadata.progressText;
-        button.append(title, progress);
+        copy.append(title, progress);
+        layout.append(preview, copy);
+        button.append(layout);
         if (metadata.timestampLabel) {
           const time = document.createElement("span");
           time.className = "game-option-meta";
@@ -12847,12 +13187,18 @@
           createSaveActionButton("export", "Export"),
           createSaveActionButton("delete", "Delete"),
         );
-        item.append(header, meta, actions);
+        const content = document.createElement("div");
+        content.className = "save-entry-content";
+        content.append(header, meta, actions);
+        const body = document.createElement("div");
+        body.className = "save-entry-body";
+        body.append(createSavePreviewElement(metadata), content);
+        item.append(body);
         if (isLoaded) {
           const status = document.createElement("div");
           status.className = "save-entry-status";
           status.textContent = "Autosaving this slot";
-          item.appendChild(status);
+          content.appendChild(status);
         }
         return item;
       }
