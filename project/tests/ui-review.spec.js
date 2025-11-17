@@ -7,8 +7,10 @@ import {
   getPerformanceMetrics,
   loadTestPuzzle,
   resetPerformanceMetrics,
+  setActiveColor,
   TEST_COLOR_IDS,
   TEST_REGION_IDS,
+  zoomViewport,
 } from './utils/fixtures.js';
 
 const BASE_URL = 'index.html';
@@ -103,6 +105,8 @@ test.describe('Capy UI smoke check', () => {
 
     await resetPerformanceMetrics(page);
     await loadTestPuzzle(page);
+    await setActiveColor(page, TEST_COLOR_IDS.coolLagoon);
+    await zoomViewport(page, 1.05, { source: 'automation:test-zoom' });
 
     await fillRegion(page, TEST_REGION_IDS.sunlitBloom[0]);
     await fillRegion(page, TEST_REGION_IDS.sunlitBloom[1]);
@@ -114,10 +118,17 @@ test.describe('Capy UI smoke check', () => {
     expect(durations['puzzle:hydrate']?.count ?? 0).toBeGreaterThan(0);
     expect(durations['render:frame']?.count ?? 0).toBeGreaterThan(0);
     expect(durations['interaction:fill']?.count ?? 0).toBeGreaterThan(0);
+    expect(durations['interaction:color-select']?.count ?? 0).toBeGreaterThan(0);
+    expect(durations['interaction:zoom']?.count ?? 0).toBeGreaterThan(0);
 
     const fillStats = durations['interaction:fill'];
     expect(fillStats?.last?.metadata?.regionId).toBe(TEST_REGION_IDS.sunlitBloom[1]);
     expect(fillStats?.last?.metadata?.result).toBe('filled');
     expect(fillStats?.last?.metadata?.filledCount ?? 0).toBeGreaterThan(0);
+
+    const selectStats = durations['interaction:color-select'];
+    expect(selectStats?.recent?.some((entry) => entry.metadata?.source === 'automation:test-select')).toBe(true);
+    const zoomStats = durations['interaction:zoom'];
+    expect(zoomStats?.recent?.some((entry) => entry.metadata?.source === 'automation:test-zoom')).toBe(true);
   });
 });

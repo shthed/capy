@@ -156,10 +156,20 @@ export async function loadTestPuzzle(page, overrides = {}) {
   return puzzle;
 }
 
-export async function setActiveColor(page, colorId) {
-  await page.evaluate((target) => {
-    window.capyGenerator?.setActiveColor?.(target, { flash: false, redraw: true });
-  }, colorId);
+export async function setActiveColor(page, colorId, options = {}) {
+  const payload = {
+    colorId,
+    flash: options.flash ?? false,
+    redraw: options.redraw ?? true,
+    source: options.source ?? 'automation:test-select',
+  };
+  await page.evaluate((data) => {
+    window.capyGenerator?.setActiveColor?.(data.colorId, {
+      flash: data.flash,
+      redraw: data.redraw,
+      source: data.source,
+    });
+  }, payload);
   await page.waitForFunction(
     (target) => window.capyGenerator?.getState?.()?.activeColor === target,
     colorId
@@ -215,4 +225,27 @@ export async function resetPerformanceMetrics(page) {
       return null;
     }
   });
+}
+
+export async function zoomViewport(page, multiplier, options = {}) {
+  const payload = {
+    multiplier,
+    options: {
+      clientX: options.clientX ?? null,
+      clientY: options.clientY ?? null,
+      defer: options.defer ?? true,
+      skipLog: options.skipLog ?? true,
+      source: options.source ?? 'automation:test-zoom',
+    },
+  };
+  const ok = await page.evaluate((data) => {
+    if (typeof window.capyGenerator?.zoomViewport !== 'function') {
+      return false;
+    }
+    return window.capyGenerator.zoomViewport(data.multiplier, data.options);
+  }, payload);
+  if (!ok) {
+    throw new Error('zoomViewport helper unavailable');
+  }
+  return ok;
 }

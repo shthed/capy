@@ -223,6 +223,7 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 - **Teardown safeguards.** `handlePanEnd` handles `pointerup`, `pointercancel`, and `lostpointercapture` so releasing outside the viewport still resets cursors, finalises drag sessions, and clears state.
 - **Zoom input.** Scroll events, `+`/`-` shortcuts, drag-to-zoom mappings, pinch gestures, and helper calls all funnel through `applyZoom`, which recalculates scale, recentres the viewport, and logs the latest percentage. The helper now pushes the zoom multiplier straight into a CSS custom property on `#canvasTransform`, letting the compositor handle the animation while a debounced redraw (≈80 ms) refreshes labels and outlines once the gesture settles. Wheel deltas still map to exponential steps and the viewport clamps between the fitted scale (100%) and the configurable ceiling (default 1200%) so you can dive into tiny regions without the canvas shrinking below the screen.
 - **Region clicks.** The canvas click handler validates that a puzzle and active colour exist, resolves the clicked pixel to a region, and either flashes a mismatch warning or streams the region geometry into the cached `filledLayer` before re-rendering. Left-click fills respect the configured mouse mapping; other buttons funnel through `finalizeMouseSession` before any click fires.
+- **Interaction telemetry.** Every colour activation and zoom gesture records a `performanceMetrics` sample (`interaction:color-select` / `interaction:zoom`) and emits a `[Select:source]` or `[Zoom:source]` debug log entry that includes the gesture source, delta, and resulting pan offsets. Tests and QA tooling call `window.capyGenerator.zoomViewport()` plus `setActiveColor(..., { source })` to exercise these code paths without synthesising wheel or pointer events.
 
 ### Code Architecture Tour
 
@@ -257,10 +258,14 @@ Capy’s developer API exposes a minimal surface for automation, QA smoke tests,
   - **Parameters:** None.
   - **Purpose:** Returns the live runtime state object (palette, fills, settings, renderer wiring) for inspection.
   - **Side effects:** None; the object is shared with the app, so treat it as read-only.
-- `setActiveColor(colorId, { flash, redraw })`
+- `setActiveColor(colorId, { flash, redraw, source })`
   - **Parameters:** `colorId` (number or string), optional `flash`/`redraw` booleans.
   - **Purpose:** Selects a palette entry for subsequent fills.
-  - **Side effects:** Optionally flashes matching regions, recentres the palette scroll, re-renders palette UI, logs the selection, and schedules an autosave when the colour changes.
+  - **Side effects:** Optionally flashes matching regions, recentres the palette scroll, re-renders palette UI, logs the selection (prefixed by `[Select:source]`), and schedules an autosave when the colour changes. Supplying `source` tags the corresponding `interaction:color-select` metric so QA logs can trace slow selections back to their gesture source.
+- `zoomViewport(multiplier, { clientX, clientY, defer, skipLog, source })`
+  - **Parameters:** `multiplier` (number), optional anchor coordinates plus flags for deferring renders, suppressing logs, and labelling the source.
+  - **Purpose:** Programmatically issues a zoom gesture around the provided point without synthesising wheel/touch events.
+  - **Side effects:** Applies the requested scale change, schedules the usual view transform, logs `[Zoom:source]` output, and records an `interaction:zoom` metric describing the change/pan offsets.
 - `getRendererType()`
   - **Parameters:** None.
   - **Purpose:** Reveals the active renderer backend identifier (e.g. `"canvas"`, `"webgl"`, `"svg"`).

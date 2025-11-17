@@ -1723,7 +1723,10 @@
             if (!allowShortcutTarget) {
               return;
             }
-            applyZoom(wantsZoomIn ? 1.1 : 0.9, undefined, undefined, { defer: true });
+            applyZoom(wantsZoomIn ? 1.1 : 0.9, undefined, undefined, {
+              defer: true,
+              source: "keyboard:ctrl-shortcut",
+            });
           },
           { capture: true }
         );
@@ -3309,6 +3312,7 @@
          * @typedef {object} CapyColorActivationOptions
          * @property {boolean} [flash=true] Whether to flash matching regions after selecting the colour.
          * @property {boolean} [redraw=true] Whether to rerender the palette immediately.
+         * @property {string} [source] Debug label recorded in performance metrics and log output.
          */
 
         /**
@@ -3317,6 +3321,16 @@
          * @property {boolean} [flash=false] Whether to flash the colour when auto-selecting it.
          * @property {boolean} [redraw=true] Whether to rerender the palette after activating a colour.
          * @property {string} [label="automation-fill"] Log label used for debug output and autosave metadata.
+         * @property {string} [source] Debug label propagated to colour-selection metrics when ensuring colours.
+         */
+
+        /**
+         * @typedef {object} CapyZoomRequestOptions
+         * @property {number} [clientX] Pointer X coordinate used to anchor the zoom.
+         * @property {number} [clientY] Pointer Y coordinate used to anchor the zoom.
+         * @property {boolean} [defer=true] Whether to defer the expensive redraw until after transforms settle.
+         * @property {boolean} [skipLog=false] Suppress the debug log entry for this zoom gesture.
+         * @property {string} [source] Debug label recorded in performance metrics and log output.
          */
 
         window.capyGenerator = {
@@ -3335,7 +3349,11 @@
             if (colorId == null) {
               return false;
             }
-            return activateColor(colorId, options);
+            const payload = options && typeof options === "object" ? { ...options } : {};
+            if (!payload.source) {
+              payload.source = "automation:api";
+            }
+            return activateColor(colorId, payload);
           },
           /**
            * Reports the identifier of the currently active renderer backend.
@@ -3564,15 +3582,36 @@
               flash = false,
               redraw = true,
               label = "automation-fill",
+              source = `automation:${label}`,
             } = options || {};
             const region = state.puzzle.regions.find((entry) => entry?.id === regionId) || null;
             if (!region) {
               return "missing-region";
             }
             if (ensureColor && state.activeColor !== region.colorId) {
-              activateColor(region.colorId, { flash, redraw });
+              activateColor(region.colorId, { flash, redraw, source });
             }
             return attemptFillRegion({ region, regionId: region.id }, { label });
+          },
+          /**
+           * Applies a zoom multiplier anchored around the optional pointer coordinates.
+           * @param {number} multiplier Zoom multiplier (e.g. 1.1 for +10%).
+           * @param {CapyZoomRequestOptions} [options]
+           * @returns {boolean} True when the zoom request was issued.
+           */
+          zoomViewport(multiplier, options = {}) {
+            if (!Number.isFinite(multiplier) || multiplier <= 0) {
+              return false;
+            }
+            const {
+              clientX = undefined,
+              clientY = undefined,
+              defer = true,
+              skipLog = false,
+              source = "automation:zoom",
+            } = options || {};
+            applyZoom(multiplier, clientX, clientY, { defer, skipLog, source });
+            return true;
           },
           getPerformanceMetrics() {
             try {
@@ -4510,7 +4549,7 @@
           areColorsAdjacent(state.activeColor, region.colorId);
         if (region.colorId !== state.activeColor && !allowAdjacentFill) {
           if (difficulty === "easy") {
-            activateColor(region.colorId, { flash: false });
+            activateColor(region.colorId, { flash: false, source: "auto:difficulty-easy" });
           } else {
             const paletteColor = getPaletteEntry(region.colorId);
             const fallbackTint = paletteColor ? undefined : "rgba(250, 204, 21, 0.55)";
@@ -4628,7 +4667,7 @@
         }
         event.preventDefault();
         lastTouchSelectionTime = now;
-        activateColor(hit.region.colorId);
+        activateColor(hit.region.colorId, { source: "canvas:dblclick" });
       });
 
       puzzleCanvas.addEventListener("pointerdown", (event) => {
@@ -4666,7 +4705,7 @@
             lastTouchTapTime = 0;
             lastTouchTapRegionId = null;
             lastTouchSelectionTime = now;
-            activateColor(hit.region.colorId);
+            activateColor(hit.region.colorId, { source: "touch:double-tap" });
             return;
           }
           const result = attemptFillRegion(hit, { label: "tap" });
@@ -5447,6 +5486,34 @@
           flush,
           reset: resetMetrics,
         };
+      }
+
+      const INTERACTION_SOURCE_MAX_LENGTH = 60;
+
+      function normalizeInteractionSource(source, fallback = "runtime") {
+        if (typeof source === "string") {
+          const trimmed = source.trim();
+          if (trimmed) {
+            return trimmed.slice(0, INTERACTION_SOURCE_MAX_LENGTH);
+          }
+        }
+        if (typeof fallback === "string" && fallback.trim()) {
+          return fallback.trim().slice(0, INTERACTION_SOURCE_MAX_LENGTH);
+        }
+        return "runtime";
+      }
+
+      function formatInteractionLabel(kind, source) {
+        const normalizedKind = typeof kind === "string" && kind.trim() ? kind.trim() : "Interaction";
+        const normalizedSource = normalizeInteractionSource(source);
+        return `[${normalizedKind}:${normalizedSource}]`;
+      }
+
+      function toFixedNumber(value, fractionDigits = 2) {
+        if (!Number.isFinite(value)) {
+          return undefined;
+        }
+        return Number(value.toFixed(fractionDigits));
       }
 
       function logDebug(message) {
@@ -8974,9 +9041,22 @@
       function activateColor(colorId, options = {}) {
         if (!state.puzzle) return false;
         if (colorId == null) return false;
-        const { flash = true, redraw = true } = options;
+        const { flash = true, redraw = true } = options || {};
+        const selectionSource = normalizeInteractionSource(options?.source, "runtime");
+        const numericColorId = Number(colorId);
+        const metricColorId = Number.isFinite(numericColorId) ? numericColorId : undefined;
+        const selectionTimer =
+          typeof performanceMetrics?.start === "function"
+            ? performanceMetrics.start("interaction:color-select", {
+                source: selectionSource,
+                colorId: metricColorId,
+              })
+            : null;
         const hasColour = state.puzzle.palette.some((entry) => entry.id === colorId);
-        if (!hasColour) return false;
+        if (!hasColour) {
+          selectionTimer?.cancel?.("missing-colour");
+          return false;
+        }
         const changed = state.activeColor !== colorId;
         state.activeColor = colorId;
         if (redraw) {
@@ -8991,10 +9071,16 @@
         if (changed) {
           scheduleAutosave("color-select");
         }
+        const selectionLabel = formatInteractionLabel("Select", selectionSource);
         logDebug(
-          `${changed ? "Selected" : "Re-selected"} ${describeColour(colorId, { includeCompleted: true })} (${suffix})`
+          `${selectionLabel} ${changed ? "Selected" : "Re-selected"} ${describeColour(colorId, { includeCompleted: true })} (${suffix})`
         );
         refreshCustomCursorHighlight();
+        selectionTimer?.end?.({
+          changed,
+          remaining,
+          paletteSize: state.puzzle?.palette?.length || 0,
+        });
         return changed;
       }
 
@@ -9276,18 +9362,18 @@
           swatch.appendChild(tooltip);
           swatch.setAttribute("aria-describedby", tooltipId);
           swatch.addEventListener("click", () => {
-            activateColor(color.id);
+            activateColor(color.id, { source: "palette:click" });
           });
           swatch.addEventListener("pointerdown", (event) => {
             if (event.button !== 2) {
               return;
             }
             event.preventDefault();
-            activateColor(color.id);
+            activateColor(color.id, { source: "palette:pointer-context" });
           });
           swatch.addEventListener("contextmenu", (event) => {
             event.preventDefault();
-            activateColor(color.id);
+            activateColor(color.id, { source: "palette:context-menu" });
           });
           paletteEl.appendChild(swatch);
         }
@@ -9619,13 +9705,13 @@
         const key = event.key;
         if (key === "+" || key === "=" || event.code === "Equal" || event.code === "NumpadAdd") {
           event.preventDefault();
-          applyZoom(1.1, undefined, undefined, { defer: true });
+          applyZoom(1.1, undefined, undefined, { defer: true, source: "keyboard:key-plus" });
           return;
         }
 
         if (key === "-" || event.code === "Minus" || event.code === "NumpadSubtract") {
           event.preventDefault();
-          applyZoom(0.9, undefined, undefined, { defer: true });
+          applyZoom(0.9, undefined, undefined, { defer: true, source: "keyboard:key-minus" });
         }
       }
 
@@ -9743,7 +9829,13 @@
         if (!Number.isFinite(multiplier) || Math.abs(multiplier - 1) < 0.001) {
           return;
         }
-        applyZoom(multiplier, event.clientX, event.clientY, { skipLog: true, defer: true });
+        const dragPointer = session.pointerType || event.pointerType || "mouse";
+        applyZoom(multiplier, event.clientX, event.clientY, {
+          skipLog: true,
+          defer: true,
+          source: `drag:${dragPointer}`,
+          pointerType: dragPointer,
+        });
         session.zoomChanged = true;
       }
 
@@ -9813,34 +9905,41 @@
         }
         suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
         if (action === "select") {
+          const selectionSource = `canvas:${buttonName || "unknown"}:select`;
           const hit = getRegionFromEvent(event);
           if (hit && hit.region) {
             const remaining = getRegionsByColor(hit.region.colorId, { includeFilled: false });
             if (remaining.length > 0) {
-              activateColor(hit.region.colorId);
+              activateColor(hit.region.colorId, { source: selectionSource });
             } else {
               logDebug(
-                `${describeColour(hit.region.colorId, { includeCompleted: true })} already complete; ${describeMouseButton(buttonName)} click ignored`
+                `${formatInteractionLabel("Select", selectionSource)} ${describeColour(hit.region.colorId, { includeCompleted: true })} already complete; ${describeMouseButton(buttonName)} click ignored`
               );
             }
           } else {
-            logDebug("No region under pointer to select a colour");
+            logDebug(`${formatInteractionLabel("Select", selectionSource)} No region under pointer to select a colour`);
           }
           return;
         }
         if (action === "select-fill") {
+          const selectionSource = `canvas:${buttonName || "unknown"}:select-fill`;
           const hit = getRegionFromEvent(event);
           if (!hit || !hit.region) {
-            logDebug("No region under pointer to select and fill");
+            logDebug(
+              `${formatInteractionLabel("Select", selectionSource)} No region under pointer to select and fill`
+            );
             return;
           }
-          activateColor(hit.region.colorId, { flash: false });
+          activateColor(hit.region.colorId, { flash: false, source: selectionSource });
           attemptFillRegion(hit, { label: "click" });
           return;
         }
         if (action === "zoom-in" || action === "zoom-out") {
           const multiplier = action === "zoom-in" ? 1.15 : 0.85;
-          applyZoom(multiplier, event.clientX, event.clientY, { defer: true });
+          applyZoom(multiplier, event.clientX, event.clientY, {
+            defer: true,
+            source: `mouse:${buttonName}:${action}`,
+          });
           return;
         }
       }
@@ -10041,7 +10140,12 @@
                 const multiplier = targetZoom / currentZoom;
                 const centerX = (first.x + second.x) / 2;
                 const centerY = (first.y + second.y) / 2;
-                applyZoom(multiplier, centerX, centerY, { skipLog: true, defer: true });
+                applyZoom(multiplier, centerX, centerY, {
+                  skipLog: true,
+                  defer: true,
+                  source: "touch:pinch",
+                  pointerType: "touch",
+                });
               }
               const centerX = (first.x + second.x) / 2;
               const centerY = (first.y + second.y) / 2;
@@ -10392,14 +10496,34 @@
       }
 
       function applyZoom(multiplier, clientX, clientY, options = {}) {
-        if (!state.puzzle) return;
+        const pointerType = typeof options?.pointerType === "string" ? options.pointerType : undefined;
+        const zoomSource = normalizeInteractionSource(
+          options?.source,
+          pointerType ? `pointer:${pointerType}` : "runtime"
+        );
+        const zoomTimer =
+          typeof performanceMetrics?.start === "function"
+            ? performanceMetrics.start("interaction:zoom", {
+                source: zoomSource,
+                pointerType: pointerType || undefined,
+                multiplier: Number.isFinite(multiplier) ? Number(multiplier.toFixed(4)) : undefined,
+                deferred: options?.defer !== false,
+              })
+            : null;
+        if (!state.puzzle) {
+          zoomTimer?.cancel?.("no-puzzle");
+          return;
+        }
         const baseScale = viewState.baseScale > 0 ? viewState.baseScale : 1;
         const { minScale, maxScale } = getScaleBounds(baseScale);
         const currentZoom = normalizeZoomValue(viewState.zoom > 0 ? viewState.zoom : 1, 1);
         const currentScale = clamp(baseScale * currentZoom, minScale, maxScale);
         const targetScale = clamp(currentScale * multiplier, minScale, maxScale);
         const change = targetScale / currentScale;
-        if (!Number.isFinite(change) || Math.abs(change - 1) < 0.00001) return;
+        if (!Number.isFinite(change) || Math.abs(change - 1) < 0.00001) {
+          zoomTimer?.cancel?.("no-change");
+          return;
+        }
         const viewportRect = viewportEl.getBoundingClientRect();
         const centerX = viewportRect.left + viewportRect.width / 2;
         const centerY = viewportRect.top + viewportRect.height / 2;
@@ -10431,8 +10555,22 @@
           applyViewTransform({ forceRender: true });
         }, ZOOM_RENDER_DEBOUNCE_MS);
         if (significant && !options.skipLog) {
-          logDebug(`Zoom set to ${(targetScale * 100).toFixed(0)}%`);
+          const direction = change > 1 ? "in" : "out";
+          logDebug(
+            `${formatInteractionLabel("Zoom", zoomSource)} ${direction} to ${(targetScale * 100).toFixed(1)}% (Δ${(
+              (change - 1) * 100
+            ).toFixed(2)}%, pan ${viewState.panX.toFixed(1)}, ${viewState.panY.toFixed(1)})`
+          );
         }
+        zoomTimer?.end?.({
+          source: zoomSource,
+          significant,
+          change: toFixedNumber(change, 4),
+          targetPercent: toFixedNumber(targetScale * 100, 2),
+          zoom: toFixedNumber(nextZoom, 4),
+          panX: toFixedNumber(viewState.panX, 2),
+          panY: toFixedNumber(viewState.panY, 2),
+        });
       }
 
       function handleWheel(event) {
@@ -10456,7 +10594,8 @@
         if (!Number.isFinite(multiplier) || Math.abs(multiplier - 1) < 0.001) {
           return;
         }
-        applyZoom(multiplier, event.clientX, event.clientY, { defer: true });
+        const wheelSource = event.ctrlKey || event.metaKey ? "wheel:ctrl" : "wheel";
+        applyZoom(multiplier, event.clientX, event.clientY, { defer: true, source: wheelSource });
       }
 
       function applyViewTransform(options = {}) {
@@ -10625,7 +10764,7 @@
           .sort((a, b) => a.pixelCount - b.pixelCount)[0];
         if (!target) {
           target = candidates.sort((a, b) => a.pixelCount - b.pixelCount)[0];
-          activateColor(target.colorId, { flash: false });
+          activateColor(target.colorId, { flash: false, source: "hint:auto-select" });
         }
         if (state.settings.animateHints) {
           const paletteColor = getPaletteEntry(target.colorId);
@@ -11003,14 +11142,14 @@
           for (let index = currentIndex + 1; index < entries.length; index += 1) {
             const candidate = entries[index];
             if ((remainingByColor.get(candidate.id) || 0) > 0) {
-              activateColor(candidate.id);
+              activateColor(candidate.id, { source: "auto:auto-advance" });
               return;
             }
           }
         }
         for (const entry of entries) {
           if ((remainingByColor.get(entry.id) || 0) > 0) {
-            activateColor(entry.id);
+            activateColor(entry.id, { source: "auto:auto-advance" });
             return;
           }
         }
