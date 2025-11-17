@@ -65,7 +65,7 @@
   --theme-palette-dock-bg: rgba(2, 6, 23, 0.94);
   --theme-palette-dock-border: rgba(15, 23, 42, 0.85);
   --command-rail-top: calc(env(safe-area-inset-top, 0px) + 12px);
-  --command-rail-height: calc(40px * var(--ui-scale));
+  --command-rail-height: calc(64px * var(--ui-scale));
   --stage-background: var(--theme-body-bg);
 }
 
@@ -239,6 +239,51 @@ body.panning {
   grid-template-rows: 1fr auto;
 }
 
+#startHint {
+  position: absolute;
+  left: var(--viewport-padding);
+  bottom: var(--viewport-padding);
+  max-width: min(480px, calc(100% - (var(--viewport-padding) * 2)));
+  padding: 16px;
+  background: var(--theme-hint-body-bg);
+  color: var(--theme-hint-body-text);
+  border: 1px solid var(--theme-hint-body-border);
+  border-radius: 14px;
+  box-shadow: var(--theme-sheet-shadow);
+  display: grid;
+  gap: 12px;
+  outline: none;
+}
+
+#startHint.hidden {
+  display: none;
+}
+
+.start-hint-copy {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.start-hint-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.start-hint-actions button {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--theme-sheet-button-border);
+  background: var(--theme-sheet-button-bg);
+  color: var(--theme-sheet-button-text);
+  cursor: pointer;
+}
+
+.start-hint-actions button:hover {
+  background: var(--theme-sheet-button-hover-bg);
+  border-color: var(--theme-sheet-button-hover-border);
+  color: var(--theme-sheet-button-hover-text);
+}
+
 @supports (height: 100dvh) {
   #app {
     height: min(var(--app-height, 100dvh), 100dvh);
@@ -246,76 +291,66 @@ body.panning {
 }
 
 #commandRail {
-  position: absolute;
+  position: fixed;
   top: var(--command-rail-top);
-  left: calc(env(safe-area-inset-left, 0px) + 12px);
-  display: flex;
-  align-items: center;
-  gap: calc(6px * var(--ui-scale));
+  left: auto;
+  right: calc(env(safe-area-inset-right, 0px) + 14px);
+  display: block;
   padding: 0;
   margin: 0;
   border: 0;
   background: none;
   box-shadow: none;
   backdrop-filter: none;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  touch-action: manipulation;
-  z-index: 3;
-  scrollbar-width: none;
-  width: max-content;
-  max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px);
-}
-
-#commandRail::-webkit-scrollbar {
-  display: none;
+  touch-action: none;
+  z-index: 6;
+  width: auto;
+  height: auto;
 }
 
 #commandRail button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: calc(6px * var(--ui-scale));
-  padding: calc(4px * var(--ui-scale)) calc(10px * var(--ui-scale));
-  border-radius: calc(6px * var(--ui-scale));
+  padding: calc(6px * var(--ui-scale));
+  border-radius: calc(16px * var(--ui-scale));
   border: 1px solid color-mix(in srgb, var(--theme-command-border) 60%, transparent);
   background: color-mix(in srgb, var(--theme-command-bg) 88%, transparent);
   color: var(--theme-command-text);
   font-size: calc(14px * var(--ui-scale));
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   flex: 0 0 auto;
-  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease,
+    transform 140ms ease;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
 }
 
-#commandRail .menu-button {
-  padding: calc(10px * var(--ui-scale)) calc(18px * var(--ui-scale));
-  border-radius: calc(14px * var(--ui-scale));
-  gap: calc(8px * var(--ui-scale));
-  font-size: calc(15px * var(--ui-scale));
-  font-weight: 600;
+#commandRail .settings-launcher {
+  width: calc(64px * var(--ui-scale));
+  height: calc(64px * var(--ui-scale));
+  border-radius: 50%;
+  padding: calc(12px * var(--ui-scale));
+  backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--theme-command-bg) 96%, transparent);
 }
 
 #commandRail button.active {
   background: color-mix(in srgb, var(--theme-command-active-bg) 70%, transparent);
   border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
   color: var(--theme-command-active-text);
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--theme-command-active-bg) 50%, transparent);
 }
 
 #commandRail button .icon {
-  font-size: 1.05rem;
+  font-size: 1.45rem;
   line-height: 1;
 }
 
-#commandRail .menu-button .icon {
-  font-size: 1.25rem;
-}
-
-#commandRail .label {
-  font-size: calc(13px * var(--ui-scale));
-  line-height: 1;
-  white-space: nowrap;
+#commandRail button .label {
+  display: none;
 }
 
 #commandRail button:not(:disabled):hover,
@@ -323,6 +358,7 @@ body.panning {
   background: color-mix(in srgb, var(--theme-command-active-bg) 55%, transparent);
   border-color: color-mix(in srgb, var(--theme-command-active-border) 70%, transparent);
   color: var(--theme-command-active-text);
+  transform: translate3d(0, -1px, 0);
 }
 
 #commandRail button:focus-visible {
@@ -333,23 +369,12 @@ body.panning {
 #commandRail button:disabled {
   background: color-mix(in srgb, var(--theme-command-disabled-bg) 70%, transparent);
   border-color: color-mix(in srgb, var(--theme-command-disabled-border) 70%, transparent);
-  color: var(--theme-command-disabled-text);
+  color: color-mix(in srgb, var(--theme-command-disabled-text) 95%, transparent);
+  box-shadow: none;
 }
 
-body[data-orientation="portrait"] #commandRail {
-  gap: calc(4px * var(--ui-scale));
-}
-
-body.compact-commands #commandRail {
-  gap: calc(4px * var(--ui-scale));
-}
-
-body.compact-commands #commandRail .label {
-  display: none;
-}
-
-body.compact-commands #commandRail .menu-button .label {
-  display: inline;
+#commandRail.dragging {
+  cursor: grabbing;
 }
 
 body[data-orientation="portrait"] #paletteDock {
@@ -1014,16 +1039,13 @@ input[type="color"]::-moz-color-swatch {
 }
 
 .sheet {
+  --sheet-translate-x: -50%;
+  --sheet-translate-y: -50%;
   position: fixed;
-  top: calc(
-    env(safe-area-inset-top, 0px) +
-      var(--rail-padding-block) +
-      var(--command-rail-height) +
-      calc(12px * var(--ui-scale))
-  );
-  right: calc(env(safe-area-inset-right, 0px) + 20px);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
-  width: min(720px, calc(100vw - 40px));
+  left: 50%;
+  top: 50%;
+  width: min(820px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 120px));
   padding: calc(18px * var(--ui-scale));
   display: flex;
   flex-direction: column;
@@ -1034,15 +1056,19 @@ input[type="color"]::-moz-color-swatch {
   box-shadow: var(--theme-sheet-shadow);
   z-index: 6;
   opacity: 1;
-  transform: translate3d(0, 0, 0);
-  transition: opacity 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transform: translate3d(var(--sheet-translate-x), var(--sheet-translate-y), 0);
+  transition: opacity 0.12s ease, box-shadow 0.12s ease;
 }
 
 .sheet.hidden {
   opacity: 0;
   pointer-events: none;
   visibility: hidden;
-  transform: translate3d(0, 12px, 0);
+}
+
+.sheet[data-free-position="true"] {
+  --sheet-translate-x: 0;
+  --sheet-translate-y: 0;
 }
 
 .sheet-header {
@@ -1050,6 +1076,12 @@ input[type="color"]::-moz-color-swatch {
   align-items: center;
   justify-content: space-between;
   gap: calc(10px * var(--ui-scale));
+  cursor: grab;
+  user-select: none;
+}
+
+.sheet.dragging .sheet-header {
+  cursor: grabbing;
 }
 
 .sheet-header h2 {
@@ -1088,68 +1120,45 @@ input[type="color"]::-moz-color-swatch {
 }
 
 .settings-body {
-  display: grid;
-  grid-template-columns:
-    minmax(calc(182px * var(--ui-scale)), calc(240px * var(--ui-scale)))
-    minmax(0, 1fr);
-  gap: calc(18px * var(--ui-scale));
   height: 100%;
   min-height: 0;
 }
 
-.settings-tabs {
+.settings-content {
   display: flex;
   flex-direction: column;
-  gap: calc(8px * var(--ui-scale));
-  max-height: 100%;
-  overflow-y: auto;
-  padding-right: calc(4px * var(--ui-scale));
-  margin-right: calc(2px * var(--ui-scale));
-}
-
-.settings-tab {
-  flex: 0 0 auto;
-  width: 100%;
-  padding: calc(10px * var(--ui-scale)) calc(16px * var(--ui-scale));
-  border-radius: calc(12px * var(--ui-scale));
-  border: 1px solid var(--theme-sheet-button-border);
-  background: var(--theme-sheet-button-bg);
-  color: var(--theme-sheet-button-text);
-  font-size: 0.95rem;
-  font-weight: 500;
-  letter-spacing: 0.005em;
-  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease,
-    box-shadow 0.16s ease;
-}
-
-.settings-content {
-  position: relative;
+  gap: calc(28px * var(--ui-scale));
   min-height: 0;
   overflow-y: auto;
-  padding-right: calc(4px * var(--ui-scale));
+  padding-right: calc(10px * var(--ui-scale));
 }
 
-.settings-tab:hover {
-  background: var(--theme-sheet-button-hover-bg);
-  border-color: var(--theme-sheet-button-hover-border);
-  color: var(--theme-sheet-button-hover-text);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-sheet-button-hover-border) 45%, transparent);
+.settings-section {
+  display: grid;
+  grid-template-columns:
+    minmax(calc(200px * var(--ui-scale)), calc(260px * var(--ui-scale)))
+    minmax(0, 1fr);
+  column-gap: calc(20px * var(--ui-scale));
+  row-gap: calc(18px * var(--ui-scale));
+  align-items: start;
 }
 
-.settings-tab[aria-selected="true"] {
-  background: var(--theme-sheet-button-active-bg);
-  border-color: var(--theme-sheet-button-active-border);
-  color: var(--theme-sheet-button-active-text);
-  box-shadow: 0 0 0 1px color-mix(
-      in srgb,
-      var(--theme-sheet-button-active-border) 55%,
-      transparent
-    );
+.settings-section-heading {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  padding-top: calc(6px * var(--ui-scale));
+  padding-bottom: calc(10px * var(--ui-scale));
+  background: var(--theme-sheet-bg);
+  color: var(--theme-sheet-muted-text);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  z-index: 1;
 }
 
-.settings-tab:focus-visible {
-  outline: 2px solid var(--theme-sheet-focus-ring);
-  outline-offset: 2px;
+.settings-section-heading h3 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .settings-panel {
@@ -1168,8 +1177,15 @@ input[type="color"]::-moz-color-swatch {
   }
 }
 
-.settings-panel[hidden] {
-  display: none;
+@media (max-width: 720px) {
+  .settings-section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: calc(12px * var(--ui-scale));
+  }
+
+  .settings-section-heading {
+    position: static;
+  }
 }
 
 .generator-import-notice,
@@ -1426,6 +1442,10 @@ body[data-theme="light"] .generator-progress-meter {
   gap: calc(12px * var(--ui-scale));
 }
 
+.save-manager > * {
+  grid-column: 1 / -1;
+}
+
 .save-start-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1662,11 +1682,18 @@ body[data-theme="light"] .readme-preview pre {
 .save-entry {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   padding: 14px;
   border-radius: 16px;
   background: rgba(15, 23, 42, 0.75);
   border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.save-entry-body {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) 1fr;
+  gap: 12px;
+  align-items: stretch;
 }
 
 .save-entry header {
@@ -1698,6 +1725,44 @@ body[data-theme="light"] .readme-preview pre {
   box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35);
 }
 
+.save-entry-preview {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(14, 165, 233, 0.2));
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  min-height: 110px;
+}
+
+.save-entry-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.save-entry-preview--compact {
+  min-width: 120px;
+  max-width: 160px;
+  min-height: 90px;
+}
+
+.save-entry-preview-fallback {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--theme-caption-text);
+  font-size: 0.85rem;
+  padding: 12px;
+  text-align: center;
+}
+
+.save-entry-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .save-entry-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1726,6 +1791,20 @@ body[data-theme="light"] .readme-preview pre {
   padding: 8px 12px;
 }
 
+.game-option-layout {
+  display: grid;
+  grid-template-columns: minmax(96px, 30%) 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.game-option-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
 @media (max-width: 1024px) {
   #commandRail {
     flex-wrap: wrap;
@@ -1741,6 +1820,19 @@ body[data-theme="light"] .readme-preview pre {
 
   body[data-orientation="portrait"] #viewport {
     padding-top: calc(var(--command-rail-top) + var(--command-rail-height));
+  }
+
+  .save-entry-body {
+    grid-template-columns: 1fr;
+  }
+
+  .save-entry-preview--compact,
+  .save-entry-preview {
+    max-width: none;
+  }
+
+  .game-option-layout {
+    grid-template-columns: 1fr;
   }
 
   #paletteDock {

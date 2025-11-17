@@ -8,6 +8,9 @@ any feature or workflow changes you ship.
 
 ## Development Workflow
 
+- **Read onboarding.** Start by skimming `ONBOARDING.md` so you follow the
+  expected setup steps, manual QA flow, and documentation touchpoints before
+  touching the runtime.
 - **Branch naming.** Create short-lived branches named `automation/<change>` so
   QA notes and preview URLs map directly to the experiment under review.
 - **Draft PRs early.** Open a draft PR as soon as you push. CI logs, manual QA
@@ -21,7 +24,16 @@ any feature or workflow changes you ship.
   branch you need, and tick `allow_without_pr` only if you intentionally want to
   publish a branch without an open review.
 - **Implementation simplicity.** Prefer straightforward solutions over clever
-  abstractions; keep changes minimal and lines of code lean.
+  abstractions; keep changes minimal and lines of code lean. Reach first for
+  native patterns (template cloning, event delegation, `dataset` flags) before
+  introducing new libraries.
+- **Surface follow-ups.** When you discover gaps during reviews, log them in
+  the root `TODO.md` (for actionable items) or `ROADMAP.md` (for longer-term
+  direction) so context is visible without chasing issues.
+- **Repository reviews.** When running a repo-wide review, reconcile any drift
+  between the runtime and handbook docs (`TECH.md`, `README.md`), refresh
+  `TODO.md`/`ROADMAP.md` with the findings, and keep the zero-build constraint
+  in mind before proposing new tooling.
 - **Manual smoke tests.** Exercise puzzle load, palette selection, painting, and
   save/load flows in at least one desktop and one mobile browser before
   requesting review.
@@ -87,6 +99,13 @@ any feature or workflow changes you ship.
   workflows.
 - Add or refresh screenshots, segmentation guides, and UI walkthroughs when
   you alter major flows.
+
+- **Runtime constraints.** Keep the runtime build-free: the shipped HTML and
+  modules must stay directly loadable without introducing bundlers or new build
+  steps. Optimisations should preserve the zero-build flow.
+- **Documentation anchors.** Sync `TECH.md`, `ROADMAP.md`, and `TODO.md` with
+  any change that affects runtime behaviour, QA coverage, or planning so
+  contributors land on a single, current source of truth.
 
 ## Automation & Git Preferences
 
