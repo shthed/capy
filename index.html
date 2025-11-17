@@ -4071,7 +4071,7 @@
           console.error("Failed to preload default puzzle metadata", error);
         });
 
-      const requestUpload = async () => {
+      async function requestUpload() {
         if (settingsSheet && !settingsSheet.classList.contains("hidden")) {
           closeSheet(settingsSheet);
         }
@@ -4079,7 +4079,8 @@
         if (!handled && fileInput) {
           fileInput.click();
         }
-      };
+      }
+      window.requestUpload = requestUpload;
 
       if (selectButton) {
         selectButton.addEventListener("click", requestUpload);
