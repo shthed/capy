@@ -23,6 +23,27 @@ test.describe('Capy UI smoke check', () => {
     await expect(page).toHaveTitle('Image to Color-by-Number');
   });
 
+  test('start hint shortcut opens the settings sheet', async ({ page }) => {
+    const settingsSheet = page.locator('#settingsSheet');
+    await expect(settingsSheet).toHaveAttribute('aria-hidden', 'true');
+
+    await page.evaluate(() => {
+      const startHint = document.getElementById('startHint');
+      if (!startHint) return;
+      startHint.classList.remove('hidden');
+      startHint.setAttribute('aria-hidden', 'false');
+      const closeButton = document.getElementById('closeStartHint');
+      if (closeButton) {
+        closeButton.hidden = false;
+        closeButton.removeAttribute('hidden');
+        closeButton.click();
+      }
+    });
+
+    await expect(settingsSheet).toBeVisible();
+    await expect(settingsSheet).toHaveAttribute('aria-hidden', 'false');
+  });
+
   test('allows switching renderer modes', async ({ page }) => {
     await loadTestPuzzle(page);
     await expect.poll(() => getActiveRenderer(page)).toBe('canvas2d');

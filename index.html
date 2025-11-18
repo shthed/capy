@@ -4198,6 +4198,7 @@
       if (startHintCloseButton) {
         startHintCloseButton.addEventListener("click", () => {
           hideStartScreen();
+          showSettingsSheet({ resetScroll: true });
           if (settingsButton) {
             settingsButton.focus();
           }
