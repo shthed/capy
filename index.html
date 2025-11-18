@@ -12185,7 +12185,8 @@
 
       function decodeLegacyAutosaveStorageRecord(record) {
         if (!record || typeof record !== "object") return null;
-        const { puzzle, settings } = decodeStoredPuzzleSnapshot(record.data ?? record.payload ?? null);
+        const { puzzle: snapshot, settings: snapshotSettings } = decodeStoredPuzzleSnapshot(record.data ?? null);
+        const puzzle = compactPuzzleSnapshot(snapshot);
         if (!puzzle) return null;
         const normalized = {
           timestamp:
@@ -12197,10 +12198,11 @@
         if (typeof record.id === "string" && record.id.trim()) {
           normalized.id = record.id.trim();
         }
-        if (settings && typeof settings === "object") {
-          normalized.settings = settings;
-        } else if (record.settings && typeof record.settings === "object") {
-          const snapshot = getUserSettingsSnapshot(record.settings);
+        const settingsSource =
+          (snapshotSettings && typeof snapshotSettings === "object" ? snapshotSettings : null) ||
+          (record.settings && typeof record.settings === "object" ? record.settings : null);
+        if (settingsSource) {
+          const snapshot = getUserSettingsSnapshot(settingsSource);
           if (snapshot) {
             normalized.settings = snapshot;
           }
@@ -12598,110 +12600,6 @@
         return bytes;
       }
 
-      function simpleLZ77Decompress(bytes) {
-        if (!bytes || bytes.length === 0) {
-          return new Uint8Array(0);
-        }
-        const output = [];
-        let index = 0;
-        while (index < bytes.length) {
-          const controlByte = bytes[index++];
-          for (let bit = 0; bit < 8 && index < bytes.length; bit += 1) {
-            const isMatch = (controlByte >> bit) & 1;
-            if (isMatch) {
-              if (index + 1 >= bytes.length) {
-                return null;
-              }
-              const first = bytes[index++];
-              const second = bytes[index++];
-              const offset = ((first << 4) | (second >> 4)) & 0xfff;
-              const length = (second & 0x0f) + 3;
-              if (offset === 0 || offset > output.length) {
-                return null;
-              }
-              const start = output.length - offset;
-              for (let i = 0; i < length; i += 1) {
-                output.push(output[start + i]);
-              }
-            } else {
-              output.push(bytes[index++]);
-            }
-          }
-        }
-        return new Uint8Array(output);
-      }
-
-      function lzwDecompress(codes) {
-        if (!codes || codes.length === 0) {
-          return "";
-        }
-        const dictionary = [];
-        for (let index = 0; index < 256; index += 1) {
-          dictionary[index] = String.fromCharCode(index);
-        }
-        let dictSize = 256;
-        let previous = String.fromCharCode(codes[0]);
-        let output = previous;
-        for (let index = 1; index < codes.length; index += 1) {
-          const code = codes[index];
-          let entry = "";
-          if (dictionary[code] != null) {
-            entry = dictionary[code];
-          } else if (code === dictSize) {
-            entry = previous + previous.charAt(0);
-          } else {
-            return null;
-          }
-          output += entry;
-          if (dictSize < 65535) {
-            dictionary[dictSize] = previous + entry.charAt(0);
-            dictSize += 1;
-          }
-          previous = entry;
-        }
-        return output;
-      }
-
-      function decodeLegacySnapshotPayload(source) {
-        if (!source || typeof source !== "object") {
-          return null;
-        }
-        const payload = typeof source.payload === "string" ? source.payload : "";
-        if (!payload) {
-          return null;
-        }
-        const encoding = typeof source.encoding === "string" ? source.encoding : "identity";
-        if (encoding === "identity") {
-          return payload;
-        }
-        if (encoding === "lz77") {
-          try {
-            const bytes = decodeBase64ToBytes(payload);
-            const decompressed = simpleLZ77Decompress(bytes);
-            return decompressed ? decodeUtf8Bytes(decompressed) : null;
-          } catch (error) {
-            console.error("Failed to decompress legacy LZ77 payload", error);
-            return null;
-          }
-        }
-        if (encoding === "lzw16") {
-          try {
-            const bytes = decodeBase64ToBytes(payload);
-            if (bytes.byteLength === 0) {
-              return "";
-            }
-            const length = Math.floor(bytes.byteLength / 2);
-            const codes = new Uint16Array(bytes.buffer, bytes.byteOffset, length);
-            return lzwDecompress(codes);
-          } catch (error) {
-            console.error("Failed to decompress legacy LZW payload", error);
-            return null;
-          }
-        }
-        console.error(`Unsupported legacy snapshot encoding: ${encoding}`);
-        return null;
-      }
-
       function decodeStoredPuzzleSnapshot(source) {
         if (!source) {
           return { puzzle: null, settings: null };
@@ -12714,21 +12612,6 @@
             console.error("Failed to parse snapshot string", error);
             return { puzzle: null, settings: null };
           }
-        } else if (
-          typeof source === "object" &&
-          source.__compressed === true &&
-          typeof source.payload === "string"
-        ) {
-          const textPayload = decodeLegacySnapshotPayload(source);
-          if (typeof textPayload !== "string") {
-            return { puzzle: null, settings: null };
-          }
-          try {
-            data = JSON.parse(textPayload);
-          } catch (error) {
-            console.error("Failed to parse legacy compressed snapshot", error);
-            return { puzzle: null, settings: null };
-          }
         }
         if (!data || typeof data !== "object") {
           return { puzzle: null, settings: null };
@@ -12739,12 +12622,7 @@
           data = { ...data };
           delete data.settings;
         }
-        const puzzle = compactPuzzleSnapshot(data);
-        const settings =
-          settingsSource && typeof settingsSource === "object"
-            ? getUserSettingsSnapshot(settingsSource)
-            : null;
-        return { puzzle, settings };
+        return { puzzle: data, settings: settingsSource };
       }
 
       function encodeStoredSnapshot(snapshot) {
@@ -12778,29 +12656,31 @@
 
       function decodeSaveStorageEntry(entry) {
         if (!entry || typeof entry !== "object") return null;
-        const { puzzle, settings } = decodeStoredPuzzleSnapshot(entry.data ?? null);
+        const { puzzle: snapshot, settings: snapshotSettings } = decodeStoredPuzzleSnapshot(entry.data ?? null);
+        const puzzle = compactPuzzleSnapshot(snapshot);
         if (!puzzle) return null;
         const decoded = {
           id: entry.id,
           timestamp: entry.timestamp,
           data: puzzle,
         };
-          if (settings && typeof settings === "object") {
-            decoded.settings = settings;
-          } else if (entry.settings && typeof entry.settings === "object") {
-            const snapshot = getUserSettingsSnapshot(entry.settings);
-            if (snapshot) {
-              decoded.settings = snapshot;
-            }
+        const settingsSource =
+          (snapshotSettings && typeof snapshotSettings === "object" ? snapshotSettings : null) ||
+          (entry.settings && typeof entry.settings === "object" ? entry.settings : null);
+        if (settingsSource) {
+          const normalizedSettings = getUserSettingsSnapshot(settingsSource);
+          if (normalizedSettings) {
+            decoded.settings = normalizedSettings;
           }
-          if (typeof entry.title === "string" && entry.title.trim()) {
-            decoded.title = entry.title.trim();
-          }
-          if (typeof entry.preview === "string" && entry.preview.startsWith("data:")) {
-            decoded.preview = entry.preview;
-          }
-          return decoded;
         }
+        if (typeof entry.title === "string" && entry.title.trim()) {
+          decoded.title = entry.title.trim();
+        }
+        if (typeof entry.preview === "string" && entry.preview.startsWith("data:")) {
+          decoded.preview = entry.preview;
+        }
+        return decoded;
+      }
 
       function createGameSaveManager() {
         const key = SAVE_STORAGE_KEY;
