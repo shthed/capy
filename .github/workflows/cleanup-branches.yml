@@ -31,4 +31,4 @@ jobs:
       - name: Run branch cleanup
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node ./scripts/cleanup-branches.mjs
+        run: node ./project/scripts/cleanup-branches.mjs
