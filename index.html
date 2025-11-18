@@ -2816,6 +2816,7 @@
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
       let lastCommandRailMetrics = { top: 0, height: 0 };
       let commandRailMeasureFrame = null;
+      const SETTINGS_LAUNCHER_DEADZONE_PX = 4;
       let settingsLauncherDrag = null;
       let settingsLauncherMoved = false;
       let suppressSettingsClick = false;
@@ -4099,6 +4100,8 @@
           id: event.pointerId,
           offsetX: event.clientX - rect.left,
           offsetY: event.clientY - rect.top,
+          startLeft: rect.left,
+          startTop: rect.top,
         };
         commandRail.classList.add("dragging");
         try {
@@ -4113,8 +4116,14 @@
         if (!settingsLauncherDrag || event.pointerId !== settingsLauncherDrag.id) return;
         const left = event.clientX - settingsLauncherDrag.offsetX;
         const top = event.clientY - settingsLauncherDrag.offsetY;
-        const clamped = clampLauncherPixels(left, top);
+        const deltaX = Math.abs(left - settingsLauncherDrag.startLeft);
+        const deltaY = Math.abs(top - settingsLauncherDrag.startTop);
+        const clearedDeadzone = Math.max(deltaX, deltaY) >= SETTINGS_LAUNCHER_DEADZONE_PX;
+        if (!settingsLauncherMoved && !clearedDeadzone) {
+          return;
+        }
         settingsLauncherMoved = true;
+        const clamped = clampLauncherPixels(left, top);
         settingsLauncherPositionPx = clamped;
         applySettingsLauncherPosition(normalizeLauncherPositionFromPixels(clamped));
         event.preventDefault();
