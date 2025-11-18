@@ -17,8 +17,8 @@ any feature or workflow changes you ship.
   notes, and preview links stay centralised, which matters once the automation
   suite returns.
 - **Branch deployments.** Branches with open PRs deploy automatically to GitHub
-  Pages under `/automation-<slug>/`; `main` deploys to the root. See "Branch
-  Deployments" below for the full workflow and maintenance details.
+  Pages under `/automation-<slug>/`; `main` deploys to the root. Preview links
+  arrive directly in PR comments so reviewers do not need a standalone index.
 - **Manual deploy overrides.** When triggering `Deploy GitHub Pages previews`
   by hand, run the workflow from `main`, set the `target_branch` input to the
   branch you need, and tick `allow_without_pr` only if you intentionally want to
@@ -159,8 +159,8 @@ any feature or workflow changes you ship.
 - Contents: Each deployment ships the runtime payload from the repository root
   (`index.html`, `render.js`, `puzzle-generation.js`, and `capy.json`) plus a
   generated `/README/index.html` so documentation mirrors the branch.
-- Index: `branch.html` lists `main` plus every deployed branch with preview,
-  PR, commit, and timestamp metadata rendered in the viewer’s local timezone.
+- Preview links: Deployment URLs post directly to the associated PRs, replacing
+  the old shared `branch.html` index.
 - Cleanup: When a PR closes, the workflow prunes its corresponding deployment on
   the next run—manual intervention is rarely needed.
 - Post-deploy smoke tests: `.github/workflows/post-deploy-tests.yml` waits for a

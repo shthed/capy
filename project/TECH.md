@@ -48,13 +48,11 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
   - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
   - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn `README.md` into `/README/index.html` and keep embedded docs mirrored in previews.
-  - `project/scripts/render-branch-page.mjs` – Static HTML builder for `branch.html`, fed by deployment metadata so previews stay discoverable.
-  - `project/scripts/prepare-deploy-metadata.mjs` – Fetches recent pull requests and commits via the GitHub API to regenerate the deployment metadata consumed by branch previews.
   - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
-  - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days.
+  - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days by calling `project/scripts/cleanup-branches.mjs`.
 
 ## Project Health Snapshot
 
@@ -108,11 +106,9 @@ source):
    - Other branches mirror the same runtime payload inside their
      branch-specific directories before running the README conversion for a
      scoped `/README/index.html`.
-4. **Index generation.** The workflow rebuilds `branch.html`, surfacing the main
-   deployment first followed by every active branch. Each card now keeps the
-   layout intentionally simple: a preview link, branch and PR references, and
-   the full list of commits collected when metadata was generated (timestamps
-   stay in ISO format so the page can render without client-side scripts).
+4. **Preview surfacing.** Preview URLs now flow directly into PR comments once
+   deployments finish, so contributors can grab the links without maintaining a
+   separate `branch.html` index page.
 5. **Cleanup.** Branch directories without open PRs are deleted on each run so
    deployments disappear automatically once work merges or closes.
 
@@ -128,8 +124,6 @@ Tweaking the deployment:
   as `main`.
 - Change the slug format in the sanitisation helper if branch naming needs to
   support additional characters.
-- Modify the GitHub API pagination values in the index-building script to show
-  more or fewer commits.
 - Swap the publish branch from `gh-pages` if you need a different hosting
   target.
 
