@@ -1,4 +1,9 @@
-import { createRendererController, createSvgRenderer, createWebGLRenderer } from "./render.js";
+import {
+  createRendererController,
+  createSvgRenderer,
+  createWebGLRenderer,
+  SceneTileLoader,
+} from "./render.js";
 
 const root = typeof document !== "undefined" ? document.documentElement : null;
 const SETTINGS_STORAGE_KEY = "capy.settings.v1";
@@ -131,6 +136,6 @@ if (root) {
   }
 }
 
-export { createRendererController, createSvgRenderer, createWebGLRenderer };
+export { createRendererController, createSvgRenderer, createWebGLRenderer, SceneTileLoader };
 
 export default getPrebootMetrics;

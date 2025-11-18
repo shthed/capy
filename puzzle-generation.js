@@ -1,3 +1,5 @@
+import { createVectorScenePayload } from "./runtime/renderer/adapters/scene-format.js";
+
 const GENERATION_STAGE_MESSAGES = {
   prepare: "Preparing image…",
   quantize: "Quantizing colours",
@@ -1108,6 +1110,8 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
     algorithm = DEFAULT_GENERATION_ALGORITHM,
     sourceImageMaxBytes = DEFAULT_SOURCE_IMAGE_MAX_BYTES,
   } = options;
+  const vectorSceneEnabled = Boolean(options?.features?.vectorScene);
+  const vectorSceneOptions = options?.vectorSceneOptions || null;
 
   const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
   const width = Math.max(8, Math.round(image.width * scale));
@@ -1239,6 +1243,21 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
   } catch (error) {
     debug(`Source image compression skipped: ${error?.message || error}`);
   }
+  let vectorScene = null;
+  if (vectorSceneEnabled) {
+    try {
+      const payload = createVectorScenePayload({
+        width,
+        height,
+        regions,
+        options: vectorSceneOptions,
+      });
+      vectorScene = { metadata: payload.json, binary: payload.binary };
+    } catch (error) {
+      debug(`Vector scene export skipped: ${error?.message || error}`);
+    }
+  }
+
   return {
     width,
     height,
@@ -1248,6 +1267,7 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
     sourceImage,
     originalWidth: image.width,
     originalHeight: image.height,
+    vectorScene,
   };
 }
 
