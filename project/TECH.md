@@ -82,39 +82,66 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
 
 ## Deployment & Branch Previews
 
-Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs on
-every push and optional manual dispatches (trigger the manual run from `main`
-and provide the `target_branch` input so the workflow checks out the right
-source):
+Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs
+on every push (all branches) plus optional manual dispatches (trigger the manual
+run from `main` and provide the `target_branch` input so the workflow checks out
+the right source):
 
-1. **PR gate.** The workflow exits early unless the branch has an open PR.
-   `main` is the exception—it always deploys. Manual runs can opt-in to deploy
-   without an open review by setting the `allow_without_pr` input.
-2. **Checkout & sanitise.** The action checks out the source branch (with a
-   shallow fetch for faster starts) and the `gh-pages` deployment branch,
-   converts branch names into URL-safe slugs (e.g., `automation/feature` →
-   `automation-feature`), and creates a matching directory for non-`main`
-   deployments. Concurrency keys include the branch name so parallel deployments
-   for different branches no longer queue behind each other.
-3. **Content sync.**
-   - `main` clears the deployment working tree (leaving `.git`) and copies the
-     runtime payload from the repository root (`index.html`, `styles.css`,
-     `render.js`, `puzzle-generation.js`, and `capy.json`) into the root of
-     `gh-pages`, then regenerates `/README/index.html` with
+1. **Checkout & sanitise.** The action checks out the triggering branch (shallow
+   fetch for speed) and the `gh-pages` deployment branch, converts branch names
+   into URL-safe slugs (e.g., `automation/feature` → `automation-feature`), and
+   creates a matching directory for non-`main` deployments. Concurrency keys
+   include the branch name so different previews deploy in parallel without
+   overwriting each other. (`main` maps to the Pages root; every other branch
+   lands in `/automation-<slug>/`.)
+2. **Content sync.**
+   - `main` copies the runtime payload from the repository root (`index.html`,
+     `styles.css`, `render.js`, `puzzle-generation.js`, `runtime.js`,
+     `service-worker.js`, `capy.json`, etc.) into the root of `gh-pages`, then
+     regenerates `/README/index.html` with
      `project/scripts/build-pages-site.mjs` so
-     https://shthed.github.io/capy/README/ always mirrors the handbook.
-   - Other branches mirror the same runtime payload inside their
-     branch-specific directories before running the README conversion for a
-     scoped `/README/index.html`.
-4. **Preview surfacing.** Preview URLs now flow directly into PR comments once
-   deployments finish, so contributors can grab the links without maintaining a
-   separate `branch.html` index page.
-5. **Cleanup.** Branch directories without open PRs are deleted on each run so
-   deployments disappear automatically once work merges or closes.
+     https://shthed.github.io/capy/README/ mirrors the handbook.
+   - Non-`main` branches clear their directory (e.g.,
+     `/automation-feature/`), copy the same runtime payload plus JS/CSS/JSON
+     dependencies, and generate a scoped `/README/index.html` for that
+     directory.
+   Because the sync uses `rsync -a` without `--delete`, previously published
+   branch folders stick around inside the `gh-pages` working tree until they are
+   removed manually.
+3. **Preview surfacing.** After copying files, the workflow commits straight to
+   `gh-pages`, calculates the preview URL based on the sanitised slug, and posts
+   the link in the job summary (separate PR commenting is handled by the
+   post-deploy test workflow).
+4. **Packaging.** `actions/upload-pages-artifact` tars the entire `pages/` tree
+   (not just the directory for the triggering branch), which means stale
+   directories inflate the artifact and can easily produce multi-hundred-megabyte
+   uploads when years of automation branches accumulate.
 
 If the sync step finds nothing new to commit, it records `has_changes=false`
 and skips the Pages packaging/deploy phases to avoid wasting artifact time while
 still reporting the preview URL from the previous publish.
+
+### Keeping branch directories and artifacts lean
+
+- **Prune Git branches regularly.** `.github/workflows/cleanup-branches.yml`
+  runs nightly (and after every successful Pages deployment) to invoke
+  `project/scripts/cleanup-branches.mjs`. The script deletes unprotected
+  `automation/` branches with no open PR activity and no commits in the last 30
+  days, ensuring future deploy runs stop re-copying previews nobody needs.
+  Trigger the workflow manually via the **Cleanup stale automation branches**
+  action whenever you close a large batch of PRs so stale heads disappear
+  immediately.
+- **Deploy run now prunes gh-pages directories automatically.** After cloning
+  the Pages branch, `.github/workflows/deploy-branch.yml` queries the remote
+  branch list, sanitises those names the same way preview directories are
+  generated, and removes any preview folders whose slug no longer matches a
+  live branch. Once the nightly branch cleanup deletes the branch itself, the
+  next deploy run drops its Pages payload automatically.
+- **Manual cleanup remains available.** If you need to reclaim space before the
+  next deployment runs (or before triggering **Deploy GitHub Pages previews**
+  by hand), delete the stale `automation-<slug>` directories on `gh-pages` and
+  push the commit. The following deploy run will confirm the branch is gone,
+  skip recreating its preview, and upload the trimmed artifact.
 
 Tweaking the deployment:
 

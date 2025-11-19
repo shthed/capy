@@ -76,6 +76,53 @@ jobs:
 
           touch .nojekyll
 
+          sanitize_branch_name() {
+            echo "$1" | sed 's/[^a-zA-Z0-9._-]/-/g'
+          }
+
+          readarray -t ACTIVE_SAFE_NAMES < <(
+            git ls-remote --heads origin \
+              | awk '{print $2}' \
+              | sed 's#^refs/heads/##' \
+              | while read -r branch_name; do
+                  if [ -z "$branch_name" ] || [ "$branch_name" = "main" ]; then
+                    continue
+                  fi
+                  safe_name=$(sanitize_branch_name "$branch_name")
+                  if [ -n "$safe_name" ]; then
+                    printf '%s\n' "$safe_name"
+                  fi
+                done \
+              | LC_ALL=C sort -u
+          )
+
+          is_active_safe_name() {
+            local candidate="$1"
+            if [ -z "$candidate" ]; then
+              return 1
+            fi
+            for safe_name in "${ACTIVE_SAFE_NAMES[@]}"; do
+              if [ "$safe_name" = "$candidate" ]; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          find . -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' dir; do
+            dir_name="${dir#./}"
+            case "$dir_name" in
+              .|..|.git|.github|README|.*)
+                continue
+                ;;
+            esac
+            if is_active_safe_name "$dir_name"; then
+              continue
+            fi
+            echo "Removing stale preview directory: $dir_name"
+            rm -rf "$dir"
+          done
+
           generate_readme_html() {
             local target_root="$1"
             local source_file="../README.md"
