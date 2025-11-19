@@ -1,10 +1,23 @@
-import { createFrameLogger, getTimestamp } from "./render.js";
+const FALLBACK_FRAME_LOGGER = () => () => {};
 
-function createCanvas2dRenderer(canvas, hooks = {}) {
+function defaultTimestamp() {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+  return Date.now();
+}
+
+function createCanvas2dRenderer(canvas, hooks = {}, _payload = {}, shared = {}) {
   let context = null;
 
   const logger = typeof hooks?.log === "function" ? hooks.log : null;
-  const logFrameDuration = createFrameLogger("canvas2d");
+  const frameLoggerFactory =
+    shared && typeof shared.createFrameLogger === "function"
+      ? shared.createFrameLogger
+      : FALLBACK_FRAME_LOGGER;
+  const logFrameDuration = frameLoggerFactory("canvas2d");
+  const now =
+    shared && typeof shared.getTimestamp === "function" ? shared.getTimestamp : defaultTimestamp;
 
   function emitLog(message, details) {
     if (!logger) {
@@ -57,14 +70,14 @@ function createCanvas2dRenderer(canvas, hooks = {}) {
     renderFrame(args) {
       const ctx = ensureContext();
       if (!ctx) return null;
-      const start = getTimestamp();
+      const start = now();
       try {
         if (typeof hooks.renderFrame === "function") {
           return hooks.renderFrame({ context: ctx, ...args });
         }
         return null;
       } finally {
-        logFrameDuration(getTimestamp() - start);
+        logFrameDuration(now() - start);
       }
     },
     renderPreview(args) {

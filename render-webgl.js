@@ -1,5 +1,3 @@
-import { createFrameLogger, getTimestamp } from "./render.js";
-
 const CONTEXT_ATTRIBUTES = {
   alpha: false,
   antialias: false,
@@ -264,9 +262,24 @@ void main() {
 }
 `;
 
-function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
+const FALLBACK_FRAME_LOGGER = () => () => {};
+
+function defaultTimestamp() {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+  return Date.now();
+}
+
+function createWebGLRenderer(canvas, hooks = {}, payload = {}, shared = {}) {
   const logger = typeof hooks?.log === "function" ? hooks.log : null;
-  const logFrameDuration = createFrameLogger("webgl");
+  const frameLoggerFactory =
+    shared && typeof shared.createFrameLogger === "function"
+      ? shared.createFrameLogger
+      : FALLBACK_FRAME_LOGGER;
+  const logFrameDuration = frameLoggerFactory("webgl");
+  const now =
+    shared && typeof shared.getTimestamp === "function" ? shared.getTimestamp : defaultTimestamp;
 
   function emitLog(message, details) {
     if (!logger) {
@@ -833,10 +846,10 @@ function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
       return null;
     }
 
-    const start = getTimestamp();
+    const start = now();
 
     try {
-    let hookResult;
+      let hookResult;
     if (typeof hooks.renderFrame === "function") {
       hookResult = hooks.renderFrame({
         gl,
@@ -1150,8 +1163,7 @@ function createWebGLRenderer(canvas, hooks = {}, payload = {}) {
 
     return null;
   } finally {
-    logFrameDuration(getTimestamp() - start);
-  }
+    logFrameDuration(now() - start);
   }
 
   function renderPreview(args = {}) {

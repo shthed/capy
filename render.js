@@ -1,10 +1,20 @@
-import { createCanvas2dRenderer } from "./render-canvas2d.js";
-import { createSvgRenderer } from "./render-svg.js";
-import { createWebGLRenderer } from "./render-webgl.js";
+import { createCanvas2dRenderer as createCanvas2dRendererImpl } from "./render-canvas2d.js";
+import { createSvgRenderer as createSvgRendererImpl } from "./render-svg.js";
 
 const DEFAULT_OVERLAY_FILL = "rgba(248, 250, 252, 1)";
 const DEFAULT_OUTLINE = "rgba(15, 23, 42, 0.65)";
 const DEFAULT_NUMBER = "rgba(15, 23, 42, 0.95)";
+
+let createWebGLRendererImpl = null;
+
+if (typeof document !== "undefined") {
+  try {
+    ({ createWebGLRenderer: createWebGLRendererImpl } = await import("./render-webgl.js"));
+  } catch (error) {
+    console.warn("WebGL renderer unavailable", error);
+    createWebGLRendererImpl = null;
+  }
+}
 
 export function formatNumber(value) {
   if (!Number.isFinite(value)) {
@@ -1082,7 +1092,33 @@ export function createRendererController(canvas, options = {}) {
   return api;
 }
 
-const sceneFormat = {
+export function createCanvas2dRenderer(canvas, hooks = {}, payload) {
+  return createCanvas2dRendererImpl(canvas, hooks, payload, {
+    createFrameLogger,
+    getTimestamp,
+  });
+}
+
+export function createSvgRenderer(canvas, hooks = {}, payload) {
+  return createSvgRendererImpl(canvas, hooks, payload, {
+    SceneGraph,
+    buildPathData,
+    computeInkStyles,
+    getFilledState,
+  });
+}
+
+export function createWebGLRenderer(canvas, hooks = {}, payload) {
+  if (!createWebGLRendererImpl) {
+    throw new Error("WebGL renderer is unavailable in this environment");
+  }
+  return createWebGLRendererImpl(canvas, hooks, payload, {
+    createFrameLogger,
+    getTimestamp,
+  });
+}
+
+export const sceneFormat = {
   SCENE_FORMAT_VERSION,
   SCENE_COMMAND_MOVE,
   SCENE_COMMAND_CURVE,
@@ -1094,7 +1130,7 @@ const sceneFormat = {
   commandsToSvgPath,
 };
 
-const vectorData = {
+export const vectorData = {
   formatNumber,
   buildPathData,
   getFilledState,
@@ -1123,35 +1159,6 @@ if (globalTarget) {
   Object.assign(globalTarget.capyRenderer, rendererExports);
   globalTarget.capyRenderer.__legacyLoaderVersion = "2024-07-28";
 }
-
-export {
-  SceneGraph,
-  SceneTileLoader,
-  commandsToSvgPath,
-  contoursToBezierCommands,
-  createCanvas2dRenderer,
-  createRendererController,
-  createSvgRenderer,
-  createVectorScenePayload,
-  createWebGLRenderer,
-  deserializeVectorScene,
-  formatNumber,
-  buildPathData,
-  getFilledState,
-  computeInkStyles,
-  ensureRegionBounds,
-  buildRegionContours,
-  SCENE_FORMAT_VERSION,
-  SCENE_COMMAND_MOVE,
-  SCENE_COMMAND_CURVE,
-  SCENE_COMMAND_CLOSE,
-  SCENE_COMMAND_STRIDE,
-  FRAME_LOG_INTERVAL_MS,
-  getTimestamp,
-  createFrameLogger,
-  sceneFormat,
-  vectorData,
-};
 
 export default rendererExports;
 

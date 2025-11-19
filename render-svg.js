@@ -1,11 +1,40 @@
-import {
-  SceneGraph,
-  buildPathData,
-  computeInkStyles,
-  getFilledState,
-} from "./render.js";
+const DEFAULT_INK_STYLES = {
+  outline: "rgba(15, 23, 42, 0.65)",
+  number: "rgba(15, 23, 42, 0.95)",
+};
 
-function createSvgRenderer(canvas, hooks = {}, payload = {}) {
+function defaultInkStyles() {
+  return { ...DEFAULT_INK_STYLES };
+}
+
+function defaultFilledState(source) {
+  if (source instanceof Set) {
+    return { set: source, ref: source, size: source.size, hash: null };
+  }
+  if (Array.isArray(source)) {
+    const set = new Set(source);
+    return { set, ref: source, size: set.size, hash: null };
+  }
+  return { set: new Set(), ref: null, size: 0, hash: null };
+}
+
+function defaultBuildPathData(geometry) {
+  if (!geometry) {
+    return "";
+  }
+  if (typeof geometry.pathData === "string") {
+    return geometry.pathData;
+  }
+  return "";
+}
+
+class NullSceneGraph {
+  rebuild() {}
+  updateFilledState() {}
+  updateOutlineStyle() {}
+}
+
+function createSvgRenderer(canvas, hooks = {}, payload = {}, shared = {}) {
   if (!canvas || typeof document === "undefined") {
     return null;
   }
@@ -14,6 +43,19 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   if (!host) {
     return null;
   }
+
+  const SceneGraphClass =
+    shared && typeof shared.SceneGraph === "function" ? shared.SceneGraph : NullSceneGraph;
+  const resolvePathData =
+    shared && typeof shared.buildPathData === "function" ? shared.buildPathData : defaultBuildPathData;
+  const resolveInkStyles =
+    shared && typeof shared.computeInkStyles === "function"
+      ? shared.computeInkStyles
+      : defaultInkStyles;
+  const resolveFilledState =
+    shared && typeof shared.getFilledState === "function"
+      ? shared.getFilledState
+      : defaultFilledState;
 
   const NS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(NS, "svg");
@@ -88,7 +130,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   let lastStrokeWidth = null;
   let baseImageHref = "";
 
-  const sceneGraph = new SceneGraph();
+  const sceneGraph = new SceneGraphClass();
 
   const numbersSurface = {
     canvas: null,
@@ -224,14 +266,14 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
       lastStrokeWidth = null;
     }
 
-    const filledState = getFilledState(state?.filled);
+    const filledState = resolveFilledState(state?.filled);
     const overlayFill =
       typeof backgroundColor === "string" && backgroundColor
         ? backgroundColor
         : "rgba(248, 250, 252, 1)";
     sceneGraph.updateFilledState(filledState, overlayFill);
 
-    const strokeColor = computeInkStyles(backgroundColor).outline;
+    const strokeColor = resolveInkStyles(backgroundColor).outline;
     const strokeWidth = cache?.strokeWidth > 0 ? cache.strokeWidth : 1;
     if (strokeColor !== lastOutlineColor || strokeWidth !== lastStrokeWidth) {
       sceneGraph.updateOutlineStyle(strokeColor, strokeWidth);
@@ -263,7 +305,7 @@ function createSvgRenderer(canvas, hooks = {}, payload = {}) {
     for (const region of regions) {
       const geometry = cache?.regionsById?.get(region.id);
       const entry = geometry ? sceneGraph.getById(geometry.id) : null;
-      const pathData = entry?.pathData || (geometry ? buildPathData(geometry) : "");
+      const pathData = entry?.pathData || (geometry ? resolvePathData(geometry) : "");
       if (!pathData) {
         continue;
       }
