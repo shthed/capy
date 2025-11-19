@@ -85,7 +85,11 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
 Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs
 on every push (all branches) plus optional manual dispatches (trigger the manual
 run from `main` and provide the `target_branch` input so the workflow checks out
-the right source):
+the right source). Because the `github-pages` environment only accepts `main`
+and `automation/*` branches, the workflow begins with a planning job that
+calculates the effective branch/ref, confirms it matches the naming policy, and
+either hands the values to the deploy job or posts a skip notice when the branch
+is not eligible:
 
 1. **Checkout & sanitise.** The action checks out the triggering branch (shallow
    fetch for speed) and the `gh-pages` deployment branch, converts branch names
@@ -111,7 +115,9 @@ the right source):
 3. **Preview surfacing.** After copying files, the workflow commits straight to
    `gh-pages`, calculates the preview URL based on the sanitised slug, and posts
    the link in the job summary (separate PR commenting is handled by the
-   post-deploy test workflow).
+   post-deploy test workflow). Branches that do not match the `automation/*`
+   pattern never reach this step; the planning job records a notice and exits so
+   environment protections are satisfied without hard failures.
 4. **Packaging.** `actions/upload-pages-artifact` tars the entire `pages/` tree
    (not just the directory for the triggering branch), which means stale
    directories inflate the artifact and can easily produce multi-hundred-megabyte
