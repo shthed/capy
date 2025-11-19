@@ -1,4 +1,4 @@
-import { createFrameLogger, getTimestamp } from "../utils.js";
+import { createFrameLogger, getTimestamp } from "./render.js";
 
 const CONTEXT_ATTRIBUTES = {
   alpha: false,

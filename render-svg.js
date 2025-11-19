@@ -1,5 +1,9 @@
-import SceneGraph from "../adapters/scene-graph.js";
-import { buildPathData, computeInkStyles, getFilledState } from "../adapters/vector-data.js";
+import {
+  SceneGraph,
+  buildPathData,
+  computeInkStyles,
+  getFilledState,
+} from "./render.js";
 
 function createSvgRenderer(canvas, hooks = {}, payload = {}) {
   if (!canvas || typeof document === "undefined") {

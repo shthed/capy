@@ -1,4 +1,4 @@
-import { createVectorScenePayload } from "./runtime/renderer/adapters/scene-format.js";
+import { createVectorScenePayload } from "./render.js";
 
 const GENERATION_STAGE_MESSAGES = {
   prepare: "Preparing image…",

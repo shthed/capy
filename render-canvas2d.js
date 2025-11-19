@@ -1,4 +1,4 @@
-import { createFrameLogger, getTimestamp } from "../utils.js";
+import { createFrameLogger, getTimestamp } from "./render.js";
 
 function createCanvas2dRenderer(canvas, hooks = {}) {
   let context = null;
