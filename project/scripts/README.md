@@ -1,9 +1,8 @@
 # Scripts Overview
 
 This directory collects helper scripts that support the GitHub Pages deployment
-pipeline, branch metadata generation, and local automation runners. Each script
-is intended to be invoked from CI workflows, but they can also be useful when
-iterating locally.
+pipeline and local automation runners. Each script is intended to be invoked
+from CI workflows, but they can also be useful when iterating locally.
 
 ## `build-pages-site.mjs`
 
@@ -32,34 +31,6 @@ path.
 ```
 python project/scripts/generate_readme_html.py temp.html README/index.html
 ```
-
-## `prepare-deploy-metadata.mjs`
-
-Queries the GitHub API for open pull requests, recent commits, and branch
-information, then writes a consolidated `deployment-metadata.json` file. The
-metadata powers the branch index and exposes commit histories for each deployed
-branch.
-
-Relevant environment variables:
-
-- `GITHUB_REPOSITORY`, `GITHUB_TOKEN`
-- `DEPLOY_METADATA_PER_PAGE`, `DEPLOY_METADATA_COMMITS_PER_BRANCH`
-- `DEPLOY_METADATA_PATH`
-
-## `render-branch-page.mjs`
-
-Consumes deployment metadata and renders the static `branch.html` page that
-lists branch previews, commits, and PR references. The script accepts its inputs
-via environment variables pointing at JSON files generated during the workflow.
-
-Key environment variables:
-
-- `DEPLOY_DATA_PATH`
-- `PR_DATA_PATH`
-- `MAIN_DATA_PATH`
-- `BRANCH_COMMITS_PATH`
-- `GITHUB_REPOSITORY`
-- `BRANCH_HTML_PATH`
 
 ## `run-tests.js`
 

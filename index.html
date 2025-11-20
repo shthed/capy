@@ -1499,7 +1499,6 @@
           }
         : {};
       const SAVE_STORAGE_KEY = "capy.saves.v2";
-      const LEGACY_AUTOSAVE_STORAGE_KEY = "capy.autosave.v1";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const SETTINGS_STORAGE_KEY = "capy.settings.v1";
       const RUNTIME_CACHE_NAME = "capy-offline-cache-v2";
@@ -2865,6 +2864,7 @@
       let lastViewportMetrics = { orientation: null, width: 0, height: 0 };
       let lastCommandRailMetrics = { top: 0, height: 0 };
       let commandRailMeasureFrame = null;
+      const SETTINGS_LAUNCHER_DEADZONE_PX = 4;
       let settingsLauncherDrag = null;
       let settingsLauncherMoved = false;
       let suppressSettingsClick = false;
@@ -3304,8 +3304,6 @@
         refreshSaveList();
         updateStorageUsageSummary();
       });
-
-      migrateLegacyAutosave();
 
       function getDefaultGameTitle() {
         const title = state.defaultGame?.title;
@@ -4176,6 +4174,8 @@
           id: event.pointerId,
           offsetX: event.clientX - rect.left,
           offsetY: event.clientY - rect.top,
+          startLeft: rect.left,
+          startTop: rect.top,
         };
         commandRail.classList.add("dragging");
         try {
@@ -4190,8 +4190,14 @@
         if (!settingsLauncherDrag || event.pointerId !== settingsLauncherDrag.id) return;
         const left = event.clientX - settingsLauncherDrag.offsetX;
         const top = event.clientY - settingsLauncherDrag.offsetY;
-        const clamped = clampLauncherPixels(left, top);
+        const deltaX = Math.abs(left - settingsLauncherDrag.startLeft);
+        const deltaY = Math.abs(top - settingsLauncherDrag.startTop);
+        const clearedDeadzone = Math.max(deltaX, deltaY) >= SETTINGS_LAUNCHER_DEADZONE_PX;
+        if (!settingsLauncherMoved && !clearedDeadzone) {
+          return;
+        }
         settingsLauncherMoved = true;
+        const clamped = clampLauncherPixels(left, top);
         settingsLauncherPositionPx = clamped;
         applySettingsLauncherPosition(normalizeLauncherPositionFromPixels(clamped));
         event.preventDefault();
@@ -12368,90 +12374,6 @@
         };
       }
 
-      function decodeLegacyAutosaveStorageRecord(record) {
-        if (!record || typeof record !== "object") return null;
-        const { puzzle, settings } = decodeStoredPuzzleSnapshot(record.data ?? record.payload ?? null);
-        if (!puzzle) return null;
-        const normalized = {
-          timestamp:
-            typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
-              ? record.timestamp
-              : Date.now(),
-          data: puzzle,
-        };
-        if (typeof record.id === "string" && record.id.trim()) {
-          normalized.id = record.id.trim();
-        }
-        if (settings && typeof settings === "object") {
-          normalized.settings = settings;
-        } else if (record.settings && typeof record.settings === "object") {
-          const snapshot = getUserSettingsSnapshot(record.settings);
-          if (snapshot) {
-            normalized.settings = snapshot;
-          }
-        }
-        if (typeof record.title === "string" && record.title.trim()) {
-          normalized.title = record.title.trim();
-        } else if (typeof puzzle.title === "string" && puzzle.title) {
-          normalized.title = puzzle.title;
-        }
-        return normalized;
-      }
-
-      function migrateLegacyAutosave() {
-        if (typeof localStorage === "undefined") {
-          return;
-        }
-        let raw = null;
-        try {
-          raw = localStorage.getItem(LEGACY_AUTOSAVE_STORAGE_KEY);
-        } catch (error) {
-          console.error("Failed to read legacy autosave", error);
-          return;
-        }
-        if (!raw) {
-          return;
-        }
-        try {
-          const parsed = JSON.parse(raw);
-          const legacy = decodeLegacyAutosaveStorageRecord(parsed);
-          if (!legacy || !legacy.data) {
-            return;
-          }
-          const timestamp = Number.isFinite(legacy.timestamp) ? legacy.timestamp : Date.now();
-          const seed = Math.floor(Math.random() * 10000);
-          const id = legacy.id && typeof legacy.id === "string" && legacy.id.trim()
-            ? legacy.id.trim()
-            : `save-${timestamp}-${seed}-autosave`;
-          const entry = {
-            id,
-            timestamp,
-            data: legacy.data,
-          };
-          if (legacy.settings && typeof legacy.settings === "object") {
-            const snapshot = getUserSettingsSnapshot(legacy.settings);
-            if (snapshot) {
-              entry.settings = snapshot;
-            }
-          }
-          if (legacy.title) {
-            entry.title = legacy.title;
-          }
-          state.saves = [entry, ...state.saves.filter((item) => item.id !== id)];
-          state.loadedSaveId = id;
-          persistSaves();
-          logDebug("Migrated legacy autosave into manual slot");
-        } catch (error) {
-          console.error("Failed to migrate legacy autosave", error);
-        } finally {
-          try {
-            localStorage.removeItem(LEGACY_AUTOSAVE_STORAGE_KEY);
-          } catch (removeError) {
-            console.error("Failed to clear legacy autosave key", removeError);
-          }
-        }
-      }
-
       function formatBytes(bytes) {
         if (!Number.isFinite(bytes) || bytes <= 0) {
           return "0 B";
@@ -13517,11 +13439,6 @@
         state.saves = [];
         state.loadedSaveId = null;
         refreshSaveList();
-        try {
-          localStorage.removeItem(LEGACY_AUTOSAVE_STORAGE_KEY);
-        } catch (error) {
-          console.error("Failed to clear legacy autosave", error);
-        }
         updateStorageUsageSummary();
         logDebug("Cleared all saves");
       }
