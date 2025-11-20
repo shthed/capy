@@ -10,6 +10,7 @@ if (!fs.existsSync(artifactsDir)) {
 
 export default defineConfig({
   testDir: './tests',
+  testMatch: ['**/ui-*.spec.js'],
   fullyParallel: false,
   timeout: 60_000,
   expect: {

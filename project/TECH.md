@@ -263,10 +263,11 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 - **Public testing surface.** `window.capyGenerator` exposes helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so automation and manual experiments can orchestrate the app without touching internals. Recent renderer work also surfaced `getRendererType()`, `listRenderers()`, `setRenderer(type)`, `registerRenderer(type, factory)`, and `unregisterRenderer(type)` so tests can assert the active backend or load experimental renderers without patching private state.
 - **Pan/zoom subsystem.** `viewState` tracks transforms for `#canvasStage` and `#canvasTransform`; helpers like `applyZoom`, `resetView`, and `applyViewTransform` keep navigation smooth across wheel, keyboard, and drag gestures.
 
-### Compact UI patterns (no framework)
+### Compact UI patterns (micro templates, no framework builds)
 
 The runtime must stay build-free and avoid shipping large bundled frameworks. To trim UI code without pulling in minified dependencies:
 
+- **`ui-template.js` handles templating.** The helper exports `html`, `unsafeHTML`, and `renderTemplate`, letting runtime code assemble declarative snippets (see the save manager and game selector) while keeping values escaped by default. Import it directly from `index.html` whenever you would otherwise build trees with dozens of `document.createElement` calls.
 - **Lean on `<template>` clones.** Define reusable fragments (e.g., palette items or save rows) in `index.html`, call `template.content.cloneNode(true)`, and toggle `dataset` flags or text content during hydration instead of re-creating DOM trees by hand.
 - **Delegate events.** Attach a single listener to the container (palette rail, save list, settings tabs) and branch on `event.target.closest('[data-action="..."]')` so new buttons can be added in markup without extra wiring.
 - **Small helper utilities only.** When repetition is unavoidable, add a tiny helper (e.g., `renderList(container, items, renderItem)`) in a shared module and reuse it rather than adopting a state library. Keep helpers self-contained and tree-shake-free.

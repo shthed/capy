@@ -161,6 +161,72 @@
             Upload Image
           </button>
         </div>
+        <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-gameplay"
+            aria-selected="true"
+            data-settings-tab="gameplay"
+            data-settings-tab-default
+          >
+            Gameplay
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-hints"
+            aria-selected="false"
+            data-settings-tab="hints"
+          >
+            Hints
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-controls"
+            aria-selected="false"
+            data-settings-tab="controls"
+          >
+            Controls
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-appearance"
+            aria-selected="false"
+            data-settings-tab="appearance"
+          >
+            Appearance
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-generator"
+            aria-selected="false"
+            data-settings-tab="generator"
+          >
+            Generator
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-saves"
+            aria-selected="false"
+            data-settings-tab="saves"
+          >
+            Saves
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-help"
+            aria-selected="false"
+            data-settings-tab="help"
+          >
+            Help &amp; logs
+          </button>
+        </nav>
         <div class="settings-body">
           <div class="settings-content" data-settings-scroll>
             <section class="settings-section" data-settings-section="gameplay">
@@ -1009,6 +1075,7 @@
           createSvgRenderer,
           createWebGLRenderer,
         } from "./runtime.js";
+        import { html, renderTemplate } from "./ui-template.js";
 
         (() => {
           const skipBootstrap = beginRendererBootstrap();
@@ -1065,6 +1132,7 @@
         }
         const tabButtons = Array.from(sheetEl.querySelectorAll("[data-settings-tab]"));
         const tabPanels = Array.from(sheetEl.querySelectorAll("[data-settings-panel]"));
+        const tabSections = tabPanels.map((panel) => panel.closest("[data-settings-section]") || null);
         const scrollContainer =
           sheetEl.querySelector("[data-settings-scroll]") || sheetEl.querySelector(".sheet-body") || null;
         const defaultTabId =
@@ -1092,11 +1160,16 @@
             candidate.setAttribute("aria-selected", selected ? "true" : "false");
             candidate.setAttribute("tabindex", selected ? "0" : "-1");
           }
-          for (const candidate of tabPanels) {
+          tabPanels.forEach((candidate, index) => {
             const isTarget = candidate === panel;
+            const section = tabSections[index];
             candidate.hidden = !isTarget;
             candidate.setAttribute("aria-hidden", isTarget ? "false" : "true");
-          }
+            if (section && section !== candidate) {
+              section.hidden = !isTarget;
+              section.setAttribute("aria-hidden", isTarget ? "false" : "true");
+            }
+          });
           if (scrollContainer && (resetScroll || changed)) {
             scrollContainer.scrollTop = 0;
           }
@@ -1136,6 +1209,10 @@
               }
             });
           });
+        }
+
+        if (tabButtons.length > 0 && defaultTabId) {
+          component.update({ activeId: activeTabId || defaultTabId, force: true });
         }
 
         function focusIndex(index, options = {}) {
@@ -1264,14 +1341,11 @@
             if (nextEntriesProvided) {
               currentEntries = props.entries;
               if (list) {
-                list.innerHTML = "";
-                if (currentEntries.length > 0) {
-                  const fragment = document.createDocumentFragment();
-                  for (const entry of currentEntries) {
-                    fragment.appendChild(createSaveManagementItem(entry));
-                  }
-                  list.appendChild(fragment);
-                }
+                const markup =
+                  currentEntries.length > 0
+                    ? html`${currentEntries.map(renderSaveManagementItem)}`
+                    : "";
+                renderTemplate(list, markup);
               }
             }
 
@@ -1356,6 +1430,7 @@
         settingsSheet?.querySelector("[data-settings-scroll]") ||
         settingsSheet?.querySelector(".sheet-body") ||
         null;
+      const settingsTabs = createSettingsTabsComponent(settingsSheet);
       const generatorPanel = settingsSheet?.querySelector('[data-settings-panel="generator"]') || null;
       const helpPanel = settingsSheet?.querySelector('[data-settings-panel="help"]') || null;
       const sheetRegistry = [settingsSheet].filter(Boolean);
@@ -3218,6 +3293,13 @@
           announce,
         });
       }
+
+      const SAVE_ACTIONS = [
+        { action: "load", label: "Load" },
+        { action: "rename", label: "Rename" },
+        { action: "export", label: "Export" },
+        { action: "delete", label: "Delete" },
+      ];
 
       gameSaveManager.subscribe((entries) => {
         state.saves = entries;
@@ -5289,7 +5371,11 @@
         const { tabId = null, focusTab = false, resetScroll = true, force = false } = options;
         openSheet(settingsSheet);
         ensureSettingsSheetPosition({ forceCenter: force || !settingsSheetPosition });
-        if (typeof tabId === "string" && tabId.length > 0) {
+        const hasTabs = typeof settingsTabs.getTabCount === "function" && settingsTabs.getTabCount() > 0;
+        const targetTabId = tabId || settingsTabs.getActiveTabId?.() || null;
+        if (hasTabs) {
+          settingsTabs.activate(targetTabId, { focusTab, resetScroll, force });
+        } else if (typeof tabId === "string" && tabId.length > 0) {
           scrollSettingsPanelIntoView(tabId, { focus: focusTab, resetScroll });
         } else if (resetScroll && settingsBody) {
           settingsBody.scrollTop = 0;
@@ -13012,175 +13098,132 @@
         };
       }
 
-      function createSaveActionButton(action, label) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.dataset.action = action;
-        button.textContent = label;
-        return button;
-      }
-
-      function createSavePreviewElement(metadata, options = {}) {
-        const { compact = false } = options;
-        const preview = document.createElement("div");
-        preview.className = "save-entry-preview";
-        if (compact) {
-          preview.classList.add("save-entry-preview--compact");
+        function renderSavePreview(metadata, options = {}) {
+          const { compact = false } = options;
+          const previewClass = ["save-entry-preview"];
+          if (compact) {
+          previewClass.push("save-entry-preview--compact");
         }
         if (metadata.previewUrl) {
-          const image = document.createElement("img");
-          image.loading = "lazy";
-          image.decoding = "async";
-          image.src = metadata.previewUrl;
-          image.alt = metadata.title ? `${metadata.title} preview` : "Puzzle preview";
-          preview.appendChild(image);
-        } else {
-          const fallback = document.createElement("span");
-          fallback.className = "save-entry-preview-fallback";
-          fallback.textContent = "Preview unavailable";
-          preview.appendChild(fallback);
+          const altText = metadata.title ? `${metadata.title} preview` : "Puzzle preview";
+          return html`<div class="${previewClass.join(" ")}">
+            <img
+              loading="lazy"
+              decoding="async"
+              src="${metadata.previewUrl}"
+              alt="${altText}"
+            />
+          </div>`;
         }
-        return preview;
+        return html`<div class="${previewClass.join(" ")}">
+          <span class="save-entry-preview-fallback">Preview unavailable</span>
+        </div>`;
       }
 
-      function createSaveSelectionItem(entry) {
+      function renderSaveSelectionItem(entry) {
         const metadata = describeSaveEntry(entry);
-        const item = document.createElement("li");
-        item.className = "game-option";
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "game-option-button";
-        button.dataset.gameId = metadata.id;
-        const layout = document.createElement("div");
-        layout.className = "game-option-layout";
-        const preview = createSavePreviewElement(metadata, { compact: true });
-        const copy = document.createElement("div");
-        copy.className = "game-option-copy";
-        const title = document.createElement("span");
-        title.className = "game-option-title";
-        title.textContent = metadata.title;
-        const progress = document.createElement("span");
-        progress.className = "game-option-meta";
-        progress.textContent = metadata.progressText;
-        copy.append(title, progress);
-        layout.append(preview, copy);
-        button.append(layout);
-        if (metadata.timestampLabel) {
-          const time = document.createElement("span");
-          time.className = "game-option-meta";
-          time.textContent = metadata.timestampLabel;
-          button.append(time);
-        }
-        if (metadata.storageLabel) {
-          const storage = document.createElement("span");
-          storage.className = "game-option-meta";
-          storage.textContent = `Storage ${metadata.storageLabel}`;
-          button.append(storage);
-        }
-        button.setAttribute("aria-label", metadata.ariaLabel);
-        item.appendChild(button);
-        return item;
+        const timestamp = metadata.timestampLabel
+          ? html`<span class="game-option-meta">${metadata.timestampLabel}</span>`
+          : "";
+        const storage = metadata.storageLabel
+          ? html`<span class="game-option-meta">Storage ${metadata.storageLabel}</span>`
+          : "";
+        return html`<li class="game-option">
+          <button
+            type="button"
+            class="game-option-button"
+            data-game-id="${metadata.id}"
+            aria-label="${metadata.ariaLabel}"
+          >
+            <div class="game-option-layout">
+              ${renderSavePreview(metadata, { compact: true })}
+              <div class="game-option-copy">
+                <span class="game-option-title">${metadata.title}</span>
+                <span class="game-option-meta">${metadata.progressText}</span>
+              </div>
+            </div>
+            ${timestamp}
+            ${storage}
+          </button>
+        </li>`;
       }
 
-      function createSaveManagementItem(entry) {
-        const metadata = describeSaveEntry(entry);
-        const item = document.createElement("article");
-        item.className = "save-entry";
-        item.setAttribute("role", "listitem");
-        item.dataset.saveId = metadata.id;
-        const isLoaded = Boolean(state.loadedSaveId && metadata.id === state.loadedSaveId);
-        if (isLoaded) {
-          item.dataset.loaded = "true";
-        }
-        const header = document.createElement("header");
-        const title = document.createElement("strong");
-        title.textContent = metadata.title;
-        header.appendChild(title);
-        if (metadata.timestamp) {
-          const time = document.createElement("time");
-          time.dateTime = metadata.timestamp.toISOString();
-          time.textContent = metadata.timestamp.toLocaleString();
-          header.appendChild(time);
-        }
-        const meta = document.createElement("div");
-        meta.className = "save-entry-meta";
-        const progress = document.createElement("span");
-        progress.textContent = metadata.progressText;
-        meta.appendChild(progress);
-        if (metadata.storageLabel) {
-          const storage = document.createElement("span");
-          storage.className = "save-entry-storage";
-          storage.textContent = `Storage ${metadata.storageLabel}`;
-          meta.appendChild(storage);
-        }
-        const actions = document.createElement("div");
-        actions.className = "save-actions";
-        actions.append(
-          createSaveActionButton("load", "Load"),
-          createSaveActionButton("rename", "Rename"),
-          createSaveActionButton("export", "Export"),
-          createSaveActionButton("delete", "Delete"),
+      function renderSaveActionButtons() {
+        return SAVE_ACTIONS.map(
+          ({ action, label }) => html`<button type="button" data-action="${action}">${label}</button>`
         );
-        const content = document.createElement("div");
-        content.className = "save-entry-content";
-        content.append(header, meta, actions);
-        const body = document.createElement("div");
-        body.className = "save-entry-body";
-        body.append(createSavePreviewElement(metadata), content);
-        item.append(body);
-        if (isLoaded) {
-          const status = document.createElement("div");
-          status.className = "save-entry-status";
-          status.textContent = "Autosaving this slot";
-          content.appendChild(status);
-        }
-        return item;
       }
 
+      function renderSaveManagementItem(entry) {
+        const metadata = describeSaveEntry(entry);
+        const isLoaded = Boolean(state.loadedSaveId && metadata.id === state.loadedSaveId);
+        const timestamp = metadata.timestamp
+          ? html`<time datetime="${metadata.timestamp.toISOString()}">
+              ${metadata.timestamp.toLocaleString()}
+            </time>`
+          : "";
+        const storage = metadata.storageLabel
+          ? html`<span class="save-entry-storage">Storage ${metadata.storageLabel}</span>`
+          : "";
+        const status = isLoaded
+          ? html`<div class="save-entry-status">Autosaving this slot</div>`
+          : "";
+        return html`<article
+          class="save-entry"
+          role="listitem"
+          data-save-id="${metadata.id}"
+          data-loaded="${isLoaded ? "true" : "false"}"
+        >
+          <div class="save-entry-body">
+            ${renderSavePreview(metadata)}
+            <div class="save-entry-content">
+              <header>
+                <strong>${metadata.title}</strong>
+                ${timestamp}
+              </header>
+              <div class="save-entry-meta">
+                <span>${metadata.progressText}</span>
+                ${storage}
+              </div>
+              <div class="save-actions">${renderSaveActionButtons()}</div>
+              ${status}
+            </div>
+          </div>
+        </article>`;
+      }
 
-
-
-      function refreshGameSelection() {
-        if (!gameSelectionList) return;
-        gameSelectionList.innerHTML = "";
-        const fragment = document.createDocumentFragment();
-
-        const defaultItem = document.createElement("li");
-        defaultItem.className = "game-option";
-        const defaultButton = document.createElement("button");
-        defaultButton.type = "button";
-        defaultButton.className = "game-option-button";
+      function renderDefaultGameSelectionItem() {
         const defaultMetadata = state.defaultGame || {};
-        defaultButton.dataset.gameId = defaultMetadata.id || DEFAULT_GAME_SOURCE.id;
-        const defaultTitle = document.createElement("span");
-        defaultTitle.className = "game-option-title";
         const resolvedTitle = getDefaultGameTitle();
-        defaultTitle.textContent = resolvedTitle;
-        const defaultMeta = document.createElement("span");
-        defaultMeta.className = "game-option-meta";
         const resolvedDescription = getDefaultGameDescription();
         const fallbackMeta = DEFAULT_GAME_FALLBACK.description || DEFAULT_GAME_SOURCE.path;
         const metaText = resolvedDescription || fallbackMeta;
-        defaultMeta.textContent = metaText;
         const hideMeta = !resolvedDescription && (!metaText || metaText === resolvedTitle);
-        defaultMeta.hidden = hideMeta;
         const labelParts = [resolvedTitle];
         if (!hideMeta && metaText && metaText !== resolvedTitle) {
           labelParts.push(metaText);
         }
-        defaultButton.setAttribute("aria-label", labelParts.join(" – "));
-        defaultButton.append(defaultTitle, defaultMeta);
-        defaultItem.appendChild(defaultButton);
-        fragment.appendChild(defaultItem);
+        return html`<li class="game-option">
+          <button
+            type="button"
+            class="game-option-button"
+            data-game-id="${defaultMetadata.id || DEFAULT_GAME_SOURCE.id}"
+            aria-label="${labelParts.join(" – ")}"
+          >
+            <span class="game-option-title">${resolvedTitle}</span>
+            <span class="game-option-meta"${hideMeta ? " hidden" : ""}>${metaText}</span>
+          </button>
+        </li>`;
+      }
 
+      function refreshGameSelection() {
+        if (!gameSelectionList) return;
         const hasSaves = Array.isArray(state.saves) && state.saves.length > 0;
-        if (hasSaves) {
-          for (const entry of state.saves) {
-            fragment.appendChild(createSaveSelectionItem(entry));
-          }
-        }
-
-        gameSelectionList.appendChild(fragment);
+        const saveMarkup = hasSaves ? state.saves.map(renderSaveSelectionItem) : "";
+        renderTemplate(
+          gameSelectionList,
+          html`${renderDefaultGameSelectionItem()}${saveMarkup}`
+        );
         if (gameSelectionEmpty) {
           gameSelectionEmpty.hidden = hasSaves;
         }
