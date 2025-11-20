@@ -3217,6 +3217,13 @@
         });
       }
 
+      const SAVE_ACTIONS = [
+        { action: "load", label: "Load" },
+        { action: "rename", label: "Rename" },
+        { action: "export", label: "Export" },
+        { action: "delete", label: "Delete" },
+      ];
+
       gameSaveManager.subscribe((entries) => {
         state.saves = entries;
         if (state.loadedSaveId && !state.saves.some((item) => item.id === state.loadedSaveId)) {
@@ -13010,17 +13017,10 @@
         };
       }
 
-      const SAVE_ACTIONS = [
-        { action: "load", label: "Load" },
-        { action: "rename", label: "Rename" },
-        { action: "export", label: "Export" },
-        { action: "delete", label: "Delete" },
-      ];
-
-      function renderSavePreview(metadata, options = {}) {
-        const { compact = false } = options;
-        const previewClass = ["save-entry-preview"];
-        if (compact) {
+        function renderSavePreview(metadata, options = {}) {
+          const { compact = false } = options;
+          const previewClass = ["save-entry-preview"];
+          if (compact) {
           previewClass.push("save-entry-preview--compact");
         }
         if (metadata.previewUrl) {
