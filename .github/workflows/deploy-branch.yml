@@ -43,19 +43,8 @@ jobs:
             effective_ref="refs/heads/$TARGET_BRANCH_INPUT"
           fi
 
-          should_deploy=false
-          skip_reason="Branches must be named automation/<slug> (or main) to deploy to github-pages."
-
-          case "$effective_branch" in
-            main)
-              should_deploy=true
-              skip_reason=""
-              ;;
-            automation/*)
-              should_deploy=true
-              skip_reason=""
-              ;;
-          esac
+          should_deploy=true
+          skip_reason=""
 
           echo "effective_branch=$effective_branch" >>"$GITHUB_OUTPUT"
           echo "effective_ref=$effective_ref" >>"$GITHUB_OUTPUT"
