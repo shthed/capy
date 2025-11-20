@@ -88,6 +88,31 @@
 
       applyPrebootMetrics();
     </script>
+    <div
+      id="errorToast"
+      class="error-toast"
+      role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
+      tabindex="-1"
+      hidden
+    >
+      <div class="error-toast__content">
+        <div class="error-toast__header">
+          <p class="error-toast__title">Something went wrong</p>
+          <button
+            type="button"
+            class="error-toast__close"
+            data-error-close
+            aria-label="Dismiss error notification"
+          >
+            ×
+          </button>
+        </div>
+        <p class="error-toast__message" data-error-message></p>
+        <pre class="error-toast__stack" data-error-stack aria-label="Error details"></pre>
+      </div>
+    </div>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
         <button
@@ -1416,6 +1441,10 @@
       const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
       const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
       const samplePreview = document.getElementById("sampleArtPreview");
+      const errorToast = document.getElementById("errorToast");
+      const errorToastMessage = errorToast?.querySelector("[data-error-message]") || null;
+      const errorToastStack = errorToast?.querySelector("[data-error-stack]") || null;
+      const errorToastCloseButton = errorToast?.querySelector("[data-error-close]") || null;
       const gameSelectionList = document.getElementById("gameSelectionList");
       const gameSelectionEmpty = document.getElementById("gameSelectionEmpty");
       const startHint = document.getElementById("startHint");
@@ -4283,6 +4312,18 @@
         }
       }
 
+      if (errorToastCloseButton) {
+        errorToastCloseButton.addEventListener("click", () => hideGlobalErrorNotice());
+      }
+
+      if (errorToast) {
+        errorToast.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") {
+            hideGlobalErrorNotice();
+          }
+        });
+      }
+
       if (startHintCloseButton) {
         startHintCloseButton.addEventListener("click", () => {
           hideStartScreen();
@@ -6049,6 +6090,70 @@
         renderDebugLog();
       }
 
+      function hideGlobalErrorNotice() {
+        if (!errorToast) return;
+        errorToast.hidden = true;
+      }
+
+      function showGlobalErrorNotice({ message, stack } = {}) {
+        if (!errorToast) return;
+        const resolvedMessage =
+          message && String(message).trim() ? String(message).trim() : "Unexpected error encountered.";
+        const resolvedStack = stack ? String(stack).trim() : "";
+
+        if (errorToastMessage) {
+          errorToastMessage.textContent = resolvedMessage;
+        }
+
+        if (errorToastStack) {
+          if (resolvedStack) {
+            errorToastStack.textContent = resolvedStack;
+            errorToastStack.hidden = false;
+          } else {
+            errorToastStack.textContent = "";
+            errorToastStack.hidden = true;
+          }
+        }
+
+        errorToast.hidden = false;
+        const focusTarget = errorToastCloseButton || errorToast;
+        if (focusTarget && typeof focusTarget.focus === "function") {
+          requestAnimationFrame(() => {
+            focusTarget.focus({ preventScroll: true });
+          });
+        }
+      }
+
+      function extractStackFromValue(value) {
+        if (!value) {
+          return "";
+        }
+        if (value instanceof Error && value.stack) {
+          return value.stack;
+        }
+        if (typeof value === "object" && "stack" in value && typeof value.stack === "string") {
+          return value.stack;
+        }
+        return "";
+      }
+
+      function deriveStackFromArgs(args) {
+        if (!Array.isArray(args)) {
+          return "";
+        }
+        for (const arg of args) {
+          const stack = extractStackFromValue(arg);
+          if (stack) {
+            return stack;
+          }
+        }
+        return "";
+      }
+
+      function deriveStackFromEvent(event) {
+        return extractStackFromValue(event?.error) || extractStackFromValue(event?.reason);
+      }
+
       function formatConsoleValue(value) {
         if (value instanceof Error) {
           return value.stack || `${value.name || "Error"}: ${value.message || ""}`.trim();
@@ -6123,6 +6228,10 @@
                 const payload = joinConsoleArguments(args);
                 const message = payload ? `[${label}] ${payload}` : `[${label}]`;
                 logDebug(message);
+                if (label === "Error") {
+                  const stack = deriveStackFromArgs(args);
+                  showGlobalErrorNotice({ message, stack });
+                }
               } catch (_error) {
                 /* Ignore debug log failures. */
               }
@@ -6156,6 +6265,10 @@
             }
             const message = parts.length ? parts.join(" – ") : label;
             logDebug(`[${label}] ${message}`);
+            showGlobalErrorNotice({
+              message,
+              stack: deriveStackFromEvent(event),
+            });
           } catch (_error) {
             /* Ignore logging failures. */
           }
