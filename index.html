@@ -161,6 +161,72 @@
             Upload Image
           </button>
         </div>
+        <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-gameplay"
+            aria-selected="true"
+            data-settings-tab="gameplay"
+            data-settings-tab-default
+          >
+            Gameplay
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-hints"
+            aria-selected="false"
+            data-settings-tab="hints"
+          >
+            Hints
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-controls"
+            aria-selected="false"
+            data-settings-tab="controls"
+          >
+            Controls
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-appearance"
+            aria-selected="false"
+            data-settings-tab="appearance"
+          >
+            Appearance
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-generator"
+            aria-selected="false"
+            data-settings-tab="generator"
+          >
+            Generator
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-saves"
+            aria-selected="false"
+            data-settings-tab="saves"
+          >
+            Saves
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-controls="settingsPanel-help"
+            aria-selected="false"
+            data-settings-tab="help"
+          >
+            Help &amp; logs
+          </button>
+        </nav>
         <div class="settings-body">
           <div class="settings-content" data-settings-scroll>
             <section class="settings-section" data-settings-section="gameplay">
@@ -1066,6 +1132,7 @@
         }
         const tabButtons = Array.from(sheetEl.querySelectorAll("[data-settings-tab]"));
         const tabPanels = Array.from(sheetEl.querySelectorAll("[data-settings-panel]"));
+        const tabSections = tabPanels.map((panel) => panel.closest("[data-settings-section]") || null);
         const scrollContainer =
           sheetEl.querySelector("[data-settings-scroll]") || sheetEl.querySelector(".sheet-body") || null;
         const defaultTabId =
@@ -1093,11 +1160,16 @@
             candidate.setAttribute("aria-selected", selected ? "true" : "false");
             candidate.setAttribute("tabindex", selected ? "0" : "-1");
           }
-          for (const candidate of tabPanels) {
+          tabPanels.forEach((candidate, index) => {
             const isTarget = candidate === panel;
+            const section = tabSections[index];
             candidate.hidden = !isTarget;
             candidate.setAttribute("aria-hidden", isTarget ? "false" : "true");
-          }
+            if (section && section !== candidate) {
+              section.hidden = !isTarget;
+              section.setAttribute("aria-hidden", isTarget ? "false" : "true");
+            }
+          });
           if (scrollContainer && (resetScroll || changed)) {
             scrollContainer.scrollTop = 0;
           }
@@ -1137,6 +1209,10 @@
               }
             });
           });
+        }
+
+        if (tabButtons.length > 0 && defaultTabId) {
+          component.update({ activeId: activeTabId || defaultTabId, force: true });
         }
 
         function focusIndex(index, options = {}) {
@@ -1354,6 +1430,7 @@
         settingsSheet?.querySelector("[data-settings-scroll]") ||
         settingsSheet?.querySelector(".sheet-body") ||
         null;
+      const settingsTabs = createSettingsTabsComponent(settingsSheet);
       const generatorPanel = settingsSheet?.querySelector('[data-settings-panel="generator"]') || null;
       const helpPanel = settingsSheet?.querySelector('[data-settings-panel="help"]') || null;
       const sheetRegistry = [settingsSheet].filter(Boolean);
@@ -5294,7 +5371,11 @@
         const { tabId = null, focusTab = false, resetScroll = true, force = false } = options;
         openSheet(settingsSheet);
         ensureSettingsSheetPosition({ forceCenter: force || !settingsSheetPosition });
-        if (typeof tabId === "string" && tabId.length > 0) {
+        const hasTabs = typeof settingsTabs.getTabCount === "function" && settingsTabs.getTabCount() > 0;
+        const targetTabId = tabId || settingsTabs.getActiveTabId?.() || null;
+        if (hasTabs) {
+          settingsTabs.activate(targetTabId, { focusTab, resetScroll, force });
+        } else if (typeof tabId === "string" && tabId.length > 0) {
           scrollSettingsPanelIntoView(tabId, { focus: focusTab, resetScroll });
         } else if (resetScroll && settingsBody) {
           settingsBody.scrollTop = 0;
@@ -13091,7 +13172,7 @@
           class="save-entry"
           role="listitem"
           data-save-id="${metadata.id}"
-          ${isLoaded ? 'data-loaded="true"' : ""}
+          data-loaded="${isLoaded ? "true" : "false"}"
         >
           <div class="save-entry-body">
             ${renderSavePreview(metadata)}
