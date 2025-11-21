@@ -1,20 +1,6 @@
-import { createCanvas2dRenderer as createCanvas2dRendererImpl } from "./render-canvas2d.js";
-import { createSvgRenderer as createSvgRendererImpl } from "./render-svg.js";
-
 const DEFAULT_OVERLAY_FILL = "rgba(248, 250, 252, 1)";
 const DEFAULT_OUTLINE = "rgba(15, 23, 42, 0.65)";
 const DEFAULT_NUMBER = "rgba(15, 23, 42, 0.95)";
-
-let createWebGLRendererImpl = null;
-
-if (typeof document !== "undefined") {
-  try {
-    ({ createWebGLRenderer: createWebGLRendererImpl } = await import("./render-webgl.js"));
-  } catch (error) {
-    console.warn("WebGL renderer unavailable", error);
-    createWebGLRendererImpl = null;
-  }
-}
 
 export function formatNumber(value) {
   if (!Number.isFinite(value)) {
@@ -801,321 +787,239 @@ export function createFrameLogger(label) {
   };
 }
 
-export function createRendererController(canvas, options = {}) {
-  const { initialRenderer = "canvas2d", hooks = {}, renderers = {} } = options || {};
+export function createRendererController(host, options = {}) {
+  const { hooks = {} } = options || {};
+  const renderer = createSvgRenderer(host, hooks);
 
-  const logger = typeof hooks?.log === "function" ? hooks.log : null;
-
-  function emitLog(message, details) {
-    if (!logger) {
-      return;
-    }
-    try {
-      logger(message, details);
-    } catch (error) {
-      console.debug("Renderer log failed", error);
-    }
+  function resize(metrics = {}) {
+    renderer?.setSize?.(metrics.pixelWidth, metrics.pixelHeight);
   }
 
-  const factories = new Map();
-  let activeRenderer = null;
-  let activeType = null;
-  let lastMetrics = null;
-  let controllerApi = null;
-
-  function selectInitialType() {
-    if (initialRenderer && factories.has(initialRenderer)) {
-      return initialRenderer;
+  function renderFrame(args = {}) {
+    const state = args.state || {};
+    const puzzle = state.puzzle || {};
+    const source = puzzle.sourceImage?.image || null;
+    const width = puzzle.width || args.metrics?.pixelWidth || host?.width || 0;
+    const height = puzzle.height || args.metrics?.pixelHeight || host?.height || 0;
+    if (source && typeof source.src === "string") {
+      renderer?.setImageSource(source.src, width, height);
+    } else {
+      renderer?.setImageSource("", width, height);
     }
-    if (factories.has("canvas2d")) {
-      return "canvas2d";
-    }
-    const first = factories.keys().next();
-    return first.done ? null : first.value;
-  }
-
-  function normalizeRendererFactory(type, factory) {
-    const payload = () => ({
-      canvas,
-      hooks,
-      type,
-      metrics: lastMetrics ? { ...lastMetrics } : null,
-      controller: controllerApi,
-    });
-    if (typeof factory === "function") {
-      return () => factory(canvas, hooks, payload());
-    }
-    if (factory && typeof factory === "object") {
-      if (typeof factory.create === "function") {
-        return () => factory.create(canvas, hooks, payload());
-      }
-      if (typeof factory.factory === "function") {
-        return () => factory.factory(canvas, hooks, payload());
-      }
-      return () => factory;
+    if (typeof args.backgroundColor === "string") {
+      renderer?.setBackground?.(args.backgroundColor);
     }
     return null;
   }
 
-  function registerRenderer(type, factory) {
-    const normalizedType = typeof type === "string" ? type.trim() : "";
-    if (!normalizedType) {
-      return false;
+  function fillBackground(args = {}) {
+    if (typeof args.color === "string") {
+      renderer?.setBackground?.(args.color);
     }
-    const normalizedFactory = normalizeRendererFactory(normalizedType, factory);
-    if (!normalizedFactory) {
-      return false;
-    }
-    emitLog("Registering renderer", { type: normalizedType });
-    factories.set(normalizedType, normalizedFactory);
-    if (activeType === normalizedType) {
-      setRenderer(normalizedType, { force: true, quiet: true });
-    } else if (!activeRenderer && selectInitialType() === normalizedType) {
-      ensureRenderer();
-    } else if (initialRenderer === normalizedType && activeType !== normalizedType) {
-      setRenderer(normalizedType, { quiet: true });
-    }
-    return true;
-  }
-
-  function unregisterRenderer(type) {
-    const normalizedType = typeof type === "string" ? type.trim() : "";
-    if (!normalizedType || !factories.has(normalizedType)) {
-      return false;
-    }
-    const wasActive = activeType === normalizedType;
-    emitLog("Unregistering renderer", { type: normalizedType, wasActive });
-    factories.delete(normalizedType);
-    if (wasActive) {
-      dispose();
-      ensureRenderer();
-    }
-    return true;
-  }
-
-  function ensureRenderer() {
-    if (activeRenderer) {
-      return activeRenderer;
-    }
-    const fallbackType = selectInitialType();
-    if (!fallbackType) {
-      return null;
-    }
-    emitLog("Ensuring renderer", { type: fallbackType });
-    return setRenderer(fallbackType, { quiet: true });
-  }
-
-  function setRenderer(type, options = {}) {
-    const { force = false, quiet = false } = options || {};
-    const targetType = type || selectInitialType();
-    if (!targetType) {
-      if (quiet) {
-        return null;
-      }
-      throw new Error("Renderer type not available");
-    }
-    if (!force && activeRenderer && activeType === targetType) {
-      return activeRenderer;
-    }
-    emitLog("Activating renderer", { type: targetType, force });
-    const factory = factories.get(targetType);
-    if (typeof factory !== "function") {
-      emitLog("Renderer activation failed", { type: targetType, reason: "missing-factory" });
-      if (quiet) {
-        return null;
-      }
-      throw new Error(`Unknown renderer type: ${targetType}`);
-    }
-    let renderer;
-    try {
-      renderer = factory();
-    } catch (error) {
-      emitLog("Renderer activation failed", {
-        type: targetType,
-        reason: error && error.message ? error.message : "exception",
-      });
-      if (!quiet) {
-        throw error;
-      }
-      return null;
-    }
-    if (!renderer || typeof renderer !== "object") {
-      emitLog("Renderer factory returned invalid value", { type: targetType });
-      if (!quiet) {
-        throw new Error(`Renderer factory for ${targetType} did not return an object`);
-      }
-      return null;
-    }
-    const previousRenderer = activeRenderer;
-    const previousType = activeType;
-    if (
-      previousRenderer &&
-      previousRenderer !== renderer &&
-      typeof previousRenderer.dispose === "function"
-    ) {
-      try {
-        previousRenderer.dispose();
-      } catch (error) {
-        console.warn("Renderer disposal failed", error);
-      }
-    }
-    activeRenderer = renderer;
-    activeType = targetType;
-    emitLog("Renderer activated", { type: activeType, previousType });
-    if (lastMetrics && typeof activeRenderer.resize === "function") {
-      activeRenderer.resize({ ...lastMetrics });
-    }
-    if (typeof hooks.onRendererChange === "function") {
-      try {
-        hooks.onRendererChange({ type: activeType, previousType });
-      } catch (error) {
-        console.warn("Renderer change hook failed", error);
-      }
-    }
-    return activeRenderer;
-  }
-
-  function getRendererType() {
-    return activeType;
-  }
-
-  function listRenderers() {
-    return Array.from(factories.keys());
-  }
-
-  function resize(metrics) {
-    lastMetrics = metrics ? { ...metrics } : null;
-    const renderer = ensureRenderer();
-    if (renderer && typeof renderer.resize === "function") {
-      renderer.resize(metrics);
-    }
-  }
-
-  function renderFrame(args) {
-    const renderer = ensureRenderer();
-    if (renderer && typeof renderer.renderFrame === "function") {
-      return renderer.renderFrame(args);
-    }
-    return null;
-  }
-
-  function renderPreview(args) {
-    const renderer = ensureRenderer();
-    if (renderer && typeof renderer.renderPreview === "function") {
-      return renderer.renderPreview(args);
-    }
-    return hooks.renderPreview ? hooks.renderPreview(args) : null;
-  }
-
-  function flashRegions(args) {
-    const renderer = ensureRenderer();
-    if (renderer && typeof renderer.flashRegions === "function") {
-      return renderer.flashRegions(args);
-    }
-    if (typeof hooks.flashRegions === "function") {
-      return hooks.flashRegions(args);
-    }
-    return null;
-  }
-
-  function fillBackground(args) {
-    const renderer = ensureRenderer();
-    if (renderer && typeof renderer.fillBackground === "function") {
-      return renderer.fillBackground(args);
-    }
-    if (typeof hooks.fillBackground === "function") {
-      return hooks.fillBackground(args);
-    }
-    return null;
   }
 
   function getContext() {
-    const renderer = ensureRenderer();
-    if (renderer && typeof renderer.getContext === "function") {
-      return renderer.getContext();
-    }
     return null;
   }
 
-  function dispose({ resetMetrics = false } = {}) {
-    if (activeRenderer && typeof activeRenderer.dispose === "function") {
-      try {
-        activeRenderer.dispose();
-      } catch (error) {
-        console.warn("Renderer disposal failed", error);
-      }
-    }
-    emitLog("Renderer disposed", { type: activeType });
-    if (typeof hooks.onRendererChange === "function" && activeType) {
-      try {
-        hooks.onRendererChange({ type: null, previousType: activeType });
-      } catch (error) {
-        console.warn("Renderer change hook failed", error);
-      }
-    }
-    activeRenderer = null;
-    activeType = null;
-    if (resetMetrics) {
-      lastMetrics = null;
-    }
-  }
-
   const api = {
-    setRenderer,
-    getRendererType,
-    listRenderers,
-    registerRenderer,
-    unregisterRenderer,
+    getRendererType: () => "svg",
+    listRenderers: () => ["svg"],
+    setRenderer: () => renderer,
     resize,
     renderFrame,
-    renderPreview,
-    flashRegions,
+    renderPreview: () => null,
+    flashRegions: () => {},
     fillBackground,
-    dispose,
+    dispose: () => renderer?.dispose?.(),
     getContext,
   };
-
-  controllerApi = api;
-
-  registerRenderer("canvas2d", (currentCanvas, currentHooks) =>
-    createCanvas2dRenderer(currentCanvas, currentHooks)
-  );
-
-  if (renderers && typeof renderers === "object") {
-    for (const [type, factory] of Object.entries(renderers)) {
-      registerRenderer(type, factory);
-    }
-  }
-
-  ensureRenderer();
 
   return api;
 }
 
-export function createCanvas2dRenderer(canvas, hooks = {}, payload) {
-  return createCanvas2dRendererImpl(canvas, hooks, payload, {
-    createFrameLogger,
-    getTimestamp,
-  });
-}
-
-export function createSvgRenderer(canvas, hooks = {}, payload) {
-  return createSvgRendererImpl(canvas, hooks, payload, {
-    SceneGraph,
-    buildPathData,
-    computeInkStyles,
-    getFilledState,
-  });
-}
-
-export function createWebGLRenderer(canvas, hooks = {}, payload) {
-  if (!createWebGLRendererImpl) {
-    throw new Error("WebGL renderer is unavailable in this environment");
+export function createSvgRenderer(host, hooks = {}) {
+  if (!host || typeof document === "undefined") {
+    return null;
   }
-  return createWebGLRendererImpl(canvas, hooks, payload, {
-    createFrameLogger,
-    getTimestamp,
-  });
+
+  const NS = "http://www.w3.org/2000/svg";
+  const container = host.parentElement || host;
+  const originalPosition = container.style.position || "";
+  if (originalPosition === "" || originalPosition === "static") {
+    container.style.position = "relative";
+  }
+
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("aria-hidden", "true");
+  svg.style.position = "absolute";
+  svg.style.top = "0";
+  svg.style.left = "0";
+  svg.style.width = "100%";
+  svg.style.height = "100%";
+  svg.style.pointerEvents = "none";
+  svg.style.userSelect = "none";
+  svg.style.display = "block";
+
+  const backgroundRect = document.createElementNS(NS, "rect");
+  backgroundRect.setAttribute("fill", "#f8fafc");
+  svg.appendChild(backgroundRect);
+
+  const baseImage = document.createElementNS(NS, "image");
+  baseImage.setAttribute("preserveAspectRatio", "none");
+  baseImage.style.pointerEvents = "none";
+  svg.appendChild(baseImage);
+
+  const shapesGroup = document.createElementNS(NS, "g");
+  shapesGroup.setAttribute("data-layer", "shapes");
+  shapesGroup.style.pointerEvents = "none";
+  svg.appendChild(shapesGroup);
+
+  const annotationsGroup = document.createElementNS(NS, "g");
+  annotationsGroup.setAttribute("data-layer", "annotations");
+  annotationsGroup.style.pointerEvents = "none";
+  svg.appendChild(annotationsGroup);
+
+  container.insertAdjacentElement("beforeend", svg);
+
+  let viewBox = { x: 0, y: 0, width: host.clientWidth || 1, height: host.clientHeight || 1 };
+  let contentWidth = viewBox.width;
+  let contentHeight = viewBox.height;
+
+  function applyViewBox() {
+    svg.setAttribute("viewBox", `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
+    backgroundRect.setAttribute("x", String(viewBox.x));
+    backgroundRect.setAttribute("y", String(viewBox.y));
+    backgroundRect.setAttribute("width", String(viewBox.width));
+    backgroundRect.setAttribute("height", String(viewBox.height));
+    baseImage.setAttribute("x", String(viewBox.x));
+    baseImage.setAttribute("y", String(viewBox.y));
+    baseImage.setAttribute("width", String(contentWidth));
+    baseImage.setAttribute("height", String(contentHeight));
+  }
+
+  function setSize(width, height) {
+    const w = Math.max(1, Math.round(width || host.clientWidth || 1));
+    const h = Math.max(1, Math.round(height || host.clientHeight || 1));
+    svg.setAttribute("width", String(w));
+    svg.setAttribute("height", String(h));
+    if (!contentWidth || !contentHeight) {
+      contentWidth = w;
+      contentHeight = h;
+      viewBox = { x: 0, y: 0, width: w, height: h };
+      applyViewBox();
+    }
+  }
+
+  function setImageSource(src, width, height) {
+    if (typeof src === "string" && src) {
+      baseImage.setAttribute("href", src);
+      baseImage.style.display = "";
+    } else {
+      baseImage.removeAttribute("href");
+      baseImage.style.display = "none";
+    }
+    if (Number.isFinite(width) && Number.isFinite(height)) {
+      contentWidth = width;
+      contentHeight = height;
+      if (viewBox.width === 0 || viewBox.height === 0) {
+        viewBox.width = width;
+        viewBox.height = height;
+      }
+      applyViewBox();
+    }
+  }
+
+  function setBackground(fill) {
+    if (typeof fill === "string" && fill) {
+      backgroundRect.setAttribute("fill", fill);
+    }
+  }
+
+  function setViewBox(x, y, width, height) {
+    if (Number.isFinite(x)) viewBox.x = x;
+    if (Number.isFinite(y)) viewBox.y = y;
+    if (Number.isFinite(width) && width > 0) viewBox.width = width;
+    if (Number.isFinite(height) && height > 0) viewBox.height = height;
+    applyViewBox();
+  }
+
+  function pan(dx = 0, dy = 0) {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.width, viewBox.height);
+  }
+
+  function zoom(factor = 1, originX = contentWidth / 2, originY = contentHeight / 2) {
+    if (!Number.isFinite(factor) || factor <= 0) return;
+    const nextWidth = viewBox.width / factor;
+    const nextHeight = viewBox.height / factor;
+    const offsetX = (originX - viewBox.x) * (1 - 1 / factor);
+    const offsetY = (originY - viewBox.y) * (1 - 1 / factor);
+    setViewBox(viewBox.x + offsetX, viewBox.y + offsetY, nextWidth, nextHeight);
+  }
+
+  function addShape(tag = "path", attributes = {}, layer = "shapes") {
+    const element = document.createElementNS(NS, tag);
+    Object.entries(attributes || {}).forEach(([key, value]) => {
+      if (value != null) {
+        element.setAttribute(key, String(value));
+      }
+    });
+    const target = layer === "annotations" ? annotationsGroup : shapesGroup;
+    target.appendChild(element);
+    return element;
+  }
+
+  function removeShape(element) {
+    if (element?.parentNode) {
+      element.parentNode.removeChild(element);
+    }
+  }
+
+  function clear() {
+    while (shapesGroup.firstChild) {
+      shapesGroup.removeChild(shapesGroup.firstChild);
+    }
+    while (annotationsGroup.firstChild) {
+      annotationsGroup.removeChild(annotationsGroup.firstChild);
+    }
+  }
+
+  function dispose() {
+    svg.remove();
+    if (container.style.position === "relative" && originalPosition === "") {
+      container.style.position = "";
+    }
+  }
+
+  applyViewBox();
+
+  hooks?.onReady?.({ svg, baseImage, shapesGroup, annotationsGroup });
+
+  return {
+    svg,
+    baseImage,
+    shapesGroup,
+    annotationsGroup,
+    setImageSource,
+    addShape,
+    removeShape,
+    clear,
+    setViewBox,
+    pan,
+    zoom,
+    setSize,
+    setBackground,
+    dispose,
+  };
+}
+
+export function createCanvas2dRenderer() {
+  throw new Error("Canvas renderer has been removed in favour of the SVG renderer.");
+}
+
+export function createWebGLRenderer() {
+  throw new Error("WebGL renderer has been removed in favour of the SVG renderer.");
 }
 
 export const sceneFormat = {
@@ -1161,4 +1065,3 @@ if (globalTarget) {
 }
 
 export default rendererExports;
-
