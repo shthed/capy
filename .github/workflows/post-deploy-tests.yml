@@ -76,7 +76,13 @@ jobs:
           if [ "${BRANCH_NAME}" = "main" ]; then
             PREVIEW_URL="${BASE_URL}/"
           else
-            SAFE_NAME="automation-${SAFE_NAME}"
+            case "$SAFE_NAME" in
+              automation-*)
+                ;;
+              *)
+                SAFE_NAME="automation-${SAFE_NAME}"
+                ;;
+            esac
             PREVIEW_URL="${BASE_URL}/${SAFE_NAME}/"
           fi
 
