@@ -192,6 +192,17 @@
         <button type="button" class="close-button" data-sheet-close="settings">Close</button>
       </div>
       <div class="sheet-body">
+        <section class="sheet-section" aria-labelledby="settingsLoadHeading">
+          <h3 id="settingsLoadHeading">Settings loader</h3>
+          <p class="control-note">Settings now load before the rest of the app and keep a running debug log.</p>
+          <div
+            id="settingsLoadConsole"
+            class="debug-log settings-loading-console"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions text"
+          ></div>
+        </section>
         <div class="sheet-actions" aria-label="Import an image or puzzle">
           <button id="settingsUploadButton" type="button" aria-label="Upload image or JSON puzzle">
             Upload Image
@@ -1140,6 +1151,24 @@
             <div class="log-actions">
               <button id="clearDebugLog" type="button">Clear log</button>
             </div>
+            <section class="sheet-section" aria-labelledby="settingsJsonHeading">
+              <h3 id="settingsJsonHeading">Settings JSON</h3>
+              <p class="control-note">
+                Review or update the current settings as JSON. Export a snapshot or import one from the textarea
+                below.
+              </p>
+              <label class="visually-hidden" for="settingsJsonView">Settings JSON</label>
+              <textarea id="settingsJsonView" class="json-view" rows="8" spellcheck="false"></textarea>
+              <div class="json-actions">
+                <button id="refreshSettingsJson" type="button">Refresh</button>
+                <button id="exportSettingsJson" type="button">Export JSON</button>
+                <button id="applySettingsJson" type="button">Import JSON</button>
+                <label class="json-upload">
+                  <input id="importSettingsFile" type="file" accept="application/json" hidden />
+                  <span role="button" aria-controls="importSettingsFile">Upload file</span>
+                </label>
+              </div>
+            </section>
           </section>
         </div>
         </section>
@@ -1147,6 +1176,62 @@
     </div>
   </div>
   </div>
+    <script>
+      (() => {
+        const sheet = document.getElementById("settingsSheet");
+        const settingsButton = document.getElementById("settingsButton");
+        const closeButtons = Array.from(document.querySelectorAll('[data-sheet-close="settings"]'));
+        const consoleEl = document.getElementById("settingsLoadConsole");
+
+        function log(message) {
+          if (!consoleEl) return;
+          const entry = document.createElement("div");
+          entry.className = "log-entry";
+          entry.textContent = `[settings] ${message}`;
+          consoleEl.appendChild(entry);
+          consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        function setOpen(nextOpen) {
+          if (!sheet) return;
+          const open = Boolean(nextOpen);
+          sheet.classList.toggle("hidden", !open);
+          sheet.setAttribute("aria-hidden", open ? "false" : "true");
+          settingsButton?.setAttribute("aria-expanded", open ? "true" : "false");
+        }
+
+        settingsButton?.addEventListener("click", () => {
+          const isHidden = sheet?.classList.contains("hidden") ?? true;
+          setOpen(isHidden);
+          if (isHidden) {
+            log("Opened from launcher before full app load");
+          }
+        });
+
+        closeButtons.forEach((button) =>
+          button.addEventListener("click", () => {
+            setOpen(false);
+            log("Closed while in fallback mode");
+          })
+        );
+
+        window.capySettingsBootstrap = {
+          log,
+          setOpen,
+          recordError(message) {
+            log(message || "Unknown settings error");
+          },
+          syncJson(text) {
+            const view = document.getElementById("settingsJsonView");
+            if (view && typeof text === "string") {
+              view.value = text;
+            }
+          },
+        };
+
+        log("Settings fallback ready before renderer bootstrap");
+      })();
+    </script>
     <script type="module" src="./render.js"></script>
       <script type="module">
         import {
@@ -1159,6 +1244,10 @@
         import { html, renderTemplate } from "./ui-template.js";
 
         (() => {
+          const settingsBootstrap =
+            window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
+          settingsBootstrap.log("Renderer bootstrap starting");
+
           const skipBootstrap = beginRendererBootstrap();
           if (skipBootstrap) {
             return;
@@ -1493,6 +1582,7 @@
       const fileInput = document.getElementById("fileInput");
       const selectButton = document.getElementById("selectImage");
       const settingsUploadButton = document.getElementById("settingsUploadButton");
+      const settingsLoadConsole = document.getElementById("settingsLoadConsole");
       const sampleButtons = Array.from(document.querySelectorAll('[data-action="load-sample"]'));
       const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
       const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
@@ -1532,6 +1622,11 @@
       const feedbackSubmitButton = document.getElementById("feedbackSubmit");
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
+      const settingsJsonView = document.getElementById("settingsJsonView");
+      const refreshSettingsJsonButton = document.getElementById("refreshSettingsJson");
+      const exportSettingsJsonButton = document.getElementById("exportSettingsJson");
+      const applySettingsJsonButton = document.getElementById("applySettingsJson");
+      const importSettingsFileInput = document.getElementById("importSettingsFile");
       const saveStorageSummary = document.getElementById("saveStorageSummary");
       const deleteAllSavesButton = document.getElementById("deleteAllSaves");
       const viewportEl = document.getElementById("viewport");
@@ -3214,6 +3309,7 @@
           state.paletteSort = storedPaletteSort;
         }
       }
+      refreshSettingsJsonView(state.settings);
 
       const unavailableRenderers = new Set();
 
@@ -4263,6 +4359,64 @@
       }
       if (settingsUploadButton) {
         settingsUploadButton.addEventListener("click", window.requestUpload);
+      }
+
+      function handleSettingsJsonImport(text) {
+        if (typeof text !== "string" || !text.trim()) {
+          settingsBootstrap.recordError("No JSON provided to import");
+          return false;
+        }
+        try {
+          const parsed = JSON.parse(text);
+          return applySettingsSnapshot(parsed, { immediate: true });
+        } catch (error) {
+          console.error("Failed to import settings JSON", error);
+          settingsBootstrap.recordError("Settings JSON import failed");
+          return false;
+        }
+      }
+
+      if (refreshSettingsJsonButton) {
+        refreshSettingsJsonButton.addEventListener("click", () => {
+          refreshSettingsJsonView();
+          settingsBootstrap.log("Settings JSON refreshed");
+        });
+      }
+
+      if (exportSettingsJsonButton) {
+        exportSettingsJsonButton.addEventListener("click", () => {
+          const serialized = refreshSettingsJsonView();
+          if (!serialized) return;
+          const blob = new Blob([serialized], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "capy-settings.json";
+          link.click();
+          URL.revokeObjectURL(url);
+          settingsBootstrap.log("Exported settings JSON");
+        });
+      }
+
+      if (applySettingsJsonButton) {
+        applySettingsJsonButton.addEventListener("click", () => {
+          const text = settingsJsonView?.value || "";
+          handleSettingsJsonImport(text);
+        });
+      }
+
+      if (importSettingsFileInput) {
+        importSettingsFileInput.addEventListener("change", async (event) => {
+          const target = event.target;
+          const [file] = target?.files || [];
+          if (!file) return;
+          try {
+            const text = await file.text();
+            handleSettingsJsonImport(text);
+          } finally {
+            target.value = "";
+          }
+        });
       }
 
       function beginSettingsLauncherDrag(event) {
@@ -5458,6 +5612,8 @@
         }
         if (sheet === settingsSheet) {
           setSettingsSheetOpenState(true);
+          settingsBootstrap.setOpen(true);
+          settingsBootstrap.log("Settings sheet opened");
         }
       }
 
@@ -5514,6 +5670,8 @@
         if (sheet === settingsSheet) {
           setSettingsSheetOpenState(false);
           clearPendingImport();
+          settingsBootstrap.setOpen(false);
+          settingsBootstrap.log("Settings sheet closed");
         }
       }
 
@@ -12440,6 +12598,7 @@
       function loadUserSettings() {
         if (typeof localStorage === "undefined") return null;
         try {
+          settingsBootstrap.log("Loading stored settings");
           const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
           if (!raw) return null;
           const parsed = JSON.parse(raw);
@@ -12468,11 +12627,56 @@
               console.error("Failed to rewrite stored settings", persistError);
             }
           }
+          settingsBootstrap.log("Stored settings hydrated");
           return normalized;
         } catch (error) {
           console.error("Failed to load stored settings", error);
+          settingsBootstrap.recordError("Stored settings unavailable; using defaults");
         }
         return null;
+      }
+
+      function refreshSettingsJsonView(source = state?.settings) {
+        if (!settingsJsonView) return null;
+        try {
+          const snapshot = getUserSettingsSnapshot(source);
+          const serialized = snapshot ? JSON.stringify(snapshot, null, 2) : "{}";
+          settingsJsonView.value = serialized;
+          settingsBootstrap.syncJson(serialized);
+          return serialized;
+        } catch (error) {
+          console.error("Failed to render settings JSON", error);
+          settingsBootstrap.recordError("Could not format settings JSON");
+          return null;
+        }
+      }
+
+      function applySettingsSnapshot(payload, options = {}) {
+        const normalized = normalizeStoredUserSettings(payload);
+        if (!normalized) {
+          return false;
+        }
+        suppressSettingsPersist += 1;
+        try {
+          const { paletteSort: nextPaletteSort, ...rest } = normalized;
+          state.settings = {
+            ...state.settings,
+            ...rest,
+          };
+          if (typeof nextPaletteSort === "string" && nextPaletteSort) {
+            state.paletteSort = nextPaletteSort;
+          }
+          applyGameplaySettings(state.settings);
+          updateOptionOutputs();
+          updateCommandStates();
+          renderDebugLog();
+        } finally {
+          suppressSettingsPersist = Math.max(0, suppressSettingsPersist - 1);
+        }
+        refreshSettingsJsonView(state.settings);
+        scheduleSettingsPersist({ immediate: options.immediate === true });
+        settingsBootstrap.log("Applied settings snapshot");
+        return true;
       }
 
       function flushPendingAutosave(reason = "shutdown") {
@@ -13860,6 +14064,10 @@
       }
 
           bootstrapSucceeded = true;
+        } catch (error) {
+          console.error("Failed to bootstrap app", error);
+          settingsBootstrap.recordError("Runtime bootstrap failed; settings stayed available");
+          throw error;
         } finally {
           completeRendererBootstrap(bootstrapSucceeded);
         }
