@@ -190,6 +190,8 @@ Tweaking the deployment:
 - **Built-in capybara sample.** The "Capybara Springs" illustration loads automatically on boot when no saves exist in the medium detail preset so players can start painting immediately.
 - **Sample detail presets.** Low/Medium/High chips tune colour counts, resize targets, k-means iterations, and smoothing passes so QA can switch between breezy ≈26-region boards, balanced ≈20-region sessions, or high-fidelity ≈140-region runs.
 - **Detailed debug logging.** The **Help & logs** tab in the Settings dialog announces sample loads, fills, hints, zooms, background tweaks, fullscreen toggles, ignored clicks, and now mirrors console warnings/errors (including unhandled rejections) so QA can confirm issues without opening DevTools.
+- **Instrumentation and monitoring.** Google Analytics (Measurement ID `G-PB9QNQCD7Q`) records session starts, default and sample puzzle loads, performance timing summaries, and forwarded exceptions so crashes and slowdowns are visible outside the in-app debug log.
+- **Feedback capture.** The Help & logs tab includes a feedback form; submissions log to the debug panel and dispatch a `feedback_submit` analytics event with the category, message snippet, optional contact info, and message length.
 - **Embedded documentation.** The same **Help & logs** tab loads the hosted README (`https://shthed.github.io/capy/README`) for in-app gameplay and contributor notes.
 - **Configurable generator.** Choose between local algorithms (k-means clustering or the posterize-and-merge pass today, with
   room for hosted services) and adjust palette size, minimum region area, resize detail, sampling, iteration count, and smoothing
