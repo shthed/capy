@@ -1,0 +1,5 @@
+{
+  "name": "capy-runtime",
+  "private": true,
+  "type": "module"
+}
