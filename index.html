@@ -231,79 +231,6 @@
           ></div>
         </section>
         <div class="settings-body">
-          <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              aria-controls="settingsPanel-gameplay"
-              aria-selected="true"
-              data-settings-tab="gameplay"
-              data-settings-tab-default
-            >
-              Gameplay
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              aria-controls="settingsPanel-hints"
-              aria-selected="false"
-              data-settings-tab="hints"
-            >
-              Hints
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              aria-controls="settingsPanel-controls"
-              aria-selected="false"
-              data-settings-tab="controls"
-            >
-              Controls
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              aria-controls="settingsPanel-appearance"
-              aria-selected="false"
-              data-settings-tab="appearance"
-            >
-              Appearance
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              aria-controls="settingsPanel-generator"
-              aria-selected="false"
-              data-settings-tab="generator"
-            >
-              Generator
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              aria-controls="settingsPanel-saves"
-              aria-selected="false"
-              data-settings-tab="saves"
-            >
-              Saves
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              aria-controls="settingsPanel-help"
-              aria-selected="false"
-              data-settings-tab="help"
-            >
-              Help &amp; logs
-            </button>
-          </nav>
           <div class="settings-content" data-settings-scroll>
             <section class="settings-section" data-settings-section="gameplay">
               <div class="settings-section-heading">
@@ -1368,144 +1295,6 @@
         return { update, on, emit, root, get props() { return currentProps; } };
       }
 
-      function createSettingsTabsComponent(sheetEl) {
-        if (!sheetEl) {
-          return {
-            root: null,
-            update() {},
-            on() {},
-            activate() {
-              return null;
-            },
-            focusIndex() {
-              return null;
-            },
-            getActiveTabId() {
-              return null;
-            },
-            getTabCount() {
-              return 0;
-            },
-          };
-        }
-        const tabButtons = Array.from(sheetEl.querySelectorAll("[data-settings-tab]"));
-        const tabPanels = Array.from(sheetEl.querySelectorAll("[data-settings-panel]"));
-        const tabSections = tabPanels.map((panel) => panel.closest("[data-settings-section]") || null);
-        const scrollContainer =
-          sheetEl.querySelector("[data-settings-scroll]") || sheetEl.querySelector(".sheet-body") || null;
-        const defaultTabId =
-          tabButtons.find((button) => button?.hasAttribute("data-settings-tab-default"))?.dataset.settingsTab ||
-          (tabButtons[0]?.dataset.settingsTab ?? null);
-        let activeTabId = defaultTabId;
-
-        const component = createComponent(sheetEl, ({ props, emit }) => {
-          const {
-            activeId = activeTabId,
-            focusTab = false,
-            force = false,
-            resetScroll = false,
-          } = props;
-          const tabId = activeId || defaultTabId;
-          const button = tabButtons.find((candidate) => candidate?.dataset.settingsTab === tabId);
-          const panel = tabPanels.find((candidate) => candidate?.dataset.settingsPanel === tabId);
-          if (!button || !panel) {
-            return;
-          }
-          const changed = force || activeTabId !== tabId;
-          activeTabId = tabId;
-          for (const candidate of tabButtons) {
-            const selected = candidate === button;
-            candidate.setAttribute("aria-selected", selected ? "true" : "false");
-            candidate.setAttribute("tabindex", selected ? "0" : "-1");
-          }
-          tabPanels.forEach((candidate, index) => {
-            const isTarget = candidate === panel;
-            const section = tabSections[index];
-            candidate.hidden = !isTarget;
-            candidate.setAttribute("aria-hidden", isTarget ? "false" : "true");
-            if (section && section !== candidate) {
-              section.hidden = !isTarget;
-              section.setAttribute("aria-hidden", isTarget ? "false" : "true");
-            }
-          });
-          if (scrollContainer && (resetScroll || changed)) {
-            scrollContainer.scrollTop = 0;
-          }
-          if (focusTab) {
-            button.focus();
-          }
-          emit("change", { tabId, changed, force });
-        });
-
-        if (tabButtons.length > 0) {
-          tabButtons.forEach((button, index) => {
-            button.addEventListener("click", () => {
-              component.update({ activeId: button.dataset.settingsTab, resetScroll: true });
-            });
-            button.addEventListener("keydown", (event) => {
-              switch (event.key) {
-                case "ArrowRight":
-                case "ArrowDown":
-                  event.preventDefault();
-                  focusIndex(index + 1, { resetScroll: true });
-                  break;
-                case "ArrowLeft":
-                case "ArrowUp":
-                  event.preventDefault();
-                  focusIndex(index - 1, { resetScroll: true });
-                  break;
-                case "Home":
-                  event.preventDefault();
-                  focusIndex(0, { resetScroll: true });
-                  break;
-                case "End":
-                  event.preventDefault();
-                  focusIndex(tabButtons.length - 1, { resetScroll: true });
-                  break;
-                default:
-                  break;
-              }
-            });
-          });
-        }
-
-        if (tabButtons.length > 0 && defaultTabId) {
-          component.update({ activeId: activeTabId || defaultTabId, force: true });
-        }
-
-        function focusIndex(index, options = {}) {
-          if (tabButtons.length === 0) {
-            return null;
-          }
-          const length = tabButtons.length;
-          const normalized = ((index % length) + length) % length;
-          const target = tabButtons[normalized];
-          const tabId = target?.dataset.settingsTab;
-          if (tabId) {
-            component.update({ activeId: tabId, focusTab: true, ...options });
-          }
-          return tabId || null;
-        }
-
-        return {
-          root: sheetEl,
-          update: component.update,
-          on: component.on,
-          getActiveTabId() {
-            return activeTabId;
-          },
-          getTabCount() {
-            return tabButtons.length;
-          },
-          activate(tabId, options = {}) {
-            const nextTab = tabId || activeTabId || defaultTabId;
-            component.update({ activeId: nextTab, ...options });
-            return nextTab;
-          },
-          focusIndex,
-        };
-      }
-
       function createPaletteDockComponent({ root, sortControl }) {
         const component = createComponent(root, ({ props, emit }) => {
           if (!root) return;
@@ -1693,7 +1482,6 @@
         settingsSheet?.querySelector("[data-settings-scroll]") ||
         settingsSheet?.querySelector(".sheet-body") ||
         null;
-      const settingsTabs = createSettingsTabsComponent(settingsSheet);
       const generatorPanel = settingsSheet?.querySelector('[data-settings-panel="generator"]') || null;
       const helpPanel = settingsSheet?.querySelector('[data-settings-panel="help"]') || null;
       const sheetRegistry = [settingsSheet].filter(Boolean);
@@ -5787,11 +5575,7 @@
         const { tabId = null, focusTab = false, resetScroll = true, force = false } = options;
         openSheet(settingsSheet);
         ensureSettingsSheetPosition({ forceCenter: force || !settingsSheetPosition });
-        const hasTabs = typeof settingsTabs.getTabCount === "function" && settingsTabs.getTabCount() > 0;
-        const targetTabId = tabId || settingsTabs.getActiveTabId?.() || null;
-        if (hasTabs) {
-          settingsTabs.activate(targetTabId, { focusTab, resetScroll, force });
-        } else if (typeof tabId === "string" && tabId.length > 0) {
+        if (typeof tabId === "string" && tabId.length > 0) {
           scrollSettingsPanelIntoView(tabId, { focus: focusTab, resetScroll });
         } else if (resetScroll && settingsBody) {
           settingsBody.scrollTop = 0;
