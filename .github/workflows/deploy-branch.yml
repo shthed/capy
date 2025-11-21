@@ -52,6 +52,7 @@ jobs:
           if [ "$BRANCH_NAME" = "main" ]; then
             SAFE_NAME=""
           else
+            SAFE_NAME="automation-${SAFE_NAME}"
             TARGET_DIR="$SAFE_NAME"
           fi
 
@@ -90,6 +91,7 @@ jobs:
                   fi
                   safe_name=$(sanitize_branch_name "$branch_name")
                   if [ -n "$safe_name" ]; then
+                    safe_name="automation-${safe_name}"
                     printf '%s\n' "$safe_name"
                   fi
                 done \

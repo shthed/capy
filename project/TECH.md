@@ -51,7 +51,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
   - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
-  - `.github/workflows/deploy-branch.yml` – Deploys every branch push to GitHub Pages (root for `main`, sanitized subfolders for everything else) and supports manual dispatches via the `target_branch` input.
+  - `.github/workflows/deploy-branch.yml` – Deploys every branch push to GitHub Pages (root for `main`, prefixed, sanitized subfolders for everything else) and supports manual dispatches via the `target_branch` input.
   - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days by calling `project/scripts/cleanup-branches.mjs`.
 
 ## Project Health Snapshot
@@ -91,10 +91,11 @@ manual runs and hands those values to the deploy step:
 1. **Checkout & sanitise.** The action checks out the triggering branch (shallow
    fetch for speed) and the `gh-pages` deployment branch, converts branch names
    into URL-safe slugs (e.g., `automation/feature` → `automation-feature`), and
-   creates a matching directory for non-`main` deployments. Concurrency keys
-   include the branch name so different previews deploy in parallel without
-   overwriting each other. (`main` maps to the Pages root; every other branch
-   lands in `/automation-<slug>/`.)
+   creates a matching directory for non-`main` deployments with an explicit
+   `automation-` prefix to keep preview folders scoped (e.g.,
+   `/automation-automation-feature/`). Concurrency keys include the branch name
+   so different previews deploy in parallel without overwriting each other.
+   (`main` maps to the Pages root; every other branch lands in `/automation-<slug>/`.)
 2. **Content sync.**
    - `main` copies the runtime payload from the repository root (`index.html`,
      `styles.css`, `render.js`, `puzzle-generation.js`, `runtime.js`,
@@ -103,7 +104,7 @@ manual runs and hands those values to the deploy step:
      `project/scripts/build-pages-site.mjs` so
      https://shthed.github.io/capy/README/ mirrors the handbook.
    - Non-`main` branches clear their directory (e.g.,
-     `/automation-feature/`), copy the same runtime payload plus JS/CSS/JSON
+     `/automation-automation-feature/`), copy the same runtime payload plus JS/CSS/JSON
      dependencies, and generate a scoped `/README/index.html` for that
      directory.
    After cloning `gh-pages`, the workflow removes preview directories whose
@@ -161,7 +162,7 @@ Tweaking the deployment:
   runs of the deployment job. It only proceeds for push-triggered runs so manual
   dispatches and `gh-pages` updates do not double-trigger Playwright.
 - **Preview discovery.** Each run sanitises the branch name the same way the
-  deployment workflow does (`automation/feature` → `/automation-feature/`) to
+  deployment workflow does (`automation/feature` → `/automation-automation-feature/`) to
   reconstruct the GitHub Pages preview URL. The computed link feeds both
   Playwright and the PR comment that lands at the end of the job.
 - **Playwright smoke rerun.** Once the preview URL is known, the workflow
