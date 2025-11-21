@@ -1310,12 +1310,12 @@
         } from "./runtime.js";
         import { html, renderTemplate } from "./ui-template.js";
 
-        (() => {
-          const settingsBootstrap =
-            window.capySettingsBootstrap ||
-            Object.freeze({ log() {}, setOpen() {}, detach() {}, recordError() {}, syncJson() {} });
+          (() => {
+            const settingsBootstrap =
+              window.capySettingsBootstrap ||
+              Object.freeze({ log() {}, setOpen() {}, detach() {}, recordError() {}, syncJson() {} });
           settingsBootstrap.detach?.();
-          settingsBootstrap.log("Renderer bootstrap starting");
+            settingsBootstrap.log("Renderer bootstrap starting");
 
           const createUiKit =
             window.capyUiKit ||
