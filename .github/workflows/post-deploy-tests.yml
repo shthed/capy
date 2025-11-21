@@ -206,6 +206,7 @@ jobs:
             const errors = process.env.ERROR_MESSAGES;
             const artifactFound = process.env.ARTIFACT_FOUND === 'true';
             const artifactUrl = process.env.ARTIFACT_URL;
+            const rerunUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/workflows/deploy-branch.yml`;
 
             const lines = [];
 
@@ -228,6 +229,8 @@ jobs:
             if (lines.length === 0) {
               lines.push('Preview link unavailable.');
             }
+
+            lines.push(`[🔁 Rerun deploy](${rerunUrl})`);
 
             const body = lines.join('\n\n');
 
