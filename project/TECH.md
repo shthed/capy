@@ -41,6 +41,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
   - `project/tests/render-controller.spec.js` – Node-based unit coverage that mocks renderer registrations and asserts the controller's fallback hooks and error paths.
   - `project/tests/generator.spec.js` / `project/tests/smoothing.spec.mjs` – Node-driven generator coverage with typed-array fixtures under `project/tests/fixtures/` plus shared helpers in `project/tests/utils/fixtures.js`.
   - `project/scripts/run-tests.js` – Harness invoked by `npm test --silent`; runs the Node test runner before handing off to Playwright so both suites share a single entry point and exit code.
+  - `project/scripts/capture-preview-screenshot.js` – Playwright helper that loads the configured `PLAYWRIGHT_BASE_URL` (falling back to the local dev server) and writes a full-page preview screenshot to `artifacts/ui-review/preview.png` for upload.
   - `project/artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
   - **Playwright local setup** – Inside `project/`, run `npm install` followed by `npm run setup:playwright` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
 - **Tooling & metadata**
@@ -166,11 +167,15 @@ Tweaking the deployment:
   Playwright and the PR comment that lands at the end of the job.
 - **Playwright smoke rerun.** Once the preview URL is known, the workflow
   installs dependencies and reuses `npm test --silent`, pointing Playwright at
-  the hosted branch preview via `PLAYWRIGHT_BASE_URL` so reviewers see the live
-  build rather than a local server.
+  the hosted branch preview via `PLAYWRIGHT_BASE_URL`. When that variable is
+  present the Playwright config skips launching the local dev server so the
+  smoke run hits the deployed payload.
 - **Artifacts.** Any files dropped under `artifacts/ui-review/` (screenshots,
-  traces, reports) are uploaded automatically. The PR comment links directly to
-  the workflow run so reviewers can download them without re-running the suite.
+  traces, reports) are uploaded automatically. The job also captures a fresh
+  `preview.png` screenshot against the hosted URL so reviewers get visual
+  confirmation even on green runs. The PR comment links directly to the
+  uploaded artifact bundle so reviewers can download traces and screenshots
+  without re-running the suite.
 - **PR update.** After the test finishes (pass or fail), the workflow posts a
   comment on every associated PR summarising the preview URL, test outcome, and
   whether UI review artifacts were captured. This keeps the automation loop

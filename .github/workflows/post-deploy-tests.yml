@@ -99,6 +99,15 @@ jobs:
           set -euo pipefail
           npm test --silent 2>&1 | tee artifacts/ui-review/smoke.log
 
+      - name: Capture preview screenshot
+        if: always()
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.preview_url }}
+        working-directory: project
+        run: |
+          set -euo pipefail
+          node ./scripts/capture-preview-screenshot.js
+
       - name: Collect smoke test errors
         id: smoke-summary
         if: always()
@@ -134,6 +143,7 @@ jobs:
 
       - name: Upload UI review artifacts
         if: always()
+        id: upload-ui-artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ui-review-${{ needs.slug.outputs.branch_slug }}-${{ github.run_id }}
@@ -147,6 +157,8 @@ jobs:
           PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
           SMOKE_OUTCOME: ${{ steps.smoke-summary.outputs.outcome }}
           ERROR_MESSAGES: ${{ steps.smoke-summary.outputs.errors }}
+          ARTIFACT_FOUND: ${{ steps.artifact-check.outputs.found }}
+          ARTIFACT_URL: ${{ steps.upload-ui-artifacts.outputs.artifact-url }}
         with:
           script: |
             const pullRequests = context.payload.workflow_run?.pull_requests ?? [];
@@ -158,6 +170,8 @@ jobs:
             const previewUrl = process.env.PREVIEW_URL;
             const smokeOutcome = process.env.SMOKE_OUTCOME;
             const errors = process.env.ERROR_MESSAGES;
+            const artifactFound = process.env.ARTIFACT_FOUND === 'true';
+            const artifactUrl = process.env.ARTIFACT_URL;
 
             const lines = [];
 
@@ -171,6 +185,10 @@ jobs:
 
             if (errors) {
               lines.push('Errors:\n```\n' + errors.trimEnd() + '\n```');
+            }
+
+            if (artifactFound && artifactUrl) {
+              lines.push(`UI review artifacts: ${artifactUrl}`);
             }
 
             if (lines.length === 0) {
