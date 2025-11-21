@@ -66,6 +66,17 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
     <title>Image to Color-by-Number</title>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PB9QNQCD7Q"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+
+      gtag("config", "G-PB9QNQCD7Q");
+    </script>
     <script type="module" src="./runtime.js"></script>
     <style>
       :root {
@@ -88,6 +99,31 @@
 
       applyPrebootMetrics();
     </script>
+    <div
+      id="errorToast"
+      class="error-toast"
+      role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
+      tabindex="-1"
+      hidden
+    >
+      <div class="error-toast__content">
+        <div class="error-toast__header">
+          <p class="error-toast__title">Something went wrong</p>
+          <button
+            type="button"
+            class="error-toast__close"
+            data-error-close
+            aria-label="Dismiss error notification"
+          >
+            ×
+          </button>
+        </div>
+        <p class="error-toast__message" data-error-message></p>
+        <pre class="error-toast__stack" data-error-stack aria-label="Error details"></pre>
+      </div>
+    </div>
     <div id="app">
       <header id="commandRail" aria-label="Game controls">
         <button
@@ -148,20 +184,112 @@
       id="settingsSheet"
       class="sheet hidden"
       role="dialog"
-      aria-labelledby="settingsTitle"
+      aria-label="Settings and tools"
       aria-hidden="true"
     >
       <div class="sheet-header">
-        <h2 id="settingsTitle">Settings</h2>
+        <div class="sheet-header-actions">
+          <button
+            id="settingsUploadButton"
+            class="settings-upload"
+            type="button"
+            aria-label="Upload image or JSON puzzle"
+          >
+            Upload image
+          </button>
+          <div class="loader-status" aria-hidden="true">
+            <span class="status-indicator" aria-hidden="true"></span>
+            <span class="status-label">Loader active</span>
+          </div>
+        </div>
         <button type="button" class="close-button" data-sheet-close="settings">Close</button>
       </div>
       <div class="sheet-body">
-        <div class="sheet-actions" aria-label="Import an image or puzzle">
-          <button id="settingsUploadButton" type="button" aria-label="Upload image or JSON puzzle">
-            Upload Image
-          </button>
-        </div>
+        <section class="sheet-section" aria-label="Settings loader console">
+          <div class="visually-hidden" id="settingsLoadHeading">Settings loader console</div>
+          <div
+            id="settingsLoadConsole"
+            class="debug-log settings-loading-console"
+            role="log"
+            aria-labelledby="settingsLoadHeading"
+            aria-live="polite"
+            aria-relevant="additions text"
+          ></div>
+        </section>
         <div class="settings-body">
+          <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-gameplay"
+              aria-selected="true"
+              data-settings-tab="gameplay"
+              data-settings-tab-default
+            >
+              Gameplay
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-hints"
+              aria-selected="false"
+              data-settings-tab="hints"
+            >
+              Hints
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-controls"
+              aria-selected="false"
+              data-settings-tab="controls"
+            >
+              Controls
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-appearance"
+              aria-selected="false"
+              data-settings-tab="appearance"
+            >
+              Appearance
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-generator"
+              aria-selected="false"
+              data-settings-tab="generator"
+            >
+              Generator
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-saves"
+              aria-selected="false"
+              data-settings-tab="saves"
+            >
+              Saves
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-help"
+              aria-selected="false"
+              data-settings-tab="help"
+            >
+              Help &amp; logs
+            </button>
+          </nav>
           <div class="settings-content" data-settings-scroll>
             <section class="settings-section" data-settings-section="gameplay">
               <div class="settings-section-heading">
@@ -978,6 +1106,51 @@
             <p class="control-note" data-readme-error role="alert" hidden></p>
             <article class="readme-preview" data-readme-content hidden aria-live="polite"></article>
           </section>
+          <section class="sheet-section" aria-labelledby="feedbackHeading">
+            <h3 id="feedbackHeading">Share feedback</h3>
+            <p class="control-note">
+              Tell us what worked, what broke, or what you want next. Submissions are logged anonymously in analytics alongside
+              the debug log.
+            </p>
+            <form id="feedbackForm" class="feedback-form" novalidate>
+              <label class="control">
+                <span>Category</span>
+                <select id="feedbackCategory" autocomplete="off">
+                  <option value="bug" selected>Bug or crash</option>
+                  <option value="idea">Feature request</option>
+                  <option value="puzzle">Puzzle feedback</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label class="control">
+                <span>Your feedback</span>
+                <textarea
+                  id="feedbackMessage"
+                  name="feedbackMessage"
+                  rows="4"
+                  maxlength="800"
+                  required
+                  placeholder="Describe what you experienced, steps to reproduce, or ideas for improvement"
+                ></textarea>
+              </label>
+              <label class="control">
+                <span>Contact (optional)</span>
+                <input
+                  id="feedbackContact"
+                  type="text"
+                  name="feedbackContact"
+                  inputmode="email"
+                  maxlength="120"
+                  placeholder="Email or handle if you want us to follow up"
+                  autocomplete="off"
+                />
+              </label>
+              <div class="feedback-actions">
+                <button id="feedbackSubmit" type="submit">Send feedback</button>
+                <p class="feedback-status" data-feedback-status role="status" aria-live="polite" hidden></p>
+              </div>
+            </form>
+          </section>
           <section class="sheet-section" aria-labelledby="debugHeading">
             <h3 id="debugHeading">Debug log</h3>
             <p class="control-note">
@@ -993,13 +1166,117 @@
             <div class="log-actions">
               <button id="clearDebugLog" type="button">Clear log</button>
             </div>
+            <section class="sheet-section" aria-labelledby="settingsJsonHeading">
+              <h3 id="settingsJsonHeading">Settings JSON</h3>
+              <p class="control-note">
+                Review or update the current settings as JSON. Export a snapshot or import one from the textarea
+                below.
+              </p>
+              <label class="visually-hidden" for="settingsJsonView">Settings JSON</label>
+              <textarea id="settingsJsonView" class="json-view" rows="8" spellcheck="false"></textarea>
+              <div class="json-actions">
+                <button id="refreshSettingsJson" type="button">Refresh</button>
+                <button id="exportSettingsJson" type="button">Export JSON</button>
+                <button id="applySettingsJson" type="button">Import JSON</button>
+                <label class="json-upload">
+                  <input id="importSettingsFile" type="file" accept="application/json" hidden />
+                  <span role="button" aria-controls="importSettingsFile">Upload file</span>
+                </label>
+              </div>
+            </section>
           </section>
         </div>
-        </section>
       </div>
     </div>
   </div>
-  </div>
+    <script>
+      (() => {
+        function createUiKit(root = document) {
+          const cache = new Map();
+          const get = (selector) => {
+            if (!selector) return null;
+            if (cache.has(selector)) {
+              return cache.get(selector);
+            }
+            const node = root.querySelector(selector);
+            cache.set(selector, node || null);
+            return node || null;
+          };
+          const all = (selector) => Array.from(root.querySelectorAll(selector));
+          const toggle = (target, className, force) => {
+            const node = typeof target === "string" ? get(target) : target;
+            if (!node || !className) return node;
+            node.classList.toggle(className, force);
+            return node;
+          };
+          return { get, all, toggle };
+        }
+
+        window.capyUiKit = createUiKit;
+        const ui = createUiKit(document);
+        const sheet = ui.get("#settingsSheet");
+        const settingsButton = ui.get("#settingsButton");
+        const closeButtons = ui.all('[data-sheet-close="settings"]');
+        const consoleEl = ui.get("#settingsLoadConsole");
+
+        function log(message) {
+          if (!consoleEl) return;
+          const timestamp = new Date();
+          const entry = document.createElement("div");
+          entry.className = "log-entry";
+          const time = document.createElement("time");
+          time.dateTime = timestamp.toISOString();
+          time.textContent = timestamp
+            .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+            .replace(/\s+/g, " ");
+          const messageEl = document.createElement("span");
+          messageEl.textContent = `[settings] ${message || "Ready"}`;
+          entry.appendChild(time);
+          entry.appendChild(messageEl);
+          consoleEl.appendChild(entry);
+          consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        function setOpen(nextOpen) {
+          if (!sheet) return;
+          const open = Boolean(nextOpen);
+          ui.toggle(sheet, "hidden", !open);
+          sheet.setAttribute("aria-hidden", open ? "false" : "true");
+          settingsButton?.setAttribute("aria-expanded", open ? "true" : "false");
+        }
+
+        settingsButton?.addEventListener("click", () => {
+          const isHidden = sheet?.classList.contains("hidden") ?? true;
+          setOpen(isHidden);
+          if (isHidden) {
+            log("Opened from launcher before full app load");
+          }
+        });
+
+        closeButtons.forEach((button) =>
+          button.addEventListener("click", () => {
+            setOpen(false);
+            log("Closed while in fallback mode");
+          })
+        );
+
+        window.capySettingsBootstrap = {
+          log,
+          setOpen,
+          recordError(message) {
+            log(message || "Unknown settings error");
+          },
+          syncJson(text) {
+            const view = document.getElementById("settingsJsonView");
+            if (view && typeof text === "string") {
+              view.value = text;
+            }
+          },
+        };
+
+        log("Settings fallback ready before renderer bootstrap");
+      })();
+    </script>
     <script type="module" src="./render.js"></script>
       <script type="module">
         import {
@@ -1010,8 +1287,32 @@
           createWebGLRenderer,
           SceneTileLoader,
         } from "./runtime.js";
+        import { html, renderTemplate } from "./ui-template.js";
 
         (() => {
+          const settingsBootstrap =
+            window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
+          settingsBootstrap.log("Renderer bootstrap starting");
+
+          const createUiKit =
+            window.capyUiKit ||
+            function createUiKit(root = document) {
+              const cache = new Map();
+              const get = (selector) => {
+                if (!selector) return null;
+                if (cache.has(selector)) {
+                  return cache.get(selector);
+                }
+                const node = root.querySelector(selector);
+                cache.set(selector, node || null);
+                return node || null;
+              };
+              const all = (selector) => Array.from(root.querySelectorAll(selector));
+              return { get, all };
+            };
+
+          const dom = createUiKit(document);
+
           const skipBootstrap = beginRendererBootstrap();
           if (skipBootstrap) {
             return;
@@ -1066,6 +1367,7 @@
         }
         const tabButtons = Array.from(sheetEl.querySelectorAll("[data-settings-tab]"));
         const tabPanels = Array.from(sheetEl.querySelectorAll("[data-settings-panel]"));
+        const tabSections = tabPanels.map((panel) => panel.closest("[data-settings-section]") || null);
         const scrollContainer =
           sheetEl.querySelector("[data-settings-scroll]") || sheetEl.querySelector(".sheet-body") || null;
         const defaultTabId =
@@ -1093,11 +1395,16 @@
             candidate.setAttribute("aria-selected", selected ? "true" : "false");
             candidate.setAttribute("tabindex", selected ? "0" : "-1");
           }
-          for (const candidate of tabPanels) {
+          tabPanels.forEach((candidate, index) => {
             const isTarget = candidate === panel;
+            const section = tabSections[index];
             candidate.hidden = !isTarget;
             candidate.setAttribute("aria-hidden", isTarget ? "false" : "true");
-          }
+            if (section && section !== candidate) {
+              section.hidden = !isTarget;
+              section.setAttribute("aria-hidden", isTarget ? "false" : "true");
+            }
+          });
           if (scrollContainer && (resetScroll || changed)) {
             scrollContainer.scrollTop = 0;
           }
@@ -1137,6 +1444,10 @@
               }
             });
           });
+        }
+
+        if (tabButtons.length > 0 && defaultTabId) {
+          component.update({ activeId: activeTabId || defaultTabId, force: true });
         }
 
         function focusIndex(index, options = {}) {
@@ -1265,14 +1576,11 @@
             if (nextEntriesProvided) {
               currentEntries = props.entries;
               if (list) {
-                list.innerHTML = "";
-                if (currentEntries.length > 0) {
-                  const fragment = document.createDocumentFragment();
-                  for (const entry of currentEntries) {
-                    fragment.appendChild(createSaveManagementItem(entry));
-                  }
-                  list.appendChild(fragment);
-                }
+                const markup =
+                  currentEntries.length > 0
+                    ? html`${currentEntries.map(renderSaveManagementItem)}`
+                    : "";
+                renderTemplate(list, markup);
               }
             }
 
@@ -1334,17 +1642,22 @@
         }
 
       // Cached DOM references so we can wire handlers without repeated lookups.
-      const appEl = document.getElementById("app");
-      const commandRail = document.getElementById("commandRail");
-      const fileInput = document.getElementById("fileInput");
-      const selectButton = document.getElementById("selectImage");
-      const settingsUploadButton = document.getElementById("settingsUploadButton");
-      const sampleButtons = Array.from(document.querySelectorAll('[data-action="load-sample"]'));
-      const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
-      const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
-      const samplePreview = document.getElementById("sampleArtPreview");
-      const gameSelectionList = document.getElementById("gameSelectionList");
-      const gameSelectionEmpty = document.getElementById("gameSelectionEmpty");
+      const appEl = dom.get("#app");
+      const commandRail = dom.get("#commandRail");
+      const fileInput = dom.get("#fileInput");
+      const selectButton = dom.get("#selectImage");
+      const settingsUploadButton = dom.get("#settingsUploadButton");
+      const settingsLoadConsole = dom.get("#settingsLoadConsole");
+      const sampleButtons = dom.all('[data-action="load-sample"]');
+      const sampleDetailButtons = dom.all("[data-detail-level]");
+      const sampleDetailCaptions = dom.all("[data-detail-caption]");
+      const samplePreview = dom.get("#sampleArtPreview");
+      const errorToast = dom.get("#errorToast");
+      const errorToastMessage = errorToast?.querySelector("[data-error-message]") || null;
+      const errorToastStack = errorToast?.querySelector("[data-error-stack]") || null;
+      const errorToastCloseButton = errorToast?.querySelector("[data-error-close]") || null;
+      const gameSelectionList = dom.get("#gameSelectionList");
+      const gameSelectionEmpty = dom.get("#gameSelectionEmpty");
       const startHint = document.getElementById("startHint");
       const startHintCloseButton = document.getElementById("closeStartHint");
       const startSaveManagerSection = document.getElementById("saveManagerSection");
@@ -1357,6 +1670,7 @@
         settingsSheet?.querySelector("[data-settings-scroll]") ||
         settingsSheet?.querySelector(".sheet-body") ||
         null;
+      const settingsTabs = createSettingsTabsComponent(settingsSheet);
       const generatorPanel = settingsSheet?.querySelector('[data-settings-panel="generator"]') || null;
       const helpPanel = settingsSheet?.querySelector('[data-settings-panel="help"]') || null;
       const sheetRegistry = [settingsSheet].filter(Boolean);
@@ -1365,8 +1679,19 @@
       const readmeErrorEl = helpPanel?.querySelector("[data-readme-error]") || null;
       const README_SOURCE_URL = "https://shthed.github.io/capy/README";
       let readmeLoadState = "idle";
+      const feedbackForm = document.getElementById("feedbackForm");
+      const feedbackStatusEl = helpPanel?.querySelector("[data-feedback-status]") || null;
+      const feedbackCategorySelect = document.getElementById("feedbackCategory");
+      const feedbackMessageInput = document.getElementById("feedbackMessage");
+      const feedbackContactInput = document.getElementById("feedbackContact");
+      const feedbackSubmitButton = document.getElementById("feedbackSubmit");
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
+      const settingsJsonView = document.getElementById("settingsJsonView");
+      const refreshSettingsJsonButton = document.getElementById("refreshSettingsJson");
+      const exportSettingsJsonButton = document.getElementById("exportSettingsJson");
+      const applySettingsJsonButton = document.getElementById("applySettingsJson");
+      const importSettingsFileInput = document.getElementById("importSettingsFile");
       const saveStorageSummary = document.getElementById("saveStorageSummary");
       const deleteAllSavesButton = document.getElementById("deleteAllSaves");
       const viewportEl = document.getElementById("viewport");
@@ -1633,6 +1958,7 @@
           if (entries.length > 0) {
             const context = reason === "interval" ? "interval" : reason;
             console.info(`[Performance] ${context} – ${entries.join("; ")}`);
+            trackPerformanceMetrics(snapshot, context);
           }
         },
       });
@@ -3124,6 +3450,7 @@
           state.paletteSort = storedPaletteSort;
         }
       }
+      refreshSettingsJsonView(state.settings);
 
       const unavailableRenderers = new Set();
 
@@ -3295,6 +3622,13 @@
           announce,
         });
       }
+
+      const SAVE_ACTIONS = [
+        { action: "load", label: "Load" },
+        { action: "rename", label: "Rename" },
+        { action: "export", label: "Export" },
+        { action: "delete", label: "Delete" },
+      ];
 
       gameSaveManager.subscribe((entries) => {
         state.saves = entries;
@@ -4069,6 +4403,9 @@
         updateCommandStates();
         renderDebugLog();
         logDebug("Session started");
+        recordUserEvent("session_start", {
+          event_label: state.sourceTitle || "unknown",
+        });
         syncCommandRailMetrics();
         handleViewportChange({ log: true, recenter: true });
         resetView({ recenter: true });
@@ -4163,6 +4500,64 @@
       }
       if (settingsUploadButton) {
         settingsUploadButton.addEventListener("click", window.requestUpload);
+      }
+
+      function handleSettingsJsonImport(text) {
+        if (typeof text !== "string" || !text.trim()) {
+          settingsBootstrap.recordError("No JSON provided to import");
+          return false;
+        }
+        try {
+          const parsed = JSON.parse(text);
+          return applySettingsSnapshot(parsed, { immediate: true });
+        } catch (error) {
+          console.error("Failed to import settings JSON", error);
+          settingsBootstrap.recordError("Settings JSON import failed");
+          return false;
+        }
+      }
+
+      if (refreshSettingsJsonButton) {
+        refreshSettingsJsonButton.addEventListener("click", () => {
+          refreshSettingsJsonView();
+          settingsBootstrap.log("Settings JSON refreshed");
+        });
+      }
+
+      if (exportSettingsJsonButton) {
+        exportSettingsJsonButton.addEventListener("click", () => {
+          const serialized = refreshSettingsJsonView();
+          if (!serialized) return;
+          const blob = new Blob([serialized], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "capy-settings.json";
+          link.click();
+          URL.revokeObjectURL(url);
+          settingsBootstrap.log("Exported settings JSON");
+        });
+      }
+
+      if (applySettingsJsonButton) {
+        applySettingsJsonButton.addEventListener("click", () => {
+          const text = settingsJsonView?.value || "";
+          handleSettingsJsonImport(text);
+        });
+      }
+
+      if (importSettingsFileInput) {
+        importSettingsFileInput.addEventListener("change", async (event) => {
+          const target = event.target;
+          const [file] = target?.files || [];
+          if (!file) return;
+          try {
+            const text = await file.text();
+            handleSettingsJsonImport(text);
+          } finally {
+            target.value = "";
+          }
+        });
       }
 
       function beginSettingsLauncherDrag(event) {
@@ -4276,6 +4671,26 @@
         } else {
           window.setTimeout(scheduleReadmePrefetch, 600);
         }
+      }
+
+      if (feedbackForm) {
+        feedbackForm.addEventListener("submit", handleFeedbackSubmit);
+      }
+
+      if (feedbackMessageInput) {
+        feedbackMessageInput.addEventListener("input", () => updateFeedbackStatus(""));
+      }
+
+      if (errorToastCloseButton) {
+        errorToastCloseButton.addEventListener("click", () => hideGlobalErrorNotice());
+      }
+
+      if (errorToast) {
+        errorToast.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") {
+            hideGlobalErrorNotice();
+          }
+        });
       }
 
       if (startHintCloseButton) {
@@ -5274,6 +5689,44 @@
         }
       }
 
+      function handleFeedbackSubmit(event) {
+        if (event) {
+          event.preventDefault();
+        }
+        if (!feedbackForm || !feedbackMessageInput) {
+          return;
+        }
+        const message = feedbackMessageInput.value || "";
+        const category = feedbackCategorySelect?.value || "bug";
+        const contact = feedbackContactInput?.value || "";
+        const normalizedMessage = normalizeFeedbackValue(message, FEEDBACK_MESSAGE_LIMIT);
+        if (!normalizedMessage) {
+          updateFeedbackStatus("Add a few details before sending feedback.", "error");
+          feedbackMessageInput.focus({ preventScroll: true });
+          return;
+        }
+        updateFeedbackStatus("Sending feedback…");
+        if (feedbackSubmitButton) {
+          feedbackSubmitButton.disabled = true;
+        }
+        try {
+          reportFeedbackToAnalytics({
+            message: normalizedMessage,
+            category,
+            contact,
+          });
+          updateFeedbackStatus("Thanks! Your feedback was sent.", "success");
+          feedbackForm.reset();
+        } catch (error) {
+          console.debug("Feedback submission failed", error);
+          updateFeedbackStatus("Couldn't send feedback right now. Please try again.", "error");
+        } finally {
+          if (feedbackSubmitButton) {
+            feedbackSubmitButton.disabled = false;
+          }
+        }
+      }
+
       function setSettingsSheetOpenState(isOpen) {
         if (!state?.settings) return;
         const resolved = Boolean(isOpen);
@@ -5300,6 +5753,8 @@
         }
         if (sheet === settingsSheet) {
           setSettingsSheetOpenState(true);
+          settingsBootstrap.setOpen(true);
+          settingsBootstrap.log("Settings sheet opened");
         }
       }
 
@@ -5356,6 +5811,8 @@
         if (sheet === settingsSheet) {
           setSettingsSheetOpenState(false);
           clearPendingImport();
+          settingsBootstrap.setOpen(false);
+          settingsBootstrap.log("Settings sheet closed");
         }
       }
 
@@ -5366,7 +5823,11 @@
         const { tabId = null, focusTab = false, resetScroll = true, force = false } = options;
         openSheet(settingsSheet);
         ensureSettingsSheetPosition({ forceCenter: force || !settingsSheetPosition });
-        if (typeof tabId === "string" && tabId.length > 0) {
+        const hasTabs = typeof settingsTabs.getTabCount === "function" && settingsTabs.getTabCount() > 0;
+        const targetTabId = tabId || settingsTabs.getActiveTabId?.() || null;
+        if (hasTabs) {
+          settingsTabs.activate(targetTabId, { focusTab, resetScroll, force });
+        } else if (typeof tabId === "string" && tabId.length > 0) {
           scrollSettingsPanelIntoView(tabId, { focus: focusTab, resetScroll });
         } else if (resetScroll && settingsBody) {
           settingsBody.scrollTop = 0;
@@ -5716,6 +6177,10 @@
               skipDefaultLog: true,
             }
           : undefined;
+        recordUserEvent("sample_load", {
+          event_label: state.sourceTitle || "Sample puzzle",
+          detail_level: detailConfig?.id || targetLevel,
+        });
         loadImage(dataUrl, loadOptions);
       }
 
@@ -5749,6 +6214,9 @@
             state.sourceTitle = descriptorTitle || DEFAULT_GAME_SOURCE.path || "Puzzle";
             hideStartScreen();
             setProgressMessage("active");
+            recordUserEvent("default_puzzle_load", {
+              event_label: state.sourceTitle,
+            });
             if (!announce) {
               logDebug(`Loaded ${state.sourceTitle} from ${DEFAULT_GAME_SOURCE.path}`);
             }
@@ -5800,6 +6268,116 @@
         }
         debugLogEl.appendChild(fragment);
         debugLogEl.scrollTop = 0;
+      }
+
+      const ANALYTICS_TRACKING_ID = "G-PB9QNQCD7Q";
+
+      function analyticsReady() {
+        return typeof window !== "undefined" && typeof window.gtag === "function";
+      }
+
+      function trackAnalyticsEvent(name, params = {}) {
+        if (!name || !analyticsReady()) {
+          return;
+        }
+        try {
+          window.gtag("event", name, params);
+        } catch (error) {
+          console.debug("Analytics dispatch failed", error);
+        }
+      }
+
+      function trackExceptionEvent(description, options = {}) {
+        if (!description) {
+          return;
+        }
+        const payload = {
+          description: String(description),
+          fatal: Boolean(options?.fatal),
+        };
+        const metadata = options?.metadata;
+        if (metadata && typeof metadata === "object") {
+          for (const [key, value] of Object.entries(metadata)) {
+            if (value == null) continue;
+            if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+              payload[key] = value;
+            }
+          }
+        }
+        trackAnalyticsEvent("exception", payload);
+      }
+
+      function trackPerformanceMetrics(summary, reason = "update") {
+        if (!summary || !summary.durations) {
+          return;
+        }
+        const context = typeof reason === "string" && reason ? reason : "update";
+        for (const [name, stats] of Object.entries(summary.durations)) {
+          if (!stats || !stats.count) continue;
+          const average = Math.round(stats.average || 0);
+          if (!Number.isFinite(average)) {
+            continue;
+          }
+          trackAnalyticsEvent("timing_complete", {
+            name,
+            value: average,
+            event_category: "performance",
+            event_label: context,
+            sample_count: stats.count,
+            max: Math.round(stats.max || 0),
+          });
+        }
+      }
+
+      function recordUserEvent(name, params = {}) {
+        trackAnalyticsEvent(name, {
+          event_category: "engagement",
+          ...params,
+        });
+      }
+
+      const FEEDBACK_MESSAGE_LIMIT = 800;
+      const FEEDBACK_CONTACT_LIMIT = 120;
+
+      function normalizeFeedbackValue(value, limit) {
+        if (typeof value !== "string") {
+          return "";
+        }
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return "";
+        }
+        const maxLength = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 2000) : 2000;
+        return trimmed.slice(0, maxLength);
+      }
+
+      function reportFeedbackToAnalytics(payload) {
+        if (!payload) return;
+        const category = normalizeFeedbackValue(payload.category, 32) || "general";
+        const message = normalizeFeedbackValue(payload.message, FEEDBACK_MESSAGE_LIMIT);
+        const contact = normalizeFeedbackValue(payload.contact, FEEDBACK_CONTACT_LIMIT);
+        if (!message) {
+          return;
+        }
+        trackAnalyticsEvent("feedback_submit", {
+          event_category: "feedback",
+          event_label: category,
+          feedback_message: message,
+          feedback_contact: contact || undefined,
+          feedback_length: message.length,
+        });
+        logDebug(`Feedback submitted (${category})`);
+      }
+
+      function updateFeedbackStatus(message, tone = "info") {
+        if (!feedbackStatusEl) {
+          return;
+        }
+        const trimmed = typeof message === "string" ? message.trim() : "";
+        feedbackStatusEl.textContent = trimmed;
+        feedbackStatusEl.hidden = !trimmed;
+        feedbackStatusEl.classList.toggle("is-success", tone === "success");
+        feedbackStatusEl.classList.toggle("is-error", tone === "error");
       }
 
       function createPerformanceMetrics(options = {}) {
@@ -6040,6 +6618,70 @@
         renderDebugLog();
       }
 
+      function hideGlobalErrorNotice() {
+        if (!errorToast) return;
+        errorToast.hidden = true;
+      }
+
+      function showGlobalErrorNotice({ message, stack } = {}) {
+        if (!errorToast) return;
+        const resolvedMessage =
+          message && String(message).trim() ? String(message).trim() : "Unexpected error encountered.";
+        const resolvedStack = stack ? String(stack).trim() : "";
+
+        if (errorToastMessage) {
+          errorToastMessage.textContent = resolvedMessage;
+        }
+
+        if (errorToastStack) {
+          if (resolvedStack) {
+            errorToastStack.textContent = resolvedStack;
+            errorToastStack.hidden = false;
+          } else {
+            errorToastStack.textContent = "";
+            errorToastStack.hidden = true;
+          }
+        }
+
+        errorToast.hidden = false;
+        const focusTarget = errorToastCloseButton || errorToast;
+        if (focusTarget && typeof focusTarget.focus === "function") {
+          requestAnimationFrame(() => {
+            focusTarget.focus({ preventScroll: true });
+          });
+        }
+      }
+
+      function extractStackFromValue(value) {
+        if (!value) {
+          return "";
+        }
+        if (value instanceof Error && value.stack) {
+          return value.stack;
+        }
+        if (typeof value === "object" && "stack" in value && typeof value.stack === "string") {
+          return value.stack;
+        }
+        return "";
+      }
+
+      function deriveStackFromArgs(args) {
+        if (!Array.isArray(args)) {
+          return "";
+        }
+        for (const arg of args) {
+          const stack = extractStackFromValue(arg);
+          if (stack) {
+            return stack;
+          }
+        }
+        return "";
+      }
+
+      function deriveStackFromEvent(event) {
+        return extractStackFromValue(event?.error) || extractStackFromValue(event?.reason);
+      }
+
       function formatConsoleValue(value) {
         if (value instanceof Error) {
           return value.stack || `${value.name || "Error"}: ${value.message || ""}`.trim();
@@ -6114,6 +6756,13 @@
                 const payload = joinConsoleArguments(args);
                 const message = payload ? `[${label}] ${payload}` : `[${label}]`;
                 logDebug(message);
+                if (label === "Error") {
+                  const stack = deriveStackFromArgs(args);
+                  showGlobalErrorNotice({ message, stack });
+                  trackExceptionEvent(message, {
+                    metadata: { stack, channel: "console" },
+                  });
+                }
               } catch (_error) {
                 /* Ignore debug log failures. */
               }
@@ -6147,6 +6796,19 @@
             }
             const message = parts.length ? parts.join(" – ") : label;
             logDebug(`[${label}] ${message}`);
+            showGlobalErrorNotice({
+              message,
+              stack: deriveStackFromEvent(event),
+            });
+            trackExceptionEvent(message, {
+              metadata: {
+                filename: event?.filename,
+                line: event?.lineno,
+                column: event?.colno,
+                stack: deriveStackFromEvent(event),
+                channel: label,
+              },
+            });
           } catch (_error) {
             /* Ignore logging failures. */
           }
@@ -12194,6 +12856,7 @@
       function loadUserSettings() {
         if (typeof localStorage === "undefined") return null;
         try {
+          settingsBootstrap.log("Loading stored settings");
           const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
           if (!raw) return null;
           const parsed = JSON.parse(raw);
@@ -12222,11 +12885,56 @@
               console.error("Failed to rewrite stored settings", persistError);
             }
           }
+          settingsBootstrap.log("Stored settings hydrated");
           return normalized;
         } catch (error) {
           console.error("Failed to load stored settings", error);
+          settingsBootstrap.recordError("Stored settings unavailable; using defaults");
         }
         return null;
+      }
+
+      function refreshSettingsJsonView(source = state?.settings) {
+        if (!settingsJsonView) return null;
+        try {
+          const snapshot = getUserSettingsSnapshot(source);
+          const serialized = snapshot ? JSON.stringify(snapshot, null, 2) : "{}";
+          settingsJsonView.value = serialized;
+          settingsBootstrap.syncJson(serialized);
+          return serialized;
+        } catch (error) {
+          console.error("Failed to render settings JSON", error);
+          settingsBootstrap.recordError("Could not format settings JSON");
+          return null;
+        }
+      }
+
+      function applySettingsSnapshot(payload, options = {}) {
+        const normalized = normalizeStoredUserSettings(payload);
+        if (!normalized) {
+          return false;
+        }
+        suppressSettingsPersist += 1;
+        try {
+          const { paletteSort: nextPaletteSort, ...rest } = normalized;
+          state.settings = {
+            ...state.settings,
+            ...rest,
+          };
+          if (typeof nextPaletteSort === "string" && nextPaletteSort) {
+            state.paletteSort = nextPaletteSort;
+          }
+          applyGameplaySettings(state.settings);
+          updateOptionOutputs();
+          updateCommandStates();
+          renderDebugLog();
+        } finally {
+          suppressSettingsPersist = Math.max(0, suppressSettingsPersist - 1);
+        }
+        refreshSettingsJsonView(state.settings);
+        scheduleSettingsPersist({ immediate: options.immediate === true });
+        settingsBootstrap.log("Applied settings snapshot");
+        return true;
       }
 
       function flushPendingAutosave(reason = "shutdown") {
@@ -13206,175 +13914,132 @@
         };
       }
 
-      function createSaveActionButton(action, label) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.dataset.action = action;
-        button.textContent = label;
-        return button;
-      }
-
-      function createSavePreviewElement(metadata, options = {}) {
-        const { compact = false } = options;
-        const preview = document.createElement("div");
-        preview.className = "save-entry-preview";
-        if (compact) {
-          preview.classList.add("save-entry-preview--compact");
+        function renderSavePreview(metadata, options = {}) {
+          const { compact = false } = options;
+          const previewClass = ["save-entry-preview"];
+          if (compact) {
+          previewClass.push("save-entry-preview--compact");
         }
         if (metadata.previewUrl) {
-          const image = document.createElement("img");
-          image.loading = "lazy";
-          image.decoding = "async";
-          image.src = metadata.previewUrl;
-          image.alt = metadata.title ? `${metadata.title} preview` : "Puzzle preview";
-          preview.appendChild(image);
-        } else {
-          const fallback = document.createElement("span");
-          fallback.className = "save-entry-preview-fallback";
-          fallback.textContent = "Preview unavailable";
-          preview.appendChild(fallback);
+          const altText = metadata.title ? `${metadata.title} preview` : "Puzzle preview";
+          return html`<div class="${previewClass.join(" ")}">
+            <img
+              loading="lazy"
+              decoding="async"
+              src="${metadata.previewUrl}"
+              alt="${altText}"
+            />
+          </div>`;
         }
-        return preview;
+        return html`<div class="${previewClass.join(" ")}">
+          <span class="save-entry-preview-fallback">Preview unavailable</span>
+        </div>`;
       }
 
-      function createSaveSelectionItem(entry) {
+      function renderSaveSelectionItem(entry) {
         const metadata = describeSaveEntry(entry);
-        const item = document.createElement("li");
-        item.className = "game-option";
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "game-option-button";
-        button.dataset.gameId = metadata.id;
-        const layout = document.createElement("div");
-        layout.className = "game-option-layout";
-        const preview = createSavePreviewElement(metadata, { compact: true });
-        const copy = document.createElement("div");
-        copy.className = "game-option-copy";
-        const title = document.createElement("span");
-        title.className = "game-option-title";
-        title.textContent = metadata.title;
-        const progress = document.createElement("span");
-        progress.className = "game-option-meta";
-        progress.textContent = metadata.progressText;
-        copy.append(title, progress);
-        layout.append(preview, copy);
-        button.append(layout);
-        if (metadata.timestampLabel) {
-          const time = document.createElement("span");
-          time.className = "game-option-meta";
-          time.textContent = metadata.timestampLabel;
-          button.append(time);
-        }
-        if (metadata.storageLabel) {
-          const storage = document.createElement("span");
-          storage.className = "game-option-meta";
-          storage.textContent = `Storage ${metadata.storageLabel}`;
-          button.append(storage);
-        }
-        button.setAttribute("aria-label", metadata.ariaLabel);
-        item.appendChild(button);
-        return item;
+        const timestamp = metadata.timestampLabel
+          ? html`<span class="game-option-meta">${metadata.timestampLabel}</span>`
+          : "";
+        const storage = metadata.storageLabel
+          ? html`<span class="game-option-meta">Storage ${metadata.storageLabel}</span>`
+          : "";
+        return html`<li class="game-option">
+          <button
+            type="button"
+            class="game-option-button"
+            data-game-id="${metadata.id}"
+            aria-label="${metadata.ariaLabel}"
+          >
+            <div class="game-option-layout">
+              ${renderSavePreview(metadata, { compact: true })}
+              <div class="game-option-copy">
+                <span class="game-option-title">${metadata.title}</span>
+                <span class="game-option-meta">${metadata.progressText}</span>
+              </div>
+            </div>
+            ${timestamp}
+            ${storage}
+          </button>
+        </li>`;
       }
 
-      function createSaveManagementItem(entry) {
-        const metadata = describeSaveEntry(entry);
-        const item = document.createElement("article");
-        item.className = "save-entry";
-        item.setAttribute("role", "listitem");
-        item.dataset.saveId = metadata.id;
-        const isLoaded = Boolean(state.loadedSaveId && metadata.id === state.loadedSaveId);
-        if (isLoaded) {
-          item.dataset.loaded = "true";
-        }
-        const header = document.createElement("header");
-        const title = document.createElement("strong");
-        title.textContent = metadata.title;
-        header.appendChild(title);
-        if (metadata.timestamp) {
-          const time = document.createElement("time");
-          time.dateTime = metadata.timestamp.toISOString();
-          time.textContent = metadata.timestamp.toLocaleString();
-          header.appendChild(time);
-        }
-        const meta = document.createElement("div");
-        meta.className = "save-entry-meta";
-        const progress = document.createElement("span");
-        progress.textContent = metadata.progressText;
-        meta.appendChild(progress);
-        if (metadata.storageLabel) {
-          const storage = document.createElement("span");
-          storage.className = "save-entry-storage";
-          storage.textContent = `Storage ${metadata.storageLabel}`;
-          meta.appendChild(storage);
-        }
-        const actions = document.createElement("div");
-        actions.className = "save-actions";
-        actions.append(
-          createSaveActionButton("load", "Load"),
-          createSaveActionButton("rename", "Rename"),
-          createSaveActionButton("export", "Export"),
-          createSaveActionButton("delete", "Delete"),
+      function renderSaveActionButtons() {
+        return SAVE_ACTIONS.map(
+          ({ action, label }) => html`<button type="button" data-action="${action}">${label}</button>`
         );
-        const content = document.createElement("div");
-        content.className = "save-entry-content";
-        content.append(header, meta, actions);
-        const body = document.createElement("div");
-        body.className = "save-entry-body";
-        body.append(createSavePreviewElement(metadata), content);
-        item.append(body);
-        if (isLoaded) {
-          const status = document.createElement("div");
-          status.className = "save-entry-status";
-          status.textContent = "Autosaving this slot";
-          content.appendChild(status);
-        }
-        return item;
       }
 
+      function renderSaveManagementItem(entry) {
+        const metadata = describeSaveEntry(entry);
+        const isLoaded = Boolean(state.loadedSaveId && metadata.id === state.loadedSaveId);
+        const timestamp = metadata.timestamp
+          ? html`<time datetime="${metadata.timestamp.toISOString()}">
+              ${metadata.timestamp.toLocaleString()}
+            </time>`
+          : "";
+        const storage = metadata.storageLabel
+          ? html`<span class="save-entry-storage">Storage ${metadata.storageLabel}</span>`
+          : "";
+        const status = isLoaded
+          ? html`<div class="save-entry-status">Autosaving this slot</div>`
+          : "";
+        return html`<article
+          class="save-entry"
+          role="listitem"
+          data-save-id="${metadata.id}"
+          data-loaded="${isLoaded ? "true" : "false"}"
+        >
+          <div class="save-entry-body">
+            ${renderSavePreview(metadata)}
+            <div class="save-entry-content">
+              <header>
+                <strong>${metadata.title}</strong>
+                ${timestamp}
+              </header>
+              <div class="save-entry-meta">
+                <span>${metadata.progressText}</span>
+                ${storage}
+              </div>
+              <div class="save-actions">${renderSaveActionButtons()}</div>
+              ${status}
+            </div>
+          </div>
+        </article>`;
+      }
 
-
-
-      function refreshGameSelection() {
-        if (!gameSelectionList) return;
-        gameSelectionList.innerHTML = "";
-        const fragment = document.createDocumentFragment();
-
-        const defaultItem = document.createElement("li");
-        defaultItem.className = "game-option";
-        const defaultButton = document.createElement("button");
-        defaultButton.type = "button";
-        defaultButton.className = "game-option-button";
+      function renderDefaultGameSelectionItem() {
         const defaultMetadata = state.defaultGame || {};
-        defaultButton.dataset.gameId = defaultMetadata.id || DEFAULT_GAME_SOURCE.id;
-        const defaultTitle = document.createElement("span");
-        defaultTitle.className = "game-option-title";
         const resolvedTitle = getDefaultGameTitle();
-        defaultTitle.textContent = resolvedTitle;
-        const defaultMeta = document.createElement("span");
-        defaultMeta.className = "game-option-meta";
         const resolvedDescription = getDefaultGameDescription();
         const fallbackMeta = DEFAULT_GAME_FALLBACK.description || DEFAULT_GAME_SOURCE.path;
         const metaText = resolvedDescription || fallbackMeta;
-        defaultMeta.textContent = metaText;
         const hideMeta = !resolvedDescription && (!metaText || metaText === resolvedTitle);
-        defaultMeta.hidden = hideMeta;
         const labelParts = [resolvedTitle];
         if (!hideMeta && metaText && metaText !== resolvedTitle) {
           labelParts.push(metaText);
         }
-        defaultButton.setAttribute("aria-label", labelParts.join(" – "));
-        defaultButton.append(defaultTitle, defaultMeta);
-        defaultItem.appendChild(defaultButton);
-        fragment.appendChild(defaultItem);
+        return html`<li class="game-option">
+          <button
+            type="button"
+            class="game-option-button"
+            data-game-id="${defaultMetadata.id || DEFAULT_GAME_SOURCE.id}"
+            aria-label="${labelParts.join(" – ")}"
+          >
+            <span class="game-option-title">${resolvedTitle}</span>
+            <span class="game-option-meta"${hideMeta ? " hidden" : ""}>${metaText}</span>
+          </button>
+        </li>`;
+      }
 
+      function refreshGameSelection() {
+        if (!gameSelectionList) return;
         const hasSaves = Array.isArray(state.saves) && state.saves.length > 0;
-        if (hasSaves) {
-          for (const entry of state.saves) {
-            fragment.appendChild(createSaveSelectionItem(entry));
-          }
-        }
-
-        gameSelectionList.appendChild(fragment);
+        const saveMarkup = hasSaves ? state.saves.map(renderSaveSelectionItem) : "";
+        renderTemplate(
+          gameSelectionList,
+          html`${renderDefaultGameSelectionItem()}${saveMarkup}`
+        );
         if (gameSelectionEmpty) {
           gameSelectionEmpty.hidden = hasSaves;
         }
@@ -13657,6 +14322,10 @@
       }
 
           bootstrapSucceeded = true;
+        } catch (error) {
+          console.error("Failed to bootstrap app", error);
+          settingsBootstrap.recordError("Runtime bootstrap failed; settings stayed available");
+          throw error;
         } finally {
           completeRendererBootstrap(bootstrapSucceeded);
         }

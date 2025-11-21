@@ -76,13 +76,13 @@ jobs:
     if: github.ref != 'refs/heads/gh-pages' && needs.plan-deploy.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
     env:
-      EFFECTIVE_BRANCH: ${{ needs.plan-deploy.outputs.effective_branch }}
-      EFFECTIVE_REF: ${{ needs.plan-deploy.outputs.effective_ref }}
+      EFFECTIVE_BRANCH: ${{ inputs.target_branch != '' && inputs.target_branch || github.ref_name }}
+      EFFECTIVE_REF: ${{ inputs.target_branch != '' && format('refs/heads/{0}', inputs.target_branch) || github.ref }}
     concurrency:
-      group: pages-deployments-${{ needs.plan-deploy.outputs.effective_branch }}
+      group: pages-deployments-${{ inputs.target_branch != '' && inputs.target_branch || github.ref_name }}
       cancel-in-progress: false
     environment:
-      name: github-pages
+      name: ${{ (inputs.target_branch != '' && inputs.target_branch || github.ref_name) == 'main' && 'github-pages' || format('github-pages-{0}', replace(inputs.target_branch != '' && inputs.target_branch || github.ref_name, '[^a-zA-Z0-9._-]', '-')) }}
       url: ${{ steps.sync.outputs.preview_url || steps.deploy-pages.outputs.page_url }}
     steps:
       - name: Checkout repository

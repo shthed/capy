@@ -51,7 +51,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
   - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
-  - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
+  - `.github/workflows/deploy-branch.yml` – Deploys every branch push to GitHub Pages (root for `main`, sanitized subfolders for everything else) and supports manual dispatches via the `target_branch` input.
   - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days by calling `project/scripts/cleanup-branches.mjs`.
 
 ## Project Health Snapshot
@@ -85,11 +85,8 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
 Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs
 on every push (all branches) plus optional manual dispatches (trigger the manual
 run from `main` and provide the `target_branch` input so the workflow checks out
-the right source). Because the `github-pages` environment only accepts `main`
-and `automation/*` branches, the workflow begins with a planning job that
-calculates the effective branch/ref, confirms it matches the naming policy, and
-either hands the values to the deploy job or posts a skip notice when the branch
-is not eligible:
+the right source). A short planning job calculates the effective branch/ref for
+manual runs and hands those values to the deploy step:
 
 1. **Checkout & sanitise.** The action checks out the triggering branch (shallow
    fetch for speed) and the `gh-pages` deployment branch, converts branch names
@@ -109,15 +106,13 @@ is not eligible:
      `/automation-feature/`), copy the same runtime payload plus JS/CSS/JSON
      dependencies, and generate a scoped `/README/index.html` for that
      directory.
-   Because the sync uses `rsync -a` without `--delete`, previously published
-   branch folders stick around inside the `gh-pages` working tree until they are
-   removed manually.
+   After cloning `gh-pages`, the workflow removes preview directories whose
+   sanitised names no longer match a live branch so stale payloads disappear as
+   soon as the corresponding branch is deleted.
 3. **Preview surfacing.** After copying files, the workflow commits straight to
    `gh-pages`, calculates the preview URL based on the sanitised slug, and posts
    the link in the job summary (separate PR commenting is handled by the
-   post-deploy test workflow). Branches that do not match the `automation/*`
-   pattern never reach this step; the planning job records a notice and exits so
-   environment protections are satisfied without hard failures.
+   post-deploy test workflow).
 4. **Packaging.** `actions/upload-pages-artifact` tars the entire `pages/` tree
    (not just the directory for the triggering branch), which means stale
    directories inflate the artifact and can easily produce multi-hundred-megabyte
@@ -190,6 +185,8 @@ Tweaking the deployment:
 - **Built-in capybara sample.** The "Capybara Springs" illustration loads automatically on boot when no saves exist in the medium detail preset so players can start painting immediately.
 - **Sample detail presets.** Low/Medium/High chips tune colour counts, resize targets, k-means iterations, and smoothing passes so QA can switch between breezy ≈26-region boards, balanced ≈20-region sessions, or high-fidelity ≈140-region runs.
 - **Detailed debug logging.** The **Help & logs** tab in the Settings dialog announces sample loads, fills, hints, zooms, background tweaks, fullscreen toggles, ignored clicks, and now mirrors console warnings/errors (including unhandled rejections) so QA can confirm issues without opening DevTools.
+- **Instrumentation and monitoring.** Google Analytics (Measurement ID `G-PB9QNQCD7Q`) records session starts, default and sample puzzle loads, performance timing summaries, and forwarded exceptions so crashes and slowdowns are visible outside the in-app debug log.
+- **Feedback capture.** The Help & logs tab includes a feedback form; submissions log to the debug panel and dispatch a `feedback_submit` analytics event with the category, message snippet, optional contact info, and message length.
 - **Embedded documentation.** The same **Help & logs** tab loads the hosted README (`https://shthed.github.io/capy/README`) for in-app gameplay and contributor notes.
 - **Configurable generator.** Choose between local algorithms (k-means clustering or the posterize-and-merge pass today, with
   room for hosted services) and adjust palette size, minimum region area, resize detail, sampling, iteration count, and smoothing
@@ -263,10 +260,11 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 - **Public testing surface.** `window.capyGenerator` exposes helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so automation and manual experiments can orchestrate the app without touching internals. Recent renderer work also surfaced `getRendererType()`, `listRenderers()`, `setRenderer(type)`, `registerRenderer(type, factory)`, and `unregisterRenderer(type)` so tests can assert the active backend or load experimental renderers without patching private state.
 - **Pan/zoom subsystem.** `viewState` tracks transforms for `#canvasStage` and `#canvasTransform`; helpers like `applyZoom`, `resetView`, and `applyViewTransform` keep navigation smooth across wheel, keyboard, and drag gestures.
 
-### Compact UI patterns (no framework)
+### Compact UI patterns (micro templates, no framework builds)
 
 The runtime must stay build-free and avoid shipping large bundled frameworks. To trim UI code without pulling in minified dependencies:
 
+- **`ui-template.js` handles templating.** The helper exports `html`, `unsafeHTML`, and `renderTemplate`, letting runtime code assemble declarative snippets (see the save manager and game selector) while keeping values escaped by default. Import it directly from `index.html` whenever you would otherwise build trees with dozens of `document.createElement` calls.
 - **Lean on `<template>` clones.** Define reusable fragments (e.g., palette items or save rows) in `index.html`, call `template.content.cloneNode(true)`, and toggle `dataset` flags or text content during hydration instead of re-creating DOM trees by hand.
 - **Delegate events.** Attach a single listener to the container (palette rail, save list, settings tabs) and branch on `event.target.closest('[data-action="..."]')` so new buttons can be added in markup without extra wiring.
 - **Small helper utilities only.** When repetition is unavoidable, add a tiny helper (e.g., `renderList(container, items, renderItem)`) in a shared module and reuse it rather than adopting a state library. Keep helpers self-contained and tree-shake-free.
