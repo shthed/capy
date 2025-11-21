@@ -183,8 +183,11 @@ Tweaking the deployment:
   without re-running the suite.
 - **PR update.** After the test finishes (pass or fail), the workflow posts a
   comment on every associated PR summarising the preview URL, test outcome, and
-  whether UI review artifacts were captured. This keeps the automation loop
-  self-serve even while the primary Playwright suite remains paused in CI.
+  whether UI review artifacts were captured. The comment also includes a
+  persistent **Rerun deploy** button that links directly to the deployment
+  workflow so reviewers can retrigger the Pages publish without hunting through
+  the Actions tab. This keeps the automation loop self-serve even while the
+  primary Playwright suite remains paused in CI.
 
 ## UI & Feature Tour
 
