@@ -1185,9 +1185,18 @@
 
         function log(message) {
           if (!consoleEl) return;
+          const timestamp = new Date();
           const entry = document.createElement("div");
           entry.className = "log-entry";
-          entry.textContent = `[settings] ${message}`;
+          const time = document.createElement("time");
+          time.dateTime = timestamp.toISOString();
+          time.textContent = timestamp
+            .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+            .replace(/\s+/g, " ");
+          const messageEl = document.createElement("span");
+          messageEl.textContent = `[settings] ${message || "Ready"}`;
+          entry.appendChild(time);
+          entry.appendChild(messageEl);
           consoleEl.appendChild(entry);
           consoleEl.scrollTop = consoleEl.scrollHeight;
         }
