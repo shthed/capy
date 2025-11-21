@@ -119,6 +119,40 @@ jobs:
             echo "errors=" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Capture preview screenshot
+        id: capture-screenshot
+        if: always()
+        continue-on-error: true
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+        working-directory: project
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PREVIEW_URL:-}" ]; then
+            echo "Preview URL missing; skipping screenshot capture."
+            exit 0
+          fi
+
+          node --input-type=module - <<'NODE'
+          import { chromium } from 'playwright';
+
+          const url = process.env.PREVIEW_URL;
+          const outputPath = 'artifacts/ui-review/preview.png';
+
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+          const page = await context.newPage();
+
+          try {
+            await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
+            await page.screenshot({ path: outputPath, fullPage: true });
+            console.log(`Captured preview screenshot at ${outputPath}`);
+          } finally {
+            await browser.close();
+          }
+          NODE
+
       - name: Detect UI review artifacts
         id: artifact-check
         if: always()
