@@ -110,6 +110,11 @@ any feature or workflow changes you ship.
 ## Automation & Git Preferences
 
 - Sync with `main` (`git fetch --all --prune`) before starting work.
+- Always add the upstream remote for this repository (`git remote add origin
+  https://github.com/shthed/capy.git`) when setting up a workspace so fetches
+  and pushes target the canonical repo.
+- Before making changes, fetch the latest `main`, pull, and rebase your branch
+  onto it to keep history current.
 - Configure git identity locally if needed:
   ```bash
   git config user.name "Codex"
