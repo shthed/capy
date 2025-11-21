@@ -206,6 +206,7 @@ jobs:
             const errors = process.env.ERROR_MESSAGES;
             const artifactFound = process.env.ARTIFACT_FOUND === 'true';
             const artifactUrl = process.env.ARTIFACT_URL;
+            const rerunUrl = context.payload.workflow_run?.html_url;
 
             const lines = [];
 
@@ -227,6 +228,10 @@ jobs:
 
             if (lines.length === 0) {
               lines.push('Preview link unavailable.');
+            }
+
+            if (rerunUrl) {
+              lines.push(`[🔁 Rerun Pages deploy](${rerunUrl})`);
             }
 
             const body = lines.join('\n\n');
