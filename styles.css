@@ -1541,23 +1541,6 @@ body[data-theme="light"] .generator-progress-meter {
     overflow-y: auto;
   }
 
-  .settings-body {
-    grid-template-columns: 1fr;
-  }
-
-  .settings-tabs {
-    flex-direction: row;
-    flex-wrap: wrap;
-    max-height: none;
-    overflow: visible;
-    padding-right: 0;
-    margin-right: 0;
-  }
-
-  .settings-tab {
-    flex: 1 1 140px;
-  }
-
   .settings-content {
     overflow: visible;
     padding-right: 0;
