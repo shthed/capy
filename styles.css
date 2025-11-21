@@ -1711,6 +1711,10 @@ body[data-theme="light"] .readme-preview pre {
   overflow-y: auto;
 }
 
+.settings-loading-console {
+  max-height: 160px;
+}
+
 .debug-log .log-entry {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -1740,6 +1744,43 @@ body[data-theme="light"] .readme-preview pre {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+.json-view {
+  width: 100%;
+  min-height: 180px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--theme-debug-border);
+  background: rgba(10, 17, 30, 0.6);
+  color: var(--theme-text-primary);
+  font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+}
+
+.json-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.json-upload span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--theme-sheet-button-border);
+  background: var(--theme-sheet-button-bg);
+  color: var(--theme-sheet-button-text);
+  cursor: pointer;
+}
+
+.json-upload span:hover {
+  border-color: var(--theme-sheet-button-hover-border);
+  background: var(--theme-sheet-button-hover-bg);
 }
 
 .sheet-actions {
