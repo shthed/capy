@@ -22,6 +22,7 @@ jobs:
     outputs:
       effective_branch: ${{ steps.plan.outputs.effective_branch }}
       effective_ref: ${{ steps.plan.outputs.effective_ref }}
+      environment_name: ${{ steps.plan.outputs.environment_name }}
     steps:
       - name: Determine deployment eligibility
         id: plan
@@ -35,14 +36,21 @@ jobs:
 
           effective_branch="$REF_NAME"
           effective_ref="$REF"
+          environment_name="github-pages"
 
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "${TARGET_BRANCH_INPUT:-}" ]; then
             effective_branch="$TARGET_BRANCH_INPUT"
             effective_ref="refs/heads/$TARGET_BRANCH_INPUT"
           fi
 
+          if [ "$effective_branch" != "main" ]; then
+            safe_branch=$(echo "$effective_branch" | sed 's/[^a-zA-Z0-9._-]/-/g')
+            environment_name="github-pages-${safe_branch}"
+          fi
+
           echo "effective_branch=$effective_branch" >>"$GITHUB_OUTPUT"
           echo "effective_ref=$effective_ref" >>"$GITHUB_OUTPUT"
+          echo "environment_name=$environment_name" >>"$GITHUB_OUTPUT"
 
   deploy:
     needs: plan-deploy
@@ -55,7 +63,7 @@ jobs:
       group: pages-deployments-${{ needs.plan-deploy.outputs.effective_branch }}
       cancel-in-progress: false
     environment:
-      name: github-pages
+      name: ${{ needs.plan-deploy.outputs.environment_name }}
       url: ${{ steps.sync.outputs.preview_url || steps.deploy-pages.outputs.page_url }}
     steps:
       - name: Checkout repository
