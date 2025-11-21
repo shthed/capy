@@ -51,7 +51,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
   - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
-  - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
+  - `.github/workflows/deploy-branch.yml` – Deploys every branch push to GitHub Pages (root for `main`, sanitized subfolders for everything else) and supports manual dispatches via the `target_branch` input.
   - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days by calling `project/scripts/cleanup-branches.mjs`.
 
 ## Project Health Snapshot
@@ -85,11 +85,8 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
 Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs
 on every push (all branches) plus optional manual dispatches (trigger the manual
 run from `main` and provide the `target_branch` input so the workflow checks out
-the right source). Because the `github-pages` environment only accepts `main`
-and `automation/*` branches, the workflow begins with a planning job that
-calculates the effective branch/ref, confirms it matches the naming policy, and
-either hands the values to the deploy job or posts a skip notice when the branch
-is not eligible:
+the right source). A short planning job calculates the effective branch/ref for
+manual runs and hands those values to the deploy step:
 
 1. **Checkout & sanitise.** The action checks out the triggering branch (shallow
    fetch for speed) and the `gh-pages` deployment branch, converts branch names
@@ -109,15 +106,13 @@ is not eligible:
      `/automation-feature/`), copy the same runtime payload plus JS/CSS/JSON
      dependencies, and generate a scoped `/README/index.html` for that
      directory.
-   Because the sync uses `rsync -a` without `--delete`, previously published
-   branch folders stick around inside the `gh-pages` working tree until they are
-   removed manually.
+   After cloning `gh-pages`, the workflow removes preview directories whose
+   sanitised names no longer match a live branch so stale payloads disappear as
+   soon as the corresponding branch is deleted.
 3. **Preview surfacing.** After copying files, the workflow commits straight to
    `gh-pages`, calculates the preview URL based on the sanitised slug, and posts
    the link in the job summary (separate PR commenting is handled by the
-   post-deploy test workflow). Branches that do not match the `automation/*`
-   pattern never reach this step; the planning job records a notice and exits so
-   environment protections are satisfied without hard failures.
+   post-deploy test workflow).
 4. **Packaging.** `actions/upload-pages-artifact` tars the entire `pages/` tree
    (not just the directory for the triggering branch), which means stale
    directories inflate the artifact and can easily produce multi-hundred-megabyte
