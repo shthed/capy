@@ -184,97 +184,112 @@
       id="settingsSheet"
       class="sheet hidden"
       role="dialog"
-      aria-labelledby="settingsTitle"
+      aria-label="Settings and tools"
       aria-hidden="true"
     >
       <div class="sheet-header">
-        <h2 id="settingsTitle">Settings</h2>
+        <div class="sheet-header-actions">
+          <button
+            id="settingsUploadButton"
+            class="settings-upload"
+            type="button"
+            aria-label="Upload image or JSON puzzle"
+          >
+            Upload image
+          </button>
+          <div class="loader-status" aria-hidden="true">
+            <span class="status-indicator" aria-hidden="true"></span>
+            <span class="status-label">Loader active</span>
+          </div>
+        </div>
         <button type="button" class="close-button" data-sheet-close="settings">Close</button>
       </div>
       <div class="sheet-body">
-        <section class="sheet-section" aria-labelledby="settingsLoadHeading">
-          <h3 id="settingsLoadHeading">Settings loader</h3>
-          <p class="control-note">Settings now load before the rest of the app and keep a running debug log.</p>
+        <section class="sheet-section" aria-label="Settings loader console">
+          <div class="visually-hidden" id="settingsLoadHeading">Settings loader console</div>
           <div
             id="settingsLoadConsole"
             class="debug-log settings-loading-console"
             role="log"
+            aria-labelledby="settingsLoadHeading"
             aria-live="polite"
             aria-relevant="additions text"
           ></div>
         </section>
-        <div class="sheet-actions" aria-label="Import an image or puzzle">
-          <button id="settingsUploadButton" type="button" aria-label="Upload image or JSON puzzle">
-            Upload Image
-          </button>
-        </div>
-        <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
-          <button
-            type="button"
-            role="tab"
-            aria-controls="settingsPanel-gameplay"
-            aria-selected="true"
-            data-settings-tab="gameplay"
-            data-settings-tab-default
-          >
-            Gameplay
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-controls="settingsPanel-hints"
-            aria-selected="false"
-            data-settings-tab="hints"
-          >
-            Hints
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-controls="settingsPanel-controls"
-            aria-selected="false"
-            data-settings-tab="controls"
-          >
-            Controls
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-controls="settingsPanel-appearance"
-            aria-selected="false"
-            data-settings-tab="appearance"
-          >
-            Appearance
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-controls="settingsPanel-generator"
-            aria-selected="false"
-            data-settings-tab="generator"
-          >
-            Generator
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-controls="settingsPanel-saves"
-            aria-selected="false"
-            data-settings-tab="saves"
-          >
-            Saves
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-controls="settingsPanel-help"
-            aria-selected="false"
-            data-settings-tab="help"
-          >
-            Help &amp; logs
-          </button>
-        </nav>
         <div class="settings-body">
+          <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-gameplay"
+              aria-selected="true"
+              data-settings-tab="gameplay"
+              data-settings-tab-default
+            >
+              Gameplay
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-hints"
+              aria-selected="false"
+              data-settings-tab="hints"
+            >
+              Hints
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-controls"
+              aria-selected="false"
+              data-settings-tab="controls"
+            >
+              Controls
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-appearance"
+              aria-selected="false"
+              data-settings-tab="appearance"
+            >
+              Appearance
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-generator"
+              aria-selected="false"
+              data-settings-tab="generator"
+            >
+              Generator
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-saves"
+              aria-selected="false"
+              data-settings-tab="saves"
+            >
+              Saves
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-help"
+              aria-selected="false"
+              data-settings-tab="help"
+            >
+              Help &amp; logs
+            </button>
+          </nav>
           <div class="settings-content" data-settings-scroll>
             <section class="settings-section" data-settings-section="gameplay">
               <div class="settings-section-heading">
@@ -1171,17 +1186,38 @@
             </section>
           </section>
         </div>
-        </section>
       </div>
     </div>
   </div>
-  </div>
     <script>
       (() => {
-        const sheet = document.getElementById("settingsSheet");
-        const settingsButton = document.getElementById("settingsButton");
-        const closeButtons = Array.from(document.querySelectorAll('[data-sheet-close="settings"]'));
-        const consoleEl = document.getElementById("settingsLoadConsole");
+        function createUiKit(root = document) {
+          const cache = new Map();
+          const get = (selector) => {
+            if (!selector) return null;
+            if (cache.has(selector)) {
+              return cache.get(selector);
+            }
+            const node = root.querySelector(selector);
+            cache.set(selector, node || null);
+            return node || null;
+          };
+          const all = (selector) => Array.from(root.querySelectorAll(selector));
+          const toggle = (target, className, force) => {
+            const node = typeof target === "string" ? get(target) : target;
+            if (!node || !className) return node;
+            node.classList.toggle(className, force);
+            return node;
+          };
+          return { get, all, toggle };
+        }
+
+        window.capyUiKit = createUiKit;
+        const ui = createUiKit(document);
+        const sheet = ui.get("#settingsSheet");
+        const settingsButton = ui.get("#settingsButton");
+        const closeButtons = ui.all('[data-sheet-close="settings"]');
+        const consoleEl = ui.get("#settingsLoadConsole");
 
         function log(message) {
           if (!consoleEl) return;
@@ -1204,7 +1240,7 @@
         function setOpen(nextOpen) {
           if (!sheet) return;
           const open = Boolean(nextOpen);
-          sheet.classList.toggle("hidden", !open);
+          ui.toggle(sheet, "hidden", !open);
           sheet.setAttribute("aria-hidden", open ? "false" : "true");
           settingsButton?.setAttribute("aria-expanded", open ? "true" : "false");
         }
@@ -1256,6 +1292,25 @@
           const settingsBootstrap =
             window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
           settingsBootstrap.log("Renderer bootstrap starting");
+
+          const createUiKit =
+            window.capyUiKit ||
+            function createUiKit(root = document) {
+              const cache = new Map();
+              const get = (selector) => {
+                if (!selector) return null;
+                if (cache.has(selector)) {
+                  return cache.get(selector);
+                }
+                const node = root.querySelector(selector);
+                cache.set(selector, node || null);
+                return node || null;
+              };
+              const all = (selector) => Array.from(root.querySelectorAll(selector));
+              return { get, all };
+            };
+
+          const dom = createUiKit(document);
 
           const skipBootstrap = beginRendererBootstrap();
           if (skipBootstrap) {
@@ -1586,22 +1641,22 @@
         }
 
       // Cached DOM references so we can wire handlers without repeated lookups.
-      const appEl = document.getElementById("app");
-      const commandRail = document.getElementById("commandRail");
-      const fileInput = document.getElementById("fileInput");
-      const selectButton = document.getElementById("selectImage");
-      const settingsUploadButton = document.getElementById("settingsUploadButton");
-      const settingsLoadConsole = document.getElementById("settingsLoadConsole");
-      const sampleButtons = Array.from(document.querySelectorAll('[data-action="load-sample"]'));
-      const sampleDetailButtons = Array.from(document.querySelectorAll('[data-detail-level]'));
-      const sampleDetailCaptions = Array.from(document.querySelectorAll('[data-detail-caption]'));
-      const samplePreview = document.getElementById("sampleArtPreview");
-      const errorToast = document.getElementById("errorToast");
+      const appEl = dom.get("#app");
+      const commandRail = dom.get("#commandRail");
+      const fileInput = dom.get("#fileInput");
+      const selectButton = dom.get("#selectImage");
+      const settingsUploadButton = dom.get("#settingsUploadButton");
+      const settingsLoadConsole = dom.get("#settingsLoadConsole");
+      const sampleButtons = dom.all('[data-action="load-sample"]');
+      const sampleDetailButtons = dom.all("[data-detail-level]");
+      const sampleDetailCaptions = dom.all("[data-detail-caption]");
+      const samplePreview = dom.get("#sampleArtPreview");
+      const errorToast = dom.get("#errorToast");
       const errorToastMessage = errorToast?.querySelector("[data-error-message]") || null;
       const errorToastStack = errorToast?.querySelector("[data-error-stack]") || null;
       const errorToastCloseButton = errorToast?.querySelector("[data-error-close]") || null;
-      const gameSelectionList = document.getElementById("gameSelectionList");
-      const gameSelectionEmpty = document.getElementById("gameSelectionEmpty");
+      const gameSelectionList = dom.get("#gameSelectionList");
+      const gameSelectionEmpty = dom.get("#gameSelectionEmpty");
       const startHint = document.getElementById("startHint");
       const startHintCloseButton = document.getElementById("closeStartHint");
       const startSaveManagerSection = document.getElementById("saveManagerSection");
