@@ -17,45 +17,17 @@ permissions:
   id-token: write
 
 jobs:
-  plan-deploy:
-    runs-on: ubuntu-latest
-    outputs:
-      effective_branch: ${{ steps.plan.outputs.effective_branch }}
-      effective_ref: ${{ steps.plan.outputs.effective_ref }}
-    steps:
-      - name: Determine deployment eligibility
-        id: plan
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          TARGET_BRANCH_INPUT: ${{ inputs.target_branch || '' }}
-          REF_NAME: ${{ github.ref_name }}
-          REF: ${{ github.ref }}
-        run: |
-          set -euo pipefail
-
-          effective_branch="$REF_NAME"
-          effective_ref="$REF"
-
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "${TARGET_BRANCH_INPUT:-}" ]; then
-            effective_branch="$TARGET_BRANCH_INPUT"
-            effective_ref="refs/heads/$TARGET_BRANCH_INPUT"
-          fi
-
-          echo "effective_branch=$effective_branch" >>"$GITHUB_OUTPUT"
-          echo "effective_ref=$effective_ref" >>"$GITHUB_OUTPUT"
-
   deploy:
-    needs: plan-deploy
     if: github.ref != 'refs/heads/gh-pages'
     runs-on: ubuntu-latest
     env:
-      EFFECTIVE_BRANCH: ${{ needs.plan-deploy.outputs.effective_branch }}
-      EFFECTIVE_REF: ${{ needs.plan-deploy.outputs.effective_ref }}
+      EFFECTIVE_BRANCH: ${{ inputs.target_branch != '' && inputs.target_branch || github.ref_name }}
+      EFFECTIVE_REF: ${{ inputs.target_branch != '' && format('refs/heads/{0}', inputs.target_branch) || github.ref }}
     concurrency:
-      group: pages-deployments-${{ needs.plan-deploy.outputs.effective_branch }}
+      group: pages-deployments-${{ inputs.target_branch != '' && inputs.target_branch || github.ref_name }}
       cancel-in-progress: false
     environment:
-      name: github-pages
+      name: ${{ (inputs.target_branch != '' && inputs.target_branch || github.ref_name) == 'main' && 'github-pages' || format('github-pages-{0}', replace(inputs.target_branch != '' && inputs.target_branch || github.ref_name, '[^a-zA-Z0-9._-]', '-')) }}
       url: ${{ steps.sync.outputs.preview_url || steps.deploy-pages.outputs.page_url }}
     steps:
       - name: Checkout repository
