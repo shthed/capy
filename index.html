@@ -1299,6 +1299,7 @@
           createRendererController,
           createSvgRenderer,
           createWebGLRenderer,
+          SceneTileLoader,
         } from "./runtime.js";
         import { html, renderTemplate } from "./ui-template.js";
 
@@ -2318,6 +2319,7 @@
           outlineLayerCtx: null,
           outlineLayerDirty: true,
           labelSettingsSignature: null,
+          sceneLoader: null,
         };
       }
 
@@ -2460,6 +2462,7 @@
           cache.strokeWidth = 1;
           cache.regions = [];
           cache.regionsById = new Map();
+          cache.sceneLoader = null;
           cache.filledLayer = null;
           cache.filledLayerCtx = null;
           cache.filledLayerDirty = true;
@@ -2474,6 +2477,7 @@
         cache.width = state.puzzle.width;
         cache.height = state.puzzle.height;
         cache.version = state.puzzle.regions.length;
+        cache.sceneLoader = state.puzzle.sceneLoader || null;
         cache.strokeWidth = computeOutlineStrokeWidth(cache.width, cache.height, {
           displayScale: canvasMetrics.displayScale,
           pixelRatio: canvasMetrics.pixelRatio,
@@ -2481,10 +2485,12 @@
         });
         cache.regions = [];
         cache.regionsById = new Map();
-        for (const region of state.puzzle.regions) {
-          const geometry = buildRegionGeometry(region, cache.width, cache.height);
-          cache.regions.push(geometry);
-          cache.regionsById.set(region.id, geometry);
+        if (!cache.sceneLoader) {
+          for (const region of state.puzzle.regions) {
+            const geometry = buildRegionGeometry(region, cache.width, cache.height);
+            cache.regions.push(geometry);
+            cache.regionsById.set(region.id, geometry);
+          }
         }
         const pixelWidth = Math.max(1, canvasMetrics.pixelWidth || cache.width);
         const pixelHeight = Math.max(1, canvasMetrics.pixelHeight || cache.height);
@@ -2498,6 +2504,28 @@
         cache.ready = true;
         syncCacheMetrics(cache);
         return cache;
+      }
+
+      function computeSceneLoaderZoom(loader) {
+        const scale = Math.max(0.0001, canvasMetrics.displayScale || computeDisplayScale() || 1);
+        const approximate = Math.round(Math.log2(scale));
+        const maxZoom = Number.isFinite(loader?.maxZoom) ? loader.maxZoom : 0;
+        return clamp(approximate, 0, maxZoom);
+      }
+
+      function hydrateSceneTiles(cache) {
+        if (!cache?.sceneLoader) {
+          return;
+        }
+        const bounds = getVisiblePuzzleBounds();
+        const zoomLevel = computeSceneLoaderZoom(cache.sceneLoader);
+        const regions = cache.sceneLoader.getVisibleRegions({ zoom: zoomLevel, bounds });
+        cache.regions = regions;
+        cache.regionsById = new Map();
+        for (const geometry of regions) {
+          cache.regionsById.set(geometry.id, geometry);
+        }
+        cache.version = regions.length;
       }
 
       function rebuildFilledLayer(cache) {
@@ -2850,6 +2878,27 @@
         const zoom = normalizeZoomValue(viewState.zoom > 0 ? viewState.zoom : 1, 1);
         const { minScale, maxScale } = getScaleBounds(base);
         return clamp(base * zoom, minScale, maxScale);
+      }
+
+      function getVisiblePuzzleBounds() {
+        if (!state.puzzle) {
+          return null;
+        }
+        const rect = getPuzzleCanvasRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) {
+          return null;
+        }
+        const scale = Math.max(0.0001, canvasMetrics.displayScale || computeDisplayScale() || 1);
+        const halfWidth = (rect.width / scale) * 0.5;
+        const halfHeight = (rect.height / scale) * 0.5;
+        const centerX = state.puzzle.width / 2 - viewState.panX / scale;
+        const centerY = state.puzzle.height / 2 - viewState.panY / scale;
+        return {
+          minX: clamp(centerX - halfWidth, 0, state.puzzle.width),
+          maxX: clamp(centerX + halfWidth, 0, state.puzzle.width),
+          minY: clamp(centerY - halfHeight, 0, state.puzzle.height),
+          maxY: clamp(centerY + halfHeight, 0, state.puzzle.height),
+        };
       }
 
       function updateCanvasMetrics() {
@@ -3221,6 +3270,7 @@
         loadedSaveId: null,
         previewImageData: null,
         renderCache: createRenderCache(),
+        sceneLoaderSubscription: null,
         rendering: { controller: null },
         paletteAdjacency: new Map(),
         defaultGame: {
@@ -3233,6 +3283,32 @@
         paletteDisplayNumbers: new Map(),
       };
 
+      function detachSceneLoaderSubscription() {
+        if (typeof state.sceneLoaderSubscription === "function") {
+          try {
+            state.sceneLoaderSubscription();
+          } catch (error) {
+            console.warn("Scene loader subscription cleanup failed", error);
+          }
+        }
+        state.sceneLoaderSubscription = null;
+      }
+
+      function attachSceneLoaderSubscription(loader) {
+        detachSceneLoaderSubscription();
+        if (!loader || typeof loader.onUpdate !== "function") {
+          return;
+        }
+        state.sceneLoaderSubscription = loader.onUpdate((event) => {
+          if (!state.renderCache || state.renderCache.sceneLoader !== loader) {
+            return;
+          }
+          if (event && event.visible === false) {
+            return;
+          }
+          renderPuzzle();
+        });
+      }
       const debugLogEntries = [];
       const DEBUG_LOG_LIMIT = 80;
 
@@ -7803,6 +7879,7 @@
 
       function resetPuzzleUI() {
         clearOverlayAnimations();
+        detachSceneLoaderSubscription();
         state.puzzle = null;
         state.activeColor = null;
         state.filled = new Set();
@@ -8258,6 +8335,83 @@
         };
       }
 
+      function toBinaryByteView(source) {
+        if (!source) {
+          return null;
+        }
+        if (source instanceof ArrayBuffer) {
+          return new Uint8Array(source);
+        }
+        if (ArrayBuffer.isView(source)) {
+          return new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+        }
+        return null;
+      }
+
+      function cloneSerializable(value) {
+        if (!value || typeof value !== "object") {
+          return null;
+        }
+        try {
+          return JSON.parse(JSON.stringify(value));
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function normalizeVectorSceneSnapshot(source) {
+        if (!source || typeof source !== "object") {
+          return null;
+        }
+        const metadata = cloneSerializable(source.metadata);
+        if (!metadata) {
+          return null;
+        }
+        const binarySource = source.binary ?? source.buffer ?? source.data ?? null;
+        let binary = null;
+        if (typeof binarySource === "string") {
+          binary = binarySource.trim();
+        } else {
+          const bytes = toBinaryByteView(binarySource);
+          if (bytes) {
+            binary = encodeBytesToBase64(bytes);
+          }
+        }
+        if (binary == null) {
+          return null;
+        }
+        return { metadata, binary };
+      }
+
+      function resolveVectorSceneBinaryBuffer(source) {
+        if (!source) {
+          return null;
+        }
+        if (typeof source === "string") {
+          try {
+            const trimmed = source.trim();
+            const bytes = decodeBase64ToBytes(trimmed);
+            if (bytes && bytes.buffer) {
+              return bytes.buffer;
+            }
+            return null;
+          } catch (error) {
+            return null;
+          }
+        }
+        if (source instanceof ArrayBuffer) {
+          return source;
+        }
+        if (ArrayBuffer.isView(source)) {
+          const { buffer, byteOffset, byteLength } = source;
+          if (byteOffset === 0 && byteLength === buffer.byteLength) {
+            return buffer;
+          }
+          return buffer.slice(byteOffset, byteOffset + byteLength);
+        }
+        return null;
+      }
+
       function hydrateSourceImageSnapshot(snapshot, defaults = {}, options = {}) {
         const normalized = normalizeSourceImageSnapshot(snapshot, defaults);
         if (!normalized) {
@@ -8546,6 +8700,26 @@
           regions,
           regionMap,
         };
+        if (data.vectorScene?.metadata && data.vectorScene?.binary) {
+          try {
+            const binaryBuffer = resolveVectorSceneBinaryBuffer(data.vectorScene.binary);
+            if (!binaryBuffer) {
+              throw new Error("Vector scene binary is unavailable");
+            }
+            puzzle.vectorScene = {
+              metadata: data.vectorScene.metadata,
+              binary: binaryBuffer,
+            };
+            puzzle.sceneLoader = new SceneTileLoader(
+              puzzle.vectorScene.metadata,
+              puzzle.vectorScene.binary
+            );
+          } catch (error) {
+            logDebug(
+              `[Renderer] Unable to initialise vector scene loader: ${error?.message || error}`
+            );
+          }
+        }
         state.puzzle = puzzle;
         state.paletteAdjacency = buildPaletteAdjacency(palette);
         const sourceSnapshot = metadata.sourceImage ?? data.sourceImage;
@@ -8571,6 +8745,7 @@
         puzzle.sourceImage = sourceImageRecord;
         state.sourceCacheKey = sourceImageRecord?.cacheKey || null;
         state.renderCache = createRenderCache();
+        attachSceneLoaderSubscription(puzzle.sceneLoader || null);
         state.puzzle.backgroundColor = backgroundHex;
         state.activeColor =
           requestedColor != null && paletteIds.has(requestedColor)
@@ -8739,6 +8914,7 @@
         if (!state.puzzle) return;
         ensureCanvasMetricsInitialized();
         const cache = ensureRenderCache();
+        hydrateSceneTiles(cache);
         const controller = state.rendering?.controller;
         if (!controller) return;
         const renderTimer = performanceMetrics.start("render:frame", {
@@ -11971,6 +12147,16 @@
         }
         const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
         const strokeWidth = cache?.strokeWidth > 0 ? cache.strokeWidth : 1;
+        const resolveGeometry = (regionId) => {
+          const cached = cache?.regionsById?.get(regionId);
+          if (cached) {
+            return cached;
+          }
+          if (cache?.sceneLoader) {
+            return cache.sceneLoader.getRegion(regionId);
+          }
+          return null;
+        };
         withRenderScale(context, scale, () => {
           context.fillStyle = fillStyle;
           context.strokeStyle = fillStyle;
@@ -11979,7 +12165,7 @@
           context.lineCap = "round";
           if (SUPPORTS_PATH2D) {
             for (const region of regions) {
-              const geometry = cache?.regionsById?.get(region.id);
+              const geometry = resolveGeometry(region.id);
               if (!geometry?.path) continue;
               context.fill(geometry.path);
               context.stroke(geometry.path);
@@ -11987,7 +12173,7 @@
             return;
           }
           for (const region of regions) {
-            const geometry = cache?.regionsById?.get(region.id);
+            const geometry = resolveGeometry(region.id);
             if (!geometry?.contours) continue;
             context.beginPath();
             for (const contour of geometry.contours) {
@@ -12131,6 +12317,10 @@
             baseScale: Number.isFinite(baseScale) ? baseScale : 1,
           };
         }
+        const vectorSceneSnapshot = normalizeVectorSceneSnapshot(snapshot.vectorScene);
+        if (vectorSceneSnapshot) {
+          payload.vectorScene = vectorSceneSnapshot;
+        }
         return payload;
       }
 
@@ -12203,6 +12393,9 @@
             baseScale: viewState.baseScale,
           },
         };
+        if (puzzle.vectorScene) {
+          snapshot.vectorScene = puzzle.vectorScene;
+        }
         if (regionMapPacked) {
           snapshot.regionMapPacked = regionMapPacked;
         } else if (puzzle.regionMap) {

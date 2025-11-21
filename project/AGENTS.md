@@ -156,22 +156,18 @@ any feature or workflow changes you ship.
 
 ## Branch Deployments
 
-- Workflow: `.github/workflows/deploy-branch.yml` builds from every push and can
-  be run manually via `workflow_dispatch` with a `target_branch` override when
-  you need to redeploy a specific ref. `main` lands at the root; every other
-  branch publishes its own preview directory.
+- Workflow: `.github/workflows/deploy-branch.yml` builds from every push.
+  Branches without open PRs exit early; `main` always deploys.
 - Destinations: `main` publishes to the root of GitHub Pages. Other branches
   land in `/automation-<slug>/` directories using sanitised branch names (e.g.,
   `automation/feature` → `/automation-feature/`).
 - Contents: Each deployment ships the runtime payload from the repository root
   (`index.html`, `render.js`, `puzzle-generation.js`, and `capy.json`) plus a
   generated `/README/index.html` so documentation mirrors the branch.
-- Preview links: Deployment URLs land in the workflow summary; the post-deploy
-  tests workflow also comments on linked PRs when the triggering run is attached
-  to one.
-- Cleanup: The deployment job deletes preview folders for branches that no
-  longer exist, and the nightly cleanup workflow prunes inactive `automation/`
-  branches so their previews drop on the next deploy.
+- Preview links: Deployment URLs post directly to the associated PRs, replacing
+  the old shared `branch.html` index.
+- Cleanup: When a PR closes, the workflow prunes its corresponding deployment on
+  the next run—manual intervention is rarely needed.
 - Post-deploy smoke tests: `.github/workflows/post-deploy-tests.yml` waits for a
   successful deployment, reruns the Playwright smoke script against the hosted
   preview, uploads any UI review artifacts, and comments on the PR with the
