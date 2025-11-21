@@ -66,16 +66,30 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
     <title>Image to Color-by-Number</title>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PB9QNQCD7Q"></script>
     <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag() {
-        dataLayer.push(arguments);
-      }
-      gtag("js", new Date());
+      (() => {
+        const host = window.location?.hostname;
+        const allowAnalytics =
+          host && host !== "localhost" && host !== "127.0.0.1" && !window.navigator?.webdriver;
 
-      gtag("config", "G-PB9QNQCD7Q");
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function gtag() {
+          window.dataLayer.push(arguments);
+        };
+
+        if (!allowAnalytics) {
+          return;
+        }
+
+        const script = document.createElement("script");
+        script.async = true;
+        script.src = "https://www.googletagmanager.com/gtag/js?id=G-PB9QNQCD7Q";
+        script.onload = () => {
+          window.gtag("js", new Date());
+          window.gtag("config", "G-PB9QNQCD7Q");
+        };
+        document.head.appendChild(script);
+      })();
     </script>
     <script type="module" src="./runtime.js"></script>
     <style>
@@ -1344,144 +1358,6 @@
         return { update, on, emit, root, get props() { return currentProps; } };
       }
 
-      function createSettingsTabsComponent(sheetEl) {
-        if (!sheetEl) {
-          return {
-            root: null,
-            update() {},
-            on() {},
-            activate() {
-              return null;
-            },
-            focusIndex() {
-              return null;
-            },
-            getActiveTabId() {
-              return null;
-            },
-            getTabCount() {
-              return 0;
-            },
-          };
-        }
-        const tabButtons = Array.from(sheetEl.querySelectorAll("[data-settings-tab]"));
-        const tabPanels = Array.from(sheetEl.querySelectorAll("[data-settings-panel]"));
-        const tabSections = tabPanels.map((panel) => panel.closest("[data-settings-section]") || null);
-        const scrollContainer =
-          sheetEl.querySelector("[data-settings-scroll]") || sheetEl.querySelector(".sheet-body") || null;
-        const defaultTabId =
-          tabButtons.find((button) => button?.hasAttribute("data-settings-tab-default"))?.dataset.settingsTab ||
-          (tabButtons[0]?.dataset.settingsTab ?? null);
-        let activeTabId = defaultTabId;
-
-        const component = createComponent(sheetEl, ({ props, emit }) => {
-          const {
-            activeId = activeTabId,
-            focusTab = false,
-            force = false,
-            resetScroll = false,
-          } = props;
-          const tabId = activeId || defaultTabId;
-          const button = tabButtons.find((candidate) => candidate?.dataset.settingsTab === tabId);
-          const panel = tabPanels.find((candidate) => candidate?.dataset.settingsPanel === tabId);
-          if (!button || !panel) {
-            return;
-          }
-          const changed = force || activeTabId !== tabId;
-          activeTabId = tabId;
-          for (const candidate of tabButtons) {
-            const selected = candidate === button;
-            candidate.setAttribute("aria-selected", selected ? "true" : "false");
-            candidate.setAttribute("tabindex", selected ? "0" : "-1");
-          }
-          tabPanels.forEach((candidate, index) => {
-            const isTarget = candidate === panel;
-            const section = tabSections[index];
-            candidate.hidden = !isTarget;
-            candidate.setAttribute("aria-hidden", isTarget ? "false" : "true");
-            if (section && section !== candidate) {
-              section.hidden = !isTarget;
-              section.setAttribute("aria-hidden", isTarget ? "false" : "true");
-            }
-          });
-          if (scrollContainer && (resetScroll || changed)) {
-            scrollContainer.scrollTop = 0;
-          }
-          if (focusTab) {
-            button.focus();
-          }
-          emit("change", { tabId, changed, force });
-        });
-
-        if (tabButtons.length > 0) {
-          tabButtons.forEach((button, index) => {
-            button.addEventListener("click", () => {
-              component.update({ activeId: button.dataset.settingsTab, resetScroll: true });
-            });
-            button.addEventListener("keydown", (event) => {
-              switch (event.key) {
-                case "ArrowRight":
-                case "ArrowDown":
-                  event.preventDefault();
-                  focusIndex(index + 1, { resetScroll: true });
-                  break;
-                case "ArrowLeft":
-                case "ArrowUp":
-                  event.preventDefault();
-                  focusIndex(index - 1, { resetScroll: true });
-                  break;
-                case "Home":
-                  event.preventDefault();
-                  focusIndex(0, { resetScroll: true });
-                  break;
-                case "End":
-                  event.preventDefault();
-                  focusIndex(tabButtons.length - 1, { resetScroll: true });
-                  break;
-                default:
-                  break;
-              }
-            });
-          });
-        }
-
-        if (tabButtons.length > 0 && defaultTabId) {
-          component.update({ activeId: activeTabId || defaultTabId, force: true });
-        }
-
-        function focusIndex(index, options = {}) {
-          if (tabButtons.length === 0) {
-            return null;
-          }
-          const length = tabButtons.length;
-          const normalized = ((index % length) + length) % length;
-          const target = tabButtons[normalized];
-          const tabId = target?.dataset.settingsTab;
-          if (tabId) {
-            component.update({ activeId: tabId, focusTab: true, ...options });
-          }
-          return tabId || null;
-        }
-
-        return {
-          root: sheetEl,
-          update: component.update,
-          on: component.on,
-          getActiveTabId() {
-            return activeTabId;
-          },
-          getTabCount() {
-            return tabButtons.length;
-          },
-          activate(tabId, options = {}) {
-            const nextTab = tabId || activeTabId || defaultTabId;
-            component.update({ activeId: nextTab, ...options });
-            return nextTab;
-          },
-          focusIndex,
-        };
-      }
-
       function createPaletteDockComponent({ root, sortControl }) {
         const component = createComponent(root, ({ props, emit }) => {
           if (!root) return;
@@ -1669,7 +1545,6 @@
         settingsSheet?.querySelector("[data-settings-scroll]") ||
         settingsSheet?.querySelector(".sheet-body") ||
         null;
-      const settingsTabs = createSettingsTabsComponent(settingsSheet);
       const generatorPanel = settingsSheet?.querySelector('[data-settings-panel="generator"]') || null;
       const helpPanel = settingsSheet?.querySelector('[data-settings-panel="help"]') || null;
       const sheetRegistry = [settingsSheet].filter(Boolean);
@@ -3358,6 +3233,9 @@
         paletteDisplayNumbers: new Map(),
       };
 
+      const debugLogEntries = [];
+      const DEBUG_LOG_LIMIT = 80;
+
       registerServiceWorker();
       warmRuntimeCache();
 
@@ -4017,9 +3895,6 @@
         scheduleSettingsPersist({ delay: 0 });
         updateOptionOutputs();
       }
-
-      const debugLogEntries = [];
-      const DEBUG_LOG_LIMIT = 80;
 
       if (typeof window !== "undefined") {
         installBrowserZoomGuards();
@@ -5529,6 +5404,23 @@
         if (readmeLoadState === "loading" || readmeLoadState === "loaded") {
           return;
         }
+        const skipReadmeFetch =
+          window.navigator?.webdriver ||
+          window.location?.hostname === "localhost" ||
+          window.location?.hostname === "127.0.0.1";
+        if (skipReadmeFetch) {
+          readmeLoadState = "loaded";
+          if (readmeStatusEl) {
+            readmeStatusEl.hidden = false;
+            readmeStatusEl.textContent = "README preview unavailable offline.";
+          }
+          if (readmeContentEl) {
+            readmeContentEl.hidden = false;
+            readmeContentEl.textContent = "README preview unavailable offline.";
+            readmeContentEl.classList.add("readme-preview--plaintext");
+          }
+          return;
+        }
         readmeLoadState = "loading";
         if (readmeStatusEl) {
           readmeStatusEl.hidden = false;
@@ -5746,11 +5638,7 @@
         const { tabId = null, focusTab = false, resetScroll = true, force = false } = options;
         openSheet(settingsSheet);
         ensureSettingsSheetPosition({ forceCenter: force || !settingsSheetPosition });
-        const hasTabs = typeof settingsTabs.getTabCount === "function" && settingsTabs.getTabCount() > 0;
-        const targetTabId = tabId || settingsTabs.getActiveTabId?.() || null;
-        if (hasTabs) {
-          settingsTabs.activate(targetTabId, { focusTab, resetScroll, force });
-        } else if (typeof tabId === "string" && tabId.length > 0) {
+        if (typeof tabId === "string" && tabId.length > 0) {
           scrollSettingsPanelIntoView(tabId, { focus: focusTab, resetScroll });
         } else if (resetScroll && settingsBody) {
           settingsBody.scrollTop = 0;
