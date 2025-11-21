@@ -1656,6 +1656,33 @@ body[data-theme="light"] .readme-preview pre {
   color: var(--theme-command-active-text);
 }
 
+.feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.feedback-status {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--theme-note-text);
+}
+
+.feedback-status.is-success {
+  color: #22c55e;
+}
+
+.feedback-status.is-error {
+  color: #ef4444;
+}
+
 .control-list kbd {
   display: inline-flex;
   align-items: center;
