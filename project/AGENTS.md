@@ -137,6 +137,15 @@ any feature or workflow changes you ship.
   # resolve conflicts
   git push --force-with-lease
   ```
+- Conflict response when `origin/main` moves:
+  - Add the canonical remote if it is missing:
+    ```bash
+    git remote add origin https://github.com/shthed/capy.git
+    ```
+  - Fetch and pull before resuming work, then rebase or merge right away so
+    merge conflicts are handled immediately instead of deferred.
+  - Capture any conflict-resolution steps (and outcomes) in notes or TODO items
+    so reviewers can trace the fixes.
 - Conflict shortcuts:
   ```bash
   git checkout --theirs package-lock.json yarn.lock pnpm-lock.yaml
