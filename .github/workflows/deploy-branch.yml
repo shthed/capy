@@ -27,7 +27,7 @@ jobs:
       group: pages-deployments-${{ inputs.target_branch != '' && inputs.target_branch || github.ref_name }}
       cancel-in-progress: false
     environment:
-      name: ${{ (inputs.target_branch != '' && inputs.target_branch || github.ref_name) == 'main' && 'github-pages' || format('github-pages-{0}', replace(inputs.target_branch != '' && inputs.target_branch || github.ref_name, '[^a-zA-Z0-9._-]', '-')) }}
+      name: ${{ (inputs.target_branch != '' && inputs.target_branch || github.ref_name) == 'main' && 'github-pages' || format('github-pages-{0}', inputs.target_branch != '' && inputs.target_branch || github.ref_name) }}
       url: ${{ steps.sync.outputs.preview_url || steps.deploy-pages.outputs.page_url }}
     steps:
       - name: Checkout repository

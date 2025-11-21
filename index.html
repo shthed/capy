@@ -231,6 +231,79 @@
           ></div>
         </section>
         <div class="settings-body">
+          <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-gameplay"
+              aria-selected="true"
+              data-settings-tab="gameplay"
+              data-settings-tab-default
+            >
+              Gameplay
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-hints"
+              aria-selected="false"
+              data-settings-tab="hints"
+            >
+              Hints
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-controls"
+              aria-selected="false"
+              data-settings-tab="controls"
+            >
+              Controls
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-appearance"
+              aria-selected="false"
+              data-settings-tab="appearance"
+            >
+              Appearance
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-generator"
+              aria-selected="false"
+              data-settings-tab="generator"
+            >
+              Generator
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-saves"
+              aria-selected="false"
+              data-settings-tab="saves"
+            >
+              Saves
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              aria-controls="settingsPanel-help"
+              aria-selected="false"
+              data-settings-tab="help"
+            >
+              Help &amp; logs
+            </button>
+          </nav>
           <div class="settings-content" data-settings-scroll>
             <section class="settings-section" data-settings-section="gameplay">
               <div class="settings-section-heading">
@@ -1186,32 +1259,24 @@
           settingsButton?.setAttribute("aria-expanded", open ? "true" : "false");
         }
 
-        const handleFallbackClick = () => {
+        settingsButton?.addEventListener("click", () => {
           const isHidden = sheet?.classList.contains("hidden") ?? true;
           setOpen(isHidden);
           if (isHidden) {
             log("Opened from launcher before full app load");
           }
-        };
+        });
 
-        const handleFallbackClose = () => {
-          setOpen(false);
-          log("Closed while in fallback mode");
-        };
-
-        settingsButton?.addEventListener("click", handleFallbackClick);
-
-        closeButtons.forEach((button) => button.addEventListener("click", handleFallbackClose));
-
-        function detachFallbackHandlers() {
-          settingsButton?.removeEventListener("click", handleFallbackClick);
-          closeButtons.forEach((button) => button.removeEventListener("click", handleFallbackClose));
-        }
+        closeButtons.forEach((button) =>
+          button.addEventListener("click", () => {
+            setOpen(false);
+            log("Closed while in fallback mode");
+          })
+        );
 
         window.capySettingsBootstrap = {
           log,
           setOpen,
-          detach: detachFallbackHandlers,
           recordError(message) {
             log(message || "Unknown settings error");
           },
@@ -1239,9 +1304,7 @@
 
         (() => {
           const settingsBootstrap =
-            window.capySettingsBootstrap ||
-            Object.freeze({ log() {}, setOpen() {}, detach() {}, recordError() {}, syncJson() {} });
-          settingsBootstrap.detach?.();
+            window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
           settingsBootstrap.log("Renderer bootstrap starting");
 
           const createUiKit =
