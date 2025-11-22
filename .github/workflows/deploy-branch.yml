@@ -72,7 +72,6 @@ jobs:
 
             const safeBranch = branch ? sanitize(branch) : '';
             const isMain = branch === 'main';
-            const isAutomationBranch = branch.startsWith('automation/');
 
             let hasOpenPr = false;
             if (!isMain && branch) {
@@ -86,7 +85,7 @@ jobs:
             }
 
             const shouldDeploy = Boolean(
-              (isMain || isAutomationBranch) && (isMain || hasOpenPr || allowWithoutPr)
+              branch && (isMain || hasOpenPr || allowWithoutPr)
             );
 
             const baseUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
