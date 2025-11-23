@@ -33,6 +33,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
   - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the runtime payload.
   - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, smoothing, and metadata assembly off the main thread.
 - **Documentation**
+  - `AGENTS.md` – Contributor workflow and automation expectations; mirrored to `/AGENTS/index.html` during deployments.
   - `README.md` – Player-facing quick start and gameplay overview.
   - `TECH.md` – This technical reference.
   - `project/STYLEGUIDE.md` – CSS conventions, load-order expectations, and maintenance tips for the runtime stylesheet.
@@ -48,7 +49,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
   - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally; `npm run dev` serves the repository root at http://localhost:8000.
   - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
-  - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn `README.md` into `/README/index.html` and keep embedded docs mirrored in previews.
+  - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn Markdown sources (README, AGENTS, etc.) into styled HTML mirrors for GitHub Pages previews.
   - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
@@ -103,13 +104,14 @@ is not eligible:
    - `main` copies the runtime payload from the repository root (`index.html`,
      `styles.css`, `render.js`, `puzzle-generation.js`, `runtime.js`,
      `service-worker.js`, `capy.json`, etc.) into the root of `gh-pages`, then
-     regenerates `/README/index.html` with
+     regenerates `/README/index.html` and `/AGENTS/index.html` with
      `project/scripts/build-pages-site.mjs` so
-     https://shthed.github.io/capy/README/ mirrors the handbook.
+     https://shthed.github.io/capy/README/ mirrors the handbook and
+     https://shthed.github.io/capy/AGENTS/ keeps the workflow guide live.
    - Non-`main` branches clear their directory (e.g.,
      `/automation-feature/`), copy the same runtime payload plus JS/CSS/JSON
-     dependencies, and generate a scoped `/README/index.html` for that
-     directory.
+     dependencies, and generate scoped `/README/index.html` and
+     `/AGENTS/index.html` files for that directory.
    Because the sync uses `rsync -a` without `--delete`, previously published
    branch folders stick around inside the `gh-pages` working tree until they are
    removed manually.

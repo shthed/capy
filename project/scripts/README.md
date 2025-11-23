@@ -6,9 +6,11 @@ from CI workflows, but they can also be useful when iterating locally.
 
 ## `build-pages-site.mjs`
 
-Renders `README.md` to a styled HTML page using GitHub's Markdown API. The
-result is written to the output path provided on the command line and wrapped in
-a layout that matches the GitHub Pages preview style.
+Renders Markdown (e.g., `README.md` or `AGENTS.md`) to a styled HTML page using
+GitHub's Markdown API. The result is written to the output path provided on the
+command line and wrapped in a layout that matches the GitHub Pages preview
+style. Optional `--title` and `--source-label` flags customise the page title
+and footer source label when rendering non-README docs.
 
 ```
 node project/scripts/build-pages-site.mjs \
