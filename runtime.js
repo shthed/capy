@@ -124,6 +124,55 @@ export function completeRendererBootstrap(succeeded) {
   window.__capyRendererBootstrapVersion = succeeded ? SENTINEL_READY : undefined;
 }
 
+export function createRendererController(host, options = {}) {
+  const { hooks = {} } = options || {};
+  const renderer = createSvgRenderer(host, hooks);
+
+  function resize(metrics = {}) {
+    renderer?.setSize?.(metrics.pixelWidth, metrics.pixelHeight);
+  }
+
+  function renderFrame(args = {}) {
+    const state = args.state || {};
+    const puzzle = state.puzzle || {};
+    const source = puzzle.sourceImage?.image || null;
+    const width = puzzle.width || args.metrics?.pixelWidth || host?.width || 0;
+    const height = puzzle.height || args.metrics?.pixelHeight || host?.height || 0;
+    if (source && typeof source.src === "string") {
+      renderer?.setImageSource(source.src, width, height);
+    } else {
+      renderer?.setImageSource("", width, height);
+    }
+    if (typeof args.backgroundColor === "string") {
+      renderer?.setBackground?.(args.backgroundColor);
+    }
+    return null;
+  }
+
+  function fillBackground(args = {}) {
+    if (typeof args.color === "string") {
+      renderer?.setBackground?.(args.color);
+    }
+  }
+
+  function getContext() {
+    return null;
+  }
+
+  return {
+    getRendererType: () => "svg",
+    listRenderers: () => ["svg"],
+    setRenderer: () => renderer,
+    resize,
+    renderFrame,
+    renderPreview: () => null,
+    flashRegions: () => {},
+    fillBackground,
+    dispose: () => renderer?.dispose?.(),
+    getContext,
+  };
+}
+
 if (root) {
   const metrics = computePrebootMetrics();
   if (typeof window !== "undefined") {
@@ -131,6 +180,6 @@ if (root) {
   }
 }
 
-export { createSvgRenderer, SceneTileLoader };
+export { createRendererController, createSvgRenderer, SceneTileLoader };
 
 export default getPrebootMetrics;
