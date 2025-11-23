@@ -124,6 +124,10 @@
     <li>Primary test command: <code class="notranslate">npm test --silent</code> from within <code class="notranslate">project/</code> (currently<br>
     prints a skip notice while the Playwright suite is offline). Mention in the<br>
     final response if you cannot run it.</li>
+    <li>Playwright flow: install browsers with <code class="notranslate">npm run setup:playwright</code> (or<br>
+    <code class="notranslate">npx playwright install --with-deps chromium</code>) before running UI checks. If<br>
+    downloads are blocked or cached binaries are busy (<code class="notranslate">ETXTBSY</code>), rerun the<br>
+    install to refresh the bundle before retrying tests.</li>
     <li>Playwright browsers are <strong>not</strong> preinstalled. Before running any tests or<br>
     scripts that launch Playwright, execute<br>
     <code class="notranslate">npx playwright install --with-deps chromium</code> to provision the Chromium<br>
@@ -137,6 +141,9 @@
     labels, and README imagery when making visual changes.</li>
     <li>Artifacts: Capture Playwright reports under <code class="notranslate">artifacts/ui-review/</code> for major<br>
     UI updates and surface them in PRs once the automated suite is reinstated.</li>
+    <li>Changelog + screenshots: save UI screenshots under <code class="notranslate">project/artifacts/</code> and<br>
+    link them from <code class="notranslate">project/changelog.md</code> so reviewers can compare against<br>
+    deployed previews.</li>
     <li>Manual QA: <code class="notranslate">window.capyGenerator</code> exposes helpers (e.g.<br>
     <code class="notranslate">loadPuzzleFixture</code>, <code class="notranslate">togglePreview</code>). Document any new helpers in <code class="notranslate">TECH.md</code><br>
     plus relevant tests.</li>
