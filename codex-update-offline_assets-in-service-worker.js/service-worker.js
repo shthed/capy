@@ -5,6 +5,9 @@ const OFFLINE_ASSETS = [
   './styles.css',
   './runtime.js',
   './render.js',
+  './render-canvas2d.js',
+  './render-webgl.js',
+  './render-svg.js',
   './puzzle-generation.js',
   './capy.json',
 ];
