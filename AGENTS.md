@@ -11,6 +11,9 @@ any feature or workflow changes you ship.
 - **Read onboarding.** Start by skimming `ONBOARDING.md` so you follow the
   expected setup steps, manual QA flow, and documentation touchpoints before
   touching the runtime.
+- **Session kick-off.** Verify the canonical `origin` remote exists, then run
+  `git fetch --all --prune` followed by `git rebase origin/main` when resuming
+  prior work—do this before any scripts or edits to minimise merge conflicts.
 - **Branch naming.** Create short-lived branches named `automation/<change>` so
   QA notes and preview URLs map directly to the experiment under review.
 - **Draft PRs early.** Open a draft PR as soon as you push. CI logs, manual QA
