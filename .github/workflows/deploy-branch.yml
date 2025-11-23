@@ -218,7 +218,8 @@ jobs:
           git commit -m "Deploy ${TARGET_BRANCH} (${GITHUB_SHA})"
           git push origin gh-pages
 
-          echo "Preview URL: ${PREVIEW_URL}" >> "$GITHUB_STEP_SUMMARY"
+          echo "::debug::Preview URL ${PREVIEW_URL}"
+          echo "Preview URL: ${PREVIEW_URL}" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Record deployment failure
         if: failure()
