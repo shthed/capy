@@ -53,7 +53,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
-  - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days by calling `project/scripts/cleanup-branches.mjs`.
+  - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale branches matching the configured prefixes (defaults to `automation/`) when they lack open PRs and fall outside the cutoff window (defaults to 60 minutes), then trims gh-pages previews whose sanitized slug no longer maps to a live branch.
 
 ## Project Health Snapshot
 
@@ -133,17 +133,18 @@ still reporting the preview URL from the previous publish.
 - **Prune Git branches regularly.** `.github/workflows/cleanup-branches.yml`
   runs nightly (and after every successful Pages deployment) to invoke
   `project/scripts/cleanup-branches.mjs`. The script deletes unprotected
-  `automation/` branches with no open PR activity and no commits in the last 30
-  days, ensuring future deploy runs stop re-copying previews nobody needs.
-  Trigger the workflow manually via the **Cleanup stale automation branches**
-  action whenever you close a large batch of PRs so stale heads disappear
-  immediately.
-- **Deploy run now prunes gh-pages directories automatically.** After cloning
-  the Pages branch, `.github/workflows/deploy-branch.yml` queries the remote
-  branch list, sanitises those names the same way preview directories are
-  generated, and removes any preview folders whose slug no longer matches a
-  live branch. Once the nightly branch cleanup deletes the branch itself, the
-  next deploy run drops its Pages payload automatically.
+  branches matching the configured prefixes (defaults to `automation/`) when
+  they have no open PR activity and have not received commits within the
+  configurable cutoff window (defaults to 60 minutes), ensuring future deploy
+  runs stop re-copying previews nobody needs. Trigger the workflow manually via
+  the **Cleanup stale automation branches** action whenever you close a large
+  batch of PRs so stale heads disappear immediately.
+- **Cleanup also trims Pages previews.** After refreshing remote branches,
+  `.github/workflows/cleanup-branches.yml` scans the `gh-pages` branch for
+  preview directories whose sanitized slug (matching the deployment helper) no
+  longer corresponds to a live branch and deletes them before committing back
+  to `gh-pages`. That keeps artifacts lean even if Pages deploys pause for a
+  while.
 - **Manual cleanup remains available.** If you need to reclaim space before the
   next deployment runs (or before triggering **Deploy GitHub Pages previews**
   by hand), delete the stale `automation-<slug>` directories on `gh-pages` and
