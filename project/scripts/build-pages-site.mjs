@@ -82,7 +82,11 @@ const formatUtcTimestamp = (date = new Date()) => {
 
 export const generateReadmeHtml = (
   renderedHtml,
-  { generatedAt = new Date() } = {}
+  {
+    generatedAt = new Date(),
+    pageTitle = 'Capy README',
+    sourceLabel = 'README.md',
+  } = {}
 ) => {
   const stamped = formatUtcTimestamp(generatedAt);
   const indentedHtml = indentHtml(renderedHtml);
@@ -92,7 +96,7 @@ export const generateReadmeHtml = (
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>Capy README</title>
+          <title>${pageTitle}</title>
           <style>
             :root {
               color-scheme: light dark;
@@ -144,7 +148,7 @@ export const generateReadmeHtml = (
 ${contentBlock}
 
           </main>
-          <footer class="page-meta">Generated from README.md · ${stamped}</footer>
+          <footer class="page-meta">Generated from ${sourceLabel} · ${stamped}</footer>
         </body>
         </html>
 `;
@@ -152,7 +156,7 @@ ${contentBlock}
 
 const printUsage = () => {
   console.error(
-    'Usage: build-pages-site.mjs --source <readme.md> --output <output.html> [--mode gfm] [--context owner/repo]'
+    'Usage: build-pages-site.mjs --source <readme.md> --output <output.html> [--mode gfm] [--context owner/repo] [--title "Capy README"] [--source-label README.md]'
   );
 };
 
@@ -183,6 +187,14 @@ const parseArgs = (argv) => {
         args.context = value;
         index += 1;
         break;
+      case '--title':
+        args.title = value;
+        index += 1;
+        break;
+      case '--source-label':
+        args.sourceLabel = value;
+        index += 1;
+        break;
       default:
         break;
     }
@@ -208,6 +220,13 @@ const main = async () => {
   const sourcePath = ensureAbsolutePath(argv.source);
   const outputPath = ensureAbsolutePath(argv.output);
 
+  const sourceLabel = argv.sourceLabel || path.basename(sourcePath);
+  const defaultTitle =
+    argv.title ||
+    (sourceLabel.toLowerCase() === 'readme.md'
+      ? 'Capy README'
+      : `Capy ${sourceLabel.replace(/\.md$/i, '')}`);
+
   let markdown;
   try {
     markdown = await fs.readFile(sourcePath, 'utf8');
@@ -229,7 +248,11 @@ const main = async () => {
     return;
   }
 
-  const html = generateReadmeHtml(rendered);
+  const html = generateReadmeHtml(rendered, {
+    generatedAt: new Date(),
+    pageTitle: defaultTitle,
+    sourceLabel,
+  });
 
   try {
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
