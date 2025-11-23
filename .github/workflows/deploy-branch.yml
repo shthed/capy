@@ -9,11 +9,6 @@ on:
         description: Branch to deploy (defaults to main when blank)
         required: false
         default: ''
-      allow_without_pr:
-        description: Deploy even when no PR is open for the target branch
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: write
@@ -32,7 +27,6 @@ jobs:
       ref: ${{ steps.compute.outputs.ref }}
       safe_branch: ${{ steps.compute.outputs.safe_branch }}
       preview_url: ${{ steps.compute.outputs.preview_url }}
-      should_deploy: ${{ steps.compute.outputs.should_deploy }}
     steps:
       - name: Derive deployment target
         id: compute
@@ -40,7 +34,6 @@ jobs:
         with:
           script: |
             const inputBranch = core.getInput('target_branch');
-            const allowWithoutPr = core.getInput('allow_without_pr') === 'true';
 
             const sanitize = (value) => (value || '').replace(/[^a-zA-Z0-9._-]/g, '-').trim();
 
@@ -56,58 +49,51 @@ jobs:
               return { branch: branchName, ref: data?.commit?.sha || '' };
             };
 
-            const eventName = context.eventName;
-            let branch = '';
-            let ref = '';
+            try {
+              const eventName = context.eventName;
+              let branch = '';
+              let ref = '';
 
-            if (eventName === 'push') {
-              branch = (context.payload.ref || '').replace('refs/heads/', '');
-              ref = context.sha;
-            } else if (eventName === 'workflow_dispatch') {
-              const target = inputBranch || 'main';
-              const resolved = await resolveBranchRef(target);
-              branch = resolved.branch;
-              ref = resolved.ref;
-            }
+              if (eventName === 'push') {
+                branch = (context.payload.ref || '').replace('refs/heads/', '');
+                ref = context.sha;
+              } else if (eventName === 'workflow_dispatch') {
+                const target = inputBranch || 'main';
+                const resolved = await resolveBranchRef(target);
+                branch = resolved.branch;
+                ref = resolved.ref;
+              }
 
-            const safeBranch = branch ? sanitize(branch) : '';
-            const isMain = branch === 'main';
+              if (!branch) {
+                const message = 'No branch could be resolved for deployment.';
+                await core.summary.addHeading('Deployment failed').addRaw(message).write();
+                core.setFailed(message);
+                return;
+              }
 
-            let hasOpenPr = false;
-            if (!isMain && branch) {
-              const { data: pulls } = await github.rest.pulls.list({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                head: `${context.repo.owner}:${branch}`,
-                state: 'open',
-              });
-              hasOpenPr = Array.isArray(pulls) && pulls.length > 0;
-            }
+              const safeBranch = sanitize(branch);
+              const isMain = branch === 'main';
 
-            const shouldDeploy = Boolean(
-              branch && (isMain || hasOpenPr || allowWithoutPr)
-            );
-
-            const baseUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
-            const previewUrl = branch
-              ? isMain
+              const baseUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
+              const previewUrl = isMain
                 ? `${baseUrl}/`
-                : `${baseUrl}/${safeBranch}/`
-              : '';
+                : `${baseUrl}/${safeBranch}/`;
 
-            core.setOutput('branch', branch);
-            core.setOutput('ref', ref);
-            core.setOutput('safe_branch', safeBranch || branch);
-            core.setOutput('preview_url', previewUrl);
-            core.setOutput('should_deploy', shouldDeploy ? 'true' : 'false');
-
-            if (!shouldDeploy) {
-              core.info('Branch not eligible for deployment; skipping.');
+              core.setOutput('branch', branch);
+              core.setOutput('ref', ref);
+              core.setOutput('safe_branch', safeBranch || branch);
+              core.setOutput('preview_url', previewUrl);
+            } catch (error) {
+              const reason = error?.message || String(error);
+              await core.summary
+                .addHeading('Deployment failed')
+                .addRaw(reason)
+                .write();
+              core.setFailed(reason);
             }
   deploy:
     name: Deploy branch preview
     needs: plan
-    if: needs.plan.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-pages-${{ needs.plan.outputs.safe_branch }}
@@ -164,7 +150,7 @@ jobs:
             TARGET_DIR="pages/${SAFE_BRANCH}"
           fi
 
-          mkdir -p "${TARGET_DIR}/README"
+          mkdir -p "${TARGET_DIR}/README" "${TARGET_DIR}/AGENTS"
           echo "target_dir=${TARGET_DIR}" >> "$GITHUB_ENV"
 
       - name: Sync runtime files
@@ -185,13 +171,14 @@ jobs:
             --include 'ui-template.js' \
             --include 'styles.css' \
             --include 'service-worker.js' \
+            --include 'AGENTS.md' \
             --include 'README.md' \
             --include 'ROADMAP.md' \
             --include 'TODO.md' \
             --exclude '*' \
             source/ "${TARGET_DIR}/"
 
-      - name: Render README for Pages
+      - name: Render docs for Pages
         env:
           TARGET_DIR: ${{ env.target_dir }}
         run: |
@@ -201,6 +188,12 @@ jobs:
             --source ./source/README.md \
             --output "${TARGET_DIR}/README/index.html" \
             --context "${GITHUB_REPOSITORY}"
+          node ./source/project/scripts/build-pages-site.mjs \
+            --source ./source/AGENTS.md \
+            --output "${TARGET_DIR}/AGENTS/index.html" \
+            --context "${GITHUB_REPOSITORY}" \
+            --title "Capy Agent Guide" \
+            --source-label "AGENTS.md"
 
       - name: Commit and push
         env:
@@ -226,3 +219,8 @@ jobs:
           git push origin gh-pages
 
           echo "Preview URL: ${PREVIEW_URL}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record deployment failure
+        if: failure()
+        run: |
+          echo "Deployment failed for branch '${{ needs.plan.outputs.branch }}'. Check logs for details." >> "$GITHUB_STEP_SUMMARY"
