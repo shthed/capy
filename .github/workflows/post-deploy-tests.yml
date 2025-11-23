@@ -16,25 +16,28 @@ jobs:
   slug:
     runs-on: ubuntu-latest
     outputs:
+      branch_name: ${{ steps.slug.outputs.branch_name }}
       branch_slug: ${{ steps.slug.outputs.branch_slug }}
     steps:
       - name: Derive branch slug
         id: slug
         env:
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch || '' }}
+          WORKFLOW_RUN: ${{ toJson(github.event.workflow_run) }}
         run: |
           set -euo pipefail
 
-          SAFE_BRANCH=$(printf '%s' "${HEAD_BRANCH}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          BRANCH_NAME=$(printf '%s' "${WORKFLOW_RUN}" | jq -r '(.inputs.target_branch // .head_branch // .pull_requests[0].head.ref // "")')
+          SAFE_BRANCH=$(printf '%s' "${BRANCH_NAME}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+
+          echo "branch_name=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
           echo "branch_slug=${SAFE_BRANCH}" >> "$GITHUB_OUTPUT"
 
   review:
     needs: slug
     if: |
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch != null &&
-      github.event.workflow_run.head_branch != ''
+      contains(fromJson('["push","workflow_dispatch"]'), github.event.workflow_run.event) &&
+      needs.slug.outputs.branch_name != ''
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,7 +49,7 @@ jobs:
       - name: Checkout branch commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.slug.outputs.branch_name }}
 
       - name: Use Node.js 18
         uses: actions/setup-node@v4
@@ -66,7 +69,7 @@ jobs:
       - name: Derive Pages preview URL
         id: preview
         env:
-          BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
+          BRANCH_NAME: ${{ needs.slug.outputs.branch_name }}
         run: |
           set -euo pipefail
 
@@ -206,7 +209,7 @@ jobs:
             const errors = process.env.ERROR_MESSAGES;
             const artifactFound = process.env.ARTIFACT_FOUND === 'true';
             const artifactUrl = process.env.ARTIFACT_URL;
-            const rerunUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/workflows/deploy-branch.yml`;
+            const rerunUrl = context.payload.workflow_run?.html_url;
 
             const lines = [];
 
@@ -230,7 +233,9 @@ jobs:
               lines.push('Preview link unavailable.');
             }
 
-            lines.push(`[🔁 Rerun deploy](${rerunUrl})`);
+            if (rerunUrl) {
+              lines.push(`[🔁 Rerun Pages deploy](${rerunUrl})`);
+            }
 
             const body = lines.join('\n\n');
 

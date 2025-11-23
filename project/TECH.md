@@ -33,6 +33,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
   - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the runtime payload.
   - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, smoothing, and metadata assembly off the main thread.
 - **Documentation**
+  - `AGENTS.md` – Contributor workflow and automation expectations; mirrored to `/AGENTS/index.html` during deployments.
   - `README.md` – Player-facing quick start and gameplay overview.
   - `TECH.md` – This technical reference.
   - `project/STYLEGUIDE.md` – CSS conventions, load-order expectations, and maintenance tips for the runtime stylesheet.
@@ -48,12 +49,12 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
   - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally; `npm run dev` serves the repository root at http://localhost:8000.
   - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
-  - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn `README.md` into `/README/index.html` and keep embedded docs mirrored in previews.
+  - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn Markdown sources (README, AGENTS, etc.) into styled HTML mirrors for GitHub Pages previews.
   - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
-  - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days by calling `project/scripts/cleanup-branches.mjs`.
+  - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `codex` branches with no open PR and no commits in the last 30 days by calling `project/scripts/cleanup-branches.mjs`.
 
 ## Project Health Snapshot
 
@@ -103,13 +104,14 @@ is not eligible:
    - `main` copies the runtime payload from the repository root (`index.html`,
      `styles.css`, `render.js`, `puzzle-generation.js`, `runtime.js`,
      `service-worker.js`, `capy.json`, etc.) into the root of `gh-pages`, then
-     regenerates `/README/index.html` with
+     regenerates `/README/index.html` and `/AGENTS/index.html` with
      `project/scripts/build-pages-site.mjs` so
-     https://shthed.github.io/capy/README/ mirrors the handbook.
+     https://shthed.github.io/capy/README/ mirrors the handbook and
+     https://shthed.github.io/capy/AGENTS/ keeps the workflow guide live.
    - Non-`main` branches clear their directory (e.g.,
      `/automation-feature/`), copy the same runtime payload plus JS/CSS/JSON
-     dependencies, and generate a scoped `/README/index.html` for that
-     directory.
+     dependencies, and generate scoped `/README/index.html` and
+     `/AGENTS/index.html` files for that directory.
    Because the sync uses `rsync -a` without `--delete`, previously published
    branch folders stick around inside the `gh-pages` working tree until they are
    removed manually.
@@ -121,8 +123,8 @@ is not eligible:
    environment protections are satisfied without hard failures.
 4. **Packaging.** `actions/upload-pages-artifact` tars the entire `pages/` tree
    (not just the directory for the triggering branch), which means stale
-   directories inflate the artifact and can easily produce multi-hundred-megabyte
-   uploads when years of automation branches accumulate.
+  directories inflate the artifact and can easily produce multi-hundred-megabyte
+  uploads when years of codex branches accumulate.
 
 If the sync step finds nothing new to commit, it records `has_changes=false`
 and skips the Pages packaging/deploy phases to avoid wasting artifact time while
@@ -133,20 +135,21 @@ still reporting the preview URL from the previous publish.
 - **Prune Git branches regularly.** `.github/workflows/cleanup-branches.yml`
   runs nightly (and after every successful Pages deployment) to invoke
   `project/scripts/cleanup-branches.mjs`. The script deletes unprotected
-  `automation/` branches with no open PR activity and no commits in the last 30
-  days, ensuring future deploy runs stop re-copying previews nobody needs.
-  Trigger the workflow manually via the **Cleanup stale automation branches**
-  action whenever you close a large batch of PRs so stale heads disappear
-  immediately.
-- **Deploy run now prunes gh-pages directories automatically.** After cloning
-  the Pages branch, `.github/workflows/deploy-branch.yml` queries the remote
-  branch list, sanitises those names the same way preview directories are
-  generated, and removes any preview folders whose slug no longer matches a
-  live branch. Once the nightly branch cleanup deletes the branch itself, the
-  next deploy run drops its Pages payload automatically.
+  branches matching the configured prefixes (defaults to `automation/`) when
+  they have no open PR activity and have not received commits within the
+  configurable cutoff window (defaults to 60 minutes), ensuring future deploy
+  runs stop re-copying previews nobody needs. Trigger the workflow manually via
+  the **Cleanup stale automation branches** action whenever you close a large
+  batch of PRs so stale heads disappear immediately.
+- **Cleanup also trims Pages previews.** After refreshing remote branches,
+  `.github/workflows/cleanup-branches.yml` scans the `gh-pages` branch for
+  preview directories whose sanitized slug (matching the deployment helper) no
+  longer corresponds to a live branch and deletes them before committing back
+  to `gh-pages`. That keeps artifacts lean even if Pages deploys pause for a
+  while.
 - **Manual cleanup remains available.** If you need to reclaim space before the
   next deployment runs (or before triggering **Deploy GitHub Pages previews**
-  by hand), delete the stale `automation-<slug>` directories on `gh-pages` and
+  by hand), delete the stale `codex-<slug>` directories on `gh-pages` and
   push the commit. The following deploy run will confirm the branch is gone,
   skip recreating its preview, and upload the trimmed artifact.
 
@@ -183,9 +186,9 @@ Tweaking the deployment:
   without re-running the suite.
 - **PR update.** After the test finishes (pass or fail), the workflow posts a
   comment on every associated PR summarising the preview URL, test outcome, and
-  whether UI review artifacts were captured. The comment also includes a
-  persistent **Rerun deploy** button that links directly to the deployment
-  workflow so reviewers can retrigger the Pages publish without hunting through
+  whether UI review artifacts were captured. Each comment also includes a
+  **Rerun Pages deploy** button that links back to the triggering deployment
+  workflow run so reviewers can retry the publish step without digging through
   the Actions tab. This keeps the automation loop self-serve even while the
   primary Playwright suite remains paused in CI.
 
