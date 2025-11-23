@@ -180,6 +180,6 @@ if (root) {
   }
 }
 
-export { createRendererController, createSvgRenderer, SceneTileLoader };
+export { createSvgRenderer, SceneTileLoader };
 
 export default getPrebootMetrics;
