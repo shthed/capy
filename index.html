@@ -665,15 +665,15 @@
               </select>
             </label>
             <p class="control-note">Switch between dark, light, or colourful chrome accents.</p>
-              <label class="control">
-                <span>Renderer</span>
-                <select id="rendererMode">
+            <label class="control">
+              <span>Renderer</span>
+              <select id="rendererMode">
                 <option value="svg">SVG</option>
-                </select>
-              </label>
-              <p class="control-note">
-              Rendering now uses the SVG pipeline for consistent output.
-              </p>
+              </select>
+            </label>
+            <p class="control-note">
+              Rendering is handled by the SVG renderer.
+            </p>
             <label class="control">
               <span>Unfilled region colour</span>
               <input id="backgroundColor" type="color" value="#f8fafc" />
@@ -1312,7 +1312,7 @@
         import {
           beginRendererBootstrap,
           completeRendererBootstrap,
-          createSvgRenderer,
+          createRendererController,
           SceneTileLoader,
         } from "./runtime.js";
         import { html, renderTemplate } from "./ui-template.js";
@@ -3503,9 +3503,8 @@
         }
       }
 
-      svgRenderer = createSvgRenderer(
-        puzzleCanvas,
-        {
+      rendererController = createRendererController(puzzleCanvas, {
+        hooks: {
           log: logRendererEvent,
           renderFrame: renderPuzzleFrame,
           renderPreview: renderPreviewImage,
@@ -3519,11 +3518,10 @@
             }
           },
           clearContext: ({ context }) => clearContext(context),
+          onRendererChange: handleRendererChange,
         },
-        { metrics: { ...canvasMetrics } },
-        { computeInkStyles, getFilledState, buildPathData }
-      );
-      state.rendering.renderer = svgRenderer;
+      });
+      state.rendering.controller = rendererController;
       updateRendererModeAvailability();
 
       let generationJobCounter = 0;
@@ -3763,16 +3761,21 @@
 
       function normalizeRendererType(value) {
         if (typeof value !== "string") return null;
-        const trimmed = value.trim().toLowerCase();
-        return trimmed ? trimmed : null;
+        return value.trim().toLowerCase() === "svg" ? "svg" : null;
       }
 
       function formatRendererLabel(type) {
-        switch (normalizeRendererType(type)) {
-          case "svg":
-            return "SVG";
-          default:
-            return "SVG";
+        return "SVG";
+      }
+
+      function markRendererUnavailable(type) {
+        const normalized = normalizeRendererType(type);
+        if (!normalized) return;
+        logRendererEvent(`Renderer unavailable`, { type: normalized });
+        unavailableRenderers.add(normalized);
+        if (rendererModeSelect) {
+          rendererModeSelect.disabled = true;
+          rendererModeSelect.title = "Not supported on this device";
         }
       }
 
@@ -3780,33 +3783,38 @@
         if (!rendererModeSelect) {
           return;
         }
-        for (const option of rendererModeSelect.options) {
-          const value = normalizeRendererType(option.value);
-          const enabled = value === "svg";
-          option.disabled = !enabled;
-          option.title = enabled ? "" : "Not supported on this device";
-        }
         rendererModeSelect.value = "svg";
+        rendererModeSelect.disabled = true;
+        rendererModeSelect.title = "SVG renderer active";
       }
 
       function applyRendererMode(type, options = {}) {
+        const controller = state.rendering?.controller;
         const resolved = "svg";
         state.settings.renderer = resolved;
         if (rendererModeSelect) {
           rendererModeSelect.value = resolved;
+          rendererModeSelect.disabled = true;
         }
         updateRendererModeAvailability();
-        scheduleSettingsPersist({ immediate: true });
+        if (controller?.setRenderer) {
+          try {
+            controller.setRenderer(resolved);
+          } catch (error) {
+            console.error(`Failed to activate renderer: ${resolved}`, error);
+          }
+        }
         if (!options.skipRender) {
           applyCanvasSizing();
           renderPuzzle();
         }
         if (!options.skipLog) {
-          logDebug(`Renderer locked to ${formatRendererLabel(resolved)}`);
+          logDebug(`Renderer switched to ${formatRendererLabel(resolved)}`);
         }
         if (!options.skipAutosave) {
           scheduleAutosave("settings-renderer");
         }
+        scheduleSettingsPersist({ immediate: true });
         return resolved;
       }
 
@@ -4748,13 +4756,6 @@
       if (rendererModeSelect) {
         rendererModeSelect.value = "svg";
         rendererModeSelect.disabled = true;
-        rendererModeSelect.addEventListener("change", (event) => {
-          const requested = event.target.value;
-          const resolved = applyRendererMode(requested);
-          if (resolved && resolved !== requested) {
-            rendererModeSelect.value = resolved;
-          }
-        });
       }
 
       if (backgroundColorInput) {
