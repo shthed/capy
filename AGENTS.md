@@ -11,6 +11,9 @@ any feature or workflow changes you ship.
 - **Read onboarding.** Start by skimming `ONBOARDING.md` so you follow the
   expected setup steps, manual QA flow, and documentation touchpoints before
   touching the runtime.
+- **Session kick-off.** Verify the canonical `origin` remote exists, then run
+  `git fetch --all --prune` followed by `git rebase origin/main` when resuming
+  prior work—do this before any scripts or edits to minimise merge conflicts.
 - **Branch naming.** Create short-lived branches named `automation/<change>` so
   QA notes and preview URLs map directly to the experiment under review.
 - **Draft PRs early.** Open a draft PR as soon as you push. CI logs, manual QA
@@ -73,6 +76,10 @@ any feature or workflow changes you ship.
 - Primary test command: `npm test --silent` from within `project/` (currently
   prints a skip notice while the Playwright suite is offline). Mention in the
   final response if you cannot run it.
+- Playwright flow: install browsers with `npm run setup:playwright` (or
+  `npx playwright install --with-deps chromium`) before running UI checks. If
+  downloads are blocked or cached binaries are busy (`ETXTBSY`), rerun the
+  install to refresh the bundle before retrying tests.
 - Playwright browsers are **not** preinstalled. Before running any tests or
   scripts that launch Playwright, execute
   `npx playwright install --with-deps chromium` to provision the Chromium
@@ -86,6 +93,9 @@ any feature or workflow changes you ship.
   labels, and README imagery when making visual changes.
 - Artifacts: Capture Playwright reports under `artifacts/ui-review/` for major
   UI updates and surface them in PRs once the automated suite is reinstated.
+- Changelog + screenshots: save UI screenshots under `project/artifacts/` and
+  link them from `project/changelog.md` so reviewers can compare against
+  deployed previews.
 - Manual QA: `window.capyGenerator` exposes helpers (e.g.
   `loadPuzzleFixture`, `togglePreview`). Document any new helpers in `TECH.md`
   plus relevant tests.
