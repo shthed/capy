@@ -211,39 +211,77 @@ jobs:
             const artifactUrl = process.env.ARTIFACT_URL;
             const rerunUrl = context.payload.workflow_run?.html_url;
 
-            const lines = [];
+            const marker = '<!-- capy-pages-preview -->';
+            const timestamp = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
 
-            if (previewUrl) {
-              lines.push(`Preview updated: ${previewUrl}`);
-            }
+            const entryLines = [`- ${timestamp}`];
 
-            if (smokeOutcome && smokeOutcome !== 'success') {
-              lines.push('Smoke tests failed.');
-            }
+            entryLines.push(`  - Preview: ${previewUrl || 'unavailable'}`);
 
-            if (errors) {
-              lines.push('Errors:\n```\n' + errors.trimEnd() + '\n```');
+            if (smokeOutcome) {
+              entryLines.push(`  - Smoke: ${smokeOutcome}`);
             }
 
             if (artifactFound && artifactUrl) {
-              lines.push(`UI review artifacts: ${artifactUrl}`);
+              entryLines.push(`  - UI review artifacts: ${artifactUrl}`);
             }
 
-            if (lines.length === 0) {
-              lines.push('Preview link unavailable.');
+            if (errors) {
+              const formattedErrors = errors
+                .trimEnd()
+                .split('\n')
+                .map((line) => line ? `    ${line}` : '    ') 
+                .join('\n');
+              entryLines.push(`  - Errors:\n${formattedErrors}`);
             }
 
             if (rerunUrl) {
-              lines.push(`[🔁 Rerun Pages deploy](${rerunUrl})`);
+              entryLines.push(`  - Rerun Pages deploy: ${rerunUrl}`);
             }
 
-            const body = lines.join('\n\n');
+            const newEntry = entryLines.join('\n');
+            const header = 'Branch preview deployments';
 
-            for (const pr of pullRequests) {
-              await github.rest.issues.createComment({
+            const findExistingComment = async (issueNumber) => {
+              const comments = await github.paginate(github.rest.issues.listComments, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: pr.number,
-                body,
+                issue_number: issueNumber,
+                per_page: 100,
               });
+
+              return comments.find(
+                (comment) => comment.user?.login === 'github-actions[bot]' && comment.body?.includes(marker)
+              );
+            };
+
+            for (const pr of pullRequests) {
+              const existingComment = await findExistingComment(pr.number);
+              let historicalEntries = [];
+
+              if (existingComment?.body?.includes(marker)) {
+                const [, tail = ''] = existingComment.body.split(marker);
+                historicalEntries = tail
+                  .trim()
+                  .split('\n\n')
+                  .filter(Boolean);
+              }
+
+              const body = [header, marker, newEntry, ...historicalEntries].join('\n\n');
+
+              if (existingComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existingComment.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body,
+                });
+              }
             }
