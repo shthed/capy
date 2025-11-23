@@ -91,7 +91,7 @@ All tooling lives in `project/`.
 - Playwright-only quick run: `npm run test:smoke` (from `project/`).
 - Reports: open `npx playwright show-report` after a run (default output `playwright-report/`).
 
-See `project/changelog.md` for dated QA notes, screenshots, and links captured
+See `project/CHANGELOG.md` for dated QA notes, screenshots, and links captured
 alongside recent changes.
 
 ## Local Development and Hosting

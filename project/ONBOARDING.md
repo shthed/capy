@@ -72,7 +72,7 @@ build steps.
   reference stays current.
 - Capture UI review artifacts under `project/artifacts/ui-review/` when running
   Playwright locally and surface them in PRs.
-- Log significant screenshots and QA notes in `project/changelog.md` so branch
+- Log significant screenshots and QA notes in `project/CHANGELOG.md` so branch
   deployments have a dated reference (link the committed `project/artifacts/`
   captures alongside the notes).
 - Before opening a PR, rebase on `origin/main`, run `npm test --silent`, and do

@@ -1,4 +1,4 @@
-# Changelog
+# Change Log
 
 ## 2025-11-23
 - Clarified Playwright setup/retry expectations in `AGENTS.md` so UI smoke tests run cleanly after browser installs.
