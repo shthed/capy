@@ -61,7 +61,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
 - **Zero-build runtime.** The app still ships as plain HTML/JS/CSS and must remain directly loadable without bundling. Optimisations should respect this constraint and avoid minified dependency drops.
 - **Cache hygiene.** The service worker (`service-worker.js`) caches every same-origin GET request (and `https://capy.local/` requests) without eviction. Add safeguards before shipping larger assets or new fetch endpoints so Cache Storage does not grow unbounded.
 - **Automation coverage.** The shared Node + Playwright harness remains the expected entry point (`npm test --silent`), but CI currently only validates installs. Manual smoke checks stay required until the hosted automation suite returns.
-- **Documentation sources.** Planning and work intake now live in `ROADMAP.md` (direction) and `TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts.
+- **Documentation sources.** Planning and work intake now live in `project/ROADMAP.md` (direction) and `project/TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts.
 
 ## Repository Review Findings
 
@@ -426,4 +426,4 @@ Run the preview at http://localhost:8000 and exercise the checks above across mu
 
 ## Open Follow-Ups
 
-Active work now lives in the root [`TODO.md`](../TODO.md) (actionable tasks) and [`ROADMAP.md`](../ROADMAP.md) (direction). Update those files when behaviour changes or milestones land so this guide can stay focused on architecture and gameplay references.
+Active work now lives in [`project/TODO.md`](./TODO.md) (actionable tasks) and [`project/ROADMAP.md`](./ROADMAP.md) (direction). Update those files when behaviour changes or milestones land so this guide can stay focused on architecture and gameplay references.
