@@ -1356,6 +1356,31 @@ input[type="color"]::-moz-color-swatch {
   align-content: start;
 }
 
+@media (max-width: 960px) {
+  .settings-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+
+  .settings-tabs {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: calc(10px * var(--ui-scale));
+    overflow-x: auto;
+    padding: calc(10px * var(--ui-scale));
+  }
+
+  .settings-tab {
+    width: auto;
+    flex: 1 1 auto;
+    white-space: nowrap;
+  }
+
+  .settings-content {
+    padding-right: 0;
+  }
+}
+
 @media (min-width: 960px) {
   .settings-panel {
     grid-template-columns: repeat(
