@@ -1,4 +1,4 @@
-name: Cleanup stale automation branches
+name: Cleanup stale codex branches
 
 on:
   schedule:
