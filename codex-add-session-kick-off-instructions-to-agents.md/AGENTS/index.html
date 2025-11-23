@@ -62,6 +62,9 @@
     <li><strong>Read onboarding.</strong> Start by skimming <code class="notranslate">ONBOARDING.md</code> so you follow the<br>
     expected setup steps, manual QA flow, and documentation touchpoints before<br>
     touching the runtime.</li>
+    <li><strong>Session kick-off.</strong> Verify the canonical <code class="notranslate">origin</code> remote exists, then run<br>
+    <code class="notranslate">git fetch --all --prune</code> followed by <code class="notranslate">git rebase origin/main</code> when resuming<br>
+    prior work—do this before any scripts or edits to minimise merge conflicts.</li>
     <li><strong>Branch naming.</strong> Create short-lived branches named <code class="notranslate">automation/&lt;change&gt;</code> so<br>
     QA notes and preview URLs map directly to the experiment under review.</li>
     <li><strong>Draft PRs early.</strong> Open a draft PR as soon as you push. CI logs, manual QA<br>
@@ -239,7 +242,7 @@
     </ul>
 
           </main>
-          <footer class="page-meta">Generated from AGENTS.md · 2025-11-23 17:00 UTC</footer>
+          <footer class="page-meta">Generated from AGENTS.md · 2025-11-23 17:01 UTC</footer>
         </body>
         </html>
 
