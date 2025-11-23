@@ -48,9 +48,10 @@ const parseArguments = () => {
 const findPreviewDirectories = (rootDir) => {
   const entries = fs.readdirSync(rootDir, { withFileTypes: true });
   return entries
-    .filter((entry) => entry.isDirectory() && entry.name !== '.git')
-    .map((entry) => ({ name: entry.name, absolutePath: path.join(rootDir, entry.name) }))
-    .filter((entry) => fs.existsSync(path.join(entry.absolutePath, 'capy.json')));
+    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.name !== '.git' && entry.name !== 'README')
+    .filter((entry) => entry.name === sanitize(entry.name))
+    .map((entry) => ({ name: entry.name, absolutePath: path.join(rootDir, entry.name) }));
 };
 
 const deleteDirectory = (targetPath) => {
