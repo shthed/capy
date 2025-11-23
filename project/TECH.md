@@ -33,6 +33,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
   - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the runtime payload.
   - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, smoothing, and metadata assembly off the main thread.
 - **Documentation**
+  - `AGENTS.md` – Contributor workflow and automation expectations; mirrored to `/AGENTS/index.html` during deployments.
   - `README.md` – Player-facing quick start and gameplay overview.
   - `TECH.md` – This technical reference.
   - `project/STYLEGUIDE.md` – CSS conventions, load-order expectations, and maintenance tips for the runtime stylesheet.
@@ -48,7 +49,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
   - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally; `npm run dev` serves the repository root at http://localhost:8000.
   - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
-  - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn `README.md` into `/README/index.html` and keep embedded docs mirrored in previews.
+  - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn Markdown sources (README, AGENTS, etc.) into styled HTML mirrors for GitHub Pages previews.
   - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
@@ -60,7 +61,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
 - **Zero-build runtime.** The app still ships as plain HTML/JS/CSS and must remain directly loadable without bundling. Optimisations should respect this constraint and avoid minified dependency drops.
 - **Cache hygiene.** The service worker (`service-worker.js`) caches every same-origin GET request (and `https://capy.local/` requests) without eviction. Add safeguards before shipping larger assets or new fetch endpoints so Cache Storage does not grow unbounded.
 - **Automation coverage.** The shared Node + Playwright harness remains the expected entry point (`npm test --silent`), but CI currently only validates installs. Manual smoke checks stay required until the hosted automation suite returns.
-- **Documentation sources.** Planning and work intake now live in `ROADMAP.md` (direction) and `TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts.
+- **Documentation sources.** Planning and work intake now live in `project/ROADMAP.md` (direction) and `project/TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts.
 
 ## Repository Review Findings
 
@@ -103,13 +104,14 @@ is not eligible:
    - `main` copies the runtime payload from the repository root (`index.html`,
      `styles.css`, `render.js`, `puzzle-generation.js`, `runtime.js`,
      `service-worker.js`, `capy.json`, etc.) into the root of `gh-pages`, then
-     regenerates `/README/index.html` with
+     regenerates `/README/index.html` and `/AGENTS/index.html` with
      `project/scripts/build-pages-site.mjs` so
-     https://shthed.github.io/capy/README/ mirrors the handbook.
+     https://shthed.github.io/capy/README/ mirrors the handbook and
+     https://shthed.github.io/capy/AGENTS/ keeps the workflow guide live.
    - Non-`main` branches clear their directory (e.g.,
      `/automation-feature/`), copy the same runtime payload plus JS/CSS/JSON
-     dependencies, and generate a scoped `/README/index.html` for that
-     directory.
+     dependencies, and generate scoped `/README/index.html` and
+     `/AGENTS/index.html` files for that directory.
    Because the sync uses `rsync -a` without `--delete`, previously published
    branch folders stick around inside the `gh-pages` working tree until they are
    removed manually.
@@ -423,4 +425,4 @@ Run the preview at http://localhost:8000 and exercise the checks above across mu
 
 ## Open Follow-Ups
 
-Active work now lives in the root [`TODO.md`](../TODO.md) (actionable tasks) and [`ROADMAP.md`](../ROADMAP.md) (direction). Update those files when behaviour changes or milestones land so this guide can stay focused on architecture and gameplay references.
+Active work now lives in [`project/TODO.md`](./TODO.md) (actionable tasks) and [`project/ROADMAP.md`](./ROADMAP.md) (direction). Update those files when behaviour changes or milestones land so this guide can stay focused on architecture and gameplay references.

@@ -150,7 +150,7 @@ jobs:
             TARGET_DIR="pages/${SAFE_BRANCH}"
           fi
 
-          mkdir -p "${TARGET_DIR}/README"
+          mkdir -p "${TARGET_DIR}/README" "${TARGET_DIR}/AGENTS"
           echo "target_dir=${TARGET_DIR}" >> "$GITHUB_ENV"
 
       - name: Sync runtime files
@@ -171,13 +171,14 @@ jobs:
             --include 'ui-template.js' \
             --include 'styles.css' \
             --include 'service-worker.js' \
+            --include 'AGENTS.md' \
             --include 'README.md' \
             --include 'ROADMAP.md' \
             --include 'TODO.md' \
             --exclude '*' \
             source/ "${TARGET_DIR}/"
 
-      - name: Render README for Pages
+      - name: Render docs for Pages
         env:
           TARGET_DIR: ${{ env.target_dir }}
         run: |
@@ -187,6 +188,12 @@ jobs:
             --source ./source/README.md \
             --output "${TARGET_DIR}/README/index.html" \
             --context "${GITHUB_REPOSITORY}"
+          node ./source/project/scripts/build-pages-site.mjs \
+            --source ./source/AGENTS.md \
+            --output "${TARGET_DIR}/AGENTS/index.html" \
+            --context "${GITHUB_REPOSITORY}" \
+            --title "Capy Agent Guide" \
+            --source-label "AGENTS.md"
 
       - name: Commit and push
         env:
