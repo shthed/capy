@@ -1162,6 +1162,26 @@
               </div>
             </form>
           </section>
+          <section class="sheet-section" aria-labelledby="systemHeading">
+            <h3 id="systemHeading">System status</h3>
+            <dl class="command-list">
+              <div>
+                <dt>Service worker</dt>
+                <dd data-service-worker-state>Waiting to register…</dd>
+              </div>
+              <div>
+                <dt>Runtime cache</dt>
+                <dd data-service-worker-cache>capy-offline-cache-v3</dd>
+              </div>
+              <div>
+                <dt>Last update</dt>
+                <dd data-service-worker-updated>Not available yet</dd>
+              </div>
+            </dl>
+            <p class="control-note">
+              Service worker registration, cache limits, and install events stream into the debug log below.
+            </p>
+          </section>
           <section class="sheet-section" aria-labelledby="debugHeading">
             <h3 id="debugHeading">Debug log</h3>
             <p class="control-note">
@@ -1559,6 +1579,9 @@
       const feedbackMessageInput = document.getElementById("feedbackMessage");
       const feedbackContactInput = document.getElementById("feedbackContact");
       const feedbackSubmitButton = document.getElementById("feedbackSubmit");
+      const serviceWorkerStateLabel = document.querySelector("[data-service-worker-state]");
+      const serviceWorkerCacheLabel = document.querySelector("[data-service-worker-cache]");
+      const serviceWorkerUpdatedLabel = document.querySelector("[data-service-worker-updated]");
       const debugLogEl = document.getElementById("debugLog");
       const clearDebugLogButton = document.getElementById("clearDebugLog");
       const settingsJsonView = document.getElementById("settingsJsonView");
@@ -1700,7 +1723,7 @@
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const SETTINGS_STORAGE_KEY = "capy.settings.v1";
-      const RUNTIME_CACHE_NAME = "capy-offline-cache-v2";
+      const RUNTIME_CACHE_NAME = "capy-offline-cache-v3";
       const CACHE_ORIGIN = "https://capy.local";
       const SOURCE_IMAGE_CACHE_PREFIX = "source-images/";
       const RUNTIME_CACHE_ASSETS = [
@@ -1858,19 +1881,165 @@
         }
       }
 
-      function registerServiceWorker() {
-        if (typeof navigator === "undefined" || !navigator.serviceWorker) {
+      function setServiceWorkerLabel(target, message) {
+        if (!target || message == null) return;
+        target.textContent = message;
+      }
+
+      function formatServiceWorkerTimestamp(value) {
+        const timestamp = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(timestamp.getTime())) {
+          return null;
+        }
+        return timestamp.toLocaleString([], { hour12: false });
+      }
+
+      function updateServiceWorkerSummary({ state, cacheName, updatedAt } = {}) {
+        if (cacheName) {
+          setServiceWorkerLabel(serviceWorkerCacheLabel, cacheName);
+        }
+        if (state) {
+          setServiceWorkerLabel(serviceWorkerStateLabel, state);
+        }
+        if (updatedAt !== undefined) {
+          const label = formatServiceWorkerTimestamp(updatedAt) || "Not available yet";
+          setServiceWorkerLabel(serviceWorkerUpdatedLabel, label);
+        }
+      }
+
+      function describeServiceWorkerState(state) {
+        switch (state) {
+          case "installing":
+            return "Installing…";
+          case "installed":
+            return "Installed";
+          case "activating":
+            return "Activating…";
+          case "activated":
+            return "Active";
+          case "redundant":
+            return "Replaced";
+          default:
+            return state || "Unknown";
+        }
+      }
+
+      function logServiceWorkerEvent(message, details = {}, timestamp = null) {
+        if (!message) return;
+        const suffix =
+          details && typeof details === "object" && Object.keys(details).length > 0
+            ? ` (${Object.entries(details)
+                .map(([key, value]) => `${key}: ${value}`)
+                .join(", ")})`
+            : "";
+        logDebug(`[sw] ${message}${suffix}`);
+        if (timestamp != null) {
+          updateServiceWorkerSummary({ updatedAt: timestamp });
+        }
+      }
+
+      function summarizeServiceWorkerUrl(url) {
+        if (!url || typeof url !== "string") {
+          return "request";
+        }
+        try {
+          const parsed = new URL(url, window.location.href);
+          return parsed.pathname || parsed.href;
+        } catch (_error) {
+          return url;
+        }
+      }
+
+      function watchServiceWorker(registration) {
+        if (!registration) {
           return;
         }
+        const monitor = (worker) => {
+          if (!worker) return;
+          updateServiceWorkerSummary({ state: describeServiceWorkerState(worker.state) });
+          worker.addEventListener("statechange", () => {
+            updateServiceWorkerSummary({
+              state: describeServiceWorkerState(worker.state),
+              updatedAt: Date.now(),
+            });
+            logServiceWorkerEvent(`Service worker ${worker.state}`, { scope: registration.scope });
+          });
+        };
+
+        monitor(registration.installing || registration.waiting || registration.active);
+      }
+
+      function handleServiceWorkerMessage(event) {
+        const data = event?.data;
+        if (!data || data.type !== "capy-sw") {
+          return;
+        }
+        const { event: swEvent, details = {}, timestamp } = data;
+        if (details.cacheName) {
+          updateServiceWorkerSummary({ cacheName: details.cacheName });
+        }
+        if (timestamp != null) {
+          updateServiceWorkerSummary({ updatedAt: timestamp });
+        }
+
+        switch (swEvent) {
+          case "install-complete":
+            updateServiceWorkerSummary({ state: "Installed" });
+            logServiceWorkerEvent("Installed offline assets", details, timestamp ?? Date.now());
+            break;
+          case "activate-complete":
+            updateServiceWorkerSummary({ state: "Active" });
+            logServiceWorkerEvent("Activated service worker", details, timestamp ?? Date.now());
+            break;
+          case "cache-skip": {
+            const urlSummary = summarizeServiceWorkerUrl(details.url);
+            const reasonLabel = details.reason ? ` (reason: ${details.reason})` : "";
+            logServiceWorkerEvent(
+              `Skipped caching ${urlSummary}${reasonLabel}`,
+              { cache: details.cacheName || RUNTIME_CACHE_NAME },
+              timestamp ?? Date.now()
+            );
+            break;
+          }
+          default:
+            logServiceWorkerEvent(`Service worker event: ${swEvent || "message"}`, details, timestamp ?? Date.now());
+            break;
+        }
+      }
+
+      function registerServiceWorker() {
+        if (typeof navigator === "undefined" || !navigator.serviceWorker) {
+          updateServiceWorkerSummary({
+            cacheName: RUNTIME_CACHE_NAME,
+            state: "Unavailable (no service worker support)",
+          });
+          return;
+        }
+        updateServiceWorkerSummary({ cacheName: RUNTIME_CACHE_NAME, state: "Registering…" });
+        navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          updateServiceWorkerSummary({ state: "Active (controller)", updatedAt: Date.now() });
+          logServiceWorkerEvent("Service worker is controlling this page");
+        });
         navigator.serviceWorker
           .register("./service-worker.js")
           .then((registration) => {
+            logServiceWorkerEvent("Registered service worker", { scope: registration?.scope });
+            watchServiceWorker(registration);
             if (registration && typeof registration.update === "function") {
               registration.update();
             }
+            return navigator.serviceWorker.ready.catch(() => null);
+          })
+          .then((readyRegistration) => {
+            if (readyRegistration) {
+              watchServiceWorker(readyRegistration);
+              updateServiceWorkerSummary({ state: "Active", updatedAt: Date.now() });
+            }
           })
           .catch((error) => {
-            console.warn("Service worker registration failed", error);
+            updateServiceWorkerSummary({ state: "Registration failed" });
+            logServiceWorkerEvent("Service worker registration failed", { error: error?.message || error });
           });
       }
 
