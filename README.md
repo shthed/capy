@@ -105,5 +105,5 @@ Review [`TECH.md`](./TECH.md) for architecture details. Contributor scripts and 
 See [`AGENTS.md`](./AGENTS.md) for the full contributor playbook. Key points:
 
 - Work from short-lived `automation/<change>` branches and open draft PRs early so deployments and QA notes stay aligned.
-- Keep docs in sync: update `TECH.md`, `ROADMAP.md`, and `TODO.md` alongside runtime or workflow changes.
+- Keep docs in sync: update `TECH.md`, `project/ROADMAP.md`, and `project/TODO.md` alongside runtime or workflow changes.
 - Prefer straightforward implementations, perform manual smoke tests, and record which automated checks ran before handing off a review.
