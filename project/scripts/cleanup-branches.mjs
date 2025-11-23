@@ -27,13 +27,13 @@ if (token) {
   fetchHeaders.Authorization = `Bearer ${token}`;
 }
 
-const cutoffDays = Number.parseInt(process.env.BRANCH_CLEANUP_CUTOFF_DAYS ?? '30', 10);
-const cutoffMillis = Number.isFinite(cutoffDays) && cutoffDays > 0 ? cutoffDays * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
+const cutoffMinutes = Number.parseInt(process.env.BRANCH_CLEANUP_CUTOFF_MINUTES ?? '60', 10);
+const cutoffMillis = Number.isFinite(cutoffMinutes) && cutoffMinutes > 0 ? cutoffMinutes * 60 * 1000 : 60 * 60 * 1000;
 const cutoffDate = new Date(Date.now() - cutoffMillis);
 const dryRun = (process.env.BRANCH_CLEANUP_DRY_RUN ?? 'false').toLowerCase() === 'true';
 
 const includePrefixes = (() => {
-  const raw = process.env.BRANCH_CLEANUP_PREFIXES ?? 'automation/';
+  const raw = process.env.BRANCH_CLEANUP_PREFIXES ?? 'codex';
   return raw
     .split(',')
     .map((value) => value.trim())
@@ -175,35 +175,40 @@ const main = async () => {
 
   const branches = await fetchBranches();
   const deletions = [];
+  const diagnostics = [];
 
   for (const branch of branches) {
     const name = branch?.name ?? '';
     if (!name) {
       continue;
     }
-    if (name === defaultBranch) {
-      continue;
-    }
-    if (branch.protected) {
-      continue;
-    }
-    if (!branchMatchesPrefix(name)) {
-      continue;
-    }
-    if (activeBranches.has(name)) {
-      continue;
-    }
 
     const lastCommitDate = parseCommitDate(branch);
-    if (!lastCommitDate) {
-      continue;
-    }
+    const formattedCutoff = cutoffDate.toISOString();
 
-    if (lastCommitDate >= cutoffDate) {
-      continue;
+    if (name === defaultBranch) {
+      diagnostics.push({ name, detail: 'skipped default branch' });
+    } else if (branch.protected) {
+      diagnostics.push({ name, detail: 'skipped protected branch' });
+    } else if (!branchMatchesPrefix(name)) {
+      diagnostics.push({ name, detail: `skipped unmatched prefix (allowed: ${includePrefixes.join(', ') || 'all'})` });
+    } else if (activeBranches.has(name)) {
+      diagnostics.push({ name, detail: 'skipped branch with open pull request' });
+    } else if (!lastCommitDate) {
+      diagnostics.push({ name, detail: 'skipped due to missing commit date' });
+    } else if (lastCommitDate >= cutoffDate) {
+      diagnostics.push({ name, detail: `skipped recent activity (last commit ${lastCommitDate.toISOString()} >= cutoff ${formattedCutoff})` });
+    } else {
+      deletions.push({ name, lastCommitDate });
+      diagnostics.push({ name, detail: `eligible for deletion (last commit ${lastCommitDate.toISOString()} < cutoff ${formattedCutoff})` });
     }
+  }
 
-    deletions.push({ name, lastCommitDate });
+  if (diagnostics.length > 0) {
+    console.log('cleanup-branches: branch diagnostics:');
+    for (const entry of diagnostics) {
+      console.log(`- ${entry.name}: ${entry.detail}`);
+    }
   }
 
   if (deletions.length === 0) {
