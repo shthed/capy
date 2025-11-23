@@ -145,12 +145,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          TARGET_DIR="pages"
+          TARGET_DIR="."
           if [ "${TARGET_BRANCH}" != "main" ]; then
-            TARGET_DIR="pages/${SAFE_BRANCH}"
+            TARGET_DIR="${SAFE_BRANCH}"
           fi
 
-          mkdir -p "${TARGET_DIR}/README" "${TARGET_DIR}/AGENTS"
+          mkdir -p "pages/${TARGET_DIR}/README" "pages/${TARGET_DIR}/AGENTS"
           echo "target_dir=${TARGET_DIR}" >> "$GITHUB_ENV"
 
       - name: Sync runtime files
@@ -176,7 +176,7 @@ jobs:
             --include 'ROADMAP.md' \
             --include 'TODO.md' \
             --exclude '*' \
-            source/ "${TARGET_DIR}/"
+            source/ "pages/${TARGET_DIR}/"
 
       - name: Render docs for Pages
         env:
@@ -186,11 +186,11 @@ jobs:
 
           node ./source/project/scripts/build-pages-site.mjs \
             --source ./source/README.md \
-            --output "${TARGET_DIR}/README/index.html" \
+            --output "pages/${TARGET_DIR}/README/index.html" \
             --context "${GITHUB_REPOSITORY}"
           node ./source/project/scripts/build-pages-site.mjs \
             --source ./source/AGENTS.md \
-            --output "${TARGET_DIR}/AGENTS/index.html" \
+            --output "pages/${TARGET_DIR}/AGENTS/index.html" \
             --context "${GITHUB_REPOSITORY}" \
             --title "Capy Agent Guide" \
             --source-label "AGENTS.md"
