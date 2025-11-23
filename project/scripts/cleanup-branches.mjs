@@ -33,7 +33,7 @@ const cutoffDate = new Date(Date.now() - cutoffMillis);
 const dryRun = (process.env.BRANCH_CLEANUP_DRY_RUN ?? 'false').toLowerCase() === 'true';
 
 const includePrefixes = (() => {
-  const raw = process.env.BRANCH_CLEANUP_PREFIXES ?? 'automation/';
+  const raw = process.env.BRANCH_CLEANUP_PREFIXES ?? 'codex';
   return raw
     .split(',')
     .map((value) => value.trim())
