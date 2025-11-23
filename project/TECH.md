@@ -53,7 +53,7 @@ keys + URLs) instead of embedding large data URLs in `localStorage`.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
-  - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `automation/` branches with no open PR and no commits in the last 30 days by calling `project/scripts/cleanup-branches.mjs`.
+  - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `codex` branches with no open PR and no commits in the last 30 days by calling `project/scripts/cleanup-branches.mjs`.
 
 ## Project Health Snapshot
 
@@ -121,8 +121,8 @@ is not eligible:
    environment protections are satisfied without hard failures.
 4. **Packaging.** `actions/upload-pages-artifact` tars the entire `pages/` tree
    (not just the directory for the triggering branch), which means stale
-   directories inflate the artifact and can easily produce multi-hundred-megabyte
-   uploads when years of automation branches accumulate.
+  directories inflate the artifact and can easily produce multi-hundred-megabyte
+  uploads when years of codex branches accumulate.
 
 If the sync step finds nothing new to commit, it records `has_changes=false`
 and skips the Pages packaging/deploy phases to avoid wasting artifact time while
@@ -133,9 +133,9 @@ still reporting the preview URL from the previous publish.
 - **Prune Git branches regularly.** `.github/workflows/cleanup-branches.yml`
   runs nightly (and after every successful Pages deployment) to invoke
   `project/scripts/cleanup-branches.mjs`. The script deletes unprotected
-  `automation/` branches with no open PR activity and no commits in the last 30
+  `codex` branches with no open PR activity and no commits in the last 30
   days, ensuring future deploy runs stop re-copying previews nobody needs.
-  Trigger the workflow manually via the **Cleanup stale automation branches**
+  Trigger the workflow manually via the **Cleanup stale codex branches**
   action whenever you close a large batch of PRs so stale heads disappear
   immediately.
 - **Deploy run now prunes gh-pages directories automatically.** After cloning
@@ -146,7 +146,7 @@ still reporting the preview URL from the previous publish.
   next deploy run drops its Pages payload automatically.
 - **Manual cleanup remains available.** If you need to reclaim space before the
   next deployment runs (or before triggering **Deploy GitHub Pages previews**
-  by hand), delete the stale `automation-<slug>` directories on `gh-pages` and
+  by hand), delete the stale `codex-<slug>` directories on `gh-pages` and
   push the commit. The following deploy run will confirm the branch is gone,
   skip recreating its preview, and upload the trimmed artifact.
 
