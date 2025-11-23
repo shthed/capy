@@ -135,17 +135,18 @@ still reporting the preview URL from the previous publish.
 - **Prune Git branches regularly.** `.github/workflows/cleanup-branches.yml`
   runs nightly (and after every successful Pages deployment) to invoke
   `project/scripts/cleanup-branches.mjs`. The script deletes unprotected
-  `codex` branches with no open PR activity and no commits in the last 30
-  days, ensuring future deploy runs stop re-copying previews nobody needs.
-  Trigger the workflow manually via the **Cleanup stale codex branches**
-  action whenever you close a large batch of PRs so stale heads disappear
-  immediately.
-- **Deploy run now prunes gh-pages directories automatically.** After cloning
-  the Pages branch, `.github/workflows/deploy-branch.yml` queries the remote
-  branch list, sanitises those names the same way preview directories are
-  generated, and removes any preview folders whose slug no longer matches a
-  live branch. Once the nightly branch cleanup deletes the branch itself, the
-  next deploy run drops its Pages payload automatically.
+  branches matching the configured prefixes (defaults to `automation/`) when
+  they have no open PR activity and have not received commits within the
+  configurable cutoff window (defaults to 60 minutes), ensuring future deploy
+  runs stop re-copying previews nobody needs. Trigger the workflow manually via
+  the **Cleanup stale automation branches** action whenever you close a large
+  batch of PRs so stale heads disappear immediately.
+- **Cleanup also trims Pages previews.** After refreshing remote branches,
+  `.github/workflows/cleanup-branches.yml` scans the `gh-pages` branch for
+  preview directories whose sanitized slug (matching the deployment helper) no
+  longer corresponds to a live branch and deletes them before committing back
+  to `gh-pages`. That keeps artifacts lean even if Pages deploys pause for a
+  while.
 - **Manual cleanup remains available.** If you need to reclaim space before the
   next deployment runs (or before triggering **Deploy GitHub Pages previews**
   by hand), delete the stale `codex-<slug>` directories on `gh-pages` and
