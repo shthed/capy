@@ -99,3 +99,11 @@ All tooling lives in `project/`.
 ## Contributing
 
 Review [`TECH.md`](./TECH.md) for architecture details. Contributor scripts and Playwright config live under [`project/`](./project/). Runtime assets reside at the repository root (`index.html`, `styles.css`, `render.js`, `puzzle-generation.js`, `capy.json`, `service-worker.js`). CSS conventions live in [`project/STYLEGUIDE.md`](./project/STYLEGUIDE.md).
+
+## Agent Guide
+
+See [`AGENTS.md`](./AGENTS.md) for the full contributor playbook. Key points:
+
+- Work from short-lived `automation/<change>` branches and open draft PRs early so deployments and QA notes stay aligned.
+- Keep docs in sync: update `TECH.md`, `project/ROADMAP.md`, and `project/TODO.md` alongside runtime or workflow changes.
+- Prefer straightforward implementations, perform manual smoke tests, and record which automated checks ran before handing off a review.

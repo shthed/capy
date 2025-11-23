@@ -36,6 +36,7 @@ footprints predictable.
   - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the runtime payload.
   - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, smoothing, and metadata assembly off the main thread.
 - **Documentation**
+  - `AGENTS.md` – Contributor workflow and automation expectations; mirrored to `/AGENTS/index.html` during deployments.
   - `README.md` – Player-facing quick start and gameplay overview.
   - `TECH.md` – This technical reference.
   - `project/STYLEGUIDE.md` – CSS conventions, load-order expectations, and maintenance tips for the runtime stylesheet.
@@ -51,7 +52,7 @@ footprints predictable.
   - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally; `npm run dev` serves the repository root at http://localhost:8000.
   - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
-  - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn `README.md` into `/README/index.html` and keep embedded docs mirrored in previews.
+  - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn Markdown sources (README, AGENTS, etc.) into styled HTML mirrors for GitHub Pages previews.
   - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
@@ -63,7 +64,7 @@ footprints predictable.
 - **Zero-build runtime.** The app still ships as plain HTML/JS/CSS and must remain directly loadable without bundling. Optimisations should respect this constraint and avoid minified dependency drops.
 - **Cache hygiene.** The service worker (`service-worker.js`) now caps Cache Storage at roughly 25 MB or 80 entries, evicting least-recently-used responses after each `cache.put` and skipping uploads larger than ~6 MB. Keep those limits in mind before introducing larger assets or new fetch endpoints so they continue to fit within the budget.
 - **Automation coverage.** The shared Node + Playwright harness remains the expected entry point (`npm test --silent`), but CI currently only validates installs. Manual smoke checks stay required until the hosted automation suite returns.
-- **Documentation sources.** Planning and work intake now live in `ROADMAP.md` (direction) and `TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts.
+- **Documentation sources.** Planning and work intake now live in `project/ROADMAP.md` (direction) and `project/TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts.
 
 ## Repository Review Findings
 
@@ -106,13 +107,14 @@ is not eligible:
    - `main` copies the runtime payload from the repository root (`index.html`,
      `styles.css`, `render.js`, `puzzle-generation.js`, `runtime.js`,
      `service-worker.js`, `capy.json`, etc.) into the root of `gh-pages`, then
-     regenerates `/README/index.html` with
+     regenerates `/README/index.html` and `/AGENTS/index.html` with
      `project/scripts/build-pages-site.mjs` so
-     https://shthed.github.io/capy/README/ mirrors the handbook.
+     https://shthed.github.io/capy/README/ mirrors the handbook and
+     https://shthed.github.io/capy/AGENTS/ keeps the workflow guide live.
    - Non-`main` branches clear their directory (e.g.,
      `/automation-feature/`), copy the same runtime payload plus JS/CSS/JSON
-     dependencies, and generate a scoped `/README/index.html` for that
-     directory.
+     dependencies, and generate scoped `/README/index.html` and
+     `/AGENTS/index.html` files for that directory.
    Because the sync uses `rsync -a` without `--delete`, previously published
    branch folders stick around inside the `gh-pages` working tree until they are
    removed manually.
@@ -136,17 +138,18 @@ still reporting the preview URL from the previous publish.
 - **Prune Git branches regularly.** `.github/workflows/cleanup-branches.yml`
   runs nightly (and after every successful Pages deployment) to invoke
   `project/scripts/cleanup-branches.mjs`. The script deletes unprotected
-  `codex` branches with no open PR activity and no commits in the last 30
-  days, ensuring future deploy runs stop re-copying previews nobody needs.
-  Trigger the workflow manually via the **Cleanup stale codex branches**
-  action whenever you close a large batch of PRs so stale heads disappear
-  immediately.
-- **Deploy run now prunes gh-pages directories automatically.** After cloning
-  the Pages branch, `.github/workflows/deploy-branch.yml` queries the remote
-  branch list, sanitises those names the same way preview directories are
-  generated, and removes any preview folders whose slug no longer matches a
-  live branch. Once the nightly branch cleanup deletes the branch itself, the
-  next deploy run drops its Pages payload automatically.
+  branches matching the configured prefixes (defaults to `automation/`) when
+  they have no open PR activity and have not received commits within the
+  configurable cutoff window (defaults to 60 minutes), ensuring future deploy
+  runs stop re-copying previews nobody needs. Trigger the workflow manually via
+  the **Cleanup stale automation branches** action whenever you close a large
+  batch of PRs so stale heads disappear immediately.
+- **Cleanup also trims Pages previews.** After refreshing remote branches,
+  `.github/workflows/cleanup-branches.yml` scans the `gh-pages` branch for
+  preview directories whose sanitized slug (matching the deployment helper) no
+  longer corresponds to a live branch and deletes them before committing back
+  to `gh-pages`. That keeps artifacts lean even if Pages deploys pause for a
+  while.
 - **Manual cleanup remains available.** If you need to reclaim space before the
   next deployment runs (or before triggering **Deploy GitHub Pages previews**
   by hand), delete the stale `codex-<slug>` directories on `gh-pages` and
@@ -426,4 +429,4 @@ Run the preview at http://localhost:8000 and exercise the checks above across mu
 
 ## Open Follow-Ups
 
-Active work now lives in the root [`TODO.md`](../TODO.md) (actionable tasks) and [`ROADMAP.md`](../ROADMAP.md) (direction). Update those files when behaviour changes or milestones land so this guide can stay focused on architecture and gameplay references.
+Active work now lives in [`project/TODO.md`](./TODO.md) (actionable tasks) and [`project/ROADMAP.md`](./ROADMAP.md) (direction). Update those files when behaviour changes or milestones land so this guide can stay focused on architecture and gameplay references.
