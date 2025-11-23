@@ -668,13 +668,11 @@
             <label class="control">
               <span>Renderer</span>
               <select id="rendererMode">
-                <option value="canvas2d">Canvas 2D</option>
-                <option value="webgl">WebGL</option>
                 <option value="svg">SVG</option>
               </select>
             </label>
             <p class="control-note">
-              Choose between the classic Canvas pipeline, accelerated WebGL, or the SVG renderer.
+              Rendering is handled by the SVG renderer.
             </p>
             <label class="control">
               <span>Unfilled region colour</span>
@@ -1315,8 +1313,6 @@
           beginRendererBootstrap,
           completeRendererBootstrap,
           createRendererController,
-          createSvgRenderer,
-          createWebGLRenderer,
           SceneTileLoader,
         } from "./runtime.js";
         import { html, renderTemplate } from "./ui-template.js";
@@ -3428,7 +3424,7 @@
           imageDescription: "",
           showRegionLabels: true,
           theme: DEFAULT_UI_THEME,
-          renderer: "canvas2d",
+          renderer: "svg",
           settingsSheetOpen: false,
           mouseControls: cloneMouseControls(DEFAULT_MOUSE_CONTROLS),
         },
@@ -3510,7 +3506,6 @@
       }
 
       rendererController = createRendererController(puzzleCanvas, {
-        initialRenderer: state.settings.renderer || "canvas2d",
         hooks: {
           log: logRendererEvent,
           renderFrame: renderPuzzleFrame,
@@ -3526,77 +3521,6 @@
           },
           clearContext: ({ context }) => clearContext(context),
           onRendererChange: handleRendererChange,
-        },
-        renderers: {
-          webgl: (currentCanvas, currentHooks, payload) => {
-            if (!currentCanvas) {
-              throw new Error("WebGL renderer unavailable");
-            }
-            const host = currentCanvas.parentElement;
-            if (!host) {
-              throw new Error("WebGL renderer unavailable");
-            }
-            const webglCanvas = document.createElement("canvas");
-            webglCanvas.classList.add("renderer-surface", "renderer-surface-webgl");
-            webglCanvas.setAttribute("aria-hidden", "true");
-            webglCanvas.style.position = "absolute";
-            webglCanvas.style.top = "0";
-            webglCanvas.style.left = "0";
-            webglCanvas.style.width = "100%";
-            webglCanvas.style.height = "100%";
-            webglCanvas.style.pointerEvents = "none";
-            webglCanvas.style.userSelect = "none";
-            host.insertBefore(webglCanvas, currentCanvas.nextSibling);
-            if (typeof currentHooks?.log === "function") {
-              try {
-                currentHooks.log("Attaching WebGL surface", { stage: "init" });
-              } catch (logError) {
-                console.debug("Renderer log failed", logError);
-              }
-            }
-            let renderer;
-            try {
-              renderer = createWebGLRenderer(webglCanvas, currentHooks, payload);
-            } catch (error) {
-              webglCanvas.remove();
-              throw error;
-            }
-            if (!renderer) {
-              webglCanvas.remove();
-              throw new Error("WebGL renderer unavailable");
-            }
-            if (typeof currentHooks?.log === "function") {
-              try {
-                currentHooks.log("WebGL renderer created", { stage: "ready" });
-              } catch (logError) {
-                console.debug("Renderer log failed", logError);
-              }
-            }
-            const baseDispose = typeof renderer.dispose === "function" ? renderer.dispose.bind(renderer) : null;
-            return {
-              ...renderer,
-              dispose() {
-                if (baseDispose) {
-                  baseDispose();
-                }
-                if (typeof currentHooks?.log === "function") {
-                  try {
-                    currentHooks.log("WebGL renderer disposed", { stage: "dispose" });
-                  } catch (logError) {
-                    console.debug("Renderer log failed", logError);
-                  }
-                }
-                webglCanvas.remove();
-              },
-            };
-          },
-          svg: (currentCanvas, currentHooks, payload) => {
-            const renderer = createSvgRenderer(currentCanvas, currentHooks, payload);
-            if (!renderer) {
-              throw new Error("SVG renderer unavailable");
-            }
-            return renderer;
-          },
         },
       });
       state.rendering.controller = rendererController;
@@ -3865,20 +3789,11 @@
 
       function normalizeRendererType(value) {
         if (typeof value !== "string") return null;
-        const trimmed = value.trim().toLowerCase();
-        return trimmed ? trimmed : null;
+        return value.trim().toLowerCase() === "svg" ? "svg" : null;
       }
 
       function formatRendererLabel(type) {
-        switch (normalizeRendererType(type)) {
-          case "webgl":
-            return "WebGL";
-          case "svg":
-            return "SVG";
-          case "canvas2d":
-          default:
-            return "Canvas 2D";
-        }
+        return "SVG";
       }
 
       function markRendererUnavailable(type) {
@@ -3887,13 +3802,8 @@
         logRendererEvent(`Renderer unavailable`, { type: normalized });
         unavailableRenderers.add(normalized);
         if (rendererModeSelect) {
-          for (const option of rendererModeSelect.options) {
-            if (normalizeRendererType(option.value) === normalized) {
-              option.disabled = true;
-              option.title = "Not supported on this device";
-              break;
-            }
-          }
+          rendererModeSelect.disabled = true;
+          rendererModeSelect.title = "Not supported on this device";
         }
       }
 
@@ -3901,107 +3811,38 @@
         if (!rendererModeSelect) {
           return;
         }
-        const controller = state.rendering?.controller || null;
-        let listed = [];
-        if (controller?.listRenderers) {
-          try {
-            listed = controller.listRenderers() || [];
-          } catch (error) {
-            listed = [];
-          }
-        }
-        const available = new Set(listed.map((entry) => normalizeRendererType(entry)).filter(Boolean));
-        for (const option of rendererModeSelect.options) {
-          const value = normalizeRendererType(option.value);
-          if (!value) continue;
-          const isUnavailable = unavailableRenderers.has(value);
-          const supported = available.has(value) || value === "canvas2d";
-          option.disabled = isUnavailable || !supported;
-          if (option.disabled && isUnavailable) {
-            option.title = "Not supported on this device";
-          } else {
-            option.removeAttribute("title");
-          }
-        }
-        const activeType = normalizeRendererType(
-          controller?.getRendererType?.() || state.settings.renderer || "canvas2d"
-        );
-        if (activeType && rendererModeSelect.value !== activeType) {
-          rendererModeSelect.value = activeType;
-        }
+        rendererModeSelect.value = "svg";
+        rendererModeSelect.disabled = true;
+        rendererModeSelect.title = "SVG renderer active";
       }
 
       function applyRendererMode(type, options = {}) {
         const controller = state.rendering?.controller;
-        const requested = normalizeRendererType(type) || state.settings.renderer || "canvas2d";
-        if (!controller || typeof controller.setRenderer !== "function") {
-          state.settings.renderer = requested;
-          if (rendererModeSelect) {
-            rendererModeSelect.value = requested;
-          }
-          return requested;
-        }
-        let availableTypes = [];
-        try {
-          availableTypes = controller.listRenderers?.() || [];
-        } catch (error) {
-          availableTypes = [];
-        }
-        const availableSet = new Set(
-          availableTypes.map((entry) => normalizeRendererType(entry)).filter(Boolean)
-        );
-        const fallback = availableSet.has("canvas2d")
-          ? "canvas2d"
-          : availableSet.size > 0
-          ? Array.from(availableSet)[0]
-          : "canvas2d";
-        let target = normalizeRendererType(requested) || fallback;
-        if (!availableSet.has(target) && !unavailableRenderers.has(target)) {
-          target = fallback;
-        }
-        const previous = normalizeRendererType(controller.getRendererType?.());
-        let resolved = previous || null;
-        let changed = false;
-        try {
-          const result = controller.setRenderer(target);
-          resolved = normalizeRendererType(controller.getRendererType?.() || (result ? target : null));
-        } catch (error) {
-          console.error(`Failed to activate renderer: ${target}`, error);
-          markRendererUnavailable(target);
-          resolved = normalizeRendererType(controller.getRendererType?.()) || previous || fallback;
-        }
-        if (!resolved || (!availableSet.has(resolved) && !unavailableRenderers.has(resolved))) {
-          resolved = fallback;
-          if (normalizeRendererType(controller.getRendererType?.()) !== resolved) {
-            try {
-              controller.setRenderer(resolved);
-            } catch (fallbackError) {
-              console.error(`Failed to fall back to renderer: ${resolved}`, fallbackError);
-            }
-          }
-        }
-        if (resolved !== previous) {
-          changed = true;
-        }
+        const resolved = "svg";
         state.settings.renderer = resolved;
         if (rendererModeSelect) {
           rendererModeSelect.value = resolved;
+          rendererModeSelect.disabled = true;
         }
         updateRendererModeAvailability();
-        if (changed && !options.skipRender) {
+        if (controller?.setRenderer) {
+          try {
+            controller.setRenderer(resolved);
+          } catch (error) {
+            console.error(`Failed to activate renderer: ${resolved}`, error);
+          }
+        }
+        if (!options.skipRender) {
           applyCanvasSizing();
           renderPuzzle();
         }
-        if (changed && !options.skipLog) {
+        if (!options.skipLog) {
           logDebug(`Renderer switched to ${formatRendererLabel(resolved)}`);
         }
-        if (!changed) {
-          return resolved;
-        }
-        scheduleSettingsPersist({ immediate: true });
         if (!options.skipAutosave) {
           scheduleAutosave("settings-renderer");
         }
+        scheduleSettingsPersist({ immediate: true });
         return resolved;
       }
 
@@ -4971,14 +4812,8 @@
       }
 
       if (rendererModeSelect) {
-        rendererModeSelect.value = state.settings.renderer || "canvas2d";
-        rendererModeSelect.addEventListener("change", (event) => {
-          const requested = event.target.value;
-          const resolved = applyRendererMode(requested);
-          if (resolved && resolved !== requested) {
-            rendererModeSelect.value = resolved;
-          }
-        });
+        rendererModeSelect.value = "svg";
+        rendererModeSelect.disabled = true;
       }
 
       if (backgroundColorInput) {
@@ -12664,7 +12499,7 @@
           maxZoomCandidate != null
             ? maxZoomCandidate
             : resolveMaxZoomCandidate(state?.settings?.maxZoom) ?? DEFAULT_MAX_VIEWPORT_ZOOM;
-        const renderer = normalizeRendererType(base.renderer) || "canvas2d";
+        const renderer = normalizeRendererType(base.renderer) || "svg";
         const themeCandidate =
           typeof base.theme === "string" ? base.theme.trim().toLowerCase() : "";
         const theme = VALID_UI_THEMES.has(themeCandidate) ? themeCandidate : DEFAULT_UI_THEME;
