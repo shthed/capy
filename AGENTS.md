@@ -73,6 +73,10 @@ any feature or workflow changes you ship.
 - Primary test command: `npm test --silent` from within `project/` (currently
   prints a skip notice while the Playwright suite is offline). Mention in the
   final response if you cannot run it.
+- Playwright flow: install browsers with `npm run setup:playwright` (or
+  `npx playwright install --with-deps chromium`) before running UI checks. If
+  downloads are blocked or cached binaries are busy (`ETXTBSY`), rerun the
+  install to refresh the bundle before retrying tests.
 - Playwright browsers are **not** preinstalled. Before running any tests or
   scripts that launch Playwright, execute
   `npx playwright install --with-deps chromium` to provision the Chromium
@@ -86,6 +90,9 @@ any feature or workflow changes you ship.
   labels, and README imagery when making visual changes.
 - Artifacts: Capture Playwright reports under `artifacts/ui-review/` for major
   UI updates and surface them in PRs once the automated suite is reinstated.
+- Changelog + screenshots: save UI screenshots under `project/artifacts/` and
+  link them from `project/changelog.md` so reviewers can compare against
+  deployed previews.
 - Manual QA: `window.capyGenerator` exposes helpers (e.g.
   `loadPuzzleFixture`, `togglePreview`). Document any new helpers in `TECH.md`
   plus relevant tests.
