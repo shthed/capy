@@ -19,7 +19,8 @@ and paint a canvas you can immediately play. Everything ships as static runtime
 files in the repository root so the single-page app can be served directly
 without a build step.
 Offline play stays supported via a minimal service worker (`service-worker.js`)
-that precaches the runtime payload and reuses a shared Cache Storage bucket for
+that precaches the runtime payload (including the renderer-specific bundles) and
+reuses a shared Cache Storage bucket for
 downloaded or user-selected source images. Imported images are stored under
 `source-images/<id>` cache entries so saves keep lightweight references (cache
 keys + URLs) instead of embedding large data URLs in `localStorage`.
