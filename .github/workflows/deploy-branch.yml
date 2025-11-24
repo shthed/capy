@@ -19,13 +19,17 @@ env:
   BASE_PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
 
 jobs:
-  plan:
-    name: Plan deployment
+  deploy:
+    name: Deploy branch preview
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-pages-${{ replace(github.ref_name, '/', '-') }}
+      cancel-in-progress: false
     outputs:
       branch: ${{ steps.compute.outputs.branch }}
       ref: ${{ steps.compute.outputs.ref }}
       safe_branch: ${{ steps.compute.outputs.safe_branch }}
+      target_dir: ${{ steps.compute.outputs.target_dir }}
       preview_url: ${{ steps.compute.outputs.preview_url }}
     steps:
       - name: Derive deployment target
@@ -71,17 +75,19 @@ jobs:
                 return;
               }
 
-              const safeBranch = sanitize(branch);
+              const safeBranch = sanitize(branch) || branch;
               const isMain = branch === 'main';
+              const targetDir = isMain ? '.' : `automation-${safeBranch}`;
 
               const baseUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
               const previewUrl = isMain
                 ? `${baseUrl}/`
-                : `${baseUrl}/${safeBranch}/`;
+                : `${baseUrl}/${targetDir}/`;
 
               core.setOutput('branch', branch);
               core.setOutput('ref', ref);
-              core.setOutput('safe_branch', safeBranch || branch);
+              core.setOutput('safe_branch', safeBranch);
+              core.setOutput('target_dir', targetDir);
               core.setOutput('preview_url', previewUrl);
             } catch (error) {
               const reason = error?.message || String(error);
@@ -91,18 +97,10 @@ jobs:
                 .write();
               core.setFailed(reason);
             }
-  deploy:
-    name: Deploy branch preview
-    needs: plan
-    runs-on: ubuntu-latest
-    concurrency:
-      group: deploy-pages-${{ needs.plan.outputs.safe_branch }}
-      cancel-in-progress: false
-    steps:
       - name: Checkout source branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.plan.outputs.ref }}
+          ref: ${{ steps.compute.outputs.ref }}
           fetch-depth: 0
           path: source
 
@@ -140,15 +138,12 @@ jobs:
 
       - name: Prepare target directory
         env:
-          TARGET_BRANCH: ${{ needs.plan.outputs.branch }}
-          SAFE_BRANCH: ${{ needs.plan.outputs.safe_branch }}
+          TARGET_BRANCH: ${{ steps.compute.outputs.branch }}
+          SAFE_BRANCH: ${{ steps.compute.outputs.safe_branch }}
         run: |
           set -euo pipefail
 
-          TARGET_DIR="."
-          if [ "${TARGET_BRANCH}" != "main" ]; then
-            TARGET_DIR="${SAFE_BRANCH}"
-          fi
+          TARGET_DIR="${{ steps.compute.outputs.target_dir }}"
 
           mkdir -p "pages/${TARGET_DIR}/README" "pages/${TARGET_DIR}/AGENTS"
           echo "target_dir=${TARGET_DIR}" >> "$GITHUB_ENV"
@@ -182,9 +177,9 @@ jobs:
 
       - name: Commit and push
         env:
-          TARGET_BRANCH: ${{ needs.plan.outputs.branch }}
-          SAFE_BRANCH: ${{ needs.plan.outputs.safe_branch }}
-          PREVIEW_URL: ${{ needs.plan.outputs.preview_url }}
+          TARGET_BRANCH: ${{ steps.compute.outputs.branch }}
+          SAFE_BRANCH: ${{ steps.compute.outputs.safe_branch }}
+          PREVIEW_URL: ${{ steps.compute.outputs.preview_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
@@ -209,4 +204,4 @@ jobs:
       - name: Record deployment failure
         if: failure()
         run: |
-          echo "Deployment failed for branch '${{ needs.plan.outputs.branch }}'. Check logs for details." >> "$GITHUB_STEP_SUMMARY"
+          echo "Deployment failed for branch '${{ steps.compute.outputs.branch || github.ref_name }}'. Check logs for details." >> "$GITHUB_STEP_SUMMARY"
