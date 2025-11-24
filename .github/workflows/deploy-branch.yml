@@ -23,7 +23,7 @@ jobs:
     name: Deploy branch preview
     runs-on: ubuntu-latest
     concurrency:
-      group: deploy-pages-${{ replace(github.ref_name, '/', '-') }}
+      group: deploy-pages-${{ github.ref_name }}
       cancel-in-progress: false
     outputs:
       branch: ${{ steps.compute.outputs.branch }}
