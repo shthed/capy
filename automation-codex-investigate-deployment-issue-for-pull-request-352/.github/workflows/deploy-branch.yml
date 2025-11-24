@@ -1,0 +1,207 @@
+name: Deploy GitHub Pages previews
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: Branch to deploy (defaults to main when blank)
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+  actions: read
+  pull-requests: read
+
+env:
+  BASE_PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+
+jobs:
+  deploy:
+    name: Deploy branch preview
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-pages-${{ github.ref_name }}
+      cancel-in-progress: false
+    outputs:
+      branch: ${{ steps.compute.outputs.branch }}
+      ref: ${{ steps.compute.outputs.ref }}
+      safe_branch: ${{ steps.compute.outputs.safe_branch }}
+      target_dir: ${{ steps.compute.outputs.target_dir }}
+      preview_url: ${{ steps.compute.outputs.preview_url }}
+    steps:
+      - name: Derive deployment target
+        id: compute
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const inputBranch = core.getInput('target_branch');
+
+            const sanitize = (value) => (value || '').replace(/[^a-zA-Z0-9._-]/g, '-').trim();
+
+            const resolveBranchRef = async (branchName) => {
+              if (!branchName) {
+                return { branch: '', ref: '' };
+              }
+              const { data } = await github.rest.repos.getBranch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: branchName,
+              });
+              return { branch: branchName, ref: data?.commit?.sha || '' };
+            };
+
+            try {
+              const eventName = context.eventName;
+              let branch = '';
+              let ref = '';
+
+              if (eventName === 'push') {
+                branch = (context.payload.ref || '').replace('refs/heads/', '');
+                ref = context.sha;
+              } else if (eventName === 'workflow_dispatch') {
+                const target = inputBranch || 'main';
+                const resolved = await resolveBranchRef(target);
+                branch = resolved.branch;
+                ref = resolved.ref;
+              }
+
+              if (!branch) {
+                const message = 'No branch could be resolved for deployment.';
+                await core.summary.addHeading('Deployment failed').addRaw(message).write();
+                core.setFailed(message);
+                return;
+              }
+
+              const safeBranch = sanitize(branch) || branch;
+              const isMain = branch === 'main';
+              const targetDir = isMain ? '.' : `automation-${safeBranch}`;
+
+              const baseUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
+              const previewUrl = isMain
+                ? `${baseUrl}/`
+                : `${baseUrl}/${targetDir}/`;
+
+              core.setOutput('branch', branch);
+              core.setOutput('ref', ref);
+              core.setOutput('safe_branch', safeBranch);
+              core.setOutput('target_dir', targetDir);
+              core.setOutput('preview_url', previewUrl);
+            } catch (error) {
+              const reason = error?.message || String(error);
+              await core.summary
+                .addHeading('Deployment failed')
+                .addRaw(reason)
+                .write();
+              core.setFailed(reason);
+            }
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.compute.outputs.ref }}
+          fetch-depth: 0
+          path: source
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: pages
+          fetch-depth: 0
+
+      - name: Ensure gh-pages working tree
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [ -d pages/.git ]; then
+            exit 0
+          fi
+
+          rm -rf pages
+          git clone --depth 1 --branch gh-pages "https://github.com/${REPOSITORY}.git" pages || true
+
+          if [ ! -d pages/.git ]; then
+            git clone --depth 1 "https://github.com/${REPOSITORY}.git" pages
+            cd pages
+            git checkout --orphan gh-pages
+            git rm -rf .
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Prepare target directory
+        env:
+          TARGET_BRANCH: ${{ steps.compute.outputs.branch }}
+          SAFE_BRANCH: ${{ steps.compute.outputs.safe_branch }}
+        run: |
+          set -euo pipefail
+
+          TARGET_DIR="${{ steps.compute.outputs.target_dir }}"
+
+          mkdir -p "pages/${TARGET_DIR}/README" "pages/${TARGET_DIR}/AGENTS"
+          echo "target_dir=${TARGET_DIR}" >> "$GITHUB_ENV"
+
+      - name: Sync runtime files
+        env:
+          TARGET_DIR: ${{ env.target_dir }}
+        run: |
+          set -euo pipefail
+
+          rsync -av --delete \
+            --exclude '.git/' \
+            source/ "pages/${TARGET_DIR}/"
+
+      - name: Render docs for Pages
+        env:
+          TARGET_DIR: ${{ env.target_dir }}
+        run: |
+          set -euo pipefail
+
+          node ./source/project/scripts/build-pages-site.mjs \
+            --source ./source/README.md \
+            --output "pages/${TARGET_DIR}/README/index.html" \
+            --context "${GITHUB_REPOSITORY}"
+          node ./source/project/scripts/build-pages-site.mjs \
+            --source ./source/AGENTS.md \
+            --output "pages/${TARGET_DIR}/AGENTS/index.html" \
+            --context "${GITHUB_REPOSITORY}" \
+            --title "Capy Agent Guide" \
+            --source-label "AGENTS.md"
+
+      - name: Commit and push
+        env:
+          TARGET_BRANCH: ${{ steps.compute.outputs.branch }}
+          SAFE_BRANCH: ${{ steps.compute.outputs.safe_branch }}
+          PREVIEW_URL: ${{ steps.compute.outputs.preview_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd pages
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          git add .
+          if git diff --cached --quiet; then
+            echo "No changes to deploy."
+            exit 0
+          fi
+
+          git commit -m "Deploy ${TARGET_BRANCH} (${GITHUB_SHA})"
+          git push origin gh-pages
+
+          echo "::debug::Preview URL ${PREVIEW_URL}"
+          echo "Preview URL: ${PREVIEW_URL}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Record deployment failure
+        if: failure()
+        run: |
+          echo "Deployment failed for branch '${{ steps.compute.outputs.branch || github.ref_name }}'. Check logs for details." >> "$GITHUB_STEP_SUMMARY"
