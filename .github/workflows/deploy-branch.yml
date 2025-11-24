@@ -77,7 +77,7 @@ jobs:
 
               const safeBranch = sanitize(branch) || branch;
               const isMain = branch === 'main';
-              const targetDir = isMain ? '.' : `automation-${safeBranch}`;
+              const targetDir = isMain ? '.' : safeBranch;
 
               const baseUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
               const previewUrl = isMain
