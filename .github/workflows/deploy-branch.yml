@@ -160,22 +160,7 @@ jobs:
           set -euo pipefail
 
           rsync -av --delete \
-            --include 'index.html' \
-            --include 'capy.json' \
-            --include 'render.js' \
-            --include 'render-canvas2d.js' \
-            --include 'render-webgl.js' \
-            --include 'render-svg.js' \
-            --include 'runtime.js' \
-            --include 'puzzle-generation.js' \
-            --include 'ui-template.js' \
-            --include 'styles.css' \
-            --include 'service-worker.js' \
-            --include 'AGENTS.md' \
-            --include 'README.md' \
-            --include 'ROADMAP.md' \
-            --include 'TODO.md' \
-            --exclude '*' \
+            --exclude '.git/' \
             source/ "pages/${TARGET_DIR}/"
 
       - name: Render docs for Pages
