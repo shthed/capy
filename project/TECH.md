@@ -90,11 +90,8 @@ footprints predictable.
 Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs
 on every push (all branches) plus optional manual dispatches (trigger the manual
 run from `main` and provide the `target_branch` input so the workflow checks out
-the right source). Because the `github-pages` environment only accepts `main`
-and `automation/*` branches, the workflow begins with a planning job that
-calculates the effective branch/ref, confirms it matches the naming policy, and
-either hands the values to the deploy job or posts a skip notice when the branch
-is not eligible:
+the right source). The workflow computes the target ref and preview URL in its
+first step, then deploys directly to `gh-pages`:
 
 1. **Checkout & sanitise.** The action checks out the triggering branch (shallow
    fetch for speed) and the `gh-pages` deployment branch, converts branch names
@@ -114,24 +111,20 @@ is not eligible:
    - Non-`main` branches clear their directory (e.g.,
      `/automation-feature/`), copy the same runtime payload plus JS/CSS/JSON
      dependencies, and generate scoped `/README/index.html` and
-     `/AGENTS/index.html` files for that directory.
-   Because the sync uses `rsync -a` without `--delete`, previously published
-   branch folders stick around inside the `gh-pages` working tree until they are
-   removed manually.
+     `/AGENTS/index.html` files for that directory. The rsync step deletes stale
+     files from existing preview directories so each deploy mirrors the source
+     branch exactly.
 3. **Preview surfacing.** After copying files, the workflow commits straight to
-   `gh-pages`, calculates the preview URL based on the sanitised slug, and posts
-   the link in the job summary (separate PR commenting is handled by the
-   post-deploy test workflow). Branches that do not match the `automation/*`
-   pattern never reach this step; the planning job records a notice and exits so
-   environment protections are satisfied without hard failures.
-4. **Packaging.** `actions/upload-pages-artifact` tars the entire `pages/` tree
-   (not just the directory for the triggering branch), which means stale
-  directories inflate the artifact and can easily produce multi-hundred-megabyte
-  uploads when years of codex branches accumulate.
+   `gh-pages`, calculates the preview URL based on the sanitised slug (prefixed
+   with `automation-` for non-`main` branches), and posts the link in the job
+   summary. Separate PR commenting remains in the post-deploy test workflow.
+4. **Packaging.** The workflow pushes directly to `gh-pages` without packaging
+   a Pages artifact, so the deployed tree always mirrors the latest rsync output
+   instead of a cached archive.
 
-If the sync step finds nothing new to commit, it records `has_changes=false`
-and skips the Pages packaging/deploy phases to avoid wasting artifact time while
-still reporting the preview URL from the previous publish.
+If the sync step finds nothing new to commit, the workflow exits after noting
+there are no changes to deploy while leaving the previously published preview
+in place.
 
 ### Keeping branch directories and artifacts lean
 
