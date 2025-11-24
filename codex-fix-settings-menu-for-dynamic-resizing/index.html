@@ -3253,9 +3253,14 @@
           viewport?.width || window.innerWidth || document.documentElement.clientWidth || settingsSheet.offsetWidth || 720;
         const rawHeight =
           viewport?.height || window.innerHeight || document.documentElement.clientHeight || settingsSheet.offsetHeight || 520;
-        const gutter = Math.max(12, Math.round(Math.min(rawWidth, rawHeight) * 0.025));
-        const width = clamp(Math.round(rawWidth - gutter * 2), 360, 1080);
-        const height = clamp(Math.round(rawHeight - gutter * 2), 420, 900);
+        const insetX = Math.max(0, Math.round(viewport?.offsetLeft || 0));
+        const insetY = Math.max(0, Math.round(viewport?.offsetTop || 0));
+        const gutter = Math.max(12, Math.round(Math.min(rawWidth, rawHeight) * 0.02));
+        const frameGutter = Math.max(gutter, Math.max(insetX, insetY));
+        const width = clamp(Math.round(rawWidth - frameGutter * 2), 340, 1080);
+        const height = clamp(Math.round(rawHeight - frameGutter * 2), 380, 900);
+        const viewportGap = Math.min(Math.max(frameGutter, 12), 72);
+        settingsSheet.style.setProperty("--settings-sheet-viewport-gap", `${viewportGap}px`);
         settingsSheet.style.setProperty("--settings-sheet-width", `${width}px`);
         settingsSheet.style.setProperty("--settings-sheet-height", `${height}px`);
         settingsSheetSize = { width, height };
