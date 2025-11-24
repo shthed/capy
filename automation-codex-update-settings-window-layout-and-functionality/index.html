@@ -202,6 +202,10 @@
       aria-hidden="true"
     >
       <div class="sheet-header">
+        <div class="sheet-header-title">
+          <p class="sheet-header-kicker">Settings</p>
+          <h2 class="sheet-header-heading">Settings &amp; tools</h2>
+        </div>
         <div class="sheet-header-actions">
           <button
             id="settingsUploadButton"
@@ -211,31 +215,25 @@
           >
             Upload image
           </button>
-          <div class="loader-status" aria-hidden="true">
-            <span class="status-indicator" aria-hidden="true"></span>
-            <span class="status-label">Loader active</span>
-          </div>
+          <button
+            type="button"
+            class="close-button sheet-close"
+            data-sheet-close="settings"
+            aria-label="Close settings"
+          >
+            <span aria-hidden="true">×</span>
+            <span class="visually-hidden">Close</span>
+          </button>
         </div>
-        <button type="button" class="close-button" data-sheet-close="settings">Close</button>
       </div>
       <div class="sheet-body">
-        <section class="sheet-section" aria-label="Settings loader console">
-          <div class="visually-hidden" id="settingsLoadHeading">Settings loader console</div>
-          <div
-            id="settingsLoadConsole"
-            class="debug-log settings-loading-console"
-            role="log"
-            aria-labelledby="settingsLoadHeading"
-            aria-live="polite"
-            aria-relevant="additions text"
-          ></div>
-        </section>
         <div class="settings-body">
           <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
             <button
               class="settings-tab"
               type="button"
               role="tab"
+              id="settingsTab-gameplay"
               aria-controls="settingsPanel-gameplay"
               aria-selected="true"
               data-settings-tab="gameplay"
@@ -247,6 +245,7 @@
               class="settings-tab"
               type="button"
               role="tab"
+              id="settingsTab-hints"
               aria-controls="settingsPanel-hints"
               aria-selected="false"
               data-settings-tab="hints"
@@ -257,6 +256,7 @@
               class="settings-tab"
               type="button"
               role="tab"
+              id="settingsTab-controls"
               aria-controls="settingsPanel-controls"
               aria-selected="false"
               data-settings-tab="controls"
@@ -267,6 +267,7 @@
               class="settings-tab"
               type="button"
               role="tab"
+              id="settingsTab-appearance"
               aria-controls="settingsPanel-appearance"
               aria-selected="false"
               data-settings-tab="appearance"
@@ -277,6 +278,7 @@
               class="settings-tab"
               type="button"
               role="tab"
+              id="settingsTab-generator"
               aria-controls="settingsPanel-generator"
               aria-selected="false"
               data-settings-tab="generator"
@@ -287,6 +289,7 @@
               class="settings-tab"
               type="button"
               role="tab"
+              id="settingsTab-saves"
               aria-controls="settingsPanel-saves"
               aria-selected="false"
               data-settings-tab="saves"
@@ -297,27 +300,43 @@
               class="settings-tab"
               type="button"
               role="tab"
+              id="settingsTab-help"
               aria-controls="settingsPanel-help"
               aria-selected="false"
               data-settings-tab="help"
             >
-              Help &amp; logs
+              Help
+            </button>
+            <button
+              class="settings-tab"
+              type="button"
+              role="tab"
+              id="settingsTab-diagnostics"
+              aria-controls="settingsPanel-diagnostics"
+              aria-selected="false"
+              data-settings-tab="diagnostics"
+            >
+              Diagnostics
             </button>
           </nav>
           <div class="settings-content" data-settings-scroll>
-            <section class="settings-section" data-settings-section="gameplay">
+            <section
+              class="settings-section settings-page"
+              id="settingsPanel-gameplay"
+              role="tabpanel"
+              aria-labelledby="settingsTab-gameplay"
+              data-settings-panel="gameplay"
+            >
               <div class="settings-section-heading">
                 <h3 id="settingsHeading-gameplay" data-settings-heading>Gameplay</h3>
               </div>
               <div
                 class="settings-panel"
-                id="settingsPanel-gameplay"
                 role="group"
                 aria-labelledby="settingsHeading-gameplay"
-                data-settings-panel="gameplay"
               >
-          <section class="sheet-section" aria-labelledby="quickActionsHeading">
-            <h3 id="quickActionsHeading">Quick actions</h3>
+              <section class="sheet-section" aria-labelledby="quickActionsHeading">
+                <h3 id="quickActionsHeading">Quick actions</h3>
             <div class="quick-actions" role="group" aria-label="Puzzle quick actions">
               <button
                 id="previewToggle"
@@ -390,17 +409,17 @@
           </section>
         </div>
         </section>
-        <section class="settings-section" data-settings-section="hints">
+        <section
+          class="settings-section settings-page"
+          id="settingsPanel-hints"
+          role="tabpanel"
+          aria-labelledby="settingsTab-hints"
+          data-settings-panel="hints"
+        >
           <div class="settings-section-heading">
             <h3 id="settingsHeading-hints" data-settings-heading>Hints</h3>
           </div>
-          <div
-            class="settings-panel"
-            id="settingsPanel-hints"
-            role="group"
-            aria-labelledby="settingsHeading-hints"
-            data-settings-panel="hints"
-          >
+          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-hints">
           <section class="sheet-section" aria-labelledby="hintsControlsHeading">
             <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
             <div class="control control-range">
@@ -470,17 +489,17 @@
           </section>
         </div>
         </section>
-        <section class="settings-section" data-settings-section="controls">
+        <section
+          class="settings-section settings-page"
+          id="settingsPanel-controls"
+          role="tabpanel"
+          aria-labelledby="settingsTab-controls"
+          data-settings-panel="controls"
+        >
           <div class="settings-section-heading">
             <h3 id="settingsHeading-controls" data-settings-heading>Controls</h3>
           </div>
-          <div
-            class="settings-panel"
-            id="settingsPanel-controls"
-            role="group"
-            aria-labelledby="settingsHeading-controls"
-            data-settings-panel="controls"
-          >
+          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-controls">
           <section class="sheet-section" aria-labelledby="mouseControlsHeading">
             <h3 id="mouseControlsHeading">Mouse controls</h3>
             <p class="control-note">
@@ -568,17 +587,17 @@
           </section>
         </div>
         </section>
-        <section class="settings-section" data-settings-section="appearance">
+        <section
+          class="settings-section settings-page"
+          id="settingsPanel-appearance"
+          role="tabpanel"
+          aria-labelledby="settingsTab-appearance"
+          data-settings-panel="appearance"
+        >
           <div class="settings-section-heading">
             <h3 id="settingsHeading-appearance" data-settings-heading>Appearance</h3>
           </div>
-          <div
-            class="settings-panel"
-            id="settingsPanel-appearance"
-            role="group"
-            aria-labelledby="settingsHeading-appearance"
-            data-settings-panel="appearance"
-          >
+          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-appearance">
           <section class="sheet-section" aria-labelledby="appearanceHeading">
             <h3 id="appearanceHeading">Appearance</h3>
             <div class="control control-range">
@@ -689,17 +708,17 @@
           </section>
         </div>
         </section>
-        <section class="settings-section" data-settings-section="generator">
+        <section
+          class="settings-section settings-page"
+          id="settingsPanel-generator"
+          role="tabpanel"
+          aria-labelledby="settingsTab-generator"
+          data-settings-panel="generator"
+        >
           <div class="settings-section-heading">
             <h3 id="settingsHeading-generator" data-settings-heading>Generator</h3>
           </div>
-          <div
-            class="settings-panel"
-            id="settingsPanel-generator"
-            role="group"
-            aria-labelledby="settingsHeading-generator"
-            data-settings-panel="generator"
-          >
+          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-generator">
           <div
             class="generator-import-notice"
             data-import-notice
@@ -974,17 +993,17 @@
         </div>
         </div>
         </section>
-        <section class="settings-section" data-settings-section="saves">
+        <section
+          class="settings-section settings-page"
+          id="settingsPanel-saves"
+          role="tabpanel"
+          aria-labelledby="settingsTab-saves"
+          data-settings-panel="saves"
+        >
           <div class="settings-section-heading">
             <h3 id="settingsHeading-saves" data-settings-heading>Saves</h3>
           </div>
-          <div
-            class="settings-panel"
-            id="settingsPanel-saves"
-            role="group"
-            aria-labelledby="settingsHeading-saves"
-            data-settings-panel="saves"
-          >
+          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-saves">
           <section class="sheet-section" aria-labelledby="saveStartHeading">
             <h3 id="saveStartHeading">Start a puzzle</h3>
             <div class="save-start-actions">
@@ -1052,17 +1071,17 @@
           </section>
         </div>
         </section>
-        <section class="settings-section" data-settings-section="help">
+        <section
+          class="settings-section settings-page"
+          id="settingsPanel-help"
+          role="tabpanel"
+          aria-labelledby="settingsTab-help"
+          data-settings-panel="help"
+        >
           <div class="settings-section-heading">
-            <h3 id="settingsHeading-help" data-settings-heading>Help &amp; logs</h3>
+            <h3 id="settingsHeading-help" data-settings-heading>Help</h3>
           </div>
-          <div
-            class="settings-panel"
-            id="settingsPanel-help"
-            role="group"
-            aria-labelledby="settingsHeading-help"
-            data-settings-panel="help"
-          >
+          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-help">
           <section class="sheet-section" aria-labelledby="commandsHeading">
             <h3 id="commandsHeading">Command buttons</h3>
             <dl class="command-list">
@@ -1085,7 +1104,9 @@
               <dt>💾 Saves</dt>
               <dd>Manage snapshots — load, rename, export, or delete stored games.</dd>
               <dt>ℹ Help</dt>
-              <dd>Open this guide and inspect the live debug log.</dd>
+              <dd>
+                Open this guide and review tips for palette controls, gestures, and sharing feedback.
+              </dd>
               <dt>⚙ Settings</dt>
               <dd>
                 Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface
@@ -1105,21 +1126,11 @@
               <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
             </ul>
           </section>
-          <section class="sheet-section" aria-labelledby="readmeHeading">
-            <h3 id="readmeHeading">Project README</h3>
-            <p class="control-note">
-              Loads the live documentation from the README so you can review gameplay notes and contributor guidance without
-              leaving the app.
-            </p>
-            <p class="control-note" data-readme-status role="status">Loading README…</p>
-            <p class="control-note" data-readme-error role="alert" hidden></p>
-            <article class="readme-preview" data-readme-content hidden aria-live="polite"></article>
-          </section>
           <section class="sheet-section" aria-labelledby="feedbackHeading">
             <h3 id="feedbackHeading">Share feedback</h3>
             <p class="control-note">
               Tell us what worked, what broke, or what you want next. Submissions are logged anonymously in analytics alongside
-              the debug log.
+              diagnostic events.
             </p>
             <form id="feedbackForm" class="feedback-form" novalidate>
               <label class="control">
@@ -1159,6 +1170,30 @@
                 <p class="feedback-status" data-feedback-status role="status" aria-live="polite" hidden></p>
               </div>
             </form>
+          </section>
+          </div>
+        </section>
+        <section
+          class="settings-section settings-page"
+          id="settingsPanel-diagnostics"
+          role="tabpanel"
+          aria-labelledby="settingsTab-diagnostics"
+          data-settings-panel="diagnostics"
+        >
+          <div class="settings-section-heading">
+            <h3 id="settingsHeading-diagnostics" data-settings-heading>Diagnostics</h3>
+          </div>
+          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-diagnostics">
+          <section class="sheet-section" aria-label="Settings loader console">
+            <div class="visually-hidden" id="settingsLoadHeading">Settings loader console</div>
+            <div
+              id="settingsLoadConsole"
+              class="debug-log settings-loading-console"
+              role="log"
+              aria-labelledby="settingsLoadHeading"
+              aria-live="polite"
+              aria-relevant="additions text"
+            ></div>
           </section>
           <section class="sheet-section" aria-labelledby="systemHeading">
             <h3 id="systemHeading">System status</h3>
@@ -1560,14 +1595,17 @@
         settingsSheet?.querySelector("[data-settings-scroll]") ||
         settingsSheet?.querySelector(".sheet-body") ||
         null;
+      const settingsTabs = settingsSheet ? Array.from(settingsSheet.querySelectorAll("[data-settings-tab]")) : [];
+      const settingsPanels = settingsSheet
+        ? Array.from(settingsSheet.querySelectorAll("[data-settings-panel]"))
+        : [];
       const generatorPanel = settingsSheet?.querySelector('[data-settings-panel="generator"]') || null;
       const helpPanel = settingsSheet?.querySelector('[data-settings-panel="help"]') || null;
+      const defaultSettingsTabId =
+        settingsTabs.find((tab) => tab.hasAttribute("data-settings-tab-default"))?.dataset.settingsTab ||
+        settingsPanels[0]?.dataset.settingsPanel ||
+        null;
       const sheetRegistry = [settingsSheet].filter(Boolean);
-      const readmeContentEl = helpPanel?.querySelector("[data-readme-content]") || null;
-      const readmeStatusEl = helpPanel?.querySelector("[data-readme-status]") || null;
-      const readmeErrorEl = helpPanel?.querySelector("[data-readme-error]") || null;
-      const README_SOURCE_URL = "https://shthed.github.io/capy/README";
-      let readmeLoadState = "idle";
       const feedbackForm = document.getElementById("feedbackForm");
       const feedbackStatusEl = helpPanel?.querySelector("[data-feedback-status]") || null;
       const feedbackCategorySelect = document.getElementById("feedbackCategory");
@@ -4512,16 +4550,14 @@
         settingsSheetHeader.addEventListener("pointercancel", endSettingsSheetDrag);
       }
 
-      if (helpPanel && readmeLoadState === "idle") {
-        const scheduleReadmePrefetch = () => {
-          if (readmeLoadState === "idle") {
-            void ensureHelpReadmeLoaded();
-          }
-        };
-        if (typeof window?.requestIdleCallback === "function") {
-          window.requestIdleCallback(scheduleReadmePrefetch, { timeout: 1200 });
-        } else {
-          window.setTimeout(scheduleReadmePrefetch, 600);
+      if (settingsTabs.length && settingsPanels.length) {
+        activateSettingsTab(defaultSettingsTabId, { resetScroll: true });
+        for (const tab of settingsTabs) {
+          tab.addEventListener("click", () => {
+            const tabId = tab.dataset.settingsTab || defaultSettingsTabId;
+            if (!tabId) return;
+            scrollSettingsPanelIntoView(tabId, { resetScroll: true, focus: true });
+          });
         }
       }
 
@@ -5447,111 +5483,6 @@
         { passive: false }
       );
 
-      async function ensureHelpReadmeLoaded() {
-        if (!readmeContentEl) return;
-        if (readmeLoadState === "loading" || readmeLoadState === "loaded") {
-          return;
-        }
-        const skipReadmeFetch =
-          window.navigator?.webdriver ||
-          window.location?.hostname === "localhost" ||
-          window.location?.hostname === "127.0.0.1";
-        if (skipReadmeFetch) {
-          readmeLoadState = "loaded";
-          if (readmeStatusEl) {
-            readmeStatusEl.hidden = false;
-            readmeStatusEl.textContent = "README preview unavailable offline.";
-          }
-          if (readmeContentEl) {
-            readmeContentEl.hidden = false;
-            readmeContentEl.textContent = "README preview unavailable offline.";
-            readmeContentEl.classList.add("readme-preview--plaintext");
-          }
-          return;
-        }
-        readmeLoadState = "loading";
-        if (readmeStatusEl) {
-          readmeStatusEl.hidden = false;
-          readmeStatusEl.textContent = "Loading README…";
-        }
-        if (readmeErrorEl) {
-          readmeErrorEl.hidden = true;
-          readmeErrorEl.textContent = "";
-        }
-        readmeContentEl.hidden = true;
-        readmeContentEl.innerHTML = "";
-        readmeContentEl.classList.remove("readme-preview--plaintext");
-        try {
-          const response = await fetch(README_SOURCE_URL, { cache: "no-store" });
-          if (!response || !response.ok) {
-            throw new Error(`HTTP ${response ? response.status : "error"}`);
-          }
-          const contentType = response.headers?.get("content-type") || "";
-          const raw = await response.text();
-          if (contentType.includes("text/html")) {
-            let html = raw;
-            if (typeof DOMParser !== "undefined") {
-              try {
-                const parser = new DOMParser();
-                const parsed = parser.parseFromString(raw, "text/html");
-                const source = parsed.querySelector("main") || parsed.body;
-                if (source) {
-                  source.querySelectorAll("script").forEach((node) => node.remove());
-                  source.querySelectorAll("a[href]").forEach((anchor) => {
-                    const href = anchor.getAttribute("href");
-                    if (!href) return;
-                    if (!href.startsWith("#")) {
-                      try {
-                        const absolute = new URL(href, README_SOURCE_URL);
-                        anchor.setAttribute("href", absolute.toString());
-                      } catch (_) {
-                        // Ignore malformed URLs.
-                      }
-                    }
-                    anchor.setAttribute("target", "_blank");
-                    anchor.setAttribute("rel", "noreferrer noopener");
-                  });
-                  source.querySelectorAll("img[src]").forEach((img) => {
-                    const src = img.getAttribute("src");
-                    if (!src) return;
-                    try {
-                      const absolute = new URL(src, README_SOURCE_URL);
-                      img.setAttribute("src", absolute.toString());
-                    } catch (_) {
-                      // Ignore malformed URLs.
-                    }
-                  });
-                  html = source.innerHTML;
-                }
-              } catch (_) {
-                // Fall back to the original HTML string if parsing fails.
-              }
-            }
-            readmeContentEl.innerHTML = html;
-            readmeContentEl.classList.remove("readme-preview--plaintext");
-          } else {
-            const trimmed = raw.trim();
-            readmeContentEl.textContent = trimmed.length > 0 ? trimmed : raw;
-            readmeContentEl.classList.add("readme-preview--plaintext");
-          }
-          readmeContentEl.hidden = false;
-          if (readmeStatusEl) {
-            readmeStatusEl.hidden = true;
-          }
-          readmeLoadState = "loaded";
-        } catch (error) {
-          readmeLoadState = "error";
-          if (readmeStatusEl) {
-            readmeStatusEl.hidden = true;
-          }
-          if (readmeErrorEl) {
-            const message = error && error.message ? error.message : "unknown error";
-            readmeErrorEl.hidden = false;
-            readmeErrorEl.textContent = `Couldn't load the README (${message}). Reopen this panel to try again.`;
-          }
-        }
-      }
-
       function handleFeedbackSubmit(event) {
         if (event) {
           event.preventDefault();
@@ -5610,9 +5541,6 @@
         if (sheet === settingsSheet && settingsButton) {
           settingsButton.setAttribute("aria-expanded", "true");
           settingsButton.classList.add("active");
-        }
-        if (sheet === settingsSheet && helpPanel && readmeLoadState === "idle") {
-          void ensureHelpReadmeLoaded();
         }
         if (sheet === settingsSheet) {
           setSettingsSheetOpenState(true);
@@ -5687,13 +5615,11 @@
         syncSettingsSheetSize();
         openSheet(settingsSheet);
         ensureSettingsSheetPosition({ forceCenter: force || !settingsSheetPosition });
-        if (typeof tabId === "string" && tabId.length > 0) {
-          scrollSettingsPanelIntoView(tabId, { focus: focusTab, resetScroll });
+        const targetTabId = typeof tabId === "string" && tabId.length > 0 ? tabId : defaultSettingsTabId;
+        if (targetTabId) {
+          scrollSettingsPanelIntoView(targetTabId, { focus: focusTab, resetScroll });
         } else if (resetScroll && settingsBody) {
           settingsBody.scrollTop = 0;
-        }
-        if (helpPanel && readmeLoadState === "idle") {
-          void ensureHelpReadmeLoaded();
         }
       }
 
@@ -6691,23 +6617,56 @@
       installConsoleErrorForwarder.installed = false;
       installConsoleErrorForwarder();
 
+      function activateSettingsTab(tabId, options = {}) {
+        if (!settingsSheet || settingsTabs.length === 0 || settingsPanels.length === 0) {
+          return null;
+        }
+        const { focusTab = false, resetScroll = false } = options;
+        const availableIds = settingsPanels
+          .map((panel) => panel?.dataset?.settingsPanel)
+          .filter((value) => typeof value === "string" && value.length > 0);
+        const resolvedId = availableIds.includes(tabId) ? tabId : defaultSettingsTabId;
+        if (!resolvedId) {
+          return null;
+        }
+        for (const tab of settingsTabs) {
+          const active = tab?.dataset?.settingsTab === resolvedId;
+          tab?.setAttribute("aria-selected", active ? "true" : "false");
+          tab?.setAttribute("tabindex", active ? "0" : "-1");
+        }
+        for (const panel of settingsPanels) {
+          if (!panel) continue;
+          const active = panel.dataset.settingsPanel === resolvedId;
+          panel.hidden = !active;
+          panel.setAttribute("aria-hidden", active ? "false" : "true");
+        }
+        if (resetScroll && settingsBody) {
+          settingsBody.scrollTop = 0;
+        }
+        if (focusTab) {
+          const activeTab = settingsTabs.find((tab) => tab?.dataset?.settingsTab === resolvedId);
+          activeTab?.focus();
+        }
+        return resolvedId;
+      }
+
       function scrollSettingsPanelIntoView(panelId, options = {}) {
         if (!panelId || !settingsSheet || !settingsBody) {
           return null;
         }
         const { focus = false, resetScroll = false } = options;
-        const panel = settingsSheet.querySelector(`[data-settings-panel="${panelId}"]`);
+        const resolvedId = activateSettingsTab(panelId, { resetScroll });
+        if (!resolvedId) {
+          return null;
+        }
+        const panel = settingsSheet.querySelector(`[data-settings-panel="${resolvedId}"]`);
         if (!panel) {
           return null;
         }
-        const section = panel.closest("[data-settings-section]") || panel;
-        if (resetScroll) {
-          settingsBody.scrollTop = 0;
+        if (!resetScroll && typeof panel.scrollIntoView === "function") {
+          panel.scrollIntoView({ block: "start" });
         }
-        if (typeof section.scrollIntoView === "function") {
-          section.scrollIntoView({ block: "start" });
-        }
-        const heading = section.querySelector("[data-settings-heading]") || section.querySelector("h3");
+        const heading = panel.querySelector("[data-settings-heading]") || panel.querySelector("h3");
         if (focus && heading) {
           const previousTabIndex = heading.getAttribute("tabindex");
           heading.setAttribute("tabindex", "-1");
@@ -6718,14 +6677,12 @@
             heading.setAttribute("tabindex", previousTabIndex);
           }
         }
-        if (panelId === "help" && readmeLoadState === "idle") {
-          void ensureHelpReadmeLoaded();
-        } else if (panelId === "generator") {
+        if (resolvedId === "generator") {
           requestAnimationFrame(() => {
             focusGeneratorUrlInput();
           });
         }
-        return section;
+        return panel;
       }
 
       function applyUiScale(scale, options = {}) {
