@@ -3234,6 +3234,7 @@
       let suppressSettingsClick = false;
       let settingsLauncherPositionPx = null;
       let settingsSheetPosition = null;
+      let settingsSheetSize = null;
       let settingsSheetDrag = null;
       let cursorHoverRegionId = null;
       let cursorLastClientX = null;
@@ -3244,6 +3245,27 @@
       const prefersReducedMotionQuery = window.matchMedia
         ? window.matchMedia("(prefers-reduced-motion: reduce)")
         : null;
+
+      function syncSettingsSheetSize() {
+        if (!settingsSheet) return null;
+        const viewport = window.visualViewport;
+        const rawWidth =
+          viewport?.width || window.innerWidth || document.documentElement.clientWidth || settingsSheet.offsetWidth || 720;
+        const rawHeight =
+          viewport?.height || window.innerHeight || document.documentElement.clientHeight || settingsSheet.offsetHeight || 520;
+        const insetX = Math.max(0, Math.round(viewport?.offsetLeft || 0));
+        const insetY = Math.max(0, Math.round(viewport?.offsetTop || 0));
+        const gutter = Math.max(12, Math.round(Math.min(rawWidth, rawHeight) * 0.02));
+        const frameGutter = Math.max(gutter, Math.max(insetX, insetY));
+        const width = clamp(Math.round(rawWidth - frameGutter * 2), 340, 1080);
+        const height = clamp(Math.round(rawHeight - frameGutter * 2), 380, 900);
+        const viewportGap = Math.min(Math.max(frameGutter, 12), 72);
+        settingsSheet.style.setProperty("--settings-sheet-viewport-gap", `${viewportGap}px`);
+        settingsSheet.style.setProperty("--settings-sheet-width", `${width}px`);
+        settingsSheet.style.setProperty("--settings-sheet-height", `${height}px`);
+        settingsSheetSize = { width, height };
+        return settingsSheetSize;
+      }
 
       function syncCommandRailMetrics() {
         if (!commandRail) {
@@ -3361,8 +3383,14 @@
         const rect = settingsSheet.getBoundingClientRect();
         const viewportWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
         const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
-        const width = rect.width || settingsSheet.offsetWidth || 720;
-        const height = rect.height || settingsSheet.offsetHeight || 520;
+        const width =
+          Number.isFinite(settingsSheetSize?.width) && settingsSheetSize?.width > 0
+            ? settingsSheetSize.width
+            : rect.width || settingsSheet.offsetWidth || 720;
+        const height =
+          Number.isFinite(settingsSheetSize?.height) && settingsSheetSize?.height > 0
+            ? settingsSheetSize.height
+            : rect.height || settingsSheet.offsetHeight || 520;
         const minVisible = Math.max(96, Math.min(200, Math.round(Math.min(width, height) * 0.4)));
         const maxLeft = viewportWidth - minVisible;
         const minLeft = minVisible - width;
@@ -5656,6 +5684,7 @@
           return;
         }
         const { tabId = null, focusTab = false, resetScroll = true, force = false } = options;
+        syncSettingsSheetSize();
         openSheet(settingsSheet);
         ensureSettingsSheetPosition({ forceCenter: force || !settingsSheetPosition });
         if (typeof tabId === "string" && tabId.length > 0) {
@@ -5823,6 +5852,7 @@
         syncComputedUiScale();
         scheduleCommandRailMetricsSync();
         applySettingsLauncherPosition(state?.settings?.launcherPosition);
+        syncSettingsSheetSize();
         if (settingsSheet) {
           if (settingsSheet.classList.contains("hidden")) {
             if (settingsSheetPosition) {
