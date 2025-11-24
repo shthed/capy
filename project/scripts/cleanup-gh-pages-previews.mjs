@@ -71,9 +71,20 @@ const main = () => {
   const defaultBranch = resolveDefaultBranch();
   const remoteBranches = fetchRemoteBranches();
 
-  const liveBranchSlugs = new Set(remoteBranches.map((name) => sanitize(name)).filter((name) => name.length > 0));
+  const liveBranchSlugs = new Set();
+
+  const addBranchTargets = (branchName) => {
+    const slug = sanitize(branchName);
+    if (!slug) {
+      return;
+    }
+
+    liveBranchSlugs.add(slug);
+  };
+
+  remoteBranches.forEach(addBranchTargets);
   if (defaultBranch) {
-    liveBranchSlugs.add(sanitize(defaultBranch));
+    addBranchTargets(defaultBranch);
   }
 
   const previewDirectories = findPreviewDirectories(resolvedPagesDir);
