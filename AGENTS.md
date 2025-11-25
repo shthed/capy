@@ -20,8 +20,9 @@ any feature or workflow changes you ship.
   notes, and preview links stay centralised, which matters once the automation
   suite returns.
 - **Branch deployments.** Branches with open PRs deploy automatically to GitHub
-  Pages under `/automation-<slug>/`; `main` deploys to the root. Preview links
-  arrive directly in PR comments so reviewers do not need a standalone index.
+  Pages under `/pull/<number>/` directories keyed to the PR number; `main`
+  deploys to the root. Preview links arrive directly in PR comments so
+  reviewers do not need a standalone index.
 - **Manual deploy overrides.** When triggering `Deploy GitHub Pages previews`
   by hand, run the workflow from `main`, set the `target_branch` input to the
   branch you need, and tick `allow_without_pr` only if you intentionally want to
@@ -179,7 +180,7 @@ any feature or workflow changes you ship.
 - Workflow: `.github/workflows/deploy-branch.yml` builds from every push.
   Branches without open PRs exit early; `main` always deploys.
 - Destinations: `main` publishes to the root of GitHub Pages. Other branches
-  land in `/automation-<slug>/` directories using sanitised branch names (e.g.,
+  land in `/<slug>/` directories using sanitised branch names (e.g.,
   `automation/feature` → `/automation-feature/`).
 - Contents: Each deployment ships the runtime payload from the repository root
   (`index.html`, `render.js`, `puzzle-generation.js`, and `capy.json`) plus a
