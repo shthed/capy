@@ -1,7 +1,7 @@
 # Capy Technical Guide
 
 Play the latest build at https://shthed.github.io/capy/ (branch previews deploy
-to `/<slug>/`). Repository: https://github.com/shthed/capy.
+to `/pull/<number>/`). Repository: https://github.com/shthed/capy.
 
 This document collects all technical, architectural, and QA details that were
 previously tracked in the README. Keep it accurate alongside feature work so
@@ -93,13 +93,12 @@ run from `main` and provide the `target_branch` input so the workflow checks out
 the right source). The workflow computes the target ref and preview URL in its
 first step, then deploys directly to `gh-pages`:
 
-1. **Checkout & sanitise.** The action checks out the triggering branch (shallow
-   fetch for speed) and the `gh-pages` deployment branch, converts branch names
-   into URL-safe slugs (e.g., `automation/feature` → `automation-feature`), and
-   creates a matching directory for non-`main` deployments. Concurrency keys
-   include the branch name so different previews deploy in parallel without
-   overwriting each other. (`main` maps to the Pages root; every other branch
-   lands in `/<slug>/`.)
+1. **Checkout & PR discovery.** The action checks out the triggering branch
+   (shallow fetch for speed) and the `gh-pages` deployment branch, then resolves
+   the PR attached to the branch. Concurrency keys include the branch name so
+   different previews deploy in parallel without overwriting each other.
+   (`main` maps to the Pages root; every other branch lands in `/pull/<number>/`
+   directories that match the PR number.)
 2. **Content sync.**
    - `main` copies the runtime payload from the repository root (`index.html`,
      `styles.css`, `render.js`, `puzzle-generation.js`, `runtime.js`,
@@ -108,16 +107,15 @@ first step, then deploys directly to `gh-pages`:
      `project/scripts/build-pages-site.mjs` so
      https://shthed.github.io/capy/README/ mirrors the handbook and
      https://shthed.github.io/capy/AGENTS/ keeps the workflow guide live.
-   - Non-`main` branches clear their directory (e.g.,
-     `/automation-feature/`), copy the same runtime payload plus JS/CSS/JSON
-     dependencies, and generate scoped `/README/index.html` and
-     `/AGENTS/index.html` files for that directory. The rsync step deletes stale
-     files from existing preview directories so each deploy mirrors the source
-     branch exactly.
+   - Non-`main` branches clear their directory (e.g., `/pull/352/`), copy the
+     same runtime payload plus JS/CSS/JSON dependencies, and generate scoped
+     `/README/index.html` and `/AGENTS/index.html` files for that directory. The
+     rsync step deletes stale files from existing preview directories so each
+     deploy mirrors the source branch exactly.
 3. **Preview surfacing.** After copying files, the workflow commits straight to
-   `gh-pages`, calculates the preview URL based on the sanitised slug, and posts
-   the link in the job summary. Separate PR commenting remains in the
-   post-deploy test workflow.
+   `gh-pages`, calculates the preview URL based on the PR number, and posts the
+   link in the job summary. Separate PR commenting remains in the post-deploy
+   test workflow.
 4. **Packaging.** The workflow pushes directly to `gh-pages` without packaging
    a Pages artifact, so the deployed tree always mirrors the latest rsync output
    instead of a cached archive.
@@ -139,14 +137,16 @@ in place.
   batch of PRs so stale heads disappear immediately.
 - **Cleanup also trims Pages previews.** After refreshing remote branches,
   `.github/workflows/cleanup-branches.yml` scans the `gh-pages` branch for
-  preview directories whose sanitized slug (matching the deployment helper) no
-  longer corresponds to a live branch. Directories stick around for at least
-  24 hours (even if the PR closed) before removal, and debug logs list the PRs
-  associated with each deployed slug so it is clear what is being evaluated
-  before deletions proceed.
+  preview directories under `/pull/<number>/`. Directories stick around for at
+  least 24 hours after losing a matching branch or associated open PR, and
+  debug logs now list the PRs associated with each deployed preview so it is
+  clear what is being evaluated before deletions proceed. When a PR closes,
+  `.github/workflows/cleanup-closed-pr.yml` kicks off immediately to delete the
+  branch (when it lives in the same repository) and remove that PR’s preview
+  directory without waiting for the 24-hour window.
 - **Manual cleanup remains available.** If you need to reclaim space before the
   next deployment runs (or before triggering **Deploy GitHub Pages previews**
-  by hand), delete the stale `codex-<slug>` directories on `gh-pages` and
+  by hand), delete the stale `pull/<number>` directories on `gh-pages` and
   push the commit. The following deploy run will confirm the branch is gone,
   skip recreating its preview, and upload the trimmed artifact.
 
@@ -156,8 +156,8 @@ Tweaking the deployment:
   adding new runtime assets, update the `ESSENTIAL_FILES`/include lists in
   `.github/workflows/deploy-branch.yml` so branch previews ship the same payload
   as `main`.
-- Change the slug format in the sanitisation helper if branch naming needs to
-  support additional characters.
+- Adjust PR lookup or target path logic in the deployment helper if preview
+  directories need a different layout.
 - Swap the publish branch from `gh-pages` if you need a different hosting
   target.
 
@@ -166,10 +166,10 @@ Tweaking the deployment:
 - **Trigger.** The `Post-deploy branch tests` workflow listens for successful
   runs of the deployment job. It only proceeds for push-triggered runs so manual
   dispatches and `gh-pages` updates do not double-trigger Playwright.
-- **Preview discovery.** Each run sanitises the branch name the same way the
-  deployment workflow does (`automation/feature` → `/automation-feature/`) to
-  reconstruct the GitHub Pages preview URL. The computed link feeds both
-  Playwright and the PR comment that lands at the end of the job.
+- **Preview discovery.** Each run resolves the PR for the triggering branch and
+  reconstructs the `/pull/<number>/` preview URL (or root for `main`). The
+  computed link feeds both Playwright and the PR comment that lands at the end
+  of the job.
 - **Playwright smoke rerun.** Once the preview URL is known, the workflow
   installs dependencies and reuses `npm test --silent`, pointing Playwright at
   the hosted branch preview via `PLAYWRIGHT_BASE_URL`. When that variable is
