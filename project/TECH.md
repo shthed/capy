@@ -140,9 +140,10 @@ in place.
 - **Cleanup also trims Pages previews.** After refreshing remote branches,
   `.github/workflows/cleanup-branches.yml` scans the `gh-pages` branch for
   preview directories whose sanitized slug (matching the deployment helper) no
-  longer corresponds to a live branch and deletes them before committing back
-  to `gh-pages`. That keeps artifacts lean even if Pages deploys pause for a
-  while.
+  longer corresponds to a live branch. Directories stick around for at least
+  24 hours (even if the PR closed) before removal, and debug logs list the PRs
+  associated with each deployed slug so it is clear what is being evaluated
+  before deletions proceed.
 - **Manual cleanup remains available.** If you need to reclaim space before the
   next deployment runs (or before triggering **Deploy GitHub Pages previews**
   by hand), delete the stale `codex-<slug>` directories on `gh-pages` and
