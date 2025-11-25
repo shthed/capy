@@ -1,7 +1,7 @@
 # Capy Technical Guide
 
 Play the latest build at https://shthed.github.io/capy/ (branch previews deploy
-to `/automation-<slug>/`). Repository: https://github.com/shthed/capy.
+to `/<slug>/`). Repository: https://github.com/shthed/capy.
 
 This document collects all technical, architectural, and QA details that were
 previously tracked in the README. Keep it accurate alongside feature work so
@@ -99,7 +99,7 @@ first step, then deploys directly to `gh-pages`:
    creates a matching directory for non-`main` deployments. Concurrency keys
    include the branch name so different previews deploy in parallel without
    overwriting each other. (`main` maps to the Pages root; every other branch
-   lands in `/automation-<slug>/`.)
+   lands in `/<slug>/`.)
 2. **Content sync.**
    - `main` copies the runtime payload from the repository root (`index.html`,
      `styles.css`, `render.js`, `puzzle-generation.js`, `runtime.js`,
@@ -115,9 +115,9 @@ first step, then deploys directly to `gh-pages`:
      files from existing preview directories so each deploy mirrors the source
      branch exactly.
 3. **Preview surfacing.** After copying files, the workflow commits straight to
-   `gh-pages`, calculates the preview URL based on the sanitised slug (prefixed
-   with `automation-` for non-`main` branches), and posts the link in the job
-   summary. Separate PR commenting remains in the post-deploy test workflow.
+   `gh-pages`, calculates the preview URL based on the sanitised slug, and posts
+   the link in the job summary. Separate PR commenting remains in the
+   post-deploy test workflow.
 4. **Packaging.** The workflow pushes directly to `gh-pages` without packaging
    a Pages artifact, so the deployed tree always mirrors the latest rsync output
    instead of a cached archive.
@@ -140,9 +140,10 @@ in place.
 - **Cleanup also trims Pages previews.** After refreshing remote branches,
   `.github/workflows/cleanup-branches.yml` scans the `gh-pages` branch for
   preview directories whose sanitized slug (matching the deployment helper) no
-  longer corresponds to a live branch and deletes them before committing back
-  to `gh-pages`. That keeps artifacts lean even if Pages deploys pause for a
-  while.
+  longer corresponds to a live branch. Directories stick around for at least
+  24 hours (even if the PR closed) before removal, and debug logs list the PRs
+  associated with each deployed slug so it is clear what is being evaluated
+  before deletions proceed.
 - **Manual cleanup remains available.** If you need to reclaim space before the
   next deployment runs (or before triggering **Deploy GitHub Pages previews**
   by hand), delete the stale `codex-<slug>` directories on `gh-pages` and
