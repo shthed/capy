@@ -20,8 +20,9 @@ any feature or workflow changes you ship.
   notes, and preview links stay centralised, which matters once the automation
   suite returns.
 - **Branch deployments.** Branches with open PRs deploy automatically to GitHub
-  Pages under `/<slug>/`; `main` deploys to the root. Preview links
-  arrive directly in PR comments so reviewers do not need a standalone index.
+  Pages under `/pull/<number>/` directories keyed to the PR number; `main`
+  deploys to the root. Preview links arrive directly in PR comments so
+  reviewers do not need a standalone index.
 - **Manual deploy overrides.** When triggering `Deploy GitHub Pages previews`
   by hand, run the workflow from `main`, set the `target_branch` input to the
   branch you need, and tick `allow_without_pr` only if you intentionally want to
