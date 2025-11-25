@@ -28,6 +28,8 @@ async function main() {
     'tests/generator.spec.js',
     'tests/smoothing.spec.mjs',
     'tests/service-worker-cache.spec.js',
+    'tests/render-controller.spec.js',
+    'tests/svg-renderer.spec.js',
   ]);
   if (nodeTestCode !== 0) {
     process.exit(nodeTestCode);

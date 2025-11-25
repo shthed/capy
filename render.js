@@ -795,7 +795,8 @@ export function createSvgRenderer(host, hooks = {}) {
   const NS = "http://www.w3.org/2000/svg";
   const container = host.parentElement || host;
   const originalPosition = container.style.position || "";
-  if (originalPosition === "" || originalPosition === "static") {
+  const shouldResetPosition = originalPosition === "" || originalPosition === "static";
+  if (shouldResetPosition) {
     container.style.position = "relative";
   }
 
@@ -871,9 +872,15 @@ export function createSvgRenderer(host, hooks = {}) {
     if (Number.isFinite(width) && Number.isFinite(height)) {
       contentWidth = width;
       contentHeight = height;
-      if (viewBox.width === 0 || viewBox.height === 0) {
-        viewBox.width = width;
-        viewBox.height = height;
+      const viewBoxNeedsUpdate =
+        !Number.isFinite(viewBox.width) ||
+        !Number.isFinite(viewBox.height) ||
+        viewBox.width <= 0 ||
+        viewBox.height <= 0 ||
+        viewBox.width !== width ||
+        viewBox.height !== height;
+      if (viewBoxNeedsUpdate) {
+        viewBox = { x: 0, y: 0, width, height };
       }
       applyViewBox();
     }
@@ -936,8 +943,8 @@ export function createSvgRenderer(host, hooks = {}) {
 
   function dispose() {
     svg.remove();
-    if (container.style.position === "relative" && originalPosition === "") {
-      container.style.position = "";
+    if (shouldResetPosition) {
+      container.style.position = originalPosition;
     }
   }
 
