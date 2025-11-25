@@ -95,7 +95,7 @@ any feature or workflow changes you ship.
 - Artifacts: Capture Playwright reports under `artifacts/ui-review/` for major
   UI updates and surface them in PRs once the automated suite is reinstated.
 - Changelog + screenshots: save UI screenshots under `project/artifacts/` and
-  link them from `project/changelog.md` so reviewers can compare against
+  link them from `project/CHANGELOG.md` so reviewers can compare against
   deployed previews.
 - Manual QA: `window.capyGenerator` exposes helpers (e.g.
   `loadPuzzleFixture`, `togglePreview`). Document any new helpers in `TECH.md`
@@ -110,6 +110,8 @@ any feature or workflow changes you ship.
   workflows.
 - Add or refresh screenshots, segmentation guides, and UI walkthroughs when
   you alter major flows.
+- Keep `project/CHANGELOG.md` up to date with user-facing changes and any
+  linked screenshots.
 
 - **Runtime constraints.** Keep the runtime build-free: the shipped HTML and
   modules must stay directly loadable without introducing bundlers or new build
