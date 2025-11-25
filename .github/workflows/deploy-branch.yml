@@ -192,6 +192,8 @@ jobs:
 
           rsync -av --delete \
             --exclude '.git/' \
+            --exclude 'project/' \
+            --exclude '.github/' \
             source/ "pages/${TARGET_DIR}/"
 
       - name: Render docs for Pages
