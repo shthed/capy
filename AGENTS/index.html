@@ -71,8 +71,9 @@
     notes, and preview links stay centralised, which matters once the automation<br>
     suite returns.</li>
     <li><strong>Branch deployments.</strong> Branches with open PRs deploy automatically to GitHub<br>
-    Pages under <code class="notranslate">/&lt;slug&gt;/</code>; <code class="notranslate">main</code> deploys to the root. Preview links<br>
-    arrive directly in PR comments so reviewers do not need a standalone index.</li>
+    Pages under <code class="notranslate">/pull/&lt;number&gt;/</code> directories keyed to the PR number; <code class="notranslate">main</code><br>
+    deploys to the root. Preview links arrive directly in PR comments so<br>
+    reviewers do not need a standalone index.</li>
     <li><strong>Manual deploy overrides.</strong> When triggering <code class="notranslate">Deploy GitHub Pages previews</code><br>
     by hand, run the workflow from <code class="notranslate">main</code>, set the <code class="notranslate">target_branch</code> input to the<br>
     branch you need, and tick <code class="notranslate">allow_without_pr</code> only if you intentionally want to<br>
@@ -254,7 +255,7 @@
     </ul>
 
           </main>
-          <footer class="page-meta">Generated from AGENTS.md · 2025-11-25 02:32 UTC</footer>
+          <footer class="page-meta">Generated from AGENTS.md · 2025-11-25 02:40 UTC</footer>
         </body>
         </html>
 

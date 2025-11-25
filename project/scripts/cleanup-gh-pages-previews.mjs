@@ -129,27 +129,51 @@ const fetchRemoteBranches = () => {
 
 const parseArguments = () => {
   const args = process.argv.slice(2);
-  const options = { pagesDir: 'gh-pages' };
+  const options = { pagesDir: 'gh-pages', targetPr: null, ignoreRecency: false };
 
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index];
     if (value === '--pages-dir') {
       options.pagesDir = args[index + 1] ?? options.pagesDir;
       index += 1;
+    } else if (value === '--target-pr') {
+      const raw = args[index + 1];
+      const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+      options.targetPr = Number.isFinite(parsed) ? parsed : null;
+      index += 1;
+    } else if (value === '--ignore-recency') {
+      options.ignoreRecency = true;
     }
   }
 
   return options;
 };
 
-const findPreviewDirectories = (rootDir) => {
+const findLegacyPreviewDirectories = (rootDir) => {
   const entries = fs.readdirSync(rootDir, { withFileTypes: true });
   return entries
     .filter((entry) => entry.isDirectory())
-    .filter((entry) => entry.name !== '.git' && entry.name !== 'README')
+    .filter((entry) => !['.git', 'README', 'pull'].includes(entry.name))
     .filter((entry) => entry.name === sanitize(entry.name))
     .map((entry) => {
       const absolutePath = path.join(rootDir, entry.name);
+      const stats = fs.statSync(absolutePath);
+      return { name: entry.name, absolutePath, stats };
+    });
+};
+
+const findPullPreviewDirectories = (rootDir) => {
+  const pullRoot = path.join(rootDir, 'pull');
+  if (!fs.existsSync(pullRoot) || !fs.statSync(pullRoot).isDirectory()) {
+    return [];
+  }
+
+  const entries = fs.readdirSync(pullRoot, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.name === sanitize(entry.name))
+    .map((entry) => {
+      const absolutePath = path.join(pullRoot, entry.name);
       const stats = fs.statSync(absolutePath);
       return { name: entry.name, absolutePath, stats };
     });
@@ -187,6 +211,28 @@ const buildPullRequestIndex = (pulls) => {
   return index;
 };
 
+const buildPullRequestNumberIndex = (pulls) => {
+  const index = new Map();
+  for (const pull of pulls) {
+    if (!pull?.number) {
+      continue;
+    }
+
+    const info = {
+      number: pull.number,
+      state: pull.state,
+      title: pull.title ?? '',
+      mergedAt: pull.merged_at ?? null,
+      updatedAt: pull.updated_at ?? null,
+      url: pull.html_url ?? '',
+      headRef: pull?.head?.ref ?? ''
+    };
+
+    index.set(pull.number, info);
+  }
+  return index;
+};
+
 const formatPrSummary = (prs) => {
   if (!prs || prs.length === 0) {
     return 'no pull requests found';
@@ -201,7 +247,8 @@ const formatPrSummary = (prs) => {
 };
 
 const main = async () => {
-  const { pagesDir } = parseArguments();
+  const options = parseArguments();
+  const { pagesDir } = options;
   const resolvedPagesDir = path.resolve(process.cwd(), pagesDir);
 
   if (!fs.existsSync(resolvedPagesDir) || !fs.statSync(resolvedPagesDir).isDirectory()) {
@@ -231,8 +278,18 @@ const main = async () => {
 
   const pulls = await fetchPullRequests();
   const pullIndex = buildPullRequestIndex(pulls);
+  const pullNumberIndex = buildPullRequestNumberIndex(pulls);
 
-  const previewDirectories = findPreviewDirectories(resolvedPagesDir);
+  const pullPreviewDirectories = findPullPreviewDirectories(resolvedPagesDir).map((entry) => ({
+    ...entry,
+    kind: 'pull'
+  }));
+  const legacyPreviewDirectories = findLegacyPreviewDirectories(resolvedPagesDir).map((entry) => ({
+    ...entry,
+    kind: 'legacy'
+  }));
+
+  const previewDirectories = [...pullPreviewDirectories, ...legacyPreviewDirectories];
 
   if (previewDirectories.length === 0) {
     console.log('cleanup-gh-pages: no preview directories detected.');
@@ -241,16 +298,28 @@ const main = async () => {
 
   const now = Date.now();
   const inventory = previewDirectories.map((entry) => {
-    const prs = pullIndex.get(entry.name) ?? [];
-    const hasLiveBranch = liveBranchSlugs.has(entry.name);
+    const prs = entry.kind === 'pull' ? [] : pullIndex.get(entry.name) ?? [];
+    const prNumber = entry.kind === 'pull' ? Number.parseInt(entry.name, 10) : null;
+    const pull = Number.isFinite(prNumber) ? pullNumberIndex.get(prNumber) : null;
+    const hasLiveBranch = (() => {
+      if (entry.kind === 'pull') {
+        const headRef = pull?.headRef;
+        const slug = sanitize(headRef);
+        return slug ? liveBranchSlugs.has(slug) : false;
+      }
+      return liveBranchSlugs.has(entry.name);
+    })();
     const ageMs = Math.max(0, now - entry.stats.mtimeMs);
     const isRecent = ageMs < DAY_IN_MS;
 
     return {
       name: entry.name,
       absolutePath: entry.absolutePath,
+      kind: entry.kind,
       hasLiveBranch,
       prs,
+      pull,
+      prNumber,
       isRecent,
       lastUpdated: entry.stats.mtime ?? entry.stats.mtimeMs
     };
@@ -258,23 +327,58 @@ const main = async () => {
 
   console.log('::debug::cleanup-gh-pages: currently deployed previews:');
   for (const entry of inventory) {
-    const prSummary = formatPrSummary(entry.prs);
+    const prSummary = (() => {
+      if (entry.pull) {
+        const mergedMarker = entry.pull.mergedAt ? 'merged' : entry.pull.state;
+        return `#${entry.pull.number} (${mergedMarker})`;
+      }
+      return formatPrSummary(entry.prs);
+    })();
+
     const freshness = entry.isRecent ? '<1 day old' : '>=1 day old';
     const branchState = entry.hasLiveBranch ? 'live branch detected' : 'no matching branch';
     const updatedLabel = entry.lastUpdated instanceof Date ? entry.lastUpdated.toISOString() : new Date(entry.lastUpdated).toISOString();
-    console.log(`::debug::- ${entry.name}: ${branchState}; last updated ${updatedLabel}; ${freshness}; PRs: ${prSummary}`);
+    const label = entry.kind === 'pull' ? `pull/${entry.name}` : entry.name;
+
+    console.log(`::debug::- ${label}: ${branchState}; last updated ${updatedLabel}; ${freshness}; PRs: ${prSummary}`);
   }
 
-  const deletions = inventory.filter((entry) => !entry.hasLiveBranch && !entry.isRecent);
+  const deletions = inventory.filter((entry) => {
+    const hasOpenPr = entry.pull?.state === 'open' || entry.prs.some((pr) => pr.state === 'open');
+    const matchesTargetPr = options.targetPr !== null && entry.prNumber === options.targetPr;
+
+    if (hasOpenPr) {
+      return false;
+    }
+
+    if (entry.kind === 'legacy' && entry.hasLiveBranch) {
+      return false;
+    }
+
+    if (matchesTargetPr && options.ignoreRecency) {
+      return true;
+    }
+
+    return !entry.isRecent;
+  });
 
   if (deletions.length === 0) {
-    console.log('cleanup-gh-pages: no preview directories met cleanup criteria (requires no branch match and age >= 1 day).');
+    if (options.targetPr !== null) {
+      console.log(`cleanup-gh-pages: no preview directories matched PR #${options.targetPr} for removal.`);
+    } else {
+      console.log('cleanup-gh-pages: no preview directories met cleanup criteria (requires no branch match and age >= 1 day).');
+    }
     return;
   }
 
-  console.log('cleanup-gh-pages: removing orphaned preview directories older than 1 day:');
+  const removalReason = options.ignoreRecency && options.targetPr !== null
+    ? `targeted removal for PR #${options.targetPr}`
+    : 'orphaned preview directories older than 1 day';
+
+  console.log(`cleanup-gh-pages: removing ${removalReason}:`);
   for (const entry of deletions) {
-    console.log(`- ${entry.name}`);
+    const label = entry.kind === 'pull' ? `pull/${entry.name}` : entry.name;
+    console.log(`- ${label}`);
     deleteDirectory(entry.absolutePath);
   }
 };
