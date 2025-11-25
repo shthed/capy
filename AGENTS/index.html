@@ -71,7 +71,7 @@
     notes, and preview links stay centralised, which matters once the automation<br>
     suite returns.</li>
     <li><strong>Branch deployments.</strong> Branches with open PRs deploy automatically to GitHub<br>
-    Pages under <code class="notranslate">/automation-&lt;slug&gt;/</code>; <code class="notranslate">main</code> deploys to the root. Preview links<br>
+    Pages under <code class="notranslate">/&lt;slug&gt;/</code>; <code class="notranslate">main</code> deploys to the root. Preview links<br>
     arrive directly in PR comments so reviewers do not need a standalone index.</li>
     <li><strong>Manual deploy overrides.</strong> When triggering <code class="notranslate">Deploy GitHub Pages previews</code><br>
     by hand, run the workflow from <code class="notranslate">main</code>, set the <code class="notranslate">target_branch</code> input to the<br>
@@ -234,7 +234,7 @@
     <li>Workflow: <code class="notranslate">.github/workflows/deploy-branch.yml</code> builds from every push.<br>
     Branches without open PRs exit early; <code class="notranslate">main</code> always deploys.</li>
     <li>Destinations: <code class="notranslate">main</code> publishes to the root of GitHub Pages. Other branches<br>
-    land in <code class="notranslate">/automation-&lt;slug&gt;/</code> directories using sanitised branch names (e.g.,<br>
+    land in <code class="notranslate">/&lt;slug&gt;/</code> directories using sanitised branch names (e.g.,<br>
     <code class="notranslate">automation/feature</code> → <code class="notranslate">/automation-feature/</code>).</li>
     <li>Contents: Each deployment ships the runtime payload from the repository root<br>
     (<code class="notranslate">index.html</code>, <code class="notranslate">render.js</code>, <code class="notranslate">puzzle-generation.js</code>, and <code class="notranslate">capy.json</code>) plus a<br>
@@ -250,7 +250,7 @@
     </ul>
 
           </main>
-          <footer class="page-meta">Generated from AGENTS.md · 2025-11-24 23:57 UTC</footer>
+          <footer class="page-meta">Generated from AGENTS.md · 2025-11-25 00:02 UTC</footer>
         </body>
         </html>
 
