@@ -18,32 +18,70 @@ jobs:
     outputs:
       branch_name: ${{ steps.slug.outputs.branch_name }}
       branch_slug: ${{ steps.slug.outputs.branch_slug }}
+      pr_number: ${{ steps.slug.outputs.pr_number }}
+      preview_url: ${{ steps.slug.outputs.preview_url }}
     steps:
       - name: Derive branch slug
         id: slug
-        env:
-          WORKFLOW_RUN: ${{ toJson(github.event.workflow_run) }}
-        run: |
-          set -euo pipefail
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run || {};
 
-          BRANCH_NAME=$(printf '%s' "${WORKFLOW_RUN}" | jq -r '(.inputs.target_branch // .head_branch // .pull_requests[0].head.ref // "")')
-          SAFE_BRANCH=$(printf '%s' "${BRANCH_NAME}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+            const sanitize = (value) => (value || '').replace(/[^a-zA-Z0-9._-]/g, '-').trim();
 
-          echo "branch_name=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
-          echo "branch_slug=${SAFE_BRANCH}" >> "$GITHUB_OUTPUT"
+            const branchName = run.inputs?.target_branch || run.head_branch || run.pull_requests?.[0]?.head?.ref || '';
+
+            const findPullRequest = async (branch) => {
+              if (!branch || branch === 'main') {
+                return null;
+              }
+
+              const lookup = async (state) => {
+                const { data } = await github.rest.pulls.list({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  head: `${context.repo.owner}:${branch}`,
+                  state,
+                  sort: 'updated',
+                  direction: 'desc',
+                  per_page: 1,
+                });
+
+                return Array.isArray(data) && data.length > 0 ? data[0] : null;
+              };
+
+              return (await lookup('open')) ?? (await lookup('closed')) ?? null;
+            };
+
+            const baseUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
+
+            const pr = await findPullRequest(branchName);
+
+            const previewUrl = branchName === 'main'
+              ? `${baseUrl}/`
+              : pr?.number
+                ? `${baseUrl}/pull/${pr.number}/`
+                : '';
+
+            core.setOutput('branch_name', branchName);
+            core.setOutput('branch_slug', sanitize(branchName));
+            core.setOutput('pr_number', pr?.number ? String(pr.number) : '');
+            core.setOutput('preview_url', previewUrl);
 
   review:
     needs: slug
     if: |
       github.event.workflow_run.conclusion == 'success' &&
       contains(fromJson('["push","workflow_dispatch"]'), github.event.workflow_run.event) &&
-      needs.slug.outputs.branch_name != ''
+      needs.slug.outputs.branch_name != '' &&
+      needs.slug.outputs.preview_url != ''
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: project
     concurrency:
-      group: post-deploy-tests-${{ needs.slug.outputs.branch_slug }}
+      group: post-deploy-tests-${{ needs.slug.outputs.pr_number || needs.slug.outputs.branch_slug }}
       cancel-in-progress: true
     steps:
       - name: Checkout branch commit
@@ -66,37 +104,22 @@ jobs:
         working-directory: project
         run: npx playwright install --with-deps
 
-      - name: Derive Pages preview URL
-        id: preview
-        env:
-          BRANCH_NAME: ${{ needs.slug.outputs.branch_name }}
-        run: |
-          set -euo pipefail
-
-          SAFE_NAME=$(printf '%s' "${BRANCH_NAME}" | sed 's/[^a-zA-Z0-9._-]/-/g')
-          BASE_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
-
-          if [ "${BRANCH_NAME}" = "main" ]; then
-            PREVIEW_URL="${BASE_URL}/"
-          else
-            PREVIEW_URL="${BASE_URL}/${SAFE_NAME}/"
-          fi
-
-          echo "preview_url=${PREVIEW_URL}" >> "$GITHUB_OUTPUT"
-          echo "Preview URL: ${PREVIEW_URL}"
-
       - name: Prepare UI review artifacts directory
         working-directory: project
         run: |
           set -euo pipefail
           rm -rf artifacts/ui-review
           mkdir -p artifacts/ui-review
+
+      - name: Announce preview URL
+        run: |
+          echo "Preview URL: ${{ needs.slug.outputs.preview_url }}"
       - name: Run Playwright smoke tests
         id: smoke
         continue-on-error: true
         env:
-          PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
-          PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.preview_url }}
+          PREVIEW_URL: ${{ needs.slug.outputs.preview_url }}
+          PLAYWRIGHT_BASE_URL: ${{ needs.slug.outputs.preview_url }}
         working-directory: project
         run: |
           set -euo pipefail
@@ -105,7 +128,7 @@ jobs:
       - name: Capture preview screenshot
         if: always()
         env:
-          PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.preview_url }}
+          PLAYWRIGHT_BASE_URL: ${{ needs.slug.outputs.preview_url }}
         working-directory: project
         run: |
           set -euo pipefail
@@ -136,7 +159,7 @@ jobs:
         if: always()
         continue-on-error: true
         env:
-          PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+          PREVIEW_URL: ${{ needs.slug.outputs.preview_url }}
         working-directory: project
         run: |
           set -euo pipefail
@@ -183,7 +206,7 @@ jobs:
         id: upload-ui-artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ui-review-${{ needs.slug.outputs.branch_slug }}-${{ github.run_id }}
+          name: ui-review-${{ needs.slug.outputs.pr_number || needs.slug.outputs.branch_slug }}-${{ github.run_id }}
           path: project/artifacts/ui-review
           if-no-files-found: ignore
 
@@ -191,7 +214,7 @@ jobs:
         if: always()
         uses: actions/github-script@v7
         env:
-          PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+          PREVIEW_URL: ${{ needs.slug.outputs.preview_url }}
           SMOKE_OUTCOME: ${{ steps.smoke-summary.outputs.outcome }}
           ERROR_MESSAGES: ${{ steps.smoke-summary.outputs.errors }}
           ARTIFACT_FOUND: ${{ steps.artifact-check.outputs.found }}
