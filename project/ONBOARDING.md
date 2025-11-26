@@ -24,7 +24,10 @@ expectations.
 - **Branch hygiene:** work on short-lived branches named `automation/<change>`;
   keep them rebased on `origin/main` so deployment workflows and preview URLs
   stay healthy. Start each day with a `git fetch --all --prune` and rebase onto
-  `origin/main` so you pick up workflow changes early and avoid conflict backlogs.
+  `origin/main` so you pick up workflow changes early and avoid conflict
+  backlogs. Branch deploys only run when an open PR exists for the branch; if
+  you need a preview first, open the PR and re-run the deploy so the job summary
+  captures the `/pull/<number>/` link.
 
 ## First 60 minutes
 1. Clone the repo and run through the setup checklist above.

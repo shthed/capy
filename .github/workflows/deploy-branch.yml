@@ -32,6 +32,7 @@ jobs:
       pr_number: ${{ steps.compute.outputs.pr_number }}
       target_dir: ${{ steps.compute.outputs.target_dir }}
       preview_url: ${{ steps.compute.outputs.preview_url }}
+      should_deploy: ${{ steps.compute.outputs.should_deploy }}
     steps:
       - name: Derive deployment target
         id: compute
@@ -59,21 +60,17 @@ jobs:
                 return null;
               }
 
-              const search = async (state) => {
-                const { data } = await github.rest.pulls.list({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  head: `${context.repo.owner}:${branchName}`,
-                  state,
-                  sort: 'updated',
-                  direction: 'desc',
-                  per_page: 1,
-                });
+              const { data } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                head: `${context.repo.owner}:${branchName}`,
+                state: 'open',
+                sort: 'updated',
+                direction: 'desc',
+                per_page: 1,
+              });
 
-                return Array.isArray(data) && data.length > 0 ? data[0] : null;
-              };
-
-              return (await search('open')) ?? (await search('closed')) ?? null;
+              return Array.isArray(data) && data.length > 0 ? data[0] : null;
             };
 
             try {
@@ -81,6 +78,7 @@ jobs:
               let branch = '';
               let ref = '';
               let prNumber = '';
+              let shouldDeploy = false;
 
               if (eventName === 'push') {
                 branch = (context.payload.ref || '').replace('refs/heads/', '');
@@ -101,23 +99,28 @@ jobs:
 
               const safeBranch = sanitize(branch) || branch;
               const isMain = branch === 'main';
+
               const pullRequest = isMain ? null : await findPullRequest(branch);
 
-              if (!isMain && (!pullRequest || !pullRequest.number)) {
-                const message = `No pull request found for branch '${branch}'. Branch previews require an associated PR.`;
-                await core.summary.addHeading('Deployment skipped').addRaw(message).write();
+              if (isMain) {
+                shouldDeploy = true;
+              } else if (pullRequest?.number) {
+                prNumber = String(pullRequest.number);
+                shouldDeploy = true;
+              } else {
+                const message = `No open pull request found for branch '${branch}'. Branch previews require an associated PR.`;
+                await core.summary.addHeading('Deployment skipped').addRaw(`${message}\n`).write();
                 core.info(message);
-                core.setFailed(message);
-                return;
               }
 
-              prNumber = pullRequest?.number ? String(pullRequest.number) : '';
-              const targetDir = isMain ? '.' : `pull/${prNumber}`;
+              const targetDir = shouldDeploy ? (isMain ? '.' : `pull/${prNumber}`) : '';
 
               const baseUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
-              const previewUrl = isMain
-                ? `${baseUrl}/`
-                : `${baseUrl}/${targetDir}/`;
+              const previewUrl = shouldDeploy
+                ? isMain
+                  ? `${baseUrl}/`
+                  : `${baseUrl}/${targetDir}/`
+                : '';
 
               core.setOutput('branch', branch);
               core.setOutput('ref', ref);
@@ -125,6 +128,7 @@ jobs:
               core.setOutput('pr_number', prNumber);
               core.setOutput('target_dir', targetDir);
               core.setOutput('preview_url', previewUrl);
+              core.setOutput('should_deploy', shouldDeploy ? 'true' : 'false');
             } catch (error) {
               const reason = error?.message || String(error);
               await core.summary
@@ -134,6 +138,7 @@ jobs:
               core.setFailed(reason);
             }
       - name: Checkout source branch
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.compute.outputs.ref }}
@@ -141,6 +146,7 @@ jobs:
           path: source
 
       - name: Checkout gh-pages branch
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
         uses: actions/checkout@v4
         with:
           ref: gh-pages
@@ -148,6 +154,7 @@ jobs:
           fetch-depth: 0
 
       - name: Ensure gh-pages working tree
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
         env:
           REPOSITORY: ${{ github.repository }}
         run: |
@@ -168,11 +175,13 @@ jobs:
           fi
 
       - name: Set up Node.js
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
       - name: Prepare target directory
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
         env:
           TARGET_BRANCH: ${{ steps.compute.outputs.branch }}
           SAFE_BRANCH: ${{ steps.compute.outputs.safe_branch }}
@@ -185,6 +194,7 @@ jobs:
           echo "target_dir=${TARGET_DIR}" >> "$GITHUB_ENV"
 
       - name: Sync runtime files
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
         env:
           TARGET_DIR: ${{ env.target_dir }}
         run: |
@@ -197,6 +207,7 @@ jobs:
             source/ "pages/${TARGET_DIR}/"
 
       - name: Render docs for Pages
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
         env:
           TARGET_DIR: ${{ env.target_dir }}
         run: |
@@ -214,6 +225,7 @@ jobs:
             --source-label "AGENTS.md"
 
       - name: Commit and push
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
         env:
           TARGET_BRANCH: ${{ steps.compute.outputs.branch }}
           SAFE_BRANCH: ${{ steps.compute.outputs.safe_branch }}
@@ -228,6 +240,9 @@ jobs:
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           git add .
+          echo "::debug::Preview URL ${PREVIEW_URL}"
+          echo "Preview URL: ${PREVIEW_URL}" | tee -a "$GITHUB_STEP_SUMMARY"
+
           if git diff --cached --quiet; then
             echo "No changes to deploy."
             exit 0
@@ -235,9 +250,6 @@ jobs:
 
           git commit -m "Deploy ${TARGET_BRANCH} (${GITHUB_SHA})"
           git push origin gh-pages
-
-          echo "::debug::Preview URL ${PREVIEW_URL}"
-          echo "Preview URL: ${PREVIEW_URL}" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Record deployment failure
         if: failure()
