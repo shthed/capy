@@ -54,6 +54,9 @@ footprints predictable.
   - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
   - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn Markdown sources (README, AGENTS, etc.) into styled HTML mirrors for GitHub Pages previews.
   - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
+- **Styling stack**
+  - `vendor/pico.css` – Unminified Pico CSS v2.1.1 vendored locally for debugging so DevTools can inspect variables and component defaults without relying on a CDN. We import it at the top of `styles.css` instead of the minified bundle to keep the zero-build pipeline debuggable while still shipping a single stylesheet.
+  - `styles.css` leans heavily on Pico’s classless layout, form styling, and color tokens; our rules focus on puzzle-specific positioning (viewport, rail, sheets) and state hooks layered on top of Pico variables. When updating Pico, pull the matching `pico.css` release from https://github.com/picocss/pico, keep the unminified file in `vendor/`, and confirm our overrides still reference the expected token names.
 - **CI & Deployment**
   - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
   - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
