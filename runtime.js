@@ -52,7 +52,7 @@ function readStoredSettings(storage) {
 
 let prebootMetrics = {};
 
-export function computePrebootMetrics() {
+function computePrebootMetrics() {
   if (!root || typeof window === "undefined") return {};
 
   const storedScale = parseStoredScale(readStoredSettings(window.localStorage));
@@ -81,11 +81,11 @@ export function computePrebootMetrics() {
   return prebootMetrics;
 }
 
-export function getPrebootMetrics() {
+function getPrebootMetrics() {
   return prebootMetrics;
 }
 
-export function consumePrebootMetrics() {
+function consumePrebootMetrics() {
   const metrics = prebootMetrics || {};
   prebootMetrics = {};
   if (typeof window !== "undefined") {
@@ -98,7 +98,7 @@ export function consumePrebootMetrics() {
   return metrics;
 }
 
-export function applyPrebootMetrics() {
+function applyPrebootMetrics() {
   if (typeof window === "undefined" || !document.body) {
     return;
   }
@@ -117,7 +117,7 @@ export function applyPrebootMetrics() {
 const BOOTSTRAP_VERSION = "2024-07-28";
 const SENTINEL_READY = `ready:${BOOTSTRAP_VERSION}`;
 
-export function beginRendererBootstrap() {
+function beginRendererBootstrap() {
   if (typeof window === "undefined") {
     return false;
   }
@@ -128,14 +128,14 @@ export function beginRendererBootstrap() {
   return false;
 }
 
-export function completeRendererBootstrap(succeeded) {
+function completeRendererBootstrap(succeeded) {
   if (typeof window === "undefined") {
     return;
   }
   window.__capyRendererBootstrapVersion = succeeded ? SENTINEL_READY : undefined;
 }
 
-export function createRendererController(host, options = {}) {
+function createRendererController(host, options = {}) {
   const { hooks = {} } = options || {};
   const renderer = createSvgRenderer(host, hooks);
 
@@ -191,6 +191,16 @@ if (root) {
   }
 }
 
-export { createSvgRenderer, SceneTileLoader };
+export {
+  computePrebootMetrics,
+  getPrebootMetrics,
+  consumePrebootMetrics,
+  applyPrebootMetrics,
+  beginRendererBootstrap,
+  completeRendererBootstrap,
+  createRendererController,
+  createSvgRenderer,
+  SceneTileLoader,
+};
 
 export default getPrebootMetrics;
