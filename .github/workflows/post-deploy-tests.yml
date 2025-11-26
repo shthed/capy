@@ -237,29 +237,31 @@ jobs:
             const marker = '<!-- capy-pages-preview -->';
             const timestamp = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
 
+            const link = (label, url, fallback) => (url ? `[${label}](${url})` : fallback || '');
+
             const entryLines = [`- ${timestamp}`];
 
-            entryLines.push(`  - Preview: ${previewUrl || 'unavailable'}`);
+            entryLines.push(`  - Preview: ${link('Preview', previewUrl, 'unavailable')}`);
 
             if (smokeOutcome) {
               entryLines.push(`  - Smoke: ${smokeOutcome}`);
             }
 
             if (artifactFound && artifactUrl) {
-              entryLines.push(`  - UI review artifacts: ${artifactUrl}`);
+              entryLines.push(`  - UI review artifacts: ${link('Download', artifactUrl)}`);
             }
 
             if (errors) {
               const formattedErrors = errors
                 .trimEnd()
                 .split('\n')
-                .map((line) => line ? `    ${line}` : '    ') 
+                .map((line) => line ? `    ${line}` : '    ')
                 .join('\n');
               entryLines.push(`  - Errors:\n${formattedErrors}`);
             }
 
             if (rerunUrl) {
-              entryLines.push(`  - Rerun Pages deploy: ${rerunUrl}`);
+              entryLines.push(`  - Rerun Pages deploy: ${link('workflow run', rerunUrl)}`);
             }
 
             const newEntry = entryLines.join('\n');
