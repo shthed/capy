@@ -29,6 +29,7 @@ async function main() {
     'tests/smoothing.spec.mjs',
     'tests/service-worker-cache.spec.js',
     'tests/render-controller.spec.js',
+    'tests/runtime-preboot.spec.js',
     'tests/svg-renderer.spec.js',
   ]);
   if (nodeTestCode !== 0) {
