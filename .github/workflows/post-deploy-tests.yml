@@ -20,6 +20,7 @@ jobs:
       branch_slug: ${{ steps.slug.outputs.branch_slug }}
       pr_number: ${{ steps.slug.outputs.pr_number }}
       preview_url: ${{ steps.slug.outputs.preview_url }}
+      deploy_key: ${{ steps.slug.outputs.deploy_key }}
     steps:
       - name: Derive branch slug
         id: slug
@@ -68,6 +69,7 @@ jobs:
             core.setOutput('branch_slug', sanitize(branchName));
             core.setOutput('pr_number', pr?.number ? String(pr.number) : '');
             core.setOutput('preview_url', previewUrl);
+            core.setOutput('deploy_key', pr?.number ? `pull-${pr.number}` : sanitize(branchName));
 
   review:
     needs: slug
@@ -210,6 +212,108 @@ jobs:
           path: project/artifacts/ui-review
           if-no-files-found: ignore
 
+      - name: Inspect deploy artifacts
+        id: deploy-artifacts
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_KEY: ${{ needs.slug.outputs.deploy_key }}
+        with:
+          script: |
+            const runId = context.payload.workflow_run?.id;
+            const deployKey = process.env.DEPLOY_KEY;
+
+            if (!runId || !deployKey) {
+              core.info('Missing run ID or deploy key; skipping artifact lookup.');
+              core.setOutput('pages_artifact_url', '');
+              core.setOutput('pages_artifact_name', '');
+              core.setOutput('diagnostics_artifact_name', '');
+              return;
+            }
+
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+              per_page: 100,
+            });
+
+            const pages = artifacts.find((artifact) => artifact.name === `gh-pages-${deployKey}`);
+            const diagnostics = artifacts.find((artifact) => artifact.name === `gh-pages-diagnostics-${deployKey}`);
+
+            if (!pages) {
+              core.info(`No gh-pages artifact found for key ${deployKey}.`);
+            }
+
+            if (!diagnostics) {
+              core.info(`No diagnostics artifact found for key ${deployKey}.`);
+            }
+
+            core.setOutput('pages_artifact_url', pages?.archive_download_url || '');
+            core.setOutput('pages_artifact_name', pages?.name || '');
+            core.setOutput('diagnostics_artifact_name', diagnostics?.name || '');
+
+      - name: Download deployment diagnostics
+        id: download-diagnostics
+        if: ${{ always() && steps.deploy-artifacts.outputs.diagnostics_artifact_name != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.deploy-artifacts.outputs.diagnostics_artifact_name }}
+          run-id: ${{ github.event.workflow_run.id }}
+          path: deployment-metadata
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Parse deployment diagnostics
+        id: parse-diagnostics
+        if: ${{ always() && steps.download-diagnostics.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+
+          file=$(find deployment-metadata -name 'summary.json' -print -quit || true)
+
+          if [ -z "${file}" ]; then
+            echo "details=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          branch=$(jq -r '.branch // ""' "$file")
+          preview=$(jq -r '.preview_url // ""' "$file")
+          target_dir=$(jq -r '.target_dir // ""' "$file")
+          file_count=$(jq -r '.file_count // ""' "$file")
+          index_status=$(jq -r '.index_html // ""' "$file")
+          pages_commit=$(jq -r '.pages_commit // ""' "$file")
+
+          summary=$(cat <<EOF
+          branch: ${branch}
+          preview: ${preview}
+          target dir: ${target_dir}
+          files: ${file_count}
+          index.html: ${index_status}
+          gh-pages commit: ${pages_commit}
+          EOF
+          )
+
+          printf 'details<<EOF\n%s\nEOF\n' "$summary" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$summary"
+
+      - name: Report deployment diagnostics
+        if: always()
+        env:
+          PAGES_ARTIFACT: ${{ steps.deploy-artifacts.outputs.pages_artifact_url }}
+          DIAGNOSTICS: ${{ steps.parse-diagnostics.outputs.details }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "gh-pages artifact: ${PAGES_ARTIFACT:-unavailable}";
+            if [ -n "${DIAGNOSTICS:-}" ]; then
+              echo "Deployment diagnostics:";
+              printf '%s\n' "${DIAGNOSTICS}";
+            else
+              echo "No deployment diagnostics available.";
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Share preview link on PR
         if: always()
         uses: actions/github-script@v7
@@ -219,6 +323,8 @@ jobs:
           ERROR_MESSAGES: ${{ steps.smoke-summary.outputs.errors }}
           ARTIFACT_FOUND: ${{ steps.artifact-check.outputs.found }}
           ARTIFACT_URL: ${{ steps.upload-ui-artifacts.outputs.artifact-url }}
+          PAGES_ARTIFACT_URL: ${{ steps.deploy-artifacts.outputs.pages_artifact_url }}
+          DEPLOY_DIAGNOSTICS: ${{ steps.parse-diagnostics.outputs.details }}
         with:
           script: |
             const pullRequests = context.payload.workflow_run?.pull_requests ?? [];
@@ -232,6 +338,8 @@ jobs:
             const errors = process.env.ERROR_MESSAGES;
             const artifactFound = process.env.ARTIFACT_FOUND === 'true';
             const artifactUrl = process.env.ARTIFACT_URL;
+            const pagesArtifactUrl = process.env.PAGES_ARTIFACT_URL;
+            const diagnostics = process.env.DEPLOY_DIAGNOSTICS;
             const rerunUrl = context.payload.workflow_run?.html_url;
 
             const marker = '<!-- capy-pages-preview -->';
@@ -249,6 +357,19 @@ jobs:
 
             if (artifactFound && artifactUrl) {
               entryLines.push(`  - UI review artifacts: ${link('Download', artifactUrl)}`);
+            }
+
+            if (pagesArtifactUrl) {
+              entryLines.push(`  - Deployed bundle: ${link('gh-pages artifact', pagesArtifactUrl)}`);
+            }
+
+            if (diagnostics) {
+              const formattedDiagnostics = diagnostics
+                .trimEnd()
+                .split('\n')
+                .map((line) => line ? `    ${line}` : '    ')
+                .join('\n');
+              entryLines.push(`  - Deployment diagnostics:\n${formattedDiagnostics}`);
             }
 
             if (errors) {
