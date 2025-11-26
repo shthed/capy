@@ -155,14 +155,6 @@ jobs:
           fetch-depth: 0
           path: source
 
-      - name: Checkout gh-pages branch
-        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
-        uses: actions/checkout@v4
-        with:
-          ref: gh-pages
-          path: pages
-          fetch-depth: 0
-
       - name: Ensure gh-pages working tree
         if: ${{ steps.compute.outputs.should_deploy == 'true' }}
         env:
@@ -171,6 +163,11 @@ jobs:
           set -euo pipefail
 
           if [ -d pages/.git ]; then
+            cd pages
+            git fetch --depth 1 origin gh-pages || true
+            git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
+            git reset --hard origin/gh-pages 2>/dev/null || true
+            git clean -fdx
             exit 0
           fi
 
