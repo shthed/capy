@@ -11,7 +11,6 @@
     "setup:playwright": "npx playwright install --with-deps chromium"
   },
   "devDependencies": {
-    "@picocss/pico": "^2.1.1",
     "@playwright/test": "^1.43.1",
     "http-server": "^14.1.1"
   },
