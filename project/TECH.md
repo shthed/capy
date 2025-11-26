@@ -89,16 +89,18 @@ footprints predictable.
 
 Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs
 on every push (all branches) plus optional manual dispatches (trigger the manual
-run from `main` and provide the `target_branch` input so the workflow checks out
+ run from `main` and provide the `target_branch` input so the workflow checks out
 the right source). The workflow computes the target ref and preview URL in its
 first step, then deploys directly to `gh-pages`:
 
 1. **Checkout & PR discovery.** The action checks out the triggering branch
    (shallow fetch for speed) and the `gh-pages` deployment branch, then resolves
-   the PR attached to the branch. Concurrency keys include the branch name so
-   different previews deploy in parallel without overwriting each other.
+   the open PR attached to the branch. Concurrency keys include the branch name
+   so different previews deploy in parallel without overwriting each other.
    (`main` maps to the Pages root; every other branch lands in `/pull/<number>/`
-   directories that match the PR number.)
+   directories that match the PR number.) Branches without an open PR log a
+   "Deployment skipped" entry to the job summary and exit early without marking
+   the workflow as failed.
 2. **Content sync.**
    - `main` copies the runtime payload from the repository root (`index.html`,
      `styles.css`, `render.js`, `puzzle-generation.js`, `runtime.js`,
@@ -122,7 +124,11 @@ first step, then deploys directly to `gh-pages`:
 
 If the sync step finds nothing new to commit, the workflow exits after noting
 there are no changes to deploy while leaving the previously published preview
-in place.
+in place. The compute step logs the resolved branch, PR number, target
+directory, and preview URL (always `/pull/<number>/` for non-`main` branches),
+and every successful run echoes the preview URL to both debug logs and the job
+summary so reviewers have a consistent place to copy the link, even when the
+checkout yielded no file changes.
 
 ### Keeping branch directories and artifacts lean
 
