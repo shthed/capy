@@ -1,4 +1,4 @@
-importScripts('./service-worker-cache.cjs');
+importScripts('./service-worker-cache.js');
 
 const RUNTIME_CACHE_NAME = 'capy-offline-cache-v3';
 const CACHE_LIMITS = {
