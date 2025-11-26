@@ -161,6 +161,23 @@ async function putWithLimits(cache, request, response, limits = DEFAULT_CACHE_LI
   return { cached: true };
 }
 
+export {
+  DEFAULT_CACHE_LIMITS,
+  METADATA_TEMPLATE,
+  cloneMetadata,
+  enforceLimits,
+  ensureMetadata,
+  estimateResponseSize,
+  findLeastRecentlyUsed,
+  getRequestKey,
+  isUploadRequest,
+  loadMetadata,
+  persistMetadata,
+  putWithLimits,
+  rebuildMetadata,
+  touchEntry,
+};
+
 const api = {
   DEFAULT_CACHE_LIMITS,
   METADATA_TEMPLATE,
@@ -177,6 +194,8 @@ const api = {
   rebuildMetadata,
   touchEntry,
 };
+
+export default api;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = api;

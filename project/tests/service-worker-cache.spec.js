@@ -1,9 +1,7 @@
 import assert from 'node:assert';
-import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
-const require = createRequire(import.meta.url);
-const cacheLimits = require('../../service-worker-cache.cjs');
+import * as cacheLimits from '../../service-worker-cache.js';
 
 class MemoryCache {
   constructor() {
