@@ -32,6 +32,7 @@ jobs:
       safe_branch: ${{ steps.compute.outputs.safe_branch }}
       deploy_key: ${{ steps.compute.outputs.deploy_key }}
       pr_number: ${{ steps.compute.outputs.pr_number }}
+      checkout_path: ${{ steps.compute.outputs.checkout_path }}
       target_dir: ${{ steps.compute.outputs.target_dir }}
       preview_url: ${{ steps.compute.outputs.preview_url }}
       should_deploy: ${{ steps.compute.outputs.should_deploy }}
@@ -116,6 +117,7 @@ jobs:
               }
 
               const targetDir = shouldDeploy ? (isMain ? '.' : `pull/${prNumber}`) : '';
+              const checkoutPath = targetDir && targetDir !== '.' ? `source/${targetDir}` : 'source';
 
               const baseUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
               const previewUrl = shouldDeploy
@@ -139,6 +141,7 @@ jobs:
               core.setOutput('safe_branch', safeBranch);
               core.setOutput('deploy_key', prNumber ? `pull-${prNumber}` : safeBranch);
               core.setOutput('pr_number', prNumber);
+              core.setOutput('checkout_path', checkoutPath);
               core.setOutput('target_dir', targetDir);
               core.setOutput('preview_url', previewUrl);
               core.setOutput('should_deploy', shouldDeploy ? 'true' : 'false');
@@ -156,7 +159,7 @@ jobs:
         with:
           ref: ${{ steps.compute.outputs.ref }}
           fetch-depth: 0
-          path: source
+          path: ${{ steps.compute.outputs.checkout_path }}
 
       - name: Ensure gh-pages working tree
         if: ${{ steps.compute.outputs.should_deploy == 'true' }}
@@ -195,17 +198,20 @@ jobs:
         env:
           TARGET_BRANCH: ${{ steps.compute.outputs.branch }}
           SAFE_BRANCH: ${{ steps.compute.outputs.safe_branch }}
+          CHECKOUT_PATH: ${{ steps.compute.outputs.checkout_path }}
         run: |
           set -euo pipefail
 
           TARGET_DIR="${{ steps.compute.outputs.target_dir }}"
           ARTIFACT_PATH="pages"
+          SOURCE_PATH="${CHECKOUT_PATH:-source}"
 
           if [ -n "${TARGET_DIR}" ] && [ "${TARGET_DIR}" != "." ]; then
             ARTIFACT_PATH="pages/${TARGET_DIR}"
           fi
 
           mkdir -p "pages/${TARGET_DIR}/README" "pages/${TARGET_DIR}/AGENTS"
+          echo "checkout_path=${SOURCE_PATH}" >> "$GITHUB_ENV"
           echo "target_dir=${TARGET_DIR}" >> "$GITHUB_ENV"
           echo "artifact_path=${ARTIFACT_PATH}" >> "$GITHUB_ENV"
 
@@ -213,6 +219,7 @@ jobs:
         if: ${{ steps.compute.outputs.should_deploy == 'true' }}
         env:
           TARGET_DIR: ${{ env.target_dir }}
+          SOURCE_PATH: ${{ env.checkout_path }}
         run: |
           set -euo pipefail
 
@@ -220,21 +227,22 @@ jobs:
             --exclude '.git/' \
             --exclude 'project/' \
             --exclude '.github/' \
-            source/ "pages/${TARGET_DIR}/"
+            "${SOURCE_PATH}/" "pages/${TARGET_DIR}/"
 
       - name: Render docs for Pages
         if: ${{ steps.compute.outputs.should_deploy == 'true' }}
         env:
           TARGET_DIR: ${{ env.target_dir }}
+          SOURCE_PATH: ${{ env.checkout_path }}
         run: |
           set -euo pipefail
 
-          node ./source/project/scripts/build-pages-site.mjs \
-            --source ./source/README.md \
+          node "${SOURCE_PATH}/project/scripts/build-pages-site.mjs" \
+            --source "${SOURCE_PATH}/README.md" \
             --output "pages/${TARGET_DIR}/README/index.html" \
             --context "${GITHUB_REPOSITORY}"
-          node ./source/project/scripts/build-pages-site.mjs \
-            --source ./source/AGENTS.md \
+          node "${SOURCE_PATH}/project/scripts/build-pages-site.mjs" \
+            --source "${SOURCE_PATH}/AGENTS.md" \
             --output "pages/${TARGET_DIR}/AGENTS/index.html" \
             --context "${GITHUB_REPOSITORY}" \
             --title "Capy Agent Guide" \
