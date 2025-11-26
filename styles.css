@@ -1,4 +1,4 @@
-@import url("https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css");
+@import url("./vendor/pico.css");
 
 /*
   This file keeps only the layout and overlay rules that Pico does not provide out of the box.

@@ -1681,6 +1681,7 @@
         sortControl: document.getElementById("paletteSort"),
       });
       const paletteSortEl = paletteDock.sortControl;
+      let rendererController = null;
       paletteDock.on("select", (event) => {
         const { colorId } = event?.detail || {};
         if (colorId == null) return;
@@ -3567,6 +3568,11 @@
         } else {
           logDebug(`[Renderer] ${message}`);
         }
+      }
+
+      function handleRendererChange(type) {
+        const normalized = normalizeRendererType(type) ?? state.settings.renderer ?? "svg";
+        return applyRendererMode(normalized, { skipAutosave: true, skipLog: true });
       }
 
       rendererController = createRendererController(puzzleCanvas, {
