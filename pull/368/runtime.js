@@ -52,7 +52,7 @@ function readStoredSettings(storage) {
 
 let prebootMetrics = {};
 
-function computePrebootMetrics() {
+export function computePrebootMetrics() {
   if (!root || typeof window === "undefined") return {};
 
   const storedScale = parseStoredScale(readStoredSettings(window.localStorage));
@@ -135,7 +135,7 @@ export function completeRendererBootstrap(succeeded) {
   window.__capyRendererBootstrapVersion = succeeded ? SENTINEL_READY : undefined;
 }
 
-function createRendererController(host, options = {}) {
+export function createRendererController(host, options = {}) {
   const { hooks = {} } = options || {};
   const renderer = createSvgRenderer(host, hooks);
 
@@ -191,6 +191,6 @@ if (root) {
   }
 }
 
-export { createSvgRenderer, SceneTileLoader, computePrebootMetrics, createRendererController };
+export { createSvgRenderer, SceneTileLoader };
 
 export default getPrebootMetrics;
