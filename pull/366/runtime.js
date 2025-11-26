@@ -135,7 +135,7 @@ export function completeRendererBootstrap(succeeded) {
   window.__capyRendererBootstrapVersion = succeeded ? SENTINEL_READY : undefined;
 }
 
-export function createRendererController(host, options = {}) {
+function createRendererController(host, options = {}) {
   const { hooks = {} } = options || {};
   const renderer = createSvgRenderer(host, hooks);
 
@@ -191,6 +191,6 @@ if (root) {
   }
 }
 
-export { createSvgRenderer, SceneTileLoader, computePrebootMetrics };
+export { createSvgRenderer, SceneTileLoader, computePrebootMetrics, createRendererController };
 
 export default getPrebootMetrics;
