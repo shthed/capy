@@ -29,6 +29,7 @@ jobs:
       branch: ${{ steps.compute.outputs.branch }}
       ref: ${{ steps.compute.outputs.ref }}
       safe_branch: ${{ steps.compute.outputs.safe_branch }}
+      deploy_key: ${{ steps.compute.outputs.deploy_key }}
       pr_number: ${{ steps.compute.outputs.pr_number }}
       target_dir: ${{ steps.compute.outputs.target_dir }}
       preview_url: ${{ steps.compute.outputs.preview_url }}
@@ -135,6 +136,7 @@ jobs:
               core.setOutput('branch', branch);
               core.setOutput('ref', ref);
               core.setOutput('safe_branch', safeBranch);
+              core.setOutput('deploy_key', prNumber ? `pull-${prNumber}` : safeBranch);
               core.setOutput('pr_number', prNumber);
               core.setOutput('target_dir', targetDir);
               core.setOutput('preview_url', previewUrl);
@@ -257,6 +259,89 @@ jobs:
 
           git commit -m "Deploy ${TARGET_BRANCH} (${GITHUB_SHA})"
           git push origin gh-pages
+
+      - name: Record deployment diagnostics
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
+        env:
+          TARGET_BRANCH: ${{ steps.compute.outputs.branch }}
+          TARGET_DIR: ${{ steps.compute.outputs.target_dir }}
+          PREVIEW_URL: ${{ steps.compute.outputs.preview_url }}
+          PR_NUMBER: ${{ steps.compute.outputs.pr_number }}
+          DEPLOY_KEY: ${{ steps.compute.outputs.deploy_key }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          DEPLOY_PATH="pages/${TARGET_DIR:-.}"
+          mkdir -p deployment-metadata
+
+          pages_commit=$(cd pages && git rev-parse HEAD || echo "unknown")
+          file_count=$(find "$DEPLOY_PATH" -type f | wc -l | tr -d ' ')
+          index_status="missing"
+          [ -f "${DEPLOY_PATH}/index.html" ] && index_status="present"
+
+          cat > deployment-metadata/summary.json <<JSON
+          {
+            "branch": "${TARGET_BRANCH}",
+            "pr_number": "${PR_NUMBER}",
+            "deploy_key": "${DEPLOY_KEY}",
+            "target_dir": "${TARGET_DIR:-.}",
+            "preview_url": "${PREVIEW_URL}",
+            "pages_commit": "${pages_commit}",
+            "workflow_run_id": "${RUN_ID}",
+            "file_count": ${file_count},
+            "index_html": "${index_status}"
+          }
+          JSON
+
+          {
+            echo "Deployment diagnostics:"
+            echo "  branch: ${TARGET_BRANCH}"
+            echo "  preview: ${PREVIEW_URL}" 
+            echo "  target dir: ${TARGET_DIR:-.}" 
+            echo "  gh-pages commit: ${pages_commit}" 
+            echo "  file count: ${file_count}" 
+            echo "  index.html: ${index_status}" 
+          } | tee deployment-metadata/summary.txt
+
+      - name: Upload gh-pages artifact
+        id: pages-artifact
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-pages-${{ steps.compute.outputs.deploy_key }}
+          path: pages/${{ steps.compute.outputs.target_dir || '.' }}
+          retention-days: 7
+
+      - name: Upload deployment diagnostics
+        id: diagnostics-artifact
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-pages-diagnostics-${{ steps.compute.outputs.deploy_key }}
+          path: deployment-metadata
+          retention-days: 14
+
+      - name: Publish deployment summary
+        if: ${{ steps.compute.outputs.should_deploy == 'true' }}
+        env:
+          PREVIEW_URL: ${{ steps.compute.outputs.preview_url }}
+          TARGET_DIR: ${{ steps.compute.outputs.target_dir }}
+          PAGES_ARTIFACT_URL: ${{ steps.pages-artifact.outputs.artifact-url }}
+          DIAGNOSTICS_ARTIFACT_URL: ${{ steps.diagnostics-artifact.outputs.artifact-url }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "## Deployment details"
+            echo "- Preview URL: ${PREVIEW_URL:-unavailable}"
+            echo "- Target directory: ${TARGET_DIR:-.}"
+            [ -n "${PAGES_ARTIFACT_URL:-}" ] && echo "- gh-pages artifact: ${PAGES_ARTIFACT_URL}"
+            [ -n "${DIAGNOSTICS_ARTIFACT_URL:-}" ] && echo "- Diagnostics: ${DIAGNOSTICS_ARTIFACT_URL}"
+            echo
+            echo "### Diagnostics"
+            sed 's/^/- /' deployment-metadata/summary.txt
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Record deployment failure
         if: failure()
