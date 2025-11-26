@@ -39,12 +39,23 @@ function parseStoredScale(raw) {
   return null;
 }
 
+function readStoredSettings(storage) {
+  if (!storage || typeof storage.getItem !== "function") {
+    return null;
+  }
+  try {
+    return storage.getItem(SETTINGS_STORAGE_KEY);
+  } catch (_error) {
+    return null;
+  }
+}
+
 let prebootMetrics = {};
 
 function computePrebootMetrics() {
   if (!root || typeof window === "undefined") return {};
 
-  const storedScale = parseStoredScale(window.localStorage?.getItem(SETTINGS_STORAGE_KEY));
+  const storedScale = parseStoredScale(readStoredSettings(window.localStorage));
   const userScale = storedScale == null ? DEFAULT_UI_SCALE : storedScale;
   root.style.setProperty("--ui-scale-user", String(userScale));
   const viewport = window.visualViewport;
@@ -180,6 +191,6 @@ if (root) {
   }
 }
 
-export { createSvgRenderer, SceneTileLoader };
+export { createSvgRenderer, SceneTileLoader, computePrebootMetrics };
 
 export default getPrebootMetrics;
