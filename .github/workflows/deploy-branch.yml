@@ -122,6 +122,16 @@ jobs:
                   : `${baseUrl}/${targetDir}/`
                 : '';
 
+              const details = [
+                `branch: ${branch}`,
+                `pr: ${prNumber || 'none'}`,
+                `targetDir: ${targetDir || 'n/a'}`,
+                `previewUrl: ${previewUrl || 'n/a'}`,
+                `shouldDeploy: ${shouldDeploy}`,
+              ].join(' | ');
+
+              core.info(`Deployment inputs -> ${details}`);
+
               core.setOutput('branch', branch);
               core.setOutput('ref', ref);
               core.setOutput('safe_branch', safeBranch);
