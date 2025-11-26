@@ -119,8 +119,11 @@ first step, then deploys directly to `gh-pages`:
      deploy mirrors the source branch exactly.
 3. **Preview surfacing.** After copying files, the workflow commits straight to
    `gh-pages`, calculates the preview URL based on the PR number, and posts the
-   link in the job summary. Separate PR commenting remains in the post-deploy
-   test workflow.
+   link in the job summary. It also creates a GitHub deployment (environment
+   name `pages/pr-<number>` for PRs, `pages/main` for the default branch) that
+   points at the preview URL so the PR header shows "Deployed" with a working
+   link even before the post-deploy smoke tests report back. Separate PR
+   commenting remains in the post-deploy test workflow.
 4. **Packaging.** The workflow pushes directly to `gh-pages` without packaging
    a Pages artifact, so the deployed tree always mirrors the latest rsync output
    instead of a cached archive.
