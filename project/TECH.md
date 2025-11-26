@@ -89,7 +89,7 @@ footprints predictable.
 
 Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs
 on every push (all branches) plus optional manual dispatches (trigger the manual
-run from `main` and provide the `target_branch` input so the workflow checks out
+ run from `main` and provide the `target_branch` input so the workflow checks out
 the right source). The workflow computes the target ref and preview URL in its
 first step, then deploys directly to `gh-pages`:
 
@@ -124,9 +124,11 @@ first step, then deploys directly to `gh-pages`:
 
 If the sync step finds nothing new to commit, the workflow exits after noting
 there are no changes to deploy while leaving the previously published preview
-in place. Every successful run echoes the preview URL to both debug logs and the
-job summary so reviewers have a consistent place to copy the `/pull/<number>/`
-link, even when the checkout yielded no file changes.
+in place. The compute step logs the resolved branch, PR number, target
+directory, and preview URL (always `/pull/<number>/` for non-`main` branches),
+and every successful run echoes the preview URL to both debug logs and the job
+summary so reviewers have a consistent place to copy the link, even when the
+checkout yielded no file changes.
 
 ### Keeping branch directories and artifacts lean
 
