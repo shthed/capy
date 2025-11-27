@@ -28,34 +28,60 @@ jobs:
 
       - name: Derive target
         id: target
-        run: |
-          set -euo pipefail
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branchInput = (context.payload?.inputs || {}).target_branch;
+            const branch = branchInput || context.ref.replace('refs/heads/', '');
 
-          branch="${{ github.event.inputs.target_branch || github.ref_name }}"
-          if [ -z "${branch}" ]; then
-            echo "Branch name is required" >&2
-            exit 1
-          fi
+            if (!branch) {
+              core.setFailed('Branch name is required');
+              return;
+            }
 
-          safe_branch=$(printf '%s' "${branch}" | sed 's/[^a-zA-Z0-9._-]/-/g')
-          if [ "${branch}" = "main" ]; then
-            target_dir="."
-            preview_url="${BASE_PREVIEW_URL}/"
-          else
-            target_dir="pull/${safe_branch}"
-            preview_url="${BASE_PREVIEW_URL}/pull/${safe_branch}/"
-          fi
+            const basePreview = process.env.BASE_PREVIEW_URL;
+            const safeBranch = branch.replace(/[^a-zA-Z0-9._-]/g, '-');
 
-          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
-          echo "safe_branch=${safe_branch}" >> "$GITHUB_OUTPUT"
-          echo "target_dir=${target_dir}" >> "$GITHUB_OUTPUT"
-          echo "preview_url=${preview_url}" >> "$GITHUB_OUTPUT"
+            let prNumber = undefined;
+            try {
+              const { data: prs } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                head: `${context.repo.owner}:${branch}`,
+                state: 'open',
+                per_page: 1,
+              });
 
-          {
-            echo "Branch: ${branch}"
-            echo "Target directory: ${target_dir}"
-            echo "Preview URL: ${preview_url}"
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+              prNumber = prs[0]?.number;
+            } catch (error) {
+              core.warning(`Failed to look up PR for ${branch}: ${error.message}`);
+            }
+
+            const targetDir = branch === 'main'
+              ? '.'
+              : prNumber
+                ? `pull/${prNumber}`
+                : `pull/${safeBranch}`;
+
+            const previewUrl = targetDir === '.'
+              ? `${basePreview}/`
+              : `${basePreview}/${targetDir}/`;
+
+            const summaryLines = [
+              `Branch: ${branch}`,
+              prNumber ? `PR: #${prNumber}` : 'PR: none found (falling back to branch slug)',
+              `Target directory: ${targetDir}`,
+              `Preview URL: ${previewUrl}`,
+            ];
+
+            core.setOutput('branch', branch);
+            core.setOutput('safe_branch', safeBranch);
+            core.setOutput('pr', prNumber ? String(prNumber) : '');
+            core.setOutput('target_dir', targetDir);
+            core.setOutput('preview_url', previewUrl);
+            core.setOutput('artifact_name', prNumber ? `gh-pages-pr-${prNumber}` : `gh-pages-${safeBranch}`);
+
+            core.summary.addRaw(summaryLines.join('\n')).write();
 
       - name: Prepare gh-pages copy
         env:
@@ -111,7 +137,7 @@ jobs:
       - name: Upload deployment artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gh-pages-${{ steps.target.outputs.safe_branch }}
+          name: ${{ steps.target.outputs.artifact_name }}
           path: pages/${{ steps.target.outputs.target_dir }}
           retention-days: 7
 

@@ -91,49 +91,29 @@ footprints predictable.
 
 Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs
 on every push (all branches) plus optional manual dispatches (trigger the manual
- run from `main` and provide the `target_branch` input so the workflow checks out
+run from `main` and provide the `target_branch` input so the workflow checks out
 the right source). The workflow computes the target ref and preview URL in its
 first step, then deploys directly to `gh-pages`:
 
 1. **Checkout & PR discovery.** The action checks out the triggering branch
    (shallow fetch for speed) and the `gh-pages` deployment branch, then resolves
-   the open PR attached to the branch. Concurrency keys include the branch name
-   so different previews deploy in parallel without overwriting each other.
-   (`main` maps to the Pages root; every other branch lands in `/pull/<number>/`
-   directories that match the PR number.) Branches without an open PR log a
-   "Deployment skipped" entry to the job summary and exit early without marking
-   the workflow as failed.
-2. **Content sync.**
-   - `main` copies the runtime payload from the repository root (`index.html`,
-     `styles.css`, `render.js`, `puzzle-generation.js`, `runtime.js`,
-     `service-worker.js`, `capy.json`, etc.) into the root of `gh-pages`, then
-     regenerates `/README/index.html` and `/AGENTS/index.html` with
-     `project/scripts/build-pages-site.mjs` so
-     https://shthed.github.io/capy/README/ mirrors the handbook and
-     https://shthed.github.io/capy/AGENTS/ keeps the workflow guide live.
-   - Non-`main` branches clear their directory (e.g., `/pull/352/`), copy the
-     same runtime payload plus JS/CSS/JSON dependencies, and generate scoped
-     `/README/index.html` and `/AGENTS/index.html` files for that directory. The
-     rsync step deletes stale files from existing preview directories so each
-     deploy mirrors the source branch exactly.
+   the open PR attached to the branch. `main` publishes to the Pages root;
+   everything else publishes to `/pull/<pr-number>/` when a PR is present or
+   falls back to `/pull/<safe-branch>/` if no PR is found. The summary logs the
+   branch, PR lookup result, target directory, and preview URL on every run.
+2. **Content sync.** The workflow wipes the target directory, then rsyncs the
+   repository root into place while excluding `.git/`, `.github/`, `project/`,
+   and any prior `pages/` checkout. The deployment mirrors the repository tree
+   directly—no build or doc regeneration steps run here.
 3. **Preview surfacing.** After copying files, the workflow commits straight to
-   `gh-pages`, calculates the preview URL based on the PR number, and posts the
-   link in the job summary. It also creates a GitHub deployment (environment
-   name `pages/pr-<number>` for PRs, `pages/main` for the default branch) that
-   points at the preview URL so the PR header shows "Deployed" with a working
-   link even before the post-deploy smoke tests report back. Separate PR
-   commenting remains in the post-deploy test workflow.
-4. **Packaging.** The workflow pushes directly to `gh-pages` without packaging
-   a Pages artifact, so the deployed tree always mirrors the latest rsync output
-   instead of a cached archive.
+   `gh-pages`, pushes the update, uploads the published directory as an artifact
+   (`gh-pages-pr-<number>` when a PR is found, otherwise `gh-pages-<safe>`), and
+   echoes the preview URL in the job summary so reviewers can copy it quickly.
 
 If the sync step finds nothing new to commit, the workflow exits after noting
 there are no changes to deploy while leaving the previously published preview
-in place. The compute step logs the resolved branch, PR number, target
-directory, and preview URL (always `/pull/<number>/` for non-`main` branches),
-and every successful run echoes the preview URL to both debug logs and the job
-summary so reviewers have a consistent place to copy the link, even when the
-checkout yielded no file changes.
+in place. The compute step logs the resolved branch, PR number (when
+applicable), target directory, and preview URL so runs stay self-documenting.
 
 ### Keeping branch directories and artifacts lean
 
@@ -149,9 +129,9 @@ checkout yielded no file changes.
 - **Cleanup also trims Pages previews.** After refreshing remote branches,
   `.github/workflows/cleanup-branches.yml` and
   `.github/workflows/cleanup-closed-pr.yml` still prune stale branches from the
-  Pages tree, but deployment itself no longer checks PR state. Any branch run
-  publishes to `gh-pages/pull/<safe-branch>` and `main` continues to publish to
-  the root.
+  Pages tree, but deployment itself no longer checks PR state. Branch runs land
+  in `gh-pages/pull/<pr-number>/` when a PR exists (or `/pull/<safe-branch>/`
+  when it does not) and `main` continues to publish to the root.
 - **Manual cleanup remains available.** If you need to reclaim space before the
   next deployment runs (or before triggering **Deploy GitHub Pages previews**
   by hand), delete the stale `pull/<branch>` directories on `gh-pages` and push
@@ -163,8 +143,8 @@ Tweaking the deployment:
   copies the repository root (excluding `.github/`, `project/`, and any prior
   `pages/` working tree) into place. Adjust the `rsync` excludes or add more
   files if the runtime payload grows.
-- Branch previews always map to `pull/<safe-branch>` unless the branch is
-  `main`; update the path construction in
+- Branch previews map to `pull/<pr-number>` when a PR exists and fall back to
+  `pull/<safe-branch>` otherwise; update the path construction in
   `.github/workflows/deploy-branch.yml` if a different layout is needed.
 - Swap the publish branch from `gh-pages` if you need a different hosting
   target.
@@ -173,9 +153,9 @@ Tweaking the deployment:
 
 - **Trigger.** The `Post-deploy branch tests` workflow runs after every
   completed deployment.
-- **Preview discovery.** The workflow rebuilds the preview URL using the branch
-  name and posts it back to the PR alongside links to the deployment run,
-  artifact bundle, and rerun entry point.
+- **Preview discovery.** The workflow rebuilds the preview URL using the PR
+  number (matching `/pull/<pr-number>/`) and posts it back to the PR alongside
+  links to the deployment run, artifact bundle, and rerun entry point.
 - **No automated tests.** The job no longer installs dependencies or runs
   Playwright; it only reports the latest preview location so reviewers can
   click through directly.
