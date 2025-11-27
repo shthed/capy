@@ -103,15 +103,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          rm -rf "pages/${TARGET_DIR}"
-          mkdir -p "pages/${TARGET_DIR}"
+          DEST_DIR="pages/${TARGET_DIR}"
+
+          if [ "${TARGET_DIR}" = "." ]; then
+            DEST_DIR="pages"
+            mkdir -p "${DEST_DIR}"
+            find "${DEST_DIR}" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          else
+            rm -rf "${DEST_DIR}"
+            mkdir -p "${DEST_DIR}"
+          fi
 
           rsync -av --delete \
             --exclude '.git/' \
             --exclude 'project/' \
             --exclude '.github/' \
             --exclude 'pages/' \
-            ./ "pages/${TARGET_DIR}/"
+            ./ "${DEST_DIR}/"
 
       - name: Publish to gh-pages
         env:
