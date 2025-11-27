@@ -1405,6 +1405,10 @@ input[type="color"]::-moz-color-swatch {
   align-items: start;
 }
 
+.settings-page[hidden] {
+  display: none !important;
+}
+
 .settings-section-heading {
   position: sticky;
   top: 0;
