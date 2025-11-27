@@ -1,5 +1,10 @@
 # Change Log
 
+## 2025-11-27
+- Refined the settings layout with responsive tabs so the sheet stays organized on smaller screens.
+- Styled text inputs and textareas across the settings UI to match the themed controls and improve readability.
+- Tightened the in-game menu spacing, added a compact drag grip, and introduced contextual help tooltips for every section.
+
 ## 2025-11-26
 - Switched the service worker and cache helper to ES modules so GitHub Pages serves them with a supported MIME type.
 - Added a lightweight README mirror at `/README/` to keep the in-app Help panel from hitting 404s.
