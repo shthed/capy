@@ -135,6 +135,14 @@ export function completeRendererBootstrap(succeeded) {
   window.__capyRendererBootstrapVersion = succeeded ? SENTINEL_READY : undefined;
 }
 
+// The renderer controller stays defined here (instead of render.js) so we can
+// re-export the underlying renderer factories without creating a circular
+// dependency. We keep the exports at the bottom of the file to avoid
+// accidentally exporting the controller twice—which manifests as the
+// "Duplicate export of 'createRendererController'" syntax error when tools or
+// caches concatenate multiple copies of this module. Keeping the declaration
+// here and re-export block below gives us a single, predictable export site
+// that matches how the inline modules import it from index.html.
 export function createRendererController(host, options = {}) {
   const { hooks = {} } = options || {};
   const renderer = createSvgRenderer(host, hooks);
@@ -191,5 +199,11 @@ if (root) {
   }
 }
 
-export { createSvgRenderer, SceneTileLoader };
+// Re-export the renderer primitives so index.html (and tests) can import a
+// single module without reaching into render.js directly. Keeping this grouped
+// export at the bottom prevents accidental shadowing of createRendererController
+// and helps avoid the duplicate-export syntax errors seen when cached bundles
+// include multiple copies of this file.
+export { createSvgRenderer, SceneTileLoader } from "./render.js";
+
 export default getPrebootMetrics;

@@ -64,9 +64,10 @@ footprints predictable.
 ## Project Health Snapshot
 
 - **Zero-build runtime.** The app still ships as plain HTML/JS/CSS and must remain directly loadable without bundling. Optimisations should respect this constraint and avoid minified dependency drops.
-- **Cache hygiene.** The service worker (`service-worker.js`) now caps Cache Storage at roughly 25 MB or 80 entries, evicting least-recently-used responses after each `cache.put` and skipping uploads larger than ~6 MB. Keep those limits in mind before introducing larger assets or new fetch endpoints so they continue to fit within the budget.
-- **Automation coverage.** The shared Node + Playwright harness remains the expected entry point (`npm test --silent`), but CI currently only validates installs. Manual smoke checks stay required until the hosted automation suite returns.
-- **Documentation sources.** Planning and work intake now live in `project/ROADMAP.md` (direction) and `project/TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts.
+  - **Cache hygiene.** The service worker (`service-worker.js`) now caps Cache Storage at roughly 25 MB or 80 entries, evicting least-recently-used responses after each `cache.put` and skipping uploads larger than ~6 MB. Keep those limits in mind before introducing larger assets or new fetch endpoints so they continue to fit within the budget.
+  - **Module registration.** The service worker registers as an ES module so `service-worker-cache.js` can load without MIME-type errors on GitHub Pages; stick to module-friendly helpers when adjusting its imports.
+  - **Automation coverage.** The shared Node + Playwright harness remains the expected entry point (`npm test --silent`), but CI currently only validates installs. Manual smoke checks stay required until the hosted automation suite returns.
+  - **Documentation sources.** Planning and work intake now live in `project/ROADMAP.md` (direction) and `project/TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts. The in-app Help panel fetches the `/README/` mirror that renders `README.md`, so keep that endpoint available when relocating docs.
 
 ## Repository Review Findings
 
