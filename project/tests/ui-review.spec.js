@@ -33,6 +33,19 @@ test.describe('Capy basic UI smoke check', () => {
     await expect(settingsSheet).toBeVisible();
     await expect(settingsSheet).toHaveAttribute('aria-hidden', 'false');
 
+    const gameplayPanel = page.locator('[data-settings-panel="gameplay"]');
+    const inactivePanels = page.locator('[data-settings-panel]:not([data-settings-panel="gameplay"])');
+
+    await expect(gameplayPanel).toBeVisible();
+    await expect(gameplayPanel).toHaveJSProperty('hidden', false);
+
+    const inactiveCount = await inactivePanels.count();
+    for (let index = 0; index < inactiveCount; index += 1) {
+      const panel = inactivePanels.nth(index);
+      await expect(panel).toBeHidden();
+      await expect(panel).toHaveJSProperty('hidden', true);
+    }
+
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
     expect(pageErrors, pageErrors.join('\n')).toEqual([]);
   });
