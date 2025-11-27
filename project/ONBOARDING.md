@@ -85,6 +85,47 @@ build steps.
 - Draft PRs early so branch deployments stay available for reviewers; link the
   preview URL once the workflow finishes.
 
+## Iterative development feedback loop
+Use this loop to ship fixes quickly while improving the gameplay experience each
+cycle.
+
+1. **Start with context.** Read `project/TODO.md` to pick a concrete issue, skim
+   recent `project/CHANGELOG.md` entries for open questions, and scan
+   `TECH.md`/`README.md` if the task touches rendering or controls.
+2. **Baseline the experience.** Launch the app (`npm run dev` in `project/`),
+   open http://localhost:8000, and complete the "How to Play" tour:
+   - Pick a palette colour, fill a few regions, and try hints/preview toggles.
+   - Exercise mouse, touch, and keyboard shortcuts plus command-rail actions
+     (preview, generator tuning, import, saves, settings) to spot regressions.
+3. **Automate repetitive checks.** In DevTools, use `window.capyGenerator`
+   helpers to speed up the loop: set the renderer, switch colours, fill regions,
+   and toggle preview without manual clicks.
+4. **Capture observations.** Take screenshots of notable states (baseline,
+   post-fix, import flow) and log findings with desired fixes in your notes or
+   `project/CHANGELOG.md`.
+5. **Implement and verify.** Apply the fix, then rerun `npm test --silent` (or
+   `npm run test:smoke` if Playwright is offline) and repeat the gameplay tour
+   from step 2.
+6. **Repeat the loop.** Continue cycling through TODO items until the experience
+   feels fun, keeping docs/snapshots current.
+
+### Prompt guide for self-improvement
+Use this prompt to anchor a single loop or daily session:
+
+```text
+Run the Capy feedback loop:
+1) Read project/TODO.md and pick one issue to tackle.
+2) Start dev server (project/: npm run dev) and play through palette selection,
+   region fills, hints, preview toggles, and command-rail actions (preview,
+   generator tuning, import, saves, settings) with mouse/touch/keyboard.
+3) Use window.capyGenerator helpers (set renderer, switch colours, fill regions,
+   toggle preview) in DevTools to automate checks.
+4) Note observations and capture screenshots (baseline, post-fix, import flow)
+   in project/CHANGELOG.md.
+5) Implement the fix, run npm test --silent (or npm run test:smoke), replay the
+   tour, and iterate until the issue is resolved.
+```
+
 ## Where to patch what
 - **UI behaviour:** adjust markup, event wiring, or settings defaults inside the
   inline script in `index.html`. Developer map comments near the top call out the
