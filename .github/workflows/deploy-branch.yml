@@ -103,15 +103,34 @@ jobs:
         run: |
           set -euo pipefail
 
-          rm -rf "pages/${TARGET_DIR}"
-          mkdir -p "pages/${TARGET_DIR}"
+          DEST_DIR="pages/${TARGET_DIR}"
+
+          if [ "${TARGET_DIR}" = "." ]; then
+            DEST_DIR="pages"
+            mkdir -p "${DEST_DIR}"
+            find "${DEST_DIR}" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          else
+            rm -rf "${DEST_DIR}"
+            mkdir -p "${DEST_DIR}"
+          fi
 
           rsync -av --delete \
             --exclude '.git/' \
             --exclude 'project/' \
             --exclude '.github/' \
             --exclude 'pages/' \
-            ./ "pages/${TARGET_DIR}/"
+            ./ "${DEST_DIR}/"
+
+      - name: Stage deployment artifact
+        env:
+          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
+        run: |
+          set -euo pipefail
+
+          rm -rf artifact
+          mkdir -p "artifact/${TARGET_DIR}"
+
+          rsync -av --delete "pages/${TARGET_DIR}/" "artifact/${TARGET_DIR}/"
 
       - name: Publish to gh-pages
         env:
@@ -138,7 +157,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.target.outputs.artifact_name }}
-          path: pages/${{ steps.target.outputs.target_dir }}
+          path: artifact
           retention-days: 7
 
       - name: Output preview link

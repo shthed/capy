@@ -3,6 +3,10 @@
 ## 2025-11-27
 - Made the settings sheet responsive by stacking the tab list above the content on smaller screens.
 - Themed settings text inputs and textareas so they match other controls.
+- Refined the settings layout with responsive tabs so the sheet stays organized on smaller screens.
+- Styled text inputs and textareas across the settings UI to match the themed controls and improve readability.
+- Tightened the in-game menu spacing, added a compact drag grip, and introduced contextual help tooltips for every section.
+- Compacted the menu sheet padding and pushed the controls into an earlier two-column flow for wide viewports.
 
 ## 2025-11-26
 - Switched the service worker and cache helper to ES modules so GitHub Pages serves them with a supported MIME type.
