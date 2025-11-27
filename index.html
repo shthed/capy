@@ -3575,6 +3575,17 @@
         return applyRendererMode(normalized, { skipAutosave: true, skipLog: true });
       }
 
+      function registerRendererControls() {
+        if (!rendererModeSelect) {
+          return;
+        }
+        rendererModeSelect.addEventListener("change", (event) => {
+          const next = event?.target?.value;
+          if (next == null) return;
+          handleRendererChange(next);
+        });
+      }
+
       rendererController = createRendererController(puzzleCanvas, {
         hooks: {
           log: logRendererEvent,
@@ -3595,6 +3606,7 @@
       });
       state.rendering.controller = rendererController;
       updateRendererModeAvailability();
+      registerRendererControls();
 
       let generationJobCounter = 0;
       let latestGenerationJobId = 0;
