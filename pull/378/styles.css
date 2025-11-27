@@ -751,6 +751,60 @@ button:disabled {
   background-image: none;
 }
 
+.control input[type="text"],
+.control input[type="number"],
+.control input[type="email"],
+.control input[type="url"],
+.control input[type="tel"],
+.control textarea {
+  width: 100%;
+  min-height: calc(38px * var(--ui-scale));
+  padding: calc(10px * var(--ui-scale)) calc(12px * var(--ui-scale));
+  border-radius: calc(12px * var(--ui-scale));
+  border: 1px solid var(--theme-input-border);
+  background: var(--theme-input-bg);
+  color: inherit;
+  font: inherit;
+  line-height: 1.4;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.control textarea {
+  min-height: calc(120px * var(--ui-scale));
+  resize: vertical;
+}
+
+.control input[type="text"]:focus,
+.control input[type="number"]:focus,
+.control input[type="email"]:focus,
+.control input[type="url"]:focus,
+.control input[type="tel"]:focus,
+.control textarea:focus {
+  outline: none;
+  border-color: rgba(96, 165, 250, 0.7);
+  box-shadow: 0 0 0 calc(2px * var(--ui-scale)) rgba(37, 99, 235, 0.28);
+  background: color-mix(in srgb, var(--theme-input-bg) 85%, transparent);
+}
+
+.control input[type="text"]:disabled,
+.control input[type="number"]:disabled,
+.control input[type="email"]:disabled,
+.control input[type="url"]:disabled,
+.control input[type="tel"]:disabled,
+.control textarea:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.control input[type="text"]::placeholder,
+.control input[type="number"]::placeholder,
+.control input[type="email"]::placeholder,
+.control input[type="url"]::placeholder,
+.control input[type="tel"]::placeholder,
+.control textarea::placeholder {
+  color: rgba(148, 163, 184, 0.8);
+}
+
 body[data-theme="light"] .control select {
   background: rgba(255, 255, 255, 0.95);
   border-color: rgba(15, 23, 42, 0.18);
@@ -1292,6 +1346,26 @@ input[type="color"]::-moz-color-swatch {
   min-height: 0;
   max-height: 100%;
   overflow: auto;
+}
+
+@media (max-width: 960px) {
+  .settings-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-tabs {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+    max-height: none;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .settings-tab {
+    flex: 1 1 calc(50% - calc(8px * var(--ui-scale)));
+  }
 }
 
 .settings-tab {
