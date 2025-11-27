@@ -147,11 +147,11 @@
           data-testid="settings-button"
           aria-haspopup="dialog"
           aria-expanded="false"
-          aria-label="Open settings"
-          title="Open settings"
+          aria-label="Open menu"
+          title="Open menu"
         >
           <span class="icon" aria-hidden="true">⚙</span>
-          <span class="label visually-hidden">Settings</span>
+          <span class="label visually-hidden">Menu</span>
         </button>
       </header>
       <section
@@ -163,11 +163,11 @@
         tabindex="0"
       >
         <p class="start-hint-copy">
-          Drop an image or JSON puzzle anywhere on the window, press Enter here to pick a file, or open Settings &amp;
-          tools to try the bundled capybara sample.
+          Drop an image or JSON puzzle anywhere on the window, press Enter here to pick a file, or open the menu to try
+          the bundled capybara sample.
         </p>
         <div class="start-hint-actions">
-          <button id="closeStartHint" type="button">Open settings</button>
+          <button id="closeStartHint" type="button">Open menu</button>
         </div>
       </section>
       <div id="viewport">
@@ -198,15 +198,16 @@
       id="settingsSheet"
       class="sheet hidden"
       role="dialog"
-      aria-label="Settings and tools"
+      aria-label="Game menu"
       aria-hidden="true"
     >
       <div class="sheet-header">
-        <div class="sheet-header-title">
-          <p class="sheet-header-kicker">Settings</p>
-          <h2 class="sheet-header-heading">Settings &amp; tools</h2>
-        </div>
         <div class="sheet-header-actions">
+          <div class="sheet-grip" aria-hidden="true" title="Drag to move the menu">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
           <button
             id="settingsUploadButton"
             class="settings-upload"
@@ -219,7 +220,7 @@
             type="button"
             class="close-button sheet-close"
             data-sheet-close="settings"
-            aria-label="Close settings"
+            aria-label="Close menu"
           >
             <span aria-hidden="true">×</span>
             <span class="visually-hidden">Close</span>
@@ -228,7 +229,7 @@
       </div>
       <div class="sheet-body">
         <div class="settings-body">
-          <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+          <nav class="settings-tabs" role="tablist" aria-label="Menu sections">
             <button
               class="settings-tab"
               type="button"
@@ -320,20 +321,33 @@
             </button>
           </nav>
           <div class="settings-content" data-settings-scroll>
-            <section
-              class="settings-section settings-page"
-              id="settingsPanel-gameplay"
-              role="tabpanel"
-              aria-labelledby="settingsTab-gameplay"
-              data-settings-panel="gameplay"
-            >
-              <div class="settings-section-heading">
+          <section
+            class="settings-section settings-page"
+            id="settingsPanel-gameplay"
+            role="tabpanel"
+            aria-labelledby="settingsTab-gameplay"
+            data-settings-panel="gameplay"
+          >
+            <div class="settings-section-heading">
+              <div class="settings-heading-row">
                 <h3 id="settingsHeading-gameplay" data-settings-heading>Gameplay</h3>
+                <button
+                  type="button"
+                  class="help-chip"
+                  aria-label="Gameplay controls for preview, pacing, and assists"
+                  aria-describedby="tooltip-gameplay"
+                >
+                  ?
+                </button>
+                <span class="help-chip-bubble" id="tooltip-gameplay" role="tooltip">
+                  Tweak quick actions, pacing, and assists without leaving the puzzle.
+                </span>
               </div>
-              <div
-                class="settings-panel"
-                role="group"
-                aria-labelledby="settingsHeading-gameplay"
+            </div>
+            <div
+              class="settings-panel"
+              role="group"
+              aria-labelledby="settingsHeading-gameplay"
               >
               <section class="sheet-section" aria-labelledby="quickActionsHeading">
                 <h3 id="quickActionsHeading">Quick actions</h3>
@@ -417,7 +431,20 @@
           data-settings-panel="hints"
         >
           <div class="settings-section-heading">
-            <h3 id="settingsHeading-hints" data-settings-heading>Hints</h3>
+            <div class="settings-heading-row">
+              <h3 id="settingsHeading-hints" data-settings-heading>Hints</h3>
+              <button
+                type="button"
+                class="help-chip"
+                aria-label="Hint visibility and overlays"
+                aria-describedby="tooltip-hints"
+              >
+                ?
+              </button>
+              <span class="help-chip-bubble" id="tooltip-hints" role="tooltip">
+                Control how hint highlights, overlays, and preview comparisons behave.
+              </span>
+            </div>
           </div>
           <div class="settings-panel" role="group" aria-labelledby="settingsHeading-hints">
           <section class="sheet-section" aria-labelledby="hintsControlsHeading">
@@ -497,7 +524,20 @@
           data-settings-panel="controls"
         >
           <div class="settings-section-heading">
-            <h3 id="settingsHeading-controls" data-settings-heading>Controls</h3>
+            <div class="settings-heading-row">
+              <h3 id="settingsHeading-controls" data-settings-heading>Controls</h3>
+              <button
+                type="button"
+                class="help-chip"
+                aria-label="Control remapping and input feel"
+                aria-describedby="tooltip-controls"
+              >
+                ?
+              </button>
+              <span class="help-chip-bubble" id="tooltip-controls" role="tooltip">
+                Remap mouse buttons, adjust gesture behaviour, and set interface scale.
+              </span>
+            </div>
           </div>
           <div class="settings-panel" role="group" aria-labelledby="settingsHeading-controls">
           <section class="sheet-section" aria-labelledby="mouseControlsHeading">
@@ -595,7 +635,20 @@
           data-settings-panel="appearance"
         >
           <div class="settings-section-heading">
-            <h3 id="settingsHeading-appearance" data-settings-heading>Appearance</h3>
+            <div class="settings-heading-row">
+              <h3 id="settingsHeading-appearance" data-settings-heading>Appearance</h3>
+              <button
+                type="button"
+                class="help-chip"
+                aria-label="Appearance and accessibility controls"
+                aria-describedby="tooltip-appearance"
+              >
+                ?
+              </button>
+              <span class="help-chip-bubble" id="tooltip-appearance" role="tooltip">
+                Balance scale, contrast, overlays, and theme picks for the board.
+              </span>
+            </div>
           </div>
           <div class="settings-panel" role="group" aria-labelledby="settingsHeading-appearance">
           <section class="sheet-section" aria-labelledby="appearanceHeading">
@@ -716,7 +769,20 @@
           data-settings-panel="generator"
         >
           <div class="settings-section-heading">
-            <h3 id="settingsHeading-generator" data-settings-heading>Generator</h3>
+            <div class="settings-heading-row">
+              <h3 id="settingsHeading-generator" data-settings-heading>Generator</h3>
+              <button
+                type="button"
+                class="help-chip"
+                aria-label="Generator and import controls"
+                aria-describedby="tooltip-generator"
+              >
+                ?
+              </button>
+              <span class="help-chip-bubble" id="tooltip-generator" role="tooltip">
+                Set clustering, imports, and metadata for new puzzles and reloads.
+              </span>
+            </div>
           </div>
           <div class="settings-panel" role="group" aria-labelledby="settingsHeading-generator">
           <div
@@ -1001,7 +1067,20 @@
           data-settings-panel="saves"
         >
           <div class="settings-section-heading">
-            <h3 id="settingsHeading-saves" data-settings-heading>Saves</h3>
+            <div class="settings-heading-row">
+              <h3 id="settingsHeading-saves" data-settings-heading>Saves</h3>
+              <button
+                type="button"
+                class="help-chip"
+                aria-label="Save management"
+                aria-describedby="tooltip-saves"
+              >
+                ?
+              </button>
+              <span class="help-chip-bubble" id="tooltip-saves" role="tooltip">
+                Import puzzles, start fresh sessions, and manage your save slots.
+              </span>
+            </div>
           </div>
           <div class="settings-panel" role="group" aria-labelledby="settingsHeading-saves">
           <section class="sheet-section" aria-labelledby="saveStartHeading">
@@ -1079,7 +1158,20 @@
           data-settings-panel="help"
         >
           <div class="settings-section-heading">
-            <h3 id="settingsHeading-help" data-settings-heading>Help</h3>
+            <div class="settings-heading-row">
+              <h3 id="settingsHeading-help" data-settings-heading>Help</h3>
+              <button
+                type="button"
+                class="help-chip"
+                aria-label="Gameplay tips"
+                aria-describedby="tooltip-help"
+              >
+                ?
+              </button>
+              <span class="help-chip-bubble" id="tooltip-help" role="tooltip">
+                Review button legends, gestures, and feedback links while you play.
+              </span>
+            </div>
           </div>
           <div class="settings-panel" role="group" aria-labelledby="settingsHeading-help">
           <section class="sheet-section" aria-labelledby="commandsHeading">
@@ -1107,7 +1199,7 @@
               <dd>
                 Open this guide and review tips for palette controls, gestures, and sharing feedback.
               </dd>
-              <dt>⚙ Settings</dt>
+              <dt>⚙ Menu</dt>
               <dd>
                 Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface
                 scale. Advanced options expose accessibility tweaks for the hint animations.
@@ -1120,7 +1212,7 @@
               <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
               <li><kbd>Right click</kbd> Select the colour under the pointer.</li>
               <li>Select a palette swatch to set the active colour and flash every matching region.</li>
-              <li>Enable Easy difficulty in Settings to let clicks auto-select the tapped region's colour.</li>
+              <li>Enable Easy difficulty in the menu to let clicks auto-select the tapped region's colour.</li>
               <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
               <li><kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas.</li>
               <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
@@ -1181,11 +1273,24 @@
           data-settings-panel="diagnostics"
         >
           <div class="settings-section-heading">
-            <h3 id="settingsHeading-diagnostics" data-settings-heading>Diagnostics</h3>
+            <div class="settings-heading-row">
+              <h3 id="settingsHeading-diagnostics" data-settings-heading>Diagnostics</h3>
+              <button
+                type="button"
+                class="help-chip"
+                aria-label="Diagnostics and JSON review"
+                aria-describedby="tooltip-diagnostics"
+              >
+                ?
+              </button>
+              <span class="help-chip-bubble" id="tooltip-diagnostics" role="tooltip">
+                Check live logs, system status, and review the current JSON payload.
+              </span>
+            </div>
           </div>
           <div class="settings-panel" role="group" aria-labelledby="settingsHeading-diagnostics">
-          <section class="sheet-section" aria-label="Settings loader console">
-            <div class="visually-hidden" id="settingsLoadHeading">Settings loader console</div>
+          <section class="sheet-section" aria-label="Menu loader console">
+            <div class="visually-hidden" id="settingsLoadHeading">Menu loader console</div>
             <div
               id="settingsLoadConsole"
               class="debug-log settings-loading-console"
@@ -1232,11 +1337,11 @@
             </div>
           </section>
           <section class="sheet-section" aria-labelledby="settingsJsonHeading">
-            <h3 id="settingsJsonHeading">Settings JSON</h3>
+            <h3 id="settingsJsonHeading">Preferences JSON</h3>
             <p class="control-note">
-              Review or update the current settings as JSON. Export a snapshot or import one from the textarea below.
+              Review or update the current preferences as JSON. Export a snapshot or import one from the textarea below.
             </p>
-            <label class="visually-hidden" for="settingsJsonView">Settings JSON</label>
+            <label class="visually-hidden" for="settingsJsonView">Preferences JSON</label>
             <textarea id="settingsJsonView" class="json-view" rows="8" spellcheck="false"></textarea>
             <div class="json-actions">
               <button id="refreshSettingsJson" type="button">Refresh</button>
@@ -2055,8 +2160,8 @@
           updateServiceWorkerSummary({ state: "Active (controller)", updatedAt: Date.now() });
           logServiceWorkerEvent("Service worker is controlling this page");
         });
-        navigator.serviceWorker
-          .register("./service-worker.js")
+          navigator.serviceWorker
+            .register("./service-worker.js", { type: "module" })
           .then((registration) => {
             logServiceWorkerEvent("Registered service worker", { scope: registration?.scope });
             watchServiceWorker(registration);
@@ -3575,6 +3680,17 @@
         return applyRendererMode(normalized, { skipAutosave: true, skipLog: true });
       }
 
+      function registerRendererControls() {
+        if (!rendererModeSelect) {
+          return;
+        }
+        rendererModeSelect.addEventListener("change", (event) => {
+          const next = event?.target?.value;
+          if (next == null) return;
+          handleRendererChange(next);
+        });
+      }
+
       rendererController = createRendererController(puzzleCanvas, {
         hooks: {
           log: logRendererEvent,
@@ -3595,6 +3711,7 @@
       });
       state.rendering.controller = rendererController;
       updateRendererModeAvailability();
+      registerRendererControls();
 
       let generationJobCounter = 0;
       let latestGenerationJobId = 0;
