@@ -13,401 +13,93 @@ permissions:
   pull-requests: write
 
 jobs:
-  slug:
+  comment:
     runs-on: ubuntu-latest
-    outputs:
-      branch_name: ${{ steps.slug.outputs.branch_name }}
-      branch_slug: ${{ steps.slug.outputs.branch_slug }}
-      pr_number: ${{ steps.slug.outputs.pr_number }}
-      preview_url: ${{ steps.slug.outputs.preview_url }}
-      deploy_key: ${{ steps.slug.outputs.deploy_key }}
     steps:
-      - name: Derive branch slug
-        id: slug
+      - name: Prepare summary
+        id: summary
         uses: actions/github-script@v7
         with:
           script: |
             const run = context.payload.workflow_run || {};
+            const pullRequests = run.pull_requests || [];
 
-            const sanitize = (value) => (value || '').replace(/[^a-zA-Z0-9._-]/g, '-').trim();
-
-            const branchName = run.inputs?.target_branch || run.head_branch || run.pull_requests?.[0]?.head?.ref || '';
-
-            const findPullRequest = async (branch) => {
-              if (!branch || branch === 'main') {
-                return null;
-              }
-
-              const lookup = async (state) => {
-                const { data } = await github.rest.pulls.list({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  head: `${context.repo.owner}:${branch}`,
-                  state,
-                  sort: 'updated',
-                  direction: 'desc',
-                  per_page: 1,
-                });
-
-                return Array.isArray(data) && data.length > 0 ? data[0] : null;
-              };
-
-              return (await lookup('open')) ?? (await lookup('closed')) ?? null;
-            };
-
-            const baseUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
-
-            const pr = await findPullRequest(branchName);
-
-            const previewUrl = branchName === 'main'
-              ? `${baseUrl}/`
-              : pr?.number
-                ? `${baseUrl}/pull/${pr.number}/`
-                : '';
-
-            core.setOutput('branch_name', branchName);
-            core.setOutput('branch_slug', sanitize(branchName));
-            core.setOutput('pr_number', pr?.number ? String(pr.number) : '');
-            core.setOutput('preview_url', previewUrl);
-            core.setOutput('deploy_key', pr?.number ? `pull-${pr.number}` : sanitize(branchName));
-
-  review:
-    needs: slug
-    if: |
-      github.event.workflow_run.conclusion == 'success' &&
-      contains(fromJson('["push","workflow_dispatch"]'), github.event.workflow_run.event) &&
-      needs.slug.outputs.branch_name != '' &&
-      needs.slug.outputs.preview_url != ''
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: project
-    concurrency:
-      group: post-deploy-tests-${{ needs.slug.outputs.pr_number || needs.slug.outputs.branch_slug }}
-      cancel-in-progress: true
-    steps:
-      - name: Checkout branch commit
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.slug.outputs.branch_name }}
-
-      - name: Use Node.js 18
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: project/package-lock.json
-
-      - name: Install dependencies
-        working-directory: project
-        run: npm ci
-
-      - name: Install Playwright browsers
-        working-directory: project
-        run: npx playwright install --with-deps
-
-      - name: Prepare UI review artifacts directory
-        working-directory: project
-        run: |
-          set -euo pipefail
-          rm -rf artifacts/ui-review
-          mkdir -p artifacts/ui-review
-
-      - name: Announce preview URL
-        run: |
-          echo "Preview URL: ${{ needs.slug.outputs.preview_url }}"
-      - name: Run Playwright smoke tests
-        id: smoke
-        continue-on-error: true
-        env:
-          PREVIEW_URL: ${{ needs.slug.outputs.preview_url }}
-          PLAYWRIGHT_BASE_URL: ${{ needs.slug.outputs.preview_url }}
-        working-directory: project
-        run: |
-          set -euo pipefail
-          npm test --silent 2>&1 | tee artifacts/ui-review/smoke.log
-
-      - name: Capture preview screenshot
-        if: always()
-        env:
-          PLAYWRIGHT_BASE_URL: ${{ needs.slug.outputs.preview_url }}
-        working-directory: project
-        run: |
-          set -euo pipefail
-          node ./scripts/capture-preview-screenshot.js
-
-      - name: Collect smoke test errors
-        id: smoke-summary
-        if: always()
-        working-directory: project
-        run: |
-          set -euo pipefail
-
-          outcome="${{ steps.smoke.outcome }}"
-          echo "outcome=${outcome}" >> "$GITHUB_OUTPUT"
-
-          if [ "$outcome" != "success" ] && [ -f artifacts/ui-review/smoke.log ]; then
-            {
-              printf 'errors<<EOF\n'
-              tail -n 40 artifacts/ui-review/smoke.log
-              printf '\nEOF\n'
-            } >> "$GITHUB_OUTPUT"
-          else
-            echo "errors=" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Capture preview screenshot
-        id: capture-screenshot
-        if: always()
-        continue-on-error: true
-        env:
-          PREVIEW_URL: ${{ needs.slug.outputs.preview_url }}
-        working-directory: project
-        run: |
-          set -euo pipefail
-
-          if [ -z "${PREVIEW_URL:-}" ]; then
-            echo "Preview URL missing; skipping screenshot capture."
-            exit 0
-          fi
-
-          node --input-type=module - <<'NODE'
-          import { chromium } from 'playwright';
-
-          const url = process.env.PREVIEW_URL;
-          const outputPath = 'artifacts/ui-review/preview.png';
-
-          const browser = await chromium.launch({ headless: true });
-          const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-          const page = await context.newPage();
-
-          try {
-            await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
-            await page.screenshot({ path: outputPath, fullPage: true });
-            console.log(`Captured preview screenshot at ${outputPath}`);
-          } finally {
-            await browser.close();
-          }
-          NODE
-
-      - name: Detect UI review artifacts
-        id: artifact-check
-        if: always()
-        working-directory: project
-        run: |
-          set -euo pipefail
-
-          if [ -d "artifacts/ui-review" ] && find "artifacts/ui-review" -type f -print -quit | grep -q .; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Upload UI review artifacts
-        if: always()
-        id: upload-ui-artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-review-${{ needs.slug.outputs.pr_number || needs.slug.outputs.branch_slug }}-${{ github.run_id }}
-          path: project/artifacts/ui-review
-          if-no-files-found: ignore
-
-      - name: Inspect deploy artifacts
-        id: deploy-artifacts
-        if: always()
-        uses: actions/github-script@v7
-        env:
-          DEPLOY_KEY: ${{ needs.slug.outputs.deploy_key }}
-        with:
-          script: |
-            const runId = context.payload.workflow_run?.id;
-            const deployKey = process.env.DEPLOY_KEY;
-
-            if (!runId || !deployKey) {
-              core.info('Missing run ID or deploy key; skipping artifact lookup.');
-              core.setOutput('pages_artifact_url', '');
-              core.setOutput('pages_artifact_name', '');
-              core.setOutput('diagnostics_artifact_name', '');
+            if (!Array.isArray(pullRequests) || pullRequests.length === 0) {
+              core.info('No pull request attached to this run.');
               return;
             }
+
+            const branch = run.head_branch || pullRequests[0]?.head?.ref || '';
+            const safeBranch = (branch || '').replace(/[^a-zA-Z0-9._-]/g, '-');
+            const previewBase = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
+            const targetDir = branch === 'main' ? '' : `pull/${safeBranch}`;
+            const previewUrl = targetDir ? `${previewBase}/${targetDir}/` : `${previewBase}/`;
+            const runUrl = run.html_url;
 
             const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              run_id: runId,
+              run_id: run.id,
               per_page: 100,
             });
 
-            const pages = artifacts.find((artifact) => artifact.name === `gh-pages-${deployKey}`);
-            const diagnostics = artifacts.find((artifact) => artifact.name === `gh-pages-diagnostics-${deployKey}`);
+            const artifact = artifacts.find((item) => item.name === `gh-pages-${safeBranch}`);
+            const artifactUrl = artifact?.archive_download_url || '';
+            const testsUrl = runUrl;
 
-            if (!pages) {
-              core.info(`No gh-pages artifact found for key ${deployKey}.`);
-            }
+            const timestamp = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+            const link = (label, url) => (url ? `[${label}](${url})` : `${label}: unavailable`);
 
-            if (!diagnostics) {
-              core.info(`No diagnostics artifact found for key ${deployKey}.`);
-            }
+            const entry = [
+              link('Run', runUrl),
+              link('Preview', previewUrl),
+              link('Tests', testsUrl),
+              artifactUrl ? link('Artifact', artifactUrl) : 'Artifact: unavailable',
+              link('Rerun', runUrl),
+            ].join(' · ');
 
-            core.setOutput('pages_artifact_url', pages?.archive_download_url || '');
-            core.setOutput('pages_artifact_name', pages?.name || '');
-            core.setOutput('diagnostics_artifact_name', diagnostics?.name || '');
+            const body = `Branch preview deployments\n<!-- capy-pages-preview -->\n- ${timestamp} · ${entry}`;
 
-      - name: Download deployment diagnostics
-        id: download-diagnostics
-        if: ${{ always() && steps.deploy-artifacts.outputs.diagnostics_artifact_name != '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ steps.deploy-artifacts.outputs.diagnostics_artifact_name }}
-          run-id: ${{ github.event.workflow_run.id }}
-          path: deployment-metadata
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+            core.setOutput('body', body);
+            core.setOutput('pr', String(pullRequests[0].number));
 
-      - name: Parse deployment diagnostics
-        id: parse-diagnostics
-        if: ${{ always() && steps.download-diagnostics.outcome == 'success' }}
-        run: |
-          set -euo pipefail
-
-          file=$(find deployment-metadata -name 'summary.json' -print -quit || true)
-
-          if [ -z "${file}" ]; then
-            echo "details=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          branch=$(jq -r '.branch // ""' "$file")
-          preview=$(jq -r '.preview_url // ""' "$file")
-          target_dir=$(jq -r '.target_dir // ""' "$file")
-          file_count=$(jq -r '.file_count // ""' "$file")
-          index_status=$(jq -r '.index_html // ""' "$file")
-          pages_commit=$(jq -r '.pages_commit // ""' "$file")
-
-          summary=$(cat <<EOF
-          branch: ${branch}
-          preview: ${preview}
-          target dir: ${target_dir}
-          files: ${file_count}
-          index.html: ${index_status}
-          gh-pages commit: ${pages_commit}
-          EOF
-          )
-
-          printf 'details<<EOF\n%s\nEOF\n' "$summary" >> "$GITHUB_OUTPUT"
-          printf '%s\n' "$summary"
-
-      - name: Report deployment diagnostics
-        if: always()
-        env:
-          PAGES_ARTIFACT: ${{ steps.deploy-artifacts.outputs.pages_artifact_url }}
-          DIAGNOSTICS: ${{ steps.parse-diagnostics.outputs.details }}
-        run: |
-          set -euo pipefail
-
-          {
-            echo "gh-pages artifact: ${PAGES_ARTIFACT:-unavailable}";
-            if [ -n "${DIAGNOSTICS:-}" ]; then
-              echo "Deployment diagnostics:";
-              printf '%s\n' "${DIAGNOSTICS}";
-            else
-              echo "No deployment diagnostics available.";
-            fi
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: Share preview link on PR
-        if: always()
+      - name: Comment on PR
+        if: ${{ steps.summary.outputs.body && steps.summary.outputs.pr }}
         uses: actions/github-script@v7
         env:
-          PREVIEW_URL: ${{ needs.slug.outputs.preview_url }}
-          ARTIFACT_FOUND: ${{ steps.artifact-check.outputs.found }}
-          ARTIFACT_URL: ${{ steps.upload-ui-artifacts.outputs.artifact-url }}
-          PAGES_ARTIFACT_URL: ${{ steps.deploy-artifacts.outputs.pages_artifact_url }}
+          BODY: ${{ steps.summary.outputs.body }}
+          PR: ${{ steps.summary.outputs.pr }}
         with:
           script: |
-            const pullRequests = context.payload.workflow_run?.pull_requests ?? [];
-            if (!Array.isArray(pullRequests) || pullRequests.length === 0) {
-              core.info('No pull requests attached to this run. Skipping comment.');
+            const body = process.env.BODY;
+            const issueNumber = Number(process.env.PR);
+
+            if (!body || !issueNumber) {
+              core.info('Nothing to comment.');
               return;
             }
 
-            const previewUrl = process.env.PREVIEW_URL;
-            const artifactFound = process.env.ARTIFACT_FOUND === 'true';
-            const artifactUrl = process.env.ARTIFACT_URL;
-            const pagesArtifactUrl = process.env.PAGES_ARTIFACT_URL;
-            const runId = context.payload.workflow_run?.id;
-            const runUrl = context.payload.workflow_run?.html_url;
-
             const marker = '<!-- capy-pages-preview -->';
-            const timestamp = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
 
-            const link = (label, url, fallback) => (url ? `[${label}](${url})` : fallback || '');
+            const existingComment = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            }).then((comments) => comments.find((comment) => comment.user?.login === 'github-actions[bot]' && comment.body?.includes(marker)));
 
-            let testsUrl = '';
-
-            if (runId) {
-              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+            if (existingComment) {
+              await github.rest.issues.updateComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                run_id: runId,
-                per_page: 100,
+                comment_id: existingComment.id,
+                body,
               });
-
-              const testsJob = jobs.find((job) => job.name?.toLowerCase().includes('post-deploy-tests')) || jobs[0];
-              testsUrl = testsJob?.html_url || '';
-            }
-
-            const parts = [
-              link('Run', runUrl),
-              link('Preview', previewUrl, 'Preview unavailable'),
-              link('Tests', testsUrl || runUrl, testsUrl ? 'Tests unavailable' : ''),
-              artifactFound && artifactUrl ? link('Artifacts', artifactUrl) : '',
-              link('Bundle', pagesArtifactUrl),
-              link('Rerun', runUrl),
-            ].filter(Boolean);
-
-            const newEntry = `- ${timestamp} · ${parts.join(' · ')}`;
-            const header = 'Branch preview deployments';
-
-            const findExistingComment = async (issueNumber) => {
-              const comments = await github.paginate(github.rest.issues.listComments, {
+            } else {
+              await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issueNumber,
-                per_page: 100,
+                body,
               });
-
-              return comments.find(
-                (comment) => comment.user?.login === 'github-actions[bot]' && comment.body?.includes(marker)
-              );
-            };
-
-            for (const pr of pullRequests) {
-              const existingComment = await findExistingComment(pr.number);
-              let historicalEntries = [];
-
-              if (existingComment?.body?.includes(marker)) {
-                const [, tail = ''] = existingComment.body.split(marker);
-                historicalEntries = tail
-                  .trim()
-                  .split('\n\n')
-                  .filter(Boolean);
-              }
-
-              const body = [header, marker, newEntry, ...historicalEntries].join('\n\n');
-
-              if (existingComment) {
-                await github.rest.issues.updateComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  comment_id: existingComment.id,
-                  body,
-                });
-              } else {
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: pr.number,
-                  body,
-                });
-              }
             }
