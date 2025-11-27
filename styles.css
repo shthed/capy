@@ -988,6 +988,64 @@ input[type="color"]::-moz-color-swatch {
   border-radius: 10px;
 }
 
+.control input[type="text"],
+.control input[type="email"],
+.control input[type="url"],
+.control input[type="number"],
+.control textarea {
+  width: 100%;
+  min-height: calc(42px * var(--ui-scale));
+  padding: calc(10px * var(--ui-scale)) calc(12px * var(--ui-scale));
+  border-radius: calc(12px * var(--ui-scale));
+  border: 1px solid var(--theme-input-border);
+  background: var(--theme-input-bg);
+  color: inherit;
+  font: inherit;
+  line-height: 1.4;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.35);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.control textarea {
+  min-height: calc(96px * var(--ui-scale));
+  resize: vertical;
+}
+
+.control input::placeholder,
+.control textarea::placeholder {
+  color: rgba(148, 163, 184, 0.75);
+}
+
+.control input:focus,
+.control textarea:focus {
+  outline: none;
+  border-color: rgba(96, 165, 250, 0.55);
+  box-shadow: 0 0 0 calc(2px * var(--ui-scale)) rgba(37, 99, 235, 0.25);
+}
+
+.control input:disabled,
+.control textarea:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+body[data-theme="light"] .control input[type="text"],
+body[data-theme="light"] .control input[type="email"],
+body[data-theme="light"] .control input[type="url"],
+body[data-theme="light"] .control input[type="number"],
+body[data-theme="light"] .control textarea {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(15, 23, 42, 0.18);
+  box-shadow: 0 1px 0 rgba(148, 163, 184, 0.35);
+  color: rgba(15, 23, 42, 0.9);
+}
+
+body[data-theme="light"] .control input:focus,
+body[data-theme="light"] .control textarea:focus {
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 0 0 calc(2px * var(--ui-scale)) rgba(59, 130, 246, 0.22);
+}
+
 .control-note {
   margin: 0;
   font-size: 0.8rem;
@@ -1354,6 +1412,29 @@ input[type="color"]::-moz-color-swatch {
   gap: calc(24px * var(--ui-scale));
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
+}
+
+@media (max-width: 960px) {
+  .settings-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+
+  .settings-tabs {
+    display: grid;
+    grid-template-columns: repeat(
+      auto-fit,
+      minmax(calc(180px * var(--ui-scale)), 1fr)
+    );
+    max-height: none;
+    overflow: visible;
+    padding: calc(10px * var(--ui-scale));
+    gap: calc(10px * var(--ui-scale));
+  }
+
+  .settings-tab {
+    width: 100%;
+  }
 }
 
 @media (min-width: 960px) {
