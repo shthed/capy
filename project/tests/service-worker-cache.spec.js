@@ -1,6 +1,5 @@
 import assert from 'node:assert';
 import { test } from 'node:test';
-
 import * as cacheLimits from '../../service-worker-cache.js';
 
 class MemoryCache {
