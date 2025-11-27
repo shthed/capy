@@ -1190,10 +1190,10 @@ input[type="color"]::-moz-color-swatch {
   top: 50%;
   width: min(820px, calc(100vw - 48px));
   height: min(760px, calc(100vh - 120px));
-  padding: calc(18px * var(--ui-scale));
+  padding: calc(14px * var(--ui-scale));
   display: flex;
   flex-direction: column;
-  gap: calc(14px * var(--ui-scale));
+  gap: calc(12px * var(--ui-scale));
   border-radius: calc(16px * var(--ui-scale));
   background: var(--theme-sheet-bg);
   border: 1px solid var(--theme-sheet-border);
@@ -1344,13 +1344,13 @@ input[type="color"]::-moz-color-swatch {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-  gap: calc(10px * var(--ui-scale));
+  gap: calc(8px * var(--ui-scale));
 }
 
 .settings-body {
   display: grid;
   grid-template-columns: minmax(calc(180px * var(--ui-scale)), calc(210px * var(--ui-scale))) 1fr;
-  gap: calc(10px * var(--ui-scale));
+  gap: calc(8px * var(--ui-scale));
   height: 100%;
   min-height: 0;
   align-items: start;
@@ -1359,7 +1359,7 @@ input[type="color"]::-moz-color-swatch {
 .settings-content {
   display: flex;
   flex-direction: column;
-  gap: calc(18px * var(--ui-scale));
+  gap: calc(14px * var(--ui-scale));
   min-height: 0;
   overflow-y: auto;
   padding-right: calc(6px * var(--ui-scale));
@@ -1368,8 +1368,8 @@ input[type="color"]::-moz-color-swatch {
 .settings-tabs {
   display: flex;
   flex-direction: column;
-  gap: calc(6px * var(--ui-scale));
-  padding: calc(10px * var(--ui-scale));
+  gap: calc(5px * var(--ui-scale));
+  padding: calc(8px * var(--ui-scale));
   border-radius: calc(12px * var(--ui-scale));
   border: 1px solid var(--theme-sheet-border);
   background: color-mix(in srgb, var(--theme-sheet-bg) 90%, rgba(148, 163, 184, 0.08));
@@ -1431,8 +1431,8 @@ input[type="color"]::-moz-color-swatch {
   grid-template-columns:
     minmax(calc(170px * var(--ui-scale)), calc(230px * var(--ui-scale)))
     minmax(0, 1fr);
-  column-gap: calc(14px * var(--ui-scale));
-  row-gap: calc(14px * var(--ui-scale));
+  column-gap: calc(12px * var(--ui-scale));
+  row-gap: calc(12px * var(--ui-scale));
   align-items: start;
 }
 
@@ -1444,8 +1444,8 @@ input[type="color"]::-moz-color-swatch {
   position: sticky;
   top: 0;
   align-self: start;
-  padding-top: calc(4px * var(--ui-scale));
-  padding-bottom: calc(8px * var(--ui-scale));
+  padding-top: calc(2px * var(--ui-scale));
+  padding-bottom: calc(6px * var(--ui-scale));
   background: var(--theme-sheet-bg);
   color: var(--theme-sheet-muted-text);
   font-weight: 600;
@@ -1461,7 +1461,7 @@ input[type="color"]::-moz-color-swatch {
 .settings-heading-row {
   display: inline-flex;
   align-items: center;
-  gap: calc(8px * var(--ui-scale));
+  gap: calc(6px * var(--ui-scale));
   position: relative;
 }
 
@@ -1532,17 +1532,17 @@ input[type="color"]::-moz-color-swatch {
 
 .settings-panel {
   display: grid;
-  gap: calc(18px * var(--ui-scale));
-  grid-template-columns: minmax(0, 1fr);
+  gap: calc(14px * var(--ui-scale));
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(calc(260px * var(--ui-scale)), 1fr)
+  );
   align-content: start;
 }
 
-@media (min-width: 960px) {
+@media (max-width: 760px) {
   .settings-panel {
-    grid-template-columns: repeat(
-      auto-fit,
-      minmax(calc(280px * var(--ui-scale)), 1fr)
-    );
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1674,7 +1674,7 @@ body[data-theme="light"] .generator-progress-meter {
   display: grid;
   grid-auto-rows: max-content;
   grid-template-columns: minmax(0, 1fr);
-  gap: calc(10px * var(--ui-scale));
+  gap: calc(9px * var(--ui-scale));
   align-content: start;
 }
 
