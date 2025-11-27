@@ -113,6 +113,17 @@ jobs:
             --exclude 'pages/' \
             ./ "pages/${TARGET_DIR}/"
 
+      - name: Stage deployment artifact
+        env:
+          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
+        run: |
+          set -euo pipefail
+
+          rm -rf artifact
+          mkdir -p "artifact/${TARGET_DIR}"
+
+          rsync -av --delete "pages/${TARGET_DIR}/" "artifact/${TARGET_DIR}/"
+
       - name: Publish to gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -138,7 +149,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.target.outputs.artifact_name }}
-          path: pages/${{ steps.target.outputs.target_dir }}
+          path: artifact
           retention-days: 7
 
       - name: Output preview link
