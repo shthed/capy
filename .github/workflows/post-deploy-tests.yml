@@ -30,9 +30,9 @@ jobs:
             }
 
             const branch = run.head_branch || pullRequests[0]?.head?.ref || '';
-            const safeBranch = (branch || '').replace(/[^a-zA-Z0-9._-]/g, '-');
+            const prNumber = pullRequests[0]?.number;
             const previewBase = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
-            const targetDir = branch === 'main' ? '' : `pull/${safeBranch}`;
+            const targetDir = branch === 'main' ? '' : prNumber ? `pull/${prNumber}` : '';
             const previewUrl = targetDir ? `${previewBase}/${targetDir}/` : `${previewBase}/`;
             const runUrl = run.html_url;
 
@@ -43,7 +43,9 @@ jobs:
               per_page: 100,
             });
 
-            const artifact = artifacts.find((item) => item.name === `gh-pages-${safeBranch}`);
+            const artifact = prNumber
+              ? artifacts.find((item) => item.name === `gh-pages-pr-${prNumber}`)
+              : undefined;
             const artifactUrl = artifact?.archive_download_url || '';
             const testsUrl = runUrl;
 
