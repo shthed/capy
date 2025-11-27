@@ -52,7 +52,7 @@ function readStoredSettings(storage) {
 
 let prebootMetrics = {};
 
-function computePrebootMetrics() {
+export function computePrebootMetrics() {
   if (!root || typeof window === "undefined") return {};
 
   const storedScale = parseStoredScale(readStoredSettings(window.localStorage));
@@ -81,11 +81,11 @@ function computePrebootMetrics() {
   return prebootMetrics;
 }
 
-function getPrebootMetrics() {
+export function getPrebootMetrics() {
   return prebootMetrics;
 }
 
-function consumePrebootMetrics() {
+export function consumePrebootMetrics() {
   const metrics = prebootMetrics || {};
   prebootMetrics = {};
   if (typeof window !== "undefined") {
@@ -98,7 +98,7 @@ function consumePrebootMetrics() {
   return metrics;
 }
 
-function applyPrebootMetrics() {
+export function applyPrebootMetrics() {
   if (typeof window === "undefined" || !document.body) {
     return;
   }
@@ -117,7 +117,7 @@ function applyPrebootMetrics() {
 const BOOTSTRAP_VERSION = "2024-07-28";
 const SENTINEL_READY = `ready:${BOOTSTRAP_VERSION}`;
 
-function beginRendererBootstrap() {
+export function beginRendererBootstrap() {
   if (typeof window === "undefined") {
     return false;
   }
@@ -128,14 +128,22 @@ function beginRendererBootstrap() {
   return false;
 }
 
-function completeRendererBootstrap(succeeded) {
+export function completeRendererBootstrap(succeeded) {
   if (typeof window === "undefined") {
     return;
   }
   window.__capyRendererBootstrapVersion = succeeded ? SENTINEL_READY : undefined;
 }
 
-function createRendererController(host, options = {}) {
+// The renderer controller stays defined here (instead of render.js) so we can
+// re-export the underlying renderer factories without creating a circular
+// dependency. We keep the exports at the bottom of the file to avoid
+// accidentally exporting the controller twice—which manifests as the
+// "Duplicate export of 'createRendererController'" syntax error when tools or
+// caches concatenate multiple copies of this module. Keeping the declaration
+// here and re-export block below gives us a single, predictable export site
+// that matches how the inline modules import it from index.html.
+export function createRendererController(host, options = {}) {
   const { hooks = {} } = options || {};
   const renderer = createSvgRenderer(host, hooks);
 
@@ -191,16 +199,11 @@ if (root) {
   }
 }
 
-export {
-  computePrebootMetrics,
-  getPrebootMetrics,
-  consumePrebootMetrics,
-  applyPrebootMetrics,
-  beginRendererBootstrap,
-  completeRendererBootstrap,
-  createRendererController,
-  createSvgRenderer,
-  SceneTileLoader,
-};
+// Re-export the renderer primitives so index.html (and tests) can import a
+// single module without reaching into render.js directly. Keeping this grouped
+// export at the bottom prevents accidental shadowing of createRendererController
+// and helps avoid the duplicate-export syntax errors seen when cached bundles
+// include multiple copies of this file.
+export { createSvgRenderer, SceneTileLoader } from "./render.js";
 
 export default getPrebootMetrics;

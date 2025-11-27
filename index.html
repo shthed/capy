@@ -2055,8 +2055,8 @@
           updateServiceWorkerSummary({ state: "Active (controller)", updatedAt: Date.now() });
           logServiceWorkerEvent("Service worker is controlling this page");
         });
-        navigator.serviceWorker
-          .register("./service-worker.js")
+          navigator.serviceWorker
+            .register("./service-worker.js", { type: "module" })
           .then((registration) => {
             logServiceWorkerEvent("Registered service worker", { scope: registration?.scope });
             watchServiceWorker(registration);

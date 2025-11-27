@@ -1,32 +1,32 @@
-const DEFAULT_CACHE_LIMITS = {
+export const DEFAULT_CACHE_LIMITS = {
   metadataKey: '__capy-cache-metadata__',
   maxEntries: 60,
   maxBytes: 20 * 1024 * 1024,
   maxUploadBytes: 5 * 1024 * 1024,
 };
 
-const METADATA_TEMPLATE = {
+export const METADATA_TEMPLATE = {
   totalBytes: 0,
   entries: {},
 };
 
-function getRequestKey(request) {
+export function getRequestKey(request) {
   return typeof request === 'string' ? request : request.url;
 }
 
-function cloneMetadata(metadata = METADATA_TEMPLATE) {
+export function cloneMetadata(metadata = METADATA_TEMPLATE) {
   return {
     totalBytes: metadata.totalBytes ?? 0,
     entries: { ...(metadata.entries ?? {}) },
   };
 }
 
-function isUploadRequest(request) {
+export function isUploadRequest(request) {
   const url = getRequestKey(request);
   return url.includes('/source-images/');
 }
 
-async function estimateResponseSize(response) {
+export async function estimateResponseSize(response) {
   try {
     const buffer = await response.arrayBuffer();
     return buffer.byteLength;
@@ -35,7 +35,7 @@ async function estimateResponseSize(response) {
   }
 }
 
-async function loadMetadata(cache, metadataKey) {
+export async function loadMetadata(cache, metadataKey) {
   const stored = await cache.match(metadataKey);
   if (!stored) {
     return null;
@@ -47,13 +47,13 @@ async function loadMetadata(cache, metadataKey) {
   }
 }
 
-async function persistMetadata(cache, metadata, metadataKey) {
+export async function persistMetadata(cache, metadata, metadataKey) {
   const snapshot = cloneMetadata(metadata);
   await cache.put(metadataKey, new Response(JSON.stringify(snapshot)));
   return snapshot;
 }
 
-async function rebuildMetadata(cache, metadataKey) {
+export async function rebuildMetadata(cache, metadataKey) {
   const metadata = cloneMetadata();
   const requests = await cache.keys();
   const now = Date.now();
@@ -75,7 +75,7 @@ async function rebuildMetadata(cache, metadataKey) {
   return persistMetadata(cache, metadata, metadataKey);
 }
 
-async function ensureMetadata(cache, metadataKey) {
+export async function ensureMetadata(cache, metadataKey) {
   const metadata = await loadMetadata(cache, metadataKey);
   if (metadata) {
     return cloneMetadata(metadata);
@@ -83,7 +83,7 @@ async function ensureMetadata(cache, metadataKey) {
   return rebuildMetadata(cache, metadataKey);
 }
 
-function findLeastRecentlyUsed(metadata, protectedKey) {
+export function findLeastRecentlyUsed(metadata, protectedKey) {
   let oldestKey = null;
   let oldestTimestamp = Number.POSITIVE_INFINITY;
   for (const [key, entry] of Object.entries(metadata.entries)) {
@@ -98,7 +98,7 @@ function findLeastRecentlyUsed(metadata, protectedKey) {
   return oldestKey;
 }
 
-async function enforceLimits(cache, metadata, limits, protectedKey) {
+export async function enforceLimits(cache, metadata, limits, protectedKey) {
   const { maxEntries, maxBytes, metadataKey } = limits;
   const mustTrimEntries = () => maxEntries && Object.keys(metadata.entries).length > maxEntries;
   const mustTrimBytes = () => maxBytes && metadata.totalBytes > maxBytes;
@@ -117,7 +117,7 @@ async function enforceLimits(cache, metadata, limits, protectedKey) {
   return persistMetadata(cache, metadata, metadataKey);
 }
 
-async function touchEntry(cache, request, metadataKey) {
+export async function touchEntry(cache, request, metadataKey) {
   const metadata = await ensureMetadata(cache, metadataKey);
   const key = getRequestKey(request);
   if (!metadata.entries[key]) {
@@ -127,7 +127,7 @@ async function touchEntry(cache, request, metadataKey) {
   return persistMetadata(cache, metadata, metadataKey);
 }
 
-async function putWithLimits(cache, request, response, limits = DEFAULT_CACHE_LIMITS) {
+export async function putWithLimits(cache, request, response, limits = DEFAULT_CACHE_LIMITS) {
   const cacheLimits = { ...DEFAULT_CACHE_LIMITS, ...limits };
   const { maxBytes, maxUploadBytes, metadataKey } = cacheLimits;
   const key = getRequestKey(request);
@@ -178,10 +178,8 @@ const api = {
   touchEntry,
 };
 
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = api;
-}
-
 if (typeof self !== 'undefined') {
   self.CapyCacheLimits = api;
 }
+
+export default api;

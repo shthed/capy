@@ -1,4 +1,4 @@
-importScripts('./service-worker-cache.cjs');
+import * as CapyCacheLimits from './service-worker-cache.js';
 
 const RUNTIME_CACHE_NAME = 'capy-offline-cache-v3';
 const CACHE_LIMITS = {
@@ -15,6 +15,8 @@ const OFFLINE_ASSETS = [
   './render.js',
   './puzzle-generation.js',
   './capy.json',
+  './service-worker-cache.js',
+  './README/',
 ];
 
 async function broadcastSwEvent(eventName, details = {}) {
