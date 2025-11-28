@@ -146,6 +146,60 @@ export function completeRendererBootstrap(succeeded) {
 export function createRendererController(host, options = {}) {
   const { hooks = {} } = options || {};
   const renderer = createSvgRenderer(host, hooks);
+  const rendererChangeHandlers = new Set();
+
+  function reportRendererError(message, context = null) {
+    if (typeof hooks.log === "function") {
+      try {
+        hooks.log(message, context);
+      } catch (_error) {
+        /* Ignore secondary logging failures. */
+      }
+    }
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+      try {
+        console.error(message, context);
+      } catch (_error) {
+        /* Ignore console failures. */
+      }
+    }
+  }
+
+  function registerRendererChangeHandler(handler) {
+    if (typeof handler !== "function") {
+      reportRendererError("Renderer change handler missing; toggles will be disabled.", {
+        code: "renderer-change-handler-missing",
+      });
+      return false;
+    }
+    rendererChangeHandlers.add(handler);
+    return true;
+  }
+
+  function notifyRendererChange(type = "svg") {
+    if (rendererChangeHandlers.size === 0) {
+      reportRendererError("Renderer change requested before handlers were registered.", {
+        code: "renderer-change-handler-unbound",
+        renderer: type,
+      });
+      return false;
+    }
+    for (const handler of rendererChangeHandlers) {
+      try {
+        handler(type);
+      } catch (error) {
+        reportRendererError("Renderer change handler threw during notification.", {
+          code: "renderer-change-handler-error",
+          renderer: type,
+          error,
+        });
+        return false;
+      }
+    }
+    return true;
+  }
+
+  registerRendererChangeHandler(hooks.onRendererChange);
 
   function resize(metrics = {}) {
     renderer?.setSize?.(metrics.pixelWidth, metrics.pixelHeight);
@@ -181,7 +235,10 @@ export function createRendererController(host, options = {}) {
   return {
     getRendererType: () => "svg",
     listRenderers: () => ["svg"],
-    setRenderer: () => renderer,
+    setRenderer: (type) => {
+      notifyRendererChange(type ?? "svg");
+      return renderer;
+    },
     resize,
     renderFrame,
     renderPreview: () => null,
@@ -189,6 +246,7 @@ export function createRendererController(host, options = {}) {
     fillBackground,
     dispose: () => renderer?.dispose?.(),
     getContext,
+    onRendererChange: registerRendererChangeHandler,
   };
 }
 
