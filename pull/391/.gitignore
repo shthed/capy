@@ -1,6 +1,0 @@
-node_modules/
-project/node_modules/
-project/artifacts/
-project/test-results/
-project/playwright-report/
-project/artifacts/menu-compact.png
