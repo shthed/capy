@@ -132,6 +132,16 @@ jobs:
 
           rsync -av --delete "pages/${TARGET_DIR}/" "artifact/${TARGET_DIR}/"
 
+      - name: Capture deployment directory listing
+        env:
+          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
+        run: |
+          set -euo pipefail
+
+          LIST_PATH="pages/${TARGET_DIR}"
+          echo "Listing contents for ${LIST_PATH}"
+          ls -la "${LIST_PATH}" | tee deployment-directory-listing.txt
+
       - name: Publish to gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -161,5 +171,14 @@ jobs:
           retention-days: 7
 
       - name: Output preview link
+        env:
+          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
         run: |
-          echo "Preview: ${{ steps.target.outputs.preview_url }}" | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "Preview: ${{ steps.target.outputs.preview_url }}"
+            echo ""
+            echo "Deployment directory listing (pages/${TARGET_DIR}):"
+            echo '```'
+            cat deployment-directory-listing.txt
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
