@@ -5,8 +5,10 @@ import { resolve, dirname } from 'node:path';
 
 const runtimeUrl = pathToFileURL(resolve(dirname(fileURLToPath(import.meta.url)), '../../runtime.js'));
 
-function importRuntime() {
-  return import(`${runtimeUrl.href}?t=${Date.now()}-${Math.random()}`);
+async function importRuntime() {
+  delete globalThis.capyRuntime;
+  await import(`${runtimeUrl.href}?t=${Date.now()}-${Math.random()}`);
+  return globalThis.capyRuntime;
 }
 
 test('createRendererController binds renderer change hooks immediately', async () => {

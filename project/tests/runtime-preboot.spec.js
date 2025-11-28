@@ -44,7 +44,9 @@ async function withRuntimeEnvironment(options, assertions) {
   global.window = window;
 
   try {
-    const module = await import(`${runtimeUrl.href}?t=${Date.now()}-${Math.random()}`);
+    delete globalThis.capyRuntime;
+    await import(`${runtimeUrl.href}?t=${Date.now()}-${Math.random()}`);
+    const module = globalThis.capyRuntime;
     return await assertions({ module, document, window });
   } finally {
     global.window = previousWindow;
