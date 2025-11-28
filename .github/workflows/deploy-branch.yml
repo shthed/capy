@@ -133,7 +133,6 @@ jobs:
           rsync -av --delete "pages/${TARGET_DIR}/" "artifact/${TARGET_DIR}/"
 
       - name: Capture deployment directory listing
-        id: capture_deployment_directory_listing
         env:
           TARGET_DIR: ${{ steps.target.outputs.target_dir }}
         run: |
@@ -141,43 +140,7 @@ jobs:
 
           LIST_PATH="pages/${TARGET_DIR}"
           echo "Listing contents for ${LIST_PATH}"
-          ls -la "${LIST_PATH}"
-
-          {
-            echo "listing<<EOF"
-            ls -la "${LIST_PATH}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Comment directory listing on PR
-        if: steps.target.outputs.pr != ''
-        uses: actions/github-script@v7
-        env:
-          PR_NUMBER: ${{ steps.target.outputs.pr }}
-          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
-          PREVIEW_URL: ${{ steps.target.outputs.preview_url }}
-          DIRECTORY_LISTING: ${{ steps.capture_deployment_directory_listing.outputs.listing }}
-        with:
-          script: |
-            const prNumber = Number(process.env.PR_NUMBER);
-            const targetDir = process.env.TARGET_DIR;
-            const previewUrl = process.env.PREVIEW_URL;
-            const listing = process.env.DIRECTORY_LISTING;
-
-            const body = [
-              `Deployment directory listing for \`${targetDir}\``,
-              '```',
-              listing,
-              '```',
-              `Preview: ${previewUrl}`,
-            ].join('\n');
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body,
-            });
+          ls -la "${LIST_PATH}" | tee deployment-directory-listing.txt
 
       - name: Publish to gh-pages
         env:
@@ -208,12 +171,14 @@ jobs:
           retention-days: 7
 
       - name: Output preview link
+        env:
+          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
         run: |
           {
             echo "Preview: ${{ steps.target.outputs.preview_url }}"
             echo ""
-            echo "Deployment directory listing (pages/${{ steps.target.outputs.target_dir }}):"
+            echo "Deployment directory listing (pages/${TARGET_DIR}):"
             echo '```'
-            echo "${{ steps.capture_deployment_directory_listing.outputs.listing }}"
+            cat deployment-directory-listing.txt
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
