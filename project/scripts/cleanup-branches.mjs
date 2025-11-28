@@ -33,7 +33,7 @@ const cutoffDate = new Date(Date.now() - cutoffMillis);
 const dryRun = (process.env.BRANCH_CLEANUP_DRY_RUN ?? 'false').toLowerCase() === 'true';
 
 const includePrefixes = (() => {
-  const raw = process.env.BRANCH_CLEANUP_PREFIXES ?? 'codex';
+  const raw = process.env.BRANCH_CLEANUP_PREFIXES ?? '';
   return raw
     .split(',')
     .map((value) => value.trim())
@@ -164,6 +164,12 @@ const main = async () => {
   const repoInfo = await fetchRepository();
   const defaultBranch = repoInfo?.default_branch ?? 'main';
 
+  console.log('cleanup-branches: starting cleanup with configuration:');
+  console.log(`- repository: ${owner}/${repo}`);
+  console.log(`- cutoff minutes: ${cutoffMinutes}`);
+  console.log(`- dry run: ${dryRun}`);
+  console.log(`- allowed prefixes: ${includePrefixes.length > 0 ? includePrefixes.join(', ') : 'all branches'}`);
+
   const pulls = await fetchOpenPulls();
   const activeBranches = new Set();
   for (const pull of pulls) {
@@ -203,6 +209,8 @@ const main = async () => {
       diagnostics.push({ name, detail: `eligible for deletion (last commit ${lastCommitDate.toISOString()} < cutoff ${formattedCutoff})` });
     }
   }
+
+  console.log(`cleanup-branches: evaluated ${branches.length} branch(es); ${deletions.length} eligible for deletion.`);
 
   if (diagnostics.length > 0) {
     console.log('cleanup-branches: branch diagnostics:');
