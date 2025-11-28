@@ -108,18 +108,24 @@ jobs:
           if [ "${TARGET_DIR}" = "." ]; then
             DEST_DIR="pages"
             mkdir -p "${DEST_DIR}"
-            find "${DEST_DIR}" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+            rsync -av --delete \
+              --exclude '.git/' \
+              --exclude 'project/' \
+              --exclude '.github/' \
+              --exclude 'pages/' \
+              --exclude 'pull/' \
+              --exclude 'README/' \
+              ./ "${DEST_DIR}/"
           else
             rm -rf "${DEST_DIR}"
             mkdir -p "${DEST_DIR}"
+            rsync -av --delete \
+              --exclude '.git/' \
+              --exclude 'project/' \
+              --exclude '.github/' \
+              --exclude 'pages/' \
+              ./ "${DEST_DIR}/"
           fi
-
-          rsync -av --delete \
-            --exclude '.git/' \
-            --exclude 'project/' \
-            --exclude '.github/' \
-            --exclude 'pages/' \
-            ./ "${DEST_DIR}/"
 
       - name: Stage deployment artifact
         env:
