@@ -143,7 +143,7 @@ export function completeRendererBootstrap(succeeded) {
 // caches concatenate multiple copies of this module. Keeping the declaration
 // here and re-export block below gives us a single, predictable export site
 // that matches how the inline modules import it from index.html.
-export function createRendererController(host, options = {}) {
+function createRendererController(host, options = {}) {
   const { hooks = {} } = options || {};
   const registry = new Map([
     ["canvas", createCanvas2dRenderer],
