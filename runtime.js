@@ -233,7 +233,7 @@ import { createSvgRenderer } from "./render.js";
     }
   }
 
-  globalThis.capyRuntime = Object.freeze({
+  const capyRuntime = Object.freeze({
     applyPrebootMetrics,
     beginRendererBootstrap,
     completeRendererBootstrap,
@@ -243,4 +243,18 @@ import { createSvgRenderer } from "./render.js";
     createSvgRenderer,
     getPrebootMetrics,
   });
+
+  globalThis.capyRuntime = capyRuntime;
+
+  export { capyRuntime as default };
+  export {
+    applyPrebootMetrics,
+    beginRendererBootstrap,
+    completeRendererBootstrap,
+    computePrebootMetrics,
+    consumePrebootMetrics,
+    createRendererController,
+    createSvgRenderer,
+    getPrebootMetrics,
+  };
 })();
