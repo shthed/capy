@@ -143,7 +143,7 @@ export function completeRendererBootstrap(succeeded) {
 // caches concatenate multiple copies of this module. Keeping the declaration
 // here and re-export block below gives us a single, predictable export site
 // that matches how the inline modules import it from index.html.
-export function createRendererController(host, options = {}) {
+function createRendererController(host, options = {}) {
   const { hooks = {} } = options || {};
   const renderer = createSvgRenderer(host, hooks);
   const rendererChangeHandlers = new Set();
@@ -262,6 +262,7 @@ if (root) {
 // export at the bottom prevents accidental shadowing of createRendererController
 // and helps avoid the duplicate-export syntax errors seen when cached bundles
 // include multiple copies of this file.
+export { createRendererController };
 export { createSvgRenderer, SceneTileLoader } from "./render.js";
 
 export default getPrebootMetrics;
