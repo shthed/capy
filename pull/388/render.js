@@ -787,6 +787,76 @@ export function createFrameLogger(label) {
   };
 }
 
+function resolveCanvasSize(canvas, metrics = {}) {
+  const targetWidth = Math.max(1, Math.round(metrics.pixelWidth || canvas?.width || 1));
+  const targetHeight = Math.max(1, Math.round(metrics.pixelHeight || canvas?.height || 1));
+  if (canvas) {
+    if (canvas.width !== targetWidth) {
+      canvas.width = targetWidth;
+    }
+    if (canvas.height !== targetHeight) {
+      canvas.height = targetHeight;
+    }
+  }
+  return { width: targetWidth, height: targetHeight };
+}
+
+function createCanvasLikeRenderer(host, hooks = {}, type = "canvas") {
+  if (!host || typeof host.getContext !== "function") {
+    return null;
+  }
+  const context = host.getContext("2d");
+  if (!context) {
+    return null;
+  }
+
+  function resize(metrics = {}) {
+    return resolveCanvasSize(host, metrics);
+  }
+
+  function renderFrame(args = {}) {
+    const metrics = args.metrics || {};
+    resize(metrics);
+    return hooks.renderFrame?.({ ...args, context, metrics }) ?? null;
+  }
+
+  function renderPreview(args = {}) {
+    return hooks.renderPreview?.({ ...args, context }) ?? null;
+  }
+
+  function flashRegions(args = {}) {
+    return hooks.flashRegions?.({ ...args, context }) ?? null;
+  }
+
+  function fillBackground(args = {}) {
+    const metrics = args.metrics || {};
+    resize(metrics);
+    return hooks.fillBackground?.({ ...args, context, metrics }) ?? null;
+  }
+
+  return {
+    type,
+    getRendererType: () => type,
+    resize,
+    renderFrame,
+    renderPreview,
+    flashRegions,
+    fillBackground,
+    getContext: () => context,
+    setImageSource: () => {},
+    setBackground: () => {},
+    dispose: () => {},
+  };
+}
+
+export function createCanvas2dRenderer(host, hooks = {}) {
+  return createCanvasLikeRenderer(host, hooks, "canvas");
+}
+
+export function createWebGLRenderer(host, hooks = {}) {
+  return createCanvasLikeRenderer(host, hooks, "webgl");
+}
+
 export function createSvgRenderer(host, hooks = {}) {
   if (!host || typeof document === "undefined") {
     return null;
@@ -953,6 +1023,8 @@ export function createSvgRenderer(host, hooks = {}) {
   hooks?.onReady?.({ svg, baseImage, shapesGroup, annotationsGroup });
 
   return {
+    type: "svg",
+    getRendererType: () => "svg",
     svg,
     baseImage,
     shapesGroup,
@@ -992,6 +1064,8 @@ export const vectorData = {
 };
 
 const rendererExports = {
+  createCanvas2dRenderer,
+  createWebGLRenderer,
   createSvgRenderer,
   SceneTileLoader,
   SceneGraph,
