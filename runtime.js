@@ -1,4 +1,4 @@
-import { createSvgRenderer, SceneTileLoader } from "./render.js";
+import { createCanvas2dRenderer, createSvgRenderer, createWebGLRenderer, SceneTileLoader } from "./render.js";
 
 const root = typeof document !== "undefined" ? document.documentElement : null;
 const SETTINGS_STORAGE_KEY = "capy.settings.v1";
@@ -145,50 +145,105 @@ export function completeRendererBootstrap(succeeded) {
 // that matches how the inline modules import it from index.html.
 export function createRendererController(host, options = {}) {
   const { hooks = {} } = options || {};
-  const renderer = createSvgRenderer(host, hooks);
+  const registry = new Map([
+    ["canvas", createCanvas2dRenderer],
+    ["webgl", createWebGLRenderer],
+    ["svg", createSvgRenderer],
+  ]);
+  const unavailable = new Set();
+  let renderer = null;
+  let activeType = null;
+
+  const normalize = (value) => {
+    if (typeof value !== "string") return null;
+    const normalized = value.trim().toLowerCase();
+    return registry.has(normalized) ? normalized : null;
+  };
+
+  function registerRenderer(type, factory) {
+    const normalized = normalize(type);
+    if (!normalized || typeof factory !== "function") return false;
+    registry.set(normalized, factory);
+    unavailable.delete(normalized);
+    return true;
+  }
+
+  function unregisterRenderer(type) {
+    const normalized = normalize(type);
+    if (!normalized || !registry.has(normalized)) return false;
+    if (activeType === normalized) {
+      renderer?.dispose?.();
+      renderer = null;
+      activeType = null;
+    }
+    registry.delete(normalized);
+    unavailable.delete(normalized);
+    return true;
+  }
+
+  function setRenderer(type) {
+    const preferred = normalize(type) || normalize(activeType) || "canvas";
+    const candidates = Array.from(new Set([preferred, "canvas", "webgl", "svg"]));
+    for (const candidate of candidates) {
+      const factory = registry.get(candidate);
+      if (!factory || unavailable.has(candidate)) {
+        continue;
+      }
+      try {
+        const nextRenderer = factory(host, hooks);
+        if (!nextRenderer) {
+          unavailable.add(candidate);
+          continue;
+        }
+        if (renderer && renderer !== nextRenderer) {
+          renderer.dispose?.();
+        }
+        renderer = nextRenderer;
+        activeType = candidate;
+        hooks.onRendererChange?.(candidate);
+        return renderer;
+      } catch (error) {
+        hooks.log?.("Renderer failed to initialise", { type: candidate, error: error?.message });
+        unavailable.add(candidate);
+      }
+    }
+    return renderer;
+  }
 
   function resize(metrics = {}) {
-    renderer?.setSize?.(metrics.pixelWidth, metrics.pixelHeight);
+    renderer?.resize?.(metrics);
   }
 
   function renderFrame(args = {}) {
-    const state = args.state || {};
-    const puzzle = state.puzzle || {};
-    const source = puzzle.sourceImage?.image || null;
-    const width = puzzle.width || args.metrics?.pixelWidth || host?.width || 0;
-    const height = puzzle.height || args.metrics?.pixelHeight || host?.height || 0;
-    if (source && typeof source.src === "string") {
-      renderer?.setImageSource(source.src, width, height);
-    } else {
-      renderer?.setImageSource("", width, height);
-    }
-    if (typeof args.backgroundColor === "string") {
-      renderer?.setBackground?.(args.backgroundColor);
-    }
-    return null;
+    return renderer?.renderFrame?.(args) ?? null;
+  }
+
+  function renderPreview(args = {}) {
+    return renderer?.renderPreview?.(args) ?? null;
+  }
+
+  function flashRegions(args = {}) {
+    renderer?.flashRegions?.(args);
   }
 
   function fillBackground(args = {}) {
-    if (typeof args.color === "string") {
-      renderer?.setBackground?.(args.color);
-    }
-  }
-
-  function getContext() {
-    return null;
+    renderer?.fillBackground?.(args);
   }
 
   return {
-    getRendererType: () => "svg",
-    listRenderers: () => ["svg"],
-    setRenderer: () => renderer,
+    getRendererType: () => renderer?.getRendererType?.() || activeType,
+    listRenderers: () => Array.from(registry.keys()),
+    setRenderer,
     resize,
     renderFrame,
-    renderPreview: () => null,
-    flashRegions: () => {},
+    renderPreview,
+    flashRegions,
     fillBackground,
     dispose: () => renderer?.dispose?.(),
-    getContext,
+    getContext: () => renderer?.getContext?.() || null,
+    registerRenderer,
+    unregisterRenderer,
+    getRenderer: () => renderer,
   };
 }
 
@@ -204,6 +259,6 @@ if (root) {
 // export at the bottom prevents accidental shadowing of createRendererController
 // and helps avoid the duplicate-export syntax errors seen when cached bundles
 // include multiple copies of this file.
-export { createSvgRenderer, SceneTileLoader } from "./render.js";
+export { createCanvas2dRenderer, createSvgRenderer, createWebGLRenderer, SceneTileLoader } from "./render.js";
 
 export default getPrebootMetrics;
