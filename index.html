@@ -752,11 +752,13 @@
             <label class="control">
               <span>Renderer</span>
               <select id="rendererMode">
+                <option value="canvas">Canvas2D</option>
+                <option value="webgl">WebGL</option>
                 <option value="svg">SVG</option>
               </select>
             </label>
             <p class="control-note">
-              Rendering is handled by the SVG renderer.
+              Rendering is handled by the Canvas2D, WebGL, or SVG backends.
             </p>
             <label class="control">
               <span>Unfilled region colour</span>
@@ -3609,7 +3611,7 @@
           imageDescription: "",
           showRegionLabels: true,
           theme: DEFAULT_UI_THEME,
-          renderer: "svg",
+          renderer: "canvas",
           settingsSheetOpen: false,
           mouseControls: cloneMouseControls(DEFAULT_MOUSE_CONTROLS),
         },
@@ -3689,7 +3691,7 @@
       }
 
       function handleRendererChange(type) {
-        const normalized = normalizeRendererType(type) ?? state.settings.renderer ?? "svg";
+        const normalized = normalizeRendererType(type) ?? state.settings.renderer ?? "canvas";
         return applyRendererMode(normalized, { skipAutosave: true, skipLog: true });
       }
 
@@ -3725,6 +3727,7 @@
       state.rendering.controller = rendererController;
       updateRendererModeAvailability();
       registerRendererControls();
+      applyRendererMode(state.settings.renderer, { skipAutosave: true, skipLog: true, skipRender: true });
 
       let generationJobCounter = 0;
       let latestGenerationJobId = 0;
@@ -3963,11 +3966,24 @@
 
       function normalizeRendererType(value) {
         if (typeof value !== "string") return null;
-        return value.trim().toLowerCase() === "svg" ? "svg" : null;
+        const normalized = value.trim().toLowerCase();
+        if (normalized === "canvas" || normalized === "webgl" || normalized === "svg") {
+          return normalized;
+        }
+        return null;
       }
 
       function formatRendererLabel(type) {
-        return "SVG";
+        switch (normalizeRendererType(type)) {
+          case "canvas":
+            return "Canvas2D";
+          case "webgl":
+            return "WebGL";
+          case "svg":
+            return "SVG";
+          default:
+            return "Unknown renderer";
+        }
       }
 
       function markRendererUnavailable(type) {
@@ -3975,38 +3991,47 @@
         if (!normalized) return;
         logRendererEvent(`Renderer unavailable`, { type: normalized });
         unavailableRenderers.add(normalized);
-        if (rendererModeSelect) {
-          rendererModeSelect.disabled = true;
-          rendererModeSelect.title = "Not supported on this device";
-        }
+        updateRendererModeAvailability();
       }
 
       function updateRendererModeAvailability() {
         if (!rendererModeSelect) {
           return;
         }
-        rendererModeSelect.value = "svg";
-        rendererModeSelect.disabled = true;
-        rendererModeSelect.title = "SVG renderer active";
+        const controller = state.rendering?.controller;
+        const supported = controller?.listRenderers?.() || ["canvas", "webgl", "svg"];
+        const available = supported.filter((type) => !unavailableRenderers.has(type));
+        const active = controller?.getRendererType?.() || state.settings.renderer || "canvas";
+        for (const option of rendererModeSelect.options) {
+          if (!option?.value) continue;
+          const normalized = normalizeRendererType(option.value);
+          option.disabled = !normalized || !available.includes(normalized);
+        }
+        rendererModeSelect.disabled = available.length <= 1;
+        rendererModeSelect.title = rendererModeSelect.disabled
+          ? formatRendererLabel(active)
+          : "Switch renderer backend";
+        const resolvedActive = normalizeRendererType(active) || available[0] || "canvas";
+        rendererModeSelect.value = resolvedActive;
       }
 
       function applyRendererMode(type, options = {}) {
         const controller = state.rendering?.controller;
-        const resolved = "svg";
+        const target = normalizeRendererType(type) || state.settings.renderer || "canvas";
+        const renderer = controller?.setRenderer ? controller.setRenderer(target) : null;
+        const resolved = normalizeRendererType(renderer?.getRendererType?.() || target) || "canvas";
+        if (renderer) {
+          state.rendering.renderer = renderer;
+        }
         state.settings.renderer = resolved;
+        if (!renderer && target) {
+          markRendererUnavailable(target);
+        }
         if (rendererModeSelect) {
           rendererModeSelect.value = resolved;
-          rendererModeSelect.disabled = true;
         }
         updateRendererModeAvailability();
-        if (controller?.setRenderer) {
-          try {
-            controller.setRenderer(resolved);
-          } catch (error) {
-            console.error(`Failed to activate renderer: ${resolved}`, error);
-          }
-        }
-        if (!options.skipRender) {
+        if (renderer && !options.skipRender) {
           applyCanvasSizing();
           renderPuzzle();
         }
@@ -4194,14 +4219,19 @@
            * @returns {string|null}
            */
           getRendererType() {
-            return "svg";
+            const controller = state.rendering?.controller;
+            const renderer = state.rendering?.renderer;
+            return (
+              renderer?.getRendererType?.() || controller?.getRendererType?.() || state.settings.renderer || null
+            );
           },
           /**
            * Lists renderer backends registered with the active controller.
            * @returns {string[]} Array of renderer identifiers.
            */
           listRenderers() {
-            return ["svg"];
+            const controller = state.rendering?.controller;
+            return controller?.listRenderers?.() || [state.settings.renderer || "canvas"];
           },
           /**
            * Switches to a different renderer backend.
@@ -4222,8 +4252,17 @@
            * @returns {boolean} True when the renderer was registered.
            */
           registerRenderer(type, factory) {
-            console.warn("Custom renderer registration is not supported; SVG renderer is fixed.", type, factory);
-            return false;
+            const controller = state.rendering?.controller;
+            if (!controller?.registerRenderer) {
+              console.warn("Renderer registration is not supported on this device.", type, factory);
+              return false;
+            }
+            try {
+              return controller.registerRenderer(type, factory);
+            } catch (error) {
+              console.error("Failed to register renderer", error);
+              return false;
+            }
           },
           /**
            * Unregisters a custom renderer backend when the controller supports hot removal.
@@ -4231,8 +4270,17 @@
            * @returns {boolean} True when the renderer was removed.
            */
           unregisterRenderer(type) {
-            console.warn("Renderer unregistration is not supported; SVG renderer is fixed.", type);
-            return false;
+            const controller = state.rendering?.controller;
+            if (!controller?.unregisterRenderer) {
+              console.warn("Renderer unregistration is not supported on this device.", type);
+              return false;
+            }
+            try {
+              return controller.unregisterRenderer(type);
+            } catch (error) {
+              console.error("Failed to unregister renderer", error);
+              return false;
+            }
           },
           /**
            * Loads a puzzle from a data URL previously generated by Capy or exported from another session.
@@ -4960,8 +5008,7 @@
       }
 
       if (rendererModeSelect) {
-        rendererModeSelect.value = "svg";
-        rendererModeSelect.disabled = true;
+        rendererModeSelect.value = normalizeRendererType(state.settings.renderer) || "canvas";
       }
 
       if (backgroundColorInput) {
@@ -8671,6 +8718,9 @@
         }
         const paletteSource = Array.isArray(data.palette) ? data.palette : [];
         const palette = [];
+        const paletteMetadata =
+          (data.paletteMeta && typeof data.paletteMeta === "object" ? data.paletteMeta : null) ||
+          (data.paletteMetadata && typeof data.paletteMetadata === "object" ? data.paletteMetadata : null);
         for (let index = 0; index < paletteSource.length; index += 1) {
           const resolvedEntry = resolvePaletteEntrySnapshot(paletteSource[index], index);
           if (!resolvedEntry) continue;
@@ -8773,6 +8823,9 @@
           regions,
           regionMap,
         };
+        if (paletteMetadata) {
+          puzzle.paletteMetadata = paletteMetadata;
+        }
         if (data.vectorScene?.metadata && data.vectorScene?.binary) {
           try {
             const binaryBuffer = resolveVectorSceneBinaryBuffer(data.vectorScene.binary);
@@ -8794,6 +8847,7 @@
           }
         }
         state.puzzle = puzzle;
+        state.paletteMetadata = paletteMetadata || null;
         state.paletteAdjacency = buildPaletteAdjacency(palette);
         const sourceSnapshot = metadata.sourceImage ?? data.sourceImage;
         let sourceImageRecord = hydrateSourceImageSnapshot(sourceSnapshot, sourceDefaults, {
