@@ -52,7 +52,7 @@ function readStoredSettings(storage) {
 
 let prebootMetrics = {};
 
-export function computePrebootMetrics() {
+function computePrebootMetrics() {
   if (!root || typeof window === "undefined") return {};
 
   const storedScale = parseStoredScale(readStoredSettings(window.localStorage));
@@ -81,11 +81,11 @@ export function computePrebootMetrics() {
   return prebootMetrics;
 }
 
-export function getPrebootMetrics() {
+function getPrebootMetrics() {
   return prebootMetrics;
 }
 
-export function consumePrebootMetrics() {
+function consumePrebootMetrics() {
   const metrics = prebootMetrics || {};
   prebootMetrics = {};
   if (typeof window !== "undefined") {
@@ -98,7 +98,7 @@ export function consumePrebootMetrics() {
   return metrics;
 }
 
-export function applyPrebootMetrics() {
+function applyPrebootMetrics() {
   if (typeof window === "undefined" || !document.body) {
     return;
   }
@@ -117,7 +117,7 @@ export function applyPrebootMetrics() {
 const BOOTSTRAP_VERSION = "2024-07-28";
 const SENTINEL_READY = `ready:${BOOTSTRAP_VERSION}`;
 
-export function beginRendererBootstrap() {
+function beginRendererBootstrap() {
   if (typeof window === "undefined") {
     return false;
   }
@@ -128,7 +128,7 @@ export function beginRendererBootstrap() {
   return false;
 }
 
-export function completeRendererBootstrap(succeeded) {
+function completeRendererBootstrap(succeeded) {
   if (typeof window === "undefined") {
     return;
   }
@@ -154,10 +154,33 @@ function createRendererController(host, options = {}) {
   let renderer = null;
   let activeType = null;
 
+  const createFallbackRenderer = (type) => ({
+    getRendererType: () => type,
+    resize: () => {},
+    renderFrame: () => null,
+    renderPreview: () => null,
+    flashRegions: () => {},
+    fillBackground: () => {},
+    dispose: () => {},
+    getContext: () => null,
+  });
+
   const normalize = (value) => {
     if (typeof value !== "string") return null;
     const normalized = value.trim().toLowerCase();
     return registry.has(normalized) ? normalized : null;
+  };
+
+  const notifyRendererChange = (type) => {
+    if (typeof hooks.onRendererChange === "function") {
+      hooks.onRendererChange(type);
+      return;
+    }
+
+    hooks.log?.("Renderer change handler unbound", {
+      code: "renderer-change-handler-unbound",
+      renderer: type,
+    });
   };
 
   function registerRenderer(type, factory) {
@@ -193,6 +216,7 @@ function createRendererController(host, options = {}) {
         const nextRenderer = factory(host, hooks);
         if (!nextRenderer) {
           unavailable.add(candidate);
+          hooks.log?.("Renderer unavailable", { code: "renderer-unavailable", renderer: candidate });
           continue;
         }
         if (renderer && renderer !== nextRenderer) {
@@ -200,12 +224,19 @@ function createRendererController(host, options = {}) {
         }
         renderer = nextRenderer;
         activeType = candidate;
-        hooks.onRendererChange?.(candidate);
+        notifyRendererChange(candidate);
         return renderer;
       } catch (error) {
         hooks.log?.("Renderer failed to initialise", { type: candidate, error: error?.message });
         unavailable.add(candidate);
       }
+    }
+    if (!renderer) {
+      const fallbackType = normalize(type) || preferred || "canvas";
+      renderer = createFallbackRenderer(fallbackType);
+      activeType = fallbackType;
+      hooks.log?.("Renderer fallback activated", { code: "renderer-fallback", renderer: fallbackType });
+      notifyRendererChange(fallbackType);
     }
     return renderer;
   }
@@ -259,6 +290,18 @@ if (root) {
 // export at the bottom prevents accidental shadowing of createRendererController
 // and helps avoid the duplicate-export syntax errors seen when cached bundles
 // include multiple copies of this file.
-export { createCanvas2dRenderer, createSvgRenderer, createWebGLRenderer, SceneTileLoader } from "./render.js";
+export {
+  applyPrebootMetrics,
+  beginRendererBootstrap,
+  completeRendererBootstrap,
+  computePrebootMetrics,
+  consumePrebootMetrics,
+  createCanvas2dRenderer,
+  createRendererController,
+  createSvgRenderer,
+  createWebGLRenderer,
+  getPrebootMetrics,
+  SceneTileLoader,
+};
 
 export default getPrebootMetrics;
