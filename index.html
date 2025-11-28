@@ -1880,6 +1880,7 @@
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const SETTINGS_STORAGE_KEY = "capy.settings.v1";
+      const SERVICE_WORKER_ENABLED = false;
       const RUNTIME_CACHE_NAME = "capy-offline-cache-v3";
       const CACHE_ORIGIN = "https://capy.local";
       const SOURCE_IMAGE_CACHE_PREFIX = "source-images/";
@@ -2027,6 +2028,9 @@
       }
 
       async function warmRuntimeCache() {
+        if (!SERVICE_WORKER_ENABLED) {
+          return;
+        }
         if (typeof caches === "undefined" || typeof caches.open !== "function") {
           return;
         }
@@ -2165,6 +2169,48 @@
       }
 
       function registerServiceWorker() {
+        if (!SERVICE_WORKER_ENABLED) {
+          updateServiceWorkerSummary({
+            cacheName: RUNTIME_CACHE_NAME,
+            state: "Disabled (offline cache paused)",
+          });
+          logServiceWorkerEvent("Service worker temporarily disabled");
+          if (typeof navigator !== "undefined" && navigator.serviceWorker) {
+            const teardownServiceWorker = async () => {
+              try {
+                const registrations =
+                  typeof navigator.serviceWorker.getRegistrations === "function"
+                    ? await navigator.serviceWorker.getRegistrations()
+                    : [];
+                let unregistered = 0;
+                for (const registration of registrations) {
+                  try {
+                    const didUnregister = await registration.unregister();
+                    if (didUnregister) {
+                      unregistered += 1;
+                    }
+                  } catch (error) {
+                    console.warn("Service worker unregister failed", error);
+                  }
+                }
+                if (unregistered > 0) {
+                  logServiceWorkerEvent("Unregistered service worker", { count: unregistered });
+                }
+              } catch (error) {
+                console.warn("Unable to enumerate service workers", error);
+              }
+              if (typeof caches !== "undefined" && typeof caches.delete === "function") {
+                try {
+                  await caches.delete(RUNTIME_CACHE_NAME);
+                } catch (cacheError) {
+                  console.warn("Unable to clear runtime cache", cacheError);
+                }
+              }
+            };
+            teardownServiceWorker();
+          }
+          return;
+        }
         if (typeof navigator === "undefined" || !navigator.serviceWorker) {
           updateServiceWorkerSummary({
             cacheName: RUNTIME_CACHE_NAME,
@@ -2178,8 +2224,8 @@
           updateServiceWorkerSummary({ state: "Active (controller)", updatedAt: Date.now() });
           logServiceWorkerEvent("Service worker is controlling this page");
         });
-          navigator.serviceWorker
-            .register("./service-worker.js", { type: "module" })
+        navigator.serviceWorker
+          .register("./service-worker.js", { type: "module" })
           .then((registration) => {
             logServiceWorkerEvent("Registered service worker", { scope: registration?.scope });
             watchServiceWorker(registration);
@@ -2201,7 +2247,12 @@
       }
 
       async function cacheSourceImageBlob(blob, options = {}) {
-        if (!blob || typeof caches === "undefined" || typeof caches.open !== "function") {
+        if (
+          !SERVICE_WORKER_ENABLED ||
+          !blob ||
+          typeof caches === "undefined" ||
+          typeof caches.open !== "function"
+        ) {
           return null;
         }
         try {
@@ -2223,7 +2274,7 @@
       }
 
       async function cacheSourceImageDataUrl(dataUrl, options = {}) {
-        if (typeof dataUrl !== "string" || !dataUrl) {
+        if (!SERVICE_WORKER_ENABLED || typeof dataUrl !== "string" || !dataUrl) {
           return null;
         }
         try {
@@ -2237,7 +2288,12 @@
       }
 
       async function cacheSourceImageUrl(url, options = {}) {
-        if (typeof caches === "undefined" || typeof caches.open !== "function" || !url) {
+        if (
+          !SERVICE_WORKER_ENABLED ||
+          typeof caches === "undefined" ||
+          typeof caches.open !== "function" ||
+          !url
+        ) {
           return null;
         }
         try {
@@ -2259,7 +2315,11 @@
       }
 
       async function readCachedSourceImage(cacheKey) {
-        if (typeof caches === "undefined" || typeof caches.open !== "function") {
+        if (
+          !SERVICE_WORKER_ENABLED ||
+          typeof caches === "undefined" ||
+          typeof caches.open !== "function"
+        ) {
           return null;
         }
         const normalizedKey = typeof cacheKey === "string" ? cacheKey.trim() : "";
