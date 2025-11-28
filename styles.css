@@ -244,14 +244,15 @@ body.panning {
   left: var(--viewport-padding);
   bottom: var(--viewport-padding);
   max-width: min(480px, calc(100% - (var(--viewport-padding) * 2)));
-  padding: 16px;
-  background: var(--theme-hint-body-bg);
+  padding: 18px;
+  background: color-mix(in srgb, var(--theme-hint-body-bg) 92%, transparent);
   color: var(--theme-hint-body-text);
   border: 1px solid var(--theme-hint-body-border);
-  border-radius: 14px;
-  box-shadow: var(--theme-sheet-shadow);
+  border-radius: 16px;
+  box-shadow: 0 18px 36px -20px rgba(0, 0, 0, 0.5), var(--theme-sheet-shadow);
   display: grid;
-  gap: 12px;
+  gap: 14px;
+  backdrop-filter: blur(10px);
   outline: none;
 }
 
@@ -349,29 +350,106 @@ body[data-theme="light"] .error-toast__stack {
   display: none;
 }
 
+.start-hint__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.start-hint__badge {
+  width: calc(48px * var(--ui-scale));
+  height: calc(48px * var(--ui-scale));
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--theme-hint-body-border) 85%, transparent);
+  background: color-mix(in srgb, var(--theme-hint-body-bg) 75%, transparent);
+  color: var(--theme-body-color);
+  font-size: 1.1rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.start-hint__titles {
+  display: grid;
+  gap: 4px;
+}
+
+.start-hint__eyebrow {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--theme-caption-text);
+}
+
+.start-hint__title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--theme-body-color);
+}
+
 .start-hint-copy {
   margin: 0;
+  line-height: 1.6;
+  color: var(--theme-hint-body-text);
+}
+
+.start-hint-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  color: var(--theme-note-text);
   line-height: 1.5;
 }
 
 .start-hint-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-.start-hint-actions button {
+.start-hint-button {
   padding: 10px 14px;
   border-radius: 12px;
   border: 1px solid var(--theme-sheet-button-border);
   background: var(--theme-sheet-button-bg);
   color: var(--theme-sheet-button-text);
   cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  box-shadow: 0 12px 22px -14px rgba(0, 0, 0, 0.45);
 }
 
-.start-hint-actions button:hover {
+.start-hint-button:hover {
   background: var(--theme-sheet-button-hover-bg);
   border-color: var(--theme-sheet-button-hover-border);
   color: var(--theme-sheet-button-hover-text);
+  box-shadow: 0 14px 30px -12px rgba(37, 99, 235, 0.32);
+}
+
+.start-hint-button:focus-visible {
+  outline: 2px solid var(--theme-sheet-focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-sheet-button-hover-bg) 55%, transparent),
+    0 12px 22px -14px rgba(0, 0, 0, 0.45);
+}
+
+.start-hint-button--primary {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-sheet-button-hover-bg) 82%, transparent),
+      color-mix(in srgb, var(--theme-sheet-button-hover-bg) 64%, transparent));
+  border-color: var(--theme-sheet-button-hover-border);
+  color: var(--theme-sheet-button-hover-text);
+}
+
+.start-hint-button--primary:hover {
+  border-color: var(--theme-sheet-button-active-border);
+  background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--theme-sheet-button-hover-bg) 92%, transparent),
+      color-mix(in srgb, var(--theme-sheet-button-hover-bg) 72%, transparent)
+    );
+  color: var(--theme-sheet-button-active-text);
 }
 
 @supports (height: 100dvh) {
