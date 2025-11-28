@@ -109,9 +109,10 @@
   </head>
   <body data-theme="dark">
     <script type="module">
-      import { applyPrebootMetrics } from "./runtime.js";
-
-      applyPrebootMetrics();
+      const runtime = window.capyRuntime;
+      if (runtime && typeof runtime.applyPrebootMetrics === "function") {
+        runtime.applyPrebootMetrics();
+      }
     </script>
     <div
       id="errorToast"
@@ -1463,15 +1464,24 @@
     </script>
     <script type="module" src="./render.js"></script>
       <script type="module">
-        import {
+        import { html, renderTemplate } from "./ui-template.js";
+
+        const runtime = window.capyRuntime;
+        const {
           beginRendererBootstrap,
           completeRendererBootstrap,
           createRendererController,
           SceneTileLoader,
-        } from "./runtime.js";
-        import { html, renderTemplate } from "./ui-template.js";
+        } = runtime || {};
+
+        if (!runtime) {
+          console.error("Capy runtime failed to load");
+        }
 
         (() => {
+          if (!runtime) {
+            return;
+          }
           const settingsBootstrap =
             window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
           settingsBootstrap.log("Renderer bootstrap starting");
