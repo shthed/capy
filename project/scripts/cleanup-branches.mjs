@@ -27,9 +27,6 @@ if (token) {
   fetchHeaders.Authorization = `Bearer ${token}`;
 }
 
-const cutoffMinutes = Number.parseInt(process.env.BRANCH_CLEANUP_CUTOFF_MINUTES ?? '60', 10);
-const cutoffMillis = Number.isFinite(cutoffMinutes) && cutoffMinutes > 0 ? cutoffMinutes * 60 * 1000 : 60 * 60 * 1000;
-const cutoffDate = new Date(Date.now() - cutoffMillis);
 const dryRun = (process.env.BRANCH_CLEANUP_DRY_RUN ?? 'false').toLowerCase() === 'true';
 
 const includePrefixes = (() => {
@@ -146,15 +143,6 @@ const branchMatchesPrefix = (name) => {
   return includePrefixes.some((prefix) => name.startsWith(prefix));
 };
 
-const parseCommitDate = (branch) => {
-  const commit = branch?.commit?.commit;
-  const authorDate = commit?.author?.date;
-  const committerDate = commit?.committer?.date;
-  const date = committerDate || authorDate || '';
-  const parsed = date ? new Date(date) : null;
-  return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
-};
-
 const encodeRefPath = (ref) => ref.split('/')
   .filter((segment) => segment.length > 0)
   .map((segment) => encodeURIComponent(segment))
@@ -166,7 +154,6 @@ const main = async () => {
 
   console.log('cleanup-branches: starting cleanup with configuration:');
   console.log(`- repository: ${owner}/${repo}`);
-  console.log(`- cutoff minutes: ${cutoffMinutes}`);
   console.log(`- dry run: ${dryRun}`);
   console.log(`- allowed prefixes: ${includePrefixes.length > 0 ? includePrefixes.join(', ') : 'all branches'}`);
 
@@ -176,6 +163,17 @@ const main = async () => {
     const branch = pull?.head?.ref;
     if (branch) {
       activeBranches.add(branch);
+    }
+  }
+
+  const closedPulls = await paginate('pulls', { state: 'closed', sort: 'updated', direction: 'desc' });
+  const mergedBranches = new Set();
+  for (const pull of closedPulls) {
+    const branch = pull?.head?.ref;
+    const merged = pull?.merged_at;
+    const headRepo = pull?.head?.repo?.full_name;
+    if (branch && merged && headRepo === repository) {
+      mergedBranches.add(branch);
     }
   }
 
@@ -189,9 +187,6 @@ const main = async () => {
       continue;
     }
 
-    const lastCommitDate = parseCommitDate(branch);
-    const formattedCutoff = cutoffDate.toISOString();
-
     if (name === defaultBranch) {
       diagnostics.push({ name, detail: 'skipped default branch' });
     } else if (branch.protected) {
@@ -200,13 +195,11 @@ const main = async () => {
       diagnostics.push({ name, detail: `skipped unmatched prefix (allowed: ${includePrefixes.join(', ') || 'all'})` });
     } else if (activeBranches.has(name)) {
       diagnostics.push({ name, detail: 'skipped branch with open pull request' });
-    } else if (!lastCommitDate) {
-      diagnostics.push({ name, detail: 'skipped due to missing commit date' });
-    } else if (lastCommitDate >= cutoffDate) {
-      diagnostics.push({ name, detail: `skipped recent activity (last commit ${lastCommitDate.toISOString()} >= cutoff ${formattedCutoff})` });
+    } else if (!mergedBranches.has(name)) {
+      diagnostics.push({ name, detail: 'skipped: no merged pull request found for branch' });
     } else {
-      deletions.push({ name, lastCommitDate });
-      diagnostics.push({ name, detail: `eligible for deletion (last commit ${lastCommitDate.toISOString()} < cutoff ${formattedCutoff})` });
+      deletions.push({ name });
+      diagnostics.push({ name, detail: 'eligible for deletion (merged pull request found)' });
     }
   }
 
@@ -224,19 +217,18 @@ const main = async () => {
     return;
   }
 
-  deletions.sort((a, b) => a.lastCommitDate - b.lastCommitDate);
+  deletions.sort((a, b) => a.name.localeCompare(b.name));
 
   let deletedCount = 0;
 
   for (const entry of deletions) {
     const branchName = entry.name;
-    const dateIso = entry.lastCommitDate.toISOString();
     if (dryRun) {
-      console.log(`cleanup-branches: dry run – would delete ${branchName} (last commit ${dateIso}).`);
+      console.log(`cleanup-branches: dry run – would delete ${branchName}.`);
       continue;
     }
 
-    console.log(`cleanup-branches: deleting ${branchName} (last commit ${dateIso}).`);
+    console.log(`cleanup-branches: deleting ${branchName}.`);
     await request(`${baseUrl}/git/refs/heads/${encodeRefPath(branchName)}`, { method: 'DELETE', retries: 0 });
     deletedCount += 1;
   }
