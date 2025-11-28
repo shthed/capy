@@ -67,12 +67,12 @@ class FakeDocument {
   }
 }
 
-test('setImageSource syncs viewBox to source dimensions', () => {
+test('renderFrame draws simple shapes', () => {
   const previousDocument = global.document;
   try {
     const document = new FakeDocument();
     const container = new FakeElement('div');
-    const host = new FakeElement('canvas');
+    const host = new FakeElement('div');
     host.clientWidth = 200;
     host.clientHeight = 120;
     host.parentElement = container;
@@ -80,12 +80,27 @@ test('setImageSource syncs viewBox to source dimensions', () => {
     global.document = document;
     const renderer = createSvgRenderer(host);
 
-    renderer.setImageSource('data:image/png;base64,', 800, 600);
+    renderer.renderFrame({
+      state: {
+        puzzle: {
+          palette: [{ id: 1, hex: '#ff0000' }],
+        },
+        filled: new Set([7]),
+      },
+      cache: {
+        regions: [
+          { id: 7, colorId: 1, pathData: 'M0 0 L10 0 L10 10 Z' },
+          { id: 8, colorId: 1, pathData: 'M20 0 L30 0 L30 10 Z' },
+        ],
+      },
+      backgroundColor: '#ffffff',
+      defaultBackgroundColor: '#ffffff',
+    });
 
-    assert.equal(renderer.svg.getAttribute('viewBox'), '0 0 800 600');
-    assert.equal(renderer.baseImage.getAttribute('width'), '800');
-    assert.equal(renderer.baseImage.getAttribute('height'), '600');
-    assert.equal(renderer.baseImage.style.display, '');
+    const paths = renderer.svg.children[1].children;
+    assert.equal(paths.length, 2);
+    assert.equal(paths[0].getAttribute('fill'), '#ff0000');
+    assert.equal(paths[1].getAttribute('fill'), 'rgba(248, 250, 252, 1)');
   } finally {
     global.document = previousDocument;
   }
@@ -97,7 +112,7 @@ test('dispose restores the container position when modified', () => {
     const document = new FakeDocument();
     const container = new FakeElement('div');
     container.style.position = 'static';
-    const host = new FakeElement('canvas');
+    const host = new FakeElement('div');
     host.clientWidth = 100;
     host.clientHeight = 100;
     host.parentElement = container;
