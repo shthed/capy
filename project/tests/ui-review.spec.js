@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { capybaraFixture } from './fixtures/puzzle-fixtures.js';
+
 const BASE_URL = 'index.html';
 
 test.describe('Capy basic UI smoke check', () => {
@@ -45,6 +47,20 @@ test.describe('Capy basic UI smoke check', () => {
       await expect(panel).toBeHidden();
       await expect(panel).toHaveJSProperty('hidden', true);
     }
+
+    const fixtureLoad = await page.evaluate((fixture) => {
+      if (!window.capyGenerator?.loadPuzzleFixture) {
+        return { loaded: false, renderer: null, paletteMeta: null };
+      }
+      const loaded = window.capyGenerator.loadPuzzleFixture(fixture);
+      const renderer = window.capyGenerator.getRendererType?.();
+      const state = window.capyGenerator.getState?.();
+      return { loaded, renderer, paletteMeta: state?.paletteMetadata ?? null };
+    }, capybaraFixture);
+
+    expect(fixtureLoad.loaded).toBe(true);
+    expect(fixtureLoad.renderer).toBeTruthy();
+    expect(fixtureLoad.paletteMeta).toMatchObject({ source: 'fixtures' });
 
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
     expect(pageErrors, pageErrors.join('\n')).toEqual([]);

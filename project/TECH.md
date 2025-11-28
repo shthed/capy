@@ -253,7 +253,7 @@ The runtime must stay build-free and avoid shipping large bundled frameworks. To
 - **Limit inline state.** Store UI state on elements via `dataset` or `aria-*` attributes and derive rendering from those flags so refresh functions can stay short and predictable.
 
 These patterns keep the DOM logic compact while preserving the zero-build, zero-framework runtime constraints.
- - **Puzzle rendering pipeline.** `renderPuzzle` composites the stored base image first, then fills an offscreen mask covering every unfinished region so the original art shows through as you paint. The mask rasterizes into the cached `filledLayer`, outlines still blit from the stroke cache, and `drawNumbers` overlays remaining labels. Label layout caches include a rounded zoom key derived from the current display-to-base scale ratio, shrink the minimum font size relative to that zoom factor, and expand their attempt list at higher zoom so thin regions surface labels once there is enough on-screen room without sacrificing base zoom legibility. Visual feedback continues to leverage `flashColorRegions` and `paintRegions` for hints. The renderer controller proxies those calls to Canvas2D, WebGL, or SVG backends—WebGL uploads the stored base image alongside the cached layers as textures, tracks incremental fills so textures refresh immediately, and preserves the last good upload when a transfer fails so the screen never flashes blank, while the SVG renderer mounts the base image under its region mask before emitting `<path>` nodes so vector output stays crisp at any zoom. Each renderer samples its frame times and prints rolling averages to the browser console once per second so you can spot performance regressions while debugging pan and zoom flows.
+- **Puzzle rendering pipeline.** `renderPuzzle` composites the stored base image first, then fills an offscreen mask covering every unfinished region so the original art shows through as you paint. The mask rasterizes into the cached `filledLayer`, outlines still blit from the stroke cache, and `drawNumbers` overlays remaining labels. Label layout caches include a rounded zoom key derived from the current display-to-base scale ratio, shrink the minimum font size relative to that zoom factor, and expand their attempt list at higher zoom so thin regions surface labels once there is enough on-screen room without sacrificing base zoom legibility. Visual feedback continues to leverage `flashColorRegions` and `paintRegions` for hints. The renderer controller proxies those calls to Canvas2D by default, with WebGL and SVG backends available for feature parity; each backend runs the shared `renderPuzzleFrame` hooks so outlines, numbers, and fills hydrate directly from puzzle payloads when the renderer swaps and resizes the canvas before redrawing.
 - **Generation & segmentation.** `createPuzzleData` looks up the requested generator in `GENERATION_ALGORITHM_CATALOG`, runs the matching quantizer via `performQuantization` (k-means or the posterize-and-merge pipeline today, with scaffolding for future services), smooths assignments, and then calls `segmentRegions`. Before returning it compresses the resized source image to a data URL honouring the “Stored image size” limit so the original art ships with saves and exports; when a remote URL is supplied we skip compression and store just the resolved link so saves refetch the bitmap on demand. Regeneration and fixtures reuse the same entry point.
 - **Persistence helpers.** `persistSaves`, `loadSavedEntries`, and `serializeCurrentPuzzle` manage puzzle snapshots while `getUserSettingsSnapshot`/`persistUserSettings` keep preferences on their own track; exports now ship puzzle data without bundling user settings.
 
@@ -263,7 +263,9 @@ Capy’s developer API exposes a minimal surface for automation, QA smoke tests,
 
 - `getState()`
   - **Parameters:** None.
-  - **Purpose:** Returns the live runtime state object (palette, fills, settings, renderer wiring) for inspection.
+  - **Purpose:** Returns the live runtime state object (palette, fills, settings, renderer wiring) for inspection. Palette
+    metadata from puzzle payloads (for example `paletteMeta` from `capy.json`) hydrates into `state.paletteMetadata` for
+    smoke tests that check palette provenance.
   - **Side effects:** None; the object is shared with the app, so treat it as read-only.
 - `setActiveColor(colorId, { flash, redraw })`
   - **Parameters:** `colorId` (number or string), optional `flash`/`redraw` booleans.
@@ -296,7 +298,8 @@ Capy’s developer API exposes a minimal surface for automation, QA smoke tests,
 - `loadPuzzleFixture(puzzle)`
   - **Parameters:** Puzzle snapshot object (for example, the parsed contents of `capy.json`).
   - **Purpose:** Loads one of the bundled sample puzzles.
-  - **Side effects:** Logs an error and returns `false` when given a non-object value; otherwise resets the UI, applies the puzzle result, hides the start screen, and returns whether hydration succeeded.
+  - **Side effects:** Logs an error and returns `false` when given a non-object value; otherwise resets the UI, applies the puzzle result, hides the start screen, and returns whether hydration succeeded. Smoke tests rely on fixtures in
+    `project/tests/fixtures/puzzle-fixtures.js` to exercise this pathway.
 - `setBackgroundColor(hex)` / `setStageBackgroundColor(hex)`
   - **Parameters:** Hex colour string.
   - **Purpose:** Updates either the app chrome background or the puzzle stage backdrop.
