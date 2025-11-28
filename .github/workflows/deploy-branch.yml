@@ -10,14 +10,23 @@ on:
         description: Branch to deploy (defaults to the event branch)
         required: false
         default: ''
+      allow_without_pr:
+        description: Allow deployment when no open PR exists for the branch
+        required: false
+        default: 'false'
+        type: boolean
 
 permissions:
-  contents: write
-  actions: read
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     env:
       BASE_PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
     steps:
@@ -26,13 +35,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Derive target
+      - name: Determine deployment target
         id: target
         uses: actions/github-script@v7
         with:
           script: |
-            const branchInput = (context.payload?.inputs || {}).target_branch;
+            const inputs = context.payload?.inputs || {};
+            const branchInput = inputs.target_branch || '';
+            const allowWithoutPrInput = inputs.allow_without_pr;
             const branch = branchInput || context.ref.replace('refs/heads/', '');
+            const allowWithoutPr = String(allowWithoutPrInput).toLowerCase() === 'true';
 
             if (!branch) {
               core.setFailed('Branch name is required');
@@ -67,37 +79,48 @@ jobs:
               ? `${basePreview}/`
               : `${basePreview}/${targetDir}/`;
 
+            const shouldSkip = branch !== 'main' && !prNumber && !allowWithoutPr;
+
             const summaryLines = [
               `Branch: ${branch}`,
-              prNumber ? `PR: #${prNumber}` : 'PR: none found (falling back to branch slug)',
+              prNumber ? `PR: #${prNumber}` : 'PR: none found',
               `Target directory: ${targetDir}`,
               `Preview URL: ${previewUrl}`,
             ];
+
+            if (shouldSkip) {
+              summaryLines.push('Deployment skipped: branch has no open PR (override with allow_without_pr).');
+            }
 
             core.setOutput('branch', branch);
             core.setOutput('safe_branch', safeBranch);
             core.setOutput('pr', prNumber ? String(prNumber) : '');
             core.setOutput('target_dir', targetDir);
             core.setOutput('preview_url', previewUrl);
-            core.setOutput('artifact_name', prNumber ? `gh-pages-pr-${prNumber}` : `gh-pages-${safeBranch}`);
+            core.setOutput('skip', shouldSkip ? 'true' : 'false');
 
             core.summary.addRaw(summaryLines.join('\n')).write();
 
-      - name: Prepare gh-pages copy
+      - name: Retrieve existing gh-pages content
+        if: steps.target.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
           rm -rf pages
-          git clone --depth 1 --branch gh-pages "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages 2>/dev/null || {
-            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages
-            cd pages
-            git checkout --orphan gh-pages
-            git rm -rf . || true
-          }
 
-      - name: Copy site content
+          if git ls-remote --exit-code --heads "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages; then
+            git clone --depth 1 --branch gh-pages "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages
+          else
+            git clone --depth 1 "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages
+            rm -rf pages/*
+          fi
+
+          rm -rf pages/.git
+
+      - name: Prepare site content
+        if: steps.target.outputs.skip != 'true'
         env:
           TARGET_DIR: ${{ steps.target.outputs.target_dir }}
         run: |
@@ -127,56 +150,33 @@ jobs:
               ./ "${DEST_DIR}/"
           fi
 
-      - name: Stage deployment artifact
-        env:
-          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
-        run: |
-          set -euo pipefail
-
-          rm -rf artifact
-          mkdir -p "artifact/${TARGET_DIR}"
-
-          rsync -av --delete "pages/${TARGET_DIR}/" "artifact/${TARGET_DIR}/"
-
       - name: Capture deployment directory listing
+        if: steps.target.outputs.skip != 'true'
         env:
           TARGET_DIR: ${{ steps.target.outputs.target_dir }}
         run: |
           set -euo pipefail
 
           LIST_PATH="pages/${TARGET_DIR}"
-          echo "Listing contents for ${LIST_PATH}"
-          ls -la "${LIST_PATH}" | tee deployment-directory-listing.txt
+          echo "Listing contents for ${LIST_PATH}" > deployment-directory-listing.txt
+          ls -la "${LIST_PATH}" | tee -a deployment-directory-listing.txt
 
-      - name: Publish to gh-pages
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_BRANCH: ${{ steps.target.outputs.branch }}
-        run: |
-          set -euo pipefail
-          cd pages
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-
-          git add .
-          if git diff --cached --quiet; then
-            echo "No changes to publish"
-            exit 0
-          fi
-
-          git commit -m "Deploy ${TARGET_BRANCH} (${GITHUB_SHA})"
-          git push origin gh-pages
-
-      - name: Upload deployment artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload Pages artifact
+        if: steps.target.outputs.skip != 'true'
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: ${{ steps.target.outputs.artifact_name }}
-          path: artifact
-          retention-days: 7
+          path: pages
+          name: github-pages-${{ github.run_attempt }}
+
+      - name: Deploy to GitHub Pages
+        if: steps.target.outputs.skip != 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
 
       - name: Output preview link
+        if: steps.target.outputs.skip != 'true'
         env:
           TARGET_DIR: ${{ steps.target.outputs.target_dir }}
         run: |
