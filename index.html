@@ -162,12 +162,24 @@
         aria-hidden="true"
         tabindex="0"
       >
-        <p class="start-hint-copy">
-          Drop an image or JSON puzzle anywhere on the window, press Enter here to pick a file, or open the menu to try
-          the bundled capybara sample.
-        </p>
+        <div class="start-hint__header">
+          <div class="start-hint__badge" aria-hidden="true">✦</div>
+          <div class="start-hint__titles">
+            <p class="start-hint__eyebrow">New session</p>
+            <p class="start-hint__title">Choose how to start coloring</p>
+          </div>
+        </div>
+        <p class="start-hint-copy">Pick a starting point and we will build your palette and canvas below.</p>
+        <ul class="start-hint-list">
+          <li>Drop an image or Capy save anywhere in the window.</li>
+          <li>Press Enter while this card is focused to choose a file.</li>
+          <li>Open the menu to load the bundled capybara sample.</li>
+        </ul>
         <div class="start-hint-actions">
-          <button id="closeStartHint" type="button">Open menu</button>
+          <button id="startHintUpload" class="start-hint-button start-hint-button--primary" type="button">
+            Upload image or save
+          </button>
+          <button id="closeStartHint" class="start-hint-button" type="button">Open menu</button>
         </div>
       </section>
       <div id="viewport">
@@ -1692,6 +1704,7 @@
       const gameSelectionEmpty = dom.get("#gameSelectionEmpty");
       const startHint = document.getElementById("startHint");
       const startHintCloseButton = document.getElementById("closeStartHint");
+      const startHintUploadButton = document.getElementById("startHintUpload");
       const startSaveManagerSection = document.getElementById("saveManagerSection");
       const previewToggle = document.getElementById("previewToggle");
       const fullscreenButton = document.getElementById("fullscreenButton");
@@ -4758,6 +4771,12 @@
           if (settingsButton) {
             settingsButton.focus();
           }
+        });
+      }
+
+      if (startHintUploadButton) {
+        startHintUploadButton.addEventListener("click", () => {
+          window.requestUpload?.();
         });
       }
 
