@@ -132,6 +132,17 @@ jobs:
 
           rsync -av --delete "pages/${TARGET_DIR}/" "artifact/${TARGET_DIR}/"
 
+      - name: Debug deployment directory listing
+        if: runner.debug == '1'
+        env:
+          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
+        run: |
+          set -euo pipefail
+
+          LIST_PATH="pages/${TARGET_DIR}"
+          echo "::debug::Listing contents for ${LIST_PATH}" \
+            && ls -la "${LIST_PATH}" | sed 's/^/::debug::/'
+
       - name: Publish to gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
