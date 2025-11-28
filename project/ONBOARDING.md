@@ -13,8 +13,9 @@ expectations.
   http://localhost:8000. The runtime is build-free, so the HTML and JS in the
   root load as-is.
 - **Primary tests:** `npm test --silent` from `project/` runs Node-based unit
-  coverage first and hands off to Playwright. Use `npm run test:smoke` for the
-  single-page Playwright load check while iterating.
+  coverage first and hands off to Playwright. When the Chromium bundle is
+  missing, the harness skips Playwright and reminds you to run
+  `npm run setup:playwright` (or `npm run test:smoke`) to restore the UI checks.
 - **Terminal output:** Avoid dumping huge single-line outputs; remote shells
   kill the session once any line exceeds ~4 KB. Prefer `rg`, `sed`, or
   `cut -c1-200` to trim results before printing.
