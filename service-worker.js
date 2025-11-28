@@ -85,9 +85,9 @@ self.addEventListener('fetch', (event) => {
         return cached;
       }
       try {
-        const response = await fetch(request.clone());
-        if (response && response.ok) {
-          const result = await CapyCacheLimits.putWithLimits(cache, request, response.clone(), CACHE_LIMITS);
+        const fetched = await fetch(request.clone());
+        if (fetched && fetched.ok) {
+          const result = await CapyCacheLimits.putWithLimits(cache, request, fetched.clone(), CACHE_LIMITS);
           if (!result?.cached && result?.reason) {
             broadcastSwEvent('cache-skip', {
               cacheName: RUNTIME_CACHE_NAME,
@@ -96,7 +96,7 @@ self.addEventListener('fetch', (event) => {
             });
           }
         }
-        return response;
+        return fetched;
       } catch (_error) {
         return cached;
       }
