@@ -40,8 +40,8 @@ UI scale and viewport padding before first paint; everything else must stay in
 
 1. **Keep deployments in sync.** When adding new runtime assets (images,
    fonts, additional stylesheets), update `.github/workflows/deploy-branch.yml`
-   so branch previews copy them alongside `index.html`, `styles.css`,
-   `render.js`, `puzzle-generation.js`, and `capy.json`.
+   so branch previews copy them alongside `index.html`, `styles.css`, `capy.js`,
+   and `capy.json`.
 2. **Watch for flash-of-unstyled content.** If a change relies on new variables
    to size or position elements, confirm the preboot inline block remains
    sufficient to avoid layout jumps before `styles.css` loads.

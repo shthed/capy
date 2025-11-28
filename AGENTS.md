@@ -185,7 +185,7 @@ any feature or workflow changes you ship.
   land in `/<slug>/` directories using sanitised branch names (e.g.,
   `automation/feature` → `/automation-feature/`).
 - Contents: Each deployment ships the runtime payload from the repository root
-  (`index.html`, `render.js`, `puzzle-generation.js`, and `capy.json`) plus a
+  (`index.html`, `capy.js`, and `capy.json`) plus a
   generated `/README/index.html` so documentation mirrors the branch.
 - Preview links: Deployment URLs post directly to the associated PRs, replacing
   the old shared `branch.html` index.
