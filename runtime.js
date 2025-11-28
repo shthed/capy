@@ -1,4 +1,4 @@
-import { createCanvas2dRenderer, createSvgRenderer, createWebGLRenderer, SceneTileLoader } from "./render.js";
+import { createSvgRenderer } from "./render.js";
 
 (() => {
   if (globalThis.capyRuntime) {
@@ -136,113 +136,94 @@ import { createCanvas2dRenderer, createSvgRenderer, createWebGLRenderer, SceneTi
   // registered up front, the preferred renderer is activated immediately, and
   // fallbacks are lightweight when no backend can initialise.
   function createRendererController(host, options = {}) {
-  const { hooks = {}, rendererType } = options || {};
-  const registry = {
-    canvas: createCanvas2dRenderer,
-    webgl: createWebGLRenderer,
-    svg: createSvgRenderer,
-  };
-  let renderer = null;
-  let activeType = null;
+    const { hooks = {}, rendererType } = options || {};
+    const registry = { svg: createSvgRenderer };
+    let renderer = null;
+    let activeType = null;
 
-  const normalize = (value) => {
-    if (typeof value !== "string") return null;
-    const normalized = value.trim().toLowerCase();
-    return normalized || null;
-  };
+    const normalize = (value) => {
+      if (typeof value !== "string") return null;
+      const normalized = value.trim().toLowerCase();
+      return normalized || null;
+    };
 
-  const notifyRendererChange = (type) => {
-    if (typeof hooks.onRendererChange === "function") {
-      hooks.onRendererChange(type);
-      return;
-    }
+    const notifyRendererChange = (type) => {
+      if (typeof hooks.onRendererChange === "function") {
+        hooks.onRendererChange(type);
+        return;
+      }
 
-    hooks.log?.("Renderer change handler unbound", {
-      code: "renderer-change-handler-unbound",
-      renderer: type,
-    });
-  };
+      hooks.log?.("Renderer change handler unbound", {
+        code: "renderer-change-handler-unbound",
+        renderer: type,
+      });
+    };
 
-  const createFallbackRenderer = (type) => ({
-    getRendererType: () => type,
-    resize: () => {},
-    renderFrame: () => null,
-    renderPreview: () => null,
-    flashRegions: () => {},
-    fillBackground: () => {},
-    dispose: () => {},
-    getContext: () => null,
-  });
-
-  function activateRenderer(type) {
-    const factory = type ? registry[type] : null;
-    if (!factory) return false;
-    try {
-      const next = factory(host, hooks);
-      if (!next) return false;
-      renderer?.dispose?.();
-      renderer = next;
-      activeType = type;
-      notifyRendererChange(type);
-      return true;
-    } catch (error) {
-      hooks.log?.("Renderer failed", { code: "renderer-failed", renderer: type, error: error?.message });
-      return false;
-    }
-  }
-
-  function ensureRenderer(preferred) {
-    const normalizedPreferred = normalize(preferred);
-    const candidates = Array.from(
-      new Set([normalizedPreferred, "canvas", "webgl", "svg"].filter((type) => type && registry[type]))
-    );
-    for (const candidate of candidates) {
-      if (activateRenderer(candidate)) {
-        return renderer;
+    function activateRenderer(type) {
+      const factory = type ? registry[type] : null;
+      if (!factory) return false;
+      try {
+        const next = factory(host, hooks);
+        if (!next) return false;
+        renderer?.dispose?.();
+        renderer = next;
+        activeType = type;
+        notifyRendererChange(type);
+        return true;
+      } catch (error) {
+        hooks.log?.("Renderer failed", { code: "renderer-failed", renderer: type, error: error?.message });
+        return false;
       }
     }
-    const fallbackType = normalizedPreferred || candidates[0] || "canvas";
-    renderer = createFallbackRenderer(fallbackType);
-    activeType = fallbackType;
-    hooks.log?.("Renderer fallback", { code: "renderer-fallback", renderer: fallbackType });
-    notifyRendererChange(fallbackType);
-    return renderer;
-  }
 
-  function registerRenderer(type, factory) {
-    const normalized = normalize(type);
-    if (!normalized || typeof factory !== "function") return false;
-    registry[normalized] = factory;
-    return true;
-  }
-
-  function unregisterRenderer(type) {
-    const normalized = normalize(type);
-    if (!normalized || !registry[normalized]) return false;
-    if (activeType === normalized) {
-      renderer?.dispose?.();
-      renderer = null;
-      activeType = null;
+    function ensureRenderer(preferred) {
+      const normalizedPreferred = normalize(preferred) || "svg";
+      if (activateRenderer(normalizedPreferred)) {
+        return renderer;
+      }
+      const fallbackType = "svg";
+      renderer = registry[fallbackType]?.(host, hooks) || null;
+      activeType = renderer ? fallbackType : null;
+      if (activeType) {
+        notifyRendererChange(activeType);
+      }
+      return renderer;
     }
-    delete registry[normalized];
-    return true;
-  }
 
-  return {
-    getRendererType: () => renderer?.getRendererType?.() || activeType,
-    listRenderers: () => Object.keys(registry),
-    setRenderer: (type) => ensureRenderer(type ?? rendererType),
-    resize: (metrics = {}) => renderer?.resize?.(metrics),
-    renderFrame: (args = {}) => renderer?.renderFrame?.(args) ?? null,
-    renderPreview: (args = {}) => renderer?.renderPreview?.(args) ?? null,
-    flashRegions: (args = {}) => renderer?.flashRegions?.(args),
-    fillBackground: (args = {}) => renderer?.fillBackground?.(args),
-    dispose: () => renderer?.dispose?.(),
-    getContext: () => renderer?.getContext?.() || null,
-    registerRenderer,
-    unregisterRenderer,
-    getRenderer: () => renderer,
-  };
+    function registerRenderer(type, factory) {
+      const normalized = normalize(type);
+      if (!normalized || typeof factory !== "function") return false;
+      registry[normalized] = factory;
+      return true;
+    }
+
+    function unregisterRenderer(type) {
+      const normalized = normalize(type);
+      if (!normalized || !registry[normalized]) return false;
+      if (activeType === normalized) {
+        renderer?.dispose?.();
+        renderer = null;
+        activeType = null;
+      }
+      delete registry[normalized];
+      return true;
+    }
+
+    return {
+      getRendererType: () => renderer?.getRendererType?.() || activeType,
+      listRenderers: () => Object.keys(registry),
+      setRenderer: (type) => ensureRenderer(type ?? rendererType),
+      resize: (metrics = {}) => renderer?.resize?.(metrics),
+      renderFrame: (args = {}) => renderer?.renderFrame?.(args) ?? null,
+      renderPreview: (args = {}) => renderer?.renderPreview?.(args) ?? null,
+      flashRegions: (args = {}) => renderer?.flashRegions?.(args),
+      fillBackground: (args = {}) => renderer?.fillBackground?.(args),
+      dispose: () => renderer?.dispose?.(),
+      getContext: () => renderer?.getContext?.() || null,
+      registerRenderer,
+      unregisterRenderer,
+      getRenderer: () => renderer,
+    };
   }
 
   if (root) {
@@ -258,11 +239,8 @@ import { createCanvas2dRenderer, createSvgRenderer, createWebGLRenderer, SceneTi
     completeRendererBootstrap,
     computePrebootMetrics,
     consumePrebootMetrics,
-    createCanvas2dRenderer,
     createRendererController,
     createSvgRenderer,
-    createWebGLRenderer,
     getPrebootMetrics,
-    SceneTileLoader,
   });
 })();
