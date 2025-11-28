@@ -144,7 +144,7 @@ jobs:
           ls -la "${LIST_PATH}"
 
           {
-            echo "listing<<'EOF'"
+            echo "listing<<EOF"
             ls -la "${LIST_PATH}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
