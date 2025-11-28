@@ -32,7 +32,7 @@ footprints predictable.
 - **Runtime (repository root)**
   - `index.html` – Single-page host document containing markup and wiring for renderer selection, saves, generator controls, and automation helpers.
   - `styles.css` – Primary stylesheet housing theme tokens, responsive layout rules, and component styles (preboot UI scale variables stay inline in `index.html`).
-  - `render.js` – Renderer controller plus Canvas2D, WebGL, and SVG backends (including the GPU-accelerated outline/text pipeline); manages the active drawing pipeline and exposes hooks for swapping or extending renderers at runtime.
+  - `render.js` – Minimal SVG renderer and controller; hosts the shared helpers for turning region geometry into path data and keeps the single backend wired to runtime consumers.
   - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the runtime payload.
   - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, smoothing, and metadata assembly off the main thread.
 - **Documentation**
@@ -71,9 +71,8 @@ footprints predictable.
 
 ## Repository Review Findings
 
-- **Renderer structure.** `render.js` houses the renderer controller plus the Canvas2D, WebGL, and SVG implementations in a
-  single ~2,300-line module. Its controller also owns renderer registration, fallback selection, and per-frame metrics logging,
-  which makes swaps risky without tighter module seams.
+- **Renderer structure.** `render.js` now focuses solely on the SVG implementation inside a much smaller module. The controller
+  still exposes registration hooks but defaults to the simple SVG backend.
 - **Preboot + settings.** `runtime.js` performs preboot sizing and UI-scale selection before the app loads, pulling stored
   settings from `localStorage` when available and falling back to defaults otherwise. Pair this with tests that cover missing or
   malformed settings data so boot-time CSS variables stay predictable.
@@ -253,7 +252,7 @@ The runtime must stay build-free and avoid shipping large bundled frameworks. To
 - **Limit inline state.** Store UI state on elements via `dataset` or `aria-*` attributes and derive rendering from those flags so refresh functions can stay short and predictable.
 
 These patterns keep the DOM logic compact while preserving the zero-build, zero-framework runtime constraints.
-- **Puzzle rendering pipeline.** `renderPuzzle` composites the stored base image first, then fills an offscreen mask covering every unfinished region so the original art shows through as you paint. The mask rasterizes into the cached `filledLayer`, outlines still blit from the stroke cache, and `drawNumbers` overlays remaining labels. Label layout caches include a rounded zoom key derived from the current display-to-base scale ratio, shrink the minimum font size relative to that zoom factor, and expand their attempt list at higher zoom so thin regions surface labels once there is enough on-screen room without sacrificing base zoom legibility. Visual feedback continues to leverage `flashColorRegions` and `paintRegions` for hints. The renderer controller proxies those calls to Canvas2D by default, with WebGL and SVG backends available for feature parity; each backend runs the shared `renderPuzzleFrame` hooks so outlines, numbers, and fills hydrate directly from puzzle payloads when the renderer swaps and resizes the canvas before redrawing.
+- **Puzzle rendering pipeline.** `renderPuzzle` now feeds the SVG renderer directly. Each frame rebuilds region paths from cached geometry, fills unfinished regions with a uniform overlay, and strokes outlines without juggling cached canvases or preview layers.
 - **Generation & segmentation.** `createPuzzleData` looks up the requested generator in `GENERATION_ALGORITHM_CATALOG`, runs the matching quantizer via `performQuantization` (k-means or the posterize-and-merge pipeline today, with scaffolding for future services), smooths assignments, and then calls `segmentRegions`. Before returning it compresses the resized source image to a data URL honouring the “Stored image size” limit so the original art ships with saves and exports; when a remote URL is supplied we skip compression and store just the resolved link so saves refetch the bitmap on demand. Regeneration and fixtures reuse the same entry point.
 - **Persistence helpers.** `persistSaves`, `loadSavedEntries`, and `serializeCurrentPuzzle` manage puzzle snapshots while `getUserSettingsSnapshot`/`persistUserSettings` keep preferences on their own track; exports now ship puzzle data without bundling user settings.
 
