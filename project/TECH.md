@@ -18,14 +18,11 @@ the posterize-and-merge pass) to build a discrete palette, merge tiny regions,
 and paint a canvas you can immediately play. Everything ships as static runtime
 files in the repository root so the single-page app can be served directly
 without a build step.
-Offline play stays supported via a minimal service worker (`service-worker.js`)
-that precaches the runtime payload and reuses a shared Cache Storage bucket for
-downloaded or user-selected source images. Imported images are stored under
-`source-images/<id>` cache entries so saves keep lightweight references (cache
-keys + URLs) instead of embedding large data URLs in `localStorage`. Cache
-Storage now enforces a 25 MB / 80-entry ceiling with least-recently-used
-eviction; uploads larger than ~6 MB skip caching outright to keep user storage
-footprints predictable.
+Offline play is temporarily disabled while the service worker (`service-worker.js`)
+and its cache are paused. The runtime still ships the worker file for when
+offline support returns, but loads now unregister any existing service worker
+and clear the runtime cache before continuing. Imported images fall back to
+in-memory URLs instead of Cache Storage while this pause is in effect.
 
 ## Repository Map
 
@@ -64,7 +61,7 @@ footprints predictable.
 ## Project Health Snapshot
 
 - **Zero-build runtime.** The app still ships as plain HTML/JS/CSS and must remain directly loadable without bundling. Optimisations should respect this constraint and avoid minified dependency drops.
-  - **Cache hygiene.** The service worker (`service-worker.js`) now caps Cache Storage at roughly 25 MB or 80 entries, evicting least-recently-used responses after each `cache.put` and skipping uploads larger than ~6 MB. Keep those limits in mind before introducing larger assets or new fetch endpoints so they continue to fit within the budget.
+  - **Cache hygiene.** Offline caching is paused; when re-enabled the service worker (`service-worker.js`) will continue to cap Cache Storage at roughly 25 MB or 80 entries with LRU eviction and skip uploads larger than ~6 MB. Keep those limits in mind before introducing larger assets or new fetch endpoints so storage stays within budget once the cache returns.
   - **Module registration.** The service worker registers as an ES module so `service-worker-cache.js` can load without MIME-type errors on GitHub Pages; stick to module-friendly helpers when adjusting its imports.
   - **Automation coverage.** The shared Node + Playwright harness remains the expected entry point (`npm test --silent`), but CI currently only validates installs. Manual smoke checks stay required until the hosted automation suite returns.
   - **Documentation sources.** Planning and work intake now live in `project/ROADMAP.md` (direction) and `project/TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts. The in-app Help panel fetches the `/README/` mirror that renders `README.md`, so keep that endpoint available when relocating docs.
@@ -76,9 +73,9 @@ footprints predictable.
 - **Preboot + settings.** `runtime.js` performs preboot sizing and UI-scale selection before the app loads, pulling stored
   settings from `localStorage` when available and falling back to defaults otherwise. Pair this with tests that cover missing or
   malformed settings data so boot-time CSS variables stay predictable.
-- **Offline cache risk.** `service-worker.js` precaches the runtime payload and now enforces LRU eviction (≈25 MB or 80 entries)
-    while skipping cached uploads above ~6 MB. Revisit those limits before adding larger assets or new fetch targets so storage
-    usage stays predictable.
+- **Offline cache risk.** Offline caching is disabled for now; when restored, `service-worker.js` will resume precaching the
+    runtime payload with the ≈25 MB / 80-entry LRU cap and continue skipping cached uploads above ~6 MB. Revisit those limits
+    before adding larger assets or new fetch targets so storage usage stays predictable once caching returns.
 - **Automation entry point.** `project/scripts/run-tests.js` still drives the Node generator specs and Playwright UI smoke tests,
   but the workflow in `.github/workflows/ci.yml` currently serves as a placeholder. Decide whether to re-enable the Playwright
   portion in CI or gate it behind an environment flag so coverage expectations match automation reality.

@@ -1,5 +1,8 @@
 # Change Log
 
+## 2025-11-28
+- Paused offline support by disabling service worker registration, unregistering any existing workers, and clearing the runtime cache on load.
+
 ## 2025-11-27
 - Made the settings sheet responsive by stacking the tab list above the content on smaller screens.
 - Themed settings text inputs and textareas so they match other controls.
