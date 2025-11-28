@@ -52,7 +52,7 @@ function readStoredSettings(storage) {
 
 let prebootMetrics = {};
 
-export function computePrebootMetrics() {
+function computePrebootMetrics() {
   if (!root || typeof window === "undefined") return {};
 
   const storedScale = parseStoredScale(readStoredSettings(window.localStorage));
@@ -81,11 +81,11 @@ export function computePrebootMetrics() {
   return prebootMetrics;
 }
 
-export function getPrebootMetrics() {
+function getPrebootMetrics() {
   return prebootMetrics;
 }
 
-export function consumePrebootMetrics() {
+function consumePrebootMetrics() {
   const metrics = prebootMetrics || {};
   prebootMetrics = {};
   if (typeof window !== "undefined") {
@@ -98,7 +98,7 @@ export function consumePrebootMetrics() {
   return metrics;
 }
 
-export function applyPrebootMetrics() {
+function applyPrebootMetrics() {
   if (typeof window === "undefined" || !document.body) {
     return;
   }
@@ -114,131 +114,124 @@ export function applyPrebootMetrics() {
   }
 }
 
-const BOOTSTRAP_VERSION = "2024-07-28";
-const SENTINEL_READY = `ready:${BOOTSTRAP_VERSION}`;
-
-export function beginRendererBootstrap() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  if (window.__capyRendererBootstrapVersion === SENTINEL_READY) {
-    return true;
-  }
-  window.__capyRendererBootstrapVersion = `pending:${BOOTSTRAP_VERSION}`;
-  return false;
+function beginRendererBootstrap() {
+  if (typeof window === "undefined") return false;
+  const alreadyBootstrapped = window.__capyRendererBootstrapped === true;
+  window.__capyRendererBootstrapped = true;
+  return alreadyBootstrapped;
 }
 
-export function completeRendererBootstrap(succeeded) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.__capyRendererBootstrapVersion = succeeded ? SENTINEL_READY : undefined;
+function completeRendererBootstrap(_succeeded) {
+  // The bootstrap flag is set immediately in beginRendererBootstrap; nothing
+  // else needs to happen here when simplifying the runtime.
 }
 
-// The renderer controller stays defined here (instead of render.js) so we can
-// re-export the underlying renderer factories without creating a circular
-// dependency. We keep the exports at the bottom of the file to avoid
-// accidentally exporting the controller twice—which manifests as the
-// "Duplicate export of 'createRendererController'" syntax error when tools or
-// caches concatenate multiple copies of this module. Keeping the declaration
-// here and re-export block below gives us a single, predictable export site
-// that matches how the inline modules import it from index.html.
+// Keep the renderer controller here so every consumer uses the exact same
+// export site. The implementation avoids layers of indirection—renderers are
+// registered up front, the preferred renderer is activated immediately, and
+// fallbacks are lightweight when no backend can initialise.
 function createRendererController(host, options = {}) {
-  const { hooks = {} } = options || {};
-  const registry = new Map([
-    ["canvas", createCanvas2dRenderer],
-    ["webgl", createWebGLRenderer],
-    ["svg", createSvgRenderer],
-  ]);
-  const unavailable = new Set();
+  const { hooks = {}, rendererType } = options || {};
+  const registry = {
+    canvas: createCanvas2dRenderer,
+    webgl: createWebGLRenderer,
+    svg: createSvgRenderer,
+  };
   let renderer = null;
   let activeType = null;
 
   const normalize = (value) => {
     if (typeof value !== "string") return null;
     const normalized = value.trim().toLowerCase();
-    return registry.has(normalized) ? normalized : null;
+    return normalized || null;
   };
+
+  const notifyRendererChange = (type) => {
+    if (typeof hooks.onRendererChange === "function") {
+      hooks.onRendererChange(type);
+      return;
+    }
+
+    hooks.log?.("Renderer change handler unbound", {
+      code: "renderer-change-handler-unbound",
+      renderer: type,
+    });
+  };
+
+  const createFallbackRenderer = (type) => ({
+    getRendererType: () => type,
+    resize: () => {},
+    renderFrame: () => null,
+    renderPreview: () => null,
+    flashRegions: () => {},
+    fillBackground: () => {},
+    dispose: () => {},
+    getContext: () => null,
+  });
+
+  function activateRenderer(type) {
+    const factory = type ? registry[type] : null;
+    if (!factory) return false;
+    try {
+      const next = factory(host, hooks);
+      if (!next) return false;
+      renderer?.dispose?.();
+      renderer = next;
+      activeType = type;
+      notifyRendererChange(type);
+      return true;
+    } catch (error) {
+      hooks.log?.("Renderer failed", { code: "renderer-failed", renderer: type, error: error?.message });
+      return false;
+    }
+  }
+
+  function ensureRenderer(preferred) {
+    const normalizedPreferred = normalize(preferred);
+    const candidates = Array.from(
+      new Set([normalizedPreferred, "canvas", "webgl", "svg"].filter((type) => type && registry[type]))
+    );
+    for (const candidate of candidates) {
+      if (activateRenderer(candidate)) {
+        return renderer;
+      }
+    }
+    const fallbackType = normalizedPreferred || candidates[0] || "canvas";
+    renderer = createFallbackRenderer(fallbackType);
+    activeType = fallbackType;
+    hooks.log?.("Renderer fallback", { code: "renderer-fallback", renderer: fallbackType });
+    notifyRendererChange(fallbackType);
+    return renderer;
+  }
 
   function registerRenderer(type, factory) {
     const normalized = normalize(type);
     if (!normalized || typeof factory !== "function") return false;
-    registry.set(normalized, factory);
-    unavailable.delete(normalized);
+    registry[normalized] = factory;
     return true;
   }
 
   function unregisterRenderer(type) {
     const normalized = normalize(type);
-    if (!normalized || !registry.has(normalized)) return false;
+    if (!normalized || !registry[normalized]) return false;
     if (activeType === normalized) {
       renderer?.dispose?.();
       renderer = null;
       activeType = null;
     }
-    registry.delete(normalized);
-    unavailable.delete(normalized);
+    delete registry[normalized];
     return true;
-  }
-
-  function setRenderer(type) {
-    const preferred = normalize(type) || normalize(activeType) || "canvas";
-    const candidates = Array.from(new Set([preferred, "canvas", "webgl", "svg"]));
-    for (const candidate of candidates) {
-      const factory = registry.get(candidate);
-      if (!factory || unavailable.has(candidate)) {
-        continue;
-      }
-      try {
-        const nextRenderer = factory(host, hooks);
-        if (!nextRenderer) {
-          unavailable.add(candidate);
-          continue;
-        }
-        if (renderer && renderer !== nextRenderer) {
-          renderer.dispose?.();
-        }
-        renderer = nextRenderer;
-        activeType = candidate;
-        hooks.onRendererChange?.(candidate);
-        return renderer;
-      } catch (error) {
-        hooks.log?.("Renderer failed to initialise", { type: candidate, error: error?.message });
-        unavailable.add(candidate);
-      }
-    }
-    return renderer;
-  }
-
-  function resize(metrics = {}) {
-    renderer?.resize?.(metrics);
-  }
-
-  function renderFrame(args = {}) {
-    return renderer?.renderFrame?.(args) ?? null;
-  }
-
-  function renderPreview(args = {}) {
-    return renderer?.renderPreview?.(args) ?? null;
-  }
-
-  function flashRegions(args = {}) {
-    renderer?.flashRegions?.(args);
-  }
-
-  function fillBackground(args = {}) {
-    renderer?.fillBackground?.(args);
   }
 
   return {
     getRendererType: () => renderer?.getRendererType?.() || activeType,
-    listRenderers: () => Array.from(registry.keys()),
-    setRenderer,
-    resize,
-    renderFrame,
-    renderPreview,
-    flashRegions,
-    fillBackground,
+    listRenderers: () => Object.keys(registry),
+    setRenderer: (type) => ensureRenderer(type ?? rendererType),
+    resize: (metrics = {}) => renderer?.resize?.(metrics),
+    renderFrame: (args = {}) => renderer?.renderFrame?.(args) ?? null,
+    renderPreview: (args = {}) => renderer?.renderPreview?.(args) ?? null,
+    flashRegions: (args = {}) => renderer?.flashRegions?.(args),
+    fillBackground: (args = {}) => renderer?.fillBackground?.(args),
     dispose: () => renderer?.dispose?.(),
     getContext: () => renderer?.getContext?.() || null,
     registerRenderer,
@@ -259,6 +252,18 @@ if (root) {
 // export at the bottom prevents accidental shadowing of createRendererController
 // and helps avoid the duplicate-export syntax errors seen when cached bundles
 // include multiple copies of this file.
-export { createCanvas2dRenderer, createSvgRenderer, createWebGLRenderer, SceneTileLoader } from "./render.js";
+export {
+  applyPrebootMetrics,
+  beginRendererBootstrap,
+  completeRendererBootstrap,
+  computePrebootMetrics,
+  consumePrebootMetrics,
+  createCanvas2dRenderer,
+  createRendererController,
+  createSvgRenderer,
+  createWebGLRenderer,
+  getPrebootMetrics,
+  SceneTileLoader,
+};
 
 export default getPrebootMetrics;
