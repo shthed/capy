@@ -130,7 +130,7 @@ function completeRendererBootstrap(_succeeded) {
 // export site. The implementation avoids layers of indirection—renderers are
 // registered up front, the preferred renderer is activated immediately, and
 // fallbacks are lightweight when no backend can initialise.
-function createRendererController(host, options = {}) {
+export function createRendererController(host, options = {}) {
   const { hooks = {}, rendererType } = options || {};
   const registry = {
     canvas: createCanvas2dRenderer,
@@ -259,7 +259,6 @@ export {
   computePrebootMetrics,
   consumePrebootMetrics,
   createCanvas2dRenderer,
-  createRendererController,
   createSvgRenderer,
   createWebGLRenderer,
   getPrebootMetrics,
