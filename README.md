@@ -10,7 +10,7 @@ A browser-based paint-by-numbers generator and player. Runs fully client-side. U
 - Bundles the Capybara Springs sample puzzle for instant play.
 - Supports Canvas 2D, WebGL, and SVG renderers.
 - Saves progress locally with autosave and manual snapshots.
-- Ships a service worker for offline use on same-origin loads.
+- Runs fully client-side; the service worker and offline cache are temporarily disabled.
 
 ## How to Play
 
@@ -23,9 +23,9 @@ Image import: drop a file anywhere or use **Import** in the command rail. The pu
 
 ## Offline and Install Behavior
 
-- `service-worker.js` precaches the runtime after the first HTTPS load (including the `https://capy.local/` alias).
-- Cached assets enable offline play and home-screen installs; clearing site data removes the cache and resets the worker.
-- If a deployment looks stale, perform a hard refresh to update the cache before continuing.
+- Offline caching is currently paused: the service worker unregisters itself on load and the runtime cache is cleared.
+- Play requires an online connection while the cache is disabled; reload after re-enabling to restore offline support.
+- If a deployment looks stale once offline support returns, perform a hard refresh to update the cache before continuing.
 
 ## Key Controls
 
