@@ -41,6 +41,7 @@ async function main() {
     'tests/service-worker-cache.spec.js',
     'tests/render-controller.spec.js',
     'tests/runtime-preboot.spec.js',
+    'tests/runtime-renderer.spec.js',
     'tests/svg-renderer.spec.js',
   ]);
   if (nodeTestCode !== 0) {
