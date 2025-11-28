@@ -6,7 +6,7 @@ Actionable maintenance items collected during the project review. Keep entries s
 - [ ] Reinstate full CI coverage: run the Node + Playwright harness (`npm test --silent`) in `.github/workflows/ci.yml`, publish reports, and make failing tests block merges (with opt-outs only when browsers are unavailable).
 - [x] Add Cache Storage limits/eviction to `service-worker.js` (or gate which requests are cached) so user sessions cannot grow the offline cache without bound.
 - [ ] Add regression tests for preboot sizing/settings in `runtime.js` (malformed or missing `localStorage` data) to keep UI scale and orientation tokens stable.
-- [ ] Fix runtime boot errors where `handleRendererChange` is undefined (shows the error toast and blocks the settings button), ensuring renderer toggles are registered before UI events fire.
+- [x] Fix runtime boot errors where `handleRendererChange` is undefined (shows the error toast and blocks the settings button), ensuring renderer toggles are registered before UI events fire.
 - [ ] Restore Playwright puzzle fixtures so `window.capyGenerator.loadPuzzleFixture` succeeds and the smoke suite can exercise renderer switching, palette updates, save/restore, and performance metrics.
 - [ ] Restore the Capybara Springs sample bootstrap so first paint loads the bundled puzzle (with sample artwork metadata) instead of the blank white viewport shown in the latest smoke screenshot.
 - [ ] Rehydrate puzzle rendering output: the stage currently shows only the white background with no outlines or numbers even though `capy.json` hydrates, and palette metadata is missing from `window.capyGenerator.getState()`.
