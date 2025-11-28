@@ -753,13 +753,11 @@
             <label class="control">
               <span>Renderer</span>
               <select id="rendererMode">
-                <option value="canvas">Canvas2D</option>
-                <option value="webgl">WebGL</option>
                 <option value="svg">SVG</option>
               </select>
             </label>
             <p class="control-note">
-              Rendering is handled by the Canvas2D, WebGL, or SVG backends.
+              Rendering is handled by the simplified SVG backend.
             </p>
             <label class="control">
               <span>Unfilled region colour</span>
@@ -1467,12 +1465,7 @@
         import { html, renderTemplate } from "./ui-template.js";
 
         const runtime = window.capyRuntime;
-        const {
-          beginRendererBootstrap,
-          completeRendererBootstrap,
-          createRendererController,
-          SceneTileLoader,
-        } = runtime || {};
+        const { beginRendererBootstrap, completeRendererBootstrap, createRendererController } = runtime || {};
 
         if (!runtime) {
           console.error("Capy runtime failed to load");
@@ -3621,7 +3614,7 @@
           imageDescription: "",
           showRegionLabels: true,
           theme: DEFAULT_UI_THEME,
-          renderer: "canvas",
+          renderer: "svg",
           settingsSheetOpen: false,
           mouseControls: cloneMouseControls(DEFAULT_MOUSE_CONTROLS),
         },
@@ -3701,7 +3694,7 @@
       }
 
       function handleRendererChange(type) {
-        const normalized = normalizeRendererType(type) ?? state.settings.renderer ?? "canvas";
+        const normalized = normalizeRendererType(type) ?? state.settings.renderer ?? "svg";
         return applyRendererMode(normalized, { skipAutosave: true, skipLog: true });
       }
 
@@ -3977,18 +3970,11 @@
       function normalizeRendererType(value) {
         if (typeof value !== "string") return null;
         const normalized = value.trim().toLowerCase();
-        if (normalized === "canvas" || normalized === "webgl" || normalized === "svg") {
-          return normalized;
-        }
-        return null;
+        return normalized === "svg" ? "svg" : null;
       }
 
       function formatRendererLabel(type) {
         switch (normalizeRendererType(type)) {
-          case "canvas":
-            return "Canvas2D";
-          case "webgl":
-            return "WebGL";
           case "svg":
             return "SVG";
           default:
@@ -4009,9 +3995,9 @@
           return;
         }
         const controller = state.rendering?.controller;
-        const supported = controller?.listRenderers?.() || ["canvas", "webgl", "svg"];
+        const supported = controller?.listRenderers?.() || ["svg"];
         const available = supported.filter((type) => !unavailableRenderers.has(type));
-        const active = controller?.getRendererType?.() || state.settings.renderer || "canvas";
+        const active = controller?.getRendererType?.() || state.settings.renderer || "svg";
         for (const option of rendererModeSelect.options) {
           if (!option?.value) continue;
           const normalized = normalizeRendererType(option.value);
@@ -4021,15 +4007,15 @@
         rendererModeSelect.title = rendererModeSelect.disabled
           ? formatRendererLabel(active)
           : "Switch renderer backend";
-        const resolvedActive = normalizeRendererType(active) || available[0] || "canvas";
+        const resolvedActive = normalizeRendererType(active) || available[0] || "svg";
         rendererModeSelect.value = resolvedActive;
       }
 
       function applyRendererMode(type, options = {}) {
         const controller = state.rendering?.controller;
-        const target = normalizeRendererType(type) || state.settings.renderer || "canvas";
+        const target = normalizeRendererType(type) || state.settings.renderer || "svg";
         const renderer = controller?.setRenderer ? controller.setRenderer(target) : null;
-        const resolved = normalizeRendererType(renderer?.getRendererType?.() || target) || "canvas";
+        const resolved = normalizeRendererType(renderer?.getRendererType?.() || target) || "svg";
         if (renderer) {
           state.rendering.renderer = renderer;
         }
@@ -4241,7 +4227,7 @@
            */
           listRenderers() {
             const controller = state.rendering?.controller;
-            return controller?.listRenderers?.() || [state.settings.renderer || "canvas"];
+            return controller?.listRenderers?.() || [state.settings.renderer || "svg"];
           },
           /**
            * Switches to a different renderer backend.
@@ -5018,7 +5004,7 @@
       }
 
       if (rendererModeSelect) {
-        rendererModeSelect.value = normalizeRendererType(state.settings.renderer) || "canvas";
+        rendererModeSelect.value = normalizeRendererType(state.settings.renderer) || "svg";
       }
 
       if (backgroundColorInput) {
@@ -8836,26 +8822,7 @@
         if (paletteMetadata) {
           puzzle.paletteMetadata = paletteMetadata;
         }
-        if (data.vectorScene?.metadata && data.vectorScene?.binary) {
-          try {
-            const binaryBuffer = resolveVectorSceneBinaryBuffer(data.vectorScene.binary);
-            if (!binaryBuffer) {
-              throw new Error("Vector scene binary is unavailable");
-            }
-            puzzle.vectorScene = {
-              metadata: data.vectorScene.metadata,
-              binary: binaryBuffer,
-            };
-            puzzle.sceneLoader = new SceneTileLoader(
-              puzzle.vectorScene.metadata,
-              puzzle.vectorScene.binary
-            );
-          } catch (error) {
-            logDebug(
-              `[Renderer] Unable to initialise vector scene loader: ${error?.message || error}`
-            );
-          }
-        }
+        puzzle.sceneLoader = null; 
         state.puzzle = puzzle;
         state.paletteMetadata = paletteMetadata || null;
         state.paletteAdjacency = buildPaletteAdjacency(palette);
