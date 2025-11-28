@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
+import { chromium } from '@playwright/test';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -22,6 +24,15 @@ function run(command, args) {
   });
 }
 
+function warnSkipPlaywright(details) {
+  console.warn(
+    'Skipping Playwright tests: Chromium is not installed. Run `npm run setup:playwright` to enable the UI smoke suite.'
+  );
+  if (details) {
+    console.warn(details);
+  }
+}
+
 async function main() {
   const nodeTestCode = await run(process.execPath, [
     '--test',
@@ -34,6 +45,23 @@ async function main() {
   ]);
   if (nodeTestCode !== 0) {
     process.exit(nodeTestCode);
+  }
+
+  let executablePath = '';
+  try {
+    executablePath = chromium.executablePath();
+  } catch (error) {
+    warnSkipPlaywright(error?.message);
+    return;
+  }
+
+  const hasBrowser = executablePath && existsSync(executablePath);
+  if (!hasBrowser) {
+    const missingMessage = executablePath
+      ? `Chromium executable not found at expected path: ${executablePath}`
+      : 'Chromium executable path was not returned.';
+    warnSkipPlaywright(missingMessage);
+    return;
   }
 
   const playwrightCode = await run('npx', [

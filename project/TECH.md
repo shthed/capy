@@ -373,7 +373,7 @@ Packing the region map trims payloads by more than half, avoiding `QuotaExceeded
 
 ## Testing & QA Checklist
 
-Playwright smoke coverage now exercises the bundled puzzle, first-paint interaction, and save/load completion flow. From inside `project/`, run `npm test --silent` locally (it wraps `npx playwright test --config=playwright.config.js`) before merging. The first run may require `npm run setup:playwright` plus the system dependencies listed in the Playwright output (`npx playwright install-deps` on Debian/Ubuntu) so Chromium can launch headlessly.
+Playwright smoke coverage now exercises the bundled puzzle, first-paint interaction, and save/load completion flow. From inside `project/`, run `npm test --silent` locally (it wraps `npx playwright test --config=playwright.config.js`) before merging. When the bundled Chromium binary is missing, the harness skips the Playwright suite and prints a reminder to run `npm run setup:playwright`; the first install may also need the system dependencies listed in the Playwright output (`npx playwright install-deps` on Debian/Ubuntu) so Chromium can launch headlessly.
 
 Supplement the automated run with these manual checks when you change gameplay, rendering, or onboarding flows:
 
