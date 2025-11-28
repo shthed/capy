@@ -66,32 +66,6 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
     <title>Image to Color-by-Number</title>
-    <script>
-      (() => {
-        const host = window.location?.hostname;
-        const allowAnalytics =
-          host && host !== "localhost" && host !== "127.0.0.1" && !window.navigator?.webdriver;
-
-        window.dataLayer = window.dataLayer || [];
-        window.gtag = function gtag() {
-          window.dataLayer.push(arguments);
-        };
-
-        if (!allowAnalytics) {
-          return;
-        }
-
-        const script = document.createElement("script");
-        script.async = true;
-        script.src = "https://www.googletagmanager.com/gtag/js?id=G-PB9QNQCD7Q";
-        script.onload = () => {
-          window.gtag("js", new Date());
-          window.gtag("config", "G-PB9QNQCD7Q");
-        };
-        document.head.appendChild(script);
-      })();
-    </script>
-    <script type="module" src="./runtime.js"></script>
     <style>
       :root {
         --ui-scale-user: 0.75;
@@ -104,16 +78,13 @@
         --rail-padding-inline: calc(20px * var(--ui-scale));
       }
     </style>
+    <link rel="preload" href="./styles.css" as="style" />
     <link rel="stylesheet" href="./styles.css" />
 
   </head>
   <body data-theme="dark">
-    <script type="module">
-      const runtime = window.capyRuntime;
-      if (runtime && typeof runtime.applyPrebootMetrics === "function") {
-        runtime.applyPrebootMetrics();
-      }
-    </script>
+    <script type="module" src="./capy.js"></script>
+    <!-- Toast notifications -->
     <div
       id="errorToast"
       class="error-toast"
@@ -183,6 +154,7 @@
           <button id="closeStartHint" class="start-hint-button" type="button">Open menu</button>
         </div>
       </section>
+      <!-- Canvas viewport -->
       <div id="viewport">
         <div id="canvasStage">
           <div id="canvasTransform">
@@ -202,11 +174,13 @@
           </div>
         </div>
       </div>
-        <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-          <div id="palette" role="list"></div>
-        </footer>
+      <!-- Palette dock -->
+      <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
+        <div id="palette" role="list"></div>
+      </footer>
     </div>
     <input id="fileInput" type="file" accept=".json,.capy,image/*" hidden />
+    <!-- Settings sheet -->
     <div
       id="settingsSheet"
       class="sheet hidden"
@@ -1460,49 +1434,48 @@
         log("Settings fallback ready before renderer bootstrap");
       })();
     </script>
-    <script type="module" src="./render.js"></script>
-      <script type="module">
-        import { html, renderTemplate } from "./ui-template.js";
+    <script type="module">
+      const { html, renderTemplate } = window.capyTemplates || {};
 
-        const runtime = window.capyRuntime;
-        const { beginRendererBootstrap, completeRendererBootstrap, createRendererController } = runtime || {};
+      const runtime = window.capyRuntime;
+      const { beginRendererBootstrap, completeRendererBootstrap, createRendererController } = runtime || {};
 
+      if (!runtime) {
+        console.error("Capy runtime failed to load");
+      }
+
+      (() => {
         if (!runtime) {
-          console.error("Capy runtime failed to load");
+          return;
         }
+        const settingsBootstrap =
+          window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
+        settingsBootstrap.log("Renderer bootstrap starting");
 
-        (() => {
-          if (!runtime) {
-            return;
-          }
-          const settingsBootstrap =
-            window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
-          settingsBootstrap.log("Renderer bootstrap starting");
-
-          const createUiKit =
-            window.capyUiKit ||
-            function createUiKit(root = document) {
-              const cache = new Map();
-              const get = (selector) => {
-                if (!selector) return null;
-                if (cache.has(selector)) {
-                  return cache.get(selector);
-                }
-                const node = root.querySelector(selector);
-                cache.set(selector, node || null);
-                return node || null;
-              };
-              const all = (selector) => Array.from(root.querySelectorAll(selector));
-              return { get, all };
+        const createUiKit =
+          window.capyUiKit ||
+          function createUiKit(root = document) {
+            const cache = new Map();
+            const get = (selector) => {
+              if (!selector) return null;
+              if (cache.has(selector)) {
+                return cache.get(selector);
+              }
+              const node = root.querySelector(selector);
+              cache.set(selector, node || null);
+              return node || null;
             };
+            const all = (selector) => Array.from(root.querySelectorAll(selector));
+            return { get, all };
+          };
 
-          const dom = createUiKit(document);
+        const dom = createUiKit(document);
 
-          const skipBootstrap = beginRendererBootstrap();
-          if (skipBootstrap) {
-            return;
-          }
-          let bootstrapSucceeded = false;
+        const skipBootstrap = beginRendererBootstrap();
+        if (skipBootstrap) {
+          return;
+        }
+        let bootstrapSucceeded = false;
       try {
       function createComponent(root, render) {
         if (!root) {
@@ -1881,16 +1854,14 @@
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const SETTINGS_STORAGE_KEY = "capy.settings.v1";
       const SERVICE_WORKER_ENABLED = false;
-      const RUNTIME_CACHE_NAME = "capy-offline-cache-v3";
+      const RUNTIME_CACHE_NAME = "capy-offline-cache-v4";
       const CACHE_ORIGIN = "https://capy.local";
       const SOURCE_IMAGE_CACHE_PREFIX = "source-images/";
       const RUNTIME_CACHE_ASSETS = [
         "./",
         "./index.html",
         "./styles.css",
-        "./runtime.js",
-        "./render.js",
-        "./puzzle-generation.js",
+        "./capy.js",
         "./capy.json",
       ];
       const SETTINGS_AUTOSAVE_REASONS = new Set([
@@ -8092,7 +8063,7 @@
 
       function loadPuzzleGenerationModule() {
         if (!puzzleGenerationModulePromise) {
-          puzzleGenerationModulePromise = import("./puzzle-generation.js")
+          puzzleGenerationModulePromise = Promise.resolve(window.capyGeneration || {})
             .then((module) => {
               try {
                 if (module && Array.isArray(module.GENERATION_ALGORITHM_CATALOG)) {
@@ -14382,6 +14353,39 @@
         }
       })();
 
+    </script>
+    <script>
+      (() => {
+        const host = window.location?.hostname;
+        const allowAnalytics =
+          host && host !== "localhost" && host !== "127.0.0.1" && !window.navigator?.webdriver;
+
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function gtag() {
+          window.dataLayer.push(arguments);
+        };
+
+        if (!allowAnalytics) {
+          return;
+        }
+
+        const injectAnalytics = () => {
+          const script = document.createElement("script");
+          script.async = true;
+          script.src = "https://www.googletagmanager.com/gtag/js?id=G-PB9QNQCD7Q";
+          script.onload = () => {
+            window.gtag("js", new Date());
+            window.gtag("config", "G-PB9QNQCD7Q");
+          };
+          document.head.appendChild(script);
+        };
+
+        if (document.readyState === "interactive" || document.readyState === "complete") {
+          requestAnimationFrame(injectAnalytics);
+        } else {
+          document.addEventListener("DOMContentLoaded", injectAnalytics, { once: true });
+        }
+      })();
     </script>
   </body>
 </html>
