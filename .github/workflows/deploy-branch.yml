@@ -166,11 +166,14 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: pages
+          name: github-pages-${{ github.run_attempt }}
 
       - name: Deploy to GitHub Pages
         if: steps.target.outputs.skip != 'true'
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
 
       - name: Output preview link
         if: steps.target.outputs.skip != 'true'
