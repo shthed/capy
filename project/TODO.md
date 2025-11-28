@@ -18,3 +18,8 @@ Actionable maintenance items collected during the project review. Keep entries s
 - [x] Extend service-worker coverage with tests that simulate cache growth and offline restores once eviction rules land.
 - [ ] Restore and publish artwork/segmentation documentation once a refreshed pipeline is ready, replacing the placeholder note in `TECH.md`.
 - [ ] Add an `actionlint` (or equivalent workflow validation) step so `.github/workflows/*.yml` files fail CI when they reference unsupported contexts, catching env-scope errors before pushes.
+
+## UI polish
+- [ ] Add a portrait-friendly start hint layout that centers the welcome card without overlapping the palette dock.
+- [ ] Trim palette dock padding on small screens so the first/last swatches are fully visible without horizontal scrolling.
+- [ ] Capture updated dark/light theme screenshots of the refreshed start hint for `project/CHANGELOG.md`.
