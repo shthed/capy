@@ -1,1308 +1,1829 @@
-<!DOCTYPE html>
-<html lang="en">
-  <!--
-    Developer Map
-    ==========
-    Layout overview
-    --------------
-    - UI chrome (command rail, modal sheets, and the debug console) exposes primary actions wired
-      to script handlers. Scan for "Command button" listeners when adjusting layout interactions.
-    - Viewport + stage: #viewport, #canvasStage, and #canvasTransform cooperate with viewState for
-      pan/zoom. Pointer handlers (handlePanStart/Move/End) and applyZoom feed navigation updates.
-    - Puzzle state & rendering: state holds palette, fills, and metadata. renderPuzzle →
-      drawOutlines/drawNumbers use ensureRenderCache to hydrate canvases and labels.
-    - Generation pipeline: loadImage → createPuzzleData orchestrates quantization, segmentation,
-      and palette prep. Regeneration, fixture loading, and saves all call applyPuzzleResult.
-    - Persistence + exports: createGameSaveManager backs the Saves sheet. Autosave,
-      manual saves, and exports live alongside serializeCurrentPuzzle.
-    - External API: window.capyGenerator exposes devtools entry points; keep signatures stable when
-      reorganizing internal wiring.
+(() => {
+  const DEFAULT_OVERLAY_FILL = "rgba(248, 250, 252, 1)";
+  const DEFAULT_OUTLINE = "rgba(15, 23, 42, 0.65)";
+  const DEFAULT_NUMBER = "rgba(15, 23, 42, 0.95)";
 
-    Script organization
-    -------------------
-    1. Cached DOM references, constants, and default settings.
-    2. Canvas metrics, view state, pointer capture, and custom cursor helpers.
-    3. Generation + rendering pipeline (loadDefaultPuzzle, createPuzzleData, renderPuzzle, etc.).
-    4. Palette interactions, keyboard/mouse handlers, and hint overlay animation loop.
-    5. Autosave + storage encoding, save manager wiring, and UI refresh routines.
-    6. window.capyGenerator bindings exported last for manual QA tooling.
+  function formatNumber(value) {
+    if (!Number.isFinite(value)) return "0";
+    const rounded = Math.round(value * 1000) / 1000;
+    if (Number.isInteger(rounded)) return String(rounded);
+    return rounded.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+  }
 
-    Function highlights
-    -------------------
-    - installBrowserZoomGuards(): Prevents browser zoom from intercepting wheel gestures on the
-      canvas.
-    - applyViewTransform(options): Pushes viewState pan/zoom changes to the stage and pointer
-      overlays.
-    - applyZoom(multiplier, clientX, clientY, options): Normalizes zoom gestures around the pointer
-      focus and updates viewState.
-    - resetView(options): Fits the puzzle to the viewport and recenters the stage.
-    - loadSamplePuzzle(options) / loadDefaultPuzzle(options): Bootstrap the bundled sample or
-      fallback puzzle payload.
-    - createPuzzleData(image, options): Invokes the generation worker to quantize colors and
-      segment regions.
-    - applyPuzzleResult(data, metadata): Hydrates puzzle state, triggers canvas redraw, and updates
-      metadata surfaces.
-    - renderPuzzle() / renderPreview(): Draw the active puzzle and thumbnail preview using the
-      shared render cache.
-    - renderPalette(): Rebuilds the palette dock and accessibility metadata for the active colors.
-    - attemptFillRegion(hit, { label }): Processes paint interactions, updates fills, and schedules
-      autosave.
-    - useHint(): Coordinates palette flashing + overlay animations to guide the next region.
-    - updateCommandStates(): Enables/disables command rail buttons based on current puzzle state.
-    - applyTheme(theme, options) / applyBackgroundColor(hex, options): Refresh UI theming tokens and
-      persist preferences.
-    - scheduleAutosave(reason) / persistAutosave(reason): Manage background save cadence and writes
-      to storage.
-    - saveCurrentSnapshot(): Captures a manual save entry and refreshes manager lists.
-    - refreshGameSelection() / refreshSaveList(): Render save management surfaces from shared
-      templates.
-    - createGameSaveManager(): Wraps persistence with list, subscribe, and persist helpers for UI
-      consumers.
-  -->
-  <head>
-    <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
-    />
-    <title>Image to Color-by-Number</title>
-    <style>
-      :root {
-        --ui-scale-user: 0.75;
-        --ui-scale-auto: 1;
-        --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
-        --app-width: 100vw;
-        --app-height: 100vh;
-        --viewport-padding: calc(32px * var(--ui-scale));
-        --rail-padding-block: calc(10px * var(--ui-scale));
-        --rail-padding-inline: calc(20px * var(--ui-scale));
+  function buildPathData(geometry) {
+    if (!geometry) return "";
+    if (geometry.pathData && typeof geometry.pathData === "string") {
+      return geometry.pathData;
+    }
+    const contours = Array.isArray(geometry.contours) ? geometry.contours : [];
+    const segments = [];
+    for (const contour of contours) {
+      if (!Array.isArray(contour) || contour.length === 0) continue;
+      const first = contour[0];
+      segments.push(`M${formatNumber(first[0])} ${formatNumber(first[1])}`);
+      for (let i = 1; i < contour.length; i++) {
+        const point = contour[i];
+        segments.push(`L${formatNumber(point[0])} ${formatNumber(point[1])}`);
       }
-    </style>
-    <link rel="preload" href="./styles.css" as="style" />
-    <link rel="stylesheet" href="./styles.css" />
+      segments.push("Z");
+    }
+    return segments.join(" ");
+  }
 
-  </head>
-  <body data-theme="dark">
-    <script type="module" src="./capy.js"></script>
-    <!-- Toast notifications -->
-    <div
-      id="errorToast"
-      class="error-toast"
-      role="alert"
-      aria-live="assertive"
-      aria-atomic="true"
-      tabindex="-1"
-      hidden
-    >
-      <div class="error-toast__content">
-        <div class="error-toast__header">
-          <p class="error-toast__title">Something went wrong</p>
-          <button
-            type="button"
-            class="error-toast__close"
-            data-error-close
-            aria-label="Dismiss error notification"
-          >
-            ×
-          </button>
-        </div>
-        <p class="error-toast__message" data-error-message></p>
-        <pre class="error-toast__stack" data-error-stack aria-label="Error details"></pre>
-      </div>
-    </div>
-    <div id="app">
-      <header id="commandRail" aria-label="Game controls">
-        <button
-          id="settingsButton"
-          class="menu-button settings-launcher"
-          type="button"
-          data-testid="settings-button"
-          aria-haspopup="dialog"
-          aria-expanded="false"
-          aria-label="Open menu"
-          title="Open menu"
-        >
-          <span class="icon" aria-hidden="true">⚙</span>
-          <span class="label visually-hidden">Menu</span>
-        </button>
-      </header>
-      <section
-        id="startHint"
-        class="hidden"
-        role="region"
-        aria-label="Getting started"
-        aria-hidden="true"
-        tabindex="0"
-      >
-        <div class="start-hint__header">
-          <div class="start-hint__badge" aria-hidden="true">✦</div>
-          <div class="start-hint__titles">
-            <p class="start-hint__eyebrow">New session</p>
-            <p class="start-hint__title">Choose how to start coloring</p>
-          </div>
-        </div>
-        <p class="start-hint-copy">Pick a starting point and we will build your palette and canvas below.</p>
-        <ul class="start-hint-list">
-          <li>Drop an image or Capy save anywhere in the window.</li>
-          <li>Press Enter while this card is focused to choose a file.</li>
-          <li>Open the menu to load the bundled capybara sample.</li>
-        </ul>
-        <div class="start-hint-actions">
-          <button id="startHintUpload" class="start-hint-button start-hint-button--primary" type="button">
-            Upload image or save
-          </button>
-          <button id="closeStartHint" class="start-hint-button" type="button">Open menu</button>
-        </div>
-      </section>
-      <!-- Canvas viewport -->
-      <div id="viewport">
-        <div id="canvasStage">
-          <div id="canvasTransform">
-            <canvas
-              id="puzzleCanvas"
-              data-testid="puzzle-canvas"
-              width="640"
-              height="480"
-            ></canvas>
-          </div>
-        </div>
-        <div id="pointerOverlay" aria-hidden="true">
-          <div class="pointer-indicator"></div>
-          <div class="pointer-tooltip">
-            <span class="pointer-swatch" data-pointer-color-swatch aria-hidden="true"></span>
-            <strong class="pointer-number" data-pointer-number></strong>
-          </div>
-        </div>
-      </div>
-      <!-- Palette dock -->
-      <footer id="paletteDock" aria-label="Palette dock" data-testid="palette-dock">
-        <div id="palette" role="list"></div>
-      </footer>
-    </div>
-    <input id="fileInput" type="file" accept=".json,.capy,image/*" hidden />
-    <!-- Settings sheet -->
-    <div
-      id="settingsSheet"
-      class="sheet hidden"
-      role="dialog"
-      aria-label="Game menu"
-      aria-hidden="true"
-    >
-      <div class="sheet-header">
-        <div class="sheet-header-actions">
-          <div class="sheet-grip" aria-hidden="true" title="Drag to move the menu">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-          <button
-            id="settingsUploadButton"
-            class="settings-upload"
-            type="button"
-            aria-label="Upload image or JSON puzzle"
-          >
-            Upload image
-          </button>
-          <button
-            type="button"
-            class="close-button sheet-close"
-            data-sheet-close="settings"
-            aria-label="Close menu"
-          >
-            <span aria-hidden="true">×</span>
-            <span class="visually-hidden">Close</span>
-          </button>
-        </div>
-      </div>
-      <div class="sheet-body">
-        <div class="settings-body">
-          <nav class="settings-tabs" role="tablist" aria-label="Menu sections">
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-gameplay"
-              aria-controls="settingsPanel-gameplay"
-              aria-selected="true"
-              data-settings-tab="gameplay"
-              data-settings-tab-default
-            >
-              Gameplay
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-hints"
-              aria-controls="settingsPanel-hints"
-              aria-selected="false"
-              data-settings-tab="hints"
-            >
-              Hints
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-controls"
-              aria-controls="settingsPanel-controls"
-              aria-selected="false"
-              data-settings-tab="controls"
-            >
-              Controls
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-appearance"
-              aria-controls="settingsPanel-appearance"
-              aria-selected="false"
-              data-settings-tab="appearance"
-            >
-              Appearance
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-generator"
-              aria-controls="settingsPanel-generator"
-              aria-selected="false"
-              data-settings-tab="generator"
-            >
-              Generator
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-saves"
-              aria-controls="settingsPanel-saves"
-              aria-selected="false"
-              data-settings-tab="saves"
-            >
-              Saves
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-help"
-              aria-controls="settingsPanel-help"
-              aria-selected="false"
-              data-settings-tab="help"
-            >
-              Help
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-diagnostics"
-              aria-controls="settingsPanel-diagnostics"
-              aria-selected="false"
-              data-settings-tab="diagnostics"
-            >
-              Diagnostics
-            </button>
-          </nav>
-          <div class="settings-content" data-settings-scroll>
-          <section
-            class="settings-section settings-page"
-            id="settingsPanel-gameplay"
-            role="tabpanel"
-            aria-labelledby="settingsTab-gameplay"
-            data-settings-panel="gameplay"
-          >
-            <div class="settings-section-heading">
-              <div class="settings-heading-row">
-                <h3 id="settingsHeading-gameplay" data-settings-heading>Gameplay</h3>
-                <button
-                  type="button"
-                  class="help-chip"
-                  aria-label="Gameplay controls for preview, pacing, and assists"
-                  aria-describedby="tooltip-gameplay"
-                >
-                  ?
-                </button>
-                <span class="help-chip-bubble" id="tooltip-gameplay" role="tooltip">
-                  Tweak quick actions, pacing, and assists without leaving the puzzle.
-                </span>
-              </div>
-            </div>
-            <div
-              class="settings-panel"
-              role="group"
-              aria-labelledby="settingsHeading-gameplay"
-              >
-              <section class="sheet-section" aria-labelledby="quickActionsHeading">
-                <h3 id="quickActionsHeading">Quick actions</h3>
-            <div class="quick-actions" role="group" aria-label="Puzzle quick actions">
-              <button
-                id="previewToggle"
-                type="button"
-                class="quick-action"
-                data-testid="preview-toggle"
-                aria-label="Show preview"
-                title="Show preview"
-                aria-pressed="false"
-                disabled
-              >
-                <span class="icon" aria-hidden="true">🖼</span>
-                <span class="label">Show preview</span>
-              </button>
-              <button
-                id="fullscreenButton"
-                type="button"
-                class="quick-action"
-                data-testid="fullscreen-button"
-                aria-label="Enter fullscreen"
-                title="Enter fullscreen"
-                aria-pressed="false"
-              >
-                <span class="icon" aria-hidden="true">⛶</span>
-                <span class="label">Enter fullscreen</span>
-              </button>
-            </div>
-            <p class="control-note">
-              Manage the reference preview and fullscreen view without leaving the puzzle.
-            </p>
-          </section>
-          <section class="sheet-section" aria-labelledby="gameplayHeading">
-            <h3 id="gameplayHeading">Gameplay</h3>
-            <label class="toggle">
-              <input id="autoAdvanceToggle" type="checkbox" checked />
-              <span>Auto-advance to the next colour when complete</span>
-            </label>
-            <label class="toggle">
-              <input id="hintFlashToggle" type="checkbox" checked />
-              <span>Animate hint highlights</span>
-            </label>
-            <label class="toggle">
-              <input id="showRegionLabelsToggle" type="checkbox" checked />
-              <span>Show region numbers</span>
-            </label>
-            <label class="control">
-              <span>Difficulty</span>
-              <select id="difficultySelect">
-                <option value="normal">Standard</option>
-                <option value="nearby">Nearby</option>
-                <option value="easy">Easy</option>
-              </select>
-            </label>
-            <p class="control-note">
-              Nearby mode lets you click adjacent colours (for example, colour 2 can also paint 1 or 3).
-              Easy mode auto-selects any colour you click before filling it.
-            </p>
-            <label class="control">
-              <span>Sort Colours</span>
-              <select id="paletteSort" data-testid="palette-sort" disabled>
-                <option value="region">Number</option>
-                <option value="remaining">Remaining regions</option>
-                <option value="name">Colour name</option>
-                <option value="spectrum">Rainbow spectrum</option>
-                <option value="warmth">Warm → cool</option>
-                <option value="lightness">Perceptual lightness</option>
-              </select>
-            </label>
-            <p class="control-note">Choose how unfinished colours appear in the dock.</p>
-          </section>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-hints"
-          role="tabpanel"
-          aria-labelledby="settingsTab-hints"
-          data-settings-panel="hints"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-hints" data-settings-heading>Hints</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Hint visibility and overlays"
-                aria-describedby="tooltip-hints"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-hints" role="tooltip">
-                Control how hint highlights, overlays, and preview comparisons behave.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-hints">
-          <section class="sheet-section" aria-labelledby="hintsControlsHeading">
-            <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="hintFadeDuration">
-                  <span>Hint fade duration <output data-for="hintFadeDuration">1.2 s</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="hintFadeDuration"
-                  data-reset-default="1200"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="hintFadeDuration"
-                type="range"
-                min="400"
-                max="2400"
-                step="100"
-                value="1200"
-                data-default="1200"
-              />
-            </div>
-            <p class="control-note">Set how long hint highlights linger before fading out. Default 1.2 s.</p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="hintIntensity">
-                  <span>Hint intensity <output data-for="hintIntensity">65%</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="hintIntensity"
-                  data-reset-default="65"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="hintIntensity"
-                type="range"
-                min="20"
-                max="90"
-                step="5"
-                value="65"
-                data-default="65"
-              />
-            </div>
-            <p class="control-note">Adjust the opacity used when flashing matching regions. Default 65%.</p>
-          </section>
-          <section class="sheet-section" aria-labelledby="hintTypesHeading">
-            <h3 id="hintTypesHeading">Hint types</h3>
-            <p class="control-note">Pick which guidance effects appear while you play.</p>
-            <label class="toggle">
-              <input id="hintMatchingToggle" type="checkbox" checked />
-              <span>Highlight every region for the active colour</span>
-            </label>
-            <p class="control-note">Toggle the pulse that flashes all remaining regions sharing the selected colour.</p>
-            <label class="toggle">
-              <input id="hintHoverToggle" type="checkbox" checked />
-              <span>Spotlight hovered regions</span>
-            </label>
-            <p class="control-note">Show a focused hint when you pause the pointer over a region.</p>
-          </section>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-controls"
-          role="tabpanel"
-          aria-labelledby="settingsTab-controls"
-          data-settings-panel="controls"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-controls" data-settings-heading>Controls</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Control remapping and input feel"
-                aria-describedby="tooltip-controls"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-controls" role="tooltip">
-                Remap mouse buttons, adjust gesture behaviour, and set interface scale.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-controls">
-          <section class="sheet-section" aria-labelledby="mouseControlsHeading">
-            <h3 id="mouseControlsHeading">Mouse controls</h3>
-            <p class="control-note">
-              Assign actions to each mouse button when clicking or click-dragging on the
-              canvas.
-            </p>
-            <div class="mouse-control-group">
-              <span class="mouse-control-title">Left button</span>
-              <div class="mouse-control-options">
-                <label class="control mouse-control-option">
-                  <span>Click</span>
-                  <select id="mouseLeftClick">
-                    <option value="fill" selected>Fill region</option>
-                    <option value="select-fill">Select and fill region</option>
-                    <option value="select">Select colour</option>
-                    <option value="zoom-in">Zoom in</option>
-                    <option value="zoom-out">Zoom out</option>
-                    <option value="none">No action</option>
-                  </select>
-                </label>
-                <label class="control mouse-control-option">
-                  <span>Click + drag</span>
-                  <select id="mouseLeftDrag">
-                    <option value="pan" selected>Pan view</option>
-                    <option value="fill">Fill while dragging</option>
-                    <option value="zoom">Zoom</option>
-                    <option value="none">No action</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            <div class="mouse-control-group">
-              <span class="mouse-control-title">Middle button</span>
-              <div class="mouse-control-options">
-                <label class="control mouse-control-option">
-                  <span>Click</span>
-                  <select id="mouseMiddleClick">
-                    <option value="fill">Fill region</option>
-                    <option value="select-fill">Select and fill region</option>
-                    <option value="select">Select colour</option>
-                    <option value="zoom-in">Zoom in</option>
-                    <option value="zoom-out">Zoom out</option>
-                    <option value="none" selected>No action</option>
-                  </select>
-                </label>
-                <label class="control mouse-control-option">
-                  <span>Click + drag</span>
-                  <select id="mouseMiddleDrag">
-                    <option value="pan" selected>Pan view</option>
-                    <option value="fill">Fill while dragging</option>
-                    <option value="zoom">Zoom</option>
-                    <option value="none">No action</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            <div class="mouse-control-group">
-              <span class="mouse-control-title">Right button</span>
-              <div class="mouse-control-options">
-                <label class="control mouse-control-option">
-                  <span>Click</span>
-                  <select id="mouseRightClick">
-                    <option value="fill">Fill region</option>
-                    <option value="select-fill">Select and fill region</option>
-                    <option value="select" selected>Select colour</option>
-                    <option value="zoom-in">Zoom in</option>
-                    <option value="zoom-out">Zoom out</option>
-                    <option value="none">No action</option>
-                  </select>
-                </label>
-                <label class="control mouse-control-option">
-                  <span>Click + drag</span>
-                  <select id="mouseRightDrag">
-                    <option value="pan" selected>Pan view</option>
-                    <option value="fill">Fill while dragging</option>
-                    <option value="zoom">Zoom</option>
-                    <option value="none">No action</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            <p class="control-note">
-              Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out.
-            </p>
-          </section>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-appearance"
-          role="tabpanel"
-          aria-labelledby="settingsTab-appearance"
-          data-settings-panel="appearance"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-appearance" data-settings-heading>Appearance</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Appearance and accessibility controls"
-                aria-describedby="tooltip-appearance"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-appearance" role="tooltip">
-                Balance scale, contrast, overlays, and theme picks for the board.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-appearance">
-          <section class="sheet-section" aria-labelledby="appearanceHeading">
-            <h3 id="appearanceHeading">Appearance</h3>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="uiScale">
-                  <span>Interface scale <output data-for="uiScale">75%</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="uiScale"
-                  data-reset-default="0.75"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="uiScale"
-                type="range"
-                min="0.2"
-                max="3"
-                step="0.05"
-                value="0.75"
-                data-default="0.75"
-              />
-            </div>
-            <p class="control-note">Resize command buttons and labels without altering canvas zoom. Default 75%.</p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="labelScale">
-                  <span>Label size <output data-for="labelScale">100%</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="labelScale"
-                  data-reset-default="1"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="labelScale"
-                type="range"
-                min="0.2"
-                max="2"
-                step="0.05"
-                value="1"
-                data-default="1"
-              />
-            </div>
-            <p class="control-note">Scale region numbers independently from the surrounding interface. Default 100%.</p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="maxZoom">
-                  <span>Maximum zoom <output data-for="maxZoom">1200%</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="maxZoom"
-                  data-reset-default="12"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="maxZoom"
-                type="range"
-                min="2"
-                max="30"
-                step="0.5"
-                value="12"
-                data-default="12"
-              />
-            </div>
-            <p class="control-note">Limit how far the canvas can zoom in beyond the fitted view. Default 1200%.</p>
-            <label class="control">
-              <span>Interface theme</span>
-              <select id="uiTheme">
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-                <option value="colorful">Colourful</option>
-              </select>
-            </label>
-            <p class="control-note">Switch between dark, light, or colourful chrome accents.</p>
-            <label class="control">
-              <span>Renderer</span>
-              <select id="rendererMode">
-                <option value="svg">SVG</option>
-              </select>
-            </label>
-            <p class="control-note">
-              Rendering is handled by the simplified SVG backend.
-            </p>
-            <label class="control">
-              <span>Unfilled region colour</span>
-              <input id="backgroundColor" type="color" value="#f8fafc" />
-            </label>
-            <p class="control-note">
-              Applies to unfinished regions and adjusts outline contrast automatically.
-            </p>
-            <label class="control">
-              <span>Background</span>
-              <input id="stageBackgroundColor" type="color" value="#000000" />
-            </label>
-            <p class="control-note">Adjust the area surrounding the puzzle canvas.</p>
-          </section>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-generator"
-          role="tabpanel"
-          aria-labelledby="settingsTab-generator"
-          data-settings-panel="generator"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-generator" data-settings-heading>Generator</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Generator and import controls"
-                aria-describedby="tooltip-generator"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-generator" role="tooltip">
-                Set clustering, imports, and metadata for new puzzles and reloads.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-generator">
-          <div
-            class="generator-import-notice"
-            data-import-notice
-            role="status"
-            aria-live="polite"
-            hidden
-          >
-            <p class="generator-import-title">
-              <strong data-import-file></strong>
-            </p>
-            <p class="generator-import-description" data-import-description></p>
-            <div class="generator-import-actions">
-              <button id="confirmImport" type="button" data-import-confirm>Generate puzzle</button>
-              <button type="button" class="close-button" data-import-cancel>Cancel</button>
-            </div>
-          </div>
-          <section class="sheet-section" aria-labelledby="generatorHeading">
-            <h3 id="generatorHeading">Clustering &amp; detail</h3>
-            <p class="control-note">
-              Tune the colour clustering pipeline that powers new puzzles. These settings apply to fresh imports and the bundled
-              capybara sample when reloaded.
-            </p>
-            <div class="detail-callout">
-              <p class="detail-intro">Capybara sample detail presets</p>
-              <div class="detail-picker" role="group" aria-label="Capybara sample detail presets">
-                <button type="button" class="detail-chip" data-detail-level="low">Low</button>
-                <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
-                <button type="button" class="detail-chip" data-detail-level="high">High</button>
-              </div>
-              <p class="detail-caption" data-detail-caption></p>
-            </div>
-            <p class="control-note">
-              Switching presets updates every slider below and reloads the sample scene when it's active.
-            </p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="colorCount">
-                  <span>Colours <output data-for="colorCount">16</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="colorCount"
-                  data-reset-default="16"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="colorCount"
-                type="range"
-                min="4"
-                max="64"
-                value="16"
-                data-default="16"
-              />
-            </div>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="minRegion">
-                  <span>Regions <output data-for="minRegion">80 px²</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="minRegion"
-                  data-reset-default="80"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="minRegion"
-                type="range"
-                min="1"
-                max="600"
-                value="80"
-                data-default="80"
-              />
-            </div>
-            <p class="control-note">Higher values merge smaller areas for fewer regions. Default 80 px².</p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="detailLevel">
-                  <span>Detail <output data-for="detailLevel">768 px</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="detailLevel"
-                  data-reset-default="768"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="detailLevel"
-                type="range"
-                min="256"
-                max="1600"
-                step="64"
-                value="768"
-                data-default="768"
-              />
-            </div>
-            <p class="control-note">Controls the longest edge used when resizing the source image. Default 768 px.</p>
-            <label class="control">
-              <span>Algorithm</span>
-              <select id="generationAlgorithm">
-                <option value="local-kmeans">Local palette clustering (k-means)</option>
-                <option value="local-posterize">Local posterize &amp; merge</option>
-                <option value="organic-slic">Organic superpixels (curved gradients)</option>
-              </select>
-            </label>
-            <p class="control-note">
-              Choose between local clustering pipelines now, with space for hosted services to appear as they become available.
-            </p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="sampleRate">
-                  <span>Sample rate <output data-for="sampleRate">65%</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="sampleRate"
-                  data-reset-default="65"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="sampleRate"
-                type="range"
-                min="25"
-                max="100"
-                step="5"
-                value="65"
-                data-default="65"
-              />
-            </div>
-            <p class="control-note">Lower values speed up clustering by sampling fewer pixels. Default 65%.</p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="kmeansIters">
-                  <span>Iterations <output data-for="kmeansIters">12</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="kmeansIters"
-                  data-reset-default="12"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="kmeansIters"
-                type="range"
-                min="4"
-                max="32"
-                step="1"
-                value="12"
-                data-default="12"
-              />
-            </div>
-            <p class="control-note">
-              Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process. Default 12 iterations.
-            </p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="smoothingPasses">
-                  <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="smoothingPasses"
-                  data-reset-default="1"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="smoothingPasses"
-                type="range"
-                min="0"
-                max="4"
-                step="1"
-                value="1"
-                data-default="1"
-              />
-            </div>
-            <p class="control-note">
-              Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source. Default 1 pass.
-            </p>
-            <details class="advanced-options" id="generatorAdvanced">
-              <summary>Advanced options</summary>
-              <label class="control">
-                <span>Art prompt</span>
-                <textarea
-                  id="artPrompt"
-                  rows="3"
-                  placeholder="Summarise the idea behind this puzzle"
-                ></textarea>
-              </label>
-              <p class="control-note">
-                Stored with saves so you can revisit the inspiration that sparked the artwork.
-              </p>
-              <label class="control">
-                <span>Image description</span>
-                <textarea
-                  id="imageDescription"
-                  rows="3"
-                  placeholder="Describe the image you want to generate"
-                ></textarea>
-              </label>
-              <p class="control-note">
-                Stored with saves and exports so you can revisit the inspiration later.
-              </p>
-              <p class="control-note">
-                <a
-                  id="chatGptLink"
-                  class="chatgpt-link"
-                  href="https://chat.openai.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open ChatGPT to craft an image prompt <span aria-hidden="true">↗</span>
-                </a>
-              </p>
-            </details>
-          </section>
-          <form class="sheet-section" data-source-url-form>
-            <h3 id="sourceUrlHeading">Import from URL</h3>
-            <p class="control-note">Enter an https:// link to load an image directly.</p>
-            <label class="control">
-              <span>Image URL</span>
-              <input type="url" inputmode="url" data-source-url-input aria-describedby="sourceUrlHint sourceUrlError" />
-            </label>
-            <p class="control-note" id="sourceUrlHint" data-source-url-hint>
-              External sites must allow cross-origin image access.
-            </p>
-            <p class="control-note" id="sourceUrlError" data-source-url-error role="alert" hidden></p>
-            <div class="panel-actions">
-              <button type="submit" data-source-url-submit disabled>Load image</button>
-            </div>
-          </form>
-          <div class="sheet-actions">
-            <button id="applyOptions" type="button" disabled>Apply changes</button>
-          </div>
-          <div
-            class="generator-progress"
-            data-generator-progress
-            role="status"
-            aria-live="polite"
-            hidden
-          >
-            <p class="generator-progress-message" data-generator-progress-message></p>
-            <div
-              class="generator-progress-meter"
-              data-generator-progress-meter
-              role="progressbar"
-              aria-label="Puzzle generation progress"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              aria-valuenow="0"
-              aria-hidden="true"
-            >
-            <div class="generator-progress-bar" data-generator-progress-bar></div>
-          </div>
-        </div>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-saves"
-          role="tabpanel"
-          aria-labelledby="settingsTab-saves"
-          data-settings-panel="saves"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-saves" data-settings-heading>Saves</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Save management"
-                aria-describedby="tooltip-saves"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-saves" role="tooltip">
-                Import puzzles, start fresh sessions, and manage your save slots.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-saves">
-          <section class="sheet-section" aria-labelledby="saveStartHeading">
-            <h3 id="saveStartHeading">Start a puzzle</h3>
-            <div class="save-start-actions">
-              <button
-                id="selectImage"
-                type="button"
-                aria-label="Upload image or JSON puzzle"
-              >
-                Upload Image
-              </button>
-              <button
-                id="samplePuzzle"
-                type="button"
-                data-action="load-sample"
-                aria-label="Load capybara sample puzzle"
-              >
-                Load capybara sample
-              </button>
-            </div>
-          </section>
-          <section
-            class="sheet-section save-manager"
-            role="group"
-            aria-labelledby="saveManagerHeading"
-            id="saveManagerSection"
-            data-save-section="dialog"
-          >
-            <h3 id="saveManagerHeading">Your saves</h3>
-            <div
-              class="save-manager-list"
-              data-save-list
-              aria-live="polite"
-              aria-labelledby="saveManagerHeading"
-              role="list"
-            ></div>
-            <p class="save-manager-empty" data-save-empty hidden>
-              No saves yet. Create one above to start autosaving progress.
-            </p>
-            <div class="save-manager-actions">
-              <button type="button" data-save-snapshot disabled>Save current puzzle</button>
-              <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
-              <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
-            </div>
-          </section>
-          <section class="sheet-section" aria-labelledby="storageHeading">
-            <h3 id="storageHeading">Save storage</h3>
-            <p id="saveStorageSummary" class="control-note"></p>
-            <label class="control">
-              <span>Stored image size <output data-for="sourceImageLimit">1 MB</output></span>
-              <select id="sourceImageLimit">
-                <option value="262144">256 KB</option>
-                <option value="524288">512 KB</option>
-                <option value="1048576" selected>1 MB</option>
-                <option value="2097152">2 MB</option>
-                <option value="5242880">5 MB</option>
-              </select>
-            </label>
-            <p class="control-note">
-              Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate
-              or import.
-            </p>
-            <div class="log-actions">
-              <button id="deleteAllSaves" type="button">Delete all saves</button>
-            </div>
-          </section>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-help"
-          role="tabpanel"
-          aria-labelledby="settingsTab-help"
-          data-settings-panel="help"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-help" data-settings-heading>Help</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Gameplay tips"
-                aria-describedby="tooltip-help"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-help" role="tooltip">
-                Review button legends and gestures while you play.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-help">
-          <section class="sheet-section" aria-labelledby="commandsHeading">
-            <h3 id="commandsHeading">Command buttons</h3>
-            <dl class="command-list">
-              <dt>🖼 Preview</dt>
-              <dd>Toggle the finished artwork overlay to compare your progress.</dd>
-              <dt>🎛 Generator</dt>
-              <dd>
-                Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor
-                generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation.
-              </dd>
-              <dt>🎚 Detail</dt>
-              <dd>
-                Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes,
-                minimum region areas, resize targets, and the region counts noted above.
-              </dd>
-              <dt>⛶ Fullscreen</dt>
-              <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
-              <dt>⬆ Import</dt>
-              <dd>Load a new image or JSON puzzle from disk.</dd>
-              <dt>💾 Saves</dt>
-              <dd>Manage snapshots — load, rename, export, or delete stored games.</dd>
-              <dt>ℹ Help</dt>
-              <dd>
-                Open this guide and review tips for palette controls, gestures, and shortcuts.
-              </dd>
-              <dt>⚙ Menu</dt>
-              <dd>
-                Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface
-                scale. Advanced options expose accessibility tweaks for the hint animations.
-              </dd>
-            </dl>
-          </section>
-          <section class="sheet-section" aria-labelledby="controlsHeading">
-            <h3 id="controlsHeading">Canvas controls</h3>
-            <ul class="control-list">
-              <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
-              <li><kbd>Right click</kbd> Select the colour under the pointer.</li>
-              <li>Select a palette swatch to set the active colour and flash every matching region.</li>
-              <li>Enable Easy difficulty in the menu to let clicks auto-select the tapped region's colour.</li>
-              <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
-              <li><kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas.</li>
-              <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
-            </ul>
-          </section>
-          </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-diagnostics"
-          role="tabpanel"
-          aria-labelledby="settingsTab-diagnostics"
-          data-settings-panel="diagnostics"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-diagnostics" data-settings-heading>Diagnostics</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Diagnostics and JSON review"
-                aria-describedby="tooltip-diagnostics"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-diagnostics" role="tooltip">
-                Check live logs, system status, and review the current JSON payload.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-diagnostics">
-          <section class="sheet-section" aria-label="Menu loader console">
-            <div class="visually-hidden" id="settingsLoadHeading">Menu loader console</div>
-            <div
-              id="settingsLoadConsole"
-              class="debug-log settings-loading-console"
-              role="log"
-              aria-labelledby="settingsLoadHeading"
-              aria-live="polite"
-              aria-relevant="additions text"
-            ></div>
-          </section>
-          <section class="sheet-section" aria-labelledby="systemHeading">
-            <h3 id="systemHeading">System status</h3>
-            <dl class="command-list">
-              <div>
-                <dt>Service worker</dt>
-                <dd data-service-worker-state>Waiting to register…</dd>
-              </div>
-              <div>
-                <dt>Runtime cache</dt>
-                <dd data-service-worker-cache>capy-offline-cache-v3</dd>
-              </div>
-              <div>
-                <dt>Last update</dt>
-                <dd data-service-worker-updated>Not available yet</dd>
-              </div>
-            </dl>
-            <p class="control-note">
-              Service worker registration, cache limits, and install events stream into the debug log below.
-            </p>
-          </section>
-          <section class="sheet-section" aria-labelledby="debugHeading">
-            <h3 id="debugHeading">Debug log</h3>
-            <p class="control-note">
-              Recent actions, selections, and generation events appear here while you play.
-            </p>
-            <div
-              id="debugLog"
-              class="debug-log"
-              role="log"
-              aria-live="polite"
-              aria-relevant="additions text"
-            ></div>
-            <div class="log-actions">
-              <button id="clearDebugLog" type="button">Clear log</button>
-            </div>
-          </section>
-          <section class="sheet-section" aria-labelledby="settingsJsonHeading">
-            <h3 id="settingsJsonHeading">Preferences JSON</h3>
-            <p class="control-note">
-              Review or update the current preferences as JSON. Export a snapshot or import one from the textarea below.
-            </p>
-            <label class="visually-hidden" for="settingsJsonView">Preferences JSON</label>
-            <textarea id="settingsJsonView" class="json-view" rows="8" spellcheck="false"></textarea>
-            <div class="json-actions">
-              <button id="refreshSettingsJson" type="button">Refresh</button>
-              <button id="exportSettingsJson" type="button">Export JSON</button>
-              <button id="applySettingsJson" type="button">Import JSON</button>
-              <label class="json-upload">
-                <input id="importSettingsFile" type="file" accept="application/json" hidden />
-                <span role="button" aria-controls="importSettingsFile">Upload file</span>
-              </label>
-            </div>
-          </section>
-          </div>
-        </section>
-          </div>
-        </div>
-      </div>
-    </div>
-    <script>
-      (() => {
+  function computeInkStyles(hex) {
+    const rgb = hexToRgb(hex);
+    const luminance = relativeLuminance(rgb);
+    if (luminance < 0.45) {
+      return { outline: "rgba(248, 250, 252, 0.75)", number: "rgba(248, 250, 252, 0.95)" };
+    }
+    return { outline: DEFAULT_OUTLINE, number: DEFAULT_NUMBER };
+  }
+
+  function hexToRgb(hex) {
+    if (typeof hex !== "string") return [248, 250, 252];
+    const normalized = hex.trim().replace(/^#/, "");
+    if (normalized.length !== 6) return [248, 250, 252];
+    const value = Number.parseInt(normalized, 16);
+    if (!Number.isFinite(value)) return [248, 250, 252];
+    return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
+  }
+
+  function relativeLuminance(rgb) {
+    if (!Array.isArray(rgb) || rgb.length < 3) return 0;
+    const transform = (component) => {
+      const channel = component / 255;
+      return channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+    };
+    const [r, g, b] = rgb.map(transform);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  function createVectorScenePayload({ width, height, regions }) {
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+      throw new Error("Scene payload requires numeric width and height");
+    }
+    const serializedRegions = [];
+    for (const region of regions || []) {
+      if (!region) continue;
+      const pathData = buildPathData(region);
+      serializedRegions.push({
+        id: region.id,
+        colorId: region.colorId,
+        pathData,
+      });
+    }
+    return {
+      json: { format: "capy.scene+simple", version: 1, width, height, regions: serializedRegions },
+      binary: new ArrayBuffer(0),
+    };
+  }
+
+  function createSvgRenderer(host, hooks = {}) {
+    if (!host || typeof document === "undefined") {
+      const stub = {
+        type: "svg",
+        getRendererType: () => "svg",
+        svg: null,
+        renderFrame() {},
+        clear() {},
+        dispose() {},
+      };
+      hooks?.onRendered?.({ svg: null, shapesGroup: null });
+      return stub;
+    }
+    const NS = "http://www.w3.org/2000/svg";
+    const container = host.parentElement || host;
+    const originalPosition = container.style.position || "";
+    const shouldResetPosition = originalPosition === "" || originalPosition === "static";
+    if (shouldResetPosition) {
+      container.style.position = "relative";
+    }
+
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("aria-hidden", "true");
+    svg.style.position = "absolute";
+    svg.style.top = "0";
+    svg.style.left = "0";
+    svg.style.width = "100%";
+    svg.style.height = "100%";
+    svg.style.pointerEvents = "none";
+    svg.style.userSelect = "none";
+    svg.style.display = "block";
+
+    const backgroundRect = document.createElementNS(NS, "rect");
+    svg.appendChild(backgroundRect);
+
+    const shapesGroup = document.createElementNS(NS, "g");
+    svg.appendChild(shapesGroup);
+
+    container.insertAdjacentElement("beforeend", svg);
+
+    function clear() {
+      while (shapesGroup.firstChild) {
+        shapesGroup.removeChild(shapesGroup.firstChild);
+      }
+    }
+
+    function renderFrame({ state, cache, backgroundColor, defaultBackgroundColor }) {
+      clear();
+      const fill = backgroundColor || defaultBackgroundColor || "#f8fafc";
+      backgroundRect.setAttribute("fill", fill);
+      const regions = cache?.regions?.length ? cache.regions : state?.puzzle?.regions || [];
+      const palette = state?.puzzle?.palette || [];
+      const paletteById = new Map(palette.map((entry) => [entry.id, entry]));
+      for (const geometry of regions) {
+        const pathData = buildPathData(geometry);
+        if (!pathData) continue;
+        const paletteEntry = paletteById.get(geometry.colorId);
+        const fillHex = paletteEntry?.hex || paletteEntry?.color || "#cbd5e1";
+        const ink = computeInkStyles(fillHex);
+        const path = document.createElementNS(NS, "path");
+        path.setAttribute("d", pathData);
+        const isFilled = state?.filled?.has(geometry.id);
+        path.setAttribute("fill", isFilled ? fillHex : DEFAULT_OVERLAY_FILL);
+        path.setAttribute("stroke", ink.outline);
+        path.setAttribute("stroke-width", "0.75");
+        shapesGroup.appendChild(path);
+      }
+      hooks?.onRendered?.({ svg, shapesGroup });
+    }
+
+    function dispose() {
+      svg.remove();
+      if (shouldResetPosition) {
+        container.style.position = originalPosition;
+      }
+    }
+
+    return {
+      type: "svg",
+      getRendererType: () => "svg",
+      svg,
+      renderFrame,
+      clear,
+      dispose,
+    };
+  }
+
+  const capyRender = { createSvgRenderer, computeInkStyles, buildPathData, formatNumber, createVectorScenePayload };
+  globalThis.capyRenderer = Object.assign(globalThis.capyRenderer || {}, capyRender);
+})();
+
+(() => {
+
+  (() => {
+    if (globalThis.capyRuntime) {
+      return;
+    }
+
+    const { createSvgRenderer } = globalThis.capyRenderer || {};
+    if (typeof createSvgRenderer !== "function") {
+      return;
+    }
+
+    const root = typeof document !== "undefined" ? document.documentElement : null;
+    const SETTINGS_STORAGE_KEY = "capy.settings.v1";
+    const DEFAULT_UI_SCALE = 0.75;
+    const MIN_UI_SCALE = 0.2;
+    const MAX_UI_SCALE = 3;
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function parseStoredScale(raw) {
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        const payload =
+          parsed && typeof parsed === "object"
+            ? parsed.settings && typeof parsed.settings === "object"
+              ? parsed.settings
+              : parsed
+            : null;
+        let candidate = payload && payload.uiScale != null ? Number(payload.uiScale) : NaN;
+        if (!Number.isFinite(candidate) && payload && typeof payload.uiScale === "string") {
+          const trimmed = payload.uiScale.trim();
+          if (trimmed.endsWith("%")) {
+            candidate = Number(trimmed.slice(0, -1)) / 100;
+          }
+        }
+        if (Number.isFinite(candidate) && candidate > 0) {
+          if (candidate > MAX_UI_SCALE && candidate <= MAX_UI_SCALE * 100) {
+            candidate /= 100;
+          }
+          return clamp(candidate, MIN_UI_SCALE, MAX_UI_SCALE);
+        }
+      } catch (_error) {
+        /* localStorage may be unavailable; fall back to defaults. */
+      }
+      return null;
+    }
+
+    function readStoredSettings(storage) {
+      if (!storage || typeof storage.getItem !== "function") {
+        return null;
+      }
+      try {
+        return storage.getItem(SETTINGS_STORAGE_KEY);
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    let prebootMetrics = {};
+
+    function computePrebootMetrics() {
+      if (!root || typeof window === "undefined") return {};
+
+      const storedScale = parseStoredScale(readStoredSettings(window.localStorage));
+      const userScale = storedScale == null ? DEFAULT_UI_SCALE : storedScale;
+      root.style.setProperty("--ui-scale-user", String(userScale));
+      const viewport = window.visualViewport;
+      const width = Math.round((viewport && viewport.width) || window.innerWidth || root.clientWidth || 0);
+      const height = Math.round(
+        (viewport && viewport.height) || window.innerHeight || root.clientHeight || 0
+      );
+      const minSide = Math.max(1, Math.min(width, height));
+      const autoScale = Math.min(1.1, Math.max(0.6, minSide / 880));
+      root.style.setProperty("--ui-scale-auto", autoScale.toFixed(3));
+      const combined = Math.min(1.8, Math.max(0.35, userScale * autoScale));
+      root.style.setProperty("--ui-scale", combined.toFixed(4));
+      const orientation = width >= height ? "landscape" : "portrait";
+      const padding = orientation === "portrait" ? Math.min(28, Math.max(16, Math.round(minSide * 0.06))) : 32;
+      root.style.setProperty("--app-width", `${width}px`);
+      root.style.setProperty("--app-height", `${height}px`);
+      root.style.setProperty("--viewport-padding", `${padding}px`);
+      const compactCommands = width < 720 || height < 540;
+      root.dataset.orientation = orientation;
+      root.dataset.compactCommands = compactCommands ? "true" : "false";
+
+      prebootMetrics = { orientation, compactCommands };
+      return prebootMetrics;
+    }
+
+    function getPrebootMetrics() {
+      return prebootMetrics;
+    }
+
+    function consumePrebootMetrics() {
+      const metrics = prebootMetrics || {};
+      prebootMetrics = {};
+      if (typeof window !== "undefined") {
+        try {
+          delete window.__capyPrebootMetrics;
+        } catch (_error) {
+          window.__capyPrebootMetrics = undefined;
+        }
+      }
+      return metrics;
+    }
+
+    function applyPrebootMetrics() {
+      if (typeof window === "undefined" || !document.body) {
+        return;
+      }
+
+      const metrics = consumePrebootMetrics();
+      if (metrics.orientation) {
+        document.body.dataset.orientation = metrics.orientation;
+        document.documentElement.dataset.orientation = metrics.orientation;
+      }
+      if (typeof metrics.compactCommands === "boolean") {
+        document.body.classList.toggle("compact-commands", metrics.compactCommands);
+        document.documentElement.dataset.compactCommands = metrics.compactCommands ? "true" : "false";
+      }
+    }
+
+    function beginRendererBootstrap() {
+      if (typeof window === "undefined") return false;
+      const alreadyBootstrapped = window.__capyRendererBootstrapped === true;
+      window.__capyRendererBootstrapped = true;
+      return alreadyBootstrapped;
+    }
+
+    function completeRendererBootstrap(_succeeded) {
+      // The bootstrap flag is set immediately in beginRendererBootstrap; nothing
+      // else needs to happen here when simplifying the runtime.
+    }
+
+    // Keep the renderer controller here so every consumer uses the exact same
+    // export site. The implementation avoids layers of indirection—renderers are
+    // registered up front, the preferred renderer is activated immediately, and
+    // fallbacks are lightweight when no backend can initialise.
+    function createRendererController(host, options = {}) {
+      const { hooks = {}, rendererType } = options || {};
+      const registry = { svg: createSvgRenderer };
+      let renderer = null;
+      let activeType = null;
+
+      const normalize = (value) => {
+        if (typeof value !== "string") return null;
+        const normalized = value.trim().toLowerCase();
+        return normalized || null;
+      };
+
+      const notifyRendererChange = (type) => {
+        if (typeof hooks.onRendererChange === "function") {
+          hooks.onRendererChange(type);
+          return;
+        }
+
+        hooks.log?.("Renderer change handler unbound", {
+          code: "renderer-change-handler-unbound",
+          renderer: type,
+        });
+      };
+
+      function activateRenderer(type) {
+        const factory = type ? registry[type] : null;
+        if (!factory) {
+          hooks.log?.("Renderer change handler unbound", { code: "renderer-change-handler-unbound", renderer: type });
+          return false;
+        }
+        try {
+          const next = factory(host, hooks);
+          if (!next) return false;
+          renderer?.dispose?.();
+          renderer = next;
+          activeType = type;
+          notifyRendererChange(type);
+          return true;
+        } catch (error) {
+          hooks.log?.("Renderer failed", { code: "renderer-failed", renderer: type, error: error?.message });
+          return false;
+        }
+      }
+
+      function ensureRenderer(preferred) {
+        const normalizedPreferred = normalize(preferred) || "svg";
+        if (activateRenderer(normalizedPreferred)) {
+          return renderer;
+        }
+        const fallbackType = "svg";
+        renderer = registry[fallbackType]?.(host, hooks) || null;
+        activeType = renderer ? fallbackType : null;
+        if (activeType) {
+          notifyRendererChange(activeType);
+        }
+        return renderer;
+      }
+
+      function registerRenderer(type, factory) {
+        const normalized = normalize(type);
+        if (!normalized || typeof factory !== "function") return false;
+        registry[normalized] = factory;
+        return true;
+      }
+
+      function unregisterRenderer(type) {
+        const normalized = normalize(type);
+        if (!normalized || !registry[normalized]) return false;
+        if (activeType === normalized) {
+          renderer?.dispose?.();
+          renderer = null;
+          activeType = null;
+        }
+        delete registry[normalized];
+        return true;
+      }
+
+      return {
+        getRendererType: () => renderer?.getRendererType?.() || activeType,
+        listRenderers: () => Object.keys(registry),
+        setRenderer: (type) => ensureRenderer(type ?? rendererType),
+        resize: (metrics = {}) => renderer?.resize?.(metrics),
+        renderFrame: (args = {}) => renderer?.renderFrame?.(args) ?? null,
+        renderPreview: (args = {}) => renderer?.renderPreview?.(args) ?? null,
+        flashRegions: (args = {}) => renderer?.flashRegions?.(args),
+        fillBackground: (args = {}) => renderer?.fillBackground?.(args),
+        dispose: () => renderer?.dispose?.(),
+        getContext: () => renderer?.getContext?.() || null,
+        registerRenderer,
+        unregisterRenderer,
+        getRenderer: () => renderer,
+      };
+    }
+
+    if (root) {
+      const metrics = computePrebootMetrics();
+      if (typeof window !== "undefined") {
+        window.__capyPrebootMetrics = metrics;
+      }
+    }
+
+    const capyRuntime = Object.freeze({
+      applyPrebootMetrics,
+      beginRendererBootstrap,
+      completeRendererBootstrap,
+      computePrebootMetrics,
+      consumePrebootMetrics,
+      createRendererController,
+      createSvgRenderer,
+      getPrebootMetrics,
+    });
+
+    globalThis.capyRuntime = capyRuntime;
+
+    if (typeof document !== "undefined" && document.body && typeof applyPrebootMetrics === "function") {
+      applyPrebootMetrics();
+    }
+  })();
+})();
+
+(() => {
+  const RAW_HTML_SENTINEL = Symbol("capy:raw-html");
+
+  function escapeHtml(value) {
+    if (value == null) {
+      return "";
+    }
+    return String(value).replace(/[&<>"']/g, (char) => {
+      switch (char) {
+        case "&":
+          return "&amp;";
+        case "<":
+          return "&lt;";
+        case ">":
+          return "&gt;";
+        case '"':
+          return "&quot;";
+        case "'":
+          return "&#39;";
+        default:
+          return char;
+      }
+    });
+  }
+
+  function serializeValue(value) {
+    if (value == null || value === false) {
+      return "";
+    }
+    if (Array.isArray(value)) {
+      return value.map(serializeValue).join("");
+    }
+    if (value && typeof value === "object") {
+      if (value.__kind === RAW_HTML_SENTINEL) {
+        return value.value;
+      }
+      if (typeof value.toHTML === "function") {
+        return serializeValue(value.toHTML());
+      }
+    }
+    return escapeHtml(value);
+  }
+
+  function html(strings, ...values) {
+    let result = "";
+    for (let index = 0; index < strings.length; index += 1) {
+      result += strings[index];
+      if (index < values.length) {
+        result += serializeValue(values[index]);
+      }
+    }
+    return unsafeHTML(result);
+  }
+
+  function unsafeHTML(value) {
+    return { __kind: RAW_HTML_SENTINEL, value: String(value ?? "") };
+  }
+
+  function renderTemplate(target, templateResult) {
+    if (!target) return;
+    let markup = "";
+    if (templateResult && templateResult.__kind === RAW_HTML_SENTINEL) {
+      markup = templateResult.value;
+    } else if (typeof templateResult === "string") {
+      markup = templateResult;
+    } else if (templateResult != null) {
+      markup = String(templateResult);
+    }
+    target.innerHTML = markup;
+  }
+
+  const capyTemplates = { html, renderTemplate, unsafeHTML };
+  globalThis.capyTemplates = capyTemplates;
+})();
+
+(() => {
+
+  const { createVectorScenePayload } = globalThis.capyRenderer || {};
+  if (typeof createVectorScenePayload !== "function") {
+    return;
+  }
+
+  const GENERATION_STAGE_MESSAGES = {
+    prepare: "Preparing image…",
+    quantize: "Quantizing colours",
+    smooth: "Smoothing regions",
+    smoothSkip: "Skipping smoothing",
+    segment: "Segmenting regions",
+    finalize: "Finalizing metadata",
+    complete: "Generation complete",
+  };
+
+  const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
+  const DEFAULT_SOURCE_IMAGE_MAX_BYTES = 1048576;
+  const SOURCE_IMAGE_VARIANT_ORIGINAL = "original";
+
+  const GENERATION_ALGORITHMS = {
+    "local-kmeans": {
+      id: "local-kmeans",
+      label: "Local palette clustering (k-means)",
+      mode: "local",
+    },
+    "local-posterize": {
+      id: "local-posterize",
+      label: "Local posterize & merge",
+      mode: "local",
+    },
+    "organic-slic": {
+      id: "organic-slic",
+      label: "Organic superpixels (curved gradients)",
+      mode: "local",
+    },
+  };
+
+  const GENERATION_ALGORITHM_CATALOG = Object.freeze(
+    Object.values(GENERATION_ALGORITHMS).map(({ id, label, mode }) => ({ id, label, mode }))
+  );
+
+  const DEFAULT_GENERATION_ALGORITHM_ID = DEFAULT_GENERATION_ALGORITHM;
+
+  let generationWorkerInstance = null;
+  let generationWorkerUrl = null;
+
+  const now =
+    typeof performance !== "undefined" && typeof performance.now === "function"
+      ? () => performance.now()
+      : () => Date.now();
+
+  function clamp(value, min, max) {
+    if (Number.isNaN(value)) return min;
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+  }
+
+  function normalizeAlgorithm(value) {
+    if (typeof value === "string") {
+      const key = value.trim();
+      switch (key) {
+        case "local-kmeans":
+        case "local-posterize":
+        case "organic-slic":
+          return key;
+        default:
+          break;
+      }
+    }
+    return DEFAULT_GENERATION_ALGORITHM;
+  }
+
+  function toHex(value) {
+    return value.toString(16).padStart(2, "0");
+  }
+
+  function accumulate(counter, touchedColors, color, weight = 1, touchedCount = 0) {
+    if (color < 0 || !Number.isFinite(color)) {
+      return touchedCount;
+    }
+    if (color >= counter.length) {
+      return touchedCount;
+    }
+    const amount = Number.isFinite(weight) ? weight : 0;
+    if (amount === 0) {
+      return touchedCount;
+    }
+    if (counter[color] === 0) {
+      touchedColors[touchedCount++] = color;
+    }
+    counter[color] += amount;
+    return touchedCount;
+  }
+
+  function floodFill(width, height, indexMap) {
+    const regionMap = new Int32Array(width * height);
+    regionMap.fill(-1);
+    const regions = [];
+    let regionId = 0;
+    const stack = [];
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const startIdx = y * width + x;
+        if (regionMap[startIdx] !== -1) continue;
+        const colorId = indexMap[startIdx];
+        stack.push(startIdx);
+        regionMap[startIdx] = regionId;
+        const pixels = [];
+        while (stack.length) {
+          const idx = stack.pop();
+          pixels.push(idx);
+          const px = idx % width;
+          const py = (idx / width) | 0;
+          if (px > 0) {
+            const n = idx - 1;
+            if (regionMap[n] === -1 && indexMap[n] === colorId) {
+              regionMap[n] = regionId;
+              stack.push(n);
+            }
+          }
+          if (px < width - 1) {
+            const n = idx + 1;
+            if (regionMap[n] === -1 && indexMap[n] === colorId) {
+              regionMap[n] = regionId;
+              stack.push(n);
+            }
+          }
+          if (py > 0) {
+            const n = idx - width;
+            if (regionMap[n] === -1 && indexMap[n] === colorId) {
+              regionMap[n] = regionId;
+              stack.push(n);
+            }
+          }
+          if (py < height - 1) {
+            const n = idx + width;
+            if (regionMap[n] === -1 && indexMap[n] === colorId) {
+              regionMap[n] = regionId;
+              stack.push(n);
+            }
+          }
+        }
+        regions.push({
+          id: regionId,
+          colorId,
+          pixels,
+          pixelCount: pixels.length,
+        });
+        regionId += 1;
+      }
+    }
+    return { regionMap, regions };
+  }
+
+  function segmentRegions(width, height, assignments, minRegion) {
+    const indexMap = new Uint16Array(assignments);
+    let maxColorId = 0;
+    for (let i = 0; i < indexMap.length; i++) {
+      if (indexMap[i] > maxColorId) {
+        maxColorId = indexMap[i];
+      }
+    }
+    const paletteSize = Math.max(1, maxColorId + 1);
+    const neighborCounter = new Uint32Array(paletteSize);
+    const touchedColors = new Uint16Array(paletteSize);
+    let attempt = 0;
+    let threshold = Math.max(1, minRegion);
+    while (true) {
+      const { regionMap, regions } = floodFill(width, height, indexMap);
+      const tiny = regions.filter((region) => region.pixelCount < threshold);
+      if (tiny.length === 0 || threshold <= 1) {
+        return { regionMap, regions };
+      }
+      let changed = false;
+      for (const region of tiny) {
+        let touchedCount = 0;
+        for (const idx of region.pixels) {
+          const x = idx % width;
+          const y = (idx / width) | 0;
+          if (x > 0) {
+            const n = idx - 1;
+            const color = indexMap[n];
+            if (color !== region.colorId) {
+              touchedCount = accumulate(
+                neighborCounter,
+                touchedColors,
+                color,
+                1,
+                touchedCount
+              );
+            }
+          }
+          if (x < width - 1) {
+            const n = idx + 1;
+            const color = indexMap[n];
+            if (color !== region.colorId) {
+              touchedCount = accumulate(
+                neighborCounter,
+                touchedColors,
+                color,
+                1,
+                touchedCount
+              );
+            }
+          }
+          if (y > 0) {
+            const n = idx - width;
+            const color = indexMap[n];
+            if (color !== region.colorId) {
+              touchedCount = accumulate(
+                neighborCounter,
+                touchedColors,
+                color,
+                1,
+                touchedCount
+              );
+            }
+          }
+          if (y < height - 1) {
+            const n = idx + width;
+            const color = indexMap[n];
+            if (color !== region.colorId) {
+              touchedCount = accumulate(
+                neighborCounter,
+                touchedColors,
+                color,
+                1,
+                touchedCount
+              );
+            }
+          }
+        }
+        if (touchedCount === 0) {
+          continue;
+        }
+        let bestColor = region.colorId;
+        let bestVotes = -1;
+        for (let i = 0; i < touchedCount; i++) {
+          const color = touchedColors[i];
+          const votes = neighborCounter[color];
+          if (votes > bestVotes) {
+            bestVotes = votes;
+            bestColor = color;
+          }
+        }
+        if (bestColor !== region.colorId) {
+          changed = true;
+          for (const idx of region.pixels) {
+            indexMap[idx] = bestColor;
+          }
+        }
+        for (let i = 0; i < touchedCount; i++) {
+          neighborCounter[touchedColors[i]] = 0;
+        }
+      }
+      attempt += 1;
+      if (!changed || attempt > 6) {
+        threshold = Math.max(1, Math.floor(threshold / 2));
+      }
+    }
+  }
+
+  function finalizeGeneratedRegions(regions, width) {
+    if (!Array.isArray(regions)) {
+      return;
+    }
+    for (const region of regions) {
+      const hasPixels = Array.isArray(region.pixels) && region.pixels.length > 0;
+      const count =
+        typeof region.pixelCount === "number" && Number.isFinite(region.pixelCount)
+          ? region.pixelCount
+          : hasPixels
+          ? region.pixels.length
+          : 0;
+      if (hasPixels && count > 0) {
+        let sumX = 0;
+        let sumY = 0;
+        for (const idx of region.pixels) {
+          sumX += idx % width;
+          sumY += (idx / width) | 0;
+        }
+        region.cx = sumX / count;
+        region.cy = sumY / count;
+      } else {
+        region.cx = 0;
+        region.cy = 0;
+      }
+      region.colorId += 1;
+    }
+  }
+
+  function serializeAssignments(pixels, centroids) {
+    const assignments = new Uint16Array(pixels.length / 4);
+    for (let i = 0; i < assignments.length; i++) {
+      const base = i * 4;
+      let best = 0;
+      let bestDist = Infinity;
+      for (let c = 0; c < centroids.length; c++) {
+        const centroid = centroids[c];
+        const dr = pixels[base] - centroid[0];
+        const dg = pixels[base + 1] - centroid[1];
+        const db = pixels[base + 2] - centroid[2];
+        const dist = dr * dr + dg * dg + db * db;
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = c;
+        }
+      }
+      assignments[i] = best;
+    }
+    return assignments;
+  }
+
+  function kmeansQuantize(pixels, width, height, targetColors, iterations, sampleRate) {
+    const totalPixels = width * height;
+    const sampleCount = Math.max(targetColors * 4, Math.floor(totalPixels * clamp(sampleRate, 0.05, 1)));
+    const sampleIndexes = new Uint32Array(Math.min(sampleCount, totalPixels));
+    const step = Math.max(1, Math.floor(totalPixels / sampleIndexes.length));
+    let pointer = 0;
+    for (let idx = 0; idx < totalPixels && pointer < sampleIndexes.length; idx += step) {
+      sampleIndexes[pointer++] = idx;
+    }
+    while (pointer < sampleIndexes.length) {
+      sampleIndexes[pointer++] = Math.floor(Math.random() * totalPixels);
+    }
+    const centroids = [];
+    for (let i = 0; i < targetColors; i++) {
+      const sampleIdx = sampleIndexes[i % sampleIndexes.length];
+      const base = sampleIdx * 4;
+      centroids.push([
+        pixels[base],
+        pixels[base + 1],
+        pixels[base + 2],
+      ]);
+    }
+    const sums = new Array(targetColors).fill(null).map(() => [0, 0, 0, 0]);
+    for (let iter = 0; iter < iterations; iter++) {
+      for (let i = 0; i < targetColors; i++) {
+        sums[i][0] = 0;
+        sums[i][1] = 0;
+        sums[i][2] = 0;
+        sums[i][3] = 0;
+      }
+      for (let i = 0; i < sampleIndexes.length; i++) {
+        const idx = sampleIndexes[i];
+        const base = idx * 4;
+        let best = 0;
+        let bestDist = Infinity;
+        for (let c = 0; c < centroids.length; c++) {
+          const centroid = centroids[c];
+          const dr = pixels[base] - centroid[0];
+          const dg = pixels[base + 1] - centroid[1];
+          const db = pixels[base + 2] - centroid[2];
+          const dist = dr * dr + dg * dg + db * db;
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = c;
+          }
+        }
+        sums[best][0] += pixels[base];
+        sums[best][1] += pixels[base + 1];
+        sums[best][2] += pixels[base + 2];
+        sums[best][3] += 1;
+      }
+      for (let c = 0; c < centroids.length; c++) {
+        const bucket = sums[c];
+        if (bucket[3] === 0) continue;
+        centroids[c][0] = bucket[0] / bucket[3];
+        centroids[c][1] = bucket[1] / bucket[3];
+        centroids[c][2] = bucket[2] / bucket[3];
+      }
+    }
+    const rounded = centroids.map((c) => c.map((value) => Math.round(value)));
+    const assignments = serializeAssignments(pixels, rounded);
+    return { centroids: rounded, assignments };
+  }
+
+  function posterizeQuantize(pixels, width, height, targetColors) {
+    const totalPixels = Math.max(1, width * height);
+    const quantizedKeys = new Uint32Array(totalPixels);
+    const buckets = new Map();
+    const normalizedTarget = Math.max(1, Math.floor(targetColors));
+    const levels = Math.max(1, Math.round(Math.cbrt(normalizedTarget)));
+
+    const quantizeChannel = (value) => {
+      if (levels <= 1) {
+        return clamp(value, 0, 255);
+      }
+      const steps = levels - 1;
+      const scaled = Math.round((clamp(value, 0, 255) / 255) * steps);
+      return clamp(Math.round((scaled / steps) * 255), 0, 255);
+    };
+
+    for (let i = 0; i < totalPixels; i++) {
+      const base = i * 4;
+      const r = quantizeChannel(pixels[base]);
+      const g = quantizeChannel(pixels[base + 1]);
+      const b = quantizeChannel(pixels[base + 2]);
+      const key = (r << 16) | (g << 8) | b;
+      quantizedKeys[i] = key;
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = { r: 0, g: 0, b: 0, count: 0 };
+        buckets.set(key, bucket);
+      }
+      bucket.r += pixels[base];
+      bucket.g += pixels[base + 1];
+      bucket.b += pixels[base + 2];
+      bucket.count += 1;
+    }
+
+    const entries = Array.from(buckets.entries()).map(([key, bucket]) => ({
+      key,
+      count: bucket.count,
+      color: [
+        Math.round(bucket.r / bucket.count),
+        Math.round(bucket.g / bucket.count),
+        Math.round(bucket.b / bucket.count),
+      ],
+    }));
+
+    entries.sort((a, b) => b.count - a.count);
+    const paletteLimit = Math.max(1, Math.min(normalizedTarget, entries.length));
+    const selected = entries.slice(0, paletteLimit);
+    const centroids = selected.map((entry) => entry.color);
+
+    if (centroids.length === 0) {
+      centroids.push([0, 0, 0]);
+    }
+
+    const assignments = new Uint16Array(totalPixels);
+    const keyToIndex = new Map();
+    for (let idx = 0; idx < selected.length; idx++) {
+      keyToIndex.set(selected[idx].key, idx);
+    }
+
+    for (let i = 0; i < totalPixels; i++) {
+      const key = quantizedKeys[i];
+      let paletteIndex = keyToIndex.get(key);
+      if (paletteIndex == null) {
+        const base = i * 4;
+        let best = 0;
+        let bestDist = Infinity;
+        for (let c = 0; c < centroids.length; c++) {
+          const centroid = centroids[c];
+          const dr = pixels[base] - centroid[0];
+          const dg = pixels[base + 1] - centroid[1];
+          const db = pixels[base + 2] - centroid[2];
+          const dist = dr * dr + dg * dg + db * db;
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = c;
+          }
+        }
+        paletteIndex = best;
+        keyToIndex.set(key, paletteIndex);
+      }
+      assignments[i] = paletteIndex;
+    }
+
+    return { centroids, assignments };
+  }
+
+  function organicQuantize(pixels, width, height, targetColors) {
+    const totalPixels = Math.max(1, width * height);
+    const clusterCount = Math.max(1, Math.round(targetColors));
+    const step = Math.max(4, Math.sqrt(totalPixels / clusterCount));
+    const centroids = [];
+    const halfStep = step / 2;
+    for (let y = halfStep; y < height && centroids.length < clusterCount; y += step) {
+      for (let x = halfStep; x < width && centroids.length < clusterCount; x += step) {
+        const px = Math.min(width - 1, Math.round(x));
+        const py = Math.min(height - 1, Math.round(y));
+        const base = (py * width + px) * 4;
+        centroids.push([
+          pixels[base],
+          pixels[base + 1],
+          pixels[base + 2],
+          px,
+          py,
+        ]);
+      }
+    }
+
+    while (centroids.length < clusterCount) {
+      const px = Math.floor(Math.random() * width);
+      const py = Math.floor(Math.random() * height);
+      const base = (py * width + px) * 4;
+      centroids.push([
+        pixels[base],
+        pixels[base + 1],
+        pixels[base + 2],
+        px,
+        py,
+      ]);
+    }
+
+    const labels = new Int32Array(totalPixels);
+    const distances = new Float32Array(totalPixels);
+    const spatialWeight = 10;
+    const iterations = 4;
+    const searchRadius = step * 2;
+
+    for (let iter = 0; iter < iterations; iter++) {
+      labels.fill(-1);
+      distances.fill(Infinity);
+      const sums = new Array(centroids.length).fill(null).map(() => [0, 0, 0, 0, 0, 0]);
+
+      for (let c = 0; c < centroids.length; c++) {
+        const [cr, cg, cb, cx, cy] = centroids[c];
+        const minX = Math.max(0, Math.floor(cx - searchRadius));
+        const maxX = Math.min(width - 1, Math.ceil(cx + searchRadius));
+        const minY = Math.max(0, Math.floor(cy - searchRadius));
+        const maxY = Math.min(height - 1, Math.ceil(cy + searchRadius));
+        for (let y = minY; y <= maxY; y++) {
+          const rowOffset = y * width;
+          for (let x = minX; x <= maxX; x++) {
+            const idx = rowOffset + x;
+            const base = idx * 4;
+            const dr = pixels[base] - cr;
+            const dg = pixels[base + 1] - cg;
+            const db = pixels[base + 2] - cb;
+            const colorDist = dr * dr + dg * dg + db * db;
+            const spatialDist = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+            const distance = colorDist + (spatialWeight * spatialDist) / (step * step);
+            if (distance < distances[idx]) {
+              distances[idx] = distance;
+              labels[idx] = c;
+            }
+          }
+        }
+      }
+
+      for (let idx = 0; idx < totalPixels; idx++) {
+        const label = labels[idx];
+        if (label < 0) continue;
+        const base = idx * 4;
+        const bucket = sums[label];
+        bucket[0] += pixels[base];
+        bucket[1] += pixels[base + 1];
+        bucket[2] += pixels[base + 2];
+        bucket[3] += idx % width;
+        bucket[4] += (idx / width) | 0;
+        bucket[5] += 1;
+      }
+
+      for (let c = 0; c < centroids.length; c++) {
+        const bucket = sums[c];
+        if (bucket[5] === 0) continue;
+        centroids[c][0] = bucket[0] / bucket[5];
+        centroids[c][1] = bucket[1] / bucket[5];
+        centroids[c][2] = bucket[2] / bucket[5];
+        centroids[c][3] = bucket[3] / bucket[5];
+        centroids[c][4] = bucket[4] / bucket[5];
+      }
+    }
+
+    const rounded = centroids.map((c) => [
+      Math.round(clamp(c[0], 0, 255)),
+      Math.round(clamp(c[1], 0, 255)),
+      Math.round(clamp(c[2], 0, 255)),
+    ]);
+
+    const assignments = new Uint16Array(totalPixels);
+    for (let i = 0; i < totalPixels; i++) {
+      const label = labels[i];
+      assignments[i] = label >= 0 && label < rounded.length ? label : 0;
+    }
+
+    return { centroids: rounded, assignments };
+  }
+
+  function performQuantization(algorithm, pixels, width, height, options) {
+    const resolved = normalizeAlgorithm(algorithm);
+    switch (resolved) {
+      case "organic-slic":
+        return organicQuantize(pixels, width, height, options.targetColors);
+      case "local-posterize":
+        return posterizeQuantize(pixels, width, height, options.targetColors);
+      case "local-kmeans":
+      default:
+        return kmeansQuantize(
+          pixels,
+          width,
+          height,
+          options.targetColors,
+          options.kmeansIters,
+          options.sampleRate
+        );
+    }
+  }
+
+  function smoothAssignments(assignments, width, height, passes) {
+    let current = new Uint16Array(assignments);
+    const totalPixels = width * height;
+    if (passes <= 0 || totalPixels === 0) {
+      return current;
+    }
+
+    let maxPaletteIndex = 0;
+    for (let i = 0; i < current.length; i++) {
+      if (current[i] > maxPaletteIndex) {
+        maxPaletteIndex = current[i];
+      }
+    }
+    const counter = new Uint32Array(maxPaletteIndex + 1);
+    const touchedColors = new Uint16Array(5);
+
+    for (let pass = 0; pass < passes; pass++) {
+      const next = new Uint16Array(current.length);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          const baseColor = current[idx];
+          let touchedCount = 0;
+          touchedCount = accumulate(counter, touchedColors, baseColor, 2, touchedCount);
+          if (x > 0) touchedCount = accumulate(counter, touchedColors, current[idx - 1], 1, touchedCount);
+          if (x < width - 1) touchedCount = accumulate(counter, touchedColors, current[idx + 1], 1, touchedCount);
+          if (y > 0) touchedCount = accumulate(counter, touchedColors, current[idx - width], 1, touchedCount);
+          if (y < height - 1) touchedCount = accumulate(counter, touchedColors, current[idx + width], 1, touchedCount);
+          let bestColor = baseColor;
+          let bestScore = -Infinity;
+          for (let i = 0; i < touchedCount; i++) {
+            const color = touchedColors[i];
+            const score = counter[color];
+            if (score > bestScore) {
+              bestScore = score;
+              bestColor = color;
+            }
+          }
+          next[idx] = bestColor;
+          for (let i = 0; i < touchedCount; i++) {
+            counter[touchedColors[i]] = 0;
+          }
+        }
+      }
+      current = next;
+    }
+    return current;
+  }
+
+  function canvasToBlob(canvas, type, quality) {
+    if (!canvas) {
+      return Promise.resolve(null);
+    }
+    if (typeof canvas.convertToBlob === "function") {
+      return canvas
+        .convertToBlob({ type, quality })
+        .catch(() => null);
+    }
+    if (typeof canvas.toBlob === "function") {
+      return new Promise((resolve) => {
+        try {
+          canvas.toBlob(
+            (blob) => {
+              resolve(blob || null);
+            },
+            type,
+            quality
+          );
+        } catch (error) {
+          resolve(null);
+        }
+      });
+    }
+    return Promise.resolve(null);
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      if (!blob) {
+        resolve(null);
+        return;
+      }
+      if (typeof FileReader !== "function") {
+        reject(new Error("FileReader unavailable"));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        resolve(typeof reader.result === "string" ? reader.result : null);
+      };
+      reader.onerror = () => {
+        reject(reader.error || new Error("Failed to read blob"));
+      };
+      try {
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  function estimateDataUrlBytes(dataUrl) {
+    if (typeof dataUrl !== "string") {
+      return null;
+    }
+    const commaIndex = dataUrl.indexOf(",");
+    if (commaIndex === -1) {
+      return null;
+    }
+    const payload = dataUrl.slice(commaIndex + 1);
+    if (!payload) {
+      return 0;
+    }
+    const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+    return Math.max(0, Math.floor(payload.length / 4) * 3 - padding);
+  }
+
+  function resizeCanvas(sourceCanvas, scale) {
+    if (!sourceCanvas || !Number.isFinite(scale) || scale <= 0) {
+      return sourceCanvas;
+    }
+    if (scale === 1) {
+      return sourceCanvas;
+    }
+    const width = Math.max(1, Math.round(sourceCanvas.width * scale));
+    const height = Math.max(1, Math.round(sourceCanvas.height * scale));
+    if (width === sourceCanvas.width && height === sourceCanvas.height) {
+      return sourceCanvas;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return sourceCanvas;
+    }
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(sourceCanvas, 0, 0, width, height);
+    return canvas;
+  }
+
+  async function compressCanvasImage(canvas, options = {}) {
+    if (!canvas) {
+      return null;
+    }
+    const maxBytes = Number.isFinite(options.maxBytes) && options.maxBytes > 0 ? options.maxBytes : null;
+    const qualityLevels = maxBytes
+      ? [0.92, 0.82, 0.72, 0.62, 0.52, 0.42, 0.32, 0.25, 0.18, 0.1]
+      : [0.92];
+    const scaleLevels = maxBytes ? [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4] : [1];
+    const formats = ["image/png", "image/webp", "image/jpeg"];
+    let best = null;
+    for (const scale of scaleLevels) {
+      const workingCanvas = scale === 1 ? canvas : resizeCanvas(canvas, scale);
+      if (!workingCanvas) {
+        continue;
+      }
+      for (const type of formats) {
+        for (const quality of qualityLevels) {
+          let dataUrl = null;
+          let blob = null;
+          try {
+            blob = await canvasToBlob(workingCanvas, type, quality);
+          } catch (error) {
+            blob = null;
+          }
+          if (blob) {
+            try {
+              dataUrl = await blobToDataUrl(blob);
+            } catch (error) {
+              dataUrl = null;
+            }
+          }
+          if (!dataUrl) {
+            try {
+              dataUrl = workingCanvas.toDataURL(type, quality);
+            } catch (error) {
+              dataUrl = null;
+            }
+          }
+          if (!dataUrl) {
+            continue;
+          }
+          const mimeType = blob?.type || (/^data:([^;,]+)[;,]/.exec(dataUrl)?.[1] || type);
+          const bytes = blob?.size ?? estimateDataUrlBytes(dataUrl);
+          const candidate = {
+            dataUrl,
+            mimeType: mimeType || type,
+            bytes: Number.isFinite(bytes) ? bytes : null,
+            width: workingCanvas.width,
+            height: workingCanvas.height,
+            scale,
+          };
+          if (!maxBytes) {
+            const candidateBytes = candidate.bytes;
+            const bestBytes = best?.bytes;
+            const candidateBeatsBest =
+              candidateBytes != null && (bestBytes == null || candidateBytes > bestBytes);
+            if (!best || candidateBeatsBest) {
+              best = candidate;
+            }
+            continue;
+          }
+          if (
+            !best ||
+            (candidate.bytes != null && (best.bytes == null || candidate.bytes < best.bytes))
+          ) {
+            best = candidate;
+          }
+          if (candidate.bytes != null && candidate.bytes <= maxBytes) {
+            return candidate;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  function buildGenerationWorkerSource() {
+    const stageMessages = JSON.stringify(GENERATION_STAGE_MESSAGES);
+    return `const STAGE_MESSAGES = ${stageMessages};
+  const DEFAULT_GENERATION_ALGORITHM = "${DEFAULT_GENERATION_ALGORITHM}";
+  const now = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
+  ${clamp.toString()}
+  ${accumulate.toString()}
+  ${floodFill.toString()}
+  ${segmentRegions.toString()}
+  ${finalizeGeneratedRegions.toString()}
+  ${serializeAssignments.toString()}
+  ${kmeansQuantize.toString()}
+  ${posterizeQuantize.toString()}
+  ${organicQuantize.toString()}
+  ${normalizeAlgorithm.toString()}
+  ${performQuantization.toString()}
+  ${smoothAssignments.toString()}
+  function normalizeOptions(options) {
+    const targetColors = Math.max(1, Number(options?.targetColors) || 16);
+    const minRegion = Math.max(1, Number(options?.minRegion) || 1);
+    const sampleRate = typeof options?.sampleRate === "number" ? options.sampleRate : 1;
+    const kmeansIters = Math.max(1, Number(options?.kmeansIters) || 1);
+    const smoothingPasses = Math.max(0, Number(options?.smoothingPasses) || 0);
+    const algorithm = normalizeAlgorithm(options?.algorithm);
+    return { targetColors, minRegion, sampleRate, kmeansIters, smoothingPasses, algorithm };
+  }
+  function postProgress(id, stage, progress, message) {
+    self.postMessage({ type: "progress", id, stage, progress, message: message || STAGE_MESSAGES[stage] || "" });
+  }
+  self.onmessage = (event) => {
+    const data = event?.data || {};
+    const id = data.id;
+    const width = data.width;
+    const height = data.height;
+    const options = normalizeOptions(data.options || {});
+    const pixelsSource = data.pixels || data.pixelsBuffer;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || !pixelsSource) {
+      self.postMessage({ type: "error", id, error: { message: "Invalid generation payload" } });
+      return;
+    }
+    try {
+      const pixels = pixelsSource instanceof Uint8ClampedArray
+        ? pixelsSource
+        : pixelsSource instanceof ArrayBuffer
+        ? new Uint8ClampedArray(pixelsSource)
+        : new Uint8ClampedArray(pixelsSource);
+      const timings = {};
+      const totalStart = now();
+      postProgress(id, "quantize", 0.15, STAGE_MESSAGES.quantize);
+      const quantStart = now();
+      const { centroids, assignments } = performQuantization(
+        options.algorithm,
+        pixels,
+        width,
+        height,
+        options
+      );
+      timings.quantize = now() - quantStart;
+      let workingAssignments = assignments;
+      if (options.smoothingPasses > 0) {
+        postProgress(id, "smooth", 0.45, STAGE_MESSAGES.smooth);
+        const smoothStart = now();
+        workingAssignments = smoothAssignments(
+          assignments,
+          width,
+          height,
+          options.smoothingPasses
+        );
+        timings.smoothing = now() - smoothStart;
+      } else {
+        postProgress(id, "smoothSkip", 0.45, STAGE_MESSAGES.smoothSkip);
+        timings.smoothing = 0;
+      }
+      postProgress(id, "segment", 0.75, STAGE_MESSAGES.segment);
+      const segmentStart = now();
+      const { regionMap, regions } = segmentRegions(
+        width,
+        height,
+        workingAssignments,
+        options.minRegion
+      );
+      timings.segment = now() - segmentStart;
+      postProgress(id, "finalize", 0.9, STAGE_MESSAGES.finalize);
+      finalizeGeneratedRegions(regions, width);
+      timings.total = now() - totalStart;
+      const regionMapBuffer = regionMap.buffer;
+      self.postMessage(
+        { type: "result", id, payload: { centroids, regions, regionMap: regionMapBuffer, timings } },
+        [regionMapBuffer]
+      );
+    } catch (error) {
+      self.postMessage({ type: "error", id, error: { message: error?.message || String(error) } });
+    }
+  };
+  `;
+  }
+
+  function canUseGenerationWorker() {
+    return (
+      typeof Worker === "function" &&
+      typeof Blob === "function" &&
+      typeof URL !== "undefined" &&
+      typeof URL.createObjectURL === "function"
+    );
+  }
+
+  function ensureGenerationWorker() {
+    if (generationWorkerInstance) {
+      return generationWorkerInstance;
+    }
+    if (!canUseGenerationWorker()) {
+      return null;
+    }
+    try {
+      const source = buildGenerationWorkerSource();
+      const blob = new Blob([source], { type: "application/javascript" });
+      generationWorkerUrl = URL.createObjectURL(blob);
+      generationWorkerInstance = new Worker(generationWorkerUrl, {
+        name: "capy-generation-worker",
+      });
+    } catch (error) {
+      console.error("Failed to initialise generation worker", error);
+      disposeGenerationWorker();
+      return null;
+    }
+    return generationWorkerInstance;
+  }
+
+  function disposeGenerationWorker() {
+    if (generationWorkerInstance) {
+      try {
+        generationWorkerInstance.terminate();
+      } catch (error) {
+        // ignore termination errors
+      }
+      generationWorkerInstance = null;
+    }
+    if (generationWorkerUrl) {
+      URL.revokeObjectURL(generationWorkerUrl);
+      generationWorkerUrl = null;
+    }
+  }
+
+  function runGenerationWorker(message, { onProgress } = {}) {
+    const worker = ensureGenerationWorker();
+    if (!worker) {
+      const error = new Error("Generation worker unavailable");
+      error.code = "WORKER_UNAVAILABLE";
+      return Promise.reject(error);
+    }
+    return new Promise((resolve, reject) => {
+      const jobId = message && typeof message.id === "number" ? message.id : null;
+      if (!Number.isFinite(jobId)) {
+        reject(new Error("Generation job missing identifier"));
+        return;
+      }
+      const handleMessage = (event) => {
+        const data = event?.data;
+        if (!data || data.id !== jobId) {
+          return;
+        }
+        if (data.type === "progress") {
+          if (typeof onProgress === "function") {
+            try {
+              onProgress(data);
+            } catch (error) {
+              console.error("Progress handler failed", error);
+            }
+          }
+          return;
+        }
+        cleanup();
+        if (data.type === "result") {
+          resolve(data.payload);
+          return;
+        }
+        if (data.type === "error") {
+          const error = new Error(data.error?.message || "Generation worker failed");
+          error.code = data.error?.code || "WORKER_ERROR";
+          reject(error);
+          return;
+        }
+        reject(new Error("Unknown worker response"));
+      };
+      const handleError = (event) => {
+        cleanup();
+        disposeGenerationWorker();
+        const error =
+          event?.error instanceof Error
+            ? event.error
+            : new Error(event?.message || "Generation worker error");
+        error.code = "WORKER_ERROR";
+        reject(error);
+      };
+      const cleanup = () => {
+        worker.removeEventListener("message", handleMessage);
+        worker.removeEventListener("error", handleError);
+      };
+      worker.addEventListener("message", handleMessage);
+      worker.addEventListener("error", handleError);
+      try {
+        worker.postMessage(message);
+      } catch (error) {
+        cleanup();
+        disposeGenerationWorker();
+        const wrapped = error instanceof Error ? error : new Error(String(error));
+        wrapped.code = "WORKER_ERROR";
+        reject(wrapped);
+      }
+    });
+  }
+
+  function runGenerationSynchronously(jobId, payload, hooks = {}) {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+    const { width, height, pixels, options } = payload;
+    if (!pixels || !options) {
+      return null;
+    }
+    const { reportStage } = hooks;
+    const timings = {};
+    const totalStart = now();
+    if (typeof reportStage === "function") {
+      reportStage(jobId, 0.15, GENERATION_STAGE_MESSAGES.quantize);
+    }
+    const quantStart = now();
+    const normalizedOptions = {
+      ...options,
+      algorithm: normalizeAlgorithm(options.algorithm),
+    };
+    const { centroids, assignments } = performQuantization(
+      normalizedOptions.algorithm,
+      pixels,
+      width,
+      height,
+      normalizedOptions
+    );
+    timings.quantize = now() - quantStart;
+    let workingAssignments = assignments;
+    if (normalizedOptions.smoothingPasses > 0) {
+      if (typeof reportStage === "function") {
+        reportStage(jobId, 0.45, GENERATION_STAGE_MESSAGES.smooth);
+      }
+      const smoothStart = now();
+      workingAssignments = smoothAssignments(
+        assignments,
+        width,
+        height,
+        normalizedOptions.smoothingPasses
+      );
+      timings.smoothing = now() - smoothStart;
+    } else {
+      if (typeof reportStage === "function") {
+        reportStage(jobId, 0.45, GENERATION_STAGE_MESSAGES.smoothSkip);
+      }
+      timings.smoothing = 0;
+    }
+    if (typeof reportStage === "function") {
+      reportStage(jobId, 0.75, GENERATION_STAGE_MESSAGES.segment);
+    }
+    const segmentStart = now();
+    const { regionMap, regions } = segmentRegions(
+      width,
+      height,
+      workingAssignments,
+      normalizedOptions.minRegion
+    );
+    timings.segment = now() - segmentStart;
+    if (typeof reportStage === "function") {
+      reportStage(jobId, 0.9, GENERATION_STAGE_MESSAGES.finalize);
+    }
+    finalizeGeneratedRegions(regions, width);
+    timings.total = now() - totalStart;
+    return { centroids, regions, regionMap, timings };
+  }
+
+  async function createPuzzleData(image, options = {}, hooks = {}) {
+    if (!image || typeof image.width !== "number" || typeof image.height !== "number") {
+      throw new Error("Invalid image supplied for puzzle generation");
+    }
+    const {
+      beginJob,
+      reportStage,
+      isLatestJob,
+      logDebug,
+    } = hooks;
+    const debug = typeof logDebug === "function" ? logDebug : (...args) => console.debug(...args);
+    const jobIdRaw = typeof beginJob === "function" ? beginJob() : Date.now();
+    const jobId = Number.isFinite(jobIdRaw) ? jobIdRaw : Date.now();
+    if (typeof reportStage === "function") {
+      reportStage(jobId, 0, GENERATION_STAGE_MESSAGES.prepare);
+    }
+
+    const {
+      targetColors = 16,
+      minRegion = 1,
+      maxSize = Math.max(image.width, image.height),
+      sampleRate = 1,
+      kmeansIters = 1,
+      smoothingPasses = 0,
+      algorithm = DEFAULT_GENERATION_ALGORITHM,
+      sourceImageMaxBytes = DEFAULT_SOURCE_IMAGE_MAX_BYTES,
+    } = options;
+    const vectorSceneEnabled = Boolean(options?.features?.vectorScene);
+    const vectorSceneOptions = options?.vectorSceneOptions || null;
+
+    const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
+    const width = Math.max(8, Math.round(image.width * scale));
+    const height = Math.max(8, Math.round(image.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) {
+      throw new Error("Canvas 2D context unavailable");
+    }
+    ctx.drawImage(image, 0, 0, width, height);
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const pixels = imageData.data;
+    const normalizedAlgorithm = normalizeAlgorithm(algorithm);
+    const provider = GENERATION_ALGORITHMS[normalizedAlgorithm];
+    const payloadOptions = {
+      targetColors,
+      minRegion,
+      sampleRate,
+      kmeansIters,
+      smoothingPasses,
+      algorithm: normalizedAlgorithm,
+    };
+    if (provider) {
+      debug(`Using ${provider.label} generator (${provider.mode})`);
+    } else {
+      debug(`Using ${normalizedAlgorithm} generator`);
+    }
+    const workerMessage = {
+      id: jobId,
+      width,
+      height,
+      pixels,
+      options: payloadOptions,
+    };
+
+    let result = null;
+    if (canUseGenerationWorker()) {
+      try {
+        result = await runGenerationWorker(workerMessage, {
+          onProgress: (event) => {
+            if (!event || event.id !== jobId) {
+              return;
+            }
+            const label =
+              typeof event.message === "string" && event.message
+                ? event.message
+                : GENERATION_STAGE_MESSAGES[event.stage] || null;
+            if (typeof reportStage === "function") {
+              reportStage(jobId, event.progress, label);
+            }
+          },
+        });
+      } catch (error) {
+        if (!error || error.code !== "WORKER_UNAVAILABLE") {
+          console.warn(
+            "Generation worker unavailable, falling back to main-thread processing.",
+            error
+          );
+        }
+        debug("Generation worker fallback to main thread");
+        disposeGenerationWorker();
+      }
+    }
+    if (!result) {
+      result = runGenerationSynchronously(jobId, {
+        width,
+        height,
+        pixels,
+        options: payloadOptions,
+      }, hooks);
+    }
+    if (!result) {
+      throw new Error("Generation pipeline returned no data");
+    }
+    const isLatest = typeof isLatestJob === "function" ? isLatestJob(jobId) : true;
+    if (!isLatest) {
+      debug("Discarded superseded generation result");
+      return null;
+    }
+    if (typeof reportStage === "function") {
+      reportStage(jobId, 1, GENERATION_STAGE_MESSAGES.complete);
+    }
+    const { centroids, regions, regionMap, timings } = result;
+    const resolvedRegionMap =
+      regionMap instanceof Int32Array ? regionMap : new Int32Array(regionMap);
+    const palette = centroids.map((c, idx) => {
+      const hex = `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`;
+      return {
+        id: idx + 1,
+        hex,
+        rgba: c,
+        name: hex.toUpperCase(),
+      };
+    });
+    const formatDuration = (value) =>
+      Number.isFinite(value) ? `${Math.round(value)} ms` : "n/a";
+    debug(`Quantized ${targetColors} colours in ${formatDuration(timings?.quantize)}`);
+    if (smoothingPasses > 0) {
+      debug(
+        `Smoothed assignments (${smoothingPasses} passes) in ${formatDuration(timings?.smoothing)}`
+      );
+    }
+    debug(
+      `Segmented ${regions.length} regions (≥${minRegion}px²) in ${formatDuration(timings?.segment)}`
+    );
+    debug(`Generation pipeline finished in ${formatDuration(timings?.total)}`);
+    let sourceImage = null;
+    try {
+      const normalizedLimit =
+        Number.isFinite(sourceImageMaxBytes) && sourceImageMaxBytes >= 0
+          ? sourceImageMaxBytes
+          : 0;
+      const compressed = await compressCanvasImage(canvas, { maxBytes: normalizedLimit });
+      if (compressed && compressed.dataUrl) {
+        sourceImage = {
+          dataUrl: compressed.dataUrl,
+          mimeType: compressed.mimeType,
+          bytes: compressed.bytes,
+          width: compressed.width,
+          height: compressed.height,
+          originalWidth: image.width,
+          originalHeight: image.height,
+          scale: compressed.width && width > 0 ? compressed.width / width : 1,
+          variant: SOURCE_IMAGE_VARIANT_ORIGINAL,
+        };
+      }
+    } catch (error) {
+      debug(`Source image compression skipped: ${error?.message || error}`);
+    }
+    let vectorScene = null;
+    if (vectorSceneEnabled) {
+      try {
+        const payload = createVectorScenePayload({
+          width,
+          height,
+          regions,
+          options: vectorSceneOptions,
+        });
+        vectorScene = { metadata: payload.json, binary: payload.binary };
+      } catch (error) {
+        debug(`Vector scene export skipped: ${error?.message || error}`);
+      }
+    }
+
+    return {
+      width,
+      height,
+      palette,
+      regions,
+      regionMap: resolvedRegionMap,
+      sourceImage,
+      originalWidth: image.width,
+      originalHeight: image.height,
+      vectorScene,
+    };
+  }
+
+  if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+    window.addEventListener("unload", () => {
+      try {
+        disposeGenerationWorker();
+      } catch (error) {
+        // ignore
+      }
+    });
+  }
+
+  const capyGeneration = {
+    GENERATION_ALGORITHM_CATALOG,
+    DEFAULT_GENERATION_ALGORITHM_ID,
+    disposeGenerationWorker,
+    createPuzzleData,
+    __smoothAssignmentsForTests: smoothAssignments,
+    __segmentRegionsForTests: segmentRegions,
+  };
+  globalThis.capyGeneration = capyGeneration;
+})();
+
+
+// Apply preboot metrics after module load
+(() => {
+  if (typeof window === "undefined") return;
+  const runtime = window.capyRuntime;
+  if (runtime && typeof runtime.applyPrebootMetrics === "function") {
+    runtime.applyPrebootMetrics();
+  }
+})();
+
+// Settings fallback bootstrap for pre-runtime interactions
+(() => {
+        if (
+          typeof window === "undefined" ||
+          typeof document === "undefined" ||
+          typeof document.querySelector !== "function"
+        ) {
+          return;
+        }
         function createUiKit(root = document) {
           const cache = new Map();
           const get = (selector) => {
@@ -1387,50 +1908,60 @@
         };
 
         log("Settings fallback ready before renderer bootstrap");
-      })();
-    </script>
-    <script type="module">
-      const { html, renderTemplate } = window.capyTemplates || {};
+})();
 
-      const runtime = window.capyRuntime;
-      const { beginRendererBootstrap, completeRendererBootstrap, createRendererController } = runtime || {};
+// Main runtime wiring
+(() => {
+        if (
+          typeof window === "undefined" ||
+          typeof document === "undefined" ||
+          typeof document.querySelector !== "function"
+        ) {
+          return;
+        }
+const { html, renderTemplate } = globalThis.capyTemplates || {};
 
-      if (!runtime) {
-        console.error("Capy runtime failed to load");
-      }
+        
 
-      (() => {
+        const runtime = window.capyRuntime;
+        const { beginRendererBootstrap, completeRendererBootstrap, createRendererController } = runtime || {};
+
         if (!runtime) {
-          return;
+          console.error("Capy runtime failed to load");
         }
-        const settingsBootstrap =
-          window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
-        settingsBootstrap.log("Renderer bootstrap starting");
 
-        const createUiKit =
-          window.capyUiKit ||
-          function createUiKit(root = document) {
-            const cache = new Map();
-            const get = (selector) => {
-              if (!selector) return null;
-              if (cache.has(selector)) {
-                return cache.get(selector);
-              }
-              const node = root.querySelector(selector);
-              cache.set(selector, node || null);
-              return node || null;
+        (() => {
+          if (!runtime) {
+            return;
+          }
+          const settingsBootstrap =
+            window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
+          settingsBootstrap.log("Renderer bootstrap starting");
+
+          const createUiKit =
+            window.capyUiKit ||
+            function createUiKit(root = document) {
+              const cache = new Map();
+              const get = (selector) => {
+                if (!selector) return null;
+                if (cache.has(selector)) {
+                  return cache.get(selector);
+                }
+                const node = root.querySelector(selector);
+                cache.set(selector, node || null);
+                return node || null;
+              };
+              const all = (selector) => Array.from(root.querySelectorAll(selector));
+              return { get, all };
             };
-            const all = (selector) => Array.from(root.querySelectorAll(selector));
-            return { get, all };
-          };
 
-        const dom = createUiKit(document);
+          const dom = createUiKit(document);
 
-        const skipBootstrap = beginRendererBootstrap();
-        if (skipBootstrap) {
-          return;
-        }
-        let bootstrapSucceeded = false;
+          const skipBootstrap = beginRendererBootstrap();
+          if (skipBootstrap) {
+            return;
+          }
+          let bootstrapSucceeded = false;
       try {
       function createComponent(root, render) {
         if (!root) {
@@ -1812,6 +2343,7 @@
         "./styles.css",
         "./capy.js",
         "./capy.json",
+        "./service-worker-cache.js",
       ];
       const SETTINGS_AUTOSAVE_REASONS = new Set([
         "settings-renderer",
@@ -7914,30 +8446,7 @@
 
       function loadPuzzleGenerationModule() {
         if (!puzzleGenerationModulePromise) {
-          puzzleGenerationModulePromise = Promise.resolve(window.capyGeneration || {})
-            .then((module) => {
-              try {
-                if (module && Array.isArray(module.GENERATION_ALGORITHM_CATALOG)) {
-                  hydrateAlgorithmOptions(module.GENERATION_ALGORITHM_CATALOG);
-                }
-                if (
-                  module &&
-                  typeof module.DEFAULT_GENERATION_ALGORITHM_ID === "string" &&
-                  module.DEFAULT_GENERATION_ALGORITHM_ID.trim()
-                ) {
-                  VALID_GENERATION_ALGORITHMS.add(
-                    module.DEFAULT_GENERATION_ALGORITHM_ID.trim()
-                  );
-                }
-              } catch (hydrationError) {
-                console.warn("Unable to hydrate generator algorithms", hydrationError);
-              }
-              return module;
-            })
-            .catch((error) => {
-              puzzleGenerationModulePromise = null;
-              throw error;
-            });
+          puzzleGenerationModulePromise = Promise.resolve(globalThis.capyGeneration || {});
         }
         return puzzleGenerationModulePromise;
       }
@@ -14203,7 +14712,4 @@
           completeRendererBootstrap(bootstrapSucceeded);
         }
       })();
-
-    </script>
-  </body>
-</html>
+})();

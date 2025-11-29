@@ -8,7 +8,7 @@ Direction for upcoming work. Use this as the planning spine; keep individual tas
 - Keep handbook docs (`TECH.md`, `AGENTS.md`, `STYLEGUIDE.md`) aligned with runtime behaviour so contributors land on accurate guidance, especially around preboot sizing and renderer bootstraps.
 
 ## Next (maintainability)
-- Decompose `render.js` into renderer-specific modules and shared helpers to cut line count and simplify backend swaps.
+- Decompose the renderer section of `capy.js` into renderer-specific modules and shared helpers to cut line count and simplify backend swaps.
 - Expand test coverage for settings/bootstrap paths (UI scale, renderer selection, persistence fallbacks) to catch regressions outside Playwright flows.
 - Document the preferred low-abstraction DOM patterns (template cloning, delegated events, small helpers) with examples in the codebase to reduce incidental complexity.
 

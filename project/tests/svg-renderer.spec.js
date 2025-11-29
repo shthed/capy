@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createSvgRenderer } from '../../render.js';
+import '../../capy.js';
+
+const { createSvgRenderer } = globalThis.capyRenderer || {};
 
 class FakeElement {
   constructor(tagName, namespaceURI = null) {
