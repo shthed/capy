@@ -136,6 +136,13 @@ export function createSvgRenderer(host, hooks = {}) {
     hooks?.onRendered?.({ svg, shapesGroup });
   }
 
+  function renderPreview(args = {}) {
+    if (typeof hooks?.renderPreview === "function") {
+      return hooks.renderPreview(args);
+    }
+    return null;
+  }
+
   function dispose() {
     svg.remove();
     if (shouldResetPosition) {
@@ -148,6 +155,7 @@ export function createSvgRenderer(host, hooks = {}) {
     getRendererType: () => "svg",
     svg,
     renderFrame,
+    renderPreview,
     clear,
     dispose,
   };
