@@ -1,6 +1,6 @@
 import * as CapyCacheLimits from './service-worker-cache.js';
 
-const RUNTIME_CACHE_NAME = 'capy-offline-cache-v3';
+const RUNTIME_CACHE_NAME = 'capy-offline-cache-v4';
 const CACHE_LIMITS = {
   metadataKey: '__capy-cache-metadata__',
   maxEntries: 80,
@@ -11,9 +11,7 @@ const OFFLINE_ASSETS = [
   './',
   './index.html',
   './styles.css',
-  './runtime.js',
-  './render.js',
-  './puzzle-generation.js',
+  './capy.js',
   './capy.json',
   './service-worker-cache.js',
   './README/',

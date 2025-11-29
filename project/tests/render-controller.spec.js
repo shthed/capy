@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../../render.js');
+await import('../../capy.js');
 
 test('exposes renderer helpers globally', () => {
   assert.ok(globalThis.capyRenderer, 'expected the renderer globals to be defined');
