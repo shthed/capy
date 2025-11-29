@@ -1806,38 +1806,6 @@
 })();
 
 
-// Analytics loader from previous inline script
-(() => {
-  if (
-    typeof window === "undefined" ||
-    typeof document === "undefined" ||
-    typeof document.querySelector !== "function"
-  ) {
-    return;
-  }
-  const host = window.location?.hostname;
-  const allowAnalytics =
-    host && host !== "localhost" && host !== "127.0.0.1" && !window.navigator?.webdriver;
-
-  window.dataLayer = window.dataLayer || [];
-  window.gtag = function gtag() {
-    window.dataLayer.push(arguments);
-  };
-
-  if (!allowAnalytics) {
-    return;
-  }
-
-  const script = document.createElement("script");
-  script.async = true;
-  script.src = "https://www.googletagmanager.com/gtag/js?id=G-PB9QNQCD7Q";
-  script.onload = () => {
-    window.gtag("js", new Date());
-    window.gtag("config", "G-PB9QNQCD7Q");
-  };
-  document.head.appendChild(script);
-})();
-
 // Apply preboot metrics after module load
 (() => {
   if (typeof window === "undefined") return;
@@ -6793,20 +6761,17 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         debugLogEl.scrollTop = 0;
       }
 
-      const ANALYTICS_TRACKING_ID = "G-PB9QNQCD7Q";
-
       function analyticsReady() {
-        return typeof window !== "undefined" && typeof window.gtag === "function";
+        return false;
       }
 
       function trackAnalyticsEvent(name, params = {}) {
-        if (!name || !analyticsReady()) {
+        if (!name) {
           return;
         }
-        try {
-          window.gtag("event", name, params);
-        } catch (error) {
-          console.debug("Analytics dispatch failed", error);
+        // Analytics removed; keep hook for compatibility.
+        if (debugLogEntries) {
+          logDebug(`${name}${Object.keys(params).length ? " (metrics suppressed)" : ""}`);
         }
       }
 
