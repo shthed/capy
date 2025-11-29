@@ -1819,7 +1819,103 @@
 (() => {
   if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
 
-  const { renderTemplate } = globalThis.capyTemplates || {};
+  const VALUE_FORMATTERS = {
+    percent(value) {
+      return `${Math.round(Number(value) || 0)}%`;
+    },
+    "unit-percent"(value) {
+      const numeric = Number(value) || 0;
+      return `${Math.round(numeric * 100)}%`;
+    },
+    "zoom-percent"(value) {
+      const numeric = Number(value) || 0;
+      return `${Math.round(numeric * 100)}%`;
+    },
+    seconds(value) {
+      const seconds = (Number(value) || 0) / 1000;
+      return `${Number.parseFloat(seconds.toFixed(1))} s`;
+    },
+    px(value) {
+      return `${Math.round(Number(value) || 0)} px`;
+    },
+    px2(value) {
+      return `${Math.round(Number(value) || 0)} px²`;
+    },
+    integer(value) {
+      return `${Math.round(Number(value) || 0)}`;
+    },
+  };
+
+  function createElement(tag, { className, attrs = {}, dataset = {}, text, id } = {}, children = []) {
+    const el = document.createElement(tag);
+    if (className) {
+      el.className = className;
+    }
+    if (id) {
+      el.id = id;
+    }
+    if (text) {
+      el.textContent = text;
+    }
+    Object.entries(attrs).forEach(([key, value]) => {
+      if (value === false || value === null || value === undefined) return;
+      if (value === true) {
+        el.setAttribute(key, "");
+        return;
+      }
+      el.setAttribute(key, String(value));
+    });
+    Object.entries(dataset).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      el.dataset[key] = String(value);
+    });
+    for (const child of children) {
+      if (child === null || child === undefined) continue;
+      el.appendChild(child);
+    }
+    return el;
+  }
+
+  function formatValue(value, format) {
+    if (format && typeof VALUE_FORMATTERS[format] === "function") {
+      return VALUE_FORMATTERS[format](value);
+    }
+    return `${value ?? ""}`;
+  }
+
+  function createHeading({ tabId, heading = {} }) {
+    const headingId = heading.id || `settingsHeading-${tabId}`;
+    const headingRow = createElement(
+      "div",
+      { className: "settings-heading-row" },
+      [
+        createElement("h3", { id: headingId, attrs: { "data-settings-heading": "" } }, [
+          document.createTextNode(heading.title || "")]),
+        heading.helpText
+          ? createElement(
+              "button",
+              {
+                className: "help-chip",
+                attrs: {
+                  type: "button",
+                  "aria-label": heading.helpLabel || heading.helpText,
+                  "aria-describedby": `tooltip-${tabId}`,
+                },
+              },
+              [document.createTextNode("?")],
+            )
+          : null,
+        heading.helpText
+          ? createElement("span", { className: "help-chip-bubble", id: `tooltip-${tabId}`, attrs: { role: "tooltip" } }, [
+              document.createTextNode(heading.helpText),
+            ])
+          : null,
+      ].filter(Boolean),
+    );
+
+    const wrapper = createElement("div", { className: "settings-section-heading" }, [headingRow]);
+    return { wrapper, headingId };
+  }
 
   function readSettingsDefinition() {
     const script = document.getElementById("settingsDefinition");
@@ -1830,6 +1926,504 @@
     } catch (error) {
       console.error("Failed to parse settings definition", error);
       return [];
+    }
+  }
+
+  function renderActionButton(item) {
+    const button = createElement(
+      "button",
+      {
+        className: "quick-action",
+        attrs: {
+          type: "button",
+          id: item.id,
+          "aria-label": item.ariaLabel || item.label,
+          title: item.title || item.label,
+          "aria-pressed": item.ariaPressed ? "true" : "false",
+          disabled: item.disabled,
+        },
+        dataset: item.testId ? { testid: item.testId } : {},
+      },
+      [
+        createElement("span", { className: "icon", attrs: { "aria-hidden": "true" } }, [
+          document.createTextNode(item.icon || ""),
+        ]),
+        createElement("span", { className: "label" }, [document.createTextNode(item.label || "")]),
+      ],
+    );
+    return button;
+  }
+
+  function renderToggle(item) {
+    const input = createElement("input", {
+      attrs: { type: "checkbox", id: item.id, checked: item.checked ? "" : undefined },
+    });
+    const label = createElement("label", { className: "toggle" }, [input, createElement("span", { text: item.label || "" })]);
+    return label;
+  }
+
+  function renderSelect(item) {
+    const select = createElement(
+      "select",
+      {
+        attrs: { id: item.id, disabled: item.disabled },
+        dataset: item.testId ? { testid: item.testId } : {},
+      },
+      (item.options || []).map((option) =>
+        createElement("option", { attrs: { value: option.value, selected: option.selected } }, [
+          document.createTextNode(option.label || ""),
+        ]),
+      ),
+    );
+
+    let labelContent;
+    if (item.outputFor) {
+      const selectedOption = (item.options || []).find((option) => option.selected) || item.options?.[0] || {};
+      const output = createElement("output", {
+        attrs: { [`data-for`]: item.outputFor },
+        text: item.outputText || selectedOption.label || "",
+      });
+      labelContent = createElement("span", {}, [
+        document.createTextNode(item.label || ""),
+        document.createTextNode(" "),
+        output,
+      ]);
+    } else {
+      labelContent = createElement("span", { text: item.label || "" });
+    }
+
+    return createElement("label", { className: "control" }, [labelContent, select]);
+  }
+
+  function renderRange(item) {
+    const output = createElement("output", { attrs: { [`data-for`]: item.id }, text: formatValue(item.value, item.format) });
+    const label = createElement("label", { attrs: { for: item.id } }, [
+      createElement("span", {}, [document.createTextNode(item.label || ""), document.createTextNode(" "), output]),
+    ]);
+    const reset = createElement(
+      "button",
+      {
+        className: "control-reset",
+        attrs: {
+          type: "button",
+          "data-reset-target": item.id,
+          "data-reset-default": item.default,
+        },
+      },
+      [document.createTextNode("Default")],
+    );
+
+    const header = createElement("div", { className: "control-header" }, [label, reset]);
+    const input = createElement("input", {
+      attrs: {
+        id: item.id,
+        type: "range",
+        min: item.min,
+        max: item.max,
+        step: item.step,
+        value: item.value,
+        "data-default": item.default,
+      },
+    });
+    return createElement("div", { className: "control control-range" }, [header, input]);
+  }
+
+  function renderMouseControls(item) {
+    const groups = (item.groups || []).map((group) => {
+      const options = (group.options || []).map((opt) => {
+        const select = createElement(
+          "select",
+          { attrs: { id: opt.id } },
+          (opt.choices || []).map((choice) =>
+            createElement(
+              "option",
+              { attrs: { value: choice.value, selected: choice.selected } },
+              [document.createTextNode(choice.label || "")],
+            ),
+          ),
+        );
+        return createElement("label", { className: "control mouse-control-option" }, [
+          createElement("span", { text: opt.label || "" }),
+          select,
+        ]);
+      });
+      return createElement("div", { className: "mouse-control-group" }, [
+        createElement("span", { className: "mouse-control-title", text: group.title || "" }),
+        createElement("div", { className: "mouse-control-options" }, options),
+      ]);
+    });
+    return createElement("div", {}, groups);
+  }
+
+  function renderDetailCallout(item) {
+    const chips = (item.levels || []).map((level) =>
+      createElement("button", {
+        className: "detail-chip",
+        attrs: { type: "button" },
+        dataset: { detailLevel: level.level },
+        text: level.label,
+      }),
+    );
+    return createElement("div", { className: "detail-callout" }, [
+      createElement("p", { className: "detail-intro", text: "Capybara sample detail presets" }),
+      createElement("div", { className: "detail-picker", attrs: { role: "group", "aria-label": "Capybara sample detail presets" } }, chips),
+      createElement("p", { className: "detail-caption", dataset: { detailCaption: "" } }),
+    ]);
+  }
+
+  function renderNote(item) {
+    if (item.link) {
+      const link = createElement("a", {
+        className: "chatgpt-link",
+        attrs: { id: item.link.id, href: item.link.href, target: "_blank", rel: "noopener noreferrer" },
+      }, [document.createTextNode(item.link.text || ""), createElement("span", { attrs: { "aria-hidden": "true" }, text: " ↗" })]);
+      return createElement("p", { className: "control-note" }, [link]);
+    }
+    const attrs = { ...(item.attrs || {}) };
+    if (item.outputId) {
+      attrs.id = item.outputId;
+    }
+    return createElement("p", { className: item.className || "control-note", attrs }, [
+      document.createTextNode(item.text || ""),
+    ]);
+  }
+
+  function renderTextarea(item) {
+    const textarea = createElement("textarea", {
+      attrs: { id: item.id, rows: item.rows || 3, placeholder: item.placeholder },
+    });
+    const label = createElement("label", { className: "control" }, [createElement("span", { text: item.label || "" }), textarea]);
+    return label;
+  }
+
+  function renderList(item) {
+    const listItems = (item.items || []).map((text) => createElement("li", {}, [document.createTextNode(text)]));
+    return createElement("ul", { className: "control-list" }, listItems);
+  }
+
+  function renderDefinitionList(item) {
+    const items = (item.items || []).map((entry) =>
+      createElement("div", {}, [
+        createElement("dt", {}, [document.createTextNode(entry.term || "")]),
+        createElement(
+          "dd",
+          entry.dataTarget ? { attrs: { [`data-${entry.dataTarget}`]: "" } } : {},
+          [document.createTextNode(entry.description || "")],
+        ),
+      ]),
+    );
+    return createElement("dl", { className: "command-list" }, items);
+  }
+
+  function renderLogger(item) {
+    return createElement("div", {
+      id: item.id,
+      className: item.className || "debug-log",
+      attrs: { role: "log", "aria-live": "polite", "aria-relevant": "additions text" },
+    });
+  }
+
+  function renderButtonsRow(item) {
+    const wrapperClass = item.className || "panel-actions";
+    const buttons = (item.actions || []).map((action) =>
+      createElement(
+        "button",
+        {
+          className: action.className,
+          attrs: {
+            type: "button",
+            id: action.id,
+            disabled: action.disabled,
+            "aria-label": action.ariaLabel,
+            title: action.title,
+          },
+          dataset: action.dataset,
+        },
+        [
+          document.createTextNode(action.label || ""),
+        ],
+      ),
+    );
+    return createElement("div", { className: wrapperClass }, buttons);
+  }
+
+  function renderJsonView() {
+    const textarea = createElement("textarea", {
+      className: "json-view",
+      attrs: { id: "settingsJsonView", rows: "8", spellcheck: "false" },
+    });
+    const label = createElement("label", { className: "visually-hidden", attrs: { for: "settingsJsonView" } }, [
+      document.createTextNode("Preferences JSON"),
+    ]);
+    const upload = createElement("label", { className: "json-upload" }, [
+      createElement("input", { attrs: { id: "importSettingsFile", type: "file", accept: "application/json", hidden: "" } }),
+      createElement("span", { attrs: { role: "button", "aria-controls": "importSettingsFile" }, text: "Upload file" }),
+    ]);
+    const actions = createElement("div", { className: "json-actions" }, [
+      createElement("button", { attrs: { id: "refreshSettingsJson", type: "button" }, text: "Refresh" }),
+      createElement("button", { attrs: { id: "exportSettingsJson", type: "button" }, text: "Export JSON" }),
+      createElement("button", { attrs: { id: "applySettingsJson", type: "button" }, text: "Import JSON" }),
+      upload,
+    ]);
+    return createElement("div", {}, [label, textarea, actions]);
+  }
+
+  function renderSection(section) {
+    const sectionEl = createElement("section", {
+      className: "sheet-section",
+      attrs: { "aria-labelledby": section.id },
+    });
+    if (section.title) {
+      sectionEl.appendChild(createElement("h3", { id: section.id, text: section.title }));
+    }
+    if (section.description) {
+      sectionEl.appendChild(renderNote({ text: section.description }));
+    }
+
+    if (section.layout === "actions") {
+      const group = createElement("div", {
+        className: "quick-actions",
+        attrs: { role: "group", "aria-label": "Puzzle quick actions" },
+      });
+      (section.items || []).forEach((item) => {
+        if (item.type === "action") {
+          group.appendChild(renderActionButton(item));
+        }
+      });
+      sectionEl.appendChild(group);
+      if (section.note) {
+        sectionEl.appendChild(renderNote({ text: section.note }));
+      }
+      return sectionEl;
+    }
+
+    (section.items || []).forEach((item) => {
+      switch (item.type) {
+        case "toggle":
+          sectionEl.appendChild(renderToggle(item));
+          break;
+        case "select":
+          sectionEl.appendChild(renderSelect(item));
+          break;
+        case "range":
+          sectionEl.appendChild(renderRange(item));
+          break;
+        case "note":
+          sectionEl.appendChild(renderNote(item));
+          break;
+        case "mouse-controls":
+          sectionEl.appendChild(renderMouseControls(item));
+          break;
+        case "detail-callout":
+          sectionEl.appendChild(renderDetailCallout(item));
+          break;
+        case "details": {
+          const details = createElement("details", { className: "advanced-options", attrs: { id: item.id || "generatorAdvanced" } });
+          details.appendChild(createElement("summary", { text: item.summary || "Details" }));
+          (item.items || []).forEach((child) => {
+            switch (child.type) {
+              case "textarea":
+                details.appendChild(renderTextarea(child));
+                break;
+              case "note":
+                details.appendChild(renderNote(child));
+                break;
+              default:
+                break;
+            }
+          });
+          sectionEl.appendChild(details);
+          break;
+        }
+        case "textarea":
+          sectionEl.appendChild(renderTextarea(item));
+          break;
+        case "list":
+          sectionEl.appendChild(renderList(item));
+          break;
+        case "definition-list":
+          sectionEl.appendChild(renderDefinitionList(item));
+          break;
+        case "logger":
+          sectionEl.appendChild(renderLogger(item));
+          break;
+        case "button-row":
+          sectionEl.appendChild(renderButtonsRow(item));
+          break;
+        case "json-view":
+          sectionEl.appendChild(renderJsonView());
+          break;
+        default:
+          break;
+      }
+    });
+
+    if (section.note) {
+      sectionEl.appendChild(renderNote({ text: section.note }));
+    }
+
+    return sectionEl;
+  }
+
+  function renderTabBlocks(blocks = [], panel, headingId) {
+    for (const block of blocks) {
+      if (!block) continue;
+      switch (block.type) {
+        case "import-notice": {
+          const notice = createElement(
+            "div",
+            {
+              className: "generator-import-notice",
+              attrs: { "data-import-notice": "", role: "status", "aria-live": "polite", hidden: "" },
+            },
+            [
+              createElement("p", { className: "generator-import-title" }, [
+                createElement("strong", { dataset: { importFile: "" } }),
+              ]),
+              createElement("p", { className: "generator-import-description", dataset: { importDescription: "" } }),
+              createElement("div", { className: "generator-import-actions" }, [
+                createElement("button", { attrs: { id: "confirmImport", type: "button", "data-import-confirm": "" } }, [
+                  document.createTextNode("Generate puzzle"),
+                ]),
+                createElement("button", { className: "close-button", attrs: { type: "button", "data-import-cancel": "" } }, [
+                  document.createTextNode("Cancel"),
+                ]),
+              ]),
+            ],
+          );
+          panel.appendChild(notice);
+          break;
+        }
+        case "source-url-form": {
+          const form = createElement("form", { className: "sheet-section", attrs: { "data-source-url-form": "" } });
+          form.appendChild(createElement("h3", { id: "sourceUrlHeading", text: "Import from URL" }));
+          form.appendChild(renderNote({ text: "Enter an https:// link to load an image directly." }));
+          const input = createElement("input", {
+            attrs: {
+              type: "url",
+              inputmode: "url",
+              "data-source-url-input": "",
+              "aria-describedby": "sourceUrlHint sourceUrlError",
+            },
+          });
+          form.appendChild(createElement("label", { className: "control" }, [
+            createElement("span", { text: "Image URL" }),
+            input,
+          ]));
+          form.appendChild(
+            renderNote({
+              text: "External sites must allow cross-origin image access.",
+              className: "control-note",
+              outputId: "sourceUrlHint",
+            }),
+          );
+          form.appendChild(
+            renderNote({
+              text: "",
+              className: "control-note",
+              outputId: "sourceUrlError",
+              attrs: { role: "alert", hidden: "" },
+            }),
+          );
+          form.appendChild(
+            createElement("div", { className: "panel-actions" }, [
+              createElement("button", { attrs: { type: "submit", "data-source-url-submit": "", disabled: "" } }, [
+                document.createTextNode("Load image"),
+              ]),
+            ]),
+          );
+          panel.appendChild(form);
+          break;
+        }
+        case "sheet-actions":
+          panel.appendChild(renderButtonsRow({
+            className: "sheet-actions",
+            actions: [{ id: "applyOptions", label: "Apply changes", disabled: true }],
+          }));
+          break;
+        case "generator-progress": {
+          const bar = createElement("div", {
+            className: "generator-progress",
+            attrs: { "data-generator-progress": "", role: "status", "aria-live": "polite", hidden: "" },
+          });
+          bar.appendChild(createElement("p", { className: "generator-progress-message", dataset: { generatorProgressMessage: "" } }));
+          const meter = createElement(
+            "div",
+            {
+              className: "generator-progress-meter",
+              dataset: { generatorProgressMeter: "" },
+              attrs: {
+                role: "progressbar",
+                "aria-label": "Puzzle generation progress",
+                "aria-valuemin": "0",
+                "aria-valuemax": "100",
+                "aria-valuenow": "0",
+                "aria-hidden": "true",
+              },
+            },
+            [createElement("div", { className: "generator-progress-bar", dataset: { generatorProgressBar: "" } })],
+          );
+          bar.appendChild(meter);
+          panel.appendChild(bar);
+          break;
+        }
+        case "loader-console": {
+          const section = createElement("section", { className: "sheet-section", attrs: { "aria-label": "Menu loader console" } });
+          section.appendChild(createElement("div", { className: "visually-hidden", id: "settingsLoadHeading", text: "Menu loader console" }));
+          section.appendChild(
+            createElement("div", {
+              id: "settingsLoadConsole",
+              className: "debug-log settings-loading-console",
+              attrs: {
+                role: "log",
+                "aria-labelledby": "settingsLoadHeading",
+                "aria-live": "polite",
+                "aria-relevant": "additions text",
+              },
+            }),
+          );
+          panel.appendChild(section);
+          break;
+        }
+        case "save-manager": {
+          const section = createElement("section", {
+            className: "sheet-section save-manager",
+            attrs: { role: "group", "aria-labelledby": "saveManagerHeading" },
+            dataset: { saveSection: "dialog" },
+            id: "saveManagerSection",
+          });
+          section.appendChild(createElement("h3", { id: "saveManagerHeading", text: "Your saves" }));
+          section.appendChild(
+            createElement("div", {
+              className: "save-manager-list",
+              attrs: { "aria-live": "polite", role: "list", "aria-labelledby": "saveManagerHeading" },
+              dataset: { saveList: "" },
+            }),
+          );
+          section.appendChild(
+            createElement("p", { className: "save-manager-empty", dataset: { saveEmpty: "" }, attrs: { hidden: "" }, text: "No saves yet. Create one above to start autosaving progress." }),
+          );
+          section.appendChild(
+            createElement("div", { className: "save-manager-actions" }, [
+              createElement("button", { attrs: { type: "button", "data-save-snapshot": "", disabled: "" } }, [
+                document.createTextNode("Save current puzzle"),
+              ]),
+              createElement("button", { attrs: { type: "button", "data-reset-progress": "", disabled: "" } }, [
+                document.createTextNode("Reset puzzle progress"),
+              ]),
+              createElement("button", { attrs: { id: "downloadJson", type: "button", disabled: "" } }, [
+                document.createTextNode("Export puzzle JSON"),
+              ]),
+            ]),
+          );
+          panel.appendChild(section);
+          break;
+        }
+        case "section":
+        default:
+          panel.appendChild(renderSection(block));
+          break;
+      }
     }
   }
 
@@ -1872,11 +2466,23 @@
       panel.dataset.settingsPanel = tabId;
       panel.setAttribute("role", "tabpanel");
       panel.setAttribute("aria-labelledby", button.id);
-      if (typeof renderTemplate === "function") {
-        renderTemplate(panel, tab.markup || "");
-      } else {
-        panel.innerHTML = tab.markup || "";
-      }
+
+      const { wrapper, headingId } = createHeading({ tabId, heading: tab.heading || {} });
+      panel.appendChild(wrapper);
+
+      const panelGroup = createElement("div", {
+        className: "settings-panel",
+        attrs: { role: "group", "aria-labelledby": headingId },
+      });
+
+      const blocks = Array.isArray(tab.blocks)
+        ? tab.blocks
+        : Array.isArray(tab.sections)
+        ? tab.sections.map((section) => ({ ...section, type: "section" }))
+        : [];
+
+      renderTabBlocks(blocks, panelGroup, headingId);
+      panel.appendChild(panelGroup);
       content.appendChild(panel);
       rendered.push(tabId);
     }

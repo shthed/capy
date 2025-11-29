@@ -3,48 +3,671 @@
     "id": "gameplay",
     "label": "Gameplay",
     "default": true,
-    "markup": "<div class=\"settings-section-heading\">\n              <div class=\"settings-heading-row\">\n                <h3 id=\"settingsHeading-gameplay\" data-settings-heading>Gameplay</h3>\n                <button\n                  type=\"button\"\n                  class=\"help-chip\"\n                  aria-label=\"Gameplay controls for preview, pacing, and assists\"\n                  aria-describedby=\"tooltip-gameplay\"\n                >\n                  ?\n                </button>\n                <span class=\"help-chip-bubble\" id=\"tooltip-gameplay\" role=\"tooltip\">\n                  Tweak quick actions, pacing, and assists without leaving the puzzle.\n                </span>\n              </div>\n            </div>\n            <div\n              class=\"settings-panel\"\n              role=\"group\"\n              aria-labelledby=\"settingsHeading-gameplay\"\n              >\n              <section class=\"sheet-section\" aria-labelledby=\"quickActionsHeading\">\n                <h3 id=\"quickActionsHeading\">Quick actions</h3>\n            <div class=\"quick-actions\" role=\"group\" aria-label=\"Puzzle quick actions\">\n              <button\n                id=\"previewToggle\"\n                type=\"button\"\n                class=\"quick-action\"\n                data-testid=\"preview-toggle\"\n                aria-label=\"Show preview\"\n                title=\"Show preview\"\n                aria-pressed=\"false\"\n                disabled\n              >\n                <span class=\"icon\" aria-hidden=\"true\">\ud83d\uddbc</span>\n                <span class=\"label\">Show preview</span>\n              </button>\n              <button\n                id=\"fullscreenButton\"\n                type=\"button\"\n                class=\"quick-action\"\n                data-testid=\"fullscreen-button\"\n                aria-label=\"Enter fullscreen\"\n                title=\"Enter fullscreen\"\n                aria-pressed=\"false\"\n              >\n                <span class=\"icon\" aria-hidden=\"true\">\u26f6</span>\n                <span class=\"label\">Enter fullscreen</span>\n              </button>\n            </div>\n            <p class=\"control-note\">\n              Manage the reference preview and fullscreen view without leaving the puzzle.\n            </p>"
+    "heading": {
+      "title": "Gameplay",
+      "helpLabel": "Gameplay controls for preview, pacing, and assists",
+      "helpText": "Tweak quick actions, pacing, and assists without leaving the puzzle."
+    },
+    "sections": [
+      {
+        "id": "quickActionsHeading",
+        "title": "Quick actions",
+        "layout": "actions",
+        "items": [
+          {
+            "type": "action",
+            "id": "previewToggle",
+            "label": "Show preview",
+            "icon": "🖼",
+            "ariaLabel": "Show preview",
+            "testId": "preview-toggle",
+            "ariaPressed": false,
+            "disabled": true
+          },
+          {
+            "type": "action",
+            "id": "fullscreenButton",
+            "label": "Enter fullscreen",
+            "icon": "⛶",
+            "ariaLabel": "Enter fullscreen",
+            "testId": "fullscreen-button",
+            "ariaPressed": false
+          }
+        ],
+        "note": "Manage the reference preview and fullscreen view without leaving the puzzle."
+      },
+      {
+        "id": "gameplayHeading",
+        "title": "Gameplay",
+        "items": [
+          {
+            "type": "toggle",
+            "id": "autoAdvanceToggle",
+            "label": "Auto-advance to the next colour when complete",
+            "checked": true
+          },
+          {
+            "type": "toggle",
+            "id": "hintFlashToggle",
+            "label": "Animate hint highlights",
+            "checked": true
+          },
+          {
+            "type": "toggle",
+            "id": "showRegionLabelsToggle",
+            "label": "Show region numbers",
+            "checked": true
+          },
+          {
+            "type": "select",
+            "id": "difficultySelect",
+            "label": "Difficulty",
+            "options": [
+              { "value": "normal", "label": "Standard" },
+              { "value": "nearby", "label": "Nearby" },
+              { "value": "easy", "label": "Easy" }
+            ]
+          },
+          {
+            "type": "note",
+            "text": "Nearby mode lets you click adjacent colours (for example, colour 2 can also paint 1 or 3). Easy mode auto-selects any colour you click before filling it."
+          },
+          {
+            "type": "select",
+            "id": "paletteSort",
+            "label": "Sort Colours",
+            "testId": "palette-sort",
+            "disabled": true,
+            "options": [
+              { "value": "region", "label": "Number" },
+              { "value": "remaining", "label": "Remaining regions" },
+              { "value": "name", "label": "Colour name" },
+              { "value": "spectrum", "label": "Rainbow spectrum" },
+              { "value": "warmth", "label": "Warm → cool" },
+              { "value": "lightness", "label": "Perceptual lightness" }
+            ]
+          },
+          { "type": "note", "text": "Choose how unfinished colours appear in the dock." }
+        ]
+      }
+    ]
   },
   {
     "id": "hints",
     "label": "Hints",
-    "default": false,
-    "markup": "<div class=\"settings-section-heading\">\n            <div class=\"settings-heading-row\">\n              <h3 id=\"settingsHeading-hints\" data-settings-heading>Hints</h3>\n              <button\n                type=\"button\"\n                class=\"help-chip\"\n                aria-label=\"Hint visibility and overlays\"\n                aria-describedby=\"tooltip-hints\"\n              >\n                ?\n              </button>\n              <span class=\"help-chip-bubble\" id=\"tooltip-hints\" role=\"tooltip\">\n                Control how hint highlights, overlays, and preview comparisons behave.\n              </span>\n            </div>\n          </div>\n          <div class=\"settings-panel\" role=\"group\" aria-labelledby=\"settingsHeading-hints\">\n          <section class=\"sheet-section\" aria-labelledby=\"hintsControlsHeading\">\n            <h3 id=\"hintsControlsHeading\">Hints &amp; controls</h3>\n            <div class=\"control control-range\">\n              <div class=\"control-header\">\n                <label for=\"hintFadeDuration\">\n                  <span>Hint fade duration <output data-for=\"hintFadeDuration\">1.2 s</output></span>\n                </label>\n                <button\n                  type=\"button\"\n                  class=\"control-reset\"\n                  data-reset-target=\"hintFadeDuration\"\n                  data-reset-default=\"1200\"\n                >\n                  Default\n                </button>\n              </div>\n              <input\n                id=\"hintFadeDuration\"\n                type=\"range\"\n                min=\"400\"\n                max=\"2400\"\n                step=\"100\"\n                value=\"1200\"\n                data-default=\"1200\"\n              />\n            </div>\n            <p class=\"control-note\">Set how long hint highlights linger before fading out. Default 1.2 s.</p>\n            <div class=\"control control-range\">\n              <div class=\"control-header\">\n                <label for=\"hintIntensity\">\n                  <span>Hint intensity <output data-for=\"hintIntensity\">65%</output></span>\n                </label>\n                <button\n                  type=\"button\"\n                  class=\"control-reset\"\n                  data-reset-target=\"hintIntensity\"\n                  data-reset-default=\"65\"\n                >\n                  Default\n                </button>\n              </div>\n              <input\n                id=\"hintIntensity\"\n                type=\"range\"\n                min=\"20\"\n                max=\"90\"\n                step=\"5\"\n                value=\"65\"\n                data-default=\"65\"\n              />\n            </div>\n            <p class=\"control-note\">Adjust the opacity used when flashing matching regions. Default 65%.</p>"
+    "heading": {
+      "title": "Hints",
+      "helpLabel": "Hint visibility and overlays",
+      "helpText": "Control how hint highlights, overlays, and preview comparisons behave."
+    },
+    "sections": [
+      {
+        "id": "hintsControlsHeading",
+        "title": "Hints & controls",
+        "items": [
+          {
+            "type": "range",
+            "id": "hintFadeDuration",
+            "label": "Hint fade duration",
+            "min": 400,
+            "max": 2400,
+            "step": 100,
+            "value": 1200,
+            "default": 1200,
+            "format": "seconds"
+          },
+          { "type": "note", "text": "Set how long hint highlights linger before fading out. Default 1.2 s." },
+          {
+            "type": "range",
+            "id": "hintIntensity",
+            "label": "Hint intensity",
+            "min": 20,
+            "max": 90,
+            "step": 5,
+            "value": 65,
+            "default": 65,
+            "format": "percent"
+          },
+          { "type": "note", "text": "Adjust the opacity used when flashing matching regions. Default 65%." }
+        ]
+      },
+      {
+        "id": "hintTypesHeading",
+        "title": "Hint types",
+        "description": "Pick which guidance effects appear while you play.",
+        "items": [
+          {
+            "type": "toggle",
+            "id": "hintMatchingToggle",
+            "label": "Highlight every region for the active colour",
+            "checked": true
+          },
+          {
+            "type": "note",
+            "text": "Toggle the pulse that flashes all remaining regions sharing the selected colour."
+          },
+          {
+            "type": "toggle",
+            "id": "hintHoverToggle",
+            "label": "Spotlight hovered regions",
+            "checked": true
+          },
+          { "type": "note", "text": "Show a focused hint when you pause the pointer over a region." }
+        ]
+      }
+    ]
   },
   {
     "id": "controls",
     "label": "Controls",
-    "default": false,
-    "markup": "<div class=\"settings-section-heading\">\n            <div class=\"settings-heading-row\">\n              <h3 id=\"settingsHeading-controls\" data-settings-heading>Controls</h3>\n              <button\n                type=\"button\"\n                class=\"help-chip\"\n                aria-label=\"Control remapping and input feel\"\n                aria-describedby=\"tooltip-controls\"\n              >\n                ?\n              </button>\n              <span class=\"help-chip-bubble\" id=\"tooltip-controls\" role=\"tooltip\">\n                Remap mouse buttons, adjust gesture behaviour, and set interface scale.\n              </span>\n            </div>\n          </div>\n          <div class=\"settings-panel\" role=\"group\" aria-labelledby=\"settingsHeading-controls\">\n          <section class=\"sheet-section\" aria-labelledby=\"mouseControlsHeading\">\n            <h3 id=\"mouseControlsHeading\">Mouse controls</h3>\n            <p class=\"control-note\">\n              Assign actions to each mouse button when clicking or click-dragging on the\n              canvas.\n            </p>\n            <div class=\"mouse-control-group\">\n              <span class=\"mouse-control-title\">Left button</span>\n              <div class=\"mouse-control-options\">\n                <label class=\"control mouse-control-option\">\n                  <span>Click</span>\n                  <select id=\"mouseLeftClick\">\n                    <option value=\"fill\" selected>Fill region</option>\n                    <option value=\"select-fill\">Select and fill region</option>\n                    <option value=\"select\">Select colour</option>\n                    <option value=\"zoom-in\">Zoom in</option>\n                    <option value=\"zoom-out\">Zoom out</option>\n                    <option value=\"none\">No action</option>\n                  </select>\n                </label>\n                <label class=\"control mouse-control-option\">\n                  <span>Click + drag</span>\n                  <select id=\"mouseLeftDrag\">\n                    <option value=\"pan\" selected>Pan view</option>\n                    <option value=\"fill\">Fill while dragging</option>\n                    <option value=\"zoom\">Zoom</option>\n                    <option value=\"none\">No action</option>\n                  </select>\n                </label>\n              </div>\n            </div>\n            <div class=\"mouse-control-group\">\n              <span class=\"mouse-control-title\">Middle button</span>\n              <div class=\"mouse-control-options\">\n                <label class=\"control mouse-control-option\">\n                  <span>Click</span>\n                  <select id=\"mouseMiddleClick\">\n                    <option value=\"fill\">Fill region</option>\n                    <option value=\"select-fill\">Select and fill region</option>\n                    <option value=\"select\">Select colour</option>\n                    <option value=\"zoom-in\">Zoom in</option>\n                    <option value=\"zoom-out\">Zoom out</option>\n                    <option value=\"none\" selected>No action</option>\n                  </select>\n                </label>\n                <label class=\"control mouse-control-option\">\n                  <span>Click + drag</span>\n                  <select id=\"mouseMiddleDrag\">\n                    <option value=\"pan\" selected>Pan view</option>\n                    <option value=\"fill\">Fill while dragging</option>\n                    <option value=\"zoom\">Zoom</option>\n                    <option value=\"none\">No action</option>\n                  </select>\n                </label>\n              </div>\n            </div>\n            <div class=\"mouse-control-group\">\n              <span class=\"mouse-control-title\">Right button</span>\n              <div class=\"mouse-control-options\">\n                <label class=\"control mouse-control-option\">\n                  <span>Click</span>\n                  <select id=\"mouseRightClick\">\n                    <option value=\"fill\">Fill region</option>\n                    <option value=\"select-fill\">Select and fill region</option>\n                    <option value=\"select\" selected>Select colour</option>\n                    <option value=\"zoom-in\">Zoom in</option>\n                    <option value=\"zoom-out\">Zoom out</option>\n                    <option value=\"none\">No action</option>\n                  </select>\n                </label>\n                <label class=\"control mouse-control-option\">\n                  <span>Click + drag</span>\n                  <select id=\"mouseRightDrag\">\n                    <option value=\"pan\" selected>Pan view</option>\n                    <option value=\"fill\">Fill while dragging</option>\n                    <option value=\"zoom\">Zoom</option>\n                    <option value=\"none\">No action</option>\n                  </select>\n                </label>\n              </div>\n            </div>\n            <p class=\"control-note\">\n              Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out.\n            </p>"
+    "heading": {
+      "title": "Controls",
+      "helpLabel": "Control remapping and input feel",
+      "helpText": "Remap mouse buttons, adjust gesture behaviour, and set interface scale."
+    },
+    "sections": [
+      {
+        "id": "mouseControlsHeading",
+        "title": "Mouse controls",
+        "description": "Assign actions to each mouse button when clicking or click-dragging on the canvas.",
+        "items": [
+          {
+            "type": "mouse-controls",
+            "groups": [
+              {
+                "title": "Left button",
+                "options": [
+                  {
+                    "label": "Click",
+                    "id": "mouseLeftClick",
+                    "choices": [
+                      { "value": "fill", "label": "Fill region", "selected": true },
+                      { "value": "select-fill", "label": "Select and fill region" },
+                      { "value": "select", "label": "Select colour" },
+                      { "value": "zoom-in", "label": "Zoom in" },
+                      { "value": "zoom-out", "label": "Zoom out" },
+                      { "value": "none", "label": "No action" }
+                    ]
+                  },
+                  {
+                    "label": "Click + drag",
+                    "id": "mouseLeftDrag",
+                    "choices": [
+                      { "value": "pan", "label": "Pan view", "selected": true },
+                      { "value": "fill", "label": "Fill while dragging" },
+                      { "value": "zoom", "label": "Zoom" },
+                      { "value": "none", "label": "No action" }
+                    ]
+                  }
+                ]
+              },
+              {
+                "title": "Middle button",
+                "options": [
+                  {
+                    "label": "Click",
+                    "id": "mouseMiddleClick",
+                    "choices": [
+                      { "value": "fill", "label": "Fill region" },
+                      { "value": "select-fill", "label": "Select and fill region" },
+                      { "value": "select", "label": "Select colour" },
+                      { "value": "zoom-in", "label": "Zoom in" },
+                      { "value": "zoom-out", "label": "Zoom out" },
+                      { "value": "none", "label": "No action", "selected": true }
+                    ]
+                  },
+                  {
+                    "label": "Click + drag",
+                    "id": "mouseMiddleDrag",
+                    "choices": [
+                      { "value": "pan", "label": "Pan view", "selected": true },
+                      { "value": "fill", "label": "Fill while dragging" },
+                      { "value": "zoom", "label": "Zoom" },
+                      { "value": "none", "label": "No action" }
+                    ]
+                  }
+                ]
+              },
+              {
+                "title": "Right button",
+                "options": [
+                  {
+                    "label": "Click",
+                    "id": "mouseRightClick",
+                    "choices": [
+                      { "value": "fill", "label": "Fill region" },
+                      { "value": "select-fill", "label": "Select and fill region" },
+                      { "value": "select", "label": "Select colour", "selected": true },
+                      { "value": "zoom-in", "label": "Zoom in" },
+                      { "value": "zoom-out", "label": "Zoom out" },
+                      { "value": "none", "label": "No action" }
+                    ]
+                  },
+                  {
+                    "label": "Click + drag",
+                    "id": "mouseRightDrag",
+                    "choices": [
+                      { "value": "pan", "label": "Pan view", "selected": true },
+                      { "value": "fill", "label": "Fill while dragging" },
+                      { "value": "zoom", "label": "Zoom" },
+                      { "value": "none", "label": "No action" }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          { "type": "note", "text": "Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out." }
+        ]
+      }
+    ]
   },
   {
     "id": "appearance",
     "label": "Appearance",
-    "default": false,
-    "markup": "<div class=\"settings-section-heading\">\n            <div class=\"settings-heading-row\">\n              <h3 id=\"settingsHeading-appearance\" data-settings-heading>Appearance</h3>\n              <button\n                type=\"button\"\n                class=\"help-chip\"\n                aria-label=\"Appearance and accessibility controls\"\n                aria-describedby=\"tooltip-appearance\"\n              >\n                ?\n              </button>\n              <span class=\"help-chip-bubble\" id=\"tooltip-appearance\" role=\"tooltip\">\n                Balance scale, contrast, overlays, and theme picks for the board.\n              </span>\n            </div>\n          </div>\n          <div class=\"settings-panel\" role=\"group\" aria-labelledby=\"settingsHeading-appearance\">\n          <section class=\"sheet-section\" aria-labelledby=\"appearanceHeading\">\n            <h3 id=\"appearanceHeading\">Appearance</h3>\n            <div class=\"control control-range\">\n              <div class=\"control-header\">\n                <label for=\"uiScale\">\n                  <span>Interface scale <output data-for=\"uiScale\">75%</output></span>\n                </label>\n                <button\n                  type=\"button\"\n                  class=\"control-reset\"\n                  data-reset-target=\"uiScale\"\n                  data-reset-default=\"0.75\"\n                >\n                  Default\n                </button>\n              </div>\n              <input\n                id=\"uiScale\"\n                type=\"range\"\n                min=\"0.2\"\n                max=\"3\"\n                step=\"0.05\"\n                value=\"0.75\"\n                data-default=\"0.75\"\n              />\n            </div>\n            <p class=\"control-note\">Resize command buttons and labels without altering canvas zoom. Default 75%.</p>\n            <div class=\"control control-range\">\n              <div class=\"control-header\">\n                <label for=\"labelScale\">\n                  <span>Label size <output data-for=\"labelScale\">100%</output></span>\n                </label>\n                <button\n                  type=\"button\"\n                  class=\"control-reset\"\n                  data-reset-target=\"labelScale\"\n                  data-reset-default=\"1\"\n                >\n                  Default\n                </button>\n              </div>\n              <input\n                id=\"labelScale\"\n                type=\"range\"\n                min=\"0.2\"\n                max=\"2\"\n                step=\"0.05\"\n                value=\"1\"\n                data-default=\"1\"\n              />\n            </div>\n            <p class=\"control-note\">Scale region numbers independently from the surrounding interface. Default 100%.</p>\n            <div class=\"control control-range\">\n              <div class=\"control-header\">\n                <label for=\"maxZoom\">\n                  <span>Maximum zoom <output data-for=\"maxZoom\">1200%</output></span>\n                </label>\n                <button\n                  type=\"button\"\n                  class=\"control-reset\"\n                  data-reset-target=\"maxZoom\"\n                  data-reset-default=\"12\"\n                >\n                  Default\n                </button>\n              </div>\n              <input\n                id=\"maxZoom\"\n                type=\"range\"\n                min=\"2\"\n                max=\"30\"\n                step=\"0.5\"\n                value=\"12\"\n                data-default=\"12\"\n              />\n            </div>\n            <p class=\"control-note\">Limit how far the canvas can zoom in beyond the fitted view. Default 1200%.</p>\n            <label class=\"control\">\n              <span>Interface theme</span>\n              <select id=\"uiTheme\">\n                <option value=\"dark\">Dark</option>\n                <option value=\"light\">Light</option>\n                <option value=\"colorful\">Colourful</option>\n              </select>\n            </label>\n            <p class=\"control-note\">Switch between dark, light, or colourful chrome accents.</p>\n            <label class=\"control\">\n              <span>Renderer</span>\n              <select id=\"rendererMode\">\n                <option value=\"svg\">SVG</option>\n              </select>\n            </label>\n            <p class=\"control-note\">\n              Rendering is handled by the simplified SVG backend.\n            </p>\n            <label class=\"control\">\n              <span>Unfilled region colour</span>\n              <input id=\"backgroundColor\" type=\"color\" value=\"#f8fafc\" />\n            </label>\n            <p class=\"control-note\">\n              Applies to unfinished regions and adjusts outline contrast automatically.\n            </p>\n            <label class=\"control\">\n              <span>Background</span>\n              <input id=\"stageBackgroundColor\" type=\"color\" value=\"#000000\" />\n            </label>\n            <p class=\"control-note\">Adjust the area surrounding the puzzle canvas.</p>"
+    "heading": {
+      "title": "Appearance",
+      "helpLabel": "Appearance and accessibility controls",
+      "helpText": "Balance scale, contrast, overlays, and theme picks for the board."
+    },
+    "sections": [
+      {
+        "id": "appearanceHeading",
+        "title": "Appearance",
+        "items": [
+          {
+            "type": "range",
+            "id": "uiScale",
+            "label": "Interface scale",
+            "min": 0.2,
+            "max": 3,
+            "step": 0.05,
+            "value": 0.75,
+            "default": 0.75,
+            "format": "unit-percent"
+          },
+          { "type": "note", "text": "Resize command buttons and labels without altering canvas zoom. Default 75%." },
+          {
+            "type": "range",
+            "id": "labelScale",
+            "label": "Label size",
+            "min": 0.2,
+            "max": 2,
+            "step": 0.05,
+            "value": 1,
+            "default": 1,
+            "format": "unit-percent"
+          },
+          { "type": "note", "text": "Scale region numbers independently from the surrounding interface. Default 100%." },
+          {
+            "type": "range",
+            "id": "maxZoom",
+            "label": "Maximum zoom",
+            "min": 2,
+            "max": 30,
+            "step": 0.5,
+            "value": 12,
+            "default": 12,
+            "format": "zoom-percent"
+          },
+          { "type": "note", "text": "Limit how far the canvas can zoom in beyond the fitted view. Default 1200%." },
+          {
+            "type": "select",
+            "id": "uiTheme",
+            "label": "Interface theme",
+            "options": [
+              { "value": "dark", "label": "Dark", "selected": true },
+              { "value": "light", "label": "Light" },
+              { "value": "colorful", "label": "Colourful" }
+            ]
+          },
+          { "type": "note", "text": "Switch between dark, light, or colourful chrome accents." },
+          {
+            "type": "select",
+            "id": "rendererMode",
+            "label": "Renderer",
+            "options": [
+              { "value": "svg", "label": "SVG", "selected": true }
+            ]
+          },
+          { "type": "note", "text": "Rendering is handled by the simplified SVG backend." },
+          {
+            "type": "color",
+            "id": "backgroundColor",
+            "label": "Unfilled region colour",
+            "value": "#f8fafc"
+          },
+          { "type": "note", "text": "Applies to unfinished regions and adjusts outline contrast automatically." },
+          { "type": "color", "id": "stageBackgroundColor", "label": "Background", "value": "#000000" },
+          { "type": "note", "text": "Adjust the area surrounding the puzzle canvas." }
+        ]
+      }
+    ]
   },
   {
     "id": "generator",
     "label": "Generator",
-    "default": false,
-    "markup": "<div class=\"settings-section-heading\">\n            <div class=\"settings-heading-row\">\n              <h3 id=\"settingsHeading-generator\" data-settings-heading>Generator</h3>\n              <button\n                type=\"button\"\n                class=\"help-chip\"\n                aria-label=\"Generator and import controls\"\n                aria-describedby=\"tooltip-generator\"\n              >\n                ?\n              </button>\n              <span class=\"help-chip-bubble\" id=\"tooltip-generator\" role=\"tooltip\">\n                Set clustering, imports, and metadata for new puzzles and reloads.\n              </span>\n            </div>\n          </div>\n          <div class=\"settings-panel\" role=\"group\" aria-labelledby=\"settingsHeading-generator\">\n          <div\n            class=\"generator-import-notice\"\n            data-import-notice\n            role=\"status\"\n            aria-live=\"polite\"\n            hidden\n          >\n            <p class=\"generator-import-title\">\n              <strong data-import-file></strong>\n            </p>\n            <p class=\"generator-import-description\" data-import-description></p>\n            <div class=\"generator-import-actions\">\n              <button id=\"confirmImport\" type=\"button\" data-import-confirm>Generate puzzle</button>\n              <button type=\"button\" class=\"close-button\" data-import-cancel>Cancel</button>\n            </div>\n          </div>\n          <section class=\"sheet-section\" aria-labelledby=\"generatorHeading\">\n            <h3 id=\"generatorHeading\">Clustering &amp; detail</h3>\n            <p class=\"control-note\">\n              Tune the colour clustering pipeline that powers new puzzles. These settings apply to fresh imports and the bundled\n              capybara sample when reloaded.\n            </p>\n            <div class=\"detail-callout\">\n              <p class=\"detail-intro\">Capybara sample detail presets</p>\n              <div class=\"detail-picker\" role=\"group\" aria-label=\"Capybara sample detail presets\">\n                <button type=\"button\" class=\"detail-chip\" data-detail-level=\"low\">Low</button>\n                <button type=\"button\" class=\"detail-chip\" data-detail-level=\"medium\">Medium</button>\n                <button type=\"button\" class=\"detail-chip\" data-detail-level=\"high\">High</button>\n              </div>\n              <p class=\"detail-caption\" data-detail-caption></p>\n            </div>\n            <p class=\"control-note\">\n              Switching presets updates every slider below and reloads the sample scene when it's active.\n            </p>\n            <div class=\"control control-range\">\n              <div class=\"control-header\">\n                <label for=\"colorCount\">\n                  <span>Colours <output data-for=\"colorCount\">16</output></span>\n                </label>\n                <button\n                  type=\"button\"\n                  class=\"control-reset\"\n                  data-reset-target=\"colorCount\"\n                  data-reset-default=\"16\"\n                >\n                  Default\n                </button>\n              </div>\n              <input\n                id=\"colorCount\"\n                type=\"range\"\n                min=\"4\"\n                max=\"64\"\n                value=\"16\"\n                data-default=\"16\"\n              />\n            </div>\n            <div class=\"control control-range\">\n              <div class=\"control-header\">\n                <label for=\"minRegion\">\n                  <span>Regions <output data-for=\"minRegion\">80 px\u00b2</output></span>\n                </label>\n                <button\n                  type=\"button\"\n                  class=\"control-reset\"\n                  data-reset-target=\"minRegion\"\n                  data-reset-default=\"80\"\n                >\n                  Default\n                </button>\n              </div>\n              <input\n                id=\"minRegion\"\n                type=\"range\"\n                min=\"1\"\n                max=\"600\"\n                value=\"80\"\n                data-default=\"80\"\n              />\n            </div>\n            <p class=\"control-note\">Higher values merge smaller areas for fewer regions. Default 80 px\u00b2.</p>\n            <div class=\"control control-range\">\n              <div class=\"control-header\">\n                <label for=\"detailLevel\">\n                  <span>Detail <output data-for=\"detailLevel\">768 px</output></span>\n                </label>\n                <button\n                  type=\"button\"\n                  class=\"control-reset\"\n                  data-reset-target=\"detailLevel\"\n                  data-reset-default=\"768\"\n                >\n                  Default\n                </button>\n              </div>\n              <input\n                id=\"detailLevel\"\n                type=\"range\"\n                min=\"256\"\n                max=\"1600\"\n                step=\"64\"\n                value=\"768\"\n                data-default=\"768\"\n              />\n            </div>\n            <p class=\"control-note\">Controls the longest edge used when resizing the source image. Default 768 px.</p>\n            <label class=\"control\">\n              <span>Algorithm</span>\n              <select id=\"generationAlgorithm\">\n                <option value=\"local-kmeans\">Local palette clustering (k-means)</option>\n                <option value=\"local-posterize\">Local posterize &amp; merge</option>\n                <option value=\"organic-slic\">Organic superpixels (curved gradients)</option>\n              </select>\n            </label>\n            <p class=\"control-note\">\n              Choose between local clustering pipelines now, with space for hosted services to appear as they become available.\n            </p>\n            <div class=\"control control-range\">\n              <div class=\"control-header\">\n                <label for=\"sampleRate\">\n                  <span>Sample rate <output data-for=\"sampleRate\">65%</output></span>\n                </label>\n                <button\n                  type=\"button\"\n                  class=\"control-reset\"\n                  data-reset-target=\"sampleRate\"\n                  data-reset-default=\"65\"\n                >\n                  Default\n                </button>\n              </div>\n              <input\n                id=\"sampleRate\"\n                type=\"range\"\n                min=\"25\"\n                max=\"100\"\n                step=\"5\"\n                value=\"65\"\n                data-default=\"65\"\n              />\n            </div>\n            <p class=\"control-note\">Lower values speed up clustering by sampling fewer pixels. Default 65%.</p>\n            <div class=\"control control-range\">\n              <div class=\"control-header\">\n                <label for=\"kmeansIters\">\n                  <span>Iterations <output data-for=\"kmeansIters\">12</output></span>\n                </label>\n                <button\n                  type=\"button\"\n                  class=\"control-reset\"\n                  data-reset-target=\"kmeansIters\"\n                  data-reset-default=\"12\"\n                >\n                  Default\n                </button>\n              </div>\n              <input\n                id=\"kmeansIters\"\n                type=\"range\"\n                min=\"4\"\n                max=\"32\"\n                step=\"1\"\n                value=\"12\"\n                data-default=\"12\"\n              />\n            </div>\n            <p class=\"control-note\">\n              Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process. Default 12 iterations.\n            </p>\n            <div class=\"control control-range\">\n              <div class=\"control-header\">\n                <label for=\"smoothingPasses\">\n                  <span>Smoothing passes <output data-for=\"smoothingPasses\">1</output></span>\n                </label>\n                <button\n                  type=\"button\"\n                  class=\"control-reset\"\n                  data-reset-target=\"smoothingPasses\"\n                  data-reset-default=\"1\"\n                >\n                  Default\n                </button>\n              </div>\n              <input\n                id=\"smoothingPasses\"\n                type=\"range\"\n                min=\"0\"\n                max=\"4\"\n                step=\"1\"\n                value=\"1\"\n                data-default=\"1\"\n              />\n            </div>\n            <p class=\"control-note\">\n              Each pass blends stray pixels into neighbouring regions before segmentation\u2014set to 0 to keep edges as crisp as the source. Default 1 pass.\n            </p>\n            <details class=\"advanced-options\" id=\"generatorAdvanced\">\n              <summary>Advanced options</summary>\n              <label class=\"control\">\n                <span>Art prompt</span>\n                <textarea\n                  id=\"artPrompt\"\n                  rows=\"3\"\n                  placeholder=\"Summarise the idea behind this puzzle\"\n                ></textarea>\n              </label>\n              <p class=\"control-note\">\n                Stored with saves so you can revisit the inspiration that sparked the artwork.\n              </p>\n              <label class=\"control\">\n                <span>Image description</span>\n                <textarea\n                  id=\"imageDescription\"\n                  rows=\"3\"\n                  placeholder=\"Describe the image you want to generate\"\n                ></textarea>\n              </label>\n              <p class=\"control-note\">\n                Stored with saves and exports so you can revisit the inspiration later.\n              </p>\n              <p class=\"control-note\">\n                <a\n                  id=\"chatGptLink\"\n                  class=\"chatgpt-link\"\n                  href=\"https://chat.openai.com/\"\n                  target=\"_blank\"\n                  rel=\"noopener noreferrer\"\n                >\n                  Open ChatGPT to craft an image prompt <span aria-hidden=\"true\">\u2197</span>\n                </a>\n              </p>\n            </details>"
+    "heading": {
+      "title": "Generator",
+      "helpLabel": "Generator and import controls",
+      "helpText": "Set clustering, imports, and metadata for new puzzles and reloads."
+    },
+    "blocks": [
+      { "type": "import-notice" },
+      {
+        "type": "section",
+        "id": "generatorHeading",
+        "title": "Clustering & detail",
+        "description": "Tune the colour clustering pipeline that powers new puzzles. These settings apply to fresh imports and the bundled capybara sample when reloaded.",
+        "items": [
+          {
+            "type": "detail-callout",
+            "captionAttr": "detail-caption",
+            "levels": [
+              { "level": "low", "label": "Low" },
+              { "level": "medium", "label": "Medium" },
+              { "level": "high", "label": "High" }
+            ]
+          },
+          { "type": "note", "text": "Switching presets updates every slider below and reloads the sample scene when it's active." },
+          {
+            "type": "range",
+            "id": "colorCount",
+            "label": "Colours",
+            "min": 4,
+            "max": 64,
+            "value": 16,
+            "default": 16,
+            "format": "integer"
+          },
+          {
+            "type": "range",
+            "id": "minRegion",
+            "label": "Regions",
+            "min": 1,
+            "max": 600,
+            "value": 80,
+            "default": 80,
+            "format": "px2"
+          },
+          { "type": "note", "text": "Higher values merge smaller areas for fewer regions. Default 80 px²." },
+          {
+            "type": "range",
+            "id": "detailLevel",
+            "label": "Detail",
+            "min": 256,
+            "max": 1600,
+            "step": 64,
+            "value": 768,
+            "default": 768,
+            "format": "px"
+          },
+          { "type": "note", "text": "Controls the longest edge used when resizing the source image. Default 768 px." },
+          {
+            "type": "select",
+            "id": "generationAlgorithm",
+            "label": "Algorithm",
+            "options": [
+              { "value": "local-kmeans", "label": "Local palette clustering (k-means)" },
+              { "value": "local-posterize", "label": "Local posterize & merge" },
+              { "value": "organic-slic", "label": "Organic superpixels (curved gradients)" }
+            ]
+          },
+          { "type": "note", "text": "Choose between local clustering pipelines now, with space for hosted services to appear as they become available." },
+          {
+            "type": "range",
+            "id": "sampleRate",
+            "label": "Sample rate",
+            "min": 25,
+            "max": 100,
+            "step": 5,
+            "value": 65,
+            "default": 65,
+            "format": "percent"
+          },
+          { "type": "note", "text": "Lower values speed up clustering by sampling fewer pixels. Default 65%." },
+          {
+            "type": "range",
+            "id": "kmeansIters",
+            "label": "Iterations",
+            "min": 4,
+            "max": 32,
+            "step": 1,
+            "value": 12,
+            "default": 12,
+            "format": "integer"
+          },
+          {
+            "type": "note",
+            "text": "Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process. Default 12 iterations."
+          },
+          {
+            "type": "range",
+            "id": "smoothingPasses",
+            "label": "Smoothing passes",
+            "min": 0,
+            "max": 4,
+            "step": 1,
+            "value": 1,
+            "default": 1,
+            "format": "integer"
+          },
+          {
+            "type": "note",
+            "text": "Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source. Default 1 pass."
+          },
+          {
+            "type": "details",
+            "summary": "Advanced options",
+            "items": [
+              {
+                "type": "textarea",
+                "id": "artPrompt",
+                "label": "Art prompt",
+                "rows": 3,
+                "placeholder": "Summarise the idea behind this puzzle"
+              },
+              {
+                "type": "note",
+                "text": "Stored with saves so you can revisit the inspiration that sparked the artwork."
+              },
+              {
+                "type": "textarea",
+                "id": "imageDescription",
+                "label": "Image description",
+                "rows": 3,
+                "placeholder": "Describe the image you want to generate"
+              },
+              {
+                "type": "note",
+                "text": "Stored with saves and exports so you can revisit the inspiration later."
+              },
+              {
+                "type": "note",
+                "link": {
+                  "href": "https://chat.openai.com/",
+                  "text": "Open ChatGPT to craft an image prompt",
+                  "id": "chatGptLink"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      { "type": "source-url-form" },
+      { "type": "sheet-actions" },
+      { "type": "generator-progress" }
+    ]
   },
   {
     "id": "saves",
     "label": "Saves",
-    "default": false,
-    "markup": "<section class=\"sheet-section\" aria-labelledby=\"saveStartHeading\">\n            <h3 id=\"saveStartHeading\">Start a puzzle</h3>\n            <div class=\"save-start-actions\">\n              <button\n                id=\"selectImage\"\n                type=\"button\"\n                aria-label=\"Upload image or JSON puzzle\"\n              >\n                Upload Image\n              </button>\n              <button\n                id=\"samplePuzzle\"\n                type=\"button\"\n                data-action=\"load-sample\"\n                aria-label=\"Load capybara sample puzzle\"\n              >\n                Load capybara sample\n              </button>"
+    "heading": {
+      "title": "Saves",
+      "helpLabel": "Save management",
+      "helpText": "Import puzzles, start fresh sessions, and manage your save slots."
+    },
+    "sections": [
+      {
+        "id": "saveStartHeading",
+        "title": "Start a puzzle",
+        "items": [
+          {
+            "type": "action-row",
+            "className": "save-start-actions",
+            "actions": [
+              { "type": "button", "id": "selectImage", "label": "Upload Image", "ariaLabel": "Upload image or JSON puzzle" },
+              { "type": "button", "id": "samplePuzzle", "label": "Load capybara sample", "ariaLabel": "Load capybara sample puzzle", "dataset": { "action": "load-sample" } }
+            ]
+          }
+        ]
+      },
+      { "type": "save-manager" },
+      {
+        "id": "storageHeading",
+        "title": "Save storage",
+        "items": [
+          { "type": "note", "text": "", "outputId": "saveStorageSummary" },
+          {
+            "type": "select",
+            "id": "sourceImageLimit",
+            "label": "Stored image size",
+            "outputFor": "sourceImageLimit",
+            "options": [
+              { "value": 262144, "label": "256 KB" },
+              { "value": 524288, "label": "512 KB" },
+              { "value": 1048576, "label": "1 MB", "selected": true },
+              { "value": 2097152, "label": "2 MB" },
+              { "value": 5242880, "label": "5 MB" }
+            ]
+          },
+          {
+            "type": "note",
+            "text": "Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate or import."
+          },
+          {
+            "type": "button-row",
+            "className": "log-actions",
+            "actions": [
+              { "type": "button", "id": "deleteAllSaves", "label": "Delete all saves" }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "help",
     "label": "Help",
-    "default": false,
-    "markup": "<div class=\"settings-section-heading\">\n            <div class=\"settings-heading-row\">\n              <h3 id=\"settingsHeading-help\" data-settings-heading>Help</h3>\n              <button\n                type=\"button\"\n                class=\"help-chip\"\n                aria-label=\"Gameplay tips\"\n                aria-describedby=\"tooltip-help\"\n              >\n                ?\n              </button>\n              <span class=\"help-chip-bubble\" id=\"tooltip-help\" role=\"tooltip\">\n                Review button legends and gestures while you play.\n              </span>\n            </div>\n          </div>\n          <div class=\"settings-panel\" role=\"group\" aria-labelledby=\"settingsHeading-help\">\n          <section class=\"sheet-section\" aria-labelledby=\"commandsHeading\">\n            <h3 id=\"commandsHeading\">Command buttons</h3>\n            <dl class=\"command-list\">\n              <dt>\ud83d\uddbc Preview</dt>\n              <dd>Toggle the finished artwork overlay to compare your progress.</dd>\n              <dt>\ud83c\udf9b Generator</dt>\n              <dd>\n                Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor\n                generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation.\n              </dd>\n              <dt>\ud83c\udf9a Detail</dt>\n              <dd>\n                Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes,\n                minimum region areas, resize targets, and the region counts noted above.\n              </dd>\n              <dt>\u26f6 Fullscreen</dt>\n              <dd>Expand the app to fill the display or exit back to windowed mode.</dd>\n              <dt>\u2b06 Import</dt>\n              <dd>Load a new image or JSON puzzle from disk.</dd>\n              <dt>\ud83d\udcbe Saves</dt>\n              <dd>Manage snapshots \u2014 load, rename, export, or delete stored games.</dd>\n              <dt>\u2139 Help</dt>\n              <dd>\n                Open this guide and review tips for palette controls, gestures, and shortcuts.\n              </dd>\n              <dt>\u2699 Menu</dt>\n              <dd>\n                Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface\n                scale. Advanced options expose accessibility tweaks for the hint animations.\n              </dd>\n            </dl>"
+    "heading": {
+      "title": "Help",
+      "helpLabel": "Gameplay tips",
+      "helpText": "Review button legends and gestures while you play."
+    },
+    "sections": [
+      {
+        "id": "commandsHeading",
+        "title": "Command buttons",
+        "items": [
+          {
+            "type": "definition-list",
+            "items": [
+              { "term": "🖼 Preview", "description": "Toggle the finished artwork overlay to compare your progress." },
+              {
+                "term": "🎛 Generator",
+                "description": "Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation."
+              },
+              {
+                "term": "🎚 Detail",
+                "description": "Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes, minimum region areas, resize targets, and the region counts noted above."
+              },
+              { "term": "⛶ Fullscreen", "description": "Expand the app to fill the display or exit back to windowed mode." },
+              { "term": "⬆ Import", "description": "Load a new image or JSON puzzle from disk." },
+              { "term": "💾 Saves", "description": "Manage snapshots — load, rename, export, or delete stored games." },
+              { "term": "ℹ Help", "description": "Open this guide and review tips for palette controls, gestures, and shortcuts." },
+              {
+                "term": "⚙ Menu",
+                "description": "Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface scale. Advanced options expose accessibility tweaks for the hint animations."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "controlsHeading",
+        "title": "Canvas controls",
+        "items": [
+          {
+            "type": "list",
+            "items": [
+              "Click Fill the tapped region if it matches the active colour.",
+              "Right click Select the colour under the pointer.",
+              "Select a palette swatch to set the active colour and flash every matching region.",
+              "Enable Easy difficulty in the menu to let clicks auto-select the tapped region's colour.",
+              "Mouse wheel or +/− Zoom in or out around the cursor.",
+              "Middle click or Space + drag Pan the canvas.",
+              "Drag & drop an image or JSON file anywhere on the window to import it."
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "diagnostics",
     "label": "Diagnostics",
-    "default": false,
-    "markup": "<section class=\"sheet-section\" aria-label=\"Menu loader console\">\n            <div class=\"visually-hidden\" id=\"settingsLoadHeading\">Menu loader console</div>\n            <div\n              id=\"settingsLoadConsole\"\n              class=\"debug-log settings-loading-console\"\n              role=\"log\"\n              aria-labelledby=\"settingsLoadHeading\"\n              aria-live=\"polite\"\n              aria-relevant=\"additions text\"\n            >"
+    "heading": {
+      "title": "Diagnostics",
+      "helpLabel": "Diagnostics and JSON review",
+      "helpText": "Check live logs, system status, and review the current JSON payload."
+    },
+    "blocks": [
+      { "type": "loader-console" },
+      {
+        "type": "section",
+        "id": "systemHeading",
+        "title": "System status",
+        "items": [
+          {
+            "type": "definition-list",
+            "items": [
+              { "term": "Service worker", "description": "Waiting to register…", "dataTarget": "service-worker-state" },
+              { "term": "Runtime cache", "description": "capy-offline-cache-v3", "dataTarget": "service-worker-cache" },
+              { "term": "Last update", "description": "Not available yet", "dataTarget": "service-worker-updated" }
+            ]
+          },
+          {
+            "type": "note",
+            "text": "Service worker registration, cache limits, and install events stream into the debug log below."
+          }
+        ]
+      },
+      {
+        "type": "section",
+        "id": "debugHeading",
+        "title": "Debug log",
+        "items": [
+          { "type": "note", "text": "Recent actions, selections, and generation events appear here while you play." },
+          { "type": "logger", "id": "debugLog" },
+          {
+            "type": "button-row",
+            "className": "log-actions",
+            "actions": [ { "type": "button", "id": "clearDebugLog", "label": "Clear log" } ]
+          }
+        ]
+      },
+      {
+        "type": "section",
+        "id": "settingsJsonHeading",
+        "title": "Preferences JSON",
+        "items": [
+          {
+            "type": "note",
+            "text": "Review or update the current preferences as JSON. Export a snapshot or import one from the textarea below."
+          },
+          { "type": "json-view" }
+        ]
+      }
+    ]
   }
 ]
