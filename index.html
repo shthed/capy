@@ -214,1093 +214,689 @@
           </button>
         </div>
       </div>
-      <div class="sheet-body">
-        <div class="settings-body">
-          <nav class="settings-tabs" role="tablist" aria-label="Menu sections">
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-gameplay"
-              aria-controls="settingsPanel-gameplay"
-              aria-selected="true"
-              data-settings-tab="gameplay"
-              data-settings-tab-default
-            >
-              Gameplay
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-hints"
-              aria-controls="settingsPanel-hints"
-              aria-selected="false"
-              data-settings-tab="hints"
-            >
-              Hints
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-controls"
-              aria-controls="settingsPanel-controls"
-              aria-selected="false"
-              data-settings-tab="controls"
-            >
-              Controls
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-appearance"
-              aria-controls="settingsPanel-appearance"
-              aria-selected="false"
-              data-settings-tab="appearance"
-            >
-              Appearance
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-generator"
-              aria-controls="settingsPanel-generator"
-              aria-selected="false"
-              data-settings-tab="generator"
-            >
-              Generator
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-saves"
-              aria-controls="settingsPanel-saves"
-              aria-selected="false"
-              data-settings-tab="saves"
-            >
-              Saves
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-help"
-              aria-controls="settingsPanel-help"
-              aria-selected="false"
-              data-settings-tab="help"
-            >
-              Help
-            </button>
-            <button
-              class="settings-tab"
-              type="button"
-              role="tab"
-              id="settingsTab-diagnostics"
-              aria-controls="settingsPanel-diagnostics"
-              aria-selected="false"
-              data-settings-tab="diagnostics"
-            >
-              Diagnostics
-            </button>
-          </nav>
-          <div class="settings-content" data-settings-scroll>
-          <section
-            class="settings-section settings-page"
-            id="settingsPanel-gameplay"
-            role="tabpanel"
-            aria-labelledby="settingsTab-gameplay"
-            data-settings-panel="gameplay"
-          >
-            <div class="settings-section-heading">
-              <div class="settings-heading-row">
-                <h3 id="settingsHeading-gameplay" data-settings-heading>Gameplay</h3>
-                <button
-                  type="button"
-                  class="help-chip"
-                  aria-label="Gameplay controls for preview, pacing, and assists"
-                  aria-describedby="tooltip-gameplay"
-                >
-                  ?
-                </button>
-                <span class="help-chip-bubble" id="tooltip-gameplay" role="tooltip">
-                  Tweak quick actions, pacing, and assists without leaving the puzzle.
-                </span>
-              </div>
-            </div>
-            <div
-              class="settings-panel"
-              role="group"
-              aria-labelledby="settingsHeading-gameplay"
-              >
-              <section class="sheet-section" aria-labelledby="quickActionsHeading">
-                <h3 id="quickActionsHeading">Quick actions</h3>
-            <div class="quick-actions" role="group" aria-label="Puzzle quick actions">
-              <button
-                id="previewToggle"
-                type="button"
-                class="quick-action"
-                data-testid="preview-toggle"
-                aria-label="Show preview"
-                title="Show preview"
-                aria-pressed="false"
-                disabled
-              >
-                <span class="icon" aria-hidden="true">🖼</span>
-                <span class="label">Show preview</span>
-              </button>
-              <button
-                id="fullscreenButton"
-                type="button"
-                class="quick-action"
-                data-testid="fullscreen-button"
-                aria-label="Enter fullscreen"
-                title="Enter fullscreen"
-                aria-pressed="false"
-              >
-                <span class="icon" aria-hidden="true">⛶</span>
-                <span class="label">Enter fullscreen</span>
-              </button>
-            </div>
-            <p class="control-note">
-              Manage the reference preview and fullscreen view without leaving the puzzle.
-            </p>
-          </section>
-          <section class="sheet-section" aria-labelledby="gameplayHeading">
-            <h3 id="gameplayHeading">Gameplay</h3>
-            <label class="toggle">
-              <input id="autoAdvanceToggle" type="checkbox" checked />
-              <span>Auto-advance to the next colour when complete</span>
-            </label>
-            <label class="toggle">
-              <input id="hintFlashToggle" type="checkbox" checked />
-              <span>Animate hint highlights</span>
-            </label>
-            <label class="toggle">
-              <input id="showRegionLabelsToggle" type="checkbox" checked />
-              <span>Show region numbers</span>
-            </label>
-            <label class="control">
-              <span>Difficulty</span>
-              <select id="difficultySelect">
-                <option value="normal">Standard</option>
-                <option value="nearby">Nearby</option>
-                <option value="easy">Easy</option>
-              </select>
-            </label>
-            <p class="control-note">
-              Nearby mode lets you click adjacent colours (for example, colour 2 can also paint 1 or 3).
-              Easy mode auto-selects any colour you click before filling it.
-            </p>
-            <label class="control">
-              <span>Sort Colours</span>
-              <select id="paletteSort" data-testid="palette-sort" disabled>
-                <option value="region">Number</option>
-                <option value="remaining">Remaining regions</option>
-                <option value="name">Colour name</option>
-                <option value="spectrum">Rainbow spectrum</option>
-                <option value="warmth">Warm → cool</option>
-                <option value="lightness">Perceptual lightness</option>
-              </select>
-            </label>
-            <p class="control-note">Choose how unfinished colours appear in the dock.</p>
-          </section>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-hints"
-          role="tabpanel"
-          aria-labelledby="settingsTab-hints"
-          data-settings-panel="hints"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-hints" data-settings-heading>Hints</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Hint visibility and overlays"
-                aria-describedby="tooltip-hints"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-hints" role="tooltip">
-                Control how hint highlights, overlays, and preview comparisons behave.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-hints">
-          <section class="sheet-section" aria-labelledby="hintsControlsHeading">
-            <h3 id="hintsControlsHeading">Hints &amp; controls</h3>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="hintFadeDuration">
-                  <span>Hint fade duration <output data-for="hintFadeDuration">1.2 s</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="hintFadeDuration"
-                  data-reset-default="1200"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="hintFadeDuration"
-                type="range"
-                min="400"
-                max="2400"
-                step="100"
-                value="1200"
-                data-default="1200"
-              />
-            </div>
-            <p class="control-note">Set how long hint highlights linger before fading out. Default 1.2 s.</p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="hintIntensity">
-                  <span>Hint intensity <output data-for="hintIntensity">65%</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="hintIntensity"
-                  data-reset-default="65"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="hintIntensity"
-                type="range"
-                min="20"
-                max="90"
-                step="5"
-                value="65"
-                data-default="65"
-              />
-            </div>
-            <p class="control-note">Adjust the opacity used when flashing matching regions. Default 65%.</p>
-          </section>
-          <section class="sheet-section" aria-labelledby="hintTypesHeading">
-            <h3 id="hintTypesHeading">Hint types</h3>
-            <p class="control-note">Pick which guidance effects appear while you play.</p>
-            <label class="toggle">
-              <input id="hintMatchingToggle" type="checkbox" checked />
-              <span>Highlight every region for the active colour</span>
-            </label>
-            <p class="control-note">Toggle the pulse that flashes all remaining regions sharing the selected colour.</p>
-            <label class="toggle">
-              <input id="hintHoverToggle" type="checkbox" checked />
-              <span>Spotlight hovered regions</span>
-            </label>
-            <p class="control-note">Show a focused hint when you pause the pointer over a region.</p>
-          </section>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-controls"
-          role="tabpanel"
-          aria-labelledby="settingsTab-controls"
-          data-settings-panel="controls"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-controls" data-settings-heading>Controls</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Control remapping and input feel"
-                aria-describedby="tooltip-controls"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-controls" role="tooltip">
-                Remap mouse buttons, adjust gesture behaviour, and set interface scale.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-controls">
-          <section class="sheet-section" aria-labelledby="mouseControlsHeading">
-            <h3 id="mouseControlsHeading">Mouse controls</h3>
-            <p class="control-note">
-              Assign actions to each mouse button when clicking or click-dragging on the
-              canvas.
-            </p>
-            <div class="mouse-control-group">
-              <span class="mouse-control-title">Left button</span>
-              <div class="mouse-control-options">
-                <label class="control mouse-control-option">
-                  <span>Click</span>
-                  <select id="mouseLeftClick">
-                    <option value="fill" selected>Fill region</option>
-                    <option value="select-fill">Select and fill region</option>
-                    <option value="select">Select colour</option>
-                    <option value="zoom-in">Zoom in</option>
-                    <option value="zoom-out">Zoom out</option>
-                    <option value="none">No action</option>
-                  </select>
-                </label>
-                <label class="control mouse-control-option">
-                  <span>Click + drag</span>
-                  <select id="mouseLeftDrag">
-                    <option value="pan" selected>Pan view</option>
-                    <option value="fill">Fill while dragging</option>
-                    <option value="zoom">Zoom</option>
-                    <option value="none">No action</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            <div class="mouse-control-group">
-              <span class="mouse-control-title">Middle button</span>
-              <div class="mouse-control-options">
-                <label class="control mouse-control-option">
-                  <span>Click</span>
-                  <select id="mouseMiddleClick">
-                    <option value="fill">Fill region</option>
-                    <option value="select-fill">Select and fill region</option>
-                    <option value="select">Select colour</option>
-                    <option value="zoom-in">Zoom in</option>
-                    <option value="zoom-out">Zoom out</option>
-                    <option value="none" selected>No action</option>
-                  </select>
-                </label>
-                <label class="control mouse-control-option">
-                  <span>Click + drag</span>
-                  <select id="mouseMiddleDrag">
-                    <option value="pan" selected>Pan view</option>
-                    <option value="fill">Fill while dragging</option>
-                    <option value="zoom">Zoom</option>
-                    <option value="none">No action</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            <div class="mouse-control-group">
-              <span class="mouse-control-title">Right button</span>
-              <div class="mouse-control-options">
-                <label class="control mouse-control-option">
-                  <span>Click</span>
-                  <select id="mouseRightClick">
-                    <option value="fill">Fill region</option>
-                    <option value="select-fill">Select and fill region</option>
-                    <option value="select" selected>Select colour</option>
-                    <option value="zoom-in">Zoom in</option>
-                    <option value="zoom-out">Zoom out</option>
-                    <option value="none">No action</option>
-                  </select>
-                </label>
-                <label class="control mouse-control-option">
-                  <span>Click + drag</span>
-                  <select id="mouseRightDrag">
-                    <option value="pan" selected>Pan view</option>
-                    <option value="fill">Fill while dragging</option>
-                    <option value="zoom">Zoom</option>
-                    <option value="none">No action</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            <p class="control-note">
-              Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out.
-            </p>
-          </section>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-appearance"
-          role="tabpanel"
-          aria-labelledby="settingsTab-appearance"
-          data-settings-panel="appearance"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-appearance" data-settings-heading>Appearance</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Appearance and accessibility controls"
-                aria-describedby="tooltip-appearance"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-appearance" role="tooltip">
-                Balance scale, contrast, overlays, and theme picks for the board.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-appearance">
-          <section class="sheet-section" aria-labelledby="appearanceHeading">
-            <h3 id="appearanceHeading">Appearance</h3>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="uiScale">
-                  <span>Interface scale <output data-for="uiScale">75%</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="uiScale"
-                  data-reset-default="0.75"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="uiScale"
-                type="range"
-                min="0.2"
-                max="3"
-                step="0.05"
-                value="0.75"
-                data-default="0.75"
-              />
-            </div>
-            <p class="control-note">Resize command buttons and labels without altering canvas zoom. Default 75%.</p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="labelScale">
-                  <span>Label size <output data-for="labelScale">100%</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="labelScale"
-                  data-reset-default="1"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="labelScale"
-                type="range"
-                min="0.2"
-                max="2"
-                step="0.05"
-                value="1"
-                data-default="1"
-              />
-            </div>
-            <p class="control-note">Scale region numbers independently from the surrounding interface. Default 100%.</p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="maxZoom">
-                  <span>Maximum zoom <output data-for="maxZoom">1200%</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="maxZoom"
-                  data-reset-default="12"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="maxZoom"
-                type="range"
-                min="2"
-                max="30"
-                step="0.5"
-                value="12"
-                data-default="12"
-              />
-            </div>
-            <p class="control-note">Limit how far the canvas can zoom in beyond the fitted view. Default 1200%.</p>
-            <label class="control">
-              <span>Interface theme</span>
-              <select id="uiTheme">
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-                <option value="colorful">Colourful</option>
-              </select>
-            </label>
-            <p class="control-note">Switch between dark, light, or colourful chrome accents.</p>
-            <label class="control">
-              <span>Renderer</span>
-              <select id="rendererMode">
-                <option value="svg">SVG</option>
-              </select>
-            </label>
-            <p class="control-note">
-              Rendering is handled by the simplified SVG backend.
-            </p>
-            <label class="control">
-              <span>Unfilled region colour</span>
-              <input id="backgroundColor" type="color" value="#f8fafc" />
-            </label>
-            <p class="control-note">
-              Applies to unfinished regions and adjusts outline contrast automatically.
-            </p>
-            <label class="control">
-              <span>Background</span>
-              <input id="stageBackgroundColor" type="color" value="#000000" />
-            </label>
-            <p class="control-note">Adjust the area surrounding the puzzle canvas.</p>
-          </section>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-generator"
-          role="tabpanel"
-          aria-labelledby="settingsTab-generator"
-          data-settings-panel="generator"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-generator" data-settings-heading>Generator</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Generator and import controls"
-                aria-describedby="tooltip-generator"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-generator" role="tooltip">
-                Set clustering, imports, and metadata for new puzzles and reloads.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-generator">
-          <div
-            class="generator-import-notice"
-            data-import-notice
-            role="status"
-            aria-live="polite"
-            hidden
-          >
-            <p class="generator-import-title">
-              <strong data-import-file></strong>
-            </p>
-            <p class="generator-import-description" data-import-description></p>
-            <div class="generator-import-actions">
-              <button id="confirmImport" type="button" data-import-confirm>Generate puzzle</button>
-              <button type="button" class="close-button" data-import-cancel>Cancel</button>
-            </div>
-          </div>
-          <section class="sheet-section" aria-labelledby="generatorHeading">
-            <h3 id="generatorHeading">Clustering &amp; detail</h3>
-            <p class="control-note">
-              Tune the colour clustering pipeline that powers new puzzles. These settings apply to fresh imports and the bundled
-              capybara sample when reloaded.
-            </p>
-            <div class="detail-callout">
-              <p class="detail-intro">Capybara sample detail presets</p>
-              <div class="detail-picker" role="group" aria-label="Capybara sample detail presets">
-                <button type="button" class="detail-chip" data-detail-level="low">Low</button>
-                <button type="button" class="detail-chip" data-detail-level="medium">Medium</button>
-                <button type="button" class="detail-chip" data-detail-level="high">High</button>
-              </div>
-              <p class="detail-caption" data-detail-caption></p>
-            </div>
-            <p class="control-note">
-              Switching presets updates every slider below and reloads the sample scene when it's active.
-            </p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="colorCount">
-                  <span>Colours <output data-for="colorCount">16</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="colorCount"
-                  data-reset-default="16"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="colorCount"
-                type="range"
-                min="4"
-                max="64"
-                value="16"
-                data-default="16"
-              />
-            </div>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="minRegion">
-                  <span>Regions <output data-for="minRegion">80 px²</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="minRegion"
-                  data-reset-default="80"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="minRegion"
-                type="range"
-                min="1"
-                max="600"
-                value="80"
-                data-default="80"
-              />
-            </div>
-            <p class="control-note">Higher values merge smaller areas for fewer regions. Default 80 px².</p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="detailLevel">
-                  <span>Detail <output data-for="detailLevel">768 px</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="detailLevel"
-                  data-reset-default="768"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="detailLevel"
-                type="range"
-                min="256"
-                max="1600"
-                step="64"
-                value="768"
-                data-default="768"
-              />
-            </div>
-            <p class="control-note">Controls the longest edge used when resizing the source image. Default 768 px.</p>
-            <label class="control">
-              <span>Algorithm</span>
-              <select id="generationAlgorithm">
-                <option value="local-kmeans">Local palette clustering (k-means)</option>
-                <option value="local-posterize">Local posterize &amp; merge</option>
-                <option value="organic-slic">Organic superpixels (curved gradients)</option>
-              </select>
-            </label>
-            <p class="control-note">
-              Choose between local clustering pipelines now, with space for hosted services to appear as they become available.
-            </p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="sampleRate">
-                  <span>Sample rate <output data-for="sampleRate">65%</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="sampleRate"
-                  data-reset-default="65"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="sampleRate"
-                type="range"
-                min="25"
-                max="100"
-                step="5"
-                value="65"
-                data-default="65"
-              />
-            </div>
-            <p class="control-note">Lower values speed up clustering by sampling fewer pixels. Default 65%.</p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="kmeansIters">
-                  <span>Iterations <output data-for="kmeansIters">12</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="kmeansIters"
-                  data-reset-default="12"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="kmeansIters"
-                type="range"
-                min="4"
-                max="32"
-                step="1"
-                value="12"
-                data-default="12"
-              />
-            </div>
-            <p class="control-note">
-              Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process. Default 12 iterations.
-            </p>
-            <div class="control control-range">
-              <div class="control-header">
-                <label for="smoothingPasses">
-                  <span>Smoothing passes <output data-for="smoothingPasses">1</output></span>
-                </label>
-                <button
-                  type="button"
-                  class="control-reset"
-                  data-reset-target="smoothingPasses"
-                  data-reset-default="1"
-                >
-                  Default
-                </button>
-              </div>
-              <input
-                id="smoothingPasses"
-                type="range"
-                min="0"
-                max="4"
-                step="1"
-                value="1"
-                data-default="1"
-              />
-            </div>
-            <p class="control-note">
-              Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source. Default 1 pass.
-            </p>
-            <details class="advanced-options" id="generatorAdvanced">
-              <summary>Advanced options</summary>
-              <label class="control">
-                <span>Art prompt</span>
-                <textarea
-                  id="artPrompt"
-                  rows="3"
-                  placeholder="Summarise the idea behind this puzzle"
-                ></textarea>
-              </label>
-              <p class="control-note">
-                Stored with saves so you can revisit the inspiration that sparked the artwork.
-              </p>
-              <label class="control">
-                <span>Image description</span>
-                <textarea
-                  id="imageDescription"
-                  rows="3"
-                  placeholder="Describe the image you want to generate"
-                ></textarea>
-              </label>
-              <p class="control-note">
-                Stored with saves and exports so you can revisit the inspiration later.
-              </p>
-              <p class="control-note">
-                <a
-                  id="chatGptLink"
-                  class="chatgpt-link"
-                  href="https://chat.openai.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open ChatGPT to craft an image prompt <span aria-hidden="true">↗</span>
-                </a>
-              </p>
-            </details>
-          </section>
-          <form class="sheet-section" data-source-url-form>
-            <h3 id="sourceUrlHeading">Import from URL</h3>
-            <p class="control-note">Enter an https:// link to load an image directly.</p>
-            <label class="control">
-              <span>Image URL</span>
-              <input type="url" inputmode="url" data-source-url-input aria-describedby="sourceUrlHint sourceUrlError" />
-            </label>
-            <p class="control-note" id="sourceUrlHint" data-source-url-hint>
-              External sites must allow cross-origin image access.
-            </p>
-            <p class="control-note" id="sourceUrlError" data-source-url-error role="alert" hidden></p>
-            <div class="panel-actions">
-              <button type="submit" data-source-url-submit disabled>Load image</button>
-            </div>
-          </form>
-          <div class="sheet-actions">
-            <button id="applyOptions" type="button" disabled>Apply changes</button>
-          </div>
-          <div
-            class="generator-progress"
-            data-generator-progress
-            role="status"
-            aria-live="polite"
-            hidden
-          >
-            <p class="generator-progress-message" data-generator-progress-message></p>
-            <div
-              class="generator-progress-meter"
-              data-generator-progress-meter
-              role="progressbar"
-              aria-label="Puzzle generation progress"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              aria-valuenow="0"
-              aria-hidden="true"
-            >
-            <div class="generator-progress-bar" data-generator-progress-bar></div>
-          </div>
-        </div>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-saves"
-          role="tabpanel"
-          aria-labelledby="settingsTab-saves"
-          data-settings-panel="saves"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-saves" data-settings-heading>Saves</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Save management"
-                aria-describedby="tooltip-saves"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-saves" role="tooltip">
-                Import puzzles, start fresh sessions, and manage your save slots.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-saves">
-          <section class="sheet-section" aria-labelledby="saveStartHeading">
-            <h3 id="saveStartHeading">Start a puzzle</h3>
-            <div class="save-start-actions">
-              <button
-                id="selectImage"
-                type="button"
-                aria-label="Upload image or JSON puzzle"
-              >
-                Upload Image
-              </button>
-              <button
-                id="samplePuzzle"
-                type="button"
-                data-action="load-sample"
-                aria-label="Load capybara sample puzzle"
-              >
-                Load capybara sample
-              </button>
-            </div>
-          </section>
-          <section
-            class="sheet-section save-manager"
-            role="group"
-            aria-labelledby="saveManagerHeading"
-            id="saveManagerSection"
-            data-save-section="dialog"
-          >
-            <h3 id="saveManagerHeading">Your saves</h3>
-            <div
-              class="save-manager-list"
-              data-save-list
-              aria-live="polite"
-              aria-labelledby="saveManagerHeading"
-              role="list"
-            ></div>
-            <p class="save-manager-empty" data-save-empty hidden>
-              No saves yet. Create one above to start autosaving progress.
-            </p>
-            <div class="save-manager-actions">
-              <button type="button" data-save-snapshot disabled>Save current puzzle</button>
-              <button type="button" data-reset-progress disabled>Reset puzzle progress</button>
-              <button id="downloadJson" type="button" disabled>Export puzzle JSON</button>
-            </div>
-          </section>
-          <section class="sheet-section" aria-labelledby="storageHeading">
-            <h3 id="storageHeading">Save storage</h3>
-            <p id="saveStorageSummary" class="control-note"></p>
-            <label class="control">
-              <span>Stored image size <output data-for="sourceImageLimit">1 MB</output></span>
-              <select id="sourceImageLimit">
-                <option value="262144">256 KB</option>
-                <option value="524288">512 KB</option>
-                <option value="1048576" selected>1 MB</option>
-                <option value="2097152">2 MB</option>
-                <option value="5242880">5 MB</option>
-              </select>
-            </label>
-            <p class="control-note">
-              Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate
-              or import.
-            </p>
-            <div class="log-actions">
-              <button id="deleteAllSaves" type="button">Delete all saves</button>
-            </div>
-          </section>
-        </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-help"
-          role="tabpanel"
-          aria-labelledby="settingsTab-help"
-          data-settings-panel="help"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-help" data-settings-heading>Help</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Gameplay tips"
-                aria-describedby="tooltip-help"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-help" role="tooltip">
-                Review button legends and gestures while you play.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-help">
-          <section class="sheet-section" aria-labelledby="commandsHeading">
-            <h3 id="commandsHeading">Command buttons</h3>
-            <dl class="command-list">
-              <dt>🖼 Preview</dt>
-              <dd>Toggle the finished artwork overlay to compare your progress.</dd>
-              <dt>🎛 Generator</dt>
-              <dd>
-                Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor
-                generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation.
-              </dd>
-              <dt>🎚 Detail</dt>
-              <dd>
-                Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes,
-                minimum region areas, resize targets, and the region counts noted above.
-              </dd>
-              <dt>⛶ Fullscreen</dt>
-              <dd>Expand the app to fill the display or exit back to windowed mode.</dd>
-              <dt>⬆ Import</dt>
-              <dd>Load a new image or JSON puzzle from disk.</dd>
-              <dt>💾 Saves</dt>
-              <dd>Manage snapshots — load, rename, export, or delete stored games.</dd>
-              <dt>ℹ Help</dt>
-              <dd>
-                Open this guide and review tips for palette controls, gestures, and shortcuts.
-              </dd>
-              <dt>⚙ Menu</dt>
-              <dd>
-                Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface
-                scale. Advanced options expose accessibility tweaks for the hint animations.
-              </dd>
-            </dl>
-          </section>
-          <section class="sheet-section" aria-labelledby="controlsHeading">
-            <h3 id="controlsHeading">Canvas controls</h3>
-            <ul class="control-list">
-              <li><kbd>Click</kbd> Fill the tapped region if it matches the active colour.</li>
-              <li><kbd>Right click</kbd> Select the colour under the pointer.</li>
-              <li>Select a palette swatch to set the active colour and flash every matching region.</li>
-              <li>Enable Easy difficulty in the menu to let clicks auto-select the tapped region's colour.</li>
-              <li><kbd>Mouse wheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd> Zoom in or out around the cursor.</li>
-              <li><kbd>Middle click</kbd> or <kbd>Space</kbd> + drag Pan the canvas.</li>
-              <li>Drag &amp; drop an image or JSON file anywhere on the window to import it.</li>
-            </ul>
-          </section>
-          </div>
-        </section>
-        <section
-          class="settings-section settings-page"
-          id="settingsPanel-diagnostics"
-          role="tabpanel"
-          aria-labelledby="settingsTab-diagnostics"
-          data-settings-panel="diagnostics"
-        >
-          <div class="settings-section-heading">
-            <div class="settings-heading-row">
-              <h3 id="settingsHeading-diagnostics" data-settings-heading>Diagnostics</h3>
-              <button
-                type="button"
-                class="help-chip"
-                aria-label="Diagnostics and JSON review"
-                aria-describedby="tooltip-diagnostics"
-              >
-                ?
-              </button>
-              <span class="help-chip-bubble" id="tooltip-diagnostics" role="tooltip">
-                Check live logs, system status, and review the current JSON payload.
-              </span>
-            </div>
-          </div>
-          <div class="settings-panel" role="group" aria-labelledby="settingsHeading-diagnostics">
-          <section class="sheet-section" aria-label="Menu loader console">
-            <div class="visually-hidden" id="settingsLoadHeading">Menu loader console</div>
-            <div
-              id="settingsLoadConsole"
-              class="debug-log settings-loading-console"
-              role="log"
-              aria-labelledby="settingsLoadHeading"
-              aria-live="polite"
-              aria-relevant="additions text"
-            ></div>
-          </section>
-          <section class="sheet-section" aria-labelledby="systemHeading">
-            <h3 id="systemHeading">System status</h3>
-            <dl class="command-list">
-              <div>
-                <dt>Service worker</dt>
-                <dd data-service-worker-state>Waiting to register…</dd>
-              </div>
-              <div>
-                <dt>Runtime cache</dt>
-                <dd data-service-worker-cache>capy-offline-cache-v3</dd>
-              </div>
-              <div>
-                <dt>Last update</dt>
-                <dd data-service-worker-updated>Not available yet</dd>
-              </div>
-            </dl>
-            <p class="control-note">
-              Service worker registration, cache limits, and install events stream into the debug log below.
-            </p>
-          </section>
-          <section class="sheet-section" aria-labelledby="debugHeading">
-            <h3 id="debugHeading">Debug log</h3>
-            <p class="control-note">
-              Recent actions, selections, and generation events appear here while you play.
-            </p>
-            <div
-              id="debugLog"
-              class="debug-log"
-              role="log"
-              aria-live="polite"
-              aria-relevant="additions text"
-            ></div>
-            <div class="log-actions">
-              <button id="clearDebugLog" type="button">Clear log</button>
-            </div>
-          </section>
-          <section class="sheet-section" aria-labelledby="settingsJsonHeading">
-            <h3 id="settingsJsonHeading">Preferences JSON</h3>
-            <p class="control-note">
-              Review or update the current preferences as JSON. Export a snapshot or import one from the textarea below.
-            </p>
-            <label class="visually-hidden" for="settingsJsonView">Preferences JSON</label>
-            <textarea id="settingsJsonView" class="json-view" rows="8" spellcheck="false"></textarea>
-            <div class="json-actions">
-              <button id="refreshSettingsJson" type="button">Refresh</button>
-              <button id="exportSettingsJson" type="button">Export JSON</button>
-              <button id="applySettingsJson" type="button">Import JSON</button>
-              <label class="json-upload">
-                <input id="importSettingsFile" type="file" accept="application/json" hidden />
-                <span role="button" aria-controls="importSettingsFile">Upload file</span>
-              </label>
-            </div>
-          </section>
-          </div>
-        </section>
+        <div class="sheet-body">
+          <div class="settings-body">
+            <nav class="settings-tabs" role="tablist" aria-label="Menu sections" data-settings-nav></nav>
+            <div class="settings-content" data-settings-scroll></div>
           </div>
         </div>
       </div>
-    </div>
+    <script id="settingsDefinition" type="application/json">
+[
+  {
+    "id": "gameplay",
+    "label": "Gameplay",
+    "default": true,
+    "heading": {
+      "title": "Gameplay",
+      "helpLabel": "Gameplay controls for preview, pacing, and assists",
+      "helpText": "Tweak quick actions, pacing, and assists without leaving the puzzle."
+    },
+    "sections": [
+      {
+        "id": "quickActionsHeading",
+        "title": "Quick actions",
+        "layout": "actions",
+        "items": [
+          {
+            "type": "action",
+            "id": "previewToggle",
+            "label": "Show preview",
+            "icon": "🖼",
+            "ariaLabel": "Show preview",
+            "testId": "preview-toggle",
+            "ariaPressed": false,
+            "disabled": true
+          },
+          {
+            "type": "action",
+            "id": "fullscreenButton",
+            "label": "Enter fullscreen",
+            "icon": "⛶",
+            "ariaLabel": "Enter fullscreen",
+            "testId": "fullscreen-button",
+            "ariaPressed": false
+          }
+        ],
+        "note": "Manage the reference preview and fullscreen view without leaving the puzzle."
+      },
+      {
+        "id": "gameplayHeading",
+        "title": "Gameplay",
+        "items": [
+          {
+            "type": "toggle",
+            "id": "autoAdvanceToggle",
+            "label": "Auto-advance to the next colour when complete",
+            "checked": true
+          },
+          {
+            "type": "toggle",
+            "id": "hintFlashToggle",
+            "label": "Animate hint highlights",
+            "checked": true
+          },
+          {
+            "type": "toggle",
+            "id": "showRegionLabelsToggle",
+            "label": "Show region numbers",
+            "checked": true
+          },
+          {
+            "type": "select",
+            "id": "difficultySelect",
+            "label": "Difficulty",
+            "options": [
+              { "value": "normal", "label": "Standard" },
+              { "value": "nearby", "label": "Nearby" },
+              { "value": "easy", "label": "Easy" }
+            ]
+          },
+          {
+            "type": "note",
+            "text": "Nearby mode lets you click adjacent colours (for example, colour 2 can also paint 1 or 3). Easy mode auto-selects any colour you click before filling it."
+          },
+          {
+            "type": "select",
+            "id": "paletteSort",
+            "label": "Sort Colours",
+            "testId": "palette-sort",
+            "disabled": true,
+            "options": [
+              { "value": "region", "label": "Number" },
+              { "value": "remaining", "label": "Remaining regions" },
+              { "value": "name", "label": "Colour name" },
+              { "value": "spectrum", "label": "Rainbow spectrum" },
+              { "value": "warmth", "label": "Warm → cool" },
+              { "value": "lightness", "label": "Perceptual lightness" }
+            ]
+          },
+          { "type": "note", "text": "Choose how unfinished colours appear in the dock." }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "hints",
+    "label": "Hints",
+    "heading": {
+      "title": "Hints",
+      "helpLabel": "Hint visibility and overlays",
+      "helpText": "Control how hint highlights, overlays, and preview comparisons behave."
+    },
+    "sections": [
+      {
+        "id": "hintsControlsHeading",
+        "title": "Hints & controls",
+        "items": [
+          {
+            "type": "range",
+            "id": "hintFadeDuration",
+            "label": "Hint fade duration",
+            "min": 400,
+            "max": 2400,
+            "step": 100,
+            "value": 1200,
+            "default": 1200,
+            "format": "seconds"
+          },
+          { "type": "note", "text": "Set how long hint highlights linger before fading out. Default 1.2 s." },
+          {
+            "type": "range",
+            "id": "hintIntensity",
+            "label": "Hint intensity",
+            "min": 20,
+            "max": 90,
+            "step": 5,
+            "value": 65,
+            "default": 65,
+            "format": "percent"
+          },
+          { "type": "note", "text": "Adjust the opacity used when flashing matching regions. Default 65%." }
+        ]
+      },
+      {
+        "id": "hintTypesHeading",
+        "title": "Hint types",
+        "description": "Pick which guidance effects appear while you play.",
+        "items": [
+          {
+            "type": "toggle",
+            "id": "hintMatchingToggle",
+            "label": "Highlight every region for the active colour",
+            "checked": true
+          },
+          {
+            "type": "note",
+            "text": "Toggle the pulse that flashes all remaining regions sharing the selected colour."
+          },
+          {
+            "type": "toggle",
+            "id": "hintHoverToggle",
+            "label": "Spotlight hovered regions",
+            "checked": true
+          },
+          { "type": "note", "text": "Show a focused hint when you pause the pointer over a region." }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "controls",
+    "label": "Controls",
+    "heading": {
+      "title": "Controls",
+      "helpLabel": "Control remapping and input feel",
+      "helpText": "Remap mouse buttons, adjust gesture behaviour, and set interface scale."
+    },
+    "sections": [
+      {
+        "id": "mouseControlsHeading",
+        "title": "Mouse controls",
+        "description": "Assign actions to each mouse button when clicking or click-dragging on the canvas.",
+        "items": [
+          {
+            "type": "mouse-controls",
+            "groups": [
+              {
+                "title": "Left button",
+                "options": [
+                  {
+                    "label": "Click",
+                    "id": "mouseLeftClick",
+                    "choices": [
+                      { "value": "fill", "label": "Fill region", "selected": true },
+                      { "value": "select-fill", "label": "Select and fill region" },
+                      { "value": "select", "label": "Select colour" },
+                      { "value": "zoom-in", "label": "Zoom in" },
+                      { "value": "zoom-out", "label": "Zoom out" },
+                      { "value": "none", "label": "No action" }
+                    ]
+                  },
+                  {
+                    "label": "Click + drag",
+                    "id": "mouseLeftDrag",
+                    "choices": [
+                      { "value": "pan", "label": "Pan view", "selected": true },
+                      { "value": "fill", "label": "Fill while dragging" },
+                      { "value": "zoom", "label": "Zoom" },
+                      { "value": "none", "label": "No action" }
+                    ]
+                  }
+                ]
+              },
+              {
+                "title": "Middle button",
+                "options": [
+                  {
+                    "label": "Click",
+                    "id": "mouseMiddleClick",
+                    "choices": [
+                      { "value": "fill", "label": "Fill region" },
+                      { "value": "select-fill", "label": "Select and fill region" },
+                      { "value": "select", "label": "Select colour" },
+                      { "value": "zoom-in", "label": "Zoom in" },
+                      { "value": "zoom-out", "label": "Zoom out" },
+                      { "value": "none", "label": "No action", "selected": true }
+                    ]
+                  },
+                  {
+                    "label": "Click + drag",
+                    "id": "mouseMiddleDrag",
+                    "choices": [
+                      { "value": "pan", "label": "Pan view", "selected": true },
+                      { "value": "fill", "label": "Fill while dragging" },
+                      { "value": "zoom", "label": "Zoom" },
+                      { "value": "none", "label": "No action" }
+                    ]
+                  }
+                ]
+              },
+              {
+                "title": "Right button",
+                "options": [
+                  {
+                    "label": "Click",
+                    "id": "mouseRightClick",
+                    "choices": [
+                      { "value": "fill", "label": "Fill region" },
+                      { "value": "select-fill", "label": "Select and fill region" },
+                      { "value": "select", "label": "Select colour", "selected": true },
+                      { "value": "zoom-in", "label": "Zoom in" },
+                      { "value": "zoom-out", "label": "Zoom out" },
+                      { "value": "none", "label": "No action" }
+                    ]
+                  },
+                  {
+                    "label": "Click + drag",
+                    "id": "mouseRightDrag",
+                    "choices": [
+                      { "value": "pan", "label": "Pan view", "selected": true },
+                      { "value": "fill", "label": "Fill while dragging" },
+                      { "value": "zoom", "label": "Zoom" },
+                      { "value": "none", "label": "No action" }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          { "type": "note", "text": "Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out." }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "appearance",
+    "label": "Appearance",
+    "heading": {
+      "title": "Appearance",
+      "helpLabel": "Appearance and accessibility controls",
+      "helpText": "Balance scale, contrast, overlays, and theme picks for the board."
+    },
+    "sections": [
+      {
+        "id": "appearanceHeading",
+        "title": "Appearance",
+        "items": [
+          {
+            "type": "range",
+            "id": "uiScale",
+            "label": "Interface scale",
+            "min": 0.2,
+            "max": 3,
+            "step": 0.05,
+            "value": 0.75,
+            "default": 0.75,
+            "format": "unit-percent"
+          },
+          { "type": "note", "text": "Resize command buttons and labels without altering canvas zoom. Default 75%." },
+          {
+            "type": "range",
+            "id": "labelScale",
+            "label": "Label size",
+            "min": 0.2,
+            "max": 2,
+            "step": 0.05,
+            "value": 1,
+            "default": 1,
+            "format": "unit-percent"
+          },
+          { "type": "note", "text": "Scale region numbers independently from the surrounding interface. Default 100%." },
+          {
+            "type": "range",
+            "id": "maxZoom",
+            "label": "Maximum zoom",
+            "min": 2,
+            "max": 30,
+            "step": 0.5,
+            "value": 12,
+            "default": 12,
+            "format": "zoom-percent"
+          },
+          { "type": "note", "text": "Limit how far the canvas can zoom in beyond the fitted view. Default 1200%." },
+          {
+            "type": "select",
+            "id": "uiTheme",
+            "label": "Interface theme",
+            "options": [
+              { "value": "dark", "label": "Dark", "selected": true },
+              { "value": "light", "label": "Light" },
+              { "value": "colorful", "label": "Colourful" }
+            ]
+          },
+          { "type": "note", "text": "Switch between dark, light, or colourful chrome accents." },
+          {
+            "type": "select",
+            "id": "rendererMode",
+            "label": "Renderer",
+            "options": [
+              { "value": "svg", "label": "SVG", "selected": true }
+            ]
+          },
+          { "type": "note", "text": "Rendering is handled by the simplified SVG backend." },
+          {
+            "type": "color",
+            "id": "backgroundColor",
+            "label": "Unfilled region colour",
+            "value": "#f8fafc"
+          },
+          { "type": "note", "text": "Applies to unfinished regions and adjusts outline contrast automatically." },
+          { "type": "color", "id": "stageBackgroundColor", "label": "Background", "value": "#000000" },
+          { "type": "note", "text": "Adjust the area surrounding the puzzle canvas." }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "generator",
+    "label": "Generator",
+    "heading": {
+      "title": "Generator",
+      "helpLabel": "Generator and import controls",
+      "helpText": "Set clustering, imports, and metadata for new puzzles and reloads."
+    },
+    "blocks": [
+      { "type": "import-notice" },
+      {
+        "type": "section",
+        "id": "generatorHeading",
+        "title": "Clustering & detail",
+        "description": "Tune the colour clustering pipeline that powers new puzzles. These settings apply to fresh imports and the bundled capybara sample when reloaded.",
+        "items": [
+          {
+            "type": "detail-callout",
+            "captionAttr": "detail-caption",
+            "levels": [
+              { "level": "low", "label": "Low" },
+              { "level": "medium", "label": "Medium" },
+              { "level": "high", "label": "High" }
+            ]
+          },
+          { "type": "note", "text": "Switching presets updates every slider below and reloads the sample scene when it's active." },
+          {
+            "type": "range",
+            "id": "colorCount",
+            "label": "Colours",
+            "min": 4,
+            "max": 64,
+            "value": 16,
+            "default": 16,
+            "format": "integer"
+          },
+          {
+            "type": "range",
+            "id": "minRegion",
+            "label": "Regions",
+            "min": 1,
+            "max": 600,
+            "value": 80,
+            "default": 80,
+            "format": "px2"
+          },
+          { "type": "note", "text": "Higher values merge smaller areas for fewer regions. Default 80 px²." },
+          {
+            "type": "range",
+            "id": "detailLevel",
+            "label": "Detail",
+            "min": 256,
+            "max": 1600,
+            "step": 64,
+            "value": 768,
+            "default": 768,
+            "format": "px"
+          },
+          { "type": "note", "text": "Controls the longest edge used when resizing the source image. Default 768 px." },
+          {
+            "type": "select",
+            "id": "generationAlgorithm",
+            "label": "Algorithm",
+            "options": [
+              { "value": "local-kmeans", "label": "Local palette clustering (k-means)" },
+              { "value": "local-posterize", "label": "Local posterize & merge" },
+              { "value": "organic-slic", "label": "Organic superpixels (curved gradients)" }
+            ]
+          },
+          { "type": "note", "text": "Choose between local clustering pipelines now, with space for hosted services to appear as they become available." },
+          {
+            "type": "range",
+            "id": "sampleRate",
+            "label": "Sample rate",
+            "min": 25,
+            "max": 100,
+            "step": 5,
+            "value": 65,
+            "default": 65,
+            "format": "percent"
+          },
+          { "type": "note", "text": "Lower values speed up clustering by sampling fewer pixels. Default 65%." },
+          {
+            "type": "range",
+            "id": "kmeansIters",
+            "label": "Iterations",
+            "min": 4,
+            "max": 32,
+            "step": 1,
+            "value": 12,
+            "default": 12,
+            "format": "integer"
+          },
+          {
+            "type": "note",
+            "text": "Iterations rerun the clustering stage; higher counts refine colour centroids but take longer to process. Default 12 iterations."
+          },
+          {
+            "type": "range",
+            "id": "smoothingPasses",
+            "label": "Smoothing passes",
+            "min": 0,
+            "max": 4,
+            "step": 1,
+            "value": 1,
+            "default": 1,
+            "format": "integer"
+          },
+          {
+            "type": "note",
+            "text": "Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source. Default 1 pass."
+          },
+          {
+            "type": "details",
+            "summary": "Advanced options",
+            "items": [
+              {
+                "type": "textarea",
+                "id": "artPrompt",
+                "label": "Art prompt",
+                "rows": 3,
+                "placeholder": "Summarise the idea behind this puzzle"
+              },
+              {
+                "type": "note",
+                "text": "Stored with saves so you can revisit the inspiration that sparked the artwork."
+              },
+              {
+                "type": "textarea",
+                "id": "imageDescription",
+                "label": "Image description",
+                "rows": 3,
+                "placeholder": "Describe the image you want to generate"
+              },
+              {
+                "type": "note",
+                "text": "Stored with saves and exports so you can revisit the inspiration later."
+              },
+              {
+                "type": "note",
+                "link": {
+                  "href": "https://chat.openai.com/",
+                  "text": "Open ChatGPT to craft an image prompt",
+                  "id": "chatGptLink"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      { "type": "source-url-form" },
+      { "type": "sheet-actions" },
+      { "type": "generator-progress" }
+    ]
+  },
+  {
+    "id": "saves",
+    "label": "Saves",
+    "heading": {
+      "title": "Saves",
+      "helpLabel": "Save management",
+      "helpText": "Import puzzles, start fresh sessions, and manage your save slots."
+    },
+    "sections": [
+      {
+        "id": "saveStartHeading",
+        "title": "Start a puzzle",
+        "items": [
+          {
+            "type": "action-row",
+            "className": "save-start-actions",
+            "actions": [
+              { "type": "button", "id": "selectImage", "label": "Upload Image", "ariaLabel": "Upload image or JSON puzzle" },
+              { "type": "button", "id": "samplePuzzle", "label": "Load capybara sample", "ariaLabel": "Load capybara sample puzzle", "dataset": { "action": "load-sample" } }
+            ]
+          }
+        ]
+      },
+      { "type": "save-manager" },
+      {
+        "id": "storageHeading",
+        "title": "Save storage",
+        "items": [
+          { "type": "note", "text": "", "outputId": "saveStorageSummary" },
+          {
+            "type": "select",
+            "id": "sourceImageLimit",
+            "label": "Stored image size",
+            "outputFor": "sourceImageLimit",
+            "options": [
+              { "value": 262144, "label": "256 KB" },
+              { "value": 524288, "label": "512 KB" },
+              { "value": 1048576, "label": "1 MB", "selected": true },
+              { "value": 2097152, "label": "2 MB" },
+              { "value": 5242880, "label": "5 MB" }
+            ]
+          },
+          {
+            "type": "note",
+            "text": "Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate or import."
+          },
+          {
+            "type": "button-row",
+            "className": "log-actions",
+            "actions": [
+              { "type": "button", "id": "deleteAllSaves", "label": "Delete all saves" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "help",
+    "label": "Help",
+    "heading": {
+      "title": "Help",
+      "helpLabel": "Gameplay tips",
+      "helpText": "Review button legends and gestures while you play."
+    },
+    "sections": [
+      {
+        "id": "commandsHeading",
+        "title": "Command buttons",
+        "items": [
+          {
+            "type": "definition-list",
+            "items": [
+              { "term": "🖼 Preview", "description": "Toggle the finished artwork overlay to compare your progress." },
+              {
+                "term": "🎛 Generator",
+                "description": "Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation."
+              },
+              {
+                "term": "🎚 Detail",
+                "description": "Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes, minimum region areas, resize targets, and the region counts noted above."
+              },
+              { "term": "⛶ Fullscreen", "description": "Expand the app to fill the display or exit back to windowed mode." },
+              { "term": "⬆ Import", "description": "Load a new image or JSON puzzle from disk." },
+              { "term": "💾 Saves", "description": "Manage snapshots — load, rename, export, or delete stored games." },
+              { "term": "ℹ Help", "description": "Open this guide and review tips for palette controls, gestures, and shortcuts." },
+              {
+                "term": "⚙ Menu",
+                "description": "Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface scale. Advanced options expose accessibility tweaks for the hint animations."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "controlsHeading",
+        "title": "Canvas controls",
+        "items": [
+          {
+            "type": "list",
+            "items": [
+              "Click Fill the tapped region if it matches the active colour.",
+              "Right click Select the colour under the pointer.",
+              "Select a palette swatch to set the active colour and flash every matching region.",
+              "Enable Easy difficulty in the menu to let clicks auto-select the tapped region's colour.",
+              "Mouse wheel or +/− Zoom in or out around the cursor.",
+              "Middle click or Space + drag Pan the canvas.",
+              "Drag & drop an image or JSON file anywhere on the window to import it."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "diagnostics",
+    "label": "Diagnostics",
+    "heading": {
+      "title": "Diagnostics",
+      "helpLabel": "Diagnostics and JSON review",
+      "helpText": "Check live logs, system status, and review the current JSON payload."
+    },
+    "blocks": [
+      { "type": "loader-console" },
+      {
+        "type": "section",
+        "id": "systemHeading",
+        "title": "System status",
+        "items": [
+          {
+            "type": "definition-list",
+            "items": [
+              { "term": "Service worker", "description": "Waiting to register…", "dataTarget": "service-worker-state" },
+              { "term": "Runtime cache", "description": "capy-offline-cache-v3", "dataTarget": "service-worker-cache" },
+              { "term": "Last update", "description": "Not available yet", "dataTarget": "service-worker-updated" }
+            ]
+          },
+          {
+            "type": "note",
+            "text": "Service worker registration, cache limits, and install events stream into the debug log below."
+          }
+        ]
+      },
+      {
+        "type": "section",
+        "id": "debugHeading",
+        "title": "Debug log",
+        "items": [
+          { "type": "note", "text": "Recent actions, selections, and generation events appear here while you play." },
+          { "type": "logger", "id": "debugLog" },
+          {
+            "type": "button-row",
+            "className": "log-actions",
+            "actions": [ { "type": "button", "id": "clearDebugLog", "label": "Clear log" } ]
+          }
+        ]
+      },
+      {
+        "type": "section",
+        "id": "settingsJsonHeading",
+        "title": "Preferences JSON",
+        "items": [
+          {
+            "type": "note",
+            "text": "Review or update the current preferences as JSON. Export a snapshot or import one from the textarea below."
+          },
+          { "type": "json-view" }
+        ]
+      }
+    ]
+  }
+]
+
+    </script>
     <script>
       (() => {
         function createUiKit(root = document) {
