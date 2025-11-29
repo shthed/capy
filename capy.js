@@ -2945,6 +2945,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       });
       const paletteSortEl = paletteDock.sortControl;
       let rendererController = null;
+      const unavailableRenderers = new Set();
       paletteDock.on("select", (event) => {
         const { colorId } = event?.detail || {};
         if (colorId == null) return;
