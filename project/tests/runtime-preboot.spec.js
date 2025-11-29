@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve, dirname } from 'node:path';
 
-const runtimeUrl = pathToFileURL(resolve(dirname(fileURLToPath(import.meta.url)), '../../runtime.js'));
+const runtimeUrl = pathToFileURL(resolve(dirname(fileURLToPath(import.meta.url)), '../../capy.js'));
 
 function createStyle() {
   return {

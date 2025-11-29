@@ -56,12 +56,10 @@ build steps.
 - **Host & UI wiring:** `index.html` contains the page markup plus a large inline
   script that handles settings, generator controls, storage, and devtools hooks
   (`window.capy`/`window.capyGenerator`).
-- **Rendering:** `render.js` owns renderer selection and the Canvas2D, WebGL, and
-  SVG backends. The controller exposes fallbacks so the UI can swap pipelines on
-  errors or user request.
-- **Puzzle generation:** `puzzle-generation.js` runs quantization, segmentation,
-  and smoothing in a worker-friendly module. Generator options are mirrored in
-  the UI controls inside `index.html`.
+- **Runtime, rendering, and generation:** `capy.js` packages renderer selection,
+  preboot sizing, and the worker-friendly generation module (quantization,
+  segmentation, smoothing). Generator options are mirrored in the UI controls
+  inside `index.html`.
 - **Persistence:** Saves and settings live in `localStorage`; imported images are
   cached via the service worker (`service-worker.js`) to keep snapshots small.
 - **Styling:** `styles.css` holds the main theme tokens and layout rules. Inline
@@ -131,12 +129,11 @@ Run the Capy feedback loop:
 - **UI behaviour:** adjust markup, event wiring, or settings defaults inside the
   inline script in `index.html`. Developer map comments near the top call out the
   major sections to navigate quickly.
-- **Rendering bugs or features:** use `render.js`; the controller sits near the
-  top, Canvas2D helpers follow, WebGL sits mid-file, and the SVG overlay is at
-  the end. Renderer registration happens near the bottom.
-- **Generator changes:** `puzzle-generation.js` contains the worker-friendly
-  generation loop. Search for `GENERATION_ALGORITHM_CATALOG` or
-  `createGeneratorWorker` to plug in new algorithms or tweak lifecycle events.
+- **Rendering bugs or features:** use `capy.js`; the renderer controller and SVG
+  helpers live near the top, with runtime wiring following below.
+- **Generator changes:** `capy.js` contains the worker-friendly generation loop.
+  Search for `GENERATION_ALGORITHM_CATALOG` or `createGeneratorWorker` to plug
+  in new algorithms or tweak lifecycle events.
 - **Styling:** global tokens and layout rules live in `styles.css`, while a few
   critical CSS variables in `index.html` set the pre-boot scale and safe-area
   padding.
@@ -163,10 +160,11 @@ the zero-build runtime.
    easier to navigate and test without introducing bundling. Start with the
    `storage` and `uiState` helpers so saves/settings logic leaves the DOM event
    section untouched.
-2. **Renderer boundary cleanup:** Split `render.js` into per-backend modules
-   (controller, Canvas2D, WebGL, SVG) and keep a thin index to wire them
-   together. This reduces scroll fatigue and makes backend swaps safer. The
-   `registerRenderer` exports near the bottom provide the seam to peel out.
+2. **Renderer boundary cleanup:** Split the renderer section of `capy.js` into
+   per-backend modules (controller, Canvas2D, WebGL, SVG) and keep a thin index
+   to wire them together. This reduces scroll fatigue and makes backend swaps
+   safer. The `registerRenderer` exports near the bottom provide the seam to
+   peel out.
 3. **Generator lifecycle wrapper:** Create a dedicated host-side module for
    launching and recycling generator workers so UI code can depend on a small
    API surface instead of manipulating worker messages directly. The calls to
