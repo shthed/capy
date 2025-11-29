@@ -6208,7 +6208,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           feedbackSubmitButton.disabled = true;
         }
         try {
-          reportFeedbackToAnalytics({
+          reportFeedbackToLog({
             message: normalizedMessage,
             category,
             contact,
@@ -6761,15 +6761,10 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         debugLogEl.scrollTop = 0;
       }
 
-      function analyticsReady() {
-        return false;
-      }
-
-      function trackAnalyticsEvent(name, params = {}) {
+      function recordTelemetryEvent(name, params = {}) {
         if (!name) {
           return;
         }
-        // Analytics removed; keep hook for compatibility.
         if (debugLogEntries) {
           logDebug(`${name}${Object.keys(params).length ? " (metrics suppressed)" : ""}`);
         }
@@ -6792,7 +6787,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             }
           }
         }
-        trackAnalyticsEvent("exception", payload);
+        recordTelemetryEvent("exception", payload);
       }
 
       function trackPerformanceMetrics(summary, reason = "update") {
@@ -6806,7 +6801,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           if (!Number.isFinite(average)) {
             continue;
           }
-          trackAnalyticsEvent("timing_complete", {
+          recordTelemetryEvent("timing_complete", {
             name,
             value: average,
             event_category: "performance",
@@ -6818,7 +6813,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       }
 
       function recordUserEvent(name, params = {}) {
-        trackAnalyticsEvent(name, {
+        recordTelemetryEvent(name, {
           event_category: "engagement",
           ...params,
         });
@@ -6839,7 +6834,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         return trimmed.slice(0, maxLength);
       }
 
-      function reportFeedbackToAnalytics(payload) {
+      function reportFeedbackToLog(payload) {
         if (!payload) return;
         const category = normalizeFeedbackValue(payload.category, 32) || "general";
         const message = normalizeFeedbackValue(payload.message, FEEDBACK_MESSAGE_LIMIT);
@@ -6847,7 +6842,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         if (!message) {
           return;
         }
-        trackAnalyticsEvent("feedback_submit", {
+        recordTelemetryEvent("feedback_submit", {
           event_category: "feedback",
           event_label: category,
           feedback_message: message,
