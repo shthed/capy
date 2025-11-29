@@ -312,86 +312,17 @@
     // registered up front, the preferred renderer is activated immediately, and
     // fallbacks are lightweight when no backend can initialise.
     function createRendererController(host, options = {}) {
-      const { hooks = {}, rendererType } = options || {};
-      const registry = { svg: createSvgRenderer };
-      let renderer = null;
-      let activeType = null;
+      const { hooks = {} } = options || {};
+      const renderer = createSvgRenderer(host, hooks);
 
-      const normalize = (value) => {
-        if (typeof value !== "string") return null;
-        const normalized = value.trim().toLowerCase();
-        return normalized || null;
-      };
-
-      const notifyRendererChange = (type) => {
-        if (typeof hooks.onRendererChange === "function") {
-          hooks.onRendererChange(type);
-          return;
-        }
-
-        hooks.log?.("Renderer change handler unbound", {
-          code: "renderer-change-handler-unbound",
-          renderer: type,
-        });
-      };
-
-      function activateRenderer(type) {
-        const factory = type ? registry[type] : null;
-        if (!factory) {
-          hooks.log?.("Renderer change handler unbound", { code: "renderer-change-handler-unbound", renderer: type });
-          return false;
-        }
-        try {
-          const next = factory(host, hooks);
-          if (!next) return false;
-          renderer?.dispose?.();
-          renderer = next;
-          activeType = type;
-          notifyRendererChange(type);
-          return true;
-        } catch (error) {
-          hooks.log?.("Renderer failed", { code: "renderer-failed", renderer: type, error: error?.message });
-          return false;
-        }
-      }
-
-      function ensureRenderer(preferred) {
-        const normalizedPreferred = normalize(preferred) || "svg";
-        if (activateRenderer(normalizedPreferred)) {
-          return renderer;
-        }
-        const fallbackType = "svg";
-        renderer = registry[fallbackType]?.(host, hooks) || null;
-        activeType = renderer ? fallbackType : null;
-        if (activeType) {
-          notifyRendererChange(activeType);
-        }
-        return renderer;
-      }
-
-      function registerRenderer(type, factory) {
-        const normalized = normalize(type);
-        if (!normalized || typeof factory !== "function") return false;
-        registry[normalized] = factory;
-        return true;
-      }
-
-      function unregisterRenderer(type) {
-        const normalized = normalize(type);
-        if (!normalized || !registry[normalized]) return false;
-        if (activeType === normalized) {
-          renderer?.dispose?.();
-          renderer = null;
-          activeType = null;
-        }
-        delete registry[normalized];
-        return true;
+      if (hooks.onRendererChange) {
+        hooks.onRendererChange("svg");
       }
 
       return {
-        getRendererType: () => renderer?.getRendererType?.() || activeType,
-        listRenderers: () => Object.keys(registry),
-        setRenderer: (type) => ensureRenderer(type ?? rendererType),
+        getRendererType: () => renderer?.getRendererType?.() || "svg",
+        listRenderers: () => ["svg"],
+        setRenderer: () => renderer,
         resize: (metrics = {}) => renderer?.resize?.(metrics),
         renderFrame: (args = {}) => renderer?.renderFrame?.(args) ?? null,
         renderPreview: (args = {}) => renderer?.renderPreview?.(args) ?? null,
@@ -399,8 +330,8 @@
         fillBackground: (args = {}) => renderer?.fillBackground?.(args),
         dispose: () => renderer?.dispose?.(),
         getContext: () => renderer?.getContext?.() || null,
-        registerRenderer,
-        unregisterRenderer,
+        registerRenderer: () => false,
+        unregisterRenderer: () => false,
         getRenderer: () => renderer,
       };
     }
@@ -2945,7 +2876,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       });
       const paletteSortEl = paletteDock.sortControl;
       let rendererController = null;
-      const unavailableRenderers = new Set();
       paletteDock.on("select", (event) => {
         const { colorId } = event?.detail || {};
         if (colorId == null) return;
@@ -5182,47 +5112,23 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
       }
 
-      function markRendererUnavailable(type) {
-        const normalized = normalizeRendererType(type);
-        if (!normalized) return;
-        logRendererEvent(`Renderer unavailable`, { type: normalized });
-        unavailableRenderers.add(normalized);
-        updateRendererModeAvailability();
-      }
-
       function updateRendererModeAvailability() {
         if (!rendererModeSelect) {
           return;
         }
-        const controller = state.rendering?.controller;
-        const supported = controller?.listRenderers?.() || ["svg"];
-        const available = supported.filter((type) => !unavailableRenderers.has(type));
-        const active = controller?.getRendererType?.() || state.settings.renderer || "svg";
-        for (const option of rendererModeSelect.options) {
-          if (!option?.value) continue;
-          const normalized = normalizeRendererType(option.value);
-          option.disabled = !normalized || !available.includes(normalized);
-        }
-        rendererModeSelect.disabled = available.length <= 1;
-        rendererModeSelect.title = rendererModeSelect.disabled
-          ? formatRendererLabel(active)
-          : "Switch renderer backend";
-        const resolvedActive = normalizeRendererType(active) || available[0] || "svg";
-        rendererModeSelect.value = resolvedActive;
+        const active = normalizeRendererType(state.rendering?.controller?.getRendererType?.()) || "svg";
+        rendererModeSelect.disabled = true;
+        rendererModeSelect.title = formatRendererLabel(active);
+        rendererModeSelect.value = active;
       }
 
       function applyRendererMode(type, options = {}) {
         const controller = state.rendering?.controller;
-        const target = normalizeRendererType(type) || state.settings.renderer || "svg";
+        const target = normalizeRendererType(type) || "svg";
         const renderer = controller?.setRenderer ? controller.setRenderer(target) : null;
-        const resolved = normalizeRendererType(renderer?.getRendererType?.() || target) || "svg";
-        if (renderer) {
-          state.rendering.renderer = renderer;
-        }
+        const resolved = normalizeRendererType(renderer?.getRendererType?.() || "svg") || "svg";
+        state.rendering.renderer = renderer || state.rendering.renderer;
         state.settings.renderer = resolved;
-        if (!renderer && target) {
-          markRendererUnavailable(target);
-        }
         if (rendererModeSelect) {
           rendererModeSelect.value = resolved;
         }
