@@ -2334,17 +2334,16 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const SETTINGS_STORAGE_KEY = "capy.settings.v1";
       const SERVICE_WORKER_ENABLED = false;
-      const RUNTIME_CACHE_NAME = "capy-offline-cache-v3";
+      const RUNTIME_CACHE_NAME = "capy-offline-cache-v4";
       const CACHE_ORIGIN = "https://capy.local";
       const SOURCE_IMAGE_CACHE_PREFIX = "source-images/";
       const RUNTIME_CACHE_ASSETS = [
         "./",
         "./index.html",
         "./styles.css",
-        "./runtime.js",
-        "./render.js",
-        "./puzzle-generation.js",
+        "./capy.js",
         "./capy.json",
+        "./service-worker-cache.js",
       ];
       const SETTINGS_AUTOSAVE_REASONS = new Set([
         "settings-renderer",
