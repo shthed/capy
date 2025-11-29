@@ -29,9 +29,8 @@ in-memory URLs instead of Cache Storage while this pause is in effect.
 - **Runtime (repository root)**
   - `index.html` – Single-page host document containing markup and wiring for renderer selection, saves, generator controls, and automation helpers.
   - `styles.css` – Primary stylesheet housing theme tokens, responsive layout rules, and component styles (preboot UI scale variables stay inline in `index.html`).
-  - `render.js` – Minimal SVG renderer and controller; hosts the shared helpers for turning region geometry into path data and keeps the single backend wired to runtime consumers.
+  - `capy.js` – Combined runtime, renderer helpers, and puzzle generation logic; hosts the SVG renderer, preboot sizing, and worker-friendly generation entry points.
   - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the runtime payload.
-  - `puzzle-generation.js` – Worker-ready generator module that handles colour quantization, segmentation, smoothing, and metadata assembly off the main thread.
 - **Documentation**
   - `AGENTS.md` – Contributor workflow and automation expectations; mirrored to `/AGENTS/index.html` during deployments.
   - `README.md` – Player-facing quick start and gameplay overview.
@@ -68,9 +67,9 @@ in-memory URLs instead of Cache Storage while this pause is in effect.
 
 ## Repository Review Findings
 
-- **Renderer structure.** `render.js` now focuses solely on the SVG implementation inside a much smaller module. The controller
-  still exposes registration hooks but defaults to the simple SVG backend.
-- **Preboot + settings.** `runtime.js` performs preboot sizing and UI-scale selection before the app loads, pulling stored
+- **Renderer structure.** `capy.js` now bundles the SVG implementation alongside the controller. The controller still exposes
+  registration hooks but defaults to the simple SVG backend.
+- **Preboot + settings.** `capy.js` performs preboot sizing and UI-scale selection before the app loads, pulling stored
   settings from `localStorage` when available and falling back to defaults otherwise. Pair this with tests that cover missing or
   malformed settings data so boot-time CSS variables stay predictable.
 - **Offline cache risk.** Offline caching is disabled for now; when restored, `service-worker.js` will resume precaching the
