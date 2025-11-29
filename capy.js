@@ -2188,12 +2188,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         settingsPanels[0]?.dataset.settingsPanel ||
         null;
       const sheetRegistry = [settingsSheet].filter(Boolean);
-      const feedbackForm = document.getElementById("feedbackForm");
-      const feedbackStatusEl = helpPanel?.querySelector("[data-feedback-status]") || null;
-      const feedbackCategorySelect = document.getElementById("feedbackCategory");
-      const feedbackMessageInput = document.getElementById("feedbackMessage");
-      const feedbackContactInput = document.getElementById("feedbackContact");
-      const feedbackSubmitButton = document.getElementById("feedbackSubmit");
       const serviceWorkerStateLabel = document.querySelector("[data-service-worker-state]");
       const serviceWorkerCacheLabel = document.querySelector("[data-service-worker-cache]");
       const serviceWorkerUpdatedLabel = document.querySelector("[data-service-worker-updated]");
@@ -5260,14 +5254,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
       }
 
-      if (feedbackForm) {
-        feedbackForm.addEventListener("submit", handleFeedbackSubmit);
-      }
-
-      if (feedbackMessageInput) {
-        feedbackMessageInput.addEventListener("input", () => updateFeedbackStatus(""));
-      }
-
       if (errorToastCloseButton) {
         errorToastCloseButton.addEventListener("click", () => hideGlobalErrorNotice());
       }
@@ -6187,44 +6173,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         { passive: false }
       );
 
-      function handleFeedbackSubmit(event) {
-        if (event) {
-          event.preventDefault();
-        }
-        if (!feedbackForm || !feedbackMessageInput) {
-          return;
-        }
-        const message = feedbackMessageInput.value || "";
-        const category = feedbackCategorySelect?.value || "bug";
-        const contact = feedbackContactInput?.value || "";
-        const normalizedMessage = normalizeFeedbackValue(message, FEEDBACK_MESSAGE_LIMIT);
-        if (!normalizedMessage) {
-          updateFeedbackStatus("Add a few details before sending feedback.", "error");
-          feedbackMessageInput.focus({ preventScroll: true });
-          return;
-        }
-        updateFeedbackStatus("Sending feedback…");
-        if (feedbackSubmitButton) {
-          feedbackSubmitButton.disabled = true;
-        }
-        try {
-          reportFeedbackToLog({
-            message: normalizedMessage,
-            category,
-            contact,
-          });
-          updateFeedbackStatus("Thanks! Your feedback was sent.", "success");
-          feedbackForm.reset();
-        } catch (error) {
-          console.debug("Feedback submission failed", error);
-          updateFeedbackStatus("Couldn't send feedback right now. Please try again.", "error");
-        } finally {
-          if (feedbackSubmitButton) {
-            feedbackSubmitButton.disabled = false;
-          }
-        }
-      }
-
       function setSettingsSheetOpenState(isOpen) {
         if (!state?.settings) return;
         const resolved = Boolean(isOpen);
@@ -6817,50 +6765,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           event_category: "engagement",
           ...params,
         });
-      }
-
-      const FEEDBACK_MESSAGE_LIMIT = 800;
-      const FEEDBACK_CONTACT_LIMIT = 120;
-
-      function normalizeFeedbackValue(value, limit) {
-        if (typeof value !== "string") {
-          return "";
-        }
-        const trimmed = value.trim();
-        if (!trimmed) {
-          return "";
-        }
-        const maxLength = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 2000) : 2000;
-        return trimmed.slice(0, maxLength);
-      }
-
-      function reportFeedbackToLog(payload) {
-        if (!payload) return;
-        const category = normalizeFeedbackValue(payload.category, 32) || "general";
-        const message = normalizeFeedbackValue(payload.message, FEEDBACK_MESSAGE_LIMIT);
-        const contact = normalizeFeedbackValue(payload.contact, FEEDBACK_CONTACT_LIMIT);
-        if (!message) {
-          return;
-        }
-        recordTelemetryEvent("feedback_submit", {
-          event_category: "feedback",
-          event_label: category,
-          feedback_message: message,
-          feedback_contact: contact || undefined,
-          feedback_length: message.length,
-        });
-        logDebug(`Feedback submitted (${category})`);
-      }
-
-      function updateFeedbackStatus(message, tone = "info") {
-        if (!feedbackStatusEl) {
-          return;
-        }
-        const trimmed = typeof message === "string" ? message.trim() : "";
-        feedbackStatusEl.textContent = trimmed;
-        feedbackStatusEl.hidden = !trimmed;
-        feedbackStatusEl.classList.toggle("is-success", tone === "success");
-        feedbackStatusEl.classList.toggle("is-error", tone === "error");
       }
 
       function createPerformanceMetrics(options = {}) {
