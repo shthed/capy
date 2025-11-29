@@ -1208,8 +1208,8 @@
           <section class="sheet-section" aria-labelledby="feedbackHeading">
             <h3 id="feedbackHeading">Share feedback</h3>
             <p class="control-note">
-              Tell us what worked, what broke, or what you want next. Submissions are logged anonymously in analytics alongside
-              diagnostic events.
+              Tell us what worked, what broke, or what you want next. Submissions stay local alongside diagnostic events in
+              the debug log.
             </p>
             <form id="feedbackForm" class="feedback-form" novalidate>
               <label class="control">
@@ -5720,7 +5720,7 @@
           feedbackSubmitButton.disabled = true;
         }
         try {
-          reportFeedbackToAnalytics({
+          reportFeedbackToLog({
             message: normalizedMessage,
             category,
             contact,
@@ -6273,11 +6273,7 @@
         debugLogEl.scrollTop = 0;
       }
 
-      function analyticsReady() {
-        return false;
-      }
-
-      function trackAnalyticsEvent(name, params = {}) {
+      function recordTelemetryEvent(name, params = {}) {
         if (!name) {
           return;
         }
@@ -6303,7 +6299,7 @@
             }
           }
         }
-        trackAnalyticsEvent("exception", payload);
+        recordTelemetryEvent("exception", payload);
       }
 
       function trackPerformanceMetrics(summary, reason = "update") {
@@ -6317,7 +6313,7 @@
           if (!Number.isFinite(average)) {
             continue;
           }
-          trackAnalyticsEvent("timing_complete", {
+          recordTelemetryEvent("timing_complete", {
             name,
             value: average,
             event_category: "performance",
@@ -6329,7 +6325,7 @@
       }
 
       function recordUserEvent(name, params = {}) {
-        trackAnalyticsEvent(name, {
+        recordTelemetryEvent(name, {
           event_category: "engagement",
           ...params,
         });
@@ -6350,7 +6346,7 @@
         return trimmed.slice(0, maxLength);
       }
 
-      function reportFeedbackToAnalytics(payload) {
+      function reportFeedbackToLog(payload) {
         if (!payload) return;
         const category = normalizeFeedbackValue(payload.category, 32) || "general";
         const message = normalizeFeedbackValue(payload.message, FEEDBACK_MESSAGE_LIMIT);
@@ -6358,7 +6354,7 @@
         if (!message) {
           return;
         }
-        trackAnalyticsEvent("feedback_submit", {
+        recordTelemetryEvent("feedback_submit", {
           event_category: "feedback",
           event_label: category,
           feedback_message: message,
