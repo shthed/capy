@@ -1815,6 +1815,82 @@
   }
 })();
 
+// Settings menu renderer
+(() => {
+  if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
+
+  const { renderTemplate } = globalThis.capyTemplates || {};
+
+  function readSettingsDefinition() {
+    const script = document.getElementById("settingsDefinition");
+    if (!script) return [];
+    try {
+      const parsed = JSON.parse(script.textContent || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error("Failed to parse settings definition", error);
+      return [];
+    }
+  }
+
+  function renderSettingsMenu(sheet, definition = []) {
+    if (!sheet || !Array.isArray(definition)) return [];
+    const nav = sheet.querySelector("[data-settings-nav]") || sheet.querySelector(".settings-tabs");
+    const content = sheet.querySelector("[data-settings-scroll]") || sheet.querySelector(".settings-content") || sheet;
+    if (!nav || !content) return [];
+
+    nav.innerHTML = "";
+    content.innerHTML = "";
+    const defaultId =
+      definition.find((tab) => tab && tab.default && typeof tab.id === "string")?.id || definition[0]?.id;
+
+    const rendered = [];
+    for (const tab of definition) {
+      if (!tab || typeof tab.id !== "string" || typeof tab.label !== "string") {
+        continue;
+      }
+      const tabId = tab.id;
+      const panelId = `settingsPanel-${tabId}`;
+      const button = document.createElement("button");
+      button.className = "settings-tab";
+      button.type = "button";
+      button.role = "tab";
+      button.id = `settingsTab-${tabId}`;
+      button.dataset.settingsTab = tabId;
+      button.setAttribute("aria-controls", panelId);
+      const isDefault = tab.default || tabId === defaultId;
+      if (isDefault) {
+        button.setAttribute("data-settings-tab-default", "");
+      }
+      button.setAttribute("aria-selected", isDefault ? "true" : "false");
+      button.textContent = tab.label;
+      nav.appendChild(button);
+
+      const panel = document.createElement("section");
+      panel.className = "settings-section settings-page";
+      panel.id = panelId;
+      panel.dataset.settingsPanel = tabId;
+      panel.setAttribute("role", "tabpanel");
+      panel.setAttribute("aria-labelledby", button.id);
+      if (typeof renderTemplate === "function") {
+        renderTemplate(panel, tab.markup || "");
+      } else {
+        panel.innerHTML = tab.markup || "";
+      }
+      content.appendChild(panel);
+      rendered.push(tabId);
+    }
+
+    return rendered;
+  }
+
+  const settingsSheet = document.getElementById("settingsSheet");
+  const settingsDefinition = readSettingsDefinition();
+  renderSettingsMenu(settingsSheet, settingsDefinition);
+
+  globalThis.capySettingsMenu = { readSettingsDefinition, renderSettingsMenu };
+})();
+
 // Settings fallback bootstrap for pre-runtime interactions
 (() => {
         if (
@@ -1956,6 +2032,12 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             };
 
           const dom = createUiKit(document);
+          const settingsSheet = document.getElementById("settingsSheet");
+          const settingsDefinition =
+            (globalThis.capySettingsMenu?.readSettingsDefinition?.() || []).filter(Boolean);
+          if (settingsSheet && settingsDefinition.length && globalThis.capySettingsMenu?.renderSettingsMenu) {
+            globalThis.capySettingsMenu.renderSettingsMenu(settingsSheet, settingsDefinition);
+          }
 
           const skipBootstrap = beginRendererBootstrap();
           if (skipBootstrap) {
@@ -2171,7 +2253,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const previewToggle = document.getElementById("previewToggle");
       const fullscreenButton = document.getElementById("fullscreenButton");
       const settingsButton = document.getElementById("settingsButton");
-      const settingsSheet = document.getElementById("settingsSheet");
       const settingsSheetHeader = settingsSheet?.querySelector(".sheet-header") || null;
       const settingsBody =
         settingsSheet?.querySelector("[data-settings-scroll]") ||
