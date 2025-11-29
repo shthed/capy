@@ -319,10 +319,19 @@
         hooks.onRendererChange("svg");
       }
 
+      function setRenderer(requestedType = "svg") {
+        const rendererType = typeof requestedType === "string" ? requestedType.trim().toLowerCase() : "";
+        if (rendererType && rendererType !== "svg") {
+          const message = "Renderer change handler unbound";
+          hooks?.log?.(message, { code: "renderer-change-handler-unbound", renderer: rendererType });
+        }
+        return renderer;
+      }
+
       return {
         getRendererType: () => renderer?.getRendererType?.() || "svg",
         listRenderers: () => ["svg"],
-        setRenderer: () => renderer,
+        setRenderer,
         resize: (metrics = {}) => renderer?.resize?.(metrics),
         renderFrame: (args = {}) => renderer?.renderFrame?.(args) ?? null,
         renderPreview: (args = {}) => renderer?.renderPreview?.(args) ?? null,
@@ -4403,8 +4412,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           canvasTransform.style.width = `${canvasMetrics.displayWidth}px`;
           canvasTransform.style.height = `${canvasMetrics.displayHeight}px`;
         }
-        if (state.rendering?.renderer) {
-          state.rendering.renderer.resize({ ...canvasMetrics });
+        const renderer = state.rendering?.renderer;
+        if (renderer && typeof renderer.resize === "function") {
+          renderer.resize({ ...canvasMetrics });
         } else {
           if (puzzleCanvas.width !== canvasMetrics.pixelWidth) {
             puzzleCanvas.width = canvasMetrics.pixelWidth;
