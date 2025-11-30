@@ -1,3 +1,506 @@
+/*
+ * Capy overview:
+ * - Renderer/vector scene helpers (capy.js:9-170): SVG drawing, palette ink styles, scene export payloads.
+ * - Runtime bootstrap & renderer controller (capy.js:173-371): preboot metrics, UI scale, renderer wiring.
+ * - Template utilities (capy.js:374-446): tagged template + HTML rendering helpers.
+ * - Puzzle generation pipeline (capy.js:449-1700): quantisation, smoothing, worker bootstrap, `createPuzzleData`.
+ * - Settings UI/render helpers (capy.js:1701+): DOM builders, controls, colour utilities, save/export commands.
+ *
+* Function index (reference each section in the overview bullets above):
+ * Renderer & Vector Scene Helpers:
+ *   - formatNumber (capy.js:15) – format number.
+ *   - buildPathData (capy.js:22) – build path data.
+ *   - computeInkStyles (capy.js:42) – compute ink styles.
+ *   - hexToRgb (capy.js:51) – hex to rgb.
+ *   - relativeLuminance (capy.js:60) – relative luminance.
+ *   - createVectorScenePayload (capy.js:70) – create vector scene payload.
+ *   - createSvgRenderer (capy.js:90) – create svg renderer.
+ *   - clear (capy.js:130) – clear.
+ *   - renderFrame (capy.js:136) – render frame.
+ *   - dispose (capy.js:160) – dispose.
+ * Runtime Bootstrap & Renderer Controller:
+ *   - clamp (capy.js:199) – clamp.
+ *   - parseStoredScale (capy.js:203) – parse stored scale.
+ *   - readStoredSettings (capy.js:232) – read stored settings.
+ *   - computePrebootMetrics (capy.js:245) – compute preboot metrics.
+ *   - getPrebootMetrics (capy.js:274) – get preboot metrics.
+ *   - consumePrebootMetrics (capy.js:278) – consume preboot metrics.
+ *   - applyPrebootMetrics (capy.js:291) – apply preboot metrics.
+ *   - beginRendererBootstrap (capy.js:307) – begin renderer bootstrap.
+ *   - completeRendererBootstrap (capy.js:314) – complete renderer bootstrap.
+ *   - createRendererController (capy.js:323) – create renderer controller.
+ *   - setRenderer (capy.js:331) – set renderer.
+ * Template Utilities:
+ *   - escapeHtml (capy.js:386) – escape html.
+ *   - serializeValue (capy.js:408) – serialize value.
+ *   - html (capy.js:426) – html.
+ *   - unsafeHTML (capy.js:437) – unsafe html.
+ *   - renderTemplate (capy.js:441) – render template.
+ * Puzzle Generation & Worker Pipeline:
+ *   - clamp (capy.js:511) – clamp.
+ *   - normalizeAlgorithm (capy.js:518) – normalize algorithm.
+ *   - toHex (capy.js:533) – to hex.
+ *   - accumulate (capy.js:537) – accumulate.
+ *   - floodFill (capy.js:555) – flood fill.
+ *   - segmentRegions (capy.js:615) – segment regions.
+ *   - finalizeGeneratedRegions (capy.js:723) – finalize generated regions.
+ *   - serializeAssignments (capy.js:752) – serialize assignments.
+ *   - kmeansQuantize (capy.js:774) – kmeans quantize.
+ *   - posterizeQuantize (capy.js:838) – posterize quantize.
+ *   - organicQuantize (capy.js:924) – organic quantize.
+ *   - performQuantization (capy.js:1033) – perform quantization.
+ *   - smoothAssignments (capy.js:1053) – smooth assignments.
+ *   - canvasToBlob (capy.js:1102) – canvas to blob.
+ *   - blobToDataUrl (capy.js:1129) – blob to data url.
+ *   - estimateDataUrlBytes (capy.js:1154) – estimate data url bytes.
+ *   - resizeCanvas (capy.js:1170) – resize canvas.
+ *   - compressCanvasImage (capy.js:1194) – async compress canvas image.
+ *   - buildGenerationWorkerSource (capy.js:1271) – build generation worker source.
+ *   - normalizeOptions (capy.js:1288) – normalize options.
+ *   - postProgress (capy.js:1297) – post progress.
+ *   - canUseGenerationWorker (capy.js:1368) – can use generation worker.
+ *   - ensureGenerationWorker (capy.js:1377) – ensure generation worker.
+ *   - disposeGenerationWorker (capy.js:1399) – dispose generation worker.
+ *   - runGenerationWorker (capy.js:1414) – run generation worker.
+ *   - runGenerationSynchronously (capy.js:1483) – run generation synchronously.
+ *   - createPuzzleData (capy.js:1548) – async create puzzle data.
+ * UI, Settings & Gameplay Runtime:
+ *   - createElement (capy.js:1798) – create element.
+ *   - formatValue (capy.js:1828) – format value.
+ *   - createHeading (capy.js:1835) – create heading.
+ *   - readSettingsDefinition (capy.js:1869) – read settings definition.
+ *   - renderActionButton (capy.js:1881) – render action button.
+ *   - renderToggle (capy.js:1906) – render toggle.
+ *   - renderSelect (capy.js:1914) – render select.
+ *   - renderRange (capy.js:1947) – render range.
+ *   - renderMouseControls (capy.js:1980) – render mouse controls.
+ *   - renderDetailCallout (capy.js:2007) – render detail callout.
+ *   - renderNote (capy.js:2023) – render note.
+ *   - renderTextarea (capy.js:2040) – render textarea.
+ *   - renderList (capy.js:2048) – render list.
+ *   - renderDefinitionList (capy.js:2053) – render definition list.
+ *   - renderLogger (capy.js:2067) – render logger.
+ *   - renderButtonsRow (capy.js:2075) – render buttons row.
+ *   - renderJsonView (capy.js:2099) – render json view.
+ *   - renderSection (capy.js:2120) – render section.
+ *   - renderTabBlocks (capy.js:2217) – render tab blocks.
+ *   - renderSettingsMenu (capy.js:2379) – render settings menu.
+ *   - createUiKit (capy.js:2458) – create ui kit.
+ *   - log (capy.js:2486) – log.
+ *   - setOpen (capy.js:2504) – set open.
+ *   - createUiKit (capy.js:2574) – create ui kit.
+ *   - createComponent (capy.js:2603) – create component.
+ *   - emit (capy.js:2615) – emit.
+ *   - on (capy.js:2618) – on.
+ *   - update (capy.js:2622) – update.
+ *   - createPaletteDockComponent (capy.js:2629) – create palette dock component.
+ *   - emitPaletteWheel (capy.js:2694) – emit palette wheel.
+ *   - createSaveManagerComponent (capy.js:2702) – create save manager component.
+ *   - buildCacheRequest (capy.js:3112) – build cache request.
+ *   - warmRuntimeCache (capy.js:3118) – async warm runtime cache.
+ *   - setServiceWorkerLabel (capy.js:3133) – set service worker label.
+ *   - formatServiceWorkerTimestamp (capy.js:3138) – format service worker timestamp.
+ *   - updateServiceWorkerSummary (capy.js:3146) – update service worker summary.
+ *   - describeServiceWorkerState (capy.js:3159) – describe service worker state.
+ *   - logServiceWorkerEvent (capy.js:3176) – log service worker event.
+ *   - summarizeServiceWorkerUrl (capy.js:3190) – summarize service worker url.
+ *   - watchServiceWorker (capy.js:3202) – watch service worker.
+ *   - handleServiceWorkerMessage (capy.js:3221) – handle service worker message.
+ *   - registerServiceWorker (capy.js:3259) – register service worker.
+ *   - cacheSourceImageBlob (capy.js:3337) – async cache source image blob.
+ *   - cacheSourceImageDataUrl (capy.js:3364) – async cache source image data url.
+ *   - cacheSourceImageUrl (capy.js:3378) – async cache source image url.
+ *   - readCachedSourceImage (capy.js:3405) – async read cached source image.
+ *   - normalizeMouseClickAction (capy.js:3432) – normalize mouse click action.
+ *   - normalizeMouseDragAction (capy.js:3442) – normalize mouse drag action.
+ *   - normalizeMouseControls (capy.js:3452) – normalize mouse controls.
+ *   - cloneMouseControls (capy.js:3466) – clone mouse controls.
+ *   - getMouseControls (capy.js:3475) – get mouse controls.
+ *   - getMouseControlsForButton (capy.js:3479) – get mouse controls for button.
+ *   - getMouseButtonName (capy.js:3487) – get mouse button name.
+ *   - describeMouseButton (capy.js:3493) – describe mouse button.
+ *   - describeMouseClickAction (capy.js:3497) – describe mouse click action.
+ *   - describeMouseDragAction (capy.js:3515) – describe mouse drag action.
+ *   - isInteractiveElementForZoomGuard (capy.js:3529) – is interactive element for zoom guard.
+ *   - installBrowserZoomGuards (capy.js:3540) – install browser zoom guards.
+ *   - drawOutlines (capy.js:3752) – draw outlines.
+ *   - createRenderCache (capy.js:3775) – create render cache.
+ *   - strokeOutlinesDirect (capy.js:3799) – stroke outlines direct.
+ *   - rasterizeOutlineLayer (capy.js:3810) – rasterize outline layer.
+ *   - createLayerCanvas (capy.js:3829) – create layer canvas.
+ *   - getLayerContext (capy.js:3845) – get layer context.
+ *   - appendContoursToPath (capy.js:3858) – append contours to path.
+ *   - fillGeometries (capy.js:3871) – fill geometries.
+ *   - strokeGeometries (capy.js:3887) – stroke geometries.
+ *   - ensureRenderCache (capy.js:3903) – ensure render cache.
+ *   - rebuildRenderCache (capy.js:3930) – rebuild render cache.
+ *   - computeSceneLoaderZoom (capy.js:3982) – compute scene loader zoom.
+ *   - hydrateSceneTiles (capy.js:3989) – hydrate scene tiles.
+ *   - rebuildFilledLayer (capy.js:4004) – rebuild filled layer.
+ *   - compositeFilledRegionsDirect (capy.js:4032) – composite filled regions direct.
+ *   - paintRegionToFilledLayer (capy.js:4053) – paint region to filled layer.
+ *   - markFilledLayerDirty (capy.js:4060) – mark filled layer dirty.
+ *   - markOutlineLayerDirty (capy.js:4067) – mark outline layer dirty.
+ *   - buildRegionGeometry (capy.js:4073) – build region geometry.
+ *   - buildRegionContours (capy.js:4101) – build region contours.
+ *   - computeOutlineStrokeWidth (capy.js:4215) – compute outline stroke width.
+ *   - clampViewPanToPuzzleBounds (capy.js:4279) – clamp view pan to puzzle bounds.
+ *   - invalidateCanvasRect (capy.js:4318) – invalidate canvas rect.
+ *   - getPuzzleCanvasRect (capy.js:4322) – get puzzle canvas rect.
+ *   - getDevicePixelRatio (capy.js:4338) – get device pixel ratio.
+ *   - computeDisplayScale (capy.js:4349) – compute display scale.
+ *   - getVisiblePuzzleBounds (capy.js:4356) – get visible puzzle bounds.
+ *   - updateCanvasMetrics (capy.js:4377) – update canvas metrics.
+ *   - applyCanvasSizing (capy.js:4413) – apply canvas sizing.
+ *   - ensureCanvasMetricsInitialized (capy.js:4439) – ensure canvas metrics initialized.
+ *   - withRenderScale (capy.js:4446) – with render scale.
+ *   - clearContext (capy.js:4457) – clear context.
+ *   - syncCacheMetrics (capy.js:4465) – sync cache metrics.
+ *   - syncSettingsSheetSize (capy.js:4560) – sync settings sheet size.
+ *   - syncCommandRailMetrics (capy.js:4581) – sync command rail metrics.
+ *   - scheduleCommandRailMetricsSync (capy.js:4608) – schedule command rail metrics sync.
+ *   - getLauncherSizeEstimate (capy.js:4625) – get launcher size estimate.
+ *   - clampLauncherPixels (capy.js:4637) – clamp launcher pixels.
+ *   - normalizeLauncherPositionFromPixels (capy.js:4654) – normalize launcher position from pixels.
+ *   - resolveLauncherPixels (capy.js:4667) – resolve launcher pixels.
+ *   - applySettingsLauncherPosition (capy.js:4677) – apply settings launcher position.
+ *   - clampSettingsSheetPosition (capy.js:4692) – clamp settings sheet position.
+ *   - setSettingsSheetPosition (capy.js:4715) – set settings sheet position.
+ *   - ensureSettingsSheetPosition (capy.js:4728) – ensure settings sheet position.
+ *   - detachSceneLoaderSubscription (capy.js:4788) – detach scene loader subscription.
+ *   - attachSceneLoaderSubscription (capy.js:4799) – attach scene loader subscription.
+ *   - logRendererEvent (capy.js:4834) – log renderer event.
+ *   - handleRendererChange (capy.js:4845) – handle renderer change.
+ *   - registerRendererControls (capy.js:4850) – register renderer controls.
+ *   - disableSampleAutoload (capy.js:4894) – disable sample autoload.
+ *   - maybeAutoLoadSample (capy.js:4898) – maybe auto load sample.
+ *   - getDefaultGameTitle (capy.js:4939) – get default game title.
+ *   - getDefaultGameDescription (capy.js:4951) – get default game description.
+ *   - getSampleArtwork (capy.js:4963) – get sample artwork.
+ *   - getSampleDataUrl (capy.js:4967) – get sample data url.
+ *   - getSampleTitle (capy.js:4976) – get sample title.
+ *   - getSampleDescription (capy.js:4985) – get sample description.
+ *   - applyDefaultGameMetadata (capy.js:4994) – apply default game metadata.
+ *   - applySampleArtwork (capy.js:5018) – apply sample artwork.
+ *   - normalizeSampleArtwork (capy.js:5027) – normalize sample artwork.
+ *   - fetchDefaultGamePayload (capy.js:5050) – async fetch default game payload.
+ *   - normalizeRendererType (capy.js:5119) – normalize renderer type.
+ *   - formatRendererLabel (capy.js:5125) – format renderer label.
+ *   - updateRendererModeAvailability (capy.js:5134) – update renderer mode availability.
+ *   - applyRendererMode (capy.js:5144) – apply renderer mode.
+ *   - applyGameplaySettings (capy.js:5169) – apply gameplay settings.
+ *   - requestUpload (capy.js:5681) – async request upload.
+ *   - handleSettingsJsonImport (capy.js:5700) – handle settings json import.
+ *   - beginSettingsLauncherDrag (capy.js:5758) – begin settings launcher drag.
+ *   - moveSettingsLauncher (capy.js:5778) – move settings launcher.
+ *   - endSettingsLauncherDrag (capy.js:5796) – end settings launcher drag.
+ *   - hasFiles (capy.js:6341) – has files.
+ *   - getRegionAtPoint (capy.js:6435) – get region at point.
+ *   - getRegionFromEvent (capy.js:6462) – get region from event.
+ *   - maybeShowRegionHint (capy.js:6530) – maybe show region hint.
+ *   - attemptFillRegion (capy.js:6565) – attempt fill region.
+ *   - setSettingsSheetOpenState (capy.js:6788) – set settings sheet open state.
+ *   - openSheet (capy.js:6796) – open sheet.
+ *   - beginSettingsSheetDrag (capy.js:6816) – begin settings sheet drag.
+ *   - moveSettingsSheet (capy.js:6836) – move settings sheet.
+ *   - endSettingsSheetDrag (capy.js:6845) – end settings sheet drag.
+ *   - closeSheet (capy.js:6858) – close sheet.
+ *   - showSettingsSheet (capy.js:6874) – show settings sheet.
+ *   - showStartScreen (capy.js:6890) – show start screen.
+ *   - hideStartScreen (capy.js:6912) – hide start screen.
+ *   - updatePreviewState (capy.js:6918) – update preview state.
+ *   - updateFullscreenState (capy.js:6947) – update fullscreen state.
+ *   - toggleFullscreen (capy.js:6965) – toggle fullscreen.
+ *   - syncComputedUiScale (capy.js:6987) – sync computed ui scale.
+ *   - updateViewportMetrics (capy.js:7015) – update viewport metrics.
+ *   - handleViewportChange (capy.js:7062) – handle viewport change.
+ *   - applySampleDetailLevel (capy.js:7077) – apply sample detail level.
+ *   - loadSamplePuzzle (capy.js:7200) – load sample puzzle.
+ *   - loadDefaultPuzzle (capy.js:7238) – async load default puzzle.
+ *   - updateCommandStates (capy.js:7284) – update command states.
+ *   - renderDebugLog (capy.js:7296) – render debug log.
+ *   - recordTelemetryEvent (capy.js:7324) – record telemetry event.
+ *   - trackExceptionEvent (capy.js:7333) – track exception event.
+ *   - trackPerformanceMetrics (capy.js:7353) – track performance metrics.
+ *   - recordUserEvent (capy.js:7375) – record user event.
+ *   - createPerformanceMetrics (capy.js:7382) – create performance metrics.
+ *   - normalizeMetadata (capy.js:7409) – normalize metadata.
+ *   - pushEvent (capy.js:7428) – push event.
+ *   - maybeFlush (capy.js:7436) – maybe flush.
+ *   - recordDuration (capy.js:7446) – record duration.
+ *   - start (capy.js:7490) – start.
+ *   - mark (capy.js:7519) – mark.
+ *   - buildSummary (capy.js:7530) – build summary.
+ *   - flush (capy.js:7569) – flush.
+ *   - resetMetrics (capy.js:7580) – reset metrics.
+ *   - logDebug (capy.js:7600) – log debug.
+ *   - hideGlobalErrorNotice (capy.js:7620) – hide global error notice.
+ *   - showGlobalErrorNotice (capy.js:7625) – show global error notice.
+ *   - extractStackFromValue (capy.js:7654) – extract stack from value.
+ *   - deriveStackFromArgs (capy.js:7667) – derive stack from args.
+ *   - deriveStackFromEvent (capy.js:7680) – derive stack from event.
+ *   - formatConsoleValue (capy.js:7684) – format console value.
+ *   - joinConsoleArguments (capy.js:7711) – join console arguments.
+ *   - installConsoleErrorForwarder (capy.js:7727) – install console error forwarder.
+ *   - recordErrorEvent (capy.js:7773) – record error event.
+ *   - activateSettingsTab (capy.js:7832) – activate settings tab.
+ *   - scrollSettingsPanelIntoView (capy.js:7865) – scroll settings panel into view.
+ *   - applyUiScale (capy.js:7900) – apply ui scale.
+ *   - applyMaxZoom (capy.js:7939) – apply max zoom.
+ *   - applyLabelScale (capy.js:7978) – apply label scale.
+ *   - updateChatGptLink (capy.js:8013) – update chat gpt link.
+ *   - applyImageDescription (capy.js:8025) – apply image description.
+ *   - applyArtPrompt (capy.js:8051) – apply art prompt.
+ *   - applyRegionLabelVisibility (capy.js:8072) – apply region label visibility.
+ *   - applyTheme (capy.js:8095) – apply theme.
+ *   - applyBackgroundColor (capy.js:8124) – apply background color.
+ *   - applyStageBackgroundColor (capy.js:8183) – apply stage background color.
+ *   - resolveSourceImageLimit (capy.js:8214) – resolve source image limit.
+ *   - formatSourceImageLimitLabel (capy.js:8228) – format source image limit label.
+ *   - updateOptionOutputs (capy.js:8239) – update option outputs.
+ *   - formatSliderDefaultValue (capy.js:8302) – format slider default value.
+ *   - normalizeGenerationAlgorithm (capy.js:8349) – normalize generation algorithm.
+ *   - hydrateAlgorithmOptions (capy.js:8359) – hydrate algorithm options.
+ *   - markOptionsDirty (capy.js:8414) – mark options dirty.
+ *   - getCurrentOptions (capy.js:8439) – get current options.
+ *   - regenerateFromSource (capy.js:8454) – regenerate from source.
+ *   - isJsonFile (capy.js:8459) – is json file.
+ *   - describeImportIntent (capy.js:8470) – describe import intent.
+ *   - shouldAutoImport (capy.js:8497) – should auto import.
+ *   - updateImportNotice (capy.js:8501) – update import notice.
+ *   - clearPendingImport (capy.js:8550) – clear pending import.
+ *   - normalizeExternalImageUrl (capy.js:8556) – normalize external image url.
+ *   - deriveSourceTitleFromUrl (capy.js:8575) – derive source title from url.
+ *   - clearSourceUrlError (capy.js:8602) – clear source url error.
+ *   - showSourceUrlError (capy.js:8612) – show source url error.
+ *   - updateSourceUrlSubmitState (capy.js:8622) – update source url submit state.
+ *   - focusGeneratorUrlInput (capy.js:8637) – focus generator url input.
+ *   - handleSourceImageUrl (capy.js:8656) – handle source image url.
+ *   - openLocalFileWithPicker (capy.js:8696) – async open local file with picker.
+ *   - prepareImport (capy.js:8742) – prepare import.
+ *   - executePendingImport (capy.js:8766) – execute pending import.
+ *   - handleFile (capy.js:8778) – async handle file.
+ *   - loadImage (capy.js:8866) – load image.
+ *   - resetPuzzleUI (capy.js:9023) – reset puzzle ui.
+ *   - loadPuzzleGenerationModule (capy.js:9060) – load puzzle generation module.
+ *   - createPuzzleData (capy.js:9067) – async create puzzle data.
+ *   - resolvePaletteEntrySnapshot (capy.js:9080) – resolve palette entry snapshot.
+ *   - encodeCompactPaletteEntry (capy.js:9141) – encode compact palette entry.
+ *   - resolveRegionEntrySnapshot (capy.js:9165) – resolve region entry snapshot.
+ *   - encodeCompactRegionEntry (capy.js:9208) – encode compact region entry.
+ *   - decodeFilledRegionList (capy.js:9224) – decode filled region list.
+ *   - resolveFilledRegions (capy.js:9266) – resolve filled regions.
+ *   - isProbablyDataUrl (capy.js:9291) – is probably data url.
+ *   - estimateDataUrlBytes (capy.js:9298) – estimate data url bytes.
+ *   - normalizeSourceImageSnapshot (capy.js:9314) – normalize source image snapshot.
+ *   - toBinaryByteView (capy.js:9458) – to binary byte view.
+ *   - cloneSerializable (capy.js:9471) – clone serializable.
+ *   - normalizeVectorSceneSnapshot (capy.js:9482) – normalize vector scene snapshot.
+ *   - resolveVectorSceneBinaryBuffer (capy.js:9506) – resolve vector scene binary buffer.
+ *   - hydrateSourceImageSnapshot (capy.js:9535) – hydrate source image snapshot.
+ *   - buildGeneratedSourceImageSnapshot (capy.js:9596) – build generated source image snapshot.
+ *   - applyPuzzleResult (capy.js:9657) – apply puzzle result.
+ *   - loadPuzzleFixtureData (capy.js:9946) – load puzzle fixture data.
+ *   - renderPreview (capy.js:9973) – render preview.
+ *   - renderPreviewImage (capy.js:9986) – render preview image.
+ *   - renderPuzzle (capy.js:10021) – render puzzle.
+ *   - renderPuzzleFrame (capy.js:10057) – render puzzle frame.
+ *   - fillBackgroundLayer (capy.js:10147) – fill background layer.
+ *   - drawNumbers (capy.js:10158) – draw numbers.
+ *   - computeLabelSettingsSignature (capy.js:10238) – compute label settings signature.
+ *   - computeRegionLabelFontSize (capy.js:10259) – compute region label font size.
+ *   - computeRegionLabelStrokeWidth (capy.js:10311) – compute region label stroke width.
+ *   - getRegionLabelText (capy.js:10316) – get region label text.
+ *   - getRegionCenter (capy.js:10341) – get region center.
+ *   - ensureRegionBounds (capy.js:10360) – ensure region bounds.
+ *   - calculateRegionBounds (capy.js:10369) – calculate region bounds.
+ *   - measureLabelMetrics (capy.js:10398) – measure label metrics.
+ *   - getMeasurementContext (capy.js:10438) – get measurement context.
+ *   - findRegionLabelAnchor (capy.js:10469) – find region label anchor.
+ *   - findRegionLabelAnchorPolylabel (capy.js:10502) – find region label anchor polylabel.
+ *   - findRegionLabelAnchorLegacy (capy.js:10578) – find region label anchor legacy.
+ *   - resolvePolylabelPrecision (capy.js:10710) – resolve polylabel precision.
+ *   - ensureRegionVisualCenter (capy.js:10719) – ensure region visual center.
+ *   - ensureRegionLabelPolygon (capy.js:10740) – ensure region label polygon.
+ *   - buildRegionLabelPolygon (capy.js:10769) – build region label polygon.
+ *   - normalizePolygonRing (capy.js:10872) – normalize polygon ring.
+ *   - polygonArea (capy.js:10900) – polygon area.
+ *   - pointsEqual (capy.js:10913) – points equal.
+ *   - computeRegionPolylabel (capy.js:10922) – compute region polylabel.
+ *   - createPolylabelCell (capy.js:11004) – create polylabel cell.
+ *   - getCentroidPolylabelCell (capy.js:11016) – get centroid polylabel cell.
+ *   - pointToPolygonDistance (capy.js:11043) – point to polygon distance.
+ *   - pointToSegmentDistanceSquared (capy.js:11069) – point to segment distance squared.
+ *   - createPolylabelMaxHeap (capy.js:11089) – create polylabel max heap.
+ *   - isEmpty (capy.js:11092) – is empty.
+ *   - push (capy.js:11096) – push.
+ *   - pop (capy.js:11102) – pop.
+ *   - siftUp (capy.js:11113) – sift up.
+ *   - siftDown (capy.js:11125) – sift down.
+ *   - rectangleFitsRegion (capy.js:11149) – rectangle fits region.
+ *   - estimateAnchorSlack (capy.js:11165) – estimate anchor slack.
+ *   - scrollPaletteToColor (capy.js:11190) – scroll palette to color.
+ *   - activateColor (capy.js:11226) – activate color.
+ *   - resolvePaletteSortMode (capy.js:11253) – resolve palette sort mode.
+ *   - getPaletteEntryOrder (capy.js:11266) – get palette entry order.
+ *   - renderPalette (capy.js:11427) – render palette.
+ *   - getColorDisplayNumber (capy.js:11485) – get color display number.
+ *   - describeColour (capy.js:11509) – describe colour.
+ *   - handlePaletteWheel (capy.js:11523) – handle palette wheel.
+ *   - updateGenerationProgress (capy.js:11546) – update generation progress.
+ *   - clearGenerationProgress (capy.js:11568) – clear generation progress.
+ *   - beginGenerationJob (capy.js:11578) – begin generation job.
+ *   - isLatestGenerationJob (capy.js:11584) – is latest generation job.
+ *   - reportGenerationStage (capy.js:11588) – report generation stage.
+ *   - setProgressMessage (capy.js:11608) – set progress message.
+ *   - updateProgress (capy.js:11629) – update progress.
+ *   - updateMouseControlInputs (capy.js:11656) – update mouse control inputs.
+ *   - applyMouseControls (capy.js:11673) – apply mouse controls.
+ *   - setMouseControl (capy.js:11716) – set mouse control.
+ *   - applyPaletteSort (capy.js:11743) – apply palette sort.
+ *   - handleKeyDown (capy.js:11778) – handle key down.
+ *   - handleKeyUp (capy.js:11822) – handle key up.
+ *   - defaultPanCaptureTarget (capy.js:11828) – default pan capture target.
+ *   - resolvePanCaptureTarget (capy.js:11832) – resolve pan capture target.
+ *   - attachGlobalPanListeners (capy.js:11846) – attach global pan listeners.
+ *   - detachGlobalPanListeners (capy.js:11856) – detach global pan listeners.
+ *   - handlePanCaptureLost (capy.js:11866) – handle pan capture lost.
+ *   - handleMouseDragFill (capy.js:11878) – handle mouse drag fill.
+ *   - handleMouseDragZoom (capy.js:11910) – handle mouse drag zoom.
+ *   - finalizeMouseSession (capy.js:11940) – finalize mouse session.
+ *   - beginPanSession (capy.js:12038) – begin pan session.
+ *   - handlePanStart (capy.js:12089) – handle pan start.
+ *   - handlePanMove (capy.js:12207) – handle pan move.
+ *   - handlePanEnd (capy.js:12315) – handle pan end.
+ *   - hideCustomCursor (capy.js:12385) – hide custom cursor.
+ *   - applyCustomCursor (capy.js:12402) – apply custom cursor.
+ *   - updateCustomCursor (capy.js:12453) – update custom cursor.
+ *   - refreshCustomCursorHighlight (capy.js:12499) – refresh custom cursor highlight.
+ *   - setupCustomCursorPreference (capy.js:12515) – setup custom cursor preference.
+ *   - resolveMaxZoomCandidate (capy.js:12541) – resolve max zoom candidate.
+ *   - getConfiguredMaxViewportZoom (capy.js:12555) – get configured max viewport zoom.
+ *   - getZoomBounds (capy.js:12563) – get zoom bounds.
+ *   - normalizeZoomValue (capy.js:12568) – normalize zoom value.
+ *   - getScaleBounds (capy.js:12576) – get scale bounds.
+ *   - applyZoom (capy.js:12584) – apply zoom.
+ *   - handleWheel (capy.js:12628) – handle wheel.
+ *   - applyViewTransform (capy.js:12652) – apply view transform.
+ *   - scheduleViewTransform (capy.js:12680) – schedule view transform.
+ *   - computeFitScale (capy.js:12721) – compute fit scale.
+ *   - resetView (capy.js:12739) – reset view.
+ *   - restoreViewport (capy.js:12779) – restore viewport.
+ *   - useHint (capy.js:12806) – use hint.
+ *   - flashColorRegions (capy.js:12832) – flash color regions.
+ *   - flashRegion (capy.js:12866) – flash region.
+ *   - queueOverlayAnimation (capy.js:12887) – queue overlay animation.
+ *   - scheduleOverlayFrame (capy.js:12914) – schedule overlay frame.
+ *   - stepOverlayAnimations (capy.js:12931) – step overlay animations.
+ *   - resolveOverlayTint (capy.js:12993) – resolve overlay tint.
+ *   - parseTintToRgb (capy.js:13009) – parse tint to rgb.
+ *   - getNow (capy.js:13016) – get now.
+ *   - clearOverlayAnimations (capy.js:13023) – clear overlay animations.
+ *   - normalizeHintFadeDuration (capy.js:13038) – normalize hint fade duration.
+ *   - normalizeHintIntensity (capy.js:13047) – normalize hint intensity.
+ *   - normalizeHintTypes (capy.js:13062) – normalize hint types.
+ *   - isHintTypeEnabled (capy.js:13078) – is hint type enabled.
+ *   - syncHintTypeToggles (capy.js:13092) – sync hint type toggles.
+ *   - resolveDifficulty (capy.js:13103) – resolve difficulty.
+ *   - normalizeColorId (capy.js:13113) – normalize color id.
+ *   - buildPaletteAdjacency (capy.js:13126) – build palette adjacency.
+ *   - areColorsAdjacent (capy.js:13163) – are colors adjacent.
+ *   - autoAdvanceColor (capy.js:13183) – auto advance color.
+ *   - getRegionsByColor (capy.js:13210) – get regions by color.
+ *   - getCompletedColorIds (capy.js:13220) – get completed color ids.
+ *   - getPaletteEntry (capy.js:13237) – get palette entry.
+ *   - paintRegions (capy.js:13243) – paint regions.
+ *   - flashRegionsWithContext (capy.js:13252) – flash regions with context.
+ *   - flashPaletteSwatch (capy.js:13303) – flash palette swatch.
+ *   - compactPuzzleSnapshot (capy.js:13328) – compact puzzle snapshot.
+ *   - serializeCurrentPuzzle (capy.js:13436) – serialize current puzzle.
+ *   - captureSavePreview (capy.js:13529) – capture save preview.
+ *   - applyPreviewToEntry (capy.js:13570) – apply preview to entry.
+ *   - isSettingsAutosaveReason (capy.js:13578) – is settings autosave reason.
+ *   - normalizeLauncherPosition (capy.js:13582) – normalize launcher position.
+ *   - getUserSettingsSnapshot (capy.js:13591) – get user settings snapshot.
+ *   - persistUserSettings (capy.js:13662) – persist user settings.
+ *   - scheduleSettingsPersist (capy.js:13686) – schedule settings persist.
+ *   - normalizeStoredUserSettings (capy.js:13730) – normalize stored user settings.
+ *   - loadUserSettings (capy.js:13851) – load user settings.
+ *   - refreshSettingsJsonView (capy.js:13892) – refresh settings json view.
+ *   - applySettingsSnapshot (capy.js:13907) – apply settings snapshot.
+ *   - flushPendingAutosave (capy.js:13935) – flush pending autosave.
+ *   - scheduleAutosave (capy.js:13943) – schedule autosave.
+ *   - persistAutosave (capy.js:13978) – persist autosave.
+ *   - getLatestBackupRecord (capy.js:14014) – get latest backup record.
+ *   - getStoredStringSize (capy.js:14038) – get stored string size.
+ *   - collectSaveStorageStats (capy.js:14053) – collect save storage stats.
+ *   - formatBytes (capy.js:14080) – format bytes.
+ *   - logStorageFailureDetails (capy.js:14095) – log storage failure details.
+ *   - updateStorageUsageSummary (capy.js:14125) – update storage usage summary.
+ *   - loadInitialSession (capy.js:14185) – load initial session.
+ *   - packFilledRegions (capy.js:14217) – pack filled regions.
+ *   - unpackFilledRegions (capy.js:14250) – unpack filled regions.
+ *   - packRegionMap (capy.js:14287) – pack region map.
+ *   - unpackRegionMap (capy.js:14308) – unpack region map.
+ *   - encodeUtf8String (capy.js:14353) – encode utf 8 string.
+ *   - decodeUtf8Bytes (capy.js:14370) – decode utf 8 bytes.
+ *   - encodeBytesToBase64 (capy.js:14387) – encode bytes to base 64.
+ *   - decodeBase64ToBytes (capy.js:14398) – decode base 64 to bytes.
+ *   - simpleLZ77Decompress (capy.js:14411) – simple 77 decompress.
+ *   - lzwDecompress (capy.js:14444) – lzw decompress.
+ *   - decodeLegacySnapshotPayload (capy.js:14475) – decode legacy snapshot payload.
+ *   - decodeStoredPuzzleSnapshot (capy.js:14515) – decode stored puzzle snapshot.
+ *   - encodeStoredSnapshot (capy.js:14560) – encode stored snapshot.
+ *   - encodeSaveStorageEntry (capy.js:14568) – encode save storage entry.
+ *   - decodeSaveStorageEntry (capy.js:14589) – decode save storage entry.
+ *   - createGameSaveManager (capy.js:14615) – create game save manager.
+ *   - notify (capy.js:14620) – notify.
+ *   - normalizeEntry (capy.js:14631) – normalize entry.
+ *   - readFromStorage (capy.js:14667) – read from storage.
+ *   - writeToStorage (capy.js:14687) – write to storage.
+ *   - hydrate (capy.js:14712) – hydrate.
+ *   - persist (capy.js:14719) – persist.
+ *   - list (capy.js:14737) – list.
+ *   - clear (capy.js:14741) – clear.
+ *   - subscribe (capy.js:14751) – subscribe.
+ *   - resetCurrentProgress (capy.js:14792) – reset current progress.
+ *   - saveCurrentSnapshot (capy.js:14810) – save current snapshot.
+ *   - estimateSaveEntryBytes (capy.js:14856) – estimate save entry bytes.
+ *   - describeSaveEntry (capy.js:14867) – describe save entry.
+ *   - renderSavePreview (capy.js:14912) – render save preview.
+ *   - renderSaveSelectionItem (capy.js:14934) – render save selection item.
+ *   - renderSaveActionButtons (capy.js:14962) – render save action buttons.
+ *   - renderSaveManagementItem (capy.js:14968) – render save management item.
+ *   - renderDefaultGameSelectionItem (capy.js:15006) – render default game selection item.
+ *   - refreshGameSelection (capy.js:15030) – refresh game selection.
+ *   - refreshSaveList (capy.js:15043) – refresh save list.
+ *   - persistSaves (capy.js:15054) – persist saves.
+ *   - loadSavedEntries (capy.js:15058) – load saved entries.
+ *   - loadSaveEntry (capy.js:15062) – load save entry.
+ *   - deleteSaveEntry (capy.js:15086) – delete save entry.
+ *   - clearAllSaveData (capy.js:15097) – clear all save data.
+ *   - renameSaveEntry (capy.js:15106) – rename save entry.
+ *   - exportSaveEntry (capy.js:15119) – export save entry.
+ *   - sanitizeHexColor (capy.js:15138) – sanitize hex color.
+ *   - computeInkStyles (capy.js:15150) – compute ink styles.
+ *   - computePointerNumberColor (capy.js:15165) – compute pointer number color.
+ *   - computeSwatchLabelStyles (capy.js:15181) – compute swatch label styles.
+ *   - relativeLuminance (capy.js:15235) – relative luminance.
+ *   - contrastRatio (capy.js:15246) – contrast ratio.
+ *   - oklchFromHex (capy.js:15252) – oklch from hex.
+ *   - oklabFromRgb (capy.js:15267) – oklab from rgb.
+ *   - hexToRgb (capy.js:15294) – hex to rgb.
+ *   - rgbaFromHex (capy.js:15306) – rgba from hex.
+ *   - clamp (capy.js:15312) – clamp.
+ *
+ * Additional notes for new contributors:
+ * - The runtime bootstraps immediately; the `capyRuntime` object is the main entry for renderer + metrics hooks.
+ * - Generation helpers rely on typed arrays and workers; mutations always happen through `createPuzzleData`.
+ * - UI code is declarative—`createElement` and block renderers convert JSON definitions into DOM tree fragments.
+ * - Service worker + save subsystems live near the bottom; adjust `TECH.md` when their flows change.
+ */
+
+
 (() => {
   const DEFAULT_OVERLAY_FILL = "rgba(248, 250, 252, 1)";
   const DEFAULT_OUTLINE = "rgba(15, 23, 42, 0.65)";
