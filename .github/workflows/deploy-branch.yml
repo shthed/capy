@@ -21,12 +21,16 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.target.outputs.preview_url }}
     env:
       BASE_PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
     steps:
