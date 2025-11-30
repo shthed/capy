@@ -148,6 +148,17 @@
       hooks?.onRendered?.({ svg, shapesGroup });
     }
 
+    function renderPreview() {
+      return null;
+    }
+
+    function flashRegions() {}
+
+    function fillBackground({ color } = {}) {
+      const fill = color || "#f8fafc";
+      backgroundRect.setAttribute("fill", fill);
+    }
+
     function dispose() {
       svg.remove();
       if (shouldResetPosition) {
@@ -160,6 +171,9 @@
       getRendererType: () => "svg",
       svg,
       renderFrame,
+      renderPreview,
+      flashRegions,
+      fillBackground,
       clear,
       dispose,
     };
@@ -4805,6 +4819,18 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const debugLogEntries = [];
       const DEBUG_LOG_LIMIT = 80;
 
+      function publishDebugLog(entry) {
+        if (typeof window === "undefined") return;
+        window.__capyDebugLogEntries = debugLogEntries;
+        if (typeof window.dispatchEvent === "function") {
+          window.dispatchEvent(new CustomEvent("capy:debug-log", { detail: entry }));
+        }
+      }
+
+      if (typeof window !== "undefined") {
+        window.__capyDebugLogEntries = debugLogEntries;
+      }
+
       registerServiceWorker();
       warmRuntimeCache();
 
@@ -7605,6 +7631,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         if (debugLogEntries.length > DEBUG_LOG_LIMIT) {
           debugLogEntries.splice(0, debugLogEntries.length - DEBUG_LOG_LIMIT);
         }
+        publishDebugLog(entry);
         renderDebugLog();
       }
 
@@ -9967,7 +9994,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           return null;
         }
         const renderer = state.rendering?.renderer;
-        const imageData = renderer
+        const imageData = renderer?.renderPreview
           ? renderer.renderPreview({ state, previewCanvas, previewCtx })
           : renderPreviewImage({ state, previewCanvas, previewCtx });
         state.previewImageData = imageData || null;
