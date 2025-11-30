@@ -104,12 +104,22 @@ export function createSvgRenderer(host, hooks = {}) {
   const shapesGroup = document.createElementNS(NS, "g");
   svg.appendChild(shapesGroup);
 
+  const overlayGroup = document.createElementNS(NS, "g");
+  svg.appendChild(overlayGroup);
+
   container.insertAdjacentElement("beforeend", svg);
+
+  function clearOverlay() {
+    while (overlayGroup.firstChild) {
+      overlayGroup.removeChild(overlayGroup.firstChild);
+    }
+  }
 
   function clear() {
     while (shapesGroup.firstChild) {
       shapesGroup.removeChild(shapesGroup.firstChild);
     }
+    clearOverlay();
   }
 
   function renderFrame({ state, cache, backgroundColor, defaultBackgroundColor }) {
@@ -136,6 +146,30 @@ export function createSvgRenderer(host, hooks = {}) {
     hooks?.onRendered?.({ svg, shapesGroup });
   }
 
+  function renderPreview(args = {}) {
+    if (typeof hooks?.renderPreview === "function") {
+      return hooks.renderPreview(args);
+    }
+    return null;
+  }
+
+  function flashRegions({ cache, regions, fillStyle }) {
+    clearOverlay();
+    if (!Array.isArray(regions) || regions.length === 0) return;
+    const fill = typeof fillStyle === "string" && fillStyle ? fillStyle : DEFAULT_OVERLAY_FILL;
+    const strokeWidth = cache?.strokeWidth > 0 ? cache.strokeWidth : 1;
+    for (const region of regions) {
+      const pathData = buildPathData(region);
+      if (!pathData) continue;
+      const path = document.createElementNS(NS, "path");
+      path.setAttribute("d", pathData);
+      path.setAttribute("fill", fill);
+      path.setAttribute("stroke", fill);
+      path.setAttribute("stroke-width", String(strokeWidth));
+      overlayGroup.appendChild(path);
+    }
+  }
+
   function dispose() {
     svg.remove();
     if (shouldResetPosition) {
@@ -148,6 +182,8 @@ export function createSvgRenderer(host, hooks = {}) {
     getRendererType: () => "svg",
     svg,
     renderFrame,
+    renderPreview,
+    flashRegions,
     clear,
     dispose,
   };
