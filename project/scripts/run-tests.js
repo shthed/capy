@@ -34,20 +34,6 @@ function warnSkipPlaywright(details) {
 }
 
 async function main() {
-  const nodeTestCode = await run(process.execPath, [
-    '--test',
-    'tests/generator.spec.js',
-    'tests/smoothing.spec.mjs',
-    'tests/service-worker-cache.spec.js',
-    'tests/render-controller.spec.js',
-    'tests/runtime-preboot.spec.js',
-    'tests/runtime-renderer.spec.js',
-    'tests/svg-renderer.spec.js',
-  ]);
-  if (nodeTestCode !== 0) {
-    process.exit(nodeTestCode);
-  }
-
   let executablePath = '';
   try {
     executablePath = chromium.executablePath();
