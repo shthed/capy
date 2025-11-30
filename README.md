@@ -79,6 +79,8 @@ window.capyGenerator.setActiveColor(3, { flash: true });
 window.capyGenerator.fillRegion(42, { ensureColor: true, label: "qa-fill" });
 ```
 
+The bundled `capy.json` only stores the Capybara Springs puzzle data and references the `capy.png` artwork; saves and exports add fill progress and settings (see [`TECH.md`](./project/TECH.md#puzzle-json-format) for the schema).
+
 See [`TECH.md`](./TECH.md#windowcapygenerator-api-reference) for full API reference.
 
 ## Testing and QA
