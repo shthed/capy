@@ -10625,11 +10625,36 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           return null;
         }
         const data = imageData.data;
+        const resolveRegionPixels = (() => {
+          const cache = new Map();
+          const map = state.puzzle.regionMap;
+          if (!map || !Number.isInteger(map.length)) {
+            return () => [];
+          }
+          return (region) => {
+            if (Array.isArray(region?.pixels)) {
+              return region.pixels;
+            }
+            if (cache.has(region.id)) {
+              return cache.get(region.id);
+            }
+            const indices = [];
+            for (let idx = 0; idx < map.length; idx += 1) {
+              if (map[idx] === region.id) {
+                indices.push(idx);
+              }
+            }
+            cache.set(region.id, indices);
+            return indices;
+          };
+        })();
         for (const region of regions) {
           const color = palette[region.colorId - 1];
           if (!color) continue;
           const rgba = color.rgba;
-          for (const idx of region.pixels) {
+          const pixels = resolveRegionPixels(region);
+          if (!pixels.length) continue;
+          for (const idx of pixels) {
             const base = idx * 4;
             data[base] = rgba[0];
             data[base + 1] = rgba[1];

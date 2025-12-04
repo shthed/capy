@@ -7,14 +7,14 @@ A browser-based paint-by-numbers generator and player. Runs fully client-side. U
 ## Overview
 
 - Converts imported images (PNG/JPG/WebP/GIF) into numbered colour regions.
-- Bundles the Capybara Springs sample puzzle for instant play.
+- Bundles a lightweight "Three Bands" sample puzzle (vector-backed stripes) for instant play.
 - Supports Canvas 2D, WebGL, and SVG renderers.
 - Saves progress locally with autosave and manual snapshots.
 - Runs fully client-side; the service worker and offline cache are temporarily disabled.
 
 ## How to Play
 
-1. Open the app and let the Capybara Springs sample load.
+1. Open the app and let the bundled "Three Bands" sample load.
 2. Select a palette tile along the bottom bar.
 3. Click/tap/pen-fill matching regions. Mouse right-click acts as an eyedropper by default.
 4. Use hints or preview to locate remaining regions.
@@ -79,9 +79,9 @@ window.capyGenerator.setActiveColor(3, { flash: true });
 window.capyGenerator.fillRegion(42, { ensureColor: true, label: "qa-fill" });
 ```
 
-The bundled `capy.json` only stores the Capybara Springs puzzle data and references the `capy.png` artwork; saves and exports add fill progress and settings (see [`TECH.md`](./project/TECH.md#puzzle-json-format) for the schema).
+The bundled `capy.json` stores the Three Bands puzzle data, including vector scene metadata for the SVG renderer; saves and exports add fill progress and settings (see [`project/TECH.md`](./project/TECH.md#puzzle-json-format) for the schema).
 
-See [`TECH.md`](./TECH.md#windowcapygenerator-api-reference) for full API reference.
+See [`project/TECH.md`](./project/TECH.md#windowcapygenerator-api-reference) for full API reference.
 
 ## Testing and QA
 
@@ -103,12 +103,12 @@ alongside recent changes.
 
 ## Contributing
 
-Review [`TECH.md`](./TECH.md) for architecture details. Contributor scripts and Playwright config live under [`project/`](./project/). Runtime assets reside at the repository root (`index.html`, `styles.css`, `capy.js`, `capy.json`, `service-worker.js`). CSS conventions live in [`project/STYLEGUIDE.md`](./project/STYLEGUIDE.md).
+Review [`project/TECH.md`](./project/TECH.md) for architecture details. Contributor scripts and Playwright config live under [`project/`](./project/). Runtime assets reside at the repository root (`index.html`, `styles.css`, `capy.js`, `capy.json`, `service-worker.js`). CSS conventions live in [`project/STYLEGUIDE.md`](./project/STYLEGUIDE.md).
 
 ## Agent Guide
 
 See [`AGENTS.md`](./AGENTS.md) for the full contributor playbook. Key points:
 
 - Work from short-lived `automation/<change>` branches and open draft PRs early so deployments and QA notes stay aligned.
-- Keep docs in sync: update `TECH.md`, `project/ROADMAP.md`, and `project/TODO.md` alongside runtime or workflow changes.
+- Keep docs in sync: update `project/TECH.md`, `project/ROADMAP.md`, and `project/TODO.md` alongside runtime or workflow changes.
 - Prefer straightforward implementations, perform manual smoke tests, and record which automated checks ran before handing off a review.

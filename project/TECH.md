@@ -30,7 +30,7 @@ in-memory URLs instead of Cache Storage while this pause is in effect.
   - `index.html` – Single-page host document containing markup and wiring for renderer selection, saves, generator controls, and automation helpers.
   - `styles.css` – Primary stylesheet housing theme tokens, responsive layout rules, and component styles (preboot UI scale variables stay inline in `index.html`).
   - `capy.js` – Combined runtime, renderer helpers, and puzzle generation logic; hosts the SVG renderer, preboot sizing, and worker-friendly generation entry points.
-  - `capy.json` – Bundled Capybara Springs puzzle fixture used for previews and branch deployments alongside the runtime payload.
+  - `capy.json` – Bundled "Three Bands" puzzle fixture (vector stripes) used for previews and branch deployments alongside the runtime payload.
 - **Documentation**
   - `AGENTS.md` – Contributor workflow and automation expectations; mirrored to `/AGENTS/index.html` during deployments.
   - `README.md` – Player-facing quick start and gameplay overview.
@@ -69,6 +69,7 @@ in-memory URLs instead of Cache Storage while this pause is in effect.
 
 - **Renderer structure.** `capy.js` now bundles the SVG implementation alongside the controller. The controller still exposes
   registration hooks but defaults to the simple SVG backend.
+- **Vector scenes.** `capy.js` can hydrate `capy.scene+simple` metadata (including optional binary buffers) into scene loaders that feed the SVG renderer; the bundled Three Bands sample ships both vector metadata and per-region pixel lists for preview rendering.
 - **Preboot + settings.** `capy.js` performs preboot sizing and UI-scale selection before the app loads, pulling stored
   settings from `localStorage` when available and falling back to defaults otherwise. Pair this with tests that cover missing or
   malformed settings data so boot-time CSS variables stay predictable.
@@ -162,7 +163,7 @@ Tweaking the deployment:
 
 - **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or previously exported JSON puzzles straight into the generator pipeline.
 - **Saves tab quick start.** The Saves tab opens with an **Upload Image** button and lists manual slots. Each card now carries a live preview thumbnail alongside the metadata so you can spot the right slot before loading. The active slot stays pinned to the top with an "Autosaving this slot" badge so you always know which snapshot will keep tracking progress. Manual snapshot tools, export shortcuts, and the **Reset puzzle progress** control sit after the save cards so you can bookmark or rewind without digging through other menus.
-- **Built-in capybara sample.** The "Capybara Springs" illustration loads automatically on boot when no saves exist in the medium detail preset so players can start painting immediately.
+- **Built-in vector sample.** The bundled "Three Bands" stripes load automatically on boot when no saves exist, providing a tiny vector-backed scene for renderer smoke checks.
 - **Sample detail presets.** Low/Medium/High chips tune colour counts, resize targets, k-means iterations, and smoothing passes so QA can switch between breezy ≈26-region boards, balanced ≈20-region sessions, or high-fidelity ≈140-region runs.
 - **Detailed debug logging.** The **Help & logs** tab in the Settings dialog announces sample loads, fills, hints, zooms, background tweaks, fullscreen toggles, ignored clicks, and now mirrors console warnings/errors (including unhandled rejections) so QA can confirm issues without opening DevTools. Service worker registration, cache limits, and skip reasons also stream into this log alongside a System summary of the active cache.
 - **Embedded documentation.** The same **Help & logs** tab loads the hosted README (`https://shthed.github.io/capy/README`) for in-app gameplay and contributor notes.
@@ -339,7 +340,7 @@ Capy’s developer API exposes a minimal surface for automation, QA smoke tests,
 
 ## Gameplay Loop Walkthrough
 
-1. **Resume or load an image.** Autosaves restore on boot; otherwise the bundled sample loads in the high preset. Drag a bitmap, pick a file, or press the 🐹 button to reload the vignette. Adjust sliders first if you want different clustering before regenerating.
+1. **Resume or load an image.** Autosaves restore on boot; otherwise the bundled Three Bands stripes load immediately. Drag a bitmap, pick a file, or press the 🐹 button to reload the sample. Adjust sliders first if you want different clustering before regenerating.
 2. **Tune generation & appearance.** Use Settings to tweak palette size, minimum region area, resize detail, sample rate, iteration count, smoothing passes, auto-advance, difficulty, hint animations, hint type toggles, fade timing, overlay intensity, interface theme, unfilled region colour, stage background, interface scale, palette sorting, and mouse button mappings. Advanced options capture art prompt metadata for exports; adjust the “Stored image size” cap from the Saves tab when you want to trade fidelity for smaller saves.
 3. **Explore the puzzle.** The canvas shows outlines and numbers; Preview floods the viewport with the finished artwork for comparison.
 4. **Fill regions.** Pick a colour and click/tap cells. Easy difficulty can auto-select the tapped colour before painting; auto-advance hops to the next incomplete colour when enabled.
@@ -347,15 +348,16 @@ Capy’s developer API exposes a minimal surface for automation, QA smoke tests,
 
 ## Puzzle JSON Format
 
-The bundled `capy.json` ships only the puzzle payload for the Capybara Springs sample; progress, viewport, and generator options live exclusively in saves. The fixture uses the `capy-puzzle@2` schema with these fields:
+The bundled `capy.json` ships only the puzzle payload for the Three Bands sample; progress, viewport, and generator options live exclusively in saves. The fixture uses the `capy-puzzle@2` schema with these fields:
 
 - `format` – Schema version (`capy-puzzle@2`).
 - `title` – Friendly puzzle label.
 - `width` / `height` – Canvas dimensions in pixels.
 - `palette` – Colour entries with `id`, `hex`, `rgba`, and display `name`.
-- `regions` – Metadata for each region (`id`, `colorId`, centroid, `pixelCount`).
-- `regionMapPacked` – Base64-encoded little-endian `Int32Array` of region ids per pixel (`width * height` entries). Loaders also accept a raw `regionMap` array for backwards compatibility and exports, but the default fixture stays packed to keep the file compact.
-- `sourceImage` – Snapshot of the original artwork (URL/data URL plus `width`, `height`, `originalWidth`, `originalHeight`, `scale`, `bytes`, and MIME type). The default puzzle points at the bundled `./capy.png` so previews mirror the reference painting.
+- `regions` – Metadata for each region (`id`, `colorId`, centroid, `pixelCount`, optional `pixels` array for preview rendering).
+- `regionMapPacked` – Base64-encoded little-endian `Int32Array` of region ids per pixel (`width * height` entries). Loaders also accept a raw `regionMap` array for backwards compatibility and exports; the bundled fixture uses the raw map because the Three Bands sample is tiny.
+- `vectorScene` – Optional vector scene snapshot (`metadata` describing a `capy.scene+simple` payload plus base64-encoded `binary`) used by the SVG renderer.
+- `sourceImage` – Snapshot of the reference artwork (URL/data URL plus `width`, `height`, `originalWidth`, `originalHeight`, `scale`, `bytes`, and MIME type). The default puzzle omits a raster URL because the Three Bands sample is already encoded in the vector scene data.
 
 Packing the default region map keeps the fixture small while preserving compatibility with earlier human-readable exports and legacy `m` blobs.
 
