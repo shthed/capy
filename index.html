@@ -3299,6 +3299,11 @@
               drawNumbers(context);
             }
           },
+          getRegionLabelProps: ({ region }) => {
+            if (!region || !state.puzzle?.regions) return null;
+            const sourceRegion = state.puzzle.regions.find((entry) => entry?.id === region.id) || region;
+            return buildRegionLabelProps(sourceRegion);
+          },
           clearContext: ({ context }) => clearContext(context),
           onRendererChange: handleRendererChange,
         },
