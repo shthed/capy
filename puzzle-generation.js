@@ -13,6 +13,8 @@ const GENERATION_STAGE_MESSAGES = {
 const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
 const DEFAULT_SOURCE_IMAGE_MAX_BYTES = 1048576;
 const SOURCE_IMAGE_VARIANT_ORIGINAL = "original";
+const DEFAULT_REGION_MERGE_PASSES = 12;
+const DEFAULT_MAX_PERIMETER_TO_AREA_RATIO = 1.6;
 
 const GENERATION_ALGORITHMS = {
   "local-kmeans": {
@@ -150,8 +152,28 @@ function floodFill(width, height, indexMap) {
   return { regionMap, regions };
 }
 
-function segmentRegions(width, height, assignments, minRegion) {
+function segmentRegions(width, height, assignments, options) {
   const indexMap = new Uint16Array(assignments);
+  let minRegion = 1;
+  let maxMergePasses = DEFAULT_REGION_MERGE_PASSES;
+  let maxPerimeterToAreaRatio = DEFAULT_MAX_PERIMETER_TO_AREA_RATIO;
+  if (Number.isFinite(options)) {
+    minRegion = Math.max(1, options);
+  } else if (options && typeof options === "object") {
+    minRegion = Math.max(1, Number(options.minRegion) || 1);
+    const mergePassesCandidate = Number(options.maxMergePasses);
+    maxMergePasses = Math.max(
+      1,
+      Number.isFinite(mergePassesCandidate) ? mergePassesCandidate : DEFAULT_REGION_MERGE_PASSES
+    );
+    const perimeterCandidate = Number(options.maxPerimeterToAreaRatio);
+    maxPerimeterToAreaRatio = Math.max(
+      0,
+      Number.isFinite(perimeterCandidate)
+        ? perimeterCandidate
+        : DEFAULT_MAX_PERIMETER_TO_AREA_RATIO
+    );
+  }
   let maxColorId = 0;
   for (let i = 0; i < indexMap.length; i++) {
     if (indexMap[i] > maxColorId) {
@@ -161,16 +183,54 @@ function segmentRegions(width, height, assignments, minRegion) {
   const paletteSize = Math.max(1, maxColorId + 1);
   const neighborCounter = new Uint32Array(paletteSize);
   const touchedColors = new Uint16Array(paletteSize);
-  let attempt = 0;
   let threshold = Math.max(1, minRegion);
-  while (true) {
-    const { regionMap, regions } = floodFill(width, height, indexMap);
-    const tiny = regions.filter((region) => region.pixelCount < threshold);
-    if (tiny.length === 0 || threshold <= 1) {
-      return { regionMap, regions };
+  let mergePass = 0;
+  let lastSegmentation = null;
+
+  while (mergePass < maxMergePasses) {
+    const segmentation = floodFill(width, height, indexMap);
+    const { regionMap, regions } = segmentation;
+    lastSegmentation = segmentation;
+    const perimeters =
+      maxPerimeterToAreaRatio > 0 ? new Uint32Array(Math.max(1, regions.length)) : null;
+    if (perimeters && maxPerimeterToAreaRatio > 0) {
+      for (let idx = 0; idx < regionMap.length; idx++) {
+        const regionId = regionMap[idx];
+        if (regionId < 0) continue;
+        const x = idx % width;
+        const y = (idx / width) | 0;
+        if (x === 0 || regionMap[idx - 1] !== regionId) {
+          perimeters[regionId] += 1;
+        }
+        if (x === width - 1 || regionMap[idx + 1] !== regionId) {
+          perimeters[regionId] += 1;
+        }
+        if (y === 0 || regionMap[idx - width] !== regionId) {
+          perimeters[regionId] += 1;
+        }
+        if (y === height - 1 || regionMap[idx + width] !== regionId) {
+          perimeters[regionId] += 1;
+        }
+      }
     }
+
+    const candidates = [];
+    for (const region of regions) {
+      const slender =
+        perimeters && region.pixelCount > 0
+          ? perimeters[region.id] / region.pixelCount >= maxPerimeterToAreaRatio
+          : false;
+      if (region.pixelCount < threshold || slender) {
+        candidates.push(region);
+      }
+    }
+
+    if (candidates.length === 0 && threshold <= 1) {
+      break;
+    }
+
     let changed = false;
-    for (const region of tiny) {
+    for (const region of candidates) {
       let touchedCount = 0;
       for (const idx of region.pixels) {
         const x = idx % width;
@@ -251,11 +311,18 @@ function segmentRegions(width, height, assignments, minRegion) {
         neighborCounter[touchedColors[i]] = 0;
       }
     }
-    attempt += 1;
-    if (!changed || attempt > 6) {
-      threshold = Math.max(1, Math.floor(threshold / 2));
+
+    mergePass += 1;
+    if (!changed) {
+      const nextThreshold = Math.max(1, Math.floor(threshold / 2));
+      if (nextThreshold === threshold) {
+        break;
+      }
+      threshold = nextThreshold;
     }
   }
+
+  return lastSegmentation || floodFill(width, height, indexMap);
 }
 
 function finalizeGeneratedRegions(regions, width) {
@@ -810,7 +877,10 @@ function buildGenerationWorkerSource() {
   const stageMessages = JSON.stringify(GENERATION_STAGE_MESSAGES);
   return `const STAGE_MESSAGES = ${stageMessages};
 const DEFAULT_GENERATION_ALGORITHM = "${DEFAULT_GENERATION_ALGORITHM}";
-const now = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
+const DEFAULT_REGION_MERGE_PASSES = ${DEFAULT_REGION_MERGE_PASSES};
+const DEFAULT_MAX_PERIMETER_TO_AREA_RATIO = ${DEFAULT_MAX_PERIMETER_TO_AREA_RATIO};
+const now = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now())
+;
 ${clamp.toString()}
 ${accumulate.toString()}
 ${floodFill.toString()}
@@ -826,11 +896,32 @@ ${smoothAssignments.toString()}
 function normalizeOptions(options) {
   const targetColors = Math.max(1, Number(options?.targetColors) || 16);
   const minRegion = Math.max(1, Number(options?.minRegion) || 1);
+  const mergePassesCandidate = Number(options?.maxMergePasses);
+  const maxMergePasses = Math.max(
+    1,
+    Number.isFinite(mergePassesCandidate) ? mergePassesCandidate : DEFAULT_REGION_MERGE_PASSES
+  );
+  const perimeterCandidate = Number(options?.maxPerimeterToAreaRatio);
+  const maxPerimeterToAreaRatio = Math.max(
+    0,
+    Number.isFinite(perimeterCandidate)
+      ? perimeterCandidate
+      : DEFAULT_MAX_PERIMETER_TO_AREA_RATIO
+  );
   const sampleRate = typeof options?.sampleRate === "number" ? options.sampleRate : 1;
   const kmeansIters = Math.max(1, Number(options?.kmeansIters) || 1);
   const smoothingPasses = Math.max(0, Number(options?.smoothingPasses) || 0);
   const algorithm = normalizeAlgorithm(options?.algorithm);
-  return { targetColors, minRegion, sampleRate, kmeansIters, smoothingPasses, algorithm };
+  return {
+    targetColors,
+    minRegion,
+    maxMergePasses,
+    maxPerimeterToAreaRatio,
+    sampleRate,
+    kmeansIters,
+    smoothingPasses,
+    algorithm,
+  };
 }
 function postProgress(id, stage, progress, message) {
   self.postMessage({ type: "progress", id, stage, progress, message: message || STAGE_MESSAGES[stage] || "" });
@@ -885,7 +976,7 @@ self.onmessage = (event) => {
       width,
       height,
       workingAssignments,
-      options.minRegion
+      options
     );
     timings.segment = now() - segmentStart;
     postProgress(id, "finalize", 0.9, STAGE_MESSAGES.finalize);
@@ -902,7 +993,6 @@ self.onmessage = (event) => {
 };
 `;
 }
-
 function canUseGenerationWorker() {
   return (
     typeof Worker === "function" &&
@@ -1033,8 +1123,23 @@ function runGenerationSynchronously(jobId, payload, hooks = {}) {
     reportStage(jobId, 0.15, GENERATION_STAGE_MESSAGES.quantize);
   }
   const quantStart = now();
+  const mergePassesCandidate = Number(options.maxMergePasses);
+  const maxMergePasses = Math.max(
+    1,
+    Number.isFinite(mergePassesCandidate) ? mergePassesCandidate : DEFAULT_REGION_MERGE_PASSES
+  );
+  const perimeterCandidate = Number(options.maxPerimeterToAreaRatio);
+  const maxPerimeterToAreaRatio = Math.max(
+    0,
+    Number.isFinite(perimeterCandidate)
+      ? perimeterCandidate
+      : DEFAULT_MAX_PERIMETER_TO_AREA_RATIO
+  );
   const normalizedOptions = {
     ...options,
+    minRegion: Math.max(1, Number(options.minRegion) || 1),
+    maxMergePasses,
+    maxPerimeterToAreaRatio,
     algorithm: normalizeAlgorithm(options.algorithm),
   };
   const { centroids, assignments } = performQuantization(
@@ -1072,7 +1177,7 @@ function runGenerationSynchronously(jobId, payload, hooks = {}) {
     width,
     height,
     workingAssignments,
-    normalizedOptions.minRegion
+    normalizedOptions
   );
   timings.segment = now() - segmentStart;
   if (typeof reportStage === "function") {
@@ -1103,6 +1208,8 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
   const {
     targetColors = 16,
     minRegion = 1,
+    maxMergePasses = DEFAULT_REGION_MERGE_PASSES,
+    maxPerimeterToAreaRatio = DEFAULT_MAX_PERIMETER_TO_AREA_RATIO,
     maxSize = Math.max(image.width, image.height),
     sampleRate = 1,
     kmeansIters = 1,
@@ -1131,6 +1238,8 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
   const payloadOptions = {
     targetColors,
     minRegion,
+    maxMergePasses,
+    maxPerimeterToAreaRatio,
     sampleRate,
     kmeansIters,
     smoothingPasses,
@@ -1216,8 +1325,12 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
       `Smoothed assignments (${smoothingPasses} passes) in ${formatDuration(timings?.smoothing)}`
     );
   }
+  const ratioDescriptor =
+    maxPerimeterToAreaRatio > 0
+      ? `, ≤${maxPerimeterToAreaRatio.toFixed(2)} perimeter/area`
+      : "";
   debug(
-    `Segmented ${regions.length} regions (≥${minRegion}px²) in ${formatDuration(timings?.segment)}`
+    `Segmented ${regions.length} regions (≥${minRegion}px²${ratioDescriptor}, ${maxMergePasses} merge passes) in ${formatDuration(timings?.segment)}`
   );
   debug(`Generation pipeline finished in ${formatDuration(timings?.total)}`);
   let sourceImage = null;
