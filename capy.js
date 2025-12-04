@@ -15228,26 +15228,55 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
 
         function writeToStorage(entries) {
-          let serialized = "[]";
-          let attemptedBytes = 0;
+          let prepared = [];
           try {
-            const prepared = Array.isArray(entries)
+            prepared = Array.isArray(entries)
               ? entries
                   .map((entry) => encodeSaveStorageEntry(entry))
                   .filter((entry) => entry && typeof entry === "object")
               : [];
-            serialized = JSON.stringify(prepared);
-            attemptedBytes = getStoredStringSize(serialized);
           } catch (error) {
             console.error("Failed to prepare saves for storage", error);
+            prepared = [];
           }
-          try {
-            localStorage.setItem(key, serialized);
-          } catch (error) {
-            console.error("Failed to persist saves", error);
-            if (error && error.name === "QuotaExceededError") {
-              logDebug("Storage full: unable to write save snapshot. Delete old saves or exports and retry.");
-              logStorageFailureDetails("manual", attemptedBytes);
+
+          const hasPreviews = prepared.some(
+            (entry) => entry && typeof entry === "object" && typeof entry.preview === "string"
+          );
+
+          const attempts = [
+            { payload: prepared },
+            hasPreviews
+              ? {
+                  payload: prepared.map((entry) => {
+                    if (!entry || typeof entry !== "object") return entry;
+                    const { preview, ...rest } = entry;
+                    return rest;
+                  }),
+                  onSuccess() {
+                    logDebug("Removed save previews to fit storage quota.");
+                  },
+                }
+              : null,
+          ].filter(Boolean);
+
+          for (const attempt of attempts) {
+            let serialized = "[]";
+            let attemptedBytes = 0;
+            try {
+              serialized = JSON.stringify(attempt.payload);
+              attemptedBytes = getStoredStringSize(serialized);
+              localStorage.setItem(key, serialized);
+              if (typeof attempt.onSuccess === "function") {
+                attempt.onSuccess();
+              }
+              return;
+            } catch (error) {
+              console.error("Failed to persist saves", error);
+              if (error && error.name === "QuotaExceededError") {
+                logDebug("Storage full: unable to write save snapshot. Delete old saves or exports and retry.");
+                logStorageFailureDetails("manual", attemptedBytes);
+              }
             }
           }
         }
