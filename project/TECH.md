@@ -347,19 +347,28 @@ Capy’s developer API exposes a minimal surface for automation, QA smoke tests,
 
 ## Puzzle JSON Format
 
-Saved puzzles share the `capy-puzzle@2` payload with the following key fields:
+The bundled `capy.json` ships only the puzzle payload for the Capybara Springs sample; progress, viewport, and generator options live exclusively in saves. The fixture uses the `capy-puzzle@2` schema with these fields:
 
 - `format` – Schema version (`capy-puzzle@2`).
+- `title` – Friendly puzzle label.
 - `width` / `height` – Canvas dimensions in pixels.
-- `palette` – Colour entries with `id`, `hex`, and display `name`.
+- `palette` – Colour entries with `id`, `hex`, `rgba`, and display `name`.
 - `regions` – Metadata for each region (`id`, `colorId`, centroid, `pixelCount`).
-- `regionMapPacked` – Base64-encoded little-endian `Int32Array` describing region ids per pixel. Legacy imports may provide `regionMap`; loaders rebuild the pixel lists either way.
-- `filled` – Region ids already painted.
-- `backgroundColor`, `stageBackgroundColor`, `options`, `activeColor`, `viewport`, `sourceUrl` – Appearance and generator state used to restore the session.
+- `regionMapPacked` – Base64-encoded little-endian `Int32Array` of region ids per pixel (`width * height` entries). Loaders also accept a raw `regionMap` array for backwards compatibility and exports, but the default fixture stays packed to keep the file compact.
+- `sourceImage` – Snapshot of the original artwork (URL/data URL plus `width`, `height`, `originalWidth`, `originalHeight`, `scale`, `bytes`, and MIME type). The default puzzle points at the bundled `./capy.png` so previews mirror the reference painting.
 
-Saved slots persist the active user settings alongside the puzzle snapshot so restoring a session on a fresh device can hydrate difficulty, renderer, and other preferences, but exported files omit that bundle for portability. When the player already has settings stored locally, puzzle loads keep those preferences instead of overwriting them with the snapshot.
+Packing the default region map keeps the fixture small while preserving compatibility with earlier human-readable exports and legacy `m` blobs.
 
-Packing the region map trims payloads by more than half, avoiding `QuotaExceededError` when large puzzles previously overflowed localStorage. Saves now store the compacted structure directly in `localStorage` without extra compression, and exports write the same JSON so imports hand the decoded object straight to `compactPuzzleSnapshot` before calling `applyPuzzleResult`. The compactor rekeys palette entries to `{ i, h, n, r }`, regions to `{ i, c, p, x, y }`, stores the region map as `m`, and varint-packs filled region ids into the `f` string. If storage does fill up, the Help log prompts the user to clear old saves before retrying.
+### Save storage schema
+
+Save slots live in `localStorage` (`capy.saves.v2`) and encode the same `capy-puzzle@2` payload alongside metadata:
+
+- `id`/`timestamp` – Slot identifier plus last-updated timestamp.
+- `data` – Puzzle snapshot normalised via `compactPuzzleSnapshot` (palette/region keys shrink to `{ i, h, n, r }` and `{ i, c, p, x, y }`, and the region map plus filled regions stay as plain arrays for readability). Legacy imports using `m`/`f` packed strings continue to decode.
+- `settings` – Optional gameplay/renderer preferences from `capy.settings.v1` so restores can reapply difficulty and renderer choices on fresh devices.
+- `title`/`preview` – Optional slot label plus downscaled canvas preview (data URL) for the Saves tab.
+
+Exports use the same schema (or the compressed `.capy` archive variant) so imports can pass the decoded payload straight into `compactPuzzleSnapshot` before calling `applyPuzzleResult`.
 
 ## Accessibility & Keyboard Notes
 

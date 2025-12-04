@@ -10220,8 +10220,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             ? data.map
             : data.regionMapPacked;
         const regionMapSource =
-          unpackRegionMap(regionMapPacked, expectedCells) ||
-          unpackRegionMap(data.regionMap, expectedCells);
+          unpackRegionMap(data.regionMap, expectedCells) ||
+          unpackRegionMap(regionMapPacked, expectedCells);
         if (!regionMapSource || regionMapSource.length !== expectedCells) {
           console.error("Puzzle data is inconsistent.");
           setProgressMessage("idle");
@@ -13912,22 +13912,18 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           }
         }
         payload.regions = regions;
-        let packed = null;
-        if (typeof snapshot.m === "string" && snapshot.m) {
-          packed = snapshot.m;
-        } else if (typeof snapshot.map === "string" && snapshot.map) {
-          packed = snapshot.map;
-        } else if (typeof snapshot.regionMapPacked === "string" && snapshot.regionMapPacked) {
-          packed = snapshot.regionMapPacked;
-        } else if (snapshot.regionMap) {
-          packed = packRegionMap(snapshot.regionMap);
+        const expectedCells = width * height;
+        const regionMap =
+          unpackRegionMap(snapshot.regionMap, expectedCells) ||
+          unpackRegionMap(snapshot.m ?? snapshot.map ?? snapshot.regionMapPacked, expectedCells);
+        if (regionMap) {
+          payload.regionMap = Array.from(regionMap);
         }
-        if (packed) {
-          payload.m = packed;
-        }
-        const filledPacked = packFilledRegions(snapshot.f ?? snapshot.filled ?? snapshot.filledPacked);
-        if (filledPacked) {
-          payload.f = filledPacked;
+        const filled = decodeFilledRegionList(
+          snapshot.f ?? snapshot.filled ?? snapshot.filledPacked
+        );
+        if (Array.isArray(filled) && filled.length > 0) {
+          payload.filled = filled;
         }
         if (snapshot.options && typeof snapshot.options === "object") {
           const options = { ...snapshot.options };
@@ -13979,7 +13975,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       function serializeCurrentPuzzle() {
         if (!state.puzzle) return {};
         const { puzzle } = state;
-        const regionMapPacked = packRegionMap(puzzle.regionMap);
         const palette = puzzle.palette.map((entry, index) => {
           const resolved = {
             id:
@@ -14047,9 +14042,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         if (puzzle.vectorScene) {
           snapshot.vectorScene = puzzle.vectorScene;
         }
-        if (regionMapPacked) {
-          snapshot.regionMapPacked = regionMapPacked;
-        } else if (puzzle.regionMap) {
+        if (puzzle.regionMap) {
           snapshot.regionMap = Array.from(puzzle.regionMap);
         }
         const sourceImageSnapshot = normalizeSourceImageSnapshot(
