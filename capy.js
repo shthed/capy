@@ -2164,11 +2164,11 @@
     }
 
     const {
-      targetColors = 16,
-      minRegion = 1,
-      maxSize = Math.max(image.width, image.height),
-      sampleRate = 1,
-      kmeansIters = 1,
+      targetColors = 12,
+      minRegion = 60,
+      maxSize = 640,
+      sampleRate = 0.5,
+      kmeansIters = 12,
       smoothingPasses = 0,
       algorithm = DEFAULT_GENERATION_ALGORITHM,
       sourceImageMaxBytes = DEFAULT_SOURCE_IMAGE_MAX_BYTES,
@@ -9052,12 +9052,12 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
 
       function getCurrentOptions() {
         return {
-          targetColors: clamp(Number(colorCountEl.value) || 16, 4, 64),
-          minRegion: clamp(Number(minRegionEl.value) || 80, 1, 5000),
-          maxSize: clamp(Number(detailEl.value) || 768, 256, 2000),
-          sampleRate: clamp(Number(sampleRateEl.value) || 65, 10, 100) / 100,
-          kmeansIters: clamp(Number(kmeansItersEl.value) || 12, 1, 64),
-          smoothingPasses: clamp(Number(smoothingEl.value) || 1, 0, 6),
+          targetColors: clamp(Number(colorCountEl.value) || 12, 4, 64),
+          minRegion: clamp(Number(minRegionEl.value) || 60, 1, 600),
+          maxSize: clamp(Number(detailEl.value) || 640, 256, 1600),
+          sampleRate: clamp(Number(sampleRateEl.value) || 50, 25, 100) / 100,
+          kmeansIters: clamp(Number(kmeansItersEl.value) || 12, 4, 32),
+          smoothingPasses: clamp(Number(smoothingEl.value) || 0, 0, 4),
           sourceImageMaxBytes: resolveSourceImageLimit(
             sourceImageLimitSelect ? sourceImageLimitSelect.value : DEFAULT_SOURCE_IMAGE_MAX_BYTES
           ),
