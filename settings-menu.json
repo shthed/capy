@@ -461,6 +461,36 @@
             "summary": "Advanced options",
             "items": [
               {
+                "type": "range",
+                "id": "mergePasses",
+                "label": "Merge passes",
+                "min": 1,
+                "max": 24,
+                "step": 1,
+                "value": 12,
+                "default": 12,
+                "format": "integer"
+              },
+              {
+                "type": "note",
+                "text": "Limits how many merge sweeps run after segmentation to avoid oscillation. Default 12 passes."
+              },
+              {
+                "type": "range",
+                "id": "perimeterRatio",
+                "label": "Perimeter/area limit",
+                "min": 0,
+                "max": 3,
+                "step": 0.05,
+                "value": 1.6,
+                "default": 1.6,
+                "format": "ratio"
+              },
+              {
+                "type": "note",
+                "text": "Regions above this perimeter-to-area ratio merge into dominant neighbours; set to 0 to disable. Default 1.6."
+              },
+              {
                 "type": "textarea",
                 "id": "artPrompt",
                 "label": "Art prompt",

@@ -206,6 +206,9 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 - **Smoothing passes.** Each pass performs a weighted majority filter across the assignment map, blending stray pixels into
   neighbouring regions before segmentation. Set it to 0 to keep posterized edges crisp; bump it up when noise or tiny islands
   sneak through.
+- **Region simplification.** Post-flood merges now cap the number of sweeps (default 12) and optionally collapse slender regions
+  whose perimeter-to-area ratio exceeds a configurable limit (default 1.6). Set the ratio to 0 to disable the slender merge and
+  preserve finer detail.
 
 ### UI Guide
 
