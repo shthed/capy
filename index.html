@@ -158,12 +158,13 @@
       <div id="viewport">
         <div id="canvasStage">
           <div id="canvasTransform">
-            <canvas
+            <div
               id="puzzleCanvas"
               data-testid="puzzle-canvas"
-              width="640"
-              height="480"
-            ></canvas>
+              aria-label="Puzzle surface"
+              role="presentation"
+              style="width: 640px; height: 480px"
+            ></div>
           </div>
         </div>
         <div id="pointerOverlay" aria-hidden="true">
@@ -3298,6 +3299,11 @@
             if (context) {
               drawNumbers(context);
             }
+          },
+          getRegionLabelProps: ({ region }) => {
+            if (!region || !state.puzzle?.regions) return null;
+            const sourceRegion = state.puzzle.regions.find((entry) => entry?.id === region.id) || region;
+            return buildRegionLabelProps(sourceRegion);
           },
           clearContext: ({ context }) => clearContext(context),
           onRendererChange: handleRendererChange,
