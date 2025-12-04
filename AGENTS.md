@@ -14,6 +14,8 @@ any feature or workflow changes you ship.
 - **Session kick-off.** Verify the canonical `origin` remote exists, then run
   `git fetch --all --prune` followed by `git rebase origin/main` when resuming
   prior work—do this before any scripts or edits to minimise merge conflicts.
+- **Current branch baseline.** Ensure the working branch is rebased from the
+  remote `origin/main` tip before making any updates or recommendations.
 - **Branch naming.** Create short-lived branches named `automation/<change>` so
   QA notes and preview URLs map directly to the experiment under review.
 - **Draft PRs early.** Open a draft PR as soon as you push. CI logs, manual QA

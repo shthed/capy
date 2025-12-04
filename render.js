@@ -168,6 +168,9 @@ export function createSvgRenderer(host, hooks = {}) {
   const shapesGroup = document.createElementNS(NS, "g");
   svg.appendChild(shapesGroup);
 
+  const labelsGroup = document.createElementNS(NS, "g");
+  svg.appendChild(labelsGroup);
+
   const overlayGroup = document.createElementNS(NS, "g");
   svg.appendChild(overlayGroup);
 
@@ -183,16 +186,27 @@ export function createSvgRenderer(host, hooks = {}) {
     while (shapesGroup.firstChild) {
       shapesGroup.removeChild(shapesGroup.firstChild);
     }
+    while (labelsGroup.firstChild) {
+      labelsGroup.removeChild(labelsGroup.firstChild);
+    }
     clearOverlay();
   }
 
   function renderFrame({ state, cache, backgroundColor, defaultBackgroundColor }) {
     clear();
     const fill = backgroundColor || defaultBackgroundColor || "#f8fafc";
+    const width = cache?.width || state?.puzzle?.width || 0;
+    const height = cache?.height || state?.puzzle?.height || 0;
+    if (width > 0 && height > 0) {
+      svg.setAttribute("viewBox", `0 0 ${formatNumber(width)} ${formatNumber(height)}`);
+    }
     backgroundRect.setAttribute("fill", fill);
     const regions = cache?.regions?.length ? cache.regions : state?.puzzle?.regions || [];
     const palette = state?.puzzle?.palette || [];
     const paletteById = new Map(palette.map((entry) => [entry.id, entry]));
+    while (labelsGroup.firstChild) {
+      labelsGroup.removeChild(labelsGroup.firstChild);
+    }
     for (const geometry of regions) {
       const pathData = buildPathData(geometry);
       if (!pathData) continue;
@@ -206,6 +220,34 @@ export function createSvgRenderer(host, hooks = {}) {
       path.setAttribute("stroke", ink.outline);
       path.setAttribute("stroke-width", "0.75");
       shapesGroup.appendChild(path);
+
+      const label = hooks?.getRegionLabelProps?.({
+        region: geometry,
+        paletteEntry,
+        pathData,
+        state,
+        cache,
+      });
+      if (label?.text && Number.isFinite(label.x) && Number.isFinite(label.y)) {
+        const text = document.createElementNS(NS, "text");
+        text.textContent = label.text;
+        text.setAttribute("x", formatNumber(label.x));
+        text.setAttribute("y", formatNumber(label.y));
+        text.setAttribute("fill", label.fill || ink.number);
+        text.setAttribute("stroke", label.stroke || ink.outline);
+        if (label.strokeWidth != null) {
+          text.setAttribute("stroke-width", formatNumber(label.strokeWidth));
+        }
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("dominant-baseline", "middle");
+        if (label.fontFamily) {
+          text.setAttribute("font-family", label.fontFamily);
+        }
+        if (label.fontSize != null) {
+          text.setAttribute("font-size", formatNumber(label.fontSize));
+        }
+        labelsGroup.appendChild(text);
+      }
     }
     hooks?.onRendered?.({ svg, shapesGroup });
   }

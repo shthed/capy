@@ -43,6 +43,16 @@ Image import: drop a file anywhere or use **Import** in the command rail. The pu
 - Help panel with manual and activity log.
 - Settings for numbers, hints, palette sorting, renderer, and accessibility options.
 
+## Generator Defaults
+
+New puzzles start from lighter-weight clustering settings to keep the first render approachable:
+
+- 12 target colours.
+- Minimum region size of 60 px².
+- 640 px longest edge when resizing the source image.
+- 50% sampling rate.
+- 0 smoothing passes and 12 k-means iterations.
+
 ## Saving and Exporting
 
 - Autosaves restore the last session automatically.

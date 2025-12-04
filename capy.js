@@ -683,6 +683,9 @@
     const shapesGroup = document.createElementNS(NS, "g");
     svg.appendChild(shapesGroup);
 
+    const labelsGroup = document.createElementNS(NS, "g");
+    svg.appendChild(labelsGroup);
+
     const overlayGroup = document.createElementNS(NS, "g");
     svg.appendChild(overlayGroup);
 
@@ -698,16 +701,27 @@
       while (shapesGroup.firstChild) {
         shapesGroup.removeChild(shapesGroup.firstChild);
       }
+      while (labelsGroup.firstChild) {
+        labelsGroup.removeChild(labelsGroup.firstChild);
+      }
       clearOverlay();
     }
 
     function renderFrame({ state, cache, backgroundColor, defaultBackgroundColor }) {
       clear();
       const fill = backgroundColor || defaultBackgroundColor || "#f8fafc";
+      const width = cache?.width || state?.puzzle?.width || 0;
+      const height = cache?.height || state?.puzzle?.height || 0;
+      if (width > 0 && height > 0) {
+        svg.setAttribute("viewBox", `0 0 ${formatNumber(width)} ${formatNumber(height)}`);
+      }
       backgroundRect.setAttribute("fill", fill);
       const regions = cache?.regions?.length ? cache.regions : state?.puzzle?.regions || [];
       const palette = state?.puzzle?.palette || [];
       const paletteById = new Map(palette.map((entry) => [entry.id, entry]));
+      while (labelsGroup.firstChild) {
+        labelsGroup.removeChild(labelsGroup.firstChild);
+      }
       for (const geometry of regions) {
         const pathData = buildPathData(geometry);
         if (!pathData) continue;
@@ -721,6 +735,34 @@
         path.setAttribute("stroke", ink.outline);
         path.setAttribute("stroke-width", "0.75");
         shapesGroup.appendChild(path);
+
+        const label = hooks?.getRegionLabelProps?.({
+          region: geometry,
+          paletteEntry,
+          pathData,
+          state,
+          cache,
+        });
+        if (label?.text && Number.isFinite(label.x) && Number.isFinite(label.y)) {
+          const text = document.createElementNS(NS, "text");
+          text.textContent = label.text;
+          text.setAttribute("x", formatNumber(label.x));
+          text.setAttribute("y", formatNumber(label.y));
+          text.setAttribute("fill", label.fill || ink.number);
+          text.setAttribute("stroke", label.stroke || ink.outline);
+          if (label.strokeWidth != null) {
+            text.setAttribute("stroke-width", formatNumber(label.strokeWidth));
+          }
+          text.setAttribute("text-anchor", "middle");
+          text.setAttribute("dominant-baseline", "middle");
+          if (label.fontFamily) {
+            text.setAttribute("font-family", label.fontFamily);
+          }
+          if (label.fontSize != null) {
+            text.setAttribute("font-size", formatNumber(label.fontSize));
+          }
+          labelsGroup.appendChild(text);
+        }
       }
       hooks?.onRendered?.({ svg, shapesGroup });
     }
@@ -1936,6 +1978,111 @@
     return best;
   }
 
+  async function readImageFromBlob(blob) {
+    if (!(blob instanceof Blob)) {
+      return null;
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve({
+          image: img,
+          width: img.naturalWidth || img.width,
+          height: img.naturalHeight || img.height,
+        });
+      };
+      img.onerror = (error) => {
+        URL.revokeObjectURL(objectUrl);
+        reject(error instanceof Error ? error : new Error("Unable to read source image"));
+      };
+      img.src = objectUrl;
+    });
+  }
+
+  async function dataUrlToBlob(dataUrl, fallbackType = "image/png") {
+    if (typeof dataUrl !== "string" || !dataUrl) {
+      return null;
+    }
+    try {
+      const response = await fetch(dataUrl);
+      if (!response || !response.ok) {
+        return null;
+      }
+      const blob = await response.blob();
+      if (blob && blob.type) {
+        return blob;
+      }
+      const buffer = await response.arrayBuffer();
+      return new Blob([buffer], { type: fallbackType });
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async function prepareSourceImageBlob(blob, options = {}) {
+    if (!(blob instanceof Blob)) {
+      return null;
+    }
+    const maxBytes = Number.isFinite(options.maxBytes) && options.maxBytes > 0 ? options.maxBytes : null;
+    const maxSize = Number.isFinite(options.maxSize) && options.maxSize > 0 ? options.maxSize : null;
+    const baseBytes = typeof blob.size === "number" && blob.size > 0 ? blob.size : null;
+    const needsSizeCheck = maxBytes != null && baseBytes != null && baseBytes > maxBytes;
+    if (!needsSizeCheck && !maxSize) {
+      return {
+        blob,
+        bytes: baseBytes,
+        mimeType: blob.type || null,
+        width: null,
+        height: null,
+      };
+    }
+    const imagePayload = await readImageFromBlob(blob);
+    if (!imagePayload || !imagePayload.image) {
+      return null;
+    }
+    const sourceWidth = imagePayload.width || imagePayload.image.width || 0;
+    const sourceHeight = imagePayload.height || imagePayload.image.height || 0;
+    const scale = maxSize
+      ? Math.min(maxSize / sourceWidth, maxSize / sourceHeight, 1)
+      : 1;
+    const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+    const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) {
+      return null;
+    }
+    ctx.drawImage(imagePayload.image, 0, 0, targetWidth, targetHeight);
+    const compressed = await compressCanvasImage(canvas, { maxBytes: maxBytes || undefined });
+    if (!compressed || !compressed.dataUrl) {
+      return null;
+    }
+    if (maxBytes && compressed.bytes != null && compressed.bytes > maxBytes) {
+      return { error: "limit" };
+    }
+    const processedBlob = await dataUrlToBlob(compressed.dataUrl, compressed.mimeType || blob.type);
+    if (!processedBlob) {
+      return null;
+    }
+    const processedBytes =
+      Number.isFinite(compressed.bytes) && compressed.bytes > 0
+        ? compressed.bytes
+        : typeof processedBlob.size === "number"
+          ? processedBlob.size
+          : null;
+    return {
+      blob: processedBlob,
+      bytes: processedBytes,
+      mimeType: processedBlob.type || compressed.mimeType || blob.type || null,
+      width: compressed.width,
+      height: compressed.height,
+    };
+  }
+
   function buildGenerationWorkerSource() {
     const stageMessages = JSON.stringify(GENERATION_STAGE_MESSAGES);
     return `const STAGE_MESSAGES = ${stageMessages};
@@ -2269,11 +2416,11 @@ function canUseGenerationWorker() {
     }
 
     const {
-      targetColors = 16,
-      minRegion = 1,
-      maxSize = Math.max(image.width, image.height),
-      sampleRate = 1,
-      kmeansIters = 1,
+      targetColors = 12,
+      minRegion = 60,
+      maxSize = 640,
+      sampleRate = 0.5,
+      kmeansIters = 12,
       smoothingPasses = 0,
       algorithm = DEFAULT_GENERATION_ALGORITHM,
       maxMergePasses = DEFAULT_REGION_MERGE_PASSES,
@@ -4515,13 +4662,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           ready: false,
           regions: [],
           regionsById: new Map(),
-          filledLayer: null,
-          filledLayerCtx: null,
-          filledLayerDirty: true,
-          filledLayerNeedsUpload: false,
-          outlineLayer: null,
-          outlineLayerCtx: null,
-          outlineLayerDirty: true,
           labelSettingsSignature: null,
           sceneLoader: null,
         };
@@ -4667,13 +4807,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           cache.regions = [];
           cache.regionsById = new Map();
           cache.sceneLoader = null;
-          cache.filledLayer = null;
-          cache.filledLayerCtx = null;
-          cache.filledLayerDirty = true;
-          cache.filledLayerNeedsUpload = false;
-          cache.outlineLayer = null;
-          cache.outlineLayerCtx = null;
-          cache.outlineLayerDirty = true;
           cache.ready = false;
           cache.labelSettingsSignature = null;
           return cache;
@@ -4696,15 +4829,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             cache.regionsById.set(region.id, geometry);
           }
         }
-        const pixelWidth = Math.max(1, canvasMetrics.pixelWidth || cache.width);
-        const pixelHeight = Math.max(1, canvasMetrics.pixelHeight || cache.height);
-        cache.filledLayer = createLayerCanvas(pixelWidth, pixelHeight);
-        cache.filledLayerCtx = getLayerContext(cache.filledLayer);
-        cache.filledLayerDirty = true;
-        cache.filledLayerNeedsUpload = true;
-        cache.outlineLayer = createLayerCanvas(pixelWidth, pixelHeight);
-        cache.outlineLayerCtx = getLayerContext(cache.outlineLayer);
-        cache.outlineLayerDirty = true;
         cache.ready = true;
         syncCacheMetrics(cache);
         return cache;
@@ -5604,18 +5728,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       rendererController = createRendererController(puzzleCanvas, {
         hooks: {
           log: logRendererEvent,
-          renderFrame: renderPuzzleFrame,
           renderPreview: renderPreviewImage,
+          getRegionLabelProps: ({ region }) => buildRegionLabelProps(region),
           flashRegions: flashRegionsWithContext,
-          fillBackground: fillBackgroundLayer,
-          rebuildFilledLayer: ({ cache }) => rebuildFilledLayer(cache),
-          rasterizeOutlineLayer: ({ cache }) => rasterizeOutlineLayer(cache),
-          drawNumbersLayer: ({ context }) => {
-            if (context) {
-              drawNumbers(context);
-            }
-          },
-          clearContext: ({ context }) => clearContext(context),
           onRendererChange: handleRendererChange,
         },
       });
@@ -9633,13 +9748,50 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         resetPuzzleUI();
         const title = file.name || "Imported image";
         const safeTitle = title.replace(/[^a-z0-9._-]+/gi, "-");
+        const options = getCurrentOptions();
+        const sourceLimit = Number.isFinite(options?.sourceImageMaxBytes)
+          ? options.sourceImageMaxBytes
+          : DEFAULT_SOURCE_IMAGE_MAX_BYTES;
+        const prepared = await prepareSourceImageBlob(file, {
+          maxBytes: sourceLimit,
+          maxSize: options?.maxSize,
+        });
+        if (!prepared) {
+          setProgressMessage("idle");
+          if (confirmImportBtn) {
+            confirmImportBtn.disabled = false;
+          }
+          return;
+        }
+        if (prepared.error === "limit") {
+          const limitLabel = formatBytes(sourceLimit || DEFAULT_SOURCE_IMAGE_MAX_BYTES);
+          setProgressMessage("complete", `Image exceeds the ${limitLabel} source cap.`);
+          if (confirmImportBtn) {
+            confirmImportBtn.disabled = false;
+          }
+          return;
+        }
+        const sourceBlob = prepared.blob || file;
+        const sourceBytes = Number.isFinite(prepared.bytes)
+          ? prepared.bytes
+          : typeof sourceBlob.size === "number"
+            ? sourceBlob.size
+            : null;
+        if (Number.isFinite(sourceLimit) && sourceLimit > 0 && Number.isFinite(sourceBytes) && sourceBytes > sourceLimit) {
+          const limitLabel = formatBytes(sourceLimit);
+          setProgressMessage("complete", `Image exceeds the ${limitLabel} source cap.`);
+          if (confirmImportBtn) {
+            confirmImportBtn.disabled = false;
+          }
+          return;
+        }
         let cacheKey = null;
-        if (file && typeof file.size === "number" && file.size > 0) {
-          cacheKey = await cacheSourceImageBlob(file, {
+        if (sourceBlob && typeof sourceBytes === "number" && sourceBytes > 0) {
+          cacheKey = await cacheSourceImageBlob(sourceBlob, {
             cacheKey: `${SOURCE_IMAGE_CACHE_PREFIX}${Date.now()}-${safeTitle || "local-image"}`,
           });
         }
-        const objectUrl = URL.createObjectURL(file);
+        const objectUrl = URL.createObjectURL(sourceBlob);
         state.sourceUrl = cacheKey ? buildCacheRequest(cacheKey).url : objectUrl;
         state.sourceTitle = title;
         hideStartScreen();
@@ -9647,9 +9799,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         loadImage(objectUrl, {
           cacheKey,
           originalUrl: title,
-          sourceBytes: typeof file.size === "number" ? file.size : null,
-          sourceMimeType: file.type || null,
-          sourceBlob: file,
+          sourceBytes,
+          sourceMimeType: prepared?.mimeType || sourceBlob.type || file.type || null,
+          sourceBlob,
           onSuccess: () => {
             if (cacheKey) {
               state.sourceCacheKey = cacheKey;
@@ -11007,85 +11159,100 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         context.restore();
       }
 
-      function drawNumbers(ctx) {
-        if (!state.puzzle || !ctx) return;
-        if (state.settings.showRegionLabels === false) return;
-        const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
-        const puzzleWidth = state.puzzle?.width || 0;
-        const puzzleHeight = state.puzzle?.height || 0;
-        const regionMap = state.puzzle?.regionMap || null;
-        const hasRegionMap =
-          regionMap && puzzleWidth > 0 && puzzleHeight > 0 && regionMap.length === puzzleWidth * puzzleHeight;
-        withRenderScale(ctx, scale, () => {
-          const fallbackNumberInk = backgroundInk.number;
-          const fallbackOutlineInk = backgroundInk.outline;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.lineJoin = "round";
-          ctx.lineCap = "round";
-          ctx.strokeStyle = fallbackOutlineInk;
-          for (const region of state.puzzle.regions) {
-            if (!region || state.filled.has(region.id)) continue;
-            const text = getRegionLabelText(region);
-            if (!text) continue;
-            let fontSize = computeRegionLabelFontSize(region, text);
-            if (!Number.isFinite(fontSize) || fontSize <= 0) {
-              continue;
-            }
-            let bounds = null;
-            if (puzzleWidth > 0) {
-              bounds = ensureRegionBounds(region, puzzleWidth);
-            }
-            let metrics = measureLabelMetrics(text, fontSize);
-            let center = null;
-            if (metrics && hasRegionMap) {
-              center = findRegionLabelAnchor(
-                region,
-                metrics.halfWidth,
-                metrics.halfHeight,
-                bounds,
-                puzzleWidth,
-                puzzleHeight,
-                regionMap
-              );
-              let attempts = 0;
-              while (!center && attempts < 5 && fontSize > 0.5) {
-                attempts += 1;
-                fontSize = Math.max(fontSize * 0.85, fontSize - 0.75);
-                metrics = measureLabelMetrics(text, fontSize);
-                if (!metrics) {
-                  break;
-                }
-                center = findRegionLabelAnchor(
-                  region,
-                  metrics.halfWidth,
-                  metrics.halfHeight,
-                  bounds,
-                  puzzleWidth,
-                  puzzleHeight,
-                  regionMap
-                );
-              }
-            }
-            if (!center) {
-              center = getRegionCenter(region);
-              metrics = metrics || measureLabelMetrics(text, fontSize);
-            }
-            if (!center || !metrics) continue;
-            const paletteColor = getPaletteEntry(region.colorId);
-            const regionInk =
-              paletteColor?.hex && typeof paletteColor.hex === "string"
-                ? rgbaFromHex(paletteColor.hex, 1)
-                : fallbackNumberInk;
-            const strokeWidth = computeRegionLabelStrokeWidth(fontSize);
-            ctx.fillStyle = regionInk;
-            ctx.font = `${fontSize}px "Inter", "Segoe UI", sans-serif`;
-            ctx.lineWidth = strokeWidth;
-            ctx.strokeText(text, center.x, center.y);
-            ctx.fillText(text, center.x, center.y);
-          }
-        });
+    function buildRegionLabelProps(region) {
+      if (!state.puzzle || !region) return null;
+      if (state.settings.showRegionLabels === false) return null;
+      if (state.filled.has(region.id)) return null;
+      const text = getRegionLabelText(region);
+      if (!text) return null;
+      let fontSize = computeRegionLabelFontSize(region, text);
+      if (!Number.isFinite(fontSize) || fontSize <= 0) {
+        return null;
       }
+      const puzzleWidth = state.puzzle?.width || 0;
+      const puzzleHeight = state.puzzle?.height || 0;
+      const regionMap = state.puzzle?.regionMap || null;
+      const hasRegionMap =
+        regionMap && puzzleWidth > 0 && puzzleHeight > 0 && regionMap.length === puzzleWidth * puzzleHeight;
+      let bounds = null;
+      if (puzzleWidth > 0) {
+        bounds = ensureRegionBounds(region, puzzleWidth);
+      }
+      let metrics = measureLabelMetrics(text, fontSize);
+      let center = null;
+      if (metrics && hasRegionMap) {
+        center = findRegionLabelAnchor(
+          region,
+          metrics.halfWidth,
+          metrics.halfHeight,
+          bounds,
+          puzzleWidth,
+          puzzleHeight,
+          regionMap
+        );
+        let attempts = 0;
+        while (!center && attempts < 5 && fontSize > 0.5) {
+          attempts += 1;
+          fontSize = Math.max(fontSize * 0.85, fontSize - 0.75);
+          metrics = measureLabelMetrics(text, fontSize);
+          if (!metrics) {
+            break;
+          }
+          center = findRegionLabelAnchor(
+            region,
+            metrics.halfWidth,
+            metrics.halfHeight,
+            bounds,
+            puzzleWidth,
+            puzzleHeight,
+            regionMap
+          );
+        }
+      }
+      if (!center) {
+        center = getRegionCenter(region);
+        metrics = metrics || measureLabelMetrics(text, fontSize);
+      }
+      if (!center || !metrics) return null;
+      const paletteColor = getPaletteEntry(region.colorId);
+      const regionInk =
+        paletteColor?.hex && typeof paletteColor.hex === "string"
+          ? rgbaFromHex(paletteColor.hex, 1)
+          : backgroundInk.number;
+      const strokeWidth = computeRegionLabelStrokeWidth(fontSize);
+      return {
+        text,
+        x: center.x,
+        y: center.y,
+        fontSize,
+        strokeWidth,
+        fill: regionInk,
+        stroke: backgroundInk.outline,
+        fontFamily: '"Inter", "Segoe UI", sans-serif',
+      };
+    }
+
+    function drawNumbers(ctx) {
+      if (!state.puzzle || !ctx) return;
+      if (state.settings.showRegionLabels === false) return;
+      const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+      withRenderScale(ctx, scale, () => {
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        for (const region of state.puzzle.regions) {
+          const props = buildRegionLabelProps(region);
+          if (!props) continue;
+          ctx.fillStyle = props.fill || backgroundInk.number;
+          ctx.strokeStyle = props.stroke || backgroundInk.outline;
+          ctx.font = `${props.fontSize}px ${props.fontFamily}`;
+          ctx.lineWidth = props.strokeWidth;
+          ctx.strokeText(props.text, props.x, props.y);
+          ctx.fillText(props.text, props.x, props.y);
+        }
+      });
+    }
 
       function computeLabelSettingsSignature() {
         const settings = state?.settings || {};
@@ -14101,55 +14268,13 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         renderer.flashRegions({ state, cache, regions, fillStyle, metrics: { ...canvasMetrics } });
       }
 
-      function flashRegionsWithContext({ context, state, cache, regions, fillStyle }) {
-        if (!context || !state?.puzzle || !Array.isArray(regions) || regions.length === 0) {
+      function flashRegionsWithContext({ state, cache, regions, fillStyle }) {
+        if (!state?.puzzle || !Array.isArray(regions) || regions.length === 0) {
           return;
         }
-        const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
-        const strokeWidth = cache?.strokeWidth > 0 ? cache.strokeWidth : 1;
-        const resolveGeometry = (regionId) => {
-          const cached = cache?.regionsById?.get(regionId);
-          if (cached) {
-            return cached;
-          }
-          if (cache?.sceneLoader) {
-            return cache.sceneLoader.getRegion(regionId);
-          }
-          return null;
-        };
-        withRenderScale(context, scale, () => {
-          context.fillStyle = fillStyle;
-          context.strokeStyle = fillStyle;
-          context.lineWidth = strokeWidth;
-          context.lineJoin = "round";
-          context.lineCap = "round";
-          if (SUPPORTS_PATH2D) {
-            for (const region of regions) {
-              const geometry = resolveGeometry(region.id);
-              if (!geometry?.path) continue;
-              context.fill(geometry.path);
-              context.stroke(geometry.path);
-            }
-            return;
-          }
-          for (const region of regions) {
-            const geometry = resolveGeometry(region.id);
-            if (!geometry?.contours) continue;
-            context.beginPath();
-            for (const contour of geometry.contours) {
-              if (contour.length === 0) continue;
-              const first = contour[0];
-              context.moveTo(first[0], first[1]);
-              for (let i = 1; i < contour.length; i++) {
-                const point = contour[i];
-                context.lineTo(point[0], point[1]);
-              }
-              context.closePath();
-            }
-            context.fill();
-            context.stroke();
-          }
-        });
+        const renderer = state.rendering?.renderer;
+        if (!renderer) return;
+        renderer.flashRegions({ state, cache, regions, fillStyle, metrics: { ...canvasMetrics } });
       }
 
       function flashPaletteSwatch(colorId, options = {}) {
