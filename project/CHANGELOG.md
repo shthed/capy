@@ -1,5 +1,10 @@
 # Change Log
 
+## 2025-12-05
+- Added a vector-scene-aware preview fallback so samples without embedded pixel lists still render previews from the region map.
+- Rebuilt the bundled Three Bands fixture with per-region pixel lists and vector scene metadata for SVG smoke checks.
+- Updated docs to describe the new sample puzzle and vector scene support.
+
 ## 2025-11-28
 - Paused offline support by disabling service worker registration, unregistering any existing workers, and clearing the runtime cache on load.
 
