@@ -3882,6 +3882,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
+      const DEFAULT_REGION_MERGE_PASSES = 12;
+      const DEFAULT_MAX_PERIMETER_TO_AREA_RATIO = 1.6;
       const VALID_GENERATION_ALGORITHMS = new Set([
         "local-kmeans",
         "local-posterize",
