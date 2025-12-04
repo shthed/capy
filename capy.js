@@ -10611,6 +10611,11 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       function renderPreviewImage({ state, previewCanvas, previewCtx }) {
         if (!state?.puzzle) return null;
         const { width, height, regions, palette } = state.puzzle;
+        const paletteById = new Map();
+        for (const entry of Array.isArray(palette) ? palette : []) {
+          if (!entry || !Number.isFinite(entry.id)) continue;
+          paletteById.set(entry.id, entry);
+        }
         if (previewCanvas) {
           previewCanvas.width = width;
           previewCanvas.height = height;
@@ -10649,11 +10654,10 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           };
         })();
         for (const region of regions) {
-          const color = palette[region.colorId - 1];
-          if (!color) continue;
-          const rgba = color.rgba;
+          const color = paletteById.get(region.colorId);
+          const rgba = Array.isArray(color?.rgba) ? color.rgba : null;
           const pixels = resolveRegionPixels(region);
-          if (!pixels.length) continue;
+          if (!rgba || !pixels.length) continue;
           for (const idx of pixels) {
             const base = idx * 4;
             data[base] = rgba[0];
