@@ -13,6 +13,7 @@ const OFFLINE_ASSETS = [
   './styles.css',
   './capy.js',
   './capy.json',
+  './capy.png',
   './service-worker-cache.js',
   './README/',
 ];
