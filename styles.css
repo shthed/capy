@@ -1321,11 +1321,24 @@ body[data-theme="light"] .control textarea:focus {
 .sheet {
   --sheet-translate-x: -50%;
   --sheet-translate-y: -50%;
+  --sheet-max-width: min(820px, calc(100vw - 48px));
+  --sheet-max-height: min(760px, calc(100vh - 120px));
+  --sheet-viewport-gap: var(--settings-sheet-viewport-gap, 24px);
+  --sheet-width: min(
+    var(--settings-sheet-width, var(--sheet-max-width)),
+    calc(100vw - var(--sheet-viewport-gap) * 2)
+  );
+  --sheet-height: min(
+    var(--settings-sheet-height, var(--sheet-max-height)),
+    calc(100vh - var(--sheet-viewport-gap) * 2)
+  );
   position: fixed;
   left: 50%;
   top: 50%;
-  width: min(820px, calc(100vw - 48px));
-  height: min(760px, calc(100vh - 120px));
+  width: var(--sheet-width);
+  height: var(--sheet-height);
+  max-width: calc(100vw - var(--sheet-viewport-gap) * 2);
+  max-height: calc(100vh - var(--sheet-viewport-gap) * 2);
   padding: calc(14px * var(--ui-scale));
   display: flex;
   flex-direction: column;
