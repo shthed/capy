@@ -60,6 +60,7 @@ in-memory URLs instead of Cache Storage while this pause is in effect.
 ## Project Health Snapshot
 
 - **Zero-build runtime.** The app still ships as plain HTML/JS/CSS and must remain directly loadable without bundling. Optimisations should respect this constraint and avoid minified dependency drops.
+  - **Binary hygiene.** Do not generate or commit binary assets (for example, screenshots or rendered previews) directly into the repository. Capture UI evidence as external PR artifacts instead so the runtime stays text-only and diffs remain lightweight.
   - **Cache hygiene.** Offline caching is paused; when re-enabled the service worker (`service-worker.js`) will continue to cap Cache Storage at roughly 25 MB or 80 entries with LRU eviction and skip uploads larger than ~6 MB. Keep those limits in mind before introducing larger assets or new fetch endpoints so storage stays within budget once the cache returns.
   - **Module registration.** The service worker registers as an ES module so `service-worker-cache.js` can load without MIME-type errors on GitHub Pages; stick to module-friendly helpers when adjusting its imports.
   - **Automation coverage.** The shared Node + Playwright harness remains the expected entry point (`npm test --silent`), but CI currently only validates installs. Manual smoke checks stay required until the hosted automation suite returns.
