@@ -77,6 +77,70 @@ export function createVectorScenePayload({ width, height, regions }) {
   };
 }
 
+export function createVectorSceneLoader(vectorScene) {
+  const metadata = vectorScene?.metadata || vectorScene?.json || vectorScene;
+  if (!metadata || metadata.format !== "capy.scene+simple" || metadata.version !== 1) {
+    return null;
+  }
+  const width = Number(metadata.width);
+  const height = Number(metadata.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return null;
+  }
+  const maxZoom = Number.isFinite(metadata.maxZoom) && metadata.maxZoom >= 0 ? metadata.maxZoom : 0;
+  const regions = [];
+  const regionsById = new Map();
+  const supportsPath2D = typeof Path2D === "function";
+
+  const regionEntries = Array.isArray(metadata.regions) ? metadata.regions : [];
+  for (let index = 0; index < regionEntries.length; index += 1) {
+    const region = regionEntries[index];
+    if (!region) continue;
+    const id = Number.isFinite(region.id) ? region.id : index;
+    const colorId = Number.isFinite(region.colorId) ? region.colorId : null;
+    const pathData = typeof region.pathData === "string" ? region.pathData.trim() : "";
+    if (!pathData) continue;
+    const geometry = { id, colorId, pathData };
+    if (supportsPath2D) {
+      try {
+        geometry.path = new Path2D(pathData);
+      } catch (_error) {
+        // Ignore malformed paths and fall back to pathData only.
+      }
+    }
+    regions.push(geometry);
+    regionsById.set(id, geometry);
+  }
+
+  const listeners = new Set();
+  const subscribe = (listener) => {
+    if (typeof listener !== "function") return () => {};
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+
+  const notify = () => {
+    listeners.forEach((listener) => {
+      try {
+        listener({ visible: true });
+      } catch (_error) {
+        // Swallow listener errors.
+      }
+    });
+  };
+
+  return {
+    type: "vector-scene-simple",
+    width,
+    height,
+    maxZoom,
+    getVisibleRegions: () => regions,
+    getRegion: (id) => regionsById.get(id) || null,
+    onUpdate: subscribe,
+    notify,
+  };
+}
+
 export function createSvgRenderer(host, hooks = {}) {
   if (!host || typeof document === "undefined") return null;
   const NS = "http://www.w3.org/2000/svg";
@@ -195,6 +259,7 @@ const rendererExports = {
   buildPathData,
   formatNumber,
   createVectorScenePayload,
+  createVectorSceneLoader,
 };
 
 const globalTarget = typeof globalThis === "object" ? globalThis : null;

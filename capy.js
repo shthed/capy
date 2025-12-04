@@ -581,6 +581,70 @@
     };
   }
 
+  function createVectorSceneLoader(vectorScene) {
+    const metadata = vectorScene?.metadata || vectorScene?.json || vectorScene;
+    if (!metadata || metadata.format !== "capy.scene+simple" || metadata.version !== 1) {
+      return null;
+    }
+    const width = Number(metadata.width);
+    const height = Number(metadata.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+      return null;
+    }
+    const maxZoom = Number.isFinite(metadata.maxZoom) && metadata.maxZoom >= 0 ? metadata.maxZoom : 0;
+    const regions = [];
+    const regionsById = new Map();
+    const supportsPath2D = typeof Path2D === "function";
+
+    const regionEntries = Array.isArray(metadata.regions) ? metadata.regions : [];
+    for (let index = 0; index < regionEntries.length; index += 1) {
+      const region = regionEntries[index];
+      if (!region) continue;
+      const id = Number.isFinite(region.id) ? region.id : index;
+      const colorId = Number.isFinite(region.colorId) ? region.colorId : null;
+      const pathData = typeof region.pathData === "string" ? region.pathData.trim() : "";
+      if (!pathData) continue;
+      const geometry = { id, colorId, pathData };
+      if (supportsPath2D) {
+        try {
+          geometry.path = new Path2D(pathData);
+        } catch (_error) {
+          // Ignore malformed paths and fall back to pathData only.
+        }
+      }
+      regions.push(geometry);
+      regionsById.set(id, geometry);
+    }
+
+    const listeners = new Set();
+    const subscribe = (listener) => {
+      if (typeof listener !== "function") return () => {};
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    };
+
+    const notify = () => {
+      listeners.forEach((listener) => {
+        try {
+          listener({ visible: true });
+        } catch (_error) {
+          // Swallow listener errors.
+        }
+      });
+    };
+
+    return {
+      type: "vector-scene-simple",
+      width,
+      height,
+      maxZoom,
+      getVisibleRegions: () => regions,
+      getRegion: (id) => regionsById.get(id) || null,
+      onUpdate: subscribe,
+      notify,
+    };
+  }
+
   function createSvgRenderer(host, hooks = {}) {
     if (!host || typeof document === "undefined") {
       const stub = {
@@ -704,7 +768,14 @@
     };
   }
 
-  const capyRender = { createSvgRenderer, computeInkStyles, buildPathData, formatNumber, createVectorScenePayload };
+  const capyRender = {
+    createSvgRenderer,
+    computeInkStyles,
+    buildPathData,
+    formatNumber,
+    createVectorScenePayload,
+    createVectorSceneLoader,
+  };
   globalThis.capyRenderer = Object.assign(globalThis.capyRenderer || {}, capyRender);
 })();
 
@@ -987,7 +1058,7 @@
 
 (() => {
 
-  const { createVectorScenePayload } = globalThis.capyRenderer || {};
+  const { createVectorScenePayload, createVectorSceneLoader } = globalThis.capyRenderer || {};
   if (typeof createVectorScenePayload !== "function") {
     return;
   }
@@ -10359,17 +10430,28 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             DEFAULT_STAGE_BACKGROUND_HEX,
           state.settings.stageBackgroundColor ?? DEFAULT_STAGE_BACKGROUND_HEX
         );
+        const vectorSceneSnapshot = normalizeVectorSceneSnapshot(metadata.vectorScene ?? data.vectorScene);
+        let sceneLoader = null;
+        if (vectorSceneSnapshot && typeof createVectorSceneLoader === "function") {
+          const buffer = resolveVectorSceneBinaryBuffer(vectorSceneSnapshot.binary);
+          sceneLoader = createVectorSceneLoader({
+            metadata: vectorSceneSnapshot.metadata,
+            binary: buffer ?? vectorSceneSnapshot.binary ?? null,
+          });
+        }
+
         const puzzle = {
           width: data.width,
           height: data.height,
           palette,
           regions,
           regionMap,
+          vectorScene: vectorSceneSnapshot || null,
+          sceneLoader: sceneLoader || null,
         };
         if (paletteMetadata) {
           puzzle.paletteMetadata = paletteMetadata;
         }
-        puzzle.sceneLoader = null; 
         state.puzzle = puzzle;
         state.paletteMetadata = paletteMetadata || null;
         state.paletteAdjacency = buildPaletteAdjacency(palette);
