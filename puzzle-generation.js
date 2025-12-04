@@ -1101,11 +1101,11 @@ export async function createPuzzleData(image, options = {}, hooks = {}) {
   }
 
   const {
-    targetColors = 16,
-    minRegion = 1,
-    maxSize = Math.max(image.width, image.height),
-    sampleRate = 1,
-    kmeansIters = 1,
+    targetColors = 12,
+    minRegion = 60,
+    maxSize = 640,
+    sampleRate = 0.5,
+    kmeansIters = 12,
     smoothingPasses = 0,
     algorithm = DEFAULT_GENERATION_ALGORITHM,
     sourceImageMaxBytes = DEFAULT_SOURCE_IMAGE_MAX_BYTES,
