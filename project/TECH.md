@@ -347,17 +347,17 @@ Capy’s developer API exposes a minimal surface for automation, QA smoke tests,
 
 ## Puzzle JSON Format
 
-The bundled `capy.json` now ships only the puzzle payload for the Capybara Springs sample; progress, viewport, and generator options live exclusively in saves. The fixture uses the `capy-puzzle@2` schema with these fields:
+The bundled `capy.json` ships only the puzzle payload for the Capybara Springs sample; progress, viewport, and generator options live exclusively in saves. The fixture uses the `capy-puzzle@2` schema with these fields:
 
 - `format` – Schema version (`capy-puzzle@2`).
 - `title` – Friendly puzzle label.
 - `width` / `height` – Canvas dimensions in pixels.
 - `palette` – Colour entries with `id`, `hex`, `rgba`, and display `name`.
 - `regions` – Metadata for each region (`id`, `colorId`, centroid, `pixelCount`).
-- `regionMap` – Flat little-endian array of region ids, one per pixel (`width * height` entries). Legacy imports may provide `regionMapPacked`/`m` Base64 blobs; loaders still decode them, but fixtures now keep the raw map for readability.
+- `regionMapPacked` – Base64-encoded little-endian `Int32Array` of region ids per pixel (`width * height` entries). Loaders also accept a raw `regionMap` array for backwards compatibility and exports, but the default fixture stays packed to keep the file compact.
 - `sourceImage` – Snapshot of the original artwork (URL/data URL plus `width`, `height`, `originalWidth`, `originalHeight`, `scale`, `bytes`, and MIME type). The default puzzle points at the bundled `./capy.png` so previews mirror the reference painting.
 
-Puzzle payloads stay human-readable (no binary packing) even when the region map inflates the JSON size; saves continue to load old packed blobs, but new exports omit them.
+Packing the default region map keeps the fixture small while preserving compatibility with earlier human-readable exports and legacy `m` blobs.
 
 ### Save storage schema
 
