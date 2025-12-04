@@ -376,8 +376,8 @@
             "label": "Colours",
             "min": 4,
             "max": 64,
-            "value": 16,
-            "default": 16,
+            "value": 12,
+            "default": 12,
             "format": "integer"
           },
           {
@@ -386,11 +386,11 @@
             "label": "Regions",
             "min": 1,
             "max": 600,
-            "value": 80,
-            "default": 80,
+            "value": 60,
+            "default": 60,
             "format": "px2"
           },
-          { "type": "note", "text": "Higher values merge smaller areas for fewer regions. Default 80 px²." },
+          { "type": "note", "text": "Higher values merge smaller areas for fewer regions. Default 60 px²." },
           {
             "type": "range",
             "id": "detailLevel",
@@ -398,11 +398,11 @@
             "min": 256,
             "max": 1600,
             "step": 64,
-            "value": 768,
-            "default": 768,
+            "value": 640,
+            "default": 640,
             "format": "px"
           },
-          { "type": "note", "text": "Controls the longest edge used when resizing the source image. Default 768 px." },
+          { "type": "note", "text": "Controls the longest edge used when resizing the source image. Default 640 px." },
           {
             "type": "select",
             "id": "generationAlgorithm",
@@ -421,11 +421,11 @@
             "min": 25,
             "max": 100,
             "step": 5,
-            "value": 65,
-            "default": 65,
+            "value": 50,
+            "default": 50,
             "format": "percent"
           },
-          { "type": "note", "text": "Lower values speed up clustering by sampling fewer pixels. Default 65%." },
+          { "type": "note", "text": "Lower values speed up clustering by sampling fewer pixels. Default 50%." },
           {
             "type": "range",
             "id": "kmeansIters",
@@ -448,13 +448,13 @@
             "min": 0,
             "max": 4,
             "step": 1,
-            "value": 1,
-            "default": 1,
+            "value": 0,
+            "default": 0,
             "format": "integer"
           },
           {
             "type": "note",
-            "text": "Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source. Default 1 pass."
+            "text": "Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source. Default 0 passes."
           },
           {
             "type": "details",
