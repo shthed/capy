@@ -4427,13 +4427,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           ready: false,
           regions: [],
           regionsById: new Map(),
-          filledLayer: null,
-          filledLayerCtx: null,
-          filledLayerDirty: true,
-          filledLayerNeedsUpload: false,
-          outlineLayer: null,
-          outlineLayerCtx: null,
-          outlineLayerDirty: true,
           labelSettingsSignature: null,
           sceneLoader: null,
         };
@@ -4579,13 +4572,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           cache.regions = [];
           cache.regionsById = new Map();
           cache.sceneLoader = null;
-          cache.filledLayer = null;
-          cache.filledLayerCtx = null;
-          cache.filledLayerDirty = true;
-          cache.filledLayerNeedsUpload = false;
-          cache.outlineLayer = null;
-          cache.outlineLayerCtx = null;
-          cache.outlineLayerDirty = true;
           cache.ready = false;
           cache.labelSettingsSignature = null;
           return cache;
@@ -4608,15 +4594,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             cache.regionsById.set(region.id, geometry);
           }
         }
-        const pixelWidth = Math.max(1, canvasMetrics.pixelWidth || cache.width);
-        const pixelHeight = Math.max(1, canvasMetrics.pixelHeight || cache.height);
-        cache.filledLayer = createLayerCanvas(pixelWidth, pixelHeight);
-        cache.filledLayerCtx = getLayerContext(cache.filledLayer);
-        cache.filledLayerDirty = true;
-        cache.filledLayerNeedsUpload = true;
-        cache.outlineLayer = createLayerCanvas(pixelWidth, pixelHeight);
-        cache.outlineLayerCtx = getLayerContext(cache.outlineLayer);
-        cache.outlineLayerDirty = true;
         cache.ready = true;
         syncCacheMetrics(cache);
         return cache;
@@ -5516,18 +5493,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       rendererController = createRendererController(puzzleCanvas, {
         hooks: {
           log: logRendererEvent,
-          renderFrame: renderPuzzleFrame,
           renderPreview: renderPreviewImage,
+          getRegionLabelProps: ({ region }) => buildRegionLabelProps(region),
           flashRegions: flashRegionsWithContext,
-          fillBackground: fillBackgroundLayer,
-          rebuildFilledLayer: ({ cache }) => rebuildFilledLayer(cache),
-          rasterizeOutlineLayer: ({ cache }) => rasterizeOutlineLayer(cache),
-          drawNumbersLayer: ({ context }) => {
-            if (context) {
-              drawNumbers(context);
-            }
-          },
-          clearContext: ({ context }) => clearContext(context),
           onRendererChange: handleRendererChange,
         },
       });
@@ -13960,55 +13928,13 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         renderer.flashRegions({ state, cache, regions, fillStyle, metrics: { ...canvasMetrics } });
       }
 
-      function flashRegionsWithContext({ context, state, cache, regions, fillStyle }) {
-        if (!context || !state?.puzzle || !Array.isArray(regions) || regions.length === 0) {
+      function flashRegionsWithContext({ state, cache, regions, fillStyle }) {
+        if (!state?.puzzle || !Array.isArray(regions) || regions.length === 0) {
           return;
         }
-        const scale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
-        const strokeWidth = cache?.strokeWidth > 0 ? cache.strokeWidth : 1;
-        const resolveGeometry = (regionId) => {
-          const cached = cache?.regionsById?.get(regionId);
-          if (cached) {
-            return cached;
-          }
-          if (cache?.sceneLoader) {
-            return cache.sceneLoader.getRegion(regionId);
-          }
-          return null;
-        };
-        withRenderScale(context, scale, () => {
-          context.fillStyle = fillStyle;
-          context.strokeStyle = fillStyle;
-          context.lineWidth = strokeWidth;
-          context.lineJoin = "round";
-          context.lineCap = "round";
-          if (SUPPORTS_PATH2D) {
-            for (const region of regions) {
-              const geometry = resolveGeometry(region.id);
-              if (!geometry?.path) continue;
-              context.fill(geometry.path);
-              context.stroke(geometry.path);
-            }
-            return;
-          }
-          for (const region of regions) {
-            const geometry = resolveGeometry(region.id);
-            if (!geometry?.contours) continue;
-            context.beginPath();
-            for (const contour of geometry.contours) {
-              if (contour.length === 0) continue;
-              const first = contour[0];
-              context.moveTo(first[0], first[1]);
-              for (let i = 1; i < contour.length; i++) {
-                const point = contour[i];
-                context.lineTo(point[0], point[1]);
-              }
-              context.closePath();
-            }
-            context.fill();
-            context.stroke();
-          }
-        });
+        const renderer = state.rendering?.renderer;
+        if (!renderer) return;
+        renderer.flashRegions({ state, cache, regions, fillStyle, metrics: { ...canvasMetrics } });
       }
 
       function flashPaletteSwatch(colorId, options = {}) {
