@@ -7285,13 +7285,50 @@
         resetPuzzleUI();
         const title = file.name || "Imported image";
         const safeTitle = title.replace(/[^a-z0-9._-]+/gi, "-");
+        const options = getCurrentOptions();
+        const sourceLimit = Number.isFinite(options?.sourceImageMaxBytes)
+          ? options.sourceImageMaxBytes
+          : DEFAULT_SOURCE_IMAGE_MAX_BYTES;
+        const prepared = await prepareSourceImageBlob(file, {
+          maxBytes: sourceLimit,
+          maxSize: options?.maxSize,
+        });
+        if (!prepared) {
+          setProgressMessage("idle");
+          if (confirmImportBtn) {
+            confirmImportBtn.disabled = false;
+          }
+          return;
+        }
+        if (prepared.error === "limit") {
+          const limitLabel = formatBytes(sourceLimit || DEFAULT_SOURCE_IMAGE_MAX_BYTES);
+          setProgressMessage("complete", `Image exceeds the ${limitLabel} source cap.`);
+          if (confirmImportBtn) {
+            confirmImportBtn.disabled = false;
+          }
+          return;
+        }
+        const sourceBlob = prepared.blob || file;
+        const sourceBytes = Number.isFinite(prepared.bytes)
+          ? prepared.bytes
+          : typeof sourceBlob.size === "number"
+            ? sourceBlob.size
+            : null;
+        if (Number.isFinite(sourceLimit) && sourceLimit > 0 && Number.isFinite(sourceBytes) && sourceBytes > sourceLimit) {
+          const limitLabel = formatBytes(sourceLimit);
+          setProgressMessage("complete", `Image exceeds the ${limitLabel} source cap.`);
+          if (confirmImportBtn) {
+            confirmImportBtn.disabled = false;
+          }
+          return;
+        }
         let cacheKey = null;
-        if (file && typeof file.size === "number" && file.size > 0) {
-          cacheKey = await cacheSourceImageBlob(file, {
+        if (sourceBlob && typeof sourceBytes === "number" && sourceBytes > 0) {
+          cacheKey = await cacheSourceImageBlob(sourceBlob, {
             cacheKey: `${SOURCE_IMAGE_CACHE_PREFIX}${Date.now()}-${safeTitle || "local-image"}`,
           });
         }
-        const objectUrl = URL.createObjectURL(file);
+        const objectUrl = URL.createObjectURL(sourceBlob);
         state.sourceUrl = cacheKey ? buildCacheRequest(cacheKey).url : objectUrl;
         state.sourceTitle = title;
         hideStartScreen();
@@ -7299,9 +7336,9 @@
         loadImage(objectUrl, {
           cacheKey,
           originalUrl: title,
-          sourceBytes: typeof file.size === "number" ? file.size : null,
-          sourceMimeType: file.type || null,
-          sourceBlob: file,
+          sourceBytes,
+          sourceMimeType: prepared?.mimeType || sourceBlob.type || file.type || null,
+          sourceBlob,
           onSuccess: () => {
             if (cacheKey) {
               state.sourceCacheKey = cacheKey;
@@ -7760,6 +7797,251 @@
           }
         }
         return [];
+      }
+
+      function canvasToBlob(canvas, type, quality = 0.92) {
+        if (!canvas || typeof canvas.toBlob !== "function") {
+          return Promise.resolve(null);
+        }
+        return new Promise((resolve, reject) => {
+          try {
+            canvas.toBlob(
+              (blob) => {
+                resolve(blob);
+              },
+              type,
+              quality
+            );
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }
+
+      function blobToDataUrl(blob) {
+        if (!blob) {
+          return Promise.resolve(null);
+        }
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            resolve(typeof reader.result === "string" ? reader.result : null);
+          };
+          reader.onerror = () => {
+            reject(reader.error || new Error("Failed to read blob"));
+          };
+          try {
+            reader.readAsDataURL(blob);
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }
+
+      function resizeCanvas(sourceCanvas, scale) {
+        if (!sourceCanvas || !Number.isFinite(scale) || scale <= 0) {
+          return sourceCanvas;
+        }
+        if (scale === 1) {
+          return sourceCanvas;
+        }
+        const width = Math.max(1, Math.round(sourceCanvas.width * scale));
+        const height = Math.max(1, Math.round(sourceCanvas.height * scale));
+        if (width === sourceCanvas.width && height === sourceCanvas.height) {
+          return sourceCanvas;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          return sourceCanvas;
+        }
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(sourceCanvas, 0, 0, width, height);
+        return canvas;
+      }
+
+      async function compressCanvasImage(canvas, options = {}) {
+        if (!canvas) {
+          return null;
+        }
+        const maxBytes = Number.isFinite(options.maxBytes) && options.maxBytes > 0 ? options.maxBytes : null;
+        const qualityLevels = maxBytes
+          ? [0.92, 0.82, 0.72, 0.62, 0.52, 0.42, 0.32, 0.25, 0.18, 0.1]
+          : [0.92];
+        const scaleLevels = maxBytes ? [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4] : [1];
+        const formats = ["image/png", "image/webp", "image/jpeg"];
+        let best = null;
+        for (const scale of scaleLevels) {
+          const workingCanvas = scale === 1 ? canvas : resizeCanvas(canvas, scale);
+          if (!workingCanvas) {
+            continue;
+          }
+          for (const type of formats) {
+            for (const quality of qualityLevels) {
+              let dataUrl = null;
+              let blob = null;
+              try {
+                blob = await canvasToBlob(workingCanvas, type, quality);
+              } catch (error) {
+                blob = null;
+              }
+              if (blob) {
+                try {
+                  dataUrl = await blobToDataUrl(blob);
+                } catch (error) {
+                  dataUrl = null;
+                }
+              }
+              if (!dataUrl) {
+                try {
+                  dataUrl = workingCanvas.toDataURL(type, quality);
+                } catch (error) {
+                  dataUrl = null;
+                }
+              }
+              if (!dataUrl) {
+                continue;
+              }
+              const mimeType = blob?.type || (/^data:([^;,]+)[;,]/.exec(dataUrl)?.[1] || type);
+              const bytes = blob?.size ?? estimateDataUrlBytes(dataUrl);
+              const candidate = {
+                dataUrl,
+                mimeType: mimeType || type,
+                bytes: Number.isFinite(bytes) ? bytes : null,
+                width: workingCanvas.width,
+                height: workingCanvas.height,
+                scale,
+              };
+              if (!maxBytes) {
+                const candidateBytes = candidate.bytes;
+                const bestBytes = best?.bytes;
+                const candidateBeatsBest =
+                  candidateBytes != null && (bestBytes == null || candidateBytes > bestBytes);
+                if (!best || candidateBeatsBest) {
+                  best = candidate;
+                }
+                continue;
+              }
+              if (
+                !best ||
+                (candidate.bytes != null && (best.bytes == null || candidate.bytes < best.bytes))
+              ) {
+                best = candidate;
+              }
+              if (candidate.bytes != null && candidate.bytes <= maxBytes) {
+                return candidate;
+              }
+            }
+          }
+        }
+        return best;
+      }
+
+      async function readImageFromBlob(blob) {
+        if (!(blob instanceof Blob)) {
+          return null;
+        }
+        const objectUrl = URL.createObjectURL(blob);
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve({
+              image: img,
+              width: img.naturalWidth || img.width,
+              height: img.naturalHeight || img.height,
+            });
+          };
+          img.onerror = (error) => {
+            URL.revokeObjectURL(objectUrl);
+            reject(error instanceof Error ? error : new Error("Unable to read source image"));
+          };
+          img.src = objectUrl;
+        });
+      }
+
+      async function dataUrlToBlob(dataUrl, fallbackType = "image/png") {
+        if (typeof dataUrl !== "string" || !dataUrl) {
+          return null;
+        }
+        try {
+          const response = await fetch(dataUrl);
+          if (!response || !response.ok) {
+            return null;
+          }
+          const blob = await response.blob();
+          if (blob && blob.type) {
+            return blob;
+          }
+          const buffer = await response.arrayBuffer();
+          return new Blob([buffer], { type: fallbackType });
+        } catch (error) {
+          return null;
+        }
+      }
+
+      async function prepareSourceImageBlob(blob, options = {}) {
+        if (!(blob instanceof Blob)) {
+          return null;
+        }
+        const maxBytes = Number.isFinite(options.maxBytes) && options.maxBytes > 0 ? options.maxBytes : null;
+        const maxSize = Number.isFinite(options.maxSize) && options.maxSize > 0 ? options.maxSize : null;
+        const baseBytes = typeof blob.size === "number" && blob.size > 0 ? blob.size : null;
+        const needsSizeCheck = maxBytes != null && baseBytes != null && baseBytes > maxBytes;
+        if (!needsSizeCheck && !maxSize) {
+          return {
+            blob,
+            bytes: baseBytes,
+            mimeType: blob.type || null,
+            width: null,
+            height: null,
+          };
+        }
+        const imagePayload = await readImageFromBlob(blob);
+        if (!imagePayload || !imagePayload.image) {
+          return null;
+        }
+        const sourceWidth = imagePayload.width || imagePayload.image.width || 0;
+        const sourceHeight = imagePayload.height || imagePayload.image.height || 0;
+        const scale = maxSize
+          ? Math.min(maxSize / sourceWidth, maxSize / sourceHeight, 1)
+          : 1;
+        const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+        const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) {
+          return null;
+        }
+        ctx.drawImage(imagePayload.image, 0, 0, targetWidth, targetHeight);
+        const compressed = await compressCanvasImage(canvas, { maxBytes: maxBytes || undefined });
+        if (!compressed || !compressed.dataUrl) {
+          return null;
+        }
+        if (maxBytes && compressed.bytes != null && compressed.bytes > maxBytes) {
+          return { error: "limit" };
+        }
+        const processedBlob = await dataUrlToBlob(compressed.dataUrl, compressed.mimeType || blob.type);
+        if (!processedBlob) {
+          return null;
+        }
+        const processedBytes =
+          Number.isFinite(compressed.bytes) && compressed.bytes > 0
+            ? compressed.bytes
+            : typeof processedBlob.size === "number"
+              ? processedBlob.size
+              : null;
+        return {
+          blob: processedBlob,
+          bytes: processedBytes,
+          mimeType: processedBlob.type || compressed.mimeType || blob.type || null,
+          width: compressed.width,
+          height: compressed.height,
+        };
       }
 
       function isProbablyDataUrl(value) {
