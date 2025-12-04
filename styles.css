@@ -1324,21 +1324,31 @@ body[data-theme="light"] .control textarea:focus {
   --sheet-max-width: min(820px, calc(100vw - 48px));
   --sheet-max-height: min(760px, calc(100vh - 120px));
   --sheet-viewport-gap: var(--settings-sheet-viewport-gap, 24px);
+  --sheet-inline-gap: max(
+    var(--sheet-viewport-gap),
+    env(safe-area-inset-left, 0px),
+    env(safe-area-inset-right, 0px)
+  );
+  --sheet-block-gap: max(
+    var(--sheet-viewport-gap),
+    env(safe-area-inset-top, 0px),
+    env(safe-area-inset-bottom, 0px)
+  );
   --sheet-width: min(
     var(--settings-sheet-width, var(--sheet-max-width)),
-    calc(100vw - var(--sheet-viewport-gap) * 2)
+    calc(100vw - var(--sheet-inline-gap) * 2)
   );
   --sheet-height: min(
     var(--settings-sheet-height, var(--sheet-max-height)),
-    calc(100vh - var(--sheet-viewport-gap) * 2)
+    calc(100vh - var(--sheet-block-gap) * 2)
   );
   position: fixed;
   left: 50%;
   top: 50%;
   width: var(--sheet-width);
   height: var(--sheet-height);
-  max-width: calc(100vw - var(--sheet-viewport-gap) * 2);
-  max-height: calc(100vh - var(--sheet-viewport-gap) * 2);
+  max-width: calc(100vw - var(--sheet-inline-gap) * 2);
+  max-height: calc(100vh - var(--sheet-block-gap) * 2);
   padding: calc(14px * var(--ui-scale));
   display: flex;
   flex-direction: column;
@@ -1527,6 +1537,34 @@ body[data-theme="light"] .control textarea:focus {
   overflow: auto;
 }
 
+@media (max-width: 720px) {
+  .settings-tabs {
+    padding: calc(8px * var(--ui-scale));
+    gap: calc(8px * var(--ui-scale));
+  }
+
+  .settings-tab {
+    font-size: 0.92rem;
+    padding: calc(8px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  }
+}
+
+@media (max-width: 640px) {
+  .sheet {
+    --sheet-max-width: calc(100vw - 18px);
+    --sheet-max-height: calc(
+      100vh - var(--sheet-block-gap) * 2 - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
+    );
+    padding: calc(10px * var(--ui-scale));
+    gap: calc(10px * var(--ui-scale));
+  }
+
+  .sheet-header {
+    flex-wrap: wrap;
+    gap: calc(6px * var(--ui-scale));
+  }
+}
+
 @media (max-width: 960px) {
   .settings-body {
     grid-template-columns: minmax(0, 1fr);
@@ -1709,6 +1747,17 @@ body[data-theme="light"] .control textarea:focus {
 
   .settings-tab {
     width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .settings-tabs {
+    grid-template-columns: repeat(auto-fit, minmax(calc(140px * var(--ui-scale)), 1fr));
+    overflow: visible;
+  }
+
+  .settings-panel {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
