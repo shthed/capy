@@ -68,7 +68,8 @@ in-memory URLs instead of Cache Storage while this pause is in effect.
 ## Repository Review Findings
 
 - **Renderer structure.** `capy.js` now bundles the SVG implementation alongside the controller. The controller still exposes
-  registration hooks but defaults to the simple SVG backend.
+  registration hooks but defaults to the simple SVG backend. The SVG renderer draws regions and labels directly into a
+  `viewBox`-aligned scene so fills, outlines, and numbers stay crisp at any zoom level.
 - **Vector scenes.** `capy.js` can hydrate `capy.scene+simple` metadata (including optional binary buffers) into scene loaders that feed the SVG renderer; the bundled Three Bands sample ships both vector metadata and per-region pixel lists for preview rendering.
 - **Preboot + settings.** `capy.js` performs preboot sizing and UI-scale selection before the app loads, pulling stored
   settings from `localStorage` when available and falling back to defaults otherwise. Pair this with tests that cover missing or
