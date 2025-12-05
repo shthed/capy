@@ -290,6 +290,12 @@ body.panning {
   gap: 10px;
 }
 
+.error-toast__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .error-toast__title {
   margin: 0;
   font-weight: 700;
@@ -321,6 +327,33 @@ body.panning {
 
 body[data-theme="light"] .error-toast__stack {
   background: rgba(226, 232, 240, 0.6);
+}
+
+.error-toast__copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--theme-sheet-button-border);
+  background: var(--theme-sheet-button-bg);
+  color: var(--theme-sheet-button-text);
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.error-toast__copy:hover,
+.error-toast__copy:focus-visible {
+  outline: 2px solid var(--theme-sheet-focus-ring);
+  outline-offset: 2px;
+  background: var(--theme-sheet-button-hover-bg);
+  color: var(--theme-sheet-button-hover-text);
+}
+
+.error-toast__copy:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .error-toast__close {

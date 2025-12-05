@@ -97,14 +97,24 @@
       <div class="error-toast__content">
         <div class="error-toast__header">
           <p class="error-toast__title">Something went wrong</p>
-          <button
-            type="button"
-            class="error-toast__close"
-            data-error-close
-            aria-label="Dismiss error notification"
-          >
-            ×
-          </button>
+          <div class="error-toast__actions">
+            <button
+              type="button"
+              class="error-toast__copy"
+              data-error-copy
+              aria-label="Copy error details to clipboard"
+            >
+              Copy error
+            </button>
+            <button
+              type="button"
+              class="error-toast__close"
+              data-error-close
+              aria-label="Dismiss error notification"
+            >
+              ×
+            </button>
+          </div>
         </div>
         <p class="error-toast__message" data-error-message></p>
         <pre class="error-toast__stack" data-error-stack aria-label="Error details"></pre>
