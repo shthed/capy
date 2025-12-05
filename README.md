@@ -10,6 +10,7 @@ A browser-based paint-by-numbers generator and player. Runs fully client-side. U
 - Bundles a lightweight "Three Bands" sample puzzle (vector-backed stripes) for instant play.
 - Supports Canvas 2D, WebGL, and SVG renderers.
 - Saves progress locally with autosave and manual snapshots.
+- Stores puzzles as pure vector geometry; saves and exports avoid embedding raster snapshots or packed region maps.
 - Runs fully client-side; the service worker and offline cache are temporarily disabled.
 
 ## How to Play
@@ -89,7 +90,7 @@ window.capyGenerator.setActiveColor(3, { flash: true });
 window.capyGenerator.fillRegion(42, { ensureColor: true, label: "qa-fill" });
 ```
 
-The bundled `capy.json` stores the Three Bands puzzle data, including vector scene metadata for the SVG renderer; saves and exports add fill progress and settings (see [`project/TECH.md`](./project/TECH.md#puzzle-json-format) for the schema).
+The bundled `capy.json` stores the Three Bands puzzle data, including vector scene metadata for the SVG renderer; saves and exports add fill progress and settings while relying on vector scenes for geometry (no bitmap previews, snapshots, or region maps are persisted). See [`project/TECH.md`](./project/TECH.md#puzzle-json-format) for the schema.
 
 See [`project/TECH.md`](./project/TECH.md#windowcapygenerator-api-reference) for full API reference.
 
