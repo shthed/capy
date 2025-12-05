@@ -7751,6 +7751,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         if (!settingsSheet || !settingsSheetHeader) return;
         if (event.pointerType === "mouse" && event.button !== 0) return;
         if (event.target?.closest?.(".close-button")) return;
+        if (event.target?.closest?.("button, input, label, select, textarea")) return;
         const rect = settingsSheet.getBoundingClientRect();
         settingsSheetDrag = {
           id: event.pointerId,

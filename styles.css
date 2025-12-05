@@ -1440,48 +1440,59 @@ body[data-theme="light"] .control textarea:focus {
 
 .sheet-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: calc(8px * var(--ui-scale));
+  gap: calc(12px * var(--ui-scale));
   cursor: grab;
   user-select: none;
 }
 
+.sheet-heading {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: calc(10px * var(--ui-scale));
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sheet-heading__text {
+  display: grid;
+  gap: calc(6px * var(--ui-scale));
+  min-width: 0;
+}
+
+.sheet-heading__text h2 {
+  margin: 0;
+}
+
+.sheet-heading__hint {
+  margin: 0;
+  color: var(--theme-sheet-muted-text);
+  line-height: 1.45;
+}
+
+  .sheet-heading__toggle {
+    justify-self: end;
+    align-self: start;
+    gap: calc(8px * var(--ui-scale));
+    padding: calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));
+    border-radius: calc(12px * var(--ui-scale));
+    background: color-mix(in srgb, var(--theme-sheet-bg) 90%, rgba(148, 163, 184, 0.08));
+    border: 1px solid var(--theme-sheet-border);
+    cursor: pointer;
+  }
+
+.sheet-heading__toggle input {
+  margin: 0;
+}
+
 .sheet-header-actions {
   display: flex;
-  align-items: center;
-  gap: calc(10px * var(--ui-scale));
-  flex: 1 1 auto;
-}
-
-.sheet-grip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));
-  border-radius: calc(10px * var(--ui-scale));
-  border: 1px dashed color-mix(in srgb, var(--theme-sheet-button-border) 65%, transparent);
-  background: color-mix(in srgb, var(--theme-sheet-bg) 88%, rgba(148, 163, 184, 0.08));
-  color: var(--theme-sheet-muted-text);
-  font-size: 0.85rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
-}
-
-.sheet-grip span {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: currentColor;
-  opacity: 0.7;
-}
-
-.sheet-grip:hover,
-.sheet-grip:focus-visible {
-  border-color: color-mix(in srgb, var(--theme-sheet-button-hover-border) 70%, transparent);
-  background: color-mix(in srgb, var(--theme-sheet-button-hover-bg) 70%, transparent);
-  color: var(--theme-sheet-button-hover-text);
+  align-items: flex-start;
+  gap: calc(12px * var(--ui-scale));
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .settings-upload {
@@ -1489,12 +1500,13 @@ body[data-theme="light"] .control textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: calc(10px * var(--ui-scale)) calc(16px * var(--ui-scale));
+  padding: calc(12px * var(--ui-scale)) calc(20px * var(--ui-scale));
   border-radius: calc(12px * var(--ui-scale));
   border: 1px solid var(--theme-sheet-button-border);
   background: var(--theme-command-active-bg);
   color: var(--theme-command-active-text);
   font-weight: 700;
+  font-size: 1rem;
   letter-spacing: 0.01em;
   cursor: pointer;
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease,
@@ -1540,11 +1552,16 @@ body[data-theme="light"] .control textarea:focus {
 }
 
 .close-button {
-  padding: calc(6px * var(--ui-scale)) calc(14px * var(--ui-scale));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(10px * var(--ui-scale));
   border-radius: calc(12px * var(--ui-scale));
   background: var(--theme-sheet-button-bg);
   color: var(--theme-sheet-button-text);
   border: 1px solid var(--theme-sheet-button-border);
+  font-size: 1.1rem;
+  line-height: 1;
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease,
     box-shadow 0.16s ease;
 }
@@ -1588,44 +1605,6 @@ body[data-theme="light"] .control textarea:focus {
   align-self: start;
   min-height: 0;
   z-index: 2;
-}
-
-.settings-mode {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: calc(10px * var(--ui-scale));
-  padding: calc(10px * var(--ui-scale));
-  border-radius: calc(12px * var(--ui-scale));
-  border: 1px solid var(--theme-sheet-border);
-  background: color-mix(in srgb, var(--theme-sheet-bg) 92%, rgba(148, 163, 184, 0.08));
-}
-
-.settings-mode__labels {
-  display: grid;
-  gap: calc(4px * var(--ui-scale));
-  min-width: 0;
-}
-
-.settings-mode__title {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-.settings-mode__hint {
-  margin: 0;
-  color: var(--theme-sheet-muted-text);
-  line-height: 1.45;
-}
-
-.settings-mode__toggle {
-  flex: 0 0 auto;
-  white-space: nowrap;
-  gap: calc(8px * var(--ui-scale));
-}
-.settings-mode__toggle input {
-  margin: 0;
 }
 
 .settings-content {
@@ -1679,33 +1658,13 @@ body[data-theme="light"] .control textarea:focus {
     flex-wrap: wrap;
     gap: calc(6px * var(--ui-scale));
   }
-}
 
-@media (max-width: 720px) {
-  .settings-tabs {
-    padding: calc(8px * var(--ui-scale));
-    gap: calc(8px * var(--ui-scale));
+  .sheet-heading {
+    grid-template-columns: 1fr;
   }
 
-  .settings-tab {
-    font-size: 0.92rem;
-    padding: calc(8px * var(--ui-scale)) calc(10px * var(--ui-scale));
-  }
-}
-
-@media (max-width: 640px) {
-  .sheet {
-    --sheet-max-width: calc(100vw - 18px);
-    --sheet-max-height: calc(
-      100vh - var(--sheet-block-gap) * 2 - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
-    );
-    padding: calc(10px * var(--ui-scale));
-    gap: calc(10px * var(--ui-scale));
-  }
-
-  .sheet-header {
-    flex-wrap: wrap;
-    gap: calc(6px * var(--ui-scale));
+  .sheet-heading__toggle {
+    justify-self: start;
   }
 }
 
@@ -1719,10 +1678,6 @@ body[data-theme="light"] .control textarea:focus {
     top: 0;
     background: var(--theme-sheet-bg);
     padding-bottom: calc(6px * var(--ui-scale));
-  }
-
-  .settings-mode {
-    flex-direction: column;
   }
 
   .settings-tabs {
