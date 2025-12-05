@@ -2844,7 +2844,7 @@ function canUseGenerationWorker() {
 
   function renderMouseControls(item) {
     const groups = (item.groups || []).map((group) => {
-      const options = (group.options || []).map((opt) => {
+      const rows = (group.options || []).map((opt) => {
         const select = createElement(
           "select",
           { attrs: { id: opt.id } },
@@ -2856,17 +2856,36 @@ function canUseGenerationWorker() {
             ),
           ),
         );
-        return createElement("label", { className: "control mouse-control-option" }, [
-          createElement("span", { text: opt.label || "" }),
+
+        return createElement("label", { className: "control mouse-control-row" }, [
+          createElement("span", { className: "mouse-control-row-label", text: opt.label || "" }),
           select,
         ]);
       });
-      return createElement("div", { className: "mouse-control-group" }, [
-        createElement("span", { className: "mouse-control-title", text: group.title || "" }),
-        createElement("div", { className: "mouse-control-options" }, options),
-      ]);
+
+      return createElement(
+        "div",
+        {
+          className: "mouse-control-card",
+          attrs: { role: "group", "aria-label": group.title || "Mouse button" },
+        },
+        [
+          createElement("div", { className: "mouse-control-card-header" }, [
+            createElement("span", { className: "mouse-control-title", text: group.title || "" }),
+            createElement("span", {
+              className: "mouse-control-subtitle",
+              text: "Click and drag bindings",
+              attrs: { "aria-hidden": "true" },
+            }),
+          ]),
+          createElement("div", { className: "mouse-control-rows" }, rows),
+        ],
+      );
     });
-    return createElement("div", {}, groups);
+
+    return createElement("div", { className: "mouse-controls" }, [
+      createElement("div", { className: "mouse-controls-grid", attrs: { role: "group", "aria-label": "Mouse controls" } }, groups),
+    ]);
   }
 
   function renderDetailCallout(item) {
