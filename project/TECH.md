@@ -340,6 +340,10 @@ Capy’s developer API exposes a minimal surface for automation, QA smoke tests,
   - **Parameters:** None.
   - **Purpose:** Clears fill progress for the active puzzle.
   - **Side effects:** Removes fill state, updates autosave/command controls, and logs the reset.
+- `deleteAllSiteData()`
+  - **Parameters:** None.
+  - **Purpose:** Clears all origin data (Cache Storage, cookies, service workers, IndexedDB, local/session storage) for a fresh start.
+  - **Side effects:** Unregisters service workers, deletes caches/databases when supported, clears browser cookies/storage, and logs a summary of what was removed.
 - `fillRegion(regionId, { ensureColor, flash, redraw, label })`
   - **Parameters:** Region id (number) plus optional behaviour flags.
   - **Purpose:** Paints a specific region programmatically, optionally selecting its palette colour first.

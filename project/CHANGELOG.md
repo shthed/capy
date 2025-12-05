@@ -2,6 +2,7 @@
 
 ## 2025-12-06
 - Moved hint intensity into the main settings tab and grouped hint toggles together for quicker tuning.
+- Added a devtools helper to clear all site data (cookies, caches, IndexedDB, storage, and workers) from `window.capyGenerator`.
 
 ## 2025-12-05
 - Added a vector-scene-aware preview fallback so samples without embedded pixel lists still render previews from the region map.
