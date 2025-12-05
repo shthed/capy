@@ -417,7 +417,6 @@
  *   - flashPaletteSwatch (capy.js:13303) – flash palette swatch.
  *   - compactPuzzleSnapshot (capy.js:13328) – compact puzzle snapshot.
  *   - serializeCurrentPuzzle (capy.js:13436) – serialize current puzzle.
- *   - applyPreviewToEntry (capy.js:13570) – apply preview to entry.
  *   - isSettingsAutosaveReason (capy.js:13578) – is settings autosave reason.
  *   - normalizeLauncherPosition (capy.js:13582) – normalize launcher position.
  *   - getUserSettingsSnapshot (capy.js:13591) – get user settings snapshot.
@@ -446,8 +445,6 @@
  *   - encodeBytesToBase64 (capy.js:14387) – encode bytes to base 64.
  *   - decodeBase64ToBytes (capy.js:14398) – decode base 64 to bytes.
  *   - simpleLZ77Decompress (capy.js:14411) – simple 77 decompress.
- *   - lzwDecompress (capy.js:14444) – lzw decompress.
- *   - decodeLegacySnapshotPayload (capy.js:14475) – decode legacy snapshot payload.
  *   - decodeStoredPuzzleSnapshot (capy.js:14515) – decode stored puzzle snapshot.
  *   - encodeStoredSnapshot (capy.js:14560) – encode stored snapshot.
  *   - encodeSaveStorageEntry (capy.js:14568) – encode save storage entry.
@@ -3788,10 +3785,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         "spectrum",
         "warmth",
         "lightness",
-      ]);
-      const LEGACY_PALETTE_SORT_ALIASES = new Map([
-        ["hue", "spectrum"],
-        ["brightness", "lightness"],
       ]);
       const WARM_HUE_PIVOT_RADIANS = (40 * Math.PI) / 180;
       const generatorImportNotice =
@@ -12522,12 +12515,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
 
       function resolvePaletteSortMode() {
         const requested = typeof state.paletteSort === "string" ? state.paletteSort : "";
-        const normalized = LEGACY_PALETTE_SORT_ALIASES.get(requested) || requested;
-        if (ALLOWED_PALETTE_SORT_MODES.has(normalized)) {
-          if (normalized !== requested) {
-            state.paletteSort = normalized;
-          }
-          return normalized;
+        if (ALLOWED_PALETTE_SORT_MODES.has(requested)) {
+          return requested;
         }
         state.paletteSort = "region";
         return "region";
@@ -13011,8 +13000,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       }
 
       function applyPaletteSort(sort, { skipLog } = {}) {
-        const normalized = LEGACY_PALETTE_SORT_ALIASES.get(sort) || sort;
-        const next = ALLOWED_PALETTE_SORT_MODES.has(normalized) ? normalized : "region";
+        const next = ALLOWED_PALETTE_SORT_MODES.has(sort) ? sort : "region";
         if (state.paletteSort === next) {
           if (paletteSortEl && paletteSortEl.value !== next) {
             paletteSortEl.value = next;
@@ -14715,16 +14703,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         return compactPuzzleSnapshot(snapshot) || snapshot;
       }
 
-      function applyPreviewToEntry(entry) {
-        if (!entry || typeof entry !== "object") return;
-        if ("preview" in entry) {
-          delete entry.preview;
-        }
-        if (entry.data && typeof entry.data === "object" && "preview" in entry.data) {
-          delete entry.data.preview;
-        }
-      }
-
       function isSettingsAutosaveReason(reason) {
         return typeof reason === "string" && SETTINGS_AUTOSAVE_REASONS.has(reason);
       }
@@ -14800,12 +14778,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             : typeof state?.paletteSort === "string"
             ? state.paletteSort
             : null;
-        if (paletteSortSource) {
-          const normalizedSort =
-            LEGACY_PALETTE_SORT_ALIASES.get(paletteSortSource) || paletteSortSource;
-          if (ALLOWED_PALETTE_SORT_MODES.has(normalizedSort)) {
-            snapshot.paletteSort = normalizedSort;
-          }
+        if (paletteSortSource && ALLOWED_PALETTE_SORT_MODES.has(paletteSortSource)) {
+          snapshot.paletteSort = paletteSortSource;
         }
         return snapshot;
       }
@@ -14991,12 +14965,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           );
         }
         if (payload.paletteSort != null) {
-          const candidate =
-            typeof payload.paletteSort === "string" ? payload.paletteSort : "";
-          const normalizedSort =
-            LEGACY_PALETTE_SORT_ALIASES.get(candidate) || candidate;
-          if (ALLOWED_PALETTE_SORT_MODES.has(normalizedSort)) {
-            normalized.paletteSort = normalizedSort;
+          const candidate = typeof payload.paletteSort === "string" ? payload.paletteSort : "";
+          if (ALLOWED_PALETTE_SORT_MODES.has(candidate)) {
+            normalized.paletteSort = candidate;
           }
         }
         return Object.keys(normalized).length > 0 ? normalized : null;
@@ -15157,7 +15128,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         } else {
           delete entry.settings;
         }
-        applyPreviewToEntry(entry);
         state.loadedSaveId = activeSaveId;
         state.saves = [entry, ...state.saves.filter((item) => item.id !== activeSaveId)];
         persistSaves();
@@ -15596,77 +15566,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         return new Uint8Array(output);
       }
 
-      function lzwDecompress(codes) {
-        if (!codes || codes.length === 0) {
-          return "";
-        }
-        const dictionary = [];
-        for (let index = 0; index < 256; index += 1) {
-          dictionary[index] = String.fromCharCode(index);
-        }
-        let dictSize = 256;
-        let previous = String.fromCharCode(codes[0]);
-        let output = previous;
-        for (let index = 1; index < codes.length; index += 1) {
-          const code = codes[index];
-          let entry = "";
-          if (dictionary[code] != null) {
-            entry = dictionary[code];
-          } else if (code === dictSize) {
-            entry = previous + previous.charAt(0);
-          } else {
-            return null;
-          }
-          output += entry;
-          if (dictSize < 65535) {
-            dictionary[dictSize] = previous + entry.charAt(0);
-            dictSize += 1;
-          }
-          previous = entry;
-        }
-        return output;
-      }
-
-      function decodeLegacySnapshotPayload(source) {
-        if (!source || typeof source !== "object") {
-          return null;
-        }
-        const payload = typeof source.payload === "string" ? source.payload : "";
-        if (!payload) {
-          return null;
-        }
-        const encoding = typeof source.encoding === "string" ? source.encoding : "identity";
-        if (encoding === "identity") {
-          return payload;
-        }
-        if (encoding === "lz77") {
-          try {
-            const bytes = decodeBase64ToBytes(payload);
-            const decompressed = simpleLZ77Decompress(bytes);
-            return decompressed ? decodeUtf8Bytes(decompressed) : null;
-          } catch (error) {
-            console.error("Failed to decompress legacy LZ77 payload", error);
-            return null;
-          }
-        }
-        if (encoding === "lzw16") {
-          try {
-            const bytes = decodeBase64ToBytes(payload);
-            if (bytes.byteLength === 0) {
-              return "";
-            }
-            const length = Math.floor(bytes.byteLength / 2);
-            const codes = new Uint16Array(bytes.buffer, bytes.byteOffset, length);
-            return lzwDecompress(codes);
-          } catch (error) {
-            console.error("Failed to decompress legacy LZW payload", error);
-            return null;
-          }
-        }
-        console.error(`Unsupported legacy snapshot encoding: ${encoding}`);
-        return null;
-      }
-
       function decodeStoredPuzzleSnapshot(source) {
         if (!source) {
           return { puzzle: null, settings: null };
@@ -15677,21 +15576,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             data = JSON.parse(source);
           } catch (error) {
             console.error("Failed to parse snapshot string", error);
-            return { puzzle: null, settings: null };
-          }
-        } else if (
-          typeof source === "object" &&
-          source.__compressed === true &&
-          typeof source.payload === "string"
-        ) {
-          const textPayload = decodeLegacySnapshotPayload(source);
-          if (typeof textPayload !== "string") {
-            return { puzzle: null, settings: null };
-          }
-          try {
-            data = JSON.parse(textPayload);
-          } catch (error) {
-            console.error("Failed to parse legacy compressed snapshot", error);
             return { puzzle: null, settings: null };
           }
         }
@@ -15747,19 +15631,19 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           timestamp: entry.timestamp,
           data: puzzle,
         };
-          if (settings && typeof settings === "object") {
-            decoded.settings = settings;
-          } else if (entry.settings && typeof entry.settings === "object") {
-            const snapshot = getUserSettingsSnapshot(entry.settings);
-            if (snapshot) {
-              decoded.settings = snapshot;
-            }
+        if (settings && typeof settings === "object") {
+          decoded.settings = settings;
+        } else if (entry.settings && typeof entry.settings === "object") {
+          const snapshot = getUserSettingsSnapshot(entry.settings);
+          if (snapshot) {
+            decoded.settings = snapshot;
           }
-          if (typeof entry.title === "string" && entry.title.trim()) {
-            decoded.title = entry.title.trim();
-          }
-          return decoded;
         }
+        if (typeof entry.title === "string" && entry.title.trim()) {
+          decoded.title = entry.title.trim();
+        }
+        return decoded;
+      }
 
       function createGameSaveManager() {
         const key = SAVE_STORAGE_KEY;
@@ -15780,7 +15664,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         function normalizeEntry(entry) {
           if (!entry || typeof entry !== "object") return null;
           const decoded = decodeSaveStorageEntry(entry) || entry;
-          applyPreviewToEntry(decoded);
           const idRaw = decoded.id != null ? String(decoded.id) : "";
           const id = idRaw.trim();
           if (!id) return null;
@@ -15982,7 +15865,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           } else {
             delete entry.settings;
           }
-          applyPreviewToEntry(entry);
           state.loadedSaveId = activeSaveId;
           state.saves = [entry, ...state.saves.filter((item) => item.id !== activeSaveId)];
           logDebug(`Updated save: ${entry.title}`);
@@ -15997,7 +15879,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           if (settingsSnapshot) {
             entry.settings = settingsSnapshot;
           }
-          applyPreviewToEntry(entry);
           state.loadedSaveId = id;
           state.saves.unshift(entry);
           logDebug(`Saved snapshot: ${entry.title}`);
@@ -16040,15 +15921,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         if (storageLabel) {
           ariaLabelParts.push(`Storage ${storageLabel}`);
         }
-        let previewUrl = null;
-        if (typeof entry?.preview === "string" && entry.preview.startsWith("data:")) {
-          previewUrl = entry.preview;
-        } else if (
-          typeof entry?.data?.sourceImage?.dataUrl === "string" &&
-          entry.data.sourceImage.dataUrl.startsWith("data:")
-        ) {
-          previewUrl = entry.data.sourceImage.dataUrl;
-        }
         return {
           id: entry?.id,
           title,
@@ -16057,27 +15929,15 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           timestampLabel,
           storageBytes,
           storageLabel,
-          previewUrl,
           ariaLabel: ariaLabelParts.join(" – "),
         };
       }
 
-        function renderSavePreview(metadata, options = {}) {
-          const { compact = false } = options;
-          const previewClass = ["save-entry-preview"];
-          if (compact) {
+      function renderSavePreview(metadata, options = {}) {
+        const { compact = false } = options;
+        const previewClass = ["save-entry-preview"];
+        if (compact) {
           previewClass.push("save-entry-preview--compact");
-        }
-        if (metadata.previewUrl) {
-          const altText = metadata.title ? `${metadata.title} preview` : "Puzzle preview";
-          return html`<div class="${previewClass.join(" ")}">
-            <img
-              loading="lazy"
-              decoding="async"
-              src="${metadata.previewUrl}"
-              alt="${altText}"
-            />
-          </div>`;
         }
         return html`<div class="${previewClass.join(" ")}">
           <span class="save-entry-preview-fallback">Preview unavailable</span>
