@@ -645,6 +645,80 @@
     };
   }
 
+  function encodeRegionIdColor(regionId) {
+    const clamped = Math.max(0, Math.min(Number.isFinite(regionId) ? regionId : 0, 0xffffff));
+    const r = clamped & 0xff;
+    const g = (clamped >> 8) & 0xff;
+    const b = (clamped >> 16) & 0xff;
+    return { r, g, b, style: `rgba(${r}, ${g}, ${b}, 1)` };
+  }
+
+  function decodeRegionIdColor(r, g, b, a) {
+    if (a <= 0) return -1;
+    const alpha = a / 255;
+    const resolvedR = Math.round(r / alpha);
+    const resolvedG = Math.round(g / alpha);
+    const resolvedB = Math.round(b / alpha);
+    return (resolvedB << 16) | (resolvedG << 8) | resolvedR;
+  }
+
+  function rasterizeRegionMapFromVectorScene(sceneLoader, width, height) {
+    if (
+      !sceneLoader ||
+      typeof document === "undefined" ||
+      !Number.isFinite(width) ||
+      !Number.isFinite(height)
+    ) {
+      return null;
+    }
+    const regions = sceneLoader.getVisibleRegions?.();
+    if (!Array.isArray(regions) || regions.length === 0) {
+      return null;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.imageSmoothingEnabled = false;
+    for (const geometry of regions) {
+      if (!geometry) continue;
+      const path = geometry.path || (geometry.pathData ? new Path2D(geometry.pathData) : null);
+      if (!path) continue;
+      const encoding = encodeRegionIdColor(geometry.id);
+      ctx.fillStyle = encoding.style;
+      try {
+        ctx.fill(path);
+      } catch (_error) {
+        // Skip malformed paths and continue with remaining geometry.
+      }
+    }
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    const regionMap = new Int32Array(width * height);
+    for (let idx = 0; idx < regionMap.length; idx += 1) {
+      const base = idx * 4;
+      const r = data[base];
+      const g = data[base + 1];
+      const b = data[base + 2];
+      const a = data[base + 3];
+      regionMap[idx] = decodeRegionIdColor(r, g, b, a);
+    }
+    return regionMap;
+  }
+
+  function resolveRegionMap(regionMapSource, sceneLoader, width, height) {
+    if (regionMapSource && regionMapSource.length === width * height) {
+      return regionMapSource instanceof Int32Array
+        ? regionMapSource
+        : new Int32Array(regionMapSource);
+    }
+    if (sceneLoader) {
+      return rasterizeRegionMapFromVectorScene(sceneLoader, width, height);
+    }
+    return null;
+  }
+
   function createSvgRenderer(host, hooks = {}) {
     if (!host || typeof document === "undefined") {
       const stub = {
@@ -10775,14 +10849,13 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             : (typeof data.map === "string" && data.map)
             ? data.map
             : data.regionMapPacked;
-        const regionMapSource =
+        const regionMapSourceRaw =
           unpackRegionMap(data.regionMap, expectedCells) ||
           unpackRegionMap(regionMapPacked, expectedCells);
-        if (!regionMapSource || regionMapSource.length !== expectedCells) {
-          console.error("Puzzle data is inconsistent.");
-          setProgressMessage("idle");
-          return false;
-        }
+        const regionMapSource =
+          regionMapSourceRaw && regionMapSourceRaw.length === expectedCells
+            ? regionMapSourceRaw
+            : null;
         const puzzleHydrationTimer = performanceMetrics.start("puzzle:hydrate", {
           width: data.width,
           height: data.height,
@@ -10793,15 +10866,11 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             (typeof data.title === "string" && data.title.trim()) ||
             state.sourceTitle || null,
         });
-        let needsPixelHydration = false;
-        for (const region of data.regions) {
-          if (!Array.isArray(region.pixels) || region.pixels.length === 0) {
-            needsPixelHydration = true;
-            break;
-          }
-        }
+        const needsPixelHydration = Boolean(
+          regionMapSource && data.regions.some((region) => !Array.isArray(region.pixels) || region.pixels.length === 0)
+        );
         let hydratedPixels = null;
-        if (needsPixelHydration) {
+        if (needsPixelHydration && regionMapSource) {
           hydratedPixels = new Map();
           for (let i = 0; i < data.regions.length; i++) {
             const region = data.regions[i];
@@ -10881,9 +10950,25 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             cy: cy ?? 0,
           };
         });
-        const regionMap = regionMapSource instanceof Int32Array
-          ? regionMapSource
-          : new Int32Array(regionMapSource);
+        const vectorSceneSnapshot = normalizeVectorSceneSnapshot(metadata.vectorScene ?? data.vectorScene);
+        let sceneLoader = null;
+        if (vectorSceneSnapshot && typeof createVectorSceneLoader === "function") {
+          const buffer = resolveVectorSceneBinaryBuffer(vectorSceneSnapshot.binary);
+          sceneLoader = createVectorSceneLoader({
+            metadata: vectorSceneSnapshot.metadata ?? vectorSceneSnapshot.json ?? vectorSceneSnapshot,
+            binary: buffer ?? vectorSceneSnapshot.binary ?? null,
+          });
+          if (!sceneLoader) {
+            console.warn("Vector scene payload rejected during hydration.");
+          }
+        }
+
+        const regionMap = resolveRegionMap(regionMapSource, sceneLoader, data.width, data.height);
+        if (!regionMap || regionMap.length !== expectedCells) {
+          console.error("Puzzle data is inconsistent.");
+          setProgressMessage("idle");
+          return false;
+        }
         const sourceDefaults = {
           width: data.width,
           height: data.height,
@@ -10915,15 +11000,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             DEFAULT_STAGE_BACKGROUND_HEX,
           state.settings.stageBackgroundColor ?? DEFAULT_STAGE_BACKGROUND_HEX
         );
-        const vectorSceneSnapshot = normalizeVectorSceneSnapshot(metadata.vectorScene ?? data.vectorScene);
-        let sceneLoader = null;
-        if (vectorSceneSnapshot && typeof createVectorSceneLoader === "function") {
-          const buffer = resolveVectorSceneBinaryBuffer(vectorSceneSnapshot.binary);
-          sceneLoader = createVectorSceneLoader({
-            metadata: vectorSceneSnapshot.metadata,
-            binary: buffer ?? vectorSceneSnapshot.binary ?? null,
-          });
-        }
 
         const puzzle = {
           width: data.width,
@@ -14495,12 +14571,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
         payload.regions = regions;
         const expectedCells = width * height;
-        const regionMap =
-          unpackRegionMap(snapshot.regionMap, expectedCells) ||
-          unpackRegionMap(snapshot.m ?? snapshot.map ?? snapshot.regionMapPacked, expectedCells);
-        if (regionMap) {
-          payload.regionMap = Array.from(regionMap);
-        }
         const filled = decodeFilledRegionList(
           snapshot.f ?? snapshot.filled ?? snapshot.filledPacked
         );
@@ -14515,15 +14585,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
         if (typeof snapshot.sourceUrl === "string" && snapshot.sourceUrl) {
           payload.sourceUrl = snapshot.sourceUrl;
-        }
-        const sourceImageSnapshot = normalizeSourceImageSnapshot(snapshot.sourceImage, {
-          width: payload.width,
-          height: payload.height,
-          originalWidth: payload.width,
-          originalHeight: payload.height,
-        });
-        if (sourceImageSnapshot) {
-          payload.sourceImage = sourceImageSnapshot;
         }
         if (typeof snapshot.activeColor === "number" && Number.isFinite(snapshot.activeColor)) {
           payload.activeColor = snapshot.activeColor;
@@ -14624,23 +14685,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         if (puzzle.vectorScene) {
           snapshot.vectorScene = puzzle.vectorScene;
         }
-        if (puzzle.regionMap) {
-          snapshot.regionMap = Array.from(puzzle.regionMap);
-        }
-        const sourceImageSnapshot = normalizeSourceImageSnapshot(
-          state.puzzle.sourceImage?.snapshot ?? state.puzzle.sourceImage,
-          {
-            width: puzzle.width,
-            height: puzzle.height,
-            originalWidth:
-              state.puzzle.sourceImage?.snapshot?.originalWidth ?? puzzle.width,
-            originalHeight:
-              state.puzzle.sourceImage?.snapshot?.originalHeight ?? puzzle.height,
-          }
-        );
-        if (sourceImageSnapshot) {
-          snapshot.sourceImage = sourceImageSnapshot;
-        }
         return compactPuzzleSnapshot(snapshot) || snapshot;
       }
 
@@ -14687,9 +14731,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
 
       function applyPreviewToEntry(entry) {
         if (!entry || typeof entry !== "object") return;
-        const preview = captureSavePreview();
-        if (preview) {
-          entry.preview = preview;
+        if ("preview" in entry) {
+          delete entry.preview;
         }
       }
 

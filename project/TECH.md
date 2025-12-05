@@ -163,8 +163,8 @@ Tweaking the deployment:
 
 ### Headline Features
 
-- **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or previously exported JSON puzzles straight into the generator pipeline.
-- **Saves tab quick start.** The Saves tab opens with an **Upload Image** button and lists manual slots. Each card now carries a live preview thumbnail alongside the metadata so you can spot the right slot before loading. The active slot stays pinned to the top with an "Autosaving this slot" badge so you always know which snapshot will keep tracking progress. Manual snapshot tools, export shortcuts, and the **Reset puzzle progress** control sit after the save cards so you can bookmark or rewind without digging through other menus.
+- **Instant image import.** Drag-and-drop or use the picker to feed bitmaps or previously exported JSON puzzles straight into the generator pipeline; finished puzzles now export only vector geometry so no raster artifacts linger in saves or fixtures, and loads regenerate region maps from the attached vector scene.
+- **Saves tab quick start.** The Saves tab opens with an **Upload Image** button and lists manual slots. Entries carry labels and timestamps without embedded previews so vector-only saves stay lean. The active slot stays pinned to the top with an "Autosaving this slot" badge so you always know which snapshot will keep tracking progress. Manual snapshot tools, export shortcuts, and the **Reset puzzle progress** control sit after the save cards so you can bookmark or rewind without digging through other menus.
 - **Built-in vector sample.** The bundled "Three Bands" stripes load automatically on boot when no saves exist, providing a tiny vector-backed scene for renderer smoke checks.
 - **Sample detail presets.** Low/Medium/High chips tune colour counts, resize targets, k-means iterations, and smoothing passes so QA can switch between breezy ≈26-region boards, balanced ≈20-region sessions, or high-fidelity ≈140-region runs.
 - **Detailed debug logging.** The **Help & logs** tab in the Settings dialog announces sample loads, fills, hints, zooms, background tweaks, fullscreen toggles, ignored clicks, and now mirrors console warnings/errors (including unhandled rejections) so QA can confirm issues without opening DevTools. Service worker registration, cache limits, and skip reasons also stream into this log alongside a System summary of the active cache.
@@ -178,7 +178,7 @@ Tweaking the deployment:
 - **Palette guidance.** Choosing a swatch pulses every matching region, flashing when a colour is complete so it is obvious where to paint next. Players can disable the matching-region hint in Settings if they prefer to scout manually.
 - **Customisable background.** Settings lets you pick a backdrop colour; outlines and numbers flip contrast automatically.
 - **Progress persistence.** Every stroke rewrites the active save slot; additional manual snapshots live in the **Saves** tab with rename/export/delete controls. Storage quota usage stays visible there, and the legacy autosave bucket migrates into a manual slot on first launch.
-- **Previewed snapshots.** Saves capture a downscaled preview thumbnail (rendered from the current preview canvas) so save cards and start-screen entries stay visually recognizable after a reload.
+- **Previewed snapshots.** Vector-only saves no longer embed preview thumbnails; slots list labels and timestamps instead of screenshot data URLs.
 - **Startup restore priority.** Launching the app resumes from the most recent save (preferring the active slot) and falls back to the bundled sample only when nothing is stored.
 - **Settings persistence.** Gameplay, hint, control, and appearance preferences now sync to `localStorage` (`capy.settings.v1`) so `capy.json` only ships puzzle data. Settings writes commit immediately so UI tweaks survive reloads even if puzzle autosave is still pending, and puzzle loads leave those stored preferences intact. Palette sorting mode selections share the same store, so switching to options like **Sort Colours → Spectrum** survives a refresh. The Settings dialog also records whether it was open so the sheet can reopen automatically after a reload.
 
@@ -258,8 +258,8 @@ The runtime must stay build-free and avoid shipping large bundled frameworks. To
 
 These patterns keep the DOM logic compact while preserving the zero-build, zero-framework runtime constraints.
 - **Puzzle rendering pipeline.** `renderPuzzle` now feeds the SVG renderer directly. Each frame rebuilds region paths from cached geometry, fills unfinished regions with a uniform overlay, and strokes outlines without juggling cached canvases or preview layers.
-- **Generation & segmentation.** `createPuzzleData` looks up the requested generator in `GENERATION_ALGORITHM_CATALOG`, runs the matching quantizer via `performQuantization` (k-means or the posterize-and-merge pipeline today, with scaffolding for future services), smooths assignments, and then calls `segmentRegions`. Local uploads are resized against the configured detail max and, when needed, recompressed before `createPuzzleData` runs so the blob respects the “Stored image size” cap. The compressed data URL of that resized source ships with saves/exports, and when a remote URL is supplied we skip compression and store just the resolved link so saves refetch the bitmap on demand. Regeneration and fixtures reuse the same entry point.
-- **Persistence helpers.** `persistSaves`, `loadSavedEntries`, and `serializeCurrentPuzzle` manage puzzle snapshots while `getUserSettingsSnapshot`/`persistUserSettings` keep preferences on their own track; exports now ship puzzle data without bundling user settings. When the browser rejects manual save writes, the save manager retries without preview thumbnails to squeeze under strict storage quotas.
+- **Generation & segmentation.** `createPuzzleData` looks up the requested generator in `GENERATION_ALGORITHM_CATALOG`, runs the matching quantizer via `performQuantization` (k-means or the posterize-and-merge pipeline today, with scaffolding for future services), smooths assignments, and then calls `segmentRegions`. Local uploads are resized against the configured detail max and sampled to keep processing fast, but the resulting puzzle payload only preserves vector geometry plus palette metadata—no raster snapshots or packed region maps are persisted with saves or exports. Region maps are rebuilt from vector scenes on load when a saved payload omits them. Regeneration and fixtures reuse the same entry point.
+- **Persistence helpers.** `persistSaves`, `loadSavedEntries`, and `serializeCurrentPuzzle` manage puzzle snapshots while `getUserSettingsSnapshot`/`persistUserSettings` keep preferences on their own track; exports now ship puzzle data without bundling user settings. Saves skip preview thumbnails entirely to keep storage purely vector and predictable.
 
 ### `window.capyGenerator` API Reference
 
@@ -361,21 +361,19 @@ The bundled `capy.json` ships only the puzzle payload for the Three Bands sample
 - `title` – Friendly puzzle label.
 - `width` / `height` – Canvas dimensions in pixels.
 - `palette` – Colour entries with `id`, `hex`, `rgba`, and display `name`.
-- `regions` – Metadata for each region (`id`, `colorId`, centroid, `pixelCount`, optional `pixels` array for preview rendering).
-- `regionMapPacked` – Base64-encoded little-endian `Int32Array` of region ids per pixel (`width * height` entries). Loaders also accept a raw `regionMap` array for backwards compatibility and exports; the bundled fixture uses the raw map because the Three Bands sample is tiny.
-- `vectorScene` – Optional vector scene snapshot (`metadata` describing a `capy.scene+simple` payload plus base64-encoded `binary`) used by the SVG renderer.
-- `sourceImage` – Snapshot of the reference artwork (URL/data URL plus `width`, `height`, `originalWidth`, `originalHeight`, `scale`, `bytes`, and MIME type). The default puzzle omits a raster URL because the Three Bands sample is already encoded in the vector scene data.
+- `regions` – Metadata for each region (`id`, `colorId`, centroid, `pixelCount`, optional vector-friendly preview payloads). Geometry lives in the paired vector scene rather than pixel lists.
+- `vectorScene` – Required vector scene snapshot (`metadata` describing a `capy.scene+simple` payload plus base64-encoded `binary`) consumed by the SVG renderer and kept as the canonical puzzle definition for all renderers.
 
-Packing the default region map keeps the fixture small while preserving compatibility with earlier human-readable exports and legacy `m` blobs.
+Loaders derive region maps from the attached vector scene when they are not present on disk, keeping persisted payloads purely vector based.
 
 ### Save storage schema
 
 Save slots live in `localStorage` (`capy.saves.v2`) and encode the same `capy-puzzle@2` payload alongside metadata:
 
 - `id`/`timestamp` – Slot identifier plus last-updated timestamp.
-- `data` – Puzzle snapshot normalised via `compactPuzzleSnapshot` (palette/region keys shrink to `{ i, h, n, r }` and `{ i, c, p, x, y }`, and the region map plus filled regions stay as plain arrays for readability). Legacy imports using `m`/`f` packed strings continue to decode.
+- `data` – Puzzle snapshot normalised via `compactPuzzleSnapshot` (palette/region keys shrink to `{ i, h, n, r }` and `{ i, c, p, x, y }`, and filled regions stay as plain arrays alongside the vector scene for readability). Legacy imports using `m`/`f` packed strings continue to decode, but raster region maps are no longer emitted and are reconstructed from vector geometry on load when absent.
 - `settings` – Optional gameplay/renderer preferences from `capy.settings.v1` so restores can reapply difficulty and renderer choices on fresh devices.
-- `title`/`preview` – Optional slot label plus downscaled canvas preview (data URL) for the Saves tab.
+- `title` – Optional slot label. Vector-only saves avoid embedding preview thumbnails or source image snapshots.
 
 Exports use the same schema (or the compressed `.capy` archive variant) so imports can pass the decoded payload straight into `compactPuzzleSnapshot` before calling `applyPuzzleResult`.
 
