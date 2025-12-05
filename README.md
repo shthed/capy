@@ -74,6 +74,7 @@ New puzzles start from lighter-weight clustering settings to keep the first rend
 - Blocky image: increase detail preset or palette size.
 - Too many small regions: use Low detail preset or raise minimum region size before regenerating.
 - Low storage: delete or export saves before clearing.
+- Fresh start: run `window.capyGenerator.deleteAllSiteData()` in devtools to wipe local saves, caches, cookies, and workers.
 - Canvas stuck: hold <kbd>Space</kbd> while dragging or use two-finger pan.
 - WebGL disabled: hardware fallback to Canvas 2D; update drivers or continue with Canvas/SVG.
 
