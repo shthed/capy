@@ -2607,6 +2607,7 @@ function canUseGenerationWorker() {
   const capyGeneration = {
     GENERATION_ALGORITHM_CATALOG,
     DEFAULT_GENERATION_ALGORITHM_ID,
+    prepareSourceImageBlob,
     disposeGenerationWorker,
     createPuzzleData,
     __smoothAssignmentsForTests: smoothAssignments,
@@ -3666,7 +3667,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const errorToast = dom.get("#errorToast");
       const errorToastMessage = errorToast?.querySelector("[data-error-message]") || null;
       const errorToastStack = errorToast?.querySelector("[data-error-stack]") || null;
+      const errorToastCopyButton = errorToast?.querySelector("[data-error-copy]") || null;
       const errorToastCloseButton = errorToast?.querySelector("[data-error-close]") || null;
+      const defaultErrorCopyLabel = errorToastCopyButton?.textContent || "Copy error";
       const gameSelectionList = dom.get("#gameSelectionList");
       const gameSelectionEmpty = dom.get("#gameSelectionEmpty");
       const startHint = document.getElementById("startHint");
@@ -6726,6 +6729,12 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
       }
 
+      if (errorToastCopyButton) {
+        errorToastCopyButton.addEventListener("click", () => {
+          void copyGlobalErrorNotice();
+        });
+      }
+
       if (errorToastCloseButton) {
         errorToastCloseButton.addEventListener("click", () => hideGlobalErrorNotice());
       }
@@ -8501,6 +8510,50 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         errorToast.hidden = true;
       }
 
+      async function copyGlobalErrorNotice() {
+        const message = errorToastMessage?.textContent?.trim() || "";
+        const stack =
+          errorToastStack && !errorToastStack.hidden && errorToastStack.textContent
+            ? errorToastStack.textContent.trim()
+            : "";
+        const clipboardText = [message, stack].filter(Boolean).join("\n\n");
+        if (!clipboardText) {
+          return;
+        }
+        const buttonLabel = defaultErrorCopyLabel;
+        try {
+          if (navigator?.clipboard?.writeText) {
+            await navigator.clipboard.writeText(clipboardText);
+          } else {
+            const textarea = document.createElement("textarea");
+            textarea.value = clipboardText;
+            textarea.setAttribute("readonly", "true");
+            textarea.style.position = "fixed";
+            textarea.style.opacity = "0";
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
+          }
+          if (errorToastCopyButton) {
+            errorToastCopyButton.disabled = true;
+            errorToastCopyButton.textContent = "Copied";
+            setTimeout(() => {
+              errorToastCopyButton.textContent = buttonLabel;
+              errorToastCopyButton.disabled = false;
+            }, 1400);
+          }
+        } catch (error) {
+          console.error("Unable to copy error details", error);
+          if (errorToastCopyButton) {
+            errorToastCopyButton.textContent = "Copy failed";
+            setTimeout(() => {
+              errorToastCopyButton.textContent = buttonLabel;
+            }, 1400);
+          }
+        }
+      }
+
       function showGlobalErrorNotice({ message, stack } = {}) {
         if (!errorToast) return;
         const resolvedMessage =
@@ -8519,6 +8572,11 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             errorToastStack.textContent = "";
             errorToastStack.hidden = true;
           }
+        }
+
+        if (errorToastCopyButton) {
+          errorToastCopyButton.disabled = false;
+          errorToastCopyButton.textContent = defaultErrorCopyLabel;
         }
 
         errorToast.hidden = false;
@@ -9754,7 +9812,16 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         const sourceLimit = Number.isFinite(options?.sourceImageMaxBytes)
           ? options.sourceImageMaxBytes
           : DEFAULT_SOURCE_IMAGE_MAX_BYTES;
-        const prepared = await prepareSourceImageBlob(file, {
+        const prepareSourceImage = globalThis.capyGeneration?.prepareSourceImageBlob;
+        if (typeof prepareSourceImage !== "function") {
+          console.warn("prepareSourceImageBlob unavailable; import cancelled");
+          setProgressMessage("idle");
+          if (confirmImportBtn) {
+            confirmImportBtn.disabled = false;
+          }
+          return;
+        }
+        const prepared = await prepareSourceImage(file, {
           maxBytes: sourceLimit,
           maxSize: options?.maxSize,
         });
