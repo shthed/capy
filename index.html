@@ -4346,6 +4346,11 @@
            */
           resetProgress: () => resetCurrentProgress(),
           /**
+           * Deletes all storage, cache, and cookie data for this origin.
+           * @returns {Promise<object>} Summary of cleared resources.
+           */
+          deleteAllSiteData: () => deleteAllSiteData(),
+          /**
            * Fills a specific puzzle region by id, optionally selecting its colour first.
            * @param {number} regionId Region identifier from the puzzle data.
            * @param {CapyFillRegionOptions} [options]
@@ -14208,6 +14213,118 @@
         refreshSaveList();
         updateStorageUsageSummary();
         logDebug("Cleared all saves");
+      }
+
+      async function deleteAllSiteData() {
+        const summary = {
+          cachesDeleted: [],
+          cookiesCleared: 0,
+          databasesDeleted: 0,
+          localStorageCleared: false,
+          sessionStorageCleared: false,
+          serviceWorkersUnregistered: 0,
+        };
+
+        if (typeof caches !== "undefined" && typeof caches.keys === "function") {
+          try {
+            const cacheNames = await caches.keys();
+            for (const cacheName of cacheNames) {
+              try {
+                const deleted = await caches.delete(cacheName);
+                if (deleted) {
+                  summary.cachesDeleted.push(cacheName);
+                }
+              } catch (error) {
+                console.warn("Failed to delete cache", cacheName, error);
+              }
+            }
+          } catch (error) {
+            console.error("Failed to enumerate caches", error);
+          }
+        }
+
+        if (typeof navigator !== "undefined" && navigator.serviceWorker) {
+          try {
+            const registrations =
+              typeof navigator.serviceWorker.getRegistrations === "function"
+                ? await navigator.serviceWorker.getRegistrations()
+                : [];
+            for (const registration of registrations) {
+              try {
+                const didUnregister = await registration.unregister();
+                if (didUnregister) {
+                  summary.serviceWorkersUnregistered += 1;
+                }
+              } catch (error) {
+                console.warn("Service worker unregister failed", error);
+              }
+            }
+          } catch (error) {
+            console.warn("Unable to enumerate service workers", error);
+          }
+        }
+
+        if (typeof localStorage !== "undefined" && typeof localStorage.clear === "function") {
+          try {
+            localStorage.clear();
+            summary.localStorageCleared = true;
+          } catch (error) {
+            console.error("Failed to clear localStorage", error);
+          }
+        }
+
+        if (typeof sessionStorage !== "undefined" && typeof sessionStorage.clear === "function") {
+          try {
+            sessionStorage.clear();
+            summary.sessionStorageCleared = true;
+          } catch (error) {
+            console.error("Failed to clear sessionStorage", error);
+          }
+        }
+
+        if (
+          typeof indexedDB !== "undefined" &&
+          typeof indexedDB.databases === "function" &&
+          typeof indexedDB.deleteDatabase === "function"
+        ) {
+          try {
+            const databases = (await indexedDB.databases()) || [];
+            for (const entry of databases) {
+              const name = entry?.name;
+              if (!name) continue;
+              const deleted = await new Promise((resolve) => {
+                const request = indexedDB.deleteDatabase(name);
+                request.onsuccess = () => resolve(true);
+                request.onerror = () => resolve(false);
+                request.onblocked = () => resolve(false);
+              });
+              if (deleted) {
+                summary.databasesDeleted += 1;
+              }
+            }
+          } catch (error) {
+            console.warn("Failed to clear IndexedDB", error);
+          }
+        }
+
+        if (typeof document !== "undefined" && typeof document.cookie === "string") {
+          const cookies = document.cookie ? document.cookie.split(";") : [];
+          let cleared = 0;
+          for (const cookie of cookies) {
+            const separatorIndex = cookie.indexOf("=");
+            const name = (separatorIndex === -1 ? cookie : cookie.slice(0, separatorIndex)).trim();
+            if (!name) continue;
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
+            document.cookie = `${name}=; Max-Age=0; path=/;`;
+            cleared += 1;
+          }
+          summary.cookiesCleared = cleared;
+        }
+
+        logDebug(
+          `Cleared site data: ${summary.cookiesCleared} cookies, ${summary.cachesDeleted.length} caches, ${summary.databasesDeleted} databases`
+        );
+        return summary;
       }
 
       function renameSaveEntry(id) {
