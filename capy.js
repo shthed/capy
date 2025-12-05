@@ -417,7 +417,6 @@
  *   - flashPaletteSwatch (capy.js:13303) – flash palette swatch.
  *   - compactPuzzleSnapshot (capy.js:13328) – compact puzzle snapshot.
  *   - serializeCurrentPuzzle (capy.js:13436) – serialize current puzzle.
- *   - captureSavePreview (capy.js:13529) – capture save preview.
  *   - applyPreviewToEntry (capy.js:13570) – apply preview to entry.
  *   - isSettingsAutosaveReason (capy.js:13578) – is settings autosave reason.
  *   - normalizeLauncherPosition (capy.js:13582) – normalize launcher position.
@@ -707,14 +706,42 @@
     return regionMap;
   }
 
-  function resolveRegionMap(regionMapSource, sceneLoader, width, height) {
-    if (regionMapSource && regionMapSource.length === width * height) {
+  function resolveRegionMap(regionMapSource, sceneLoader, width, height, regions) {
+    const expectedCells = width * height;
+    if (regionMapSource && regionMapSource.length === expectedCells) {
       return regionMapSource instanceof Int32Array
         ? regionMapSource
         : new Int32Array(regionMapSource);
     }
     if (sceneLoader) {
       return rasterizeRegionMapFromVectorScene(sceneLoader, width, height);
+    }
+    const hasRegionPixels = Array.isArray(regions) && regions.some((region) => Array.isArray(region?.pixels));
+    if (!hasRegionPixels) {
+      return null;
+    }
+    const regionMap = new Int32Array(expectedCells);
+    regionMap.fill(-1);
+    const coverage = new Uint8Array(expectedCells);
+    let assigned = 0;
+    for (const region of regions) {
+      if (!region || !Array.isArray(region.pixels)) continue;
+      const regionId = Number.isFinite(region.id) ? region.id : null;
+      if (regionId == null) continue;
+      for (const pixel of region.pixels) {
+        const idx = Number(pixel);
+        if (!Number.isFinite(idx)) continue;
+        const target = idx | 0;
+        if (target < 0 || target >= expectedCells) continue;
+        regionMap[target] = regionId;
+        if (coverage[target] === 0) {
+          coverage[target] = 1;
+          assigned += 1;
+        }
+      }
+    }
+    if (assigned === expectedCells) {
+      return regionMap;
     }
     return null;
   }
@@ -10963,7 +10990,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           }
         }
 
-        const regionMap = resolveRegionMap(regionMapSource, sceneLoader, data.width, data.height);
+        const regionMap = resolveRegionMap(regionMapSource, sceneLoader, data.width, data.height, regions);
         if (!regionMap || regionMap.length !== expectedCells) {
           console.error("Puzzle data is inconsistent.");
           setProgressMessage("idle");
@@ -14688,51 +14715,13 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         return compactPuzzleSnapshot(snapshot) || snapshot;
       }
 
-      function captureSavePreview() {
-        if (!previewCanvas || !previewCanvas.width || !previewCanvas.height) {
-          return null;
-        }
-        try {
-          const largestSide = Math.max(previewCanvas.width, previewCanvas.height);
-          const targetMax = 320;
-          const scale = largestSide > targetMax ? targetMax / largestSide : 1;
-          const width = Math.max(1, Math.round(previewCanvas.width * scale));
-          const height = Math.max(1, Math.round(previewCanvas.height * scale));
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return null;
-          const bg = state.settings?.stageBackgroundColor || DEFAULT_STAGE_BACKGROUND_HEX;
-          ctx.fillStyle = bg;
-          ctx.fillRect(0, 0, width, height);
-          ctx.drawImage(previewCanvas, 0, 0, width, height);
-          let dataUrl = null;
-          try {
-            dataUrl = canvas.toDataURL("image/webp", 0.85);
-          } catch (error) {
-            try {
-              dataUrl = canvas.toDataURL("image/png");
-            } catch (fallbackError) {
-              console.warn("Failed to encode save preview", fallbackError);
-              return null;
-            }
-          }
-          const bytes = estimateDataUrlBytes(dataUrl);
-          if (bytes && bytes > 800000) {
-            return null;
-          }
-          return dataUrl;
-        } catch (error) {
-          console.warn("Failed to capture save preview", error);
-          return null;
-        }
-      }
-
       function applyPreviewToEntry(entry) {
         if (!entry || typeof entry !== "object") return;
         if ("preview" in entry) {
           delete entry.preview;
+        }
+        if (entry.data && typeof entry.data === "object" && "preview" in entry.data) {
+          delete entry.data.preview;
         }
       }
 
@@ -15746,9 +15735,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           if (typeof entry.title === "string" && entry.title.trim()) {
             storageEntry.title = entry.title.trim();
           }
-          if (typeof entry.preview === "string" && entry.preview.startsWith("data:")) {
-            storageEntry.preview = entry.preview;
-          }
           return storageEntry;
         }
 
@@ -15772,9 +15758,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           if (typeof entry.title === "string" && entry.title.trim()) {
             decoded.title = entry.title.trim();
           }
-          if (typeof entry.preview === "string" && entry.preview.startsWith("data:")) {
-            decoded.preview = entry.preview;
-          }
           return decoded;
         }
 
@@ -15797,6 +15780,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         function normalizeEntry(entry) {
           if (!entry || typeof entry !== "object") return null;
           const decoded = decodeSaveStorageEntry(entry) || entry;
+          applyPreviewToEntry(decoded);
           const idRaw = decoded.id != null ? String(decoded.id) : "";
           const id = idRaw.trim();
           if (!id) return null;
@@ -15862,44 +15846,18 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             console.error("Failed to prepare saves for storage", error);
             prepared = [];
           }
-
-          const hasPreviews = prepared.some(
-            (entry) => entry && typeof entry === "object" && typeof entry.preview === "string"
-          );
-
-          const attempts = [
-            { payload: prepared },
-            hasPreviews
-              ? {
-                  payload: prepared.map((entry) => {
-                    if (!entry || typeof entry !== "object") return entry;
-                    const { preview, ...rest } = entry;
-                    return rest;
-                  }),
-                  onSuccess() {
-                    logDebug("Removed save previews to fit storage quota.");
-                  },
-                }
-              : null,
-          ].filter(Boolean);
-
-          for (const attempt of attempts) {
-            let serialized = "[]";
-            let attemptedBytes = 0;
-            try {
-              serialized = JSON.stringify(attempt.payload);
-              attemptedBytes = getStoredStringSize(serialized);
-              localStorage.setItem(key, serialized);
-              if (typeof attempt.onSuccess === "function") {
-                attempt.onSuccess();
-              }
-              return;
-            } catch (error) {
-              console.error("Failed to persist saves", error);
-              if (error && error.name === "QuotaExceededError") {
-                logDebug("Storage full: unable to write save snapshot. Delete old saves or exports and retry.");
-                logStorageFailureDetails("manual", attemptedBytes);
-              }
+          let serialized = "[]";
+          let attemptedBytes = 0;
+          try {
+            serialized = JSON.stringify(prepared);
+            attemptedBytes = getStoredStringSize(serialized);
+            localStorage.setItem(key, serialized);
+            return;
+          } catch (error) {
+            console.error("Failed to persist saves", error);
+            if (error && error.name === "QuotaExceededError") {
+              logDebug("Storage full: unable to write save snapshot. Delete old saves or exports and retry.");
+              logStorageFailureDetails("manual", attemptedBytes);
             }
           }
         }
