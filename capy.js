@@ -2844,7 +2844,7 @@ function canUseGenerationWorker() {
 
   function renderMouseControls(item) {
     const groups = (item.groups || []).map((group) => {
-      const options = (group.options || []).map((opt) => {
+      const rows = (group.options || []).map((opt) => {
         const select = createElement(
           "select",
           { attrs: { id: opt.id } },
@@ -2856,17 +2856,36 @@ function canUseGenerationWorker() {
             ),
           ),
         );
-        return createElement("label", { className: "control mouse-control-option" }, [
-          createElement("span", { text: opt.label || "" }),
+
+        return createElement("label", { className: "control mouse-control-row" }, [
+          createElement("span", { className: "mouse-control-row-label", text: opt.label || "" }),
           select,
         ]);
       });
-      return createElement("div", { className: "mouse-control-group" }, [
-        createElement("span", { className: "mouse-control-title", text: group.title || "" }),
-        createElement("div", { className: "mouse-control-options" }, options),
-      ]);
+
+      return createElement(
+        "div",
+        {
+          className: "mouse-control-card",
+          attrs: { role: "group", "aria-label": group.title || "Mouse button" },
+        },
+        [
+          createElement("div", { className: "mouse-control-card-header" }, [
+            createElement("span", { className: "mouse-control-title", text: group.title || "" }),
+            createElement("span", {
+              className: "mouse-control-subtitle",
+              text: "Click and drag bindings",
+              attrs: { "aria-hidden": "true" },
+            }),
+          ]),
+          createElement("div", { className: "mouse-control-rows" }, rows),
+        ],
+      );
     });
-    return createElement("div", {}, groups);
+
+    return createElement("div", { className: "mouse-controls" }, [
+      createElement("div", { className: "mouse-controls-grid", attrs: { role: "group", "aria-label": "Mouse controls" } }, groups),
+    ]);
   }
 
   function renderDetailCallout(item) {
@@ -2987,12 +3006,18 @@ function canUseGenerationWorker() {
       className: "sheet-section",
       attrs: { "aria-labelledby": section.id },
     });
+    const headerChildren = [];
     if (section.title) {
-      sectionEl.appendChild(createElement("h3", { id: section.id, text: section.title }));
+      headerChildren.push(createElement("h3", { id: section.id, text: section.title }));
     }
     if (section.description) {
-      sectionEl.appendChild(renderNote({ text: section.description }));
+      headerChildren.push(renderNote({ text: section.description, className: "control-note section-description" }));
     }
+    if (headerChildren.length) {
+      sectionEl.appendChild(createElement("div", { className: "sheet-section-header" }, headerChildren));
+    }
+
+    const body = createElement("div", { className: "sheet-section-body" });
 
     if (section.layout === "actions") {
       const group = createElement("div", {
@@ -3004,9 +3029,10 @@ function canUseGenerationWorker() {
           group.appendChild(renderActionButton(item));
         }
       });
-      sectionEl.appendChild(group);
+      body.appendChild(group);
+      sectionEl.appendChild(body);
       if (section.note) {
-        sectionEl.appendChild(renderNote({ text: section.note }));
+        sectionEl.appendChild(renderNote({ text: section.note, className: "control-note section-note" }));
       }
       return sectionEl;
     }
@@ -3014,22 +3040,22 @@ function canUseGenerationWorker() {
     (section.items || []).forEach((item) => {
       switch (item.type) {
         case "toggle":
-          sectionEl.appendChild(renderToggle(item));
+          body.appendChild(renderToggle(item));
           break;
         case "select":
-          sectionEl.appendChild(renderSelect(item));
+          body.appendChild(renderSelect(item));
           break;
         case "range":
-          sectionEl.appendChild(renderRange(item));
+          body.appendChild(renderRange(item));
           break;
         case "note":
-          sectionEl.appendChild(renderNote(item));
+          body.appendChild(renderNote(item));
           break;
         case "mouse-controls":
-          sectionEl.appendChild(renderMouseControls(item));
+          body.appendChild(renderMouseControls(item));
           break;
         case "detail-callout":
-          sectionEl.appendChild(renderDetailCallout(item));
+          body.appendChild(renderDetailCallout(item));
           break;
         case "details": {
           const details = createElement("details", { className: "advanced-options", attrs: { id: item.id || "generatorAdvanced" } });
@@ -3046,34 +3072,38 @@ function canUseGenerationWorker() {
                 break;
             }
           });
-          sectionEl.appendChild(details);
+          body.appendChild(details);
           break;
         }
         case "textarea":
-          sectionEl.appendChild(renderTextarea(item));
+          body.appendChild(renderTextarea(item));
           break;
         case "list":
-          sectionEl.appendChild(renderList(item));
+          body.appendChild(renderList(item));
           break;
         case "definition-list":
-          sectionEl.appendChild(renderDefinitionList(item));
+          body.appendChild(renderDefinitionList(item));
           break;
         case "logger":
-          sectionEl.appendChild(renderLogger(item));
+          body.appendChild(renderLogger(item));
           break;
         case "button-row":
-          sectionEl.appendChild(renderButtonsRow(item));
+          body.appendChild(renderButtonsRow(item));
           break;
         case "json-view":
-          sectionEl.appendChild(renderJsonView());
+          body.appendChild(renderJsonView());
           break;
         default:
           break;
       }
     });
 
+    if (body.childElementCount) {
+      sectionEl.appendChild(body);
+    }
+
     if (section.note) {
-      sectionEl.appendChild(renderNote({ text: section.note }));
+      sectionEl.appendChild(renderNote({ text: section.note, className: "control-note section-note" }));
     }
 
     return sectionEl;
