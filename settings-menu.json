@@ -1,24 +1,24 @@
 [
   {
-    "id": "gameplay",
-    "label": "Gameplay",
+    "id": "basics",
+    "label": "Basics",
     "default": true,
     "heading": {
-      "title": "Gameplay",
-      "helpLabel": "Gameplay controls for preview, pacing, and assists",
-      "helpText": "Tweak quick actions, pacing, and assists without leaving the puzzle."
+      "title": "Basics",
+      "helpLabel": "Everyday controls",
+      "helpText": "Stay in a single view for quick play: preview, playstyle, hints, and sizing live here."
     },
     "sections": [
       {
-        "id": "quickActionsHeading",
-        "title": "Quick actions",
+        "id": "quickStart",
+        "title": "Quick start",
         "layout": "actions",
         "items": [
           {
             "type": "action",
             "id": "previewToggle",
             "label": "Show preview",
-            "icon": "🖼",
+            "icon": "\ud83d\uddbc",
             "ariaLabel": "Show preview",
             "testId": "preview-toggle",
             "ariaPressed": false,
@@ -28,82 +28,131 @@
             "type": "action",
             "id": "fullscreenButton",
             "label": "Enter fullscreen",
-            "icon": "⛶",
+            "icon": "\u26f6",
             "ariaLabel": "Enter fullscreen",
             "testId": "fullscreen-button",
             "ariaPressed": false
           }
         ],
-        "note": "Manage the reference preview and fullscreen view without leaving the puzzle."
+        "note": "Open a preview or go fullscreen without leaving the puzzle."
       },
       {
-        "id": "gameplayHeading",
-        "title": "Gameplay",
+        "id": "playStyle",
+        "title": "Play style",
         "items": [
           {
             "type": "toggle",
             "id": "autoAdvanceToggle",
-            "label": "Auto-advance to the next colour when complete",
-            "checked": true
-          },
-          {
-            "type": "toggle",
-            "id": "hintFlashToggle",
-            "label": "Animate hint highlights",
-            "checked": true
-          },
-          {
-            "type": "toggle",
-            "id": "showRegionLabelsToggle",
-            "label": "Show region numbers",
+            "label": "Jump to the next colour when finished",
             "checked": true
           },
           {
             "type": "select",
             "id": "difficultySelect",
-            "label": "Difficulty",
+            "label": "Tap forgiveness",
             "options": [
-              { "value": "normal", "label": "Standard" },
-              { "value": "nearby", "label": "Nearby" },
-              { "value": "easy", "label": "Easy" }
+              {
+                "value": "normal",
+                "label": "Precise (standard)",
+                "selected": true
+              },
+              {
+                "value": "nearby",
+                "label": "Nearby match"
+              },
+              {
+                "value": "easy",
+                "label": "Auto-select colour"
+              }
             ]
           },
           {
-            "type": "note",
-            "text": "Nearby mode lets you click adjacent colours (for example, colour 2 can also paint 1 or 3). Easy mode auto-selects any colour you click before filling it."
+            "type": "toggle",
+            "id": "showRegionLabelsToggle",
+            "label": "Show numbers on regions",
+            "checked": true
+          }
+        ],
+        "note": "Pick how forgiving taps should be and whether to jump to the next colour automatically."
+      },
+      {
+        "id": "hintsBasics",
+        "title": "Hints & guidance",
+        "items": [
+          {
+            "type": "toggle",
+            "id": "hintFlashToggle",
+            "label": "Animate hint flashes",
+            "checked": true
           },
+          {
+            "type": "toggle",
+            "id": "hintMatchingToggle",
+            "label": "Highlight every region for the active colour",
+            "checked": true
+          },
+          {
+            "type": "toggle",
+            "id": "hintHoverToggle",
+            "label": "Glow on hover",
+            "checked": true
+          }
+        ],
+        "note": "Toggle hint pulses here. Fine-tune brightness and timing from the advanced assists tab."
+      },
+      {
+        "id": "lookAndFeel",
+        "title": "Look & feel",
+        "items": [
           {
             "type": "select",
-            "id": "paletteSort",
-            "label": "Sort Colours",
-            "testId": "palette-sort",
-            "disabled": true,
+            "id": "uiTheme",
+            "label": "Theme",
             "options": [
-              { "value": "region", "label": "Number" },
-              { "value": "remaining", "label": "Remaining regions" },
-              { "value": "name", "label": "Colour name" },
-              { "value": "spectrum", "label": "Rainbow spectrum" },
-              { "value": "warmth", "label": "Warm → cool" },
-              { "value": "lightness", "label": "Perceptual lightness" }
+              {
+                "value": "dark",
+                "label": "Dark",
+                "selected": true
+              },
+              {
+                "value": "light",
+                "label": "Light"
+              },
+              {
+                "value": "colorful",
+                "label": "Colourful"
+              }
             ]
           },
-          { "type": "note", "text": "Choose how unfinished colours appear in the dock." }
-        ]
+          {
+            "type": "range",
+            "id": "uiScale",
+            "label": "Interface size",
+            "min": 0.2,
+            "max": 3,
+            "step": 0.05,
+            "value": 0.75,
+            "default": 0.75,
+            "format": "unit-percent"
+          }
+        ],
+        "note": "Adjust the UI without touching puzzle colours. Advanced display controls live in Display & zoom."
       }
     ]
   },
   {
     "id": "hints",
-    "label": "Hints",
+    "label": "Assists & timing",
+    "advancedOnly": true,
     "heading": {
-      "title": "Hints",
-      "helpLabel": "Hint visibility and overlays",
-      "helpText": "Control how hint highlights, overlays, and preview comparisons behave."
+      "title": "Assists & timing",
+      "helpLabel": "Hint timing and palette order",
+      "helpText": "Fine-tune how hints feel and how the palette is ordered once you need extra control."
     },
     "sections": [
       {
-        "id": "hintsControlsHeading",
-        "title": "Hints & controls",
+        "id": "hintTiming",
+        "title": "Hint timing",
         "items": [
           {
             "type": "range",
@@ -115,8 +164,14 @@
             "value": 1200,
             "default": 1200,
             "format": "seconds"
-          },
-          { "type": "note", "text": "Set how long hint highlights linger before fading out. Default 1.2 s." },
+          }
+        ],
+        "note": "Control how long hint flashes stay visible. Default 1.2 s."
+      },
+      {
+        "id": "hintBrightness",
+        "title": "Hint brightness",
+        "items": [
           {
             "type": "range",
             "id": "hintIntensity",
@@ -127,43 +182,149 @@
             "value": 65,
             "default": 65,
             "format": "percent"
-          },
-          { "type": "note", "text": "Adjust the opacity used when flashing matching regions. Default 65%." }
-        ]
+          }
+        ],
+        "note": "Raise or lower hint overlays to match your display brightness."
       },
       {
-        "id": "hintTypesHeading",
-        "title": "Hint types",
-        "description": "Pick which guidance effects appear while you play.",
+        "id": "paletteOrder",
+        "title": "Palette order",
         "items": [
           {
-            "type": "toggle",
-            "id": "hintMatchingToggle",
-            "label": "Highlight every region for the active colour",
-            "checked": true
+            "type": "select",
+            "id": "paletteSort",
+            "label": "Sort the palette",
+            "testId": "palette-sort",
+            "disabled": true,
+            "options": [
+              {
+                "value": "region",
+                "label": "Number"
+              },
+              {
+                "value": "remaining",
+                "label": "Remaining regions"
+              },
+              {
+                "value": "name",
+                "label": "Colour name"
+              },
+              {
+                "value": "spectrum",
+                "label": "Rainbow spectrum"
+              },
+              {
+                "value": "warmth",
+                "label": "Warm \u2192 cool"
+              },
+              {
+                "value": "lightness",
+                "label": "Perceptual lightness"
+              }
+            ]
+          }
+        ],
+        "note": "Reorder swatches after a puzzle loads: by number, remaining regions, colour name, or spectrum."
+      }
+    ]
+  },
+  {
+    "id": "appearance",
+    "label": "Display & zoom",
+    "advancedOnly": true,
+    "heading": {
+      "title": "Display & zoom",
+      "helpLabel": "Canvas and contrast tweaks",
+      "helpText": "Change label size, zoom limits, renderer, and backgrounds without affecting puzzle data."
+    },
+    "sections": [
+      {
+        "id": "labeling",
+        "title": "Labels & zoom",
+        "items": [
+          {
+            "type": "range",
+            "id": "labelScale",
+            "label": "Label size",
+            "min": 0.2,
+            "max": 2,
+            "step": 0.05,
+            "value": 1,
+            "default": 1,
+            "format": "unit-percent"
           },
           {
             "type": "note",
-            "text": "Toggle the pulse that flashes all remaining regions sharing the selected colour."
+            "text": "Scale region numbers independently from the surrounding interface. Default 100%."
           },
           {
-            "type": "toggle",
-            "id": "hintHoverToggle",
-            "label": "Spotlight hovered regions",
-            "checked": true
+            "type": "range",
+            "id": "maxZoom",
+            "label": "Maximum zoom",
+            "min": 2,
+            "max": 30,
+            "step": 0.5,
+            "value": 12,
+            "default": 12,
+            "format": "zoom-percent"
           },
-          { "type": "note", "text": "Show a focused hint when you pause the pointer over a region." }
+          {
+            "type": "note",
+            "text": "Limit how far the canvas can zoom in beyond the fitted view. Default 1200%."
+          },
+          {
+            "type": "select",
+            "id": "rendererMode",
+            "label": "Renderer",
+            "options": [
+              {
+                "value": "svg",
+                "label": "SVG",
+                "selected": true
+              }
+            ]
+          },
+          {
+            "type": "note",
+            "text": "Rendering is handled by the simplified SVG backend."
+          }
+        ]
+      },
+      {
+        "id": "backgrounds",
+        "title": "Backgrounds",
+        "items": [
+          {
+            "type": "color",
+            "id": "backgroundColor",
+            "label": "Unfilled region colour",
+            "value": "#f8fafc"
+          },
+          {
+            "type": "note",
+            "text": "Applies to unfinished regions and adjusts outline contrast automatically."
+          },
+          {
+            "type": "color",
+            "id": "stageBackgroundColor",
+            "label": "Background",
+            "value": "#000000"
+          },
+          {
+            "type": "note",
+            "text": "Adjust the area surrounding the puzzle canvas."
+          }
         ]
       }
     ]
   },
   {
     "id": "controls",
-    "label": "Controls",
+    "label": "Controls & gestures",
     "heading": {
-      "title": "Controls",
-      "helpLabel": "Control remapping and input feel",
-      "helpText": "Remap mouse buttons, adjust gesture behaviour, and set interface scale."
+      "title": "Controls & gestures",
+      "helpLabel": "Mouse bindings and input feel",
+      "helpText": "Remap clicks and drags or change gesture defaults for advanced setups."
     },
     "sections": [
       {
@@ -181,22 +342,54 @@
                     "label": "Click",
                     "id": "mouseLeftClick",
                     "choices": [
-                      { "value": "fill", "label": "Fill region", "selected": true },
-                      { "value": "select-fill", "label": "Select and fill region" },
-                      { "value": "select", "label": "Select colour" },
-                      { "value": "zoom-in", "label": "Zoom in" },
-                      { "value": "zoom-out", "label": "Zoom out" },
-                      { "value": "none", "label": "No action" }
+                      {
+                        "value": "fill",
+                        "label": "Fill region",
+                        "selected": true
+                      },
+                      {
+                        "value": "select-fill",
+                        "label": "Select and fill region"
+                      },
+                      {
+                        "value": "select",
+                        "label": "Select colour"
+                      },
+                      {
+                        "value": "zoom-in",
+                        "label": "Zoom in"
+                      },
+                      {
+                        "value": "zoom-out",
+                        "label": "Zoom out"
+                      },
+                      {
+                        "value": "none",
+                        "label": "No action"
+                      }
                     ]
                   },
                   {
                     "label": "Click + drag",
                     "id": "mouseLeftDrag",
                     "choices": [
-                      { "value": "pan", "label": "Pan view", "selected": true },
-                      { "value": "fill", "label": "Fill while dragging" },
-                      { "value": "zoom", "label": "Zoom" },
-                      { "value": "none", "label": "No action" }
+                      {
+                        "value": "pan",
+                        "label": "Pan view",
+                        "selected": true
+                      },
+                      {
+                        "value": "fill",
+                        "label": "Fill while dragging"
+                      },
+                      {
+                        "value": "zoom",
+                        "label": "Zoom"
+                      },
+                      {
+                        "value": "none",
+                        "label": "No action"
+                      }
                     ]
                   }
                 ]
@@ -208,22 +401,54 @@
                     "label": "Click",
                     "id": "mouseMiddleClick",
                     "choices": [
-                      { "value": "fill", "label": "Fill region" },
-                      { "value": "select-fill", "label": "Select and fill region" },
-                      { "value": "select", "label": "Select colour" },
-                      { "value": "zoom-in", "label": "Zoom in" },
-                      { "value": "zoom-out", "label": "Zoom out" },
-                      { "value": "none", "label": "No action", "selected": true }
+                      {
+                        "value": "fill",
+                        "label": "Fill region"
+                      },
+                      {
+                        "value": "select-fill",
+                        "label": "Select and fill region"
+                      },
+                      {
+                        "value": "select",
+                        "label": "Select colour"
+                      },
+                      {
+                        "value": "zoom-in",
+                        "label": "Zoom in"
+                      },
+                      {
+                        "value": "zoom-out",
+                        "label": "Zoom out"
+                      },
+                      {
+                        "value": "none",
+                        "label": "No action",
+                        "selected": true
+                      }
                     ]
                   },
                   {
                     "label": "Click + drag",
                     "id": "mouseMiddleDrag",
                     "choices": [
-                      { "value": "pan", "label": "Pan view", "selected": true },
-                      { "value": "fill", "label": "Fill while dragging" },
-                      { "value": "zoom", "label": "Zoom" },
-                      { "value": "none", "label": "No action" }
+                      {
+                        "value": "pan",
+                        "label": "Pan view",
+                        "selected": true
+                      },
+                      {
+                        "value": "fill",
+                        "label": "Fill while dragging"
+                      },
+                      {
+                        "value": "zoom",
+                        "label": "Zoom"
+                      },
+                      {
+                        "value": "none",
+                        "label": "No action"
+                      }
                     ]
                   }
                 ]
@@ -235,125 +460,81 @@
                     "label": "Click",
                     "id": "mouseRightClick",
                     "choices": [
-                      { "value": "fill", "label": "Fill region" },
-                      { "value": "select-fill", "label": "Select and fill region" },
-                      { "value": "select", "label": "Select colour", "selected": true },
-                      { "value": "zoom-in", "label": "Zoom in" },
-                      { "value": "zoom-out", "label": "Zoom out" },
-                      { "value": "none", "label": "No action" }
+                      {
+                        "value": "fill",
+                        "label": "Fill region"
+                      },
+                      {
+                        "value": "select-fill",
+                        "label": "Select and fill region"
+                      },
+                      {
+                        "value": "select",
+                        "label": "Select colour",
+                        "selected": true
+                      },
+                      {
+                        "value": "zoom-in",
+                        "label": "Zoom in"
+                      },
+                      {
+                        "value": "zoom-out",
+                        "label": "Zoom out"
+                      },
+                      {
+                        "value": "none",
+                        "label": "No action"
+                      }
                     ]
                   },
                   {
                     "label": "Click + drag",
                     "id": "mouseRightDrag",
                     "choices": [
-                      { "value": "pan", "label": "Pan view", "selected": true },
-                      { "value": "fill", "label": "Fill while dragging" },
-                      { "value": "zoom", "label": "Zoom" },
-                      { "value": "none", "label": "No action" }
+                      {
+                        "value": "pan",
+                        "label": "Pan view",
+                        "selected": true
+                      },
+                      {
+                        "value": "fill",
+                        "label": "Fill while dragging"
+                      },
+                      {
+                        "value": "zoom",
+                        "label": "Zoom"
+                      },
+                      {
+                        "value": "none",
+                        "label": "No action"
+                      }
                     ]
                   }
                 ]
               }
             ]
           },
-          { "type": "note", "text": "Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out." }
+          {
+            "type": "note",
+            "text": "Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out."
+          }
         ]
       }
-    ]
-  },
-  {
-    "id": "appearance",
-    "label": "Appearance",
-    "heading": {
-      "title": "Appearance",
-      "helpLabel": "Appearance and accessibility controls",
-      "helpText": "Balance scale, contrast, overlays, and theme picks for the board."
-    },
-    "sections": [
-      {
-        "id": "appearanceHeading",
-        "title": "Appearance",
-        "items": [
-          {
-            "type": "range",
-            "id": "uiScale",
-            "label": "Interface scale",
-            "min": 0.2,
-            "max": 3,
-            "step": 0.05,
-            "value": 0.75,
-            "default": 0.75,
-            "format": "unit-percent"
-          },
-          { "type": "note", "text": "Resize command buttons and labels without altering canvas zoom. Default 75%." },
-          {
-            "type": "range",
-            "id": "labelScale",
-            "label": "Label size",
-            "min": 0.2,
-            "max": 2,
-            "step": 0.05,
-            "value": 1,
-            "default": 1,
-            "format": "unit-percent"
-          },
-          { "type": "note", "text": "Scale region numbers independently from the surrounding interface. Default 100%." },
-          {
-            "type": "range",
-            "id": "maxZoom",
-            "label": "Maximum zoom",
-            "min": 2,
-            "max": 30,
-            "step": 0.5,
-            "value": 12,
-            "default": 12,
-            "format": "zoom-percent"
-          },
-          { "type": "note", "text": "Limit how far the canvas can zoom in beyond the fitted view. Default 1200%." },
-          {
-            "type": "select",
-            "id": "uiTheme",
-            "label": "Interface theme",
-            "options": [
-              { "value": "dark", "label": "Dark", "selected": true },
-              { "value": "light", "label": "Light" },
-              { "value": "colorful", "label": "Colourful" }
-            ]
-          },
-          { "type": "note", "text": "Switch between dark, light, or colourful chrome accents." },
-          {
-            "type": "select",
-            "id": "rendererMode",
-            "label": "Renderer",
-            "options": [
-              { "value": "svg", "label": "SVG", "selected": true }
-            ]
-          },
-          { "type": "note", "text": "Rendering is handled by the simplified SVG backend." },
-          {
-            "type": "color",
-            "id": "backgroundColor",
-            "label": "Unfilled region colour",
-            "value": "#f8fafc"
-          },
-          { "type": "note", "text": "Applies to unfinished regions and adjusts outline contrast automatically." },
-          { "type": "color", "id": "stageBackgroundColor", "label": "Background", "value": "#000000" },
-          { "type": "note", "text": "Adjust the area surrounding the puzzle canvas." }
-        ]
-      }
-    ]
+    ],
+    "advancedOnly": true
   },
   {
     "id": "generator",
-    "label": "Generator",
+    "label": "Puzzle builder",
     "heading": {
-      "title": "Generator",
+      "title": "Puzzle builder",
       "helpLabel": "Generator and import controls",
       "helpText": "Set clustering, imports, and metadata for new puzzles and reloads."
     },
     "blocks": [
-      { "type": "import-notice" },
+      {
+        "type": "import-notice"
+      },
       {
         "type": "section",
         "id": "generatorHeading",
@@ -364,12 +545,24 @@
             "type": "detail-callout",
             "captionAttr": "detail-caption",
             "levels": [
-              { "level": "low", "label": "Low" },
-              { "level": "medium", "label": "Medium" },
-              { "level": "high", "label": "High" }
+              {
+                "level": "low",
+                "label": "Low"
+              },
+              {
+                "level": "medium",
+                "label": "Medium"
+              },
+              {
+                "level": "high",
+                "label": "High"
+              }
             ]
           },
-          { "type": "note", "text": "Switching presets updates every slider below and reloads the sample scene when it's active." },
+          {
+            "type": "note",
+            "text": "Switching presets updates every slider below and reloads the sample scene when it's active."
+          },
           {
             "type": "range",
             "id": "colorCount",
@@ -390,7 +583,10 @@
             "default": 60,
             "format": "px2"
           },
-          { "type": "note", "text": "Higher values merge smaller areas for fewer regions. Default 60 px²." },
+          {
+            "type": "note",
+            "text": "Higher values merge smaller areas for fewer regions. Default 60 px\u00b2."
+          },
           {
             "type": "range",
             "id": "detailLevel",
@@ -402,18 +598,33 @@
             "default": 640,
             "format": "px"
           },
-          { "type": "note", "text": "Controls the longest edge used when resizing the source image. Default 640 px." },
+          {
+            "type": "note",
+            "text": "Controls the longest edge used when resizing the source image. Default 640 px."
+          },
           {
             "type": "select",
             "id": "generationAlgorithm",
             "label": "Algorithm",
             "options": [
-              { "value": "local-kmeans", "label": "Local palette clustering (k-means)" },
-              { "value": "local-posterize", "label": "Local posterize & merge" },
-              { "value": "organic-slic", "label": "Organic superpixels (curved gradients)" }
+              {
+                "value": "local-kmeans",
+                "label": "Local palette clustering (k-means)"
+              },
+              {
+                "value": "local-posterize",
+                "label": "Local posterize & merge"
+              },
+              {
+                "value": "organic-slic",
+                "label": "Organic superpixels (curved gradients)"
+              }
             ]
           },
-          { "type": "note", "text": "Choose between local clustering pipelines now, with space for hosted services to appear as they become available." },
+          {
+            "type": "note",
+            "text": "Choose between local clustering pipelines now, with space for hosted services to appear as they become available."
+          },
           {
             "type": "range",
             "id": "sampleRate",
@@ -425,7 +636,10 @@
             "default": 50,
             "format": "percent"
           },
-          { "type": "note", "text": "Lower values speed up clustering by sampling fewer pixels. Default 50%." },
+          {
+            "type": "note",
+            "text": "Lower values speed up clustering by sampling fewer pixels. Default 50%."
+          },
           {
             "type": "range",
             "id": "kmeansIters",
@@ -454,7 +668,7 @@
           },
           {
             "type": "note",
-            "text": "Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source. Default 0 passes."
+            "text": "Each pass blends stray pixels into neighbouring regions before segmentation\u2014set to 0 to keep edges as crisp as the source. Default 0 passes."
           },
           {
             "type": "details",
@@ -524,18 +738,25 @@
           }
         ]
       },
-      { "type": "source-url-form" },
-      { "type": "sheet-actions" },
-      { "type": "generator-progress" }
-    ]
+      {
+        "type": "source-url-form"
+      },
+      {
+        "type": "sheet-actions"
+      },
+      {
+        "type": "generator-progress"
+      }
+    ],
+    "advancedOnly": true
   },
   {
     "id": "saves",
-    "label": "Saves",
+    "label": "Saves & storage",
     "heading": {
-      "title": "Saves",
-      "helpLabel": "Save management",
-      "helpText": "Import puzzles, start fresh sessions, and manage your save slots."
+      "title": "Saves & storage",
+      "helpLabel": "Manage snapshots and cached images",
+      "helpText": "Export progress, reset a puzzle, or change how large stored images can be."
     },
     "sections": [
       {
@@ -546,29 +767,64 @@
             "type": "action-row",
             "className": "save-start-actions",
             "actions": [
-              { "type": "button", "id": "selectImage", "label": "Upload Image", "ariaLabel": "Upload image or JSON puzzle" },
-              { "type": "button", "id": "samplePuzzle", "label": "Load capybara sample", "ariaLabel": "Load capybara sample puzzle", "dataset": { "action": "load-sample" } }
+              {
+                "type": "button",
+                "id": "selectImage",
+                "label": "Upload Image",
+                "ariaLabel": "Upload image or JSON puzzle"
+              },
+              {
+                "type": "button",
+                "id": "samplePuzzle",
+                "label": "Load capybara sample",
+                "ariaLabel": "Load capybara sample puzzle",
+                "dataset": {
+                  "action": "load-sample"
+                }
+              }
             ]
           }
         ]
       },
-      { "type": "save-manager" },
+      {
+        "type": "save-manager"
+      },
       {
         "id": "storageHeading",
         "title": "Save storage",
         "items": [
-          { "type": "note", "text": "", "outputId": "saveStorageSummary" },
+          {
+            "type": "note",
+            "text": "",
+            "outputId": "saveStorageSummary"
+          },
           {
             "type": "select",
             "id": "sourceImageLimit",
             "label": "Stored image size",
             "outputFor": "sourceImageLimit",
             "options": [
-              { "value": 262144, "label": "256 KB" },
-              { "value": 524288, "label": "512 KB" },
-              { "value": 1048576, "label": "1 MB", "selected": true },
-              { "value": 2097152, "label": "2 MB" },
-              { "value": 5242880, "label": "5 MB" }
+              {
+                "value": 262144,
+                "label": "256 KB"
+              },
+              {
+                "value": 524288,
+                "label": "512 KB"
+              },
+              {
+                "value": 1048576,
+                "label": "1 MB",
+                "selected": true
+              },
+              {
+                "value": 2097152,
+                "label": "2 MB"
+              },
+              {
+                "value": 5242880,
+                "label": "5 MB"
+              }
             ]
           },
           {
@@ -579,20 +835,25 @@
             "type": "button-row",
             "className": "log-actions",
             "actions": [
-              { "type": "button", "id": "deleteAllSaves", "label": "Delete all saves" }
+              {
+                "type": "button",
+                "id": "deleteAllSaves",
+                "label": "Delete all saves"
+              }
             ]
           }
         ]
       }
-    ]
+    ],
+    "advancedOnly": true
   },
   {
     "id": "help",
-    "label": "Help",
+    "label": "Guides",
     "heading": {
-      "title": "Help",
-      "helpLabel": "Gameplay tips",
-      "helpText": "Review button legends and gestures while you play."
+      "title": "Guides",
+      "helpLabel": "Gestures, shortcuts, and documentation",
+      "helpText": "Review inputs, commands, and the built-in README without leaving the puzzle."
     },
     "sections": [
       {
@@ -602,21 +863,36 @@
           {
             "type": "definition-list",
             "items": [
-              { "term": "🖼 Preview", "description": "Toggle the finished artwork overlay to compare your progress." },
               {
-                "term": "🎛 Generator",
+                "term": "\ud83d\uddbc Preview",
+                "description": "Toggle the finished artwork overlay to compare your progress."
+              },
+              {
+                "term": "\ud83c\udf9b Generator",
                 "description": "Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation."
               },
               {
-                "term": "🎚 Detail",
+                "term": "\ud83c\udf9a Detail",
                 "description": "Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes, minimum region areas, resize targets, and the region counts noted above."
               },
-              { "term": "⛶ Fullscreen", "description": "Expand the app to fill the display or exit back to windowed mode." },
-              { "term": "⬆ Import", "description": "Load a new image or JSON puzzle from disk." },
-              { "term": "💾 Saves", "description": "Manage snapshots — load, rename, export, or delete stored games." },
-              { "term": "ℹ Help", "description": "Open this guide and review tips for palette controls, gestures, and shortcuts." },
               {
-                "term": "⚙ Menu",
+                "term": "\u26f6 Fullscreen",
+                "description": "Expand the app to fill the display or exit back to windowed mode."
+              },
+              {
+                "term": "\u2b06 Import",
+                "description": "Load a new image or JSON puzzle from disk."
+              },
+              {
+                "term": "\ud83d\udcbe Saves",
+                "description": "Manage snapshots \u2014 load, rename, export, or delete stored games."
+              },
+              {
+                "term": "\u2139 Help",
+                "description": "Open this guide and review tips for palette controls, gestures, and shortcuts."
+              },
+              {
+                "term": "\u2699 Menu",
                 "description": "Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface scale. Advanced options expose accessibility tweaks for the hint animations."
               }
             ]
@@ -634,25 +910,28 @@
               "Right click Select the colour under the pointer.",
               "Select a palette swatch to set the active colour and flash every matching region.",
               "Enable Easy difficulty in the menu to let clicks auto-select the tapped region's colour.",
-              "Mouse wheel or +/− Zoom in or out around the cursor.",
+              "Mouse wheel or +/\u2212 Zoom in or out around the cursor.",
               "Middle click or Space + drag Pan the canvas.",
               "Drag & drop an image or JSON file anywhere on the window to import it."
             ]
           }
         ]
       }
-    ]
+    ],
+    "advancedOnly": true
   },
   {
     "id": "diagnostics",
     "label": "Diagnostics",
     "heading": {
       "title": "Diagnostics",
-      "helpLabel": "Diagnostics and JSON review",
-      "helpText": "Check live logs, system status, and review the current JSON payload."
+      "helpLabel": "Debug and system info",
+      "helpText": "Inspect logs and service worker state while troubleshooting."
     },
     "blocks": [
-      { "type": "loader-console" },
+      {
+        "type": "loader-console"
+      },
       {
         "type": "section",
         "id": "systemHeading",
@@ -661,9 +940,21 @@
           {
             "type": "definition-list",
             "items": [
-              { "term": "Service worker", "description": "Waiting to register…", "dataTarget": "service-worker-state" },
-              { "term": "Runtime cache", "description": "capy-offline-cache-v3", "dataTarget": "service-worker-cache" },
-              { "term": "Last update", "description": "Not available yet", "dataTarget": "service-worker-updated" }
+              {
+                "term": "Service worker",
+                "description": "Waiting to register\u2026",
+                "dataTarget": "service-worker-state"
+              },
+              {
+                "term": "Runtime cache",
+                "description": "capy-offline-cache-v3",
+                "dataTarget": "service-worker-cache"
+              },
+              {
+                "term": "Last update",
+                "description": "Not available yet",
+                "dataTarget": "service-worker-updated"
+              }
             ]
           },
           {
@@ -677,12 +968,24 @@
         "id": "debugHeading",
         "title": "Debug log",
         "items": [
-          { "type": "note", "text": "Recent actions, selections, and generation events appear here while you play." },
-          { "type": "logger", "id": "debugLog" },
+          {
+            "type": "note",
+            "text": "Recent actions, selections, and generation events appear here while you play."
+          },
+          {
+            "type": "logger",
+            "id": "debugLog"
+          },
           {
             "type": "button-row",
             "className": "log-actions",
-            "actions": [ { "type": "button", "id": "clearDebugLog", "label": "Clear log" } ]
+            "actions": [
+              {
+                "type": "button",
+                "id": "clearDebugLog",
+                "label": "Clear log"
+              }
+            ]
           }
         ]
       },
@@ -695,9 +998,12 @@
             "type": "note",
             "text": "Review or update the current preferences as JSON. Export a snapshot or import one from the textarea below."
           },
-          { "type": "json-view" }
+          {
+            "type": "json-view"
+          }
         ]
       }
-    ]
+    ],
+    "advancedOnly": true
   }
 ]

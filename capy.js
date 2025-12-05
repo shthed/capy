@@ -2607,6 +2607,7 @@ function canUseGenerationWorker() {
   const capyGeneration = {
     GENERATION_ALGORITHM_CATALOG,
     DEFAULT_GENERATION_ALGORITHM_ID,
+    prepareSourceImageBlob,
     disposeGenerationWorker,
     createPuzzleData,
     __smoothAssignmentsForTests: smoothAssignments,
@@ -3261,6 +3262,7 @@ function canUseGenerationWorker() {
         continue;
       }
       const tabId = tab.id;
+      const isAdvancedTab = tab.advancedOnly === true;
       const panelId = `settingsPanel-${tabId}`;
       const button = document.createElement("button");
       button.className = "settings-tab";
@@ -3268,6 +3270,10 @@ function canUseGenerationWorker() {
       button.role = "tab";
       button.id = `settingsTab-${tabId}`;
       button.dataset.settingsTab = tabId;
+      button.dataset.settingsTier = isAdvancedTab ? "advanced" : "basic";
+      button.dataset.settingsAvailable = isAdvancedTab ? "false" : "true";
+      button.hidden = isAdvancedTab;
+      button.setAttribute("aria-hidden", isAdvancedTab ? "true" : "false");
       button.setAttribute("aria-controls", panelId);
       const isDefault = tab.default || tabId === defaultId;
       if (isDefault) {
@@ -3281,6 +3287,10 @@ function canUseGenerationWorker() {
       panel.className = "settings-section settings-page";
       panel.id = panelId;
       panel.dataset.settingsPanel = tabId;
+      panel.dataset.settingsTier = isAdvancedTab ? "advanced" : "basic";
+      panel.dataset.settingsAvailable = isAdvancedTab ? "false" : "true";
+      panel.hidden = isAdvancedTab;
+      panel.setAttribute("aria-hidden", isAdvancedTab ? "true" : "false");
       panel.setAttribute("role", "tabpanel");
       panel.setAttribute("aria-labelledby", button.id);
 
@@ -3666,7 +3676,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const errorToast = dom.get("#errorToast");
       const errorToastMessage = errorToast?.querySelector("[data-error-message]") || null;
       const errorToastStack = errorToast?.querySelector("[data-error-stack]") || null;
+      const errorToastCopyButton = errorToast?.querySelector("[data-error-copy]") || null;
       const errorToastCloseButton = errorToast?.querySelector("[data-error-close]") || null;
+      const defaultErrorCopyLabel = errorToastCopyButton?.textContent || "Copy error";
       const gameSelectionList = dom.get("#gameSelectionList");
       const gameSelectionEmpty = dom.get("#gameSelectionEmpty");
       const startHint = document.getElementById("startHint");
@@ -3681,6 +3693,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         settingsSheet?.querySelector("[data-settings-scroll]") ||
         settingsSheet?.querySelector(".sheet-body") ||
         null;
+      const advancedModeToggle = document.getElementById("advancedModeToggle");
       const settingsTabs = settingsSheet ? Array.from(settingsSheet.querySelectorAll("[data-settings-tab]")) : [];
       const settingsPanels = settingsSheet
         ? Array.from(settingsSheet.querySelectorAll("[data-settings-panel]"))
@@ -3882,6 +3895,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
+      const DEFAULT_REGION_MERGE_PASSES = 12;
+      const DEFAULT_MAX_PERIMETER_TO_AREA_RATIO = 1.6;
       const VALID_GENERATION_ALGORITHMS = new Set([
         "local-kmeans",
         "local-posterize",
@@ -5423,9 +5438,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         const insetY = Math.max(0, Math.round(viewport?.offsetTop || 0));
         const gutter = Math.max(12, Math.round(Math.min(rawWidth, rawHeight) * 0.02));
         const frameGutter = Math.max(gutter, Math.max(insetX, insetY));
-        const width = clamp(Math.round(rawWidth - frameGutter * 2), 340, 1080);
-        const height = clamp(Math.round(rawHeight - frameGutter * 2), 380, 900);
-        const viewportGap = Math.min(Math.max(frameGutter, 12), 72);
+        const width = clamp(Math.round(rawWidth - frameGutter * 2), 320, 980);
+        const height = clamp(Math.round(rawHeight - frameGutter * 2), 360, 860);
+        const viewportGap = Math.min(Math.max(frameGutter, 10), 64);
         settingsSheet.style.setProperty("--settings-sheet-viewport-gap", `${viewportGap}px`);
         settingsSheet.style.setProperty("--settings-sheet-width", `${width}px`);
         settingsSheet.style.setProperty("--settings-sheet-height", `${height}px`);
@@ -5619,6 +5634,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           showRegionLabels: true,
           theme: DEFAULT_UI_THEME,
           renderer: "svg",
+          showAdvancedSettings: false,
           settingsSheetOpen: false,
           mouseControls: cloneMouseControls(DEFAULT_MOUSE_CONTROLS),
         },
@@ -5696,6 +5712,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           state.paletteSort = storedPaletteSort;
         }
       }
+      setAdvancedSettingsAvailability(state.settings.showAdvancedSettings === true, { resetTab: true });
       refreshSettingsJsonView(state.settings);
 
       function logRendererEvent(message, details = null) {
@@ -6714,7 +6731,10 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       }
 
       if (settingsTabs.length && settingsPanels.length) {
-        activateSettingsTab(defaultSettingsTabId, { resetScroll: true });
+        const hasActiveTab = settingsTabs.some((tab) => tab?.getAttribute("aria-selected") === "true");
+        if (!hasActiveTab) {
+          activateSettingsTab(defaultSettingsTabId, { resetScroll: true });
+        }
         for (const tab of settingsTabs) {
           tab.addEventListener("click", () => {
             const tabId = tab.dataset.settingsTab || defaultSettingsTabId;
@@ -6722,6 +6742,12 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             scrollSettingsPanelIntoView(tabId, { resetScroll: true, focus: true });
           });
         }
+      }
+
+      if (errorToastCopyButton) {
+        errorToastCopyButton.addEventListener("click", () => {
+          void copyGlobalErrorNotice();
+        });
       }
 
       if (errorToastCloseButton) {
@@ -6913,6 +6939,17 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           logDebug(difficultyLog);
           scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-difficulty");
+        });
+      }
+
+      if (advancedModeToggle) {
+        advancedModeToggle.checked = state.settings.showAdvancedSettings === true;
+        advancedModeToggle.addEventListener("change", () => {
+          const advanced = advancedModeToggle.checked;
+          state.settings.showAdvancedSettings = advanced;
+          setAdvancedSettingsAvailability(advanced, { resetTab: !advanced });
+          logDebug(`Advanced controls ${advanced ? "enabled" : "hidden"}`);
+          scheduleSettingsPersist({ immediate: true });
         });
       }
 
@@ -8499,6 +8536,50 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         errorToast.hidden = true;
       }
 
+      async function copyGlobalErrorNotice() {
+        const message = errorToastMessage?.textContent?.trim() || "";
+        const stack =
+          errorToastStack && !errorToastStack.hidden && errorToastStack.textContent
+            ? errorToastStack.textContent.trim()
+            : "";
+        const clipboardText = [message, stack].filter(Boolean).join("\n\n");
+        if (!clipboardText) {
+          return;
+        }
+        const buttonLabel = defaultErrorCopyLabel;
+        try {
+          if (navigator?.clipboard?.writeText) {
+            await navigator.clipboard.writeText(clipboardText);
+          } else {
+            const textarea = document.createElement("textarea");
+            textarea.value = clipboardText;
+            textarea.setAttribute("readonly", "true");
+            textarea.style.position = "fixed";
+            textarea.style.opacity = "0";
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
+          }
+          if (errorToastCopyButton) {
+            errorToastCopyButton.disabled = true;
+            errorToastCopyButton.textContent = "Copied";
+            setTimeout(() => {
+              errorToastCopyButton.textContent = buttonLabel;
+              errorToastCopyButton.disabled = false;
+            }, 1400);
+          }
+        } catch (error) {
+          console.error("Unable to copy error details", error);
+          if (errorToastCopyButton) {
+            errorToastCopyButton.textContent = "Copy failed";
+            setTimeout(() => {
+              errorToastCopyButton.textContent = buttonLabel;
+            }, 1400);
+          }
+        }
+      }
+
       function showGlobalErrorNotice({ message, stack } = {}) {
         if (!errorToast) return;
         const resolvedMessage =
@@ -8517,6 +8598,11 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             errorToastStack.textContent = "";
             errorToastStack.hidden = true;
           }
+        }
+
+        if (errorToastCopyButton) {
+          errorToastCopyButton.disabled = false;
+          errorToastCopyButton.textContent = defaultErrorCopyLabel;
         }
 
         errorToast.hidden = false;
@@ -8712,20 +8798,29 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
         const { focusTab = false, resetScroll = false } = options;
         const availableIds = settingsPanels
+          .filter((panel) => panel?.dataset?.settingsAvailable !== "false")
           .map((panel) => panel?.dataset?.settingsPanel)
           .filter((value) => typeof value === "string" && value.length > 0);
-        const resolvedId = availableIds.includes(tabId) ? tabId : defaultSettingsTabId;
+        const resolvedId = availableIds.includes(tabId)
+          ? tabId
+          : availableIds.includes(defaultSettingsTabId)
+          ? defaultSettingsTabId
+          : availableIds[0];
         if (!resolvedId) {
           return null;
         }
         for (const tab of settingsTabs) {
-          const active = tab?.dataset?.settingsTab === resolvedId;
+          const available = tab?.dataset?.settingsAvailable !== "false";
+          const active = available && tab?.dataset?.settingsTab === resolvedId;
+          tab.hidden = !available;
+          tab?.setAttribute("aria-hidden", available ? "false" : "true");
           tab?.setAttribute("aria-selected", active ? "true" : "false");
           tab?.setAttribute("tabindex", active ? "0" : "-1");
         }
         for (const panel of settingsPanels) {
           if (!panel) continue;
-          const active = panel.dataset.settingsPanel === resolvedId;
+          const available = panel.dataset.settingsAvailable !== "false";
+          const active = available && panel.dataset.settingsPanel === resolvedId;
           panel.hidden = !active;
           panel.setAttribute("aria-hidden", active ? "false" : "true");
         }
@@ -8739,11 +8834,55 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         return resolvedId;
       }
 
+      function setAdvancedSettingsAvailability(enabled, options = {}) {
+        if (!settingsSheet || settingsTabs.length === 0 || settingsPanels.length === 0) {
+          return null;
+        }
+        const { resetTab = false } = options;
+        const allowAdvanced = enabled === true;
+        settingsSheet.classList.toggle("settings-mode-advanced", allowAdvanced);
+        settingsSheet.classList.toggle("settings-mode-basic", !allowAdvanced);
+        if (advancedModeToggle) {
+          advancedModeToggle.checked = allowAdvanced;
+        }
+        for (const tab of settingsTabs) {
+          const isAdvanced = tab?.dataset?.settingsTier === "advanced";
+          const available = !isAdvanced || allowAdvanced;
+          tab.hidden = !available;
+          tab.dataset.settingsAvailable = available ? "true" : "false";
+          tab.setAttribute("aria-hidden", available ? "false" : "true");
+        }
+        for (const panel of settingsPanels) {
+          if (!panel) continue;
+          const isAdvanced = panel?.dataset?.settingsTier === "advanced";
+          const available = !isAdvanced || allowAdvanced;
+          panel.dataset.settingsAvailable = available ? "true" : "false";
+        }
+        const availableIds = settingsPanels
+          .filter((panel) => panel?.dataset?.settingsAvailable !== "false")
+          .map((panel) => panel?.dataset?.settingsPanel)
+          .filter((value) => typeof value === "string" && value.length > 0);
+        const activeTab = settingsTabs.find((tab) => tab?.getAttribute("aria-selected") === "true");
+        const activeId = activeTab?.dataset?.settingsTab;
+        const needsReset = resetTab || (activeId && !availableIds.includes(activeId));
+        if (needsReset && availableIds.length) {
+          activateSettingsTab(availableIds[0], { resetScroll: true });
+        }
+        return allowAdvanced;
+      }
+
       function scrollSettingsPanelIntoView(panelId, options = {}) {
         if (!panelId || !settingsSheet || !settingsBody) {
           return null;
         }
         const { focus = false, resetScroll = false } = options;
+        const targetPanel = settingsSheet.querySelector(`[data-settings-panel="${panelId}"]`);
+        if (
+          targetPanel?.dataset?.settingsTier === "advanced" &&
+          targetPanel?.dataset?.settingsAvailable === "false"
+        ) {
+          setAdvancedSettingsAvailability(true, { resetTab: false });
+        }
         const resolvedId = activateSettingsTab(panelId, { resetScroll });
         if (!resolvedId) {
           return null;
@@ -9752,7 +9891,16 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         const sourceLimit = Number.isFinite(options?.sourceImageMaxBytes)
           ? options.sourceImageMaxBytes
           : DEFAULT_SOURCE_IMAGE_MAX_BYTES;
-        const prepared = await prepareSourceImageBlob(file, {
+        const prepareSourceImage = globalThis.capyGeneration?.prepareSourceImageBlob;
+        if (typeof prepareSourceImage !== "function") {
+          console.warn("prepareSourceImageBlob unavailable; import cancelled");
+          setProgressMessage("idle");
+          if (confirmImportBtn) {
+            confirmImportBtn.disabled = false;
+          }
+          return;
+        }
+        const prepared = await prepareSourceImage(file, {
           maxBytes: sourceLimit,
           maxSize: options?.maxSize,
         });
@@ -14611,6 +14759,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           stageBackgroundColor,
           mouseControls,
           launcherPosition,
+          showAdvancedSettings: base.showAdvancedSettings === true,
           settingsSheetOpen: base.settingsSheetOpen === true,
         };
         const paletteSortSource =
@@ -14770,6 +14919,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         if (payload.settingsSheetOpen != null) {
           normalized.settingsSheetOpen = payload.settingsSheetOpen === true;
         }
+        if (payload.showAdvancedSettings != null) {
+          normalized.showAdvancedSettings = payload.showAdvancedSettings === true;
+        }
         if (payload.theme != null) {
           const themeCandidate =
             typeof payload.theme === "string" ? payload.theme.trim().toLowerCase() : "";
@@ -14886,6 +15038,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             ...state.settings,
             ...rest,
           };
+          setAdvancedSettingsAvailability(state.settings.showAdvancedSettings === true, { resetTab: true });
           if (typeof nextPaletteSort === "string" && nextPaletteSort) {
             state.paletteSort = nextPaletteSort;
           }
