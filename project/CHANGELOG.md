@@ -1,5 +1,8 @@
 # Change Log
 
+## 2025-12-06
+- Moved hint intensity into the main settings tab and grouped hint toggles together for quicker tuning.
+
 ## 2025-12-05
 - Added a vector-scene-aware preview fallback so samples without embedded pixel lists still render previews from the region map.
 - Rebuilt the bundled Three Bands fixture with per-region pixel lists and vector scene metadata for SVG smoke checks.

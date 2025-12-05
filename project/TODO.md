@@ -25,3 +25,4 @@ Actionable maintenance items collected during the project review. Keep entries s
 - [ ] Add a portrait-friendly start hint layout that centers the welcome card without overlapping the palette dock.
 - [ ] Trim palette dock padding on small screens so the first/last swatches are fully visible without horizontal scrolling.
 - [ ] Capture updated dark/light theme screenshots of the refreshed start hint for `project/CHANGELOG.md`.
+- [x] Reorganize the settings panel into grouped toggles with adjustable hint intensity controls (see `project/notes/screenshot-review.md`).

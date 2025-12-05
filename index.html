@@ -345,9 +345,20 @@
             "id": "hintHoverToggle",
             "label": "Glow on hover",
             "checked": true
+          },
+          {
+            "type": "range",
+            "id": "hintIntensity",
+            "label": "Hint intensity",
+            "min": 20,
+            "max": 90,
+            "step": 5,
+            "value": 65,
+            "default": 65,
+            "format": "percent"
           }
         ],
-        "note": "Toggle hint pulses here. Fine-tune brightness and timing from the advanced assists tab."
+        "note": "Toggle hint pulses and set their brightness here. Adjust timing from Assists & timing."
       },
       {
         "id": "lookAndFeel",
@@ -396,7 +407,7 @@
     "heading": {
       "title": "Assists & timing",
       "helpLabel": "Hint timing and palette order",
-      "helpText": "Fine-tune how hints feel and how the palette is ordered once you need extra control."
+      "helpText": "Fine-tune hint timing and palette order once you need extra control."
     },
     "sections": [
       {
@@ -416,24 +427,6 @@
           }
         ],
         "note": "Control how long hint flashes stay visible. Default 1.2 s."
-      },
-      {
-        "id": "hintBrightness",
-        "title": "Hint brightness",
-        "items": [
-          {
-            "type": "range",
-            "id": "hintIntensity",
-            "label": "Hint intensity",
-            "min": 20,
-            "max": 90,
-            "step": 5,
-            "value": 65,
-            "default": 65,
-            "format": "percent"
-          }
-        ],
-        "note": "Raise or lower hint overlays to match your display brightness."
       },
       {
         "id": "paletteOrder",
