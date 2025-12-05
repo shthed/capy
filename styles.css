@@ -1548,6 +1548,55 @@ body[data-theme="light"] .control textarea:focus {
   align-items: start;
 }
 
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--ui-scale));
+  position: sticky;
+  top: 0;
+  align-self: start;
+  min-height: 0;
+  z-index: 2;
+}
+
+.settings-mode {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(10px * var(--ui-scale));
+  padding: calc(10px * var(--ui-scale));
+  border-radius: calc(12px * var(--ui-scale));
+  border: 1px solid var(--theme-sheet-border);
+  background: color-mix(in srgb, var(--theme-sheet-bg) 92%, rgba(148, 163, 184, 0.08));
+}
+
+.settings-mode__labels {
+  display: grid;
+  gap: calc(4px * var(--ui-scale));
+  min-width: 0;
+}
+
+.settings-mode__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.settings-mode__hint {
+  margin: 0;
+  color: var(--theme-sheet-muted-text);
+  line-height: 1.45;
+}
+
+.settings-mode__toggle {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  gap: calc(8px * var(--ui-scale));
+}
+.settings-mode__toggle input {
+  margin: 0;
+}
+
 .settings-content {
   display: flex;
   flex-direction: column;
@@ -1555,6 +1604,7 @@ body[data-theme="light"] .control textarea:focus {
   min-height: 0;
   overflow-y: auto;
   padding-right: calc(6px * var(--ui-scale));
+  scrollbar-gutter: stable both-edge;
 }
 
 .settings-tabs {
@@ -1567,7 +1617,9 @@ body[data-theme="light"] .control textarea:focus {
   background: color-mix(in srgb, var(--theme-sheet-bg) 90%, rgba(148, 163, 184, 0.08));
   min-height: 0;
   max-height: 100%;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable both-edge;
 }
 
 @media (max-width: 720px) {
@@ -1603,18 +1655,30 @@ body[data-theme="light"] .control textarea:focus {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .settings-tabs {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: stretch;
-    max-height: none;
+  .settings-nav {
     position: sticky;
     top: 0;
-    z-index: 2;
+    background: var(--theme-sheet-bg);
+    padding-bottom: calc(6px * var(--ui-scale));
+  }
+
+  .settings-mode {
+    flex-direction: column;
+  }
+
+  .settings-tabs {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-gutter: stable;
   }
 
   .settings-tab {
-    flex: 1 1 calc(50% - calc(6px * var(--ui-scale)));
+    flex: 0 0 auto;
+    min-width: calc(160px * var(--ui-scale));
   }
 }
 
