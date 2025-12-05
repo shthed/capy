@@ -644,108 +644,6 @@
     };
   }
 
-  function encodeRegionIdColor(regionId) {
-    const clamped = Math.max(0, Math.min(Number.isFinite(regionId) ? regionId : 0, 0xffffff));
-    const r = clamped & 0xff;
-    const g = (clamped >> 8) & 0xff;
-    const b = (clamped >> 16) & 0xff;
-    return { r, g, b, style: `rgba(${r}, ${g}, ${b}, 1)` };
-  }
-
-  function decodeRegionIdColor(r, g, b, a) {
-    if (a <= 0) return -1;
-    const alpha = a / 255;
-    const resolvedR = Math.round(r / alpha);
-    const resolvedG = Math.round(g / alpha);
-    const resolvedB = Math.round(b / alpha);
-    return (resolvedB << 16) | (resolvedG << 8) | resolvedR;
-  }
-
-  function rasterizeRegionMapFromVectorScene(sceneLoader, width, height) {
-    if (
-      !sceneLoader ||
-      typeof document === "undefined" ||
-      !Number.isFinite(width) ||
-      !Number.isFinite(height)
-    ) {
-      return null;
-    }
-    const regions = sceneLoader.getVisibleRegions?.();
-    if (!Array.isArray(regions) || regions.length === 0) {
-      return null;
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.imageSmoothingEnabled = false;
-    for (const geometry of regions) {
-      if (!geometry) continue;
-      const path = geometry.path || (geometry.pathData ? new Path2D(geometry.pathData) : null);
-      if (!path) continue;
-      const encoding = encodeRegionIdColor(geometry.id);
-      ctx.fillStyle = encoding.style;
-      try {
-        ctx.fill(path);
-      } catch (_error) {
-        // Skip malformed paths and continue with remaining geometry.
-      }
-    }
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    const regionMap = new Int32Array(width * height);
-    for (let idx = 0; idx < regionMap.length; idx += 1) {
-      const base = idx * 4;
-      const r = data[base];
-      const g = data[base + 1];
-      const b = data[base + 2];
-      const a = data[base + 3];
-      regionMap[idx] = decodeRegionIdColor(r, g, b, a);
-    }
-    return regionMap;
-  }
-
-  function resolveRegionMap(regionMapSource, sceneLoader, width, height, regions) {
-    const expectedCells = width * height;
-    if (regionMapSource && regionMapSource.length === expectedCells) {
-      return regionMapSource instanceof Int32Array
-        ? regionMapSource
-        : new Int32Array(regionMapSource);
-    }
-    if (sceneLoader) {
-      return rasterizeRegionMapFromVectorScene(sceneLoader, width, height);
-    }
-    const hasRegionPixels = Array.isArray(regions) && regions.some((region) => Array.isArray(region?.pixels));
-    if (!hasRegionPixels) {
-      return null;
-    }
-    const regionMap = new Int32Array(expectedCells);
-    regionMap.fill(-1);
-    const coverage = new Uint8Array(expectedCells);
-    let assigned = 0;
-    for (const region of regions) {
-      if (!region || !Array.isArray(region.pixels)) continue;
-      const regionId = Number.isFinite(region.id) ? region.id : null;
-      if (regionId == null) continue;
-      for (const pixel of region.pixels) {
-        const idx = Number(pixel);
-        if (!Number.isFinite(idx)) continue;
-        const target = idx | 0;
-        if (target < 0 || target >= expectedCells) continue;
-        regionMap[target] = regionId;
-        if (coverage[target] === 0) {
-          coverage[target] = 1;
-          assigned += 1;
-        }
-      }
-    }
-    if (assigned === expectedCells) {
-      return regionMap;
-    }
-    return null;
-  }
-
   function createSvgRenderer(host, hooks = {}) {
     if (!host || typeof document === "undefined") {
       const stub = {
@@ -10791,6 +10689,108 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           finalize();
         }
         return record;
+      }
+
+      function encodeRegionIdColor(regionId) {
+        const clamped = Math.max(0, Math.min(Number.isFinite(regionId) ? regionId : 0, 0xffffff));
+        const r = clamped & 0xff;
+        const g = (clamped >> 8) & 0xff;
+        const b = (clamped >> 16) & 0xff;
+        return { r, g, b, style: `rgba(${r}, ${g}, ${b}, 1)` };
+      }
+
+      function decodeRegionIdColor(r, g, b, a) {
+        if (a <= 0) return -1;
+        const alpha = a / 255;
+        const resolvedR = Math.round(r / alpha);
+        const resolvedG = Math.round(g / alpha);
+        const resolvedB = Math.round(b / alpha);
+        return (resolvedB << 16) | (resolvedG << 8) | resolvedR;
+      }
+
+      function rasterizeRegionMapFromVectorScene(sceneLoader, width, height) {
+        if (
+          !sceneLoader ||
+          typeof document === "undefined" ||
+          !Number.isFinite(width) ||
+          !Number.isFinite(height)
+        ) {
+          return null;
+        }
+        const regions = sceneLoader.getVisibleRegions?.();
+        if (!Array.isArray(regions) || regions.length === 0) {
+          return null;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+        ctx.imageSmoothingEnabled = false;
+        for (const geometry of regions) {
+          if (!geometry) continue;
+          const path = geometry.path || (geometry.pathData ? new Path2D(geometry.pathData) : null);
+          if (!path) continue;
+          const encoding = encodeRegionIdColor(geometry.id);
+          ctx.fillStyle = encoding.style;
+          try {
+            ctx.fill(path);
+          } catch (_error) {
+            // Skip malformed paths and continue with remaining geometry.
+          }
+        }
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        const regionMap = new Int32Array(width * height);
+        for (let idx = 0; idx < regionMap.length; idx += 1) {
+          const base = idx * 4;
+          const r = data[base];
+          const g = data[base + 1];
+          const b = data[base + 2];
+          const a = data[base + 3];
+          regionMap[idx] = decodeRegionIdColor(r, g, b, a);
+        }
+        return regionMap;
+      }
+
+      function resolveRegionMap(regionMapSource, sceneLoader, width, height, regions) {
+        const expectedCells = width * height;
+        if (regionMapSource && regionMapSource.length === expectedCells) {
+          return regionMapSource instanceof Int32Array
+            ? regionMapSource
+            : new Int32Array(regionMapSource);
+        }
+        if (sceneLoader) {
+          return rasterizeRegionMapFromVectorScene(sceneLoader, width, height);
+        }
+        const hasRegionPixels = Array.isArray(regions) && regions.some((region) => Array.isArray(region?.pixels));
+        if (!hasRegionPixels) {
+          return null;
+        }
+        const regionMap = new Int32Array(expectedCells);
+        regionMap.fill(-1);
+        const coverage = new Uint8Array(expectedCells);
+        let assigned = 0;
+        for (const region of regions) {
+          if (!region || !Array.isArray(region.pixels)) continue;
+          const regionId = Number.isFinite(region.id) ? region.id : null;
+          if (regionId == null) continue;
+          for (const pixel of region.pixels) {
+            const idx = Number(pixel);
+            if (!Number.isFinite(idx)) continue;
+            const target = idx | 0;
+            if (target < 0 || target >= expectedCells) continue;
+            regionMap[target] = regionId;
+            if (coverage[target] === 0) {
+              coverage[target] = 1;
+              assigned += 1;
+            }
+          }
+        }
+        if (assigned === expectedCells) {
+          return regionMap;
+        }
+        return null;
       }
 
       function buildGeneratedSourceImageSnapshot(puzzle) {
