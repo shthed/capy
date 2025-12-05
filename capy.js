@@ -3262,6 +3262,7 @@ function canUseGenerationWorker() {
         continue;
       }
       const tabId = tab.id;
+      const isAdvancedTab = tab.advancedOnly === true;
       const panelId = `settingsPanel-${tabId}`;
       const button = document.createElement("button");
       button.className = "settings-tab";
@@ -3269,6 +3270,10 @@ function canUseGenerationWorker() {
       button.role = "tab";
       button.id = `settingsTab-${tabId}`;
       button.dataset.settingsTab = tabId;
+      button.dataset.settingsTier = isAdvancedTab ? "advanced" : "basic";
+      button.dataset.settingsAvailable = isAdvancedTab ? "false" : "true";
+      button.hidden = isAdvancedTab;
+      button.setAttribute("aria-hidden", isAdvancedTab ? "true" : "false");
       button.setAttribute("aria-controls", panelId);
       const isDefault = tab.default || tabId === defaultId;
       if (isDefault) {
@@ -3282,6 +3287,10 @@ function canUseGenerationWorker() {
       panel.className = "settings-section settings-page";
       panel.id = panelId;
       panel.dataset.settingsPanel = tabId;
+      panel.dataset.settingsTier = isAdvancedTab ? "advanced" : "basic";
+      panel.dataset.settingsAvailable = isAdvancedTab ? "false" : "true";
+      panel.hidden = isAdvancedTab;
+      panel.setAttribute("aria-hidden", isAdvancedTab ? "true" : "false");
       panel.setAttribute("role", "tabpanel");
       panel.setAttribute("aria-labelledby", button.id);
 
@@ -3684,6 +3693,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         settingsSheet?.querySelector("[data-settings-scroll]") ||
         settingsSheet?.querySelector(".sheet-body") ||
         null;
+      const advancedModeToggle = document.getElementById("advancedModeToggle");
       const settingsTabs = settingsSheet ? Array.from(settingsSheet.querySelectorAll("[data-settings-tab]")) : [];
       const settingsPanels = settingsSheet
         ? Array.from(settingsSheet.querySelectorAll("[data-settings-panel]"))
@@ -5624,6 +5634,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           showRegionLabels: true,
           theme: DEFAULT_UI_THEME,
           renderer: "svg",
+          showAdvancedSettings: false,
           settingsSheetOpen: false,
           mouseControls: cloneMouseControls(DEFAULT_MOUSE_CONTROLS),
         },
@@ -5701,6 +5712,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           state.paletteSort = storedPaletteSort;
         }
       }
+      setAdvancedSettingsAvailability(state.settings.showAdvancedSettings === true, { resetTab: true });
       refreshSettingsJsonView(state.settings);
 
       function logRendererEvent(message, details = null) {
@@ -6719,7 +6731,10 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       }
 
       if (settingsTabs.length && settingsPanels.length) {
-        activateSettingsTab(defaultSettingsTabId, { resetScroll: true });
+        const hasActiveTab = settingsTabs.some((tab) => tab?.getAttribute("aria-selected") === "true");
+        if (!hasActiveTab) {
+          activateSettingsTab(defaultSettingsTabId, { resetScroll: true });
+        }
         for (const tab of settingsTabs) {
           tab.addEventListener("click", () => {
             const tabId = tab.dataset.settingsTab || defaultSettingsTabId;
@@ -6924,6 +6939,17 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           logDebug(difficultyLog);
           scheduleSettingsPersist({ immediate: true });
           scheduleAutosave("settings-difficulty");
+        });
+      }
+
+      if (advancedModeToggle) {
+        advancedModeToggle.checked = state.settings.showAdvancedSettings === true;
+        advancedModeToggle.addEventListener("change", () => {
+          const advanced = advancedModeToggle.checked;
+          state.settings.showAdvancedSettings = advanced;
+          setAdvancedSettingsAvailability(advanced, { resetTab: !advanced });
+          logDebug(`Advanced controls ${advanced ? "enabled" : "hidden"}`);
+          scheduleSettingsPersist({ immediate: true });
         });
       }
 
@@ -8772,20 +8798,29 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
         const { focusTab = false, resetScroll = false } = options;
         const availableIds = settingsPanels
+          .filter((panel) => panel?.dataset?.settingsAvailable !== "false")
           .map((panel) => panel?.dataset?.settingsPanel)
           .filter((value) => typeof value === "string" && value.length > 0);
-        const resolvedId = availableIds.includes(tabId) ? tabId : defaultSettingsTabId;
+        const resolvedId = availableIds.includes(tabId)
+          ? tabId
+          : availableIds.includes(defaultSettingsTabId)
+          ? defaultSettingsTabId
+          : availableIds[0];
         if (!resolvedId) {
           return null;
         }
         for (const tab of settingsTabs) {
-          const active = tab?.dataset?.settingsTab === resolvedId;
+          const available = tab?.dataset?.settingsAvailable !== "false";
+          const active = available && tab?.dataset?.settingsTab === resolvedId;
+          tab.hidden = !available;
+          tab?.setAttribute("aria-hidden", available ? "false" : "true");
           tab?.setAttribute("aria-selected", active ? "true" : "false");
           tab?.setAttribute("tabindex", active ? "0" : "-1");
         }
         for (const panel of settingsPanels) {
           if (!panel) continue;
-          const active = panel.dataset.settingsPanel === resolvedId;
+          const available = panel.dataset.settingsAvailable !== "false";
+          const active = available && panel.dataset.settingsPanel === resolvedId;
           panel.hidden = !active;
           panel.setAttribute("aria-hidden", active ? "false" : "true");
         }
@@ -8799,11 +8834,55 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         return resolvedId;
       }
 
+      function setAdvancedSettingsAvailability(enabled, options = {}) {
+        if (!settingsSheet || settingsTabs.length === 0 || settingsPanels.length === 0) {
+          return null;
+        }
+        const { resetTab = false } = options;
+        const allowAdvanced = enabled === true;
+        settingsSheet.classList.toggle("settings-mode-advanced", allowAdvanced);
+        settingsSheet.classList.toggle("settings-mode-basic", !allowAdvanced);
+        if (advancedModeToggle) {
+          advancedModeToggle.checked = allowAdvanced;
+        }
+        for (const tab of settingsTabs) {
+          const isAdvanced = tab?.dataset?.settingsTier === "advanced";
+          const available = !isAdvanced || allowAdvanced;
+          tab.hidden = !available;
+          tab.dataset.settingsAvailable = available ? "true" : "false";
+          tab.setAttribute("aria-hidden", available ? "false" : "true");
+        }
+        for (const panel of settingsPanels) {
+          if (!panel) continue;
+          const isAdvanced = panel?.dataset?.settingsTier === "advanced";
+          const available = !isAdvanced || allowAdvanced;
+          panel.dataset.settingsAvailable = available ? "true" : "false";
+        }
+        const availableIds = settingsPanels
+          .filter((panel) => panel?.dataset?.settingsAvailable !== "false")
+          .map((panel) => panel?.dataset?.settingsPanel)
+          .filter((value) => typeof value === "string" && value.length > 0);
+        const activeTab = settingsTabs.find((tab) => tab?.getAttribute("aria-selected") === "true");
+        const activeId = activeTab?.dataset?.settingsTab;
+        const needsReset = resetTab || (activeId && !availableIds.includes(activeId));
+        if (needsReset && availableIds.length) {
+          activateSettingsTab(availableIds[0], { resetScroll: true });
+        }
+        return allowAdvanced;
+      }
+
       function scrollSettingsPanelIntoView(panelId, options = {}) {
         if (!panelId || !settingsSheet || !settingsBody) {
           return null;
         }
         const { focus = false, resetScroll = false } = options;
+        const targetPanel = settingsSheet.querySelector(`[data-settings-panel="${panelId}"]`);
+        if (
+          targetPanel?.dataset?.settingsTier === "advanced" &&
+          targetPanel?.dataset?.settingsAvailable === "false"
+        ) {
+          setAdvancedSettingsAvailability(true, { resetTab: false });
+        }
         const resolvedId = activateSettingsTab(panelId, { resetScroll });
         if (!resolvedId) {
           return null;
@@ -14680,6 +14759,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           stageBackgroundColor,
           mouseControls,
           launcherPosition,
+          showAdvancedSettings: base.showAdvancedSettings === true,
           settingsSheetOpen: base.settingsSheetOpen === true,
         };
         const paletteSortSource =
@@ -14839,6 +14919,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         if (payload.settingsSheetOpen != null) {
           normalized.settingsSheetOpen = payload.settingsSheetOpen === true;
         }
+        if (payload.showAdvancedSettings != null) {
+          normalized.showAdvancedSettings = payload.showAdvancedSettings === true;
+        }
         if (payload.theme != null) {
           const themeCandidate =
             typeof payload.theme === "string" ? payload.theme.trim().toLowerCase() : "";
@@ -14955,6 +15038,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             ...state.settings,
             ...rest,
           };
+          setAdvancedSettingsAvailability(state.settings.showAdvancedSettings === true, { resetTab: true });
           if (typeof nextPaletteSort === "string" && nextPaletteSort) {
             state.paletteSort = nextPaletteSort;
           }
