@@ -832,7 +832,7 @@
     const root = typeof document !== "undefined" ? document.documentElement : null;
     const SETTINGS_STORAGE_KEY = "capy.settings.v1";
     const SETTINGS_VERSION_STAMP = "2025-12-06";
-    const DEFAULT_UI_SCALE = 0.75;
+    const DEFAULT_UI_SCALE = 1;
     const MIN_UI_SCALE = 0.2;
     const MAX_UI_SCALE = 3;
 
@@ -3921,7 +3921,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
       const DEFAULT_LAUNCHER_POSITION = { x: 0.92, y: 0.08 };
-      const DEFAULT_UI_SCALE = 0.75;
+      const DEFAULT_UI_SCALE = 1;
       const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
@@ -15348,7 +15348,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       }
 
       function updateStorageUsageSummary() {
-        if (!saveStorageSummary) return;
+        const hasSummary = Boolean(saveStorageSummary);
         const token = ++storageSummaryUpdateToken;
         let stats = { manualBytes: 0, manualCount: 0, totalBytes: 0 };
         try {
@@ -15358,53 +15358,52 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
         let summaryText =
           "Save data lives entirely in this browser. The active slot updates automatically as you play.";
-        let disableClearButton = stats.manualCount === 0;
         if (stats.manualCount > 0) {
-          const manualLabel =
-            stats.manualCount === 1
-              ? "1 save"
-              : `${stats.manualCount} saves`;
+          const manualLabel = stats.manualCount === 1 ? "1 save" : `${stats.manualCount} saves`;
           summaryText = `${manualLabel} using ${formatBytes(stats.manualBytes)} stored locally.`;
         }
-        saveStorageSummary.textContent = summaryText;
+        if (hasSummary) {
+          saveStorageSummary.textContent = summaryText;
+        }
         if (deleteAllSavesButton) {
-          deleteAllSavesButton.disabled = disableClearButton;
+          deleteAllSavesButton.disabled = stats.manualCount === 0;
         }
-        if (navigator.storage && typeof navigator.storage.estimate === "function") {
-          const baseSummary = summaryText;
-          const statsSnapshot = { ...stats };
-          navigator.storage
-            .estimate()
-            .then((estimate) => {
-              if (token !== storageSummaryUpdateToken) return;
-              if (!estimate) return;
-              const quota = Number(estimate.quota);
-              const usage = Number(estimate.usage);
-              if (!Number.isFinite(quota) || quota <= 0) {
-                if (Number.isFinite(usage) && usage > 0) {
-                  const usageText = `Storage usage: ${formatBytes(usage)}.`;
-                  saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${usageText}`;
-                }
-                return;
-              }
-              const usedBytes = Number.isFinite(usage) && usage >= 0 ? usage : statsSnapshot.totalBytes;
-              const usageLabel = formatBytes(usedBytes);
-              const quotaLabel = formatBytes(quota);
-              let percentText = "";
-              if (quota > 0 && Number.isFinite(usedBytes)) {
-                const percent = Math.min(100, Math.round((usedBytes / quota) * 1000) / 10);
-                if (Number.isFinite(percent)) {
-                  percentText = ` (${percent}% used)`;
-                }
-              }
-              const quotaText = `Storage quota: ${usageLabel} of ${quotaLabel}${percentText}.`;
-              saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${quotaText}`;
-            })
-            .catch((error) => {
-              if (token !== storageSummaryUpdateToken) return;
-              console.error("Failed to estimate storage quota", error);
-            });
+        if (!hasSummary || !(navigator.storage && typeof navigator.storage.estimate === "function")) {
+          return;
         }
+        const baseSummary = summaryText;
+        const statsSnapshot = { ...stats };
+        navigator.storage
+          .estimate()
+          .then((estimate) => {
+            if (token !== storageSummaryUpdateToken) return;
+            if (!estimate) return;
+            const quota = Number(estimate.quota);
+            const usage = Number(estimate.usage);
+            if (!Number.isFinite(quota) || quota <= 0) {
+              if (Number.isFinite(usage) && usage > 0) {
+                const usageText = `Storage usage: ${formatBytes(usage)}.`;
+                saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${usageText}`;
+              }
+              return;
+            }
+            const usedBytes = Number.isFinite(usage) && usage >= 0 ? usage : statsSnapshot.totalBytes;
+            const usageLabel = formatBytes(usedBytes);
+            const quotaLabel = formatBytes(quota);
+            let percentText = "";
+            if (quota > 0 && Number.isFinite(usedBytes)) {
+              const percent = Math.min(100, Math.round((usedBytes / quota) * 1000) / 10);
+              if (Number.isFinite(percent)) {
+                percentText = ` (${percent}% used)`;
+              }
+            }
+            const quotaText = `Storage quota: ${usageLabel} of ${quotaLabel}${percentText}.`;
+            saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${quotaText}`;
+          })
+          .catch((error) => {
+            if (token !== storageSummaryUpdateToken) return;
+            console.error("Failed to estimate storage quota", error);
+          });
       }
 
       function loadInitialSession() {
