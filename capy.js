@@ -3024,6 +3024,8 @@ function canUseGenerationWorker() {
 
     const body = createElement("div", { className: "sheet-section-body" });
 
+    const body = createElement("div", { className: "sheet-section-body" });
+
     if (section.layout === "actions") {
       const group = createElement("div", {
         className: "quick-actions",
