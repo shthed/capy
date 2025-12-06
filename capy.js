@@ -6766,7 +6766,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           tab.addEventListener("click", () => {
             const tabId = tab.dataset.settingsTab || defaultSettingsTabId;
             if (!tabId) return;
-            scrollSettingsPanelIntoView(tabId, { resetScroll: true, focus: true });
+            scrollSettingsPanelIntoView(tabId, { resetScroll: false, focus: true });
           });
         }
       }
@@ -8845,12 +8845,20 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           tab?.setAttribute("aria-selected", active ? "true" : "false");
           tab?.setAttribute("tabindex", active ? "0" : "-1");
         }
+        const showDiagnosticsOnly = resolvedId === "diagnostics";
         for (const panel of settingsPanels) {
           if (!panel) continue;
           const available = panel.dataset.settingsAvailable !== "false";
-          const active = available && panel.dataset.settingsPanel === resolvedId;
-          panel.hidden = !active;
-          panel.setAttribute("aria-hidden", active ? "false" : "true");
+          const isDiagnostics = panel.dataset.settingsPanel === "diagnostics";
+          const isActiveTarget = panel.dataset.settingsPanel === resolvedId;
+          const shouldShow = available && (showDiagnosticsOnly ? isDiagnostics : !isDiagnostics);
+          panel.hidden = !shouldShow;
+          panel.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+          if (shouldShow && isActiveTarget) {
+            panel.dataset.settingsActive = "true";
+          } else {
+            panel.dataset.settingsActive = "false";
+          }
         }
         if (resetScroll && settingsBody) {
           settingsBody.scrollTop = 0;
@@ -8895,6 +8903,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         const needsReset = resetTab || (activeId && !availableIds.includes(activeId));
         if (needsReset && availableIds.length) {
           activateSettingsTab(availableIds[0], { resetScroll: true });
+        } else if (availableIds.length) {
+          activateSettingsTab(activeId || availableIds[0], { resetScroll: false });
         }
         return allowAdvanced;
       }

@@ -1438,32 +1438,22 @@ body[data-theme="light"] .control textarea:focus {
   --sheet-translate-y: 0;
 }
 
+
 .sheet-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: calc(12px * var(--ui-scale));
+  gap: calc(10px * var(--ui-scale));
   cursor: grab;
   user-select: none;
 }
 
 .sheet-heading {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: calc(10px * var(--ui-scale));
-  align-items: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.sheet-heading__text {
-  display: grid;
-  gap: calc(6px * var(--ui-scale));
-  min-width: 0;
-}
-
-.sheet-heading__text h2 {
-  margin: 0;
 }
 
 .sheet-heading__hint {
@@ -1489,10 +1479,14 @@ body[data-theme="light"] .control textarea:focus {
 
 .sheet-header-actions {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: calc(12px * var(--ui-scale));
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+.sheet-header-actions--start {
+  margin-left: 0;
 }
 
 .settings-upload {
@@ -1501,6 +1495,7 @@ body[data-theme="light"] .control textarea:focus {
   justify-content: center;
   gap: 8px;
   padding: calc(12px * var(--ui-scale)) calc(20px * var(--ui-scale));
+  min-width: calc(150px * var(--ui-scale));
   border-radius: calc(12px * var(--ui-scale));
   border: 1px solid var(--theme-sheet-button-border);
   background: var(--theme-command-active-bg);
@@ -1546,24 +1541,24 @@ body[data-theme="light"] .control textarea:focus {
   cursor: grabbing;
 }
 
-.sheet-header h2 {
-  margin: 0;
-  font-size: 1.25rem;
-}
-
 .close-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: calc(10px * var(--ui-scale));
+  padding: calc(12px * var(--ui-scale)) calc(20px * var(--ui-scale));
+  min-width: calc(150px * var(--ui-scale));
   border-radius: calc(12px * var(--ui-scale));
   background: var(--theme-sheet-button-bg);
   color: var(--theme-sheet-button-text);
   border: 1px solid var(--theme-sheet-button-border);
-  font-size: 1.1rem;
+  font-size: 1rem;
   line-height: 1;
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease,
     box-shadow 0.16s ease;
+}
+
+.sheet-close--balanced {
+  font-weight: 700;
 }
 
 .close-button:hover {
@@ -1841,6 +1836,39 @@ body[data-theme="light"] .control textarea:focus {
 
 .settings-page[data-settings-panel="diagnostics"] .settings-panel {
   grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+  align-content: stretch;
+}
+
+.settings-page[data-settings-panel="diagnostics"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.settings-page[data-settings-panel="diagnostics"] .sheet-section {
+  display: flex;
+  flex-direction: column;
+  gap: calc(12px * var(--ui-scale));
+}
+
+.settings-page[data-settings-panel="diagnostics"] .sheet-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--ui-scale));
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.settings-page[data-settings-panel="diagnostics"] .settings-panel .sheet-section {
+  min-height: 0;
+}
+
+.settings-page[data-settings-panel="diagnostics"] .debug-log {
+  max-height: none;
+  min-height: 260px;
+  height: 100%;
 }
 
 @media (max-width: 960px) {
