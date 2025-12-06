@@ -238,7 +238,7 @@
       </div>
     </div>
     <script id="settingsDefinition" type="application/json">
-[ 
+[
   {
     "id": "saves",
     "label": "Saves & storage",
@@ -246,7 +246,7 @@
     "heading": {
       "title": "Saves & storage",
       "helpLabel": "Manage snapshots and cached images",
-      "helpText": "Export progress, reset a puzzle, or change how large stored images can be.",
+      "helpText": "Export progress, reset a puzzle, or change how large stored images can be."
     },
     "sections": [
       {
@@ -261,7 +261,7 @@
                 "type": "button",
                 "id": "selectImage",
                 "label": "Upload Image",
-                "ariaLabel": "Upload image or JSON puzzle",
+                "ariaLabel": "Upload image or JSON puzzle"
               },
               {
                 "type": "button",
@@ -269,15 +269,15 @@
                 "label": "Load capybara sample",
                 "ariaLabel": "Load capybara sample puzzle",
                 "dataset": {
-                  "action": "load-sample",
-                },
-              },
-            ],
-          },
-        ],
+                  "action": "load-sample"
+                }
+              }
+            ]
+          }
+        ]
       },
       {
-        "type": "save-manager",
+        "type": "save-manager"
       },
       {
         "id": "storageHeading",
@@ -286,7 +286,7 @@
           {
             "type": "note",
             "text": "",
-            "outputId": "saveStorageSummary",
+            "outputId": "saveStorageSummary"
           },
           {
             "type": "select",
@@ -296,30 +296,30 @@
             "options": [
               {
                 "value": 262144,
-                "label": "256 KB",
+                "label": "256 KB"
               },
               {
                 "value": 524288,
-                "label": "512 KB",
+                "label": "512 KB"
               },
               {
                 "value": 1048576,
                 "label": "1 MB",
-                "selected": true,
+                "selected": true
               },
               {
                 "value": 2097152,
-                "label": "2 MB",
+                "label": "2 MB"
               },
               {
                 "value": 5242880,
-                "label": "5 MB",
-              },
-            ],
+                "label": "5 MB"
+              }
+            ]
           },
           {
             "type": "note",
-            "text": "Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate or import.",
+            "text": "Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate or import."
           },
           {
             "type": "button-row",
@@ -328,13 +328,13 @@
               {
                 "type": "button",
                 "id": "deleteAllSaves",
-                "label": "Delete all saves",
-              },
-            ],
-          },
-        ],
-      },
-    ],
+                "label": "Delete all saves"
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "basics",
