@@ -831,7 +831,8 @@
 
     const root = typeof document !== "undefined" ? document.documentElement : null;
     const SETTINGS_STORAGE_KEY = "capy.settings.v1";
-    const DEFAULT_UI_SCALE = 0.75;
+    const SETTINGS_VERSION_STAMP = "2025-12-06";
+    const DEFAULT_UI_SCALE = 1;
     const MIN_UI_SCALE = 0.2;
     const MAX_UI_SCALE = 3;
 
@@ -843,6 +844,12 @@
       if (!raw) return null;
       try {
         const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          const versionDate = typeof parsed.versionDate === "string" ? parsed.versionDate : null;
+          if (!versionDate || versionDate !== SETTINGS_VERSION_STAMP) {
+            return null;
+          }
+        }
         const payload =
           parsed && typeof parsed === "object"
             ? parsed.settings && typeof parsed.settings === "object"
@@ -3876,6 +3883,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const SETTINGS_STORAGE_KEY = "capy.settings.v1";
+      const SETTINGS_VERSION_STAMP = "2025-12-06";
       const SERVICE_WORKER_ENABLED = false;
       const RUNTIME_CACHE_NAME = "capy-offline-cache-v4";
       const CACHE_ORIGIN = "https://capy.local";
@@ -3913,7 +3921,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
       const DEFAULT_LAUNCHER_POSITION = { x: 0.92, y: 0.08 };
-      const DEFAULT_UI_SCALE = 0.75;
+      const DEFAULT_UI_SCALE = 1;
       const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
@@ -6766,7 +6774,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           tab.addEventListener("click", () => {
             const tabId = tab.dataset.settingsTab || defaultSettingsTabId;
             if (!tabId) return;
-            scrollSettingsPanelIntoView(tabId, { resetScroll: true, focus: true });
+            scrollSettingsPanelIntoView(tabId, { resetScroll: false, focus: true });
           });
         }
       }
@@ -7751,6 +7759,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         if (!settingsSheet || !settingsSheetHeader) return;
         if (event.pointerType === "mouse" && event.button !== 0) return;
         if (event.target?.closest?.(".close-button")) return;
+        if (event.target?.closest?.("button, input, label, select, textarea")) return;
         const rect = settingsSheet.getBoundingClientRect();
         settingsSheetDrag = {
           id: event.pointerId,
@@ -8844,12 +8853,20 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           tab?.setAttribute("aria-selected", active ? "true" : "false");
           tab?.setAttribute("tabindex", active ? "0" : "-1");
         }
+        const showDiagnosticsOnly = resolvedId === "diagnostics";
         for (const panel of settingsPanels) {
           if (!panel) continue;
           const available = panel.dataset.settingsAvailable !== "false";
-          const active = available && panel.dataset.settingsPanel === resolvedId;
-          panel.hidden = !active;
-          panel.setAttribute("aria-hidden", active ? "false" : "true");
+          const isDiagnostics = panel.dataset.settingsPanel === "diagnostics";
+          const isActiveTarget = panel.dataset.settingsPanel === resolvedId;
+          const shouldShow = available && (showDiagnosticsOnly ? isDiagnostics : !isDiagnostics);
+          panel.hidden = !shouldShow;
+          panel.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+          if (shouldShow && isActiveTarget) {
+            panel.dataset.settingsActive = "true";
+          } else {
+            panel.dataset.settingsActive = "false";
+          }
         }
         if (resetScroll && settingsBody) {
           settingsBody.scrollTop = 0;
@@ -8894,6 +8911,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         const needsReset = resetTab || (activeId && !availableIds.includes(activeId));
         if (needsReset && availableIds.length) {
           activateSettingsTab(availableIds[0], { resetScroll: true });
+        } else if (availableIds.length) {
+          activateSettingsTab(activeId || availableIds[0], { resetScroll: false });
         }
         return allowAdvanced;
       }
@@ -14819,10 +14838,50 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         return snapshot;
       }
 
+      function clearSettingsCookies() {
+        if (typeof document === "undefined" || typeof document.cookie !== "string") return 0;
+        const targetNames = new Set([SETTINGS_STORAGE_KEY, "capy.settings", "capy_settings", "capySettings"]);
+        const cookies = document.cookie ? document.cookie.split(";") : [];
+        let cleared = 0;
+        for (const cookie of cookies) {
+          const separatorIndex = cookie.indexOf("=");
+          const name = (separatorIndex === -1 ? cookie : cookie.slice(0, separatorIndex)).trim();
+          if (!name) continue;
+          if (targetNames.has(name) || name.startsWith(`${SETTINGS_STORAGE_KEY}-`)) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
+            document.cookie = `${name}=; Max-Age=0; path=/;`;
+            cleared += 1;
+          }
+        }
+        return cleared;
+      }
+
+      function purgeLegacySettingsStorage() {
+        let clearedCookies = 0;
+        if (typeof localStorage !== "undefined" && typeof localStorage.removeItem === "function") {
+          try {
+            localStorage.removeItem(SETTINGS_STORAGE_KEY);
+          } catch (error) {
+            console.warn("Failed to remove stored settings", error);
+          }
+        }
+        try {
+          clearedCookies = clearSettingsCookies();
+          if (clearedCookies > 0 && settingsBootstrap?.log) {
+            settingsBootstrap.log(
+              `Cleared ${clearedCookies} stale settings cookie${clearedCookies === 1 ? "" : "s"}`,
+            );
+          }
+        } catch (error) {
+          console.warn("Failed to clear legacy settings cookies", error);
+        }
+        return clearedCookies;
+      }
+
       function persistUserSettings(snapshot) {
         if (!snapshot || typeof snapshot !== "object") return null;
         if (typeof localStorage === "undefined") return null;
-        const record = { version: 1, settings: snapshot };
+        const record = { version: 1, versionDate: SETTINGS_VERSION_STAMP, settings: snapshot };
         let serialized = null;
         try {
           serialized = JSON.stringify(record);
@@ -15015,13 +15074,18 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
           if (!raw) return null;
           const parsed = JSON.parse(raw);
+          const versionDate = typeof parsed?.versionDate === "string" ? parsed.versionDate : null;
+          if (!versionDate || versionDate !== SETTINGS_VERSION_STAMP) {
+            purgeLegacySettingsStorage();
+            return null;
+          }
           const normalized = normalizeStoredUserSettings(parsed);
           if (!normalized) return null;
           let rewritePayload = null;
           try {
             const snapshot = getUserSettingsSnapshot(normalized);
             if (snapshot) {
-              const record = { version: 1, settings: snapshot };
+              const record = { version: 1, versionDate: SETTINGS_VERSION_STAMP, settings: snapshot };
               const serialized = JSON.stringify(record);
               if (serialized !== raw) {
                 rewritePayload = serialized;
@@ -15044,6 +15108,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           return normalized;
         } catch (error) {
           console.error("Failed to load stored settings", error);
+          purgeLegacySettingsStorage();
           settingsBootstrap.recordError("Stored settings unavailable; using defaults");
         }
         return null;
@@ -15283,7 +15348,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       }
 
       function updateStorageUsageSummary() {
-        if (!saveStorageSummary) return;
+        const hasSummary = Boolean(saveStorageSummary);
         const token = ++storageSummaryUpdateToken;
         let stats = { manualBytes: 0, manualCount: 0, totalBytes: 0 };
         try {
@@ -15293,53 +15358,52 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
         let summaryText =
           "Save data lives entirely in this browser. The active slot updates automatically as you play.";
-        let disableClearButton = stats.manualCount === 0;
         if (stats.manualCount > 0) {
-          const manualLabel =
-            stats.manualCount === 1
-              ? "1 save"
-              : `${stats.manualCount} saves`;
+          const manualLabel = stats.manualCount === 1 ? "1 save" : `${stats.manualCount} saves`;
           summaryText = `${manualLabel} using ${formatBytes(stats.manualBytes)} stored locally.`;
         }
-        saveStorageSummary.textContent = summaryText;
+        if (hasSummary) {
+          saveStorageSummary.textContent = summaryText;
+        }
         if (deleteAllSavesButton) {
-          deleteAllSavesButton.disabled = disableClearButton;
+          deleteAllSavesButton.disabled = stats.manualCount === 0;
         }
-        if (navigator.storage && typeof navigator.storage.estimate === "function") {
-          const baseSummary = summaryText;
-          const statsSnapshot = { ...stats };
-          navigator.storage
-            .estimate()
-            .then((estimate) => {
-              if (token !== storageSummaryUpdateToken) return;
-              if (!estimate) return;
-              const quota = Number(estimate.quota);
-              const usage = Number(estimate.usage);
-              if (!Number.isFinite(quota) || quota <= 0) {
-                if (Number.isFinite(usage) && usage > 0) {
-                  const usageText = `Storage usage: ${formatBytes(usage)}.`;
-                  saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${usageText}`;
-                }
-                return;
-              }
-              const usedBytes = Number.isFinite(usage) && usage >= 0 ? usage : statsSnapshot.totalBytes;
-              const usageLabel = formatBytes(usedBytes);
-              const quotaLabel = formatBytes(quota);
-              let percentText = "";
-              if (quota > 0 && Number.isFinite(usedBytes)) {
-                const percent = Math.min(100, Math.round((usedBytes / quota) * 1000) / 10);
-                if (Number.isFinite(percent)) {
-                  percentText = ` (${percent}% used)`;
-                }
-              }
-              const quotaText = `Storage quota: ${usageLabel} of ${quotaLabel}${percentText}.`;
-              saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${quotaText}`;
-            })
-            .catch((error) => {
-              if (token !== storageSummaryUpdateToken) return;
-              console.error("Failed to estimate storage quota", error);
-            });
+        if (!hasSummary || !(navigator.storage && typeof navigator.storage.estimate === "function")) {
+          return;
         }
+        const baseSummary = summaryText;
+        const statsSnapshot = { ...stats };
+        navigator.storage
+          .estimate()
+          .then((estimate) => {
+            if (token !== storageSummaryUpdateToken) return;
+            if (!estimate) return;
+            const quota = Number(estimate.quota);
+            const usage = Number(estimate.usage);
+            if (!Number.isFinite(quota) || quota <= 0) {
+              if (Number.isFinite(usage) && usage > 0) {
+                const usageText = `Storage usage: ${formatBytes(usage)}.`;
+                saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${usageText}`;
+              }
+              return;
+            }
+            const usedBytes = Number.isFinite(usage) && usage >= 0 ? usage : statsSnapshot.totalBytes;
+            const usageLabel = formatBytes(usedBytes);
+            const quotaLabel = formatBytes(quota);
+            let percentText = "";
+            if (quota > 0 && Number.isFinite(usedBytes)) {
+              const percent = Math.min(100, Math.round((usedBytes / quota) * 1000) / 10);
+              if (Number.isFinite(percent)) {
+                percentText = ` (${percent}% used)`;
+              }
+            }
+            const quotaText = `Storage quota: ${usageLabel} of ${quotaLabel}${percentText}.`;
+            saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${quotaText}`;
+          })
+          .catch((error) => {
+            if (token !== storageSummaryUpdateToken) return;
+            console.error("Failed to estimate storage quota", error);
+          });
       }
 
       function loadInitialSession() {
