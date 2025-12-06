@@ -1839,6 +1839,10 @@ body[data-theme="light"] .control textarea:focus {
   align-items: start;
 }
 
+.settings-page[data-settings-panel="diagnostics"] .settings-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 @media (max-width: 960px) {
   .settings-body {
     grid-template-columns: minmax(0, 1fr);
