@@ -2,7 +2,7 @@
   color-scheme: light dark;
   font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui,
     sans-serif;
-  --ui-scale-user: 0.75;
+  --ui-scale-user: 1;
   --ui-scale-auto: 1;
   --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
   --app-width: 100vw;
@@ -1869,6 +1869,8 @@ body[data-theme="light"] .control textarea:focus {
   max-height: none;
   min-height: 260px;
   height: 100%;
+  width: 100%;
+  flex: 1 1 auto;
 }
 
 @media (max-width: 960px) {

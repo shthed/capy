@@ -68,7 +68,7 @@
     <title>Image to Color-by-Number</title>
     <style>
       :root {
-        --ui-scale-user: 0.75;
+        --ui-scale-user: 1;
         --ui-scale-auto: 1;
         --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
         --app-width: 100vw;
@@ -241,98 +241,14 @@
 [
   {
     "id": "saves",
-    "label": "Saves & storage",
+    "label": "Saves",
     "default": true,
     "heading": {
-      "title": "Saves & storage",
-      "helpLabel": "Manage snapshots and cached images",
-      "helpText": "Export progress, reset a puzzle, or change how large stored images can be."
+      "title": "Saves"
     },
     "sections": [
       {
-        "id": "saveStartHeading",
-        "title": "Start a puzzle",
-        "items": [
-          {
-            "type": "action-row",
-            "className": "save-start-actions",
-            "actions": [
-              {
-                "type": "button",
-                "id": "selectImage",
-                "label": "Upload Image",
-                "ariaLabel": "Upload image or JSON puzzle"
-              },
-              {
-                "type": "button",
-                "id": "samplePuzzle",
-                "label": "Load capybara sample",
-                "ariaLabel": "Load capybara sample puzzle",
-                "dataset": {
-                  "action": "load-sample"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      {
         "type": "save-manager"
-      },
-      {
-        "id": "storageHeading",
-        "title": "Save storage",
-        "items": [
-          {
-            "type": "note",
-            "text": "",
-            "outputId": "saveStorageSummary"
-          },
-          {
-            "type": "select",
-            "id": "sourceImageLimit",
-            "label": "Stored image size",
-            "outputFor": "sourceImageLimit",
-            "options": [
-              {
-                "value": 262144,
-                "label": "256 KB"
-              },
-              {
-                "value": 524288,
-                "label": "512 KB"
-              },
-              {
-                "value": 1048576,
-                "label": "1 MB",
-                "selected": true
-              },
-              {
-                "value": 2097152,
-                "label": "2 MB"
-              },
-              {
-                "value": 5242880,
-                "label": "5 MB"
-              }
-            ]
-          },
-          {
-            "type": "note",
-            "text": "Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate or import."
-          },
-          {
-            "type": "button-row",
-            "className": "log-actions",
-            "actions": [
-              {
-                "type": "button",
-                "id": "deleteAllSaves",
-                "label": "Delete all saves"
-              }
-            ]
-          }
-        ]
       }
     ]
   },
@@ -445,7 +361,7 @@
             "format": "percent"
           }
         ],
-        "note": "Toggle hint pulses and set their brightness here. Adjust timing from Assists & timing."
+        "note": "Toggle hint pulses and set their brightness here. Adjust timing from Assists."
       },
       {
         "id": "lookAndFeel",
@@ -478,22 +394,22 @@
             "min": 0.2,
             "max": 3,
             "step": 0.05,
-            "value": 0.75,
-            "default": 0.75,
+            "value": 1,
+            "default": 1,
             "format": "unit-percent"
           }
         ],
-        "note": "Adjust the UI without touching puzzle colours. Advanced display controls live in Display & zoom."
+        "note": "Adjust the UI without touching puzzle colours. Advanced display controls live in Display."
       }
     ]
   },
   {
     "id": "hints",
-    "label": "Assists & timing",
+    "label": "Assists",
     "advancedOnly": true,
     "heading": {
-      "title": "Assists & timing",
-      "helpLabel": "Hint timing and palette order",
+      "title": "Assists",
+      "helpLabel": "Hint timing",
       "helpText": "Fine-tune hint timing and palette order once you need extra control."
     },
     "sections": [
@@ -559,11 +475,11 @@
   },
   {
     "id": "appearance",
-    "label": "Display & zoom",
+    "label": "Display",
     "advancedOnly": true,
     "heading": {
-      "title": "Display & zoom",
-      "helpLabel": "Canvas and contrast tweaks",
+      "title": "Display",
+      "helpLabel": "Canvas and contrast",
       "helpText": "Change label size, zoom limits, renderer, and backgrounds without affecting puzzle data."
     },
     "sections": [
@@ -649,10 +565,10 @@
   },
   {
     "id": "controls",
-    "label": "Controls & gestures",
+    "label": "Controls",
     "heading": {
-      "title": "Controls & gestures",
-      "helpLabel": "Mouse bindings and input feel",
+      "title": "Controls",
+      "helpLabel": "Mouse bindings",
       "helpText": "Remap clicks and drags or change gesture defaults for advanced setups."
     },
     "sections": [
@@ -854,10 +770,10 @@
   },
   {
     "id": "generator",
-    "label": "Puzzle builder",
+    "label": "Builder",
     "heading": {
-      "title": "Puzzle builder",
-      "helpLabel": "Generator and import controls",
+      "title": "Builder",
+      "helpLabel": "Generator",
       "helpText": "Set clustering, imports, and metadata for new puzzles and reloads."
     },
     "blocks": [
@@ -1124,13 +1040,27 @@
       },
       {
         "type": "section",
+        "id": "saveMaintenance",
+        "title": "Saves",
+        "items": [
+          {
+            "type": "button-row",
+            "className": "log-actions",
+            "actions": [
+              {
+                "type": "button",
+                "id": "deleteAllSaves",
+                "label": "Delete all saves"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "section",
         "id": "debugHeading",
         "title": "Debug log",
         "items": [
-          {
-            "type": "note",
-            "text": "Recent actions, selections, and generation events appear here while you play."
-          },
           {
             "type": "logger",
             "id": "debugLog"
@@ -1705,7 +1635,7 @@
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
       const DEFAULT_LAUNCHER_POSITION = { x: 0.92, y: 0.08 };
-      const DEFAULT_UI_SCALE = 0.75;
+      const DEFAULT_UI_SCALE = 1;
       const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
@@ -13199,7 +13129,7 @@
       }
 
       function updateStorageUsageSummary() {
-        if (!saveStorageSummary) return;
+        const hasSummary = Boolean(saveStorageSummary);
         const token = ++storageSummaryUpdateToken;
         let stats = { manualBytes: 0, manualCount: 0, totalBytes: 0 };
         try {
@@ -13209,53 +13139,52 @@
         }
         let summaryText =
           "Save data lives entirely in this browser. The active slot updates automatically as you play.";
-        let disableClearButton = stats.manualCount === 0;
         if (stats.manualCount > 0) {
-          const manualLabel =
-            stats.manualCount === 1
-              ? "1 save"
-              : `${stats.manualCount} saves`;
+          const manualLabel = stats.manualCount === 1 ? "1 save" : `${stats.manualCount} saves`;
           summaryText = `${manualLabel} using ${formatBytes(stats.manualBytes)} stored locally.`;
         }
-        saveStorageSummary.textContent = summaryText;
+        if (hasSummary) {
+          saveStorageSummary.textContent = summaryText;
+        }
         if (deleteAllSavesButton) {
-          deleteAllSavesButton.disabled = disableClearButton;
+          deleteAllSavesButton.disabled = stats.manualCount === 0;
         }
-        if (navigator.storage && typeof navigator.storage.estimate === "function") {
-          const baseSummary = summaryText;
-          const statsSnapshot = { ...stats };
-          navigator.storage
-            .estimate()
-            .then((estimate) => {
-              if (token !== storageSummaryUpdateToken) return;
-              if (!estimate) return;
-              const quota = Number(estimate.quota);
-              const usage = Number(estimate.usage);
-              if (!Number.isFinite(quota) || quota <= 0) {
-                if (Number.isFinite(usage) && usage > 0) {
-                  const usageText = `Storage usage: ${formatBytes(usage)}.`;
-                  saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${usageText}`;
-                }
-                return;
-              }
-              const usedBytes = Number.isFinite(usage) && usage >= 0 ? usage : statsSnapshot.totalBytes;
-              const usageLabel = formatBytes(usedBytes);
-              const quotaLabel = formatBytes(quota);
-              let percentText = "";
-              if (quota > 0 && Number.isFinite(usedBytes)) {
-                const percent = Math.min(100, Math.round((usedBytes / quota) * 1000) / 10);
-                if (Number.isFinite(percent)) {
-                  percentText = ` (${percent}% used)`;
-                }
-              }
-              const quotaText = `Storage quota: ${usageLabel} of ${quotaLabel}${percentText}.`;
-              saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${quotaText}`;
-            })
-            .catch((error) => {
-              if (token !== storageSummaryUpdateToken) return;
-              console.error("Failed to estimate storage quota", error);
-            });
+        if (!hasSummary || !(navigator.storage && typeof navigator.storage.estimate === "function")) {
+          return;
         }
+        const baseSummary = summaryText;
+        const statsSnapshot = { ...stats };
+        navigator.storage
+          .estimate()
+          .then((estimate) => {
+            if (token !== storageSummaryUpdateToken) return;
+            if (!estimate) return;
+            const quota = Number(estimate.quota);
+            const usage = Number(estimate.usage);
+            if (!Number.isFinite(quota) || quota <= 0) {
+              if (Number.isFinite(usage) && usage > 0) {
+                const usageText = `Storage usage: ${formatBytes(usage)}.`;
+                saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${usageText}`;
+              }
+              return;
+            }
+            const usedBytes = Number.isFinite(usage) && usage >= 0 ? usage : statsSnapshot.totalBytes;
+            const usageLabel = formatBytes(usedBytes);
+            const quotaLabel = formatBytes(quota);
+            let percentText = "";
+            if (quota > 0 && Number.isFinite(usedBytes)) {
+              const percent = Math.min(100, Math.round((usedBytes / quota) * 1000) / 10);
+              if (Number.isFinite(percent)) {
+                percentText = ` (${percent}% used)`;
+              }
+            }
+            const quotaText = `Storage quota: ${usageLabel} of ${quotaLabel}${percentText}.`;
+            saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${quotaText}`;
+          })
+          .catch((error) => {
+            if (token !== storageSummaryUpdateToken) return;
+            console.error("Failed to estimate storage quota", error);
+          });
       }
 
       function loadInitialSession() {
