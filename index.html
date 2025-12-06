@@ -200,16 +200,7 @@
       aria-hidden="true"
     >
       <div class="sheet-header">
-        <div class="sheet-heading">
-          <div class="sheet-heading__text">
-            <h2>Settings</h2>
-          </div>
-          <label class="toggle sheet-heading__toggle">
-            <input type="checkbox" id="advancedModeToggle" />
-            <span>Advanced controls</span>
-          </label>
-        </div>
-        <div class="sheet-header-actions">
+        <div class="sheet-header-actions sheet-header-actions--start">
           <button
             id="settingsUploadButton"
             class="settings-upload"
@@ -218,9 +209,17 @@
           >
             Upload image
           </button>
+        </div>
+        <div class="sheet-heading">
+          <label class="toggle sheet-heading__toggle">
+            <input type="checkbox" id="advancedModeToggle" />
+            <span>Advanced controls</span>
+          </label>
+        </div>
+        <div class="sheet-header-actions">
           <button
             type="button"
-            class="close-button sheet-close"
+            class="close-button sheet-close sheet-close--balanced"
             data-sheet-close="settings"
             aria-label="Close menu"
           >
@@ -239,11 +238,107 @@
       </div>
     </div>
     <script id="settingsDefinition" type="application/json">
-[
+[ 
+  {
+    "id": "saves",
+    "label": "Saves & storage",
+    "default": true,
+    "heading": {
+      "title": "Saves & storage",
+      "helpLabel": "Manage snapshots and cached images",
+      "helpText": "Export progress, reset a puzzle, or change how large stored images can be.",
+    },
+    "sections": [
+      {
+        "id": "saveStartHeading",
+        "title": "Start a puzzle",
+        "items": [
+          {
+            "type": "action-row",
+            "className": "save-start-actions",
+            "actions": [
+              {
+                "type": "button",
+                "id": "selectImage",
+                "label": "Upload Image",
+                "ariaLabel": "Upload image or JSON puzzle",
+              },
+              {
+                "type": "button",
+                "id": "samplePuzzle",
+                "label": "Load capybara sample",
+                "ariaLabel": "Load capybara sample puzzle",
+                "dataset": {
+                  "action": "load-sample",
+                },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        "type": "save-manager",
+      },
+      {
+        "id": "storageHeading",
+        "title": "Save storage",
+        "items": [
+          {
+            "type": "note",
+            "text": "",
+            "outputId": "saveStorageSummary",
+          },
+          {
+            "type": "select",
+            "id": "sourceImageLimit",
+            "label": "Stored image size",
+            "outputFor": "sourceImageLimit",
+            "options": [
+              {
+                "value": 262144,
+                "label": "256 KB",
+              },
+              {
+                "value": 524288,
+                "label": "512 KB",
+              },
+              {
+                "value": 1048576,
+                "label": "1 MB",
+                "selected": true,
+              },
+              {
+                "value": 2097152,
+                "label": "2 MB",
+              },
+              {
+                "value": 5242880,
+                "label": "5 MB",
+              },
+            ],
+          },
+          {
+            "type": "note",
+            "text": "Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate or import.",
+          },
+          {
+            "type": "button-row",
+            "className": "log-actions",
+            "actions": [
+              {
+                "type": "button",
+                "id": "deleteAllSaves",
+                "label": "Delete all saves",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
   {
     "id": "basics",
     "label": "Basics",
-    "default": true,
     "heading": {
       "title": "Basics",
       "helpLabel": "Everyday controls",
@@ -985,180 +1080,10 @@
     "advancedOnly": true
   },
   {
-    "id": "saves",
-    "label": "Saves & storage",
-    "heading": {
-      "title": "Saves & storage",
-      "helpLabel": "Manage snapshots and cached images",
-      "helpText": "Export progress, reset a puzzle, or change how large stored images can be."
-    },
-    "sections": [
-      {
-        "id": "saveStartHeading",
-        "title": "Start a puzzle",
-        "items": [
-          {
-            "type": "action-row",
-            "className": "save-start-actions",
-            "actions": [
-              {
-                "type": "button",
-                "id": "selectImage",
-                "label": "Upload Image",
-                "ariaLabel": "Upload image or JSON puzzle"
-              },
-              {
-                "type": "button",
-                "id": "samplePuzzle",
-                "label": "Load capybara sample",
-                "ariaLabel": "Load capybara sample puzzle",
-                "dataset": {
-                  "action": "load-sample"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "type": "save-manager"
-      },
-      {
-        "id": "storageHeading",
-        "title": "Save storage",
-        "items": [
-          {
-            "type": "note",
-            "text": "",
-            "outputId": "saveStorageSummary"
-          },
-          {
-            "type": "select",
-            "id": "sourceImageLimit",
-            "label": "Stored image size",
-            "outputFor": "sourceImageLimit",
-            "options": [
-              {
-                "value": 262144,
-                "label": "256 KB"
-              },
-              {
-                "value": 524288,
-                "label": "512 KB"
-              },
-              {
-                "value": 1048576,
-                "label": "1 MB",
-                "selected": true
-              },
-              {
-                "value": 2097152,
-                "label": "2 MB"
-              },
-              {
-                "value": 5242880,
-                "label": "5 MB"
-              }
-            ]
-          },
-          {
-            "type": "note",
-            "text": "Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate or import."
-          },
-          {
-            "type": "button-row",
-            "className": "log-actions",
-            "actions": [
-              {
-                "type": "button",
-                "id": "deleteAllSaves",
-                "label": "Delete all saves"
-              }
-            ]
-          }
-        ]
-      }
-    ],
-    "advancedOnly": true
-  },
-  {
-    "id": "help",
-    "label": "Guides",
-    "heading": {
-      "title": "Guides",
-      "helpLabel": "Gestures, shortcuts, and documentation",
-      "helpText": "Review inputs, commands, and the built-in README without leaving the puzzle."
-    },
-    "sections": [
-      {
-        "id": "commandsHeading",
-        "title": "Command buttons",
-        "items": [
-          {
-            "type": "definition-list",
-            "items": [
-              {
-                "term": "\ud83d\uddbc Preview",
-                "description": "Toggle the finished artwork overlay to compare your progress."
-              },
-              {
-                "term": "\ud83c\udf9b Generator",
-                "description": "Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation."
-              },
-              {
-                "term": "\ud83c\udf9a Detail",
-                "description": "Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes, minimum region areas, resize targets, and the region counts noted above."
-              },
-              {
-                "term": "\u26f6 Fullscreen",
-                "description": "Expand the app to fill the display or exit back to windowed mode."
-              },
-              {
-                "term": "\u2b06 Import",
-                "description": "Load a new image or JSON puzzle from disk."
-              },
-              {
-                "term": "\ud83d\udcbe Saves",
-                "description": "Manage snapshots \u2014 load, rename, export, or delete stored games."
-              },
-              {
-                "term": "\u2139 Help",
-                "description": "Open this guide and review tips for palette controls, gestures, and shortcuts."
-              },
-              {
-                "term": "\u2699 Menu",
-                "description": "Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface scale. Advanced options expose accessibility tweaks for the hint animations."
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "id": "controlsHeading",
-        "title": "Canvas controls",
-        "items": [
-          {
-            "type": "list",
-            "items": [
-              "Click Fill the tapped region if it matches the active colour.",
-              "Right click Select the colour under the pointer.",
-              "Select a palette swatch to set the active colour and flash every matching region.",
-              "Enable Easy difficulty in the menu to let clicks auto-select the tapped region's colour.",
-              "Mouse wheel or +/\u2212 Zoom in or out around the cursor.",
-              "Middle click or Space + drag Pan the canvas.",
-              "Drag & drop an image or JSON file anywhere on the window to import it."
-            ]
-          }
-        ]
-      }
-    ],
-    "advancedOnly": true
-  },
-  {
     "id": "diagnostics",
-    "label": "Diagnostics",
+    "label": "Debug",
     "heading": {
-      "title": "Diagnostics",
+      "title": "Debug",
       "helpLabel": "Debug and system info",
       "helpText": "Inspect logs and service worker state while troubleshooting."
     },
