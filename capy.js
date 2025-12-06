@@ -831,6 +831,7 @@
 
     const root = typeof document !== "undefined" ? document.documentElement : null;
     const SETTINGS_STORAGE_KEY = "capy.settings.v1";
+    const SETTINGS_VERSION_STAMP = "2025-12-06";
     const DEFAULT_UI_SCALE = 0.75;
     const MIN_UI_SCALE = 0.2;
     const MAX_UI_SCALE = 3;
@@ -843,6 +844,12 @@
       if (!raw) return null;
       try {
         const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          const versionDate = typeof parsed.versionDate === "string" ? parsed.versionDate : null;
+          if (!versionDate || versionDate !== SETTINGS_VERSION_STAMP) {
+            return null;
+          }
+        }
         const payload =
           parsed && typeof parsed === "object"
             ? parsed.settings && typeof parsed.settings === "object"
@@ -3876,6 +3883,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const SETTINGS_STORAGE_KEY = "capy.settings.v1";
+      const SETTINGS_VERSION_STAMP = "2025-12-06";
       const SERVICE_WORKER_ENABLED = false;
       const RUNTIME_CACHE_NAME = "capy-offline-cache-v4";
       const CACHE_ORIGIN = "https://capy.local";
@@ -14830,10 +14838,50 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         return snapshot;
       }
 
+      function clearSettingsCookies() {
+        if (typeof document === "undefined" || typeof document.cookie !== "string") return 0;
+        const targetNames = new Set([SETTINGS_STORAGE_KEY, "capy.settings", "capy_settings", "capySettings"]);
+        const cookies = document.cookie ? document.cookie.split(";") : [];
+        let cleared = 0;
+        for (const cookie of cookies) {
+          const separatorIndex = cookie.indexOf("=");
+          const name = (separatorIndex === -1 ? cookie : cookie.slice(0, separatorIndex)).trim();
+          if (!name) continue;
+          if (targetNames.has(name) || name.startsWith(`${SETTINGS_STORAGE_KEY}-`)) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
+            document.cookie = `${name}=; Max-Age=0; path=/;`;
+            cleared += 1;
+          }
+        }
+        return cleared;
+      }
+
+      function purgeLegacySettingsStorage() {
+        let clearedCookies = 0;
+        if (typeof localStorage !== "undefined" && typeof localStorage.removeItem === "function") {
+          try {
+            localStorage.removeItem(SETTINGS_STORAGE_KEY);
+          } catch (error) {
+            console.warn("Failed to remove stored settings", error);
+          }
+        }
+        try {
+          clearedCookies = clearSettingsCookies();
+          if (clearedCookies > 0 && settingsBootstrap?.log) {
+            settingsBootstrap.log(
+              `Cleared ${clearedCookies} stale settings cookie${clearedCookies === 1 ? "" : "s"}`,
+            );
+          }
+        } catch (error) {
+          console.warn("Failed to clear legacy settings cookies", error);
+        }
+        return clearedCookies;
+      }
+
       function persistUserSettings(snapshot) {
         if (!snapshot || typeof snapshot !== "object") return null;
         if (typeof localStorage === "undefined") return null;
-        const record = { version: 1, settings: snapshot };
+        const record = { version: 1, versionDate: SETTINGS_VERSION_STAMP, settings: snapshot };
         let serialized = null;
         try {
           serialized = JSON.stringify(record);
@@ -15026,13 +15074,18 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
           if (!raw) return null;
           const parsed = JSON.parse(raw);
+          const versionDate = typeof parsed?.versionDate === "string" ? parsed.versionDate : null;
+          if (!versionDate || versionDate !== SETTINGS_VERSION_STAMP) {
+            purgeLegacySettingsStorage();
+            return null;
+          }
           const normalized = normalizeStoredUserSettings(parsed);
           if (!normalized) return null;
           let rewritePayload = null;
           try {
             const snapshot = getUserSettingsSnapshot(normalized);
             if (snapshot) {
-              const record = { version: 1, settings: snapshot };
+              const record = { version: 1, versionDate: SETTINGS_VERSION_STAMP, settings: snapshot };
               const serialized = JSON.stringify(record);
               if (serialized !== raw) {
                 rewritePayload = serialized;
@@ -15055,6 +15108,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           return normalized;
         } catch (error) {
           console.error("Failed to load stored settings", error);
+          purgeLegacySettingsStorage();
           settingsBootstrap.recordError("Stored settings unavailable; using defaults");
         }
         return null;
