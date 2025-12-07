@@ -68,7 +68,7 @@
     <title>Image to Color-by-Number</title>
     <style>
       :root {
-        --ui-scale-user: 0.75;
+        --ui-scale-user: 1;
         --ui-scale-auto: 1;
         --ui-scale: calc(var(--ui-scale-user, 1) * var(--ui-scale-auto, 1));
         --app-width: 100vw;
@@ -200,12 +200,7 @@
       aria-hidden="true"
     >
       <div class="sheet-header">
-        <div class="sheet-header-actions">
-          <div class="sheet-grip" aria-hidden="true" title="Drag to move the menu">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
+        <div class="sheet-header-actions sheet-header-actions--start">
           <button
             id="settingsUploadButton"
             class="settings-upload"
@@ -214,9 +209,17 @@
           >
             Upload image
           </button>
+        </div>
+        <div class="sheet-heading">
+          <label class="toggle sheet-heading__toggle">
+            <input type="checkbox" id="advancedModeToggle" />
+            <span>Advanced controls</span>
+          </label>
+        </div>
+        <div class="sheet-header-actions">
           <button
             type="button"
-            class="close-button sheet-close"
+            class="close-button sheet-close sheet-close--balanced"
             data-sheet-close="settings"
             aria-label="Close menu"
           >
@@ -225,33 +228,33 @@
           </button>
         </div>
       </div>
-        <div class="sheet-body">
-          <div class="settings-body">
-            <div class="settings-nav">
-              <div class="settings-mode">
-                <div class="settings-mode__labels">
-                  <p class="settings-mode__title">Mode</p>
-                  <p class="settings-mode__hint">
-                    Basics keep everyday controls together. Turn on Advanced to unlock builder, saves, and diagnostics.
-                  </p>
-                </div>
-                <label class="toggle settings-mode__toggle">
-                  <input type="checkbox" id="advancedModeToggle" />
-                  <span>Advanced controls</span>
-                </label>
-              </div>
-              <nav class="settings-tabs" role="tablist" aria-label="Menu sections" data-settings-nav></nav>
-            </div>
-            <div class="settings-content" data-settings-scroll></div>
+      <div class="sheet-body">
+        <div class="settings-body">
+          <div class="settings-nav">
+            <nav class="settings-tabs" role="tablist" aria-label="Menu sections" data-settings-nav></nav>
           </div>
+          <div class="settings-content" data-settings-scroll></div>
         </div>
       </div>
+    </div>
     <script id="settingsDefinition" type="application/json">
 [
   {
+    "id": "saves",
+    "label": "Saves",
+    "default": true,
+    "heading": {
+      "title": "Saves"
+    },
+    "sections": [
+      {
+        "type": "save-manager"
+      }
+    ]
+  },
+  {
     "id": "basics",
     "label": "Basics",
-    "default": true,
     "heading": {
       "title": "Basics",
       "helpLabel": "Everyday controls",
@@ -358,7 +361,7 @@
             "format": "percent"
           }
         ],
-        "note": "Toggle hint pulses and set their brightness here. Adjust timing from Assists & timing."
+        "note": "Toggle hint pulses and set their brightness here. Adjust timing from Assists."
       },
       {
         "id": "lookAndFeel",
@@ -391,22 +394,22 @@
             "min": 0.2,
             "max": 3,
             "step": 0.05,
-            "value": 0.75,
-            "default": 0.75,
+            "value": 1,
+            "default": 1,
             "format": "unit-percent"
           }
         ],
-        "note": "Adjust the UI without touching puzzle colours. Advanced display controls live in Display & zoom."
+        "note": "Adjust the UI without touching puzzle colours. Advanced display controls live in Display."
       }
     ]
   },
   {
     "id": "hints",
-    "label": "Assists & timing",
+    "label": "Assists",
     "advancedOnly": true,
     "heading": {
-      "title": "Assists & timing",
-      "helpLabel": "Hint timing and palette order",
+      "title": "Assists",
+      "helpLabel": "Hint timing",
       "helpText": "Fine-tune hint timing and palette order once you need extra control."
     },
     "sections": [
@@ -472,11 +475,11 @@
   },
   {
     "id": "appearance",
-    "label": "Display & zoom",
+    "label": "Display",
     "advancedOnly": true,
     "heading": {
-      "title": "Display & zoom",
-      "helpLabel": "Canvas and contrast tweaks",
+      "title": "Display",
+      "helpLabel": "Canvas and contrast",
       "helpText": "Change label size, zoom limits, renderer, and backgrounds without affecting puzzle data."
     },
     "sections": [
@@ -562,10 +565,10 @@
   },
   {
     "id": "controls",
-    "label": "Controls & gestures",
+    "label": "Controls",
     "heading": {
-      "title": "Controls & gestures",
-      "helpLabel": "Mouse bindings and input feel",
+      "title": "Controls",
+      "helpLabel": "Mouse bindings",
       "helpText": "Remap clicks and drags or change gesture defaults for advanced setups."
     },
     "sections": [
@@ -767,10 +770,10 @@
   },
   {
     "id": "generator",
-    "label": "Puzzle builder",
+    "label": "Builder",
     "heading": {
-      "title": "Puzzle builder",
-      "helpLabel": "Generator and import controls",
+      "title": "Builder",
+      "helpLabel": "Generator",
       "helpText": "Set clustering, imports, and metadata for new puzzles and reloads."
     },
     "blocks": [
@@ -993,180 +996,10 @@
     "advancedOnly": true
   },
   {
-    "id": "saves",
-    "label": "Saves & storage",
-    "heading": {
-      "title": "Saves & storage",
-      "helpLabel": "Manage snapshots and cached images",
-      "helpText": "Export progress, reset a puzzle, or change how large stored images can be."
-    },
-    "sections": [
-      {
-        "id": "saveStartHeading",
-        "title": "Start a puzzle",
-        "items": [
-          {
-            "type": "action-row",
-            "className": "save-start-actions",
-            "actions": [
-              {
-                "type": "button",
-                "id": "selectImage",
-                "label": "Upload Image",
-                "ariaLabel": "Upload image or JSON puzzle"
-              },
-              {
-                "type": "button",
-                "id": "samplePuzzle",
-                "label": "Load capybara sample",
-                "ariaLabel": "Load capybara sample puzzle",
-                "dataset": {
-                  "action": "load-sample"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "type": "save-manager"
-      },
-      {
-        "id": "storageHeading",
-        "title": "Save storage",
-        "items": [
-          {
-            "type": "note",
-            "text": "",
-            "outputId": "saveStorageSummary"
-          },
-          {
-            "type": "select",
-            "id": "sourceImageLimit",
-            "label": "Stored image size",
-            "outputFor": "sourceImageLimit",
-            "options": [
-              {
-                "value": 262144,
-                "label": "256 KB"
-              },
-              {
-                "value": 524288,
-                "label": "512 KB"
-              },
-              {
-                "value": 1048576,
-                "label": "1 MB",
-                "selected": true
-              },
-              {
-                "value": 2097152,
-                "label": "2 MB"
-              },
-              {
-                "value": 5242880,
-                "label": "5 MB"
-              }
-            ]
-          },
-          {
-            "type": "note",
-            "text": "Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate or import."
-          },
-          {
-            "type": "button-row",
-            "className": "log-actions",
-            "actions": [
-              {
-                "type": "button",
-                "id": "deleteAllSaves",
-                "label": "Delete all saves"
-              }
-            ]
-          }
-        ]
-      }
-    ],
-    "advancedOnly": true
-  },
-  {
-    "id": "help",
-    "label": "Guides",
-    "heading": {
-      "title": "Guides",
-      "helpLabel": "Gestures, shortcuts, and documentation",
-      "helpText": "Review inputs, commands, and the built-in README without leaving the puzzle."
-    },
-    "sections": [
-      {
-        "id": "commandsHeading",
-        "title": "Command buttons",
-        "items": [
-          {
-            "type": "definition-list",
-            "items": [
-              {
-                "term": "\ud83d\uddbc Preview",
-                "description": "Toggle the finished artwork overlay to compare your progress."
-              },
-              {
-                "term": "\ud83c\udf9b Generator",
-                "description": "Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation."
-              },
-              {
-                "term": "\ud83c\udf9a Detail",
-                "description": "Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes, minimum region areas, resize targets, and the region counts noted above."
-              },
-              {
-                "term": "\u26f6 Fullscreen",
-                "description": "Expand the app to fill the display or exit back to windowed mode."
-              },
-              {
-                "term": "\u2b06 Import",
-                "description": "Load a new image or JSON puzzle from disk."
-              },
-              {
-                "term": "\ud83d\udcbe Saves",
-                "description": "Manage snapshots \u2014 load, rename, export, or delete stored games."
-              },
-              {
-                "term": "\u2139 Help",
-                "description": "Open this guide and review tips for palette controls, gestures, and shortcuts."
-              },
-              {
-                "term": "\u2699 Menu",
-                "description": "Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface scale. Advanced options expose accessibility tweaks for the hint animations."
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "id": "controlsHeading",
-        "title": "Canvas controls",
-        "items": [
-          {
-            "type": "list",
-            "items": [
-              "Click Fill the tapped region if it matches the active colour.",
-              "Right click Select the colour under the pointer.",
-              "Select a palette swatch to set the active colour and flash every matching region.",
-              "Enable Easy difficulty in the menu to let clicks auto-select the tapped region's colour.",
-              "Mouse wheel or +/\u2212 Zoom in or out around the cursor.",
-              "Middle click or Space + drag Pan the canvas.",
-              "Drag & drop an image or JSON file anywhere on the window to import it."
-            ]
-          }
-        ]
-      }
-    ],
-    "advancedOnly": true
-  },
-  {
     "id": "diagnostics",
-    "label": "Diagnostics",
+    "label": "Debug",
     "heading": {
-      "title": "Diagnostics",
+      "title": "Debug",
       "helpLabel": "Debug and system info",
       "helpText": "Inspect logs and service worker state while troubleshooting."
     },
@@ -1207,13 +1040,27 @@
       },
       {
         "type": "section",
+        "id": "saveMaintenance",
+        "title": "Saves",
+        "items": [
+          {
+            "type": "button-row",
+            "className": "log-actions",
+            "actions": [
+              {
+                "type": "button",
+                "id": "deleteAllSaves",
+                "label": "Delete all saves"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "section",
         "id": "debugHeading",
         "title": "Debug log",
         "items": [
-          {
-            "type": "note",
-            "text": "Recent actions, selections, and generation events appear here while you play."
-          },
           {
             "type": "logger",
             "id": "debugLog"
@@ -1751,6 +1598,7 @@
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
       const SETTINGS_STORAGE_KEY = "capy.settings.v1";
+      const SETTINGS_VERSION_STAMP = "2025-12-06";
       const SERVICE_WORKER_ENABLED = false;
       const RUNTIME_CACHE_NAME = "capy-offline-cache-v4";
       const CACHE_ORIGIN = "https://capy.local";
@@ -1787,7 +1635,7 @@
       const DEFAULT_BACKGROUND_HEX = "#f8fafc";
       const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
       const DEFAULT_LAUNCHER_POSITION = { x: 0.92, y: 0.08 };
-      const DEFAULT_UI_SCALE = 0.75;
+      const DEFAULT_UI_SCALE = 1;
       const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
@@ -12771,10 +12619,50 @@
         return snapshot;
       }
 
+      function clearSettingsCookies() {
+        if (typeof document === "undefined" || typeof document.cookie !== "string") return 0;
+        const targetNames = new Set([SETTINGS_STORAGE_KEY, "capy.settings", "capy_settings", "capySettings"]);
+        const cookies = document.cookie ? document.cookie.split(";") : [];
+        let cleared = 0;
+        for (const cookie of cookies) {
+          const separatorIndex = cookie.indexOf("=");
+          const name = (separatorIndex === -1 ? cookie : cookie.slice(0, separatorIndex)).trim();
+          if (!name) continue;
+          if (targetNames.has(name) || name.startsWith(`${SETTINGS_STORAGE_KEY}-`)) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
+            document.cookie = `${name}=; Max-Age=0; path=/;`;
+            cleared += 1;
+          }
+        }
+        return cleared;
+      }
+
+      function purgeLegacySettingsStorage() {
+        let clearedCookies = 0;
+        if (typeof localStorage !== "undefined" && typeof localStorage.removeItem === "function") {
+          try {
+            localStorage.removeItem(SETTINGS_STORAGE_KEY);
+          } catch (error) {
+            console.warn("Failed to remove stored settings", error);
+          }
+        }
+        try {
+          clearedCookies = clearSettingsCookies();
+          if (clearedCookies > 0 && settingsBootstrap?.log) {
+            settingsBootstrap.log(
+              `Cleared ${clearedCookies} stale settings cookie${clearedCookies === 1 ? "" : "s"}`,
+            );
+          }
+        } catch (error) {
+          console.warn("Failed to clear legacy settings cookies", error);
+        }
+        return clearedCookies;
+      }
+
       function persistUserSettings(snapshot) {
         if (!snapshot || typeof snapshot !== "object") return null;
         if (typeof localStorage === "undefined") return null;
-        const record = { version: 1, settings: snapshot };
+        const record = { version: 1, versionDate: SETTINGS_VERSION_STAMP, settings: snapshot };
         let serialized = null;
         try {
           serialized = JSON.stringify(record);
@@ -12967,13 +12855,18 @@
           const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
           if (!raw) return null;
           const parsed = JSON.parse(raw);
+          const versionDate = typeof parsed?.versionDate === "string" ? parsed.versionDate : null;
+          if (!versionDate || versionDate !== SETTINGS_VERSION_STAMP) {
+            purgeLegacySettingsStorage();
+            return null;
+          }
           const normalized = normalizeStoredUserSettings(parsed);
           if (!normalized) return null;
           let rewritePayload = null;
           try {
             const snapshot = getUserSettingsSnapshot(normalized);
             if (snapshot) {
-              const record = { version: 1, settings: snapshot };
+              const record = { version: 1, versionDate: SETTINGS_VERSION_STAMP, settings: snapshot };
               const serialized = JSON.stringify(record);
               if (serialized !== raw) {
                 rewritePayload = serialized;
@@ -12996,6 +12889,7 @@
           return normalized;
         } catch (error) {
           console.error("Failed to load stored settings", error);
+          purgeLegacySettingsStorage();
           settingsBootstrap.recordError("Stored settings unavailable; using defaults");
         }
         return null;
@@ -13235,7 +13129,7 @@
       }
 
       function updateStorageUsageSummary() {
-        if (!saveStorageSummary) return;
+        const hasSummary = Boolean(saveStorageSummary);
         const token = ++storageSummaryUpdateToken;
         let stats = { manualBytes: 0, manualCount: 0, totalBytes: 0 };
         try {
@@ -13245,53 +13139,52 @@
         }
         let summaryText =
           "Save data lives entirely in this browser. The active slot updates automatically as you play.";
-        let disableClearButton = stats.manualCount === 0;
         if (stats.manualCount > 0) {
-          const manualLabel =
-            stats.manualCount === 1
-              ? "1 save"
-              : `${stats.manualCount} saves`;
+          const manualLabel = stats.manualCount === 1 ? "1 save" : `${stats.manualCount} saves`;
           summaryText = `${manualLabel} using ${formatBytes(stats.manualBytes)} stored locally.`;
         }
-        saveStorageSummary.textContent = summaryText;
+        if (hasSummary) {
+          saveStorageSummary.textContent = summaryText;
+        }
         if (deleteAllSavesButton) {
-          deleteAllSavesButton.disabled = disableClearButton;
+          deleteAllSavesButton.disabled = stats.manualCount === 0;
         }
-        if (navigator.storage && typeof navigator.storage.estimate === "function") {
-          const baseSummary = summaryText;
-          const statsSnapshot = { ...stats };
-          navigator.storage
-            .estimate()
-            .then((estimate) => {
-              if (token !== storageSummaryUpdateToken) return;
-              if (!estimate) return;
-              const quota = Number(estimate.quota);
-              const usage = Number(estimate.usage);
-              if (!Number.isFinite(quota) || quota <= 0) {
-                if (Number.isFinite(usage) && usage > 0) {
-                  const usageText = `Storage usage: ${formatBytes(usage)}.`;
-                  saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${usageText}`;
-                }
-                return;
-              }
-              const usedBytes = Number.isFinite(usage) && usage >= 0 ? usage : statsSnapshot.totalBytes;
-              const usageLabel = formatBytes(usedBytes);
-              const quotaLabel = formatBytes(quota);
-              let percentText = "";
-              if (quota > 0 && Number.isFinite(usedBytes)) {
-                const percent = Math.min(100, Math.round((usedBytes / quota) * 1000) / 10);
-                if (Number.isFinite(percent)) {
-                  percentText = ` (${percent}% used)`;
-                }
-              }
-              const quotaText = `Storage quota: ${usageLabel} of ${quotaLabel}${percentText}.`;
-              saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${quotaText}`;
-            })
-            .catch((error) => {
-              if (token !== storageSummaryUpdateToken) return;
-              console.error("Failed to estimate storage quota", error);
-            });
+        if (!hasSummary || !(navigator.storage && typeof navigator.storage.estimate === "function")) {
+          return;
         }
+        const baseSummary = summaryText;
+        const statsSnapshot = { ...stats };
+        navigator.storage
+          .estimate()
+          .then((estimate) => {
+            if (token !== storageSummaryUpdateToken) return;
+            if (!estimate) return;
+            const quota = Number(estimate.quota);
+            const usage = Number(estimate.usage);
+            if (!Number.isFinite(quota) || quota <= 0) {
+              if (Number.isFinite(usage) && usage > 0) {
+                const usageText = `Storage usage: ${formatBytes(usage)}.`;
+                saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${usageText}`;
+              }
+              return;
+            }
+            const usedBytes = Number.isFinite(usage) && usage >= 0 ? usage : statsSnapshot.totalBytes;
+            const usageLabel = formatBytes(usedBytes);
+            const quotaLabel = formatBytes(quota);
+            let percentText = "";
+            if (quota > 0 && Number.isFinite(usedBytes)) {
+              const percent = Math.min(100, Math.round((usedBytes / quota) * 1000) / 10);
+              if (Number.isFinite(percent)) {
+                percentText = ` (${percent}% used)`;
+              }
+            }
+            const quotaText = `Storage quota: ${usageLabel} of ${quotaLabel}${percentText}.`;
+            saveStorageSummary.textContent = `${baseSummary}${baseSummary ? " " : ""}${quotaText}`;
+          })
+          .catch((error) => {
+            if (token !== storageSummaryUpdateToken) return;
+            console.error("Failed to estimate storage quota", error);
+          });
       }
 
       function loadInitialSession() {
