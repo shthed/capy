@@ -497,6 +497,117 @@
  * - Service worker + save subsystems live near the bottom; adjust `TECH.md` when their flows change.
  */
 
+const capyConstants = (() => {
+  const constants = {
+    SETTINGS_STORAGE_KEY: "capy.settings.v1",
+    SETTINGS_VERSION_STAMP: "2025-12-06",
+    DEFAULT_UI_SCALE: 1,
+    MIN_UI_SCALE: 0.25,
+    MAX_UI_SCALE: 4,
+    UI_SCALE_PRESETS: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4],
+    DISABLED_SETTINGS: new Set([
+      "settings-guide",
+      "settings-feedback",
+      "settings-report-issue",
+      "settings-share",
+      "settings-capy-saves",
+      "settings-load-saves",
+      "settings-save-settings",
+      "settings-load-settings",
+      "settings-save-ui-kit",
+      "settings-load-ui-kit",
+      "settings-json-view",
+      "settings-json-import",
+      "settings-region-merge-passes",
+      "settings-perimeter-to-area-ratio",
+      "settings-hint-visibility",
+      "settings-auto-advance",
+      "settings-hint-animations",
+      "settings-hint-matching",
+      "settings-hint-hover",
+      "settings-difficulty",
+      "settings-hint-fade",
+      "settings-hint-intensity",
+      "settings-ui-scale",
+      "settings-label-scale",
+      "settings-max-zoom",
+      "settings-image-description",
+      "settings-art-prompt",
+      "settings-region-labels",
+      "settings-theme",
+      "settings-mouse-controls",
+      "settings-palette-sort",
+      "settings-launcher-position",
+      "background-colour",
+      "stage-background-colour",
+    ]),
+    DEFAULT_BACKGROUND_HEX: "#f8fafc",
+    DEFAULT_STAGE_BACKGROUND_HEX: "#000000",
+    DEFAULT_LAUNCHER_POSITION: { x: 0.92, y: 0.08 },
+    DEFAULT_LABEL_SCALE: 1,
+    DEFAULT_UI_THEME: "dark",
+    DEFAULT_GENERATION_ALGORITHM: "local-kmeans",
+    DEFAULT_REGION_MERGE_PASSES: 12,
+    DEFAULT_MAX_PERIMETER_TO_AREA_RATIO: 1.6,
+    VALID_GENERATION_ALGORITHMS: new Set(["local-kmeans", "local-posterize", "organic-slic"]),
+    VALID_UI_THEMES: new Set(["dark", "light", "colorful"]),
+    DEFAULT_HINT_FADE_DURATION: 1200,
+    MIN_HINT_FADE_DURATION: 400,
+    MAX_HINT_FADE_DURATION: 2400,
+    DEFAULT_HINT_INTENSITY: 0.65,
+    MIN_HINT_INTENSITY: 0.2,
+    MAX_HINT_INTENSITY: 0.9,
+    DEFAULT_HINT_TYPES: { matchingRegions: true, hoverRegions: true },
+    HINT_TYPE_KEYS: ["matchingRegions", "hoverRegions"],
+    DEFAULT_SOURCE_IMAGE_MAX_BYTES: 1048576,
+    SOURCE_IMAGE_LIMIT_OPTIONS: [
+      { value: 262144, label: "256 KB" },
+      { value: 524288, label: "512 KB" },
+      { value: 1048576, label: "1 MB" },
+      { value: 2097152, label: "2 MB" },
+      { value: 5242880, label: "5 MB" },
+    ],
+    SOURCE_IMAGE_VARIANT_ORIGINAL: "original",
+    SOURCE_IMAGE_VARIANT_GENERATED: "generated",
+    DEFAULT_DIFFICULTY: "normal",
+    VALID_DIFFICULTY_LEVELS: new Set(["normal", "nearby", "easy"]),
+    MOUSE_BUTTON_KEYS: ["left", "middle", "right"],
+    MOUSE_BUTTON_LABELS: {
+      left: "Left mouse button",
+      middle: "Middle mouse button",
+      right: "Right mouse button",
+    },
+    DEFAULT_MOUSE_CONTROLS: {
+      left: { click: "fill", drag: "pan" },
+      middle: { click: "none", drag: "pan" },
+      right: { click: "select", drag: "pan" },
+    },
+    VALID_MOUSE_CLICK_ACTIONS: new Set(["fill", "select-fill", "select", "zoom-in", "zoom-out", "none"]),
+    VALID_MOUSE_DRAG_ACTIONS: new Set(["pan", "fill", "zoom", "none"]),
+    DOUBLE_TAP_GUARD_MS: 350,
+  };
+
+  constants.MAX_SOURCE_IMAGE_LIMIT = constants.SOURCE_IMAGE_LIMIT_OPTIONS.reduce((max, option) => {
+    const value = option?.value;
+    if (Number.isFinite(value) && value > max) {
+      return value;
+    }
+    return max;
+  }, constants.DEFAULT_SOURCE_IMAGE_MAX_BYTES);
+
+  return Object.freeze(constants);
+})();
+
+const capyGlobal = globalThis.capy || {};
+capyGlobal.constants = capyConstants;
+capyGlobal.details = Object.freeze({
+  settingsStorageKey: capyConstants.SETTINGS_STORAGE_KEY,
+  settingsVersion: capyConstants.SETTINGS_VERSION_STAMP,
+  uiScalePresets: capyConstants.UI_SCALE_PRESETS,
+});
+globalThis.capy = capyGlobal;
+
+export { capyGlobal as capy, capyConstants };
 
 (() => {
   const DEFAULT_OVERLAY_FILL = "rgba(248, 250, 252, 1)";
@@ -831,11 +942,8 @@
     }
 
     const root = typeof document !== "undefined" ? document.documentElement : null;
-    const SETTINGS_STORAGE_KEY = "capy.settings.v1";
-    const SETTINGS_VERSION_STAMP = "2025-12-06";
-    const DEFAULT_UI_SCALE = 1;
-    const MIN_UI_SCALE = 0.25;
-    const MAX_UI_SCALE = 4;
+    const { SETTINGS_STORAGE_KEY, SETTINGS_VERSION_STAMP, DEFAULT_UI_SCALE, MIN_UI_SCALE, MAX_UI_SCALE } =
+      capyConstants;
 
     function clamp(value, min, max) {
       return Math.min(max, Math.max(min, value));
@@ -1020,6 +1128,7 @@
     });
 
     globalThis.capyRuntime = capyRuntime;
+    capyGlobal.runtime = capyRuntime;
 
     if (typeof document !== "undefined" && document.body && typeof applyPrebootMetrics === "function") {
       applyPrebootMetrics();
@@ -3385,6 +3494,7 @@ function canUseGenerationWorker() {
 
   const settingsSheet = document.getElementById("settingsSheet");
   const settingsDefinition = readSettingsDefinition();
+  capyGlobal.settingsDefinition = settingsDefinition;
   renderSettingsMenu(settingsSheet, settingsDefinition);
 
   globalThis.capySettingsMenu = { readSettingsDefinition, renderSettingsMenu };
@@ -3404,10 +3514,13 @@ function canUseGenerationWorker() {
           const get = (selector) => {
             if (!selector) return null;
             if (cache.has(selector)) {
-              return cache.get(selector);
+              const cached = cache.get(selector);
+              if (cached) return cached;
             }
             const node = root.querySelector(selector);
-            cache.set(selector, node || null);
+            if (node) {
+              cache.set(selector, node);
+            }
             return node || null;
           };
           const all = (selector) => Array.from(root.querySelectorAll(selector));
@@ -3446,20 +3559,30 @@ function canUseGenerationWorker() {
         }
 
         function setOpen(nextOpen) {
-          if (!sheet) return;
+          const targetSheet = ui.get("#settingsSheet") || sheet || document.getElementById("settingsSheet");
+          if (!targetSheet) return;
           const open = Boolean(nextOpen);
-          ui.toggle(sheet, "hidden", !open);
-          sheet.setAttribute("aria-hidden", open ? "false" : "true");
+          ui.toggle(targetSheet, "hidden", !open);
+          targetSheet.setAttribute("aria-hidden", open ? "false" : "true");
           settingsButton?.setAttribute("aria-expanded", open ? "true" : "false");
         }
 
-        settingsButton?.addEventListener("click", () => {
-          const isHidden = sheet?.classList.contains("hidden") ?? true;
-          setOpen(isHidden);
-          if (isHidden) {
-            log("Opened from launcher before full app load");
-          }
-        });
+        const attachSettingsButtonHandler = (button) => {
+          button?.addEventListener("click", () => {
+            const isHidden = sheet?.classList.contains("hidden") ?? true;
+            setOpen(true);
+            if (isHidden) {
+              log("Opened from launcher before full app load");
+            }
+          });
+        };
+        if (settingsButton) {
+          attachSettingsButtonHandler(settingsButton);
+        } else {
+          window.addEventListener("DOMContentLoaded", () => {
+            attachSettingsButtonHandler(document.getElementById("settingsButton"));
+          });
+        }
 
         closeButtons.forEach((button) =>
           button.addEventListener("click", () => {
@@ -3520,10 +3643,13 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
               const get = (selector) => {
                 if (!selector) return null;
                 if (cache.has(selector)) {
-                  return cache.get(selector);
+                  const cached = cache.get(selector);
+                  if (cached) return cached;
                 }
                 const node = root.querySelector(selector);
-                cache.set(selector, node || null);
+                if (node) {
+                  cache.set(selector, node);
+                }
                 return node || null;
               };
               const all = (selector) => Array.from(root.querySelectorAll(selector));
@@ -3652,6 +3778,11 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           const saveButton = section.querySelector("[data-save-snapshot]");
           const resetButton = section.querySelector("[data-reset-progress]");
           const downloadButton = section.querySelector("#downloadJson");
+          section.hidden = false;
+          section.setAttribute("aria-hidden", "false");
+          if (list) {
+            list.hidden = false;
+          }
           const defaultEmptyMessage =
             "No saves yet. Create one above to start autosaving progress.";
           let currentEntries = [];
@@ -3753,6 +3884,15 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const previewToggle = document.getElementById("previewToggle");
       const fullscreenButton = document.getElementById("fullscreenButton");
       const settingsButton = document.getElementById("settingsButton");
+      settingsButton?.addEventListener("click", () => {
+        if (typeof window.capySettingsBootstrap?.setOpen === "function") {
+          window.capySettingsBootstrap.setOpen(true);
+          requestAnimationFrame(() => window.capySettingsBootstrap.setOpen(true));
+        }
+        if (typeof openSheet === "function" && settingsSheet) {
+          openSheet(settingsSheet);
+        }
+      });
       const settingsSheetHeader = settingsSheet?.querySelector(".sheet-header") || null;
       const settingsBody =
         settingsSheet?.querySelector("[data-settings-scroll]") ||
@@ -3980,8 +4120,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         : {};
       const SAVE_STORAGE_KEY = "capy.saves.v2";
       const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
-      const SETTINGS_STORAGE_KEY = "capy.settings.v1";
-      const SETTINGS_VERSION_STAMP = "2025-12-06";
+      const { SETTINGS_STORAGE_KEY, SETTINGS_VERSION_STAMP } = capyConstants;
       const SERVICE_WORKER_ENABLED = false;
       const RUNTIME_CACHE_NAME = "capy-offline-cache-v4";
       const CACHE_ORIGIN = "https://capy.local";
@@ -4016,74 +4155,43 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         "background-colour",
         "stage-background-colour",
       ]);
-      const DEFAULT_BACKGROUND_HEX = "#f8fafc";
-      const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
-      const DEFAULT_LAUNCHER_POSITION = { x: 0.92, y: 0.08 };
-      const MIN_UI_SCALE = 0.25;
-      const MAX_UI_SCALE = 4;
-      const DEFAULT_UI_SCALE = 1;
-      const UI_SCALE_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
-      const DEFAULT_LABEL_SCALE = 1;
-      const DEFAULT_UI_THEME = "dark";
-      const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
-      const DEFAULT_REGION_MERGE_PASSES = 12;
-      const DEFAULT_MAX_PERIMETER_TO_AREA_RATIO = 1.6;
-      const VALID_GENERATION_ALGORITHMS = new Set([
-        "local-kmeans",
-        "local-posterize",
-        "organic-slic",
-      ]);
-      const VALID_UI_THEMES = new Set(["dark", "light", "colorful"]);
-      const DEFAULT_HINT_FADE_DURATION = 1200;
-      const MIN_HINT_FADE_DURATION = 400;
-      const MAX_HINT_FADE_DURATION = 2400;
-      const DEFAULT_HINT_INTENSITY = 0.65;
-      const MIN_HINT_INTENSITY = 0.2;
-      const MAX_HINT_INTENSITY = 0.9;
-      const DEFAULT_HINT_TYPES = {
-        matchingRegions: true,
-        hoverRegions: true,
-      };
-      const HINT_TYPE_KEYS = ["matchingRegions", "hoverRegions"];
-      const DEFAULT_SOURCE_IMAGE_MAX_BYTES = 1048576;
-      const SOURCE_IMAGE_LIMIT_OPTIONS = [
-        { value: 262144, label: "256 KB" },
-        { value: 524288, label: "512 KB" },
-        { value: 1048576, label: "1 MB" },
-        { value: 2097152, label: "2 MB" },
-        { value: 5242880, label: "5 MB" },
-      ];
-      const MAX_SOURCE_IMAGE_LIMIT = SOURCE_IMAGE_LIMIT_OPTIONS.reduce((max, option) => {
-        const value = option?.value;
-        if (Number.isFinite(value) && value > max) {
-          return value;
-        }
-        return max;
-      }, DEFAULT_SOURCE_IMAGE_MAX_BYTES);
-      const SOURCE_IMAGE_VARIANT_ORIGINAL = "original";
-      const SOURCE_IMAGE_VARIANT_GENERATED = "generated";
-      const DEFAULT_DIFFICULTY = "normal";
-      const VALID_DIFFICULTY_LEVELS = new Set(["normal", "nearby", "easy"]);
-      const MOUSE_BUTTON_KEYS = ["left", "middle", "right"];
-      const MOUSE_BUTTON_LABELS = {
-        left: "Left mouse button",
-        middle: "Middle mouse button",
-        right: "Right mouse button",
-      };
-      const DEFAULT_MOUSE_CONTROLS = {
-        left: { click: "fill", drag: "pan" },
-        middle: { click: "none", drag: "pan" },
-        right: { click: "select", drag: "pan" },
-      };
-      const VALID_MOUSE_CLICK_ACTIONS = new Set([
-        "fill",
-        "select-fill",
-        "select",
-        "zoom-in",
-        "zoom-out",
-        "none",
-      ]);
-      const VALID_MOUSE_DRAG_ACTIONS = new Set(["pan", "fill", "zoom", "none"]);
+      const {
+        DEFAULT_BACKGROUND_HEX,
+        DEFAULT_STAGE_BACKGROUND_HEX,
+        DEFAULT_LAUNCHER_POSITION,
+        MIN_UI_SCALE,
+        MAX_UI_SCALE,
+        DEFAULT_UI_SCALE,
+        UI_SCALE_PRESETS,
+        DEFAULT_LABEL_SCALE,
+        DEFAULT_UI_THEME,
+        DEFAULT_GENERATION_ALGORITHM,
+        DEFAULT_REGION_MERGE_PASSES,
+        DEFAULT_MAX_PERIMETER_TO_AREA_RATIO,
+        VALID_GENERATION_ALGORITHMS,
+        VALID_UI_THEMES,
+        DEFAULT_HINT_FADE_DURATION,
+        MIN_HINT_FADE_DURATION,
+        MAX_HINT_FADE_DURATION,
+        DEFAULT_HINT_INTENSITY,
+        MIN_HINT_INTENSITY,
+        MAX_HINT_INTENSITY,
+        DEFAULT_HINT_TYPES,
+        HINT_TYPE_KEYS,
+        DEFAULT_SOURCE_IMAGE_MAX_BYTES,
+        SOURCE_IMAGE_LIMIT_OPTIONS,
+        MAX_SOURCE_IMAGE_LIMIT,
+        SOURCE_IMAGE_VARIANT_ORIGINAL,
+        SOURCE_IMAGE_VARIANT_GENERATED,
+        DEFAULT_DIFFICULTY,
+        VALID_DIFFICULTY_LEVELS,
+        MOUSE_BUTTON_KEYS,
+        MOUSE_BUTTON_LABELS,
+        DEFAULT_MOUSE_CONTROLS,
+        VALID_MOUSE_CLICK_ACTIONS,
+        VALID_MOUSE_DRAG_ACTIONS,
+        DOUBLE_TAP_GUARD_MS,
+      } = capyConstants;
       let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
       let settingsPersistTimer = null;
       let pendingSettingsPersistPayload = null;
@@ -4095,7 +4203,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       let pendingAutosaveReason = null;
       let storageSummaryUpdateToken = 0;
       let preventingBrowserZoom = false;
-      const DOUBLE_TAP_GUARD_MS = 350;
 
       const performanceMetrics = createPerformanceMetrics({
         flushInterval: 8000,
