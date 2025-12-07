@@ -211,10 +211,7 @@
           </button>
         </div>
         <div class="sheet-heading">
-          <label class="toggle sheet-heading__toggle">
-            <input type="checkbox" id="advancedModeToggle" />
-            <span>Advanced controls</span>
-          </label>
+          <p class="sheet-heading__hint">Menu</p>
         </div>
         <div class="sheet-header-actions">
           <button
@@ -242,7 +239,6 @@
   {
     "id": "saves",
     "label": "Saves",
-    "default": true,
     "heading": {
       "title": "Saves",
       "helpLabel": "Manage saves",
@@ -255,10 +251,11 @@
     ]
   },
   {
-    "id": "options",
-    "label": "Options",
+    "id": "settings",
+    "label": "Settings",
+    "default": true,
     "heading": {
-      "title": "Options",
+      "title": "Settings",
       "helpLabel": "Gameplay, assists, and display",
       "helpText": "Adjust play style, assists, display, and controls from one place."
     },
@@ -1163,6 +1160,22 @@
       },
       {
         "type": "section",
+        "id": "advancedSettings",
+        "title": "Advanced settings",
+        "items": [
+          {
+            "type": "note",
+            "text": "Show experimental controls and deeper configuration across the menu."
+          },
+          {
+            "type": "toggle",
+            "id": "advancedModeToggle",
+            "label": "Show advanced settings"
+          }
+        ]
+      },
+      {
+        "type": "section",
         "id": "systemHeading",
         "title": "System status",
         "items": [
@@ -1246,8 +1259,7 @@
           }
         ]
       }
-    ],
-    "advancedOnly": true
+    ]
   }
 ]
 </script>
