@@ -3717,7 +3717,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const startHint = document.getElementById("startHint");
       const startHintCloseButton = document.getElementById("closeStartHint");
       const startHintUploadButton = document.getElementById("startHintUpload");
-      const startSaveManagerSection = document.getElementById("saveManagerSection");
       const previewToggle = document.getElementById("previewToggle");
       const fullscreenButton = document.getElementById("fullscreenButton");
       const settingsButton = document.getElementById("settingsButton");
@@ -3726,6 +3725,69 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         settingsSheet?.querySelector("[data-settings-scroll]") ||
         settingsSheet?.querySelector(".sheet-body") ||
         null;
+      function ensureSaveManagerSection() {
+        const existing = document.querySelector('[data-save-section="dialog"]');
+        if (existing) return existing;
+        if (!settingsBody) return null;
+
+        const section = document.createElement("section");
+        section.className = "sheet-section save-manager";
+        section.id = "saveManagerSection";
+        section.dataset.saveSection = "dialog";
+        section.setAttribute("role", "group");
+        section.setAttribute("aria-labelledby", "saveManagerHeading");
+
+        const heading = document.createElement("h3");
+        heading.id = "saveManagerHeading";
+        heading.textContent = "Your saves";
+        section.appendChild(heading);
+
+        const list = document.createElement("div");
+        list.className = "save-manager-list";
+        list.dataset.saveList = "";
+        list.setAttribute("role", "list");
+        list.setAttribute("aria-live", "polite");
+        list.setAttribute("aria-labelledby", "saveManagerHeading");
+        section.appendChild(list);
+
+        const empty = document.createElement("p");
+        empty.className = "save-manager-empty";
+        empty.dataset.saveEmpty = "";
+        empty.hidden = true;
+        empty.textContent = "No saves yet. Create one above to start autosaving progress.";
+        section.appendChild(empty);
+
+        const actions = document.createElement("div");
+        actions.className = "save-manager-actions";
+
+        const saveButton = document.createElement("button");
+        saveButton.type = "button";
+        saveButton.dataset.saveSnapshot = "";
+        saveButton.disabled = true;
+        saveButton.textContent = "Save current puzzle";
+        actions.appendChild(saveButton);
+
+        const resetButton = document.createElement("button");
+        resetButton.type = "button";
+        resetButton.dataset.resetProgress = "";
+        resetButton.disabled = true;
+        resetButton.textContent = "Reset puzzle progress";
+        actions.appendChild(resetButton);
+
+        const exportButton = document.createElement("button");
+        exportButton.type = "button";
+        exportButton.id = "downloadJson";
+        exportButton.disabled = true;
+        exportButton.textContent = "Export puzzle JSON";
+        actions.appendChild(exportButton);
+
+        section.appendChild(actions);
+
+        settingsBody.appendChild(section);
+        return section;
+      }
+
+      const startSaveManagerSection = ensureSaveManagerSection();
       const advancedModeToggle = document.getElementById("advancedModeToggle");
       const settingsTabs = settingsSheet ? Array.from(settingsSheet.querySelectorAll("[data-settings-tab]")) : [];
       const settingsPanels = settingsSheet
@@ -3801,9 +3863,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const sourceImageLimitSelect = document.getElementById("sourceImageLimit");
       const chatGptLink = document.getElementById("chatGptLink");
       const applyBtn = document.getElementById("applyOptions");
-      const saveManagerComponent = createSaveManagerComponent(
-        document.querySelector('[data-save-section="dialog"]')
-      );
+      const saveManagerComponent = createSaveManagerComponent(startSaveManagerSection);
       const paletteDock = createPaletteDockComponent({
         root: document.getElementById("palette"),
         sortControl: document.getElementById("paletteSort"),
@@ -15231,6 +15291,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         state.loadedSaveId = activeSaveId;
         state.saves = [entry, ...state.saves.filter((item) => item.id !== activeSaveId)];
         persistSaves();
+        refreshSaveList();
+        updateStorageUsageSummary();
         logDebug(`Autosaved ${resolvedTitle} (${reason})`);
         return entry;
       }
