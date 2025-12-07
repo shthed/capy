@@ -3265,6 +3265,9 @@ function canUseGenerationWorker() {
               createElement("button", { attrs: { id: "downloadJson", type: "button", disabled: "" } }, [
                 document.createTextNode("Export puzzle JSON"),
               ]),
+              createElement("button", { attrs: { id: "downloadSvg", type: "button", disabled: "" } }, [
+                document.createTextNode("Export puzzle SVG"),
+              ]),
             ]),
           );
           panel.appendChild(section);
@@ -3619,6 +3622,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           const saveButton = section.querySelector("[data-save-snapshot]");
           const resetButton = section.querySelector("[data-reset-progress]");
           const downloadButton = section.querySelector("#downloadJson");
+          const downloadSvgButton = section.querySelector("#downloadSvg");
           const defaultEmptyMessage =
             "No saves yet. Create one above to start autosaving progress.";
           let currentEntries = [];
@@ -3661,6 +3665,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             if (downloadButton) {
               downloadButton.disabled = !hasPuzzle;
             }
+            if (downloadSvgButton) {
+              downloadSvgButton.disabled = !hasPuzzle;
+            }
           });
 
           if (list) {
@@ -3690,6 +3697,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           }
           if (downloadButton) {
             downloadButton.addEventListener("click", () => component.emit("download"));
+          }
+          if (downloadSvgButton) {
+            downloadSvgButton.addEventListener("click", () => component.emit("downloadSvg"));
           }
 
           return { root: section, update: component.update, on: component.on };
@@ -7145,6 +7155,11 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           URL.revokeObjectURL(url);
         });
         logDebug("Exported puzzle JSON");
+      });
+
+      saveManagerComponent.on("downloadSvg", () => {
+        if (!state.puzzle) return;
+        exportCurrentPuzzleSvg();
       });
 
       saveManagerComponent.on("save", () => {
@@ -16357,6 +16372,185 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           URL.revokeObjectURL(url);
         });
         logDebug(`Exported save: ${entry.title || "capy-save"}`);
+      }
+
+
+      function buildSvgSnapshot() {
+        if (!state.puzzle) return null;
+        const { puzzle } = state;
+        const palette = puzzle.palette.map((entry, index) => {
+          const id = Number.isFinite(entry.id) ? entry.id : index + 1;
+          const hex = sanitizeHexColor(
+            entry.hex ?? entry.color ?? DEFAULT_BACKGROUND_HEX,
+            DEFAULT_BACKGROUND_HEX
+          );
+          const payload = { id, hex };
+          if (typeof entry.name === "string" && entry.name.trim()) {
+            payload.name = entry.name.trim();
+          }
+          return payload;
+        });
+        const paletteById = new Map(palette.map((entry) => [entry.id, entry]));
+        const regionLookup = new Map();
+        for (let index = 0; index < puzzle.regions.length; index += 1) {
+          const region = puzzle.regions[index];
+          if (!region) continue;
+          const id = Number.isFinite(region.id) ? region.id : index;
+          regionLookup.set(id, region);
+        }
+
+        const geometries = [];
+        const sceneLoader = puzzle.sceneLoader;
+        for (const [id, region] of regionLookup.entries()) {
+          let geometry = null;
+          if (sceneLoader && typeof sceneLoader.getRegion === "function") {
+            geometry = sceneLoader.getRegion(id);
+          }
+          if (!geometry) {
+            geometry = buildRegionGeometry(region, puzzle.width, puzzle.height);
+          }
+          const pathData = buildPathData(geometry);
+          if (!pathData) continue;
+          geometries.push({
+            id,
+            colorId: Number.isFinite(region.colorId)
+              ? region.colorId
+              : Number.isFinite(geometry?.colorId)
+              ? geometry.colorId
+              : 1,
+            cx: Number.isFinite(region.cx) ? region.cx : null,
+            cy: Number.isFinite(region.cy) ? region.cy : null,
+            pathData,
+          });
+        }
+
+        const width = Number.isFinite(puzzle.width) && puzzle.width > 0 ? puzzle.width : 0;
+        const height = Number.isFinite(puzzle.height) && puzzle.height > 0 ? puzzle.height : 0;
+        const title =
+          (typeof state.sourceTitle === "string" && state.sourceTitle.trim()) ||
+          "capy-puzzle";
+        const backgroundColor = sanitizeHexColor(
+          puzzle.backgroundColor ?? state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX,
+          state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX
+        );
+        const stageBackgroundColor = sanitizeHexColor(
+          state.settings.stageBackgroundColor ?? DEFAULT_STAGE_BACKGROUND_HEX,
+          DEFAULT_STAGE_BACKGROUND_HEX
+        );
+        const filledCount = Math.min(state.filled.size, geometries.length);
+        const progressPercent =
+          geometries.length > 0 ? Math.round((filledCount / geometries.length) * 1000) / 10 : 0;
+        const metadata = {
+          title,
+          generatedAt: new Date().toISOString(),
+          palette,
+          progress: {
+            filled: filledCount,
+            total: geometries.length,
+            percent: progressPercent,
+          },
+          centers: geometries
+            .filter((entry) => Number.isFinite(entry.cx) && Number.isFinite(entry.cy))
+            .map((entry) => ({ id: entry.id, x: entry.cx, y: entry.cy })),
+          backgroundColor,
+          stageBackgroundColor,
+        };
+
+        const svgParts = [];
+        svgParts.push(
+          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${formatNumber(width)} ${formatNumber(
+            height
+          )}" role="img" aria-label="${escapeHtml(title)}">`
+        );
+        svgParts.push(
+          `  <title>${escapeHtml(title)} (${filledCount}/${geometries.length} filled)</title>`
+        );
+        svgParts.push(`  <metadata>${escapeHtml(JSON.stringify(metadata))}</metadata>`);
+        svgParts.push("  <defs>");
+        svgParts.push("    <style>");
+        svgParts.push("      .region { stroke-linejoin: round; stroke-linecap: round; }");
+        svgParts.push(`      .region--empty { fill: ${DEFAULT_OVERLAY_FILL}; }`);
+        svgParts.push(
+          "      .region-centers { pointer-events: none; mix-blend-mode: multiply; opacity: 0.85; }"
+        );
+        svgParts.push(
+          "      .region-centers circle { fill: none; stroke: rgba(15, 23, 42, 0.45); stroke-width: 0.5; }"
+        );
+        svgParts.push("    </style>");
+        svgParts.push("  </defs>");
+        svgParts.push(
+          `  <rect width="${formatNumber(width)}" height="${formatNumber(height)}" fill="${backgroundColor}" />`
+        );
+        svgParts.push('  <g data-layer="regions">');
+        for (const geometry of geometries) {
+          const paletteEntry = paletteById.get(geometry.colorId);
+          const fillHex = sanitizeHexColor(
+            paletteEntry?.hex ?? paletteEntry?.color ?? DEFAULT_BACKGROUND_HEX,
+            DEFAULT_BACKGROUND_HEX
+          );
+          const ink = computeInkStyles(fillHex);
+          const isFilled = state.filled.has(geometry.id);
+          const centerX = Number.isFinite(geometry.cx) ? formatNumber(geometry.cx) : null;
+          const centerY = Number.isFinite(geometry.cy) ? formatNumber(geometry.cy) : null;
+          const attributes = [
+            `d="${geometry.pathData}"`,
+            `class="region ${isFilled ? "region--filled" : "region--empty"}"`,
+            `data-region-id="${geometry.id}"`,
+            `data-color-id="${geometry.colorId}"`,
+            `fill="${isFilled ? fillHex : DEFAULT_OVERLAY_FILL}"`,
+            `stroke="${ink.outline}"`,
+            'stroke-width="0.75"',
+            `data-fill-hex="${fillHex}"`,
+            `data-filled="${isFilled ? "true" : "false"}"`,
+          ];
+          if (centerX != null && centerY != null) {
+            attributes.push(`data-center-x="${centerX}"`, `data-center-y="${centerY}"`);
+          }
+          svgParts.push(`    <path ${attributes.join(" ")} />`);
+        }
+        svgParts.push("  </g>");
+        svgParts.push('  <g class="region-centers" data-layer="centers">');
+        for (const geometry of geometries) {
+          if (!Number.isFinite(geometry.cx) || !Number.isFinite(geometry.cy)) {
+            continue;
+          }
+          const paletteEntry = paletteById.get(geometry.colorId);
+          const fillHex = sanitizeHexColor(
+            paletteEntry?.hex ?? paletteEntry?.color ?? DEFAULT_BACKGROUND_HEX,
+            DEFAULT_BACKGROUND_HEX
+          );
+          svgParts.push(
+            `    <circle cx="${formatNumber(geometry.cx)}" cy="${formatNumber(geometry.cy)}" r="0.85" data-region-id="${
+              geometry.id
+            }" fill="${fillHex}" fill-opacity="0.3" />`
+          );
+        }
+        svgParts.push("  </g>");
+        svgParts.push("</svg>");
+
+        return {
+          svg: svgParts.join("\n"),
+          title,
+          progress: metadata.progress,
+        };
+      }
+
+      function exportCurrentPuzzleSvg() {
+        const snapshot = buildSvgSnapshot();
+        if (!snapshot || !snapshot.svg) return;
+        const blob = new Blob([snapshot.svg], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${snapshot.title}-progress.svg`;
+        document.body.appendChild(link);
+        link.click();
+        requestAnimationFrame(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        });
+        const progressLabel = `${snapshot.progress.filled}/${snapshot.progress.total} filled`;
+        logDebug(`Exported puzzle SVG (${progressLabel})`);
       }
 
       function sanitizeHexColor(value, fallback = DEFAULT_BACKGROUND_HEX) {
