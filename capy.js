@@ -245,8 +245,10 @@
  *   - recordErrorEvent (capy.js:7773) – record error event.
  *   - activateSettingsTab (capy.js:7832) – activate settings tab.
  *   - scrollSettingsPanelIntoView (capy.js:7865) – scroll settings panel into view.
- *   - applyUiScale (capy.js:7900) – apply ui scale.
- *   - applyMaxZoom (capy.js:7939) – apply max zoom.
+ *   - resolveUiScalePreset (capy.js:7894) – resolve ui scale preset.
+ *   - scrollUiScaleControlIntoView (capy.js:7912) – keep ui scale control visible.
+ *   - applyUiScale (capy.js:7933) – apply ui scale.
+ *   - applyMaxZoom (capy.js:7972) – apply max zoom.
  *   - applyLabelScale (capy.js:7978) – apply label scale.
  *   - updateChatGptLink (capy.js:8013) – update chat gpt link.
  *   - applyImageDescription (capy.js:8025) – apply image description.
@@ -273,14 +275,13 @@
  *   - deriveSourceTitleFromUrl (capy.js:8575) – derive source title from url.
  *   - clearSourceUrlError (capy.js:8602) – clear source url error.
  *   - showSourceUrlError (capy.js:8612) – show source url error.
- *   - updateSourceUrlSubmitState (capy.js:8622) – update source url submit state.
- *   - focusGeneratorUrlInput (capy.js:8637) – focus generator url input.
- *   - handleSourceImageUrl (capy.js:8656) – handle source image url.
- *   - openLocalFileWithPicker (capy.js:8696) – async open local file with picker.
- *   - prepareImport (capy.js:8742) – prepare import.
- *   - executePendingImport (capy.js:8766) – execute pending import.
- *   - handleFile (capy.js:8778) – async handle file.
- *   - loadImage (capy.js:8866) – load image.
+ *   - updateSourceUrlSubmitState (capy.js:8619) – update source url submit state.
+ *   - handleSourceImageUrl (capy.js:8634) – handle source image url.
+ *   - openLocalFileWithPicker (capy.js:8674) – async open local file with picker.
+ *   - prepareImport (capy.js:8720) – prepare import.
+ *   - executePendingImport (capy.js:8744) – execute pending import.
+ *   - handleFile (capy.js:8756) – async handle file.
+ *   - loadImage (capy.js:8844) – load image.
  *   - resetPuzzleUI (capy.js:9023) – reset puzzle ui.
  *   - loadPuzzleGenerationModule (capy.js:9060) – load puzzle generation module.
  *   - createPuzzleData (capy.js:9067) – async create puzzle data.
@@ -3717,7 +3718,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const startHint = document.getElementById("startHint");
       const startHintCloseButton = document.getElementById("closeStartHint");
       const startHintUploadButton = document.getElementById("startHintUpload");
-      const startSaveManagerSection = document.getElementById("saveManagerSection");
       const previewToggle = document.getElementById("previewToggle");
       const fullscreenButton = document.getElementById("fullscreenButton");
       const settingsButton = document.getElementById("settingsButton");
@@ -3726,6 +3726,69 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         settingsSheet?.querySelector("[data-settings-scroll]") ||
         settingsSheet?.querySelector(".sheet-body") ||
         null;
+      function ensureSaveManagerSection() {
+        const existing = document.querySelector('[data-save-section="dialog"]');
+        if (existing) return existing;
+        if (!settingsBody) return null;
+
+        const section = document.createElement("section");
+        section.className = "sheet-section save-manager";
+        section.id = "saveManagerSection";
+        section.dataset.saveSection = "dialog";
+        section.setAttribute("role", "group");
+        section.setAttribute("aria-labelledby", "saveManagerHeading");
+
+        const heading = document.createElement("h3");
+        heading.id = "saveManagerHeading";
+        heading.textContent = "Your saves";
+        section.appendChild(heading);
+
+        const list = document.createElement("div");
+        list.className = "save-manager-list";
+        list.dataset.saveList = "";
+        list.setAttribute("role", "list");
+        list.setAttribute("aria-live", "polite");
+        list.setAttribute("aria-labelledby", "saveManagerHeading");
+        section.appendChild(list);
+
+        const empty = document.createElement("p");
+        empty.className = "save-manager-empty";
+        empty.dataset.saveEmpty = "";
+        empty.hidden = true;
+        empty.textContent = "No saves yet. Create one above to start autosaving progress.";
+        section.appendChild(empty);
+
+        const actions = document.createElement("div");
+        actions.className = "save-manager-actions";
+
+        const saveButton = document.createElement("button");
+        saveButton.type = "button";
+        saveButton.dataset.saveSnapshot = "";
+        saveButton.disabled = true;
+        saveButton.textContent = "Save current puzzle";
+        actions.appendChild(saveButton);
+
+        const resetButton = document.createElement("button");
+        resetButton.type = "button";
+        resetButton.dataset.resetProgress = "";
+        resetButton.disabled = true;
+        resetButton.textContent = "Reset puzzle progress";
+        actions.appendChild(resetButton);
+
+        const exportButton = document.createElement("button");
+        exportButton.type = "button";
+        exportButton.id = "downloadJson";
+        exportButton.disabled = true;
+        exportButton.textContent = "Export puzzle JSON";
+        actions.appendChild(exportButton);
+
+        section.appendChild(actions);
+
+        settingsBody.appendChild(section);
+        return section;
+      }
+
+      const startSaveManagerSection = ensureSaveManagerSection();
       const advancedModeToggle = document.getElementById("advancedModeToggle");
       const settingsTabs = settingsSheet ? Array.from(settingsSheet.querySelectorAll("[data-settings-tab]")) : [];
       const settingsPanels = settingsSheet
@@ -3801,9 +3864,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const sourceImageLimitSelect = document.getElementById("sourceImageLimit");
       const chatGptLink = document.getElementById("chatGptLink");
       const applyBtn = document.getElementById("applyOptions");
-      const saveManagerComponent = createSaveManagerComponent(
-        document.querySelector('[data-save-section="dialog"]')
-      );
+      const saveManagerComponent = createSaveManagerComponent(startSaveManagerSection);
       const paletteDock = createPaletteDockComponent({
         root: document.getElementById("palette"),
         sortControl: document.getElementById("paletteSort"),
@@ -3922,6 +3983,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
       const DEFAULT_LAUNCHER_POSITION = { x: 0.92, y: 0.08 };
       const DEFAULT_UI_SCALE = 1;
+      const UI_SCALE_PRESETS = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5];
       const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
@@ -7073,11 +7135,13 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       }
 
       if (uiScaleInput) {
-        uiScaleInput.addEventListener("input", (event) => {
-          applyUiScale(event.target.value, { skipLog: true, skipAutosave: true });
-        });
         uiScaleInput.addEventListener("change", (event) => {
           applyUiScale(event.target.value);
+          if (document.activeElement === uiScaleInput) {
+            requestAnimationFrame(() => {
+              scrollUiScaleControlIntoView();
+            });
+          }
         });
       }
 
@@ -8951,27 +9015,52 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             heading.setAttribute("tabindex", previousTabIndex);
           }
         }
-        if (resolvedId === "generator") {
-          requestAnimationFrame(() => {
-            focusGeneratorUrlInput();
-          });
-        }
         return panel;
+      }
+
+      function resolveUiScalePreset(value) {
+        const numeric = Number(value);
+        const candidate = Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_UI_SCALE;
+        const optionValues = Array.from(uiScaleInput?.options || [])
+          .map((option) => Number(option.value))
+          .filter((optionValue) => Number.isFinite(optionValue) && optionValue > 0);
+        const presets = optionValues.length > 0 ? optionValues : UI_SCALE_PRESETS;
+        if (!presets.length) {
+          return candidate;
+        }
+        let closest = presets[0];
+        let smallestDelta = Math.abs(candidate - closest);
+        for (const preset of presets) {
+          const delta = Math.abs(candidate - preset);
+          if (delta < smallestDelta) {
+            closest = preset;
+            smallestDelta = delta;
+          }
+        }
+        return closest;
+      }
+
+      function scrollUiScaleControlIntoView() {
+        if (!uiScaleInput || !settingsBody) {
+          return;
+        }
+        const target = uiScaleInput.closest(".control") || uiScaleInput;
+        if (typeof target.scrollIntoView === "function") {
+          target.scrollIntoView({ block: "nearest" });
+        }
       }
 
       function applyUiScale(scale, options = {}) {
         const { skipLog = false, skipAutosave = false, force = false } = options;
         const numeric = Number(scale);
-        const fallbackScale =
-          Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
-            ? state.settings.uiScale
-            : DEFAULT_UI_SCALE;
-        const resolved = clamp(
+        const fallbackScale = resolveUiScalePreset(state.settings.uiScale);
+        const normalized = clamp(
           Number.isFinite(numeric) && numeric > 0 ? numeric : fallbackScale,
           0.2,
           3
         );
-        const current = fallbackScale;
+        const resolved = resolveUiScalePreset(normalized);
+        const current = resolveUiScalePreset(fallbackScale);
         const changed = force || Math.abs(resolved - current) > 0.001;
         state.settings.uiScale = resolved;
         document.documentElement.style.setProperty("--ui-scale-user", String(resolved));
@@ -9339,11 +9428,10 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
         if (settingsOutputs.uiScale) {
           const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
-          const value = Number.isFinite(source) && source > 0
-            ? source
-            : (Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
-                ? state.settings.uiScale
-                : DEFAULT_UI_SCALE);
+          const candidate = Number.isFinite(source) && source > 0 ? source : state.settings.uiScale;
+          const value = resolveUiScalePreset(
+            Number.isFinite(candidate) && candidate > 0 ? candidate : DEFAULT_UI_SCALE
+          );
           settingsOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
         }
         if (settingsOutputs.labelScale) {
@@ -9387,7 +9475,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           }
           case "uiScale": {
             const numeric = Number(rawValue);
-            const scale = Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_UI_SCALE;
+            const scale = resolveUiScalePreset(
+              Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_UI_SCALE
+            );
             return `${Math.round(scale * 100)}%`;
           }
           case "labelScale": {
@@ -9733,25 +9823,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
       }
 
-      function focusGeneratorUrlInput() {
-        if (!generatorUrlInput) {
-          return;
-        }
-        if (
-          (!generatorUrlInput.value || generatorUrlInput.value.trim().length === 0) &&
-          state.sourceUrl &&
-          !isProbablyDataUrl(state.sourceUrl)
-        ) {
-          generatorUrlInput.value = state.sourceUrl;
-        }
-        clearSourceUrlError();
-        updateSourceUrlSubmitState();
-        generatorUrlInput.focus();
-        if (typeof generatorUrlInput.select === "function") {
-          generatorUrlInput.select();
-        }
-      }
-
       function handleSourceImageUrl(rawUrl) {
         const normalized = normalizeExternalImageUrl(rawUrl);
         if (!normalized) {
@@ -9856,8 +9927,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             executePendingImport();
           } else if (confirmImportBtn && !confirmImportBtn.hidden) {
             confirmImportBtn.focus();
-          } else {
-            focusGeneratorUrlInput();
+          } else if (generatorUrlInput && typeof generatorUrlInput.scrollIntoView === "function") {
+            generatorUrlInput.scrollIntoView({ block: "center" });
           }
         });
       }
@@ -15231,6 +15302,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         state.loadedSaveId = activeSaveId;
         state.saves = [entry, ...state.saves.filter((item) => item.id !== activeSaveId)];
         persistSaves();
+        refreshSaveList();
+        updateStorageUsageSummary();
         logDebug(`Autosaved ${resolvedTitle} (${reason})`);
         return entry;
       }

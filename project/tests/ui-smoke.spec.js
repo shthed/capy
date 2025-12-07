@@ -107,3 +107,30 @@ test('loads the game without console or debug errors', async ({ page }) => {
   expect(consoleErrors, report).toEqual([]);
   expect(debugErrorLogs, report).toEqual([]);
 });
+
+test('autosaves a loaded puzzle and renders the save entry', async ({ page }) => {
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+
+  await page.waitForSelector('[data-testid="puzzle-canvas"]');
+  await page.waitForFunction(
+    () => document.querySelectorAll('#palette [role="listitem"]').length > 0,
+    undefined,
+    { timeout: 10000 }
+  );
+
+  await page.click('#settingsButton');
+
+  const saveList = page.locator('[data-save-list]');
+  await expect(saveList).toBeVisible({ timeout: 10000 });
+
+  const saveEntry = saveList.locator('[data-save-id]');
+  await page.waitForFunction(
+    () => document.querySelectorAll('[data-save-list] [data-save-id]').length > 0,
+    undefined,
+    { timeout: 15000 }
+  );
+
+  const saveCount = await saveEntry.count();
+  expect(saveCount).toBeGreaterThan(0);
+  await expect(saveEntry.first()).toBeVisible();
+});
