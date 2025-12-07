@@ -242,9 +242,10 @@ Each preset reloads the sample immediately, updates generator sliders, and stamp
 
 ### Code Architecture Tour
 
-- **Single-file app shell.** `index.html` owns markup, styles, and logic. The inline script is segmented into DOM caches, global state, event wiring, puzzle rendering, generation helpers, and persistence utilities—each called out in a developer-map comment.
+- **Module entrypoint.** `index.html` owns markup, styles, and the JSON settings definition, while `capy.js` houses the runtime logic (templates, renderer boot, persistence, and settings rendering). Keep the developer-map comment in `index.html` aligned with the module’s structure.
 - **Preboot viewport metrics.** A blocking `<script>` in the `<head>` seeds UI scale variables, viewport padding, and the orientation/compact flags before the stylesheet paints; a companion snippet at the top of `<body>` mirrors those attributes so the runtime boot avoids first-paint jumps when `handleViewportChange` recalculates metrics.
 - **Public testing surface.** `window.capyGenerator` exposes helpers (`loadFromDataUrl`, `loadPuzzleFixture`, `togglePreview`, etc.) so automation and manual experiments can orchestrate the app without touching internals. Recent renderer work also surfaced `getRendererType()`, `listRenderers()`, `setRenderer(type)`, `registerRenderer(type, factory)`, and `unregisterRenderer(type)` so tests can assert the active backend or load experimental renderers without patching private state.
+- **Inspectable globals.** `window.capy` aggregates immutable constants, the parsed settings definition, and the active `capyRuntime` handle so testers can inspect presets or tab layouts without re-parsing the module.
 - **Pan/zoom subsystem.** `viewState` tracks transforms for `#canvasStage` and `#canvasTransform`; helpers like `applyZoom`, `resetView`, and `applyViewTransform` keep navigation smooth across wheel, keyboard, and drag gestures.
 
 ### Compact UI patterns (no framework)
