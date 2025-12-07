@@ -1,5 +1,8 @@
 # Change Log
 
+## 2025-12-07
+- Added an SVG export option that downloads a palette-aware progress snapshot with region paths and centres from the Saves tab.
+
 ## 2025-12-06
 - Moved hint intensity into the main settings tab and grouped hint toggles together for quicker tuning.
 - Added a devtools helper to clear all site data (cookies, caches, IndexedDB, storage, and workers) from `window.capyGenerator`.
