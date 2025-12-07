@@ -245,8 +245,10 @@
  *   - recordErrorEvent (capy.js:7773) – record error event.
  *   - activateSettingsTab (capy.js:7832) – activate settings tab.
  *   - scrollSettingsPanelIntoView (capy.js:7865) – scroll settings panel into view.
- *   - applyUiScale (capy.js:7900) – apply ui scale.
- *   - applyMaxZoom (capy.js:7939) – apply max zoom.
+ *   - resolveUiScalePreset (capy.js:7894) – resolve ui scale preset.
+ *   - scrollUiScaleControlIntoView (capy.js:7912) – keep ui scale control visible.
+ *   - applyUiScale (capy.js:7933) – apply ui scale.
+ *   - applyMaxZoom (capy.js:7972) – apply max zoom.
  *   - applyLabelScale (capy.js:7978) – apply label scale.
  *   - updateChatGptLink (capy.js:8013) – update chat gpt link.
  *   - applyImageDescription (capy.js:8025) – apply image description.
@@ -273,14 +275,13 @@
  *   - deriveSourceTitleFromUrl (capy.js:8575) – derive source title from url.
  *   - clearSourceUrlError (capy.js:8602) – clear source url error.
  *   - showSourceUrlError (capy.js:8612) – show source url error.
- *   - updateSourceUrlSubmitState (capy.js:8622) – update source url submit state.
- *   - focusGeneratorUrlInput (capy.js:8637) – focus generator url input.
- *   - handleSourceImageUrl (capy.js:8656) – handle source image url.
- *   - openLocalFileWithPicker (capy.js:8696) – async open local file with picker.
- *   - prepareImport (capy.js:8742) – prepare import.
- *   - executePendingImport (capy.js:8766) – execute pending import.
- *   - handleFile (capy.js:8778) – async handle file.
- *   - loadImage (capy.js:8866) – load image.
+ *   - updateSourceUrlSubmitState (capy.js:8619) – update source url submit state.
+ *   - handleSourceImageUrl (capy.js:8634) – handle source image url.
+ *   - openLocalFileWithPicker (capy.js:8674) – async open local file with picker.
+ *   - prepareImport (capy.js:8720) – prepare import.
+ *   - executePendingImport (capy.js:8744) – execute pending import.
+ *   - handleFile (capy.js:8756) – async handle file.
+ *   - loadImage (capy.js:8844) – load image.
  *   - resetPuzzleUI (capy.js:9023) – reset puzzle ui.
  *   - loadPuzzleGenerationModule (capy.js:9060) – load puzzle generation module.
  *   - createPuzzleData (capy.js:9067) – async create puzzle data.
@@ -3982,6 +3983,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
       const DEFAULT_LAUNCHER_POSITION = { x: 0.92, y: 0.08 };
       const DEFAULT_UI_SCALE = 1;
+      const UI_SCALE_PRESETS = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5];
       const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
@@ -7133,11 +7135,13 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
       }
 
       if (uiScaleInput) {
-        uiScaleInput.addEventListener("input", (event) => {
-          applyUiScale(event.target.value, { skipLog: true, skipAutosave: true });
-        });
         uiScaleInput.addEventListener("change", (event) => {
           applyUiScale(event.target.value);
+          if (document.activeElement === uiScaleInput) {
+            requestAnimationFrame(() => {
+              scrollUiScaleControlIntoView();
+            });
+          }
         });
       }
 
@@ -9011,27 +9015,52 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             heading.setAttribute("tabindex", previousTabIndex);
           }
         }
-        if (resolvedId === "generator") {
-          requestAnimationFrame(() => {
-            focusGeneratorUrlInput();
-          });
-        }
         return panel;
+      }
+
+      function resolveUiScalePreset(value) {
+        const numeric = Number(value);
+        const candidate = Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_UI_SCALE;
+        const optionValues = Array.from(uiScaleInput?.options || [])
+          .map((option) => Number(option.value))
+          .filter((optionValue) => Number.isFinite(optionValue) && optionValue > 0);
+        const presets = optionValues.length > 0 ? optionValues : UI_SCALE_PRESETS;
+        if (!presets.length) {
+          return candidate;
+        }
+        let closest = presets[0];
+        let smallestDelta = Math.abs(candidate - closest);
+        for (const preset of presets) {
+          const delta = Math.abs(candidate - preset);
+          if (delta < smallestDelta) {
+            closest = preset;
+            smallestDelta = delta;
+          }
+        }
+        return closest;
+      }
+
+      function scrollUiScaleControlIntoView() {
+        if (!uiScaleInput || !settingsBody) {
+          return;
+        }
+        const target = uiScaleInput.closest(".control") || uiScaleInput;
+        if (typeof target.scrollIntoView === "function") {
+          target.scrollIntoView({ block: "nearest" });
+        }
       }
 
       function applyUiScale(scale, options = {}) {
         const { skipLog = false, skipAutosave = false, force = false } = options;
         const numeric = Number(scale);
-        const fallbackScale =
-          Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
-            ? state.settings.uiScale
-            : DEFAULT_UI_SCALE;
-        const resolved = clamp(
+        const fallbackScale = resolveUiScalePreset(state.settings.uiScale);
+        const normalized = clamp(
           Number.isFinite(numeric) && numeric > 0 ? numeric : fallbackScale,
           0.2,
           3
         );
-        const current = fallbackScale;
+        const resolved = resolveUiScalePreset(normalized);
+        const current = resolveUiScalePreset(fallbackScale);
         const changed = force || Math.abs(resolved - current) > 0.001;
         state.settings.uiScale = resolved;
         document.documentElement.style.setProperty("--ui-scale-user", String(resolved));
@@ -9399,11 +9428,10 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
         if (settingsOutputs.uiScale) {
           const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
-          const value = Number.isFinite(source) && source > 0
-            ? source
-            : (Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
-                ? state.settings.uiScale
-                : DEFAULT_UI_SCALE);
+          const candidate = Number.isFinite(source) && source > 0 ? source : state.settings.uiScale;
+          const value = resolveUiScalePreset(
+            Number.isFinite(candidate) && candidate > 0 ? candidate : DEFAULT_UI_SCALE
+          );
           settingsOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
         }
         if (settingsOutputs.labelScale) {
@@ -9447,7 +9475,9 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           }
           case "uiScale": {
             const numeric = Number(rawValue);
-            const scale = Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_UI_SCALE;
+            const scale = resolveUiScalePreset(
+              Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_UI_SCALE
+            );
             return `${Math.round(scale * 100)}%`;
           }
           case "labelScale": {
@@ -9793,25 +9823,6 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         }
       }
 
-      function focusGeneratorUrlInput() {
-        if (!generatorUrlInput) {
-          return;
-        }
-        if (
-          (!generatorUrlInput.value || generatorUrlInput.value.trim().length === 0) &&
-          state.sourceUrl &&
-          !isProbablyDataUrl(state.sourceUrl)
-        ) {
-          generatorUrlInput.value = state.sourceUrl;
-        }
-        clearSourceUrlError();
-        updateSourceUrlSubmitState();
-        generatorUrlInput.focus();
-        if (typeof generatorUrlInput.select === "function") {
-          generatorUrlInput.select();
-        }
-      }
-
       function handleSourceImageUrl(rawUrl) {
         const normalized = normalizeExternalImageUrl(rawUrl);
         if (!normalized) {
@@ -9916,8 +9927,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
             executePendingImport();
           } else if (confirmImportBtn && !confirmImportBtn.hidden) {
             confirmImportBtn.focus();
-          } else {
-            focusGeneratorUrlInput();
+          } else if (generatorUrlInput && typeof generatorUrlInput.scrollIntoView === "function") {
+            generatorUrlInput.scrollIntoView({ block: "center" });
           }
         });
       }

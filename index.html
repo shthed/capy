@@ -386,20 +386,9 @@
                 "label": "Colourful"
               }
             ]
-          },
-          {
-            "type": "range",
-            "id": "uiScale",
-            "label": "Interface size",
-            "min": 0.2,
-            "max": 3,
-            "step": 0.05,
-            "value": 1,
-            "default": 1,
-            "format": "unit-percent"
           }
         ],
-        "note": "Adjust the UI without touching puzzle colours. Advanced display controls live in Display."
+        "note": "Adjust the colour theme. Interface scale presets now live under Display."
       }
     ]
   },
@@ -483,6 +472,57 @@
       "helpText": "Change label size, zoom limits, renderer, and backgrounds without affecting puzzle data."
     },
     "sections": [
+      {
+        "id": "uiScalePreset",
+        "title": "Interface scale",
+        "items": [
+          {
+            "type": "select",
+            "id": "uiScale",
+            "label": "Interface size",
+            "outputFor": "uiScale",
+            "options": [
+              {
+                "value": 0.85,
+                "label": "Compact (85%)"
+              },
+              {
+                "value": 1,
+                "label": "Standard (100%)",
+                "selected": true
+              },
+              {
+                "value": 1.15,
+                "label": "Comfortable (115%)"
+              },
+              {
+                "value": 1.3,
+                "label": "Roomy (130%)"
+              },
+              {
+                "value": 1.5,
+                "label": "Large (150%)"
+              },
+              {
+                "value": 1.75,
+                "label": "Extra large (175%)"
+              },
+              {
+                "value": 2,
+                "label": "Huge (200%)"
+              },
+              {
+                "value": 2.5,
+                "label": "Giant (250%)"
+              }
+            ]
+          },
+          {
+            "type": "note",
+            "text": "Choose a preset for buttons and menus without affecting puzzle colours. Default 100%."
+          }
+        ]
+      },
       {
         "id": "labeling",
         "title": "Labels & zoom",
@@ -1696,6 +1736,7 @@
       const DEFAULT_STAGE_BACKGROUND_HEX = "#000000";
       const DEFAULT_LAUNCHER_POSITION = { x: 0.92, y: 0.08 };
       const DEFAULT_UI_SCALE = 1;
+      const UI_SCALE_PRESETS = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5];
       const DEFAULT_LABEL_SCALE = 1;
       const DEFAULT_UI_THEME = "dark";
       const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
@@ -4865,11 +4906,13 @@
       }
 
       if (uiScaleInput) {
-        uiScaleInput.addEventListener("input", (event) => {
-          applyUiScale(event.target.value, { skipLog: true, skipAutosave: true });
-        });
         uiScaleInput.addEventListener("change", (event) => {
           applyUiScale(event.target.value);
+          if (document.activeElement === uiScaleInput) {
+            requestAnimationFrame(() => {
+              scrollUiScaleControlIntoView();
+            });
+          }
         });
       }
 
@@ -6611,27 +6654,52 @@
             heading.setAttribute("tabindex", previousTabIndex);
           }
         }
-        if (resolvedId === "generator") {
-          requestAnimationFrame(() => {
-            focusGeneratorUrlInput();
-          });
-        }
         return panel;
+      }
+
+      function resolveUiScalePreset(value) {
+        const numeric = Number(value);
+        const candidate = Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_UI_SCALE;
+        const optionValues = Array.from(uiScaleInput?.options || [])
+          .map((option) => Number(option.value))
+          .filter((optionValue) => Number.isFinite(optionValue) && optionValue > 0);
+        const presets = optionValues.length > 0 ? optionValues : UI_SCALE_PRESETS;
+        if (!presets.length) {
+          return candidate;
+        }
+        let closest = presets[0];
+        let smallestDelta = Math.abs(candidate - closest);
+        for (const preset of presets) {
+          const delta = Math.abs(candidate - preset);
+          if (delta < smallestDelta) {
+            closest = preset;
+            smallestDelta = delta;
+          }
+        }
+        return closest;
+      }
+
+      function scrollUiScaleControlIntoView() {
+        if (!uiScaleInput || !settingsBody) {
+          return;
+        }
+        const target = uiScaleInput.closest(".control") || uiScaleInput;
+        if (typeof target.scrollIntoView === "function") {
+          target.scrollIntoView({ block: "nearest" });
+        }
       }
 
       function applyUiScale(scale, options = {}) {
         const { skipLog = false, skipAutosave = false, force = false } = options;
         const numeric = Number(scale);
-        const fallbackScale =
-          Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
-            ? state.settings.uiScale
-            : DEFAULT_UI_SCALE;
-        const resolved = clamp(
+        const fallbackScale = resolveUiScalePreset(state.settings.uiScale);
+        const normalized = clamp(
           Number.isFinite(numeric) && numeric > 0 ? numeric : fallbackScale,
           0.2,
           3
         );
-        const current = fallbackScale;
+        const resolved = resolveUiScalePreset(normalized);
+        const current = resolveUiScalePreset(fallbackScale);
         const changed = force || Math.abs(resolved - current) > 0.001;
         state.settings.uiScale = resolved;
         document.documentElement.style.setProperty("--ui-scale-user", String(resolved));
@@ -6985,11 +7053,10 @@
         }
         if (settingsOutputs.uiScale) {
           const source = uiScaleInput ? parseFloat(uiScaleInput.value) : NaN;
-          const value = Number.isFinite(source) && source > 0
-            ? source
-            : (Number.isFinite(state.settings.uiScale) && state.settings.uiScale > 0
-                ? state.settings.uiScale
-                : DEFAULT_UI_SCALE);
+          const candidate = Number.isFinite(source) && source > 0 ? source : state.settings.uiScale;
+          const value = resolveUiScalePreset(
+            Number.isFinite(candidate) && candidate > 0 ? candidate : DEFAULT_UI_SCALE
+          );
           settingsOutputs.uiScale.textContent = `${Math.round(value * 100)}%`;
         }
         if (settingsOutputs.labelScale) {
@@ -7033,7 +7100,9 @@
           }
           case "uiScale": {
             const numeric = Number(rawValue);
-            const scale = Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_UI_SCALE;
+            const scale = resolveUiScalePreset(
+              Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_UI_SCALE
+            );
             return `${Math.round(scale * 100)}%`;
           }
           case "labelScale": {
@@ -7356,25 +7425,6 @@
         }
       }
 
-      function focusGeneratorUrlInput() {
-        if (!generatorUrlInput) {
-          return;
-        }
-        if (
-          (!generatorUrlInput.value || generatorUrlInput.value.trim().length === 0) &&
-          state.sourceUrl &&
-          !isProbablyDataUrl(state.sourceUrl)
-        ) {
-          generatorUrlInput.value = state.sourceUrl;
-        }
-        clearSourceUrlError();
-        updateSourceUrlSubmitState();
-        generatorUrlInput.focus();
-        if (typeof generatorUrlInput.select === "function") {
-          generatorUrlInput.select();
-        }
-      }
-
       function handleSourceImageUrl(rawUrl) {
         const normalized = normalizeExternalImageUrl(rawUrl);
         if (!normalized) {
@@ -7479,8 +7529,8 @@
             executePendingImport();
           } else if (confirmImportBtn && !confirmImportBtn.hidden) {
             confirmImportBtn.focus();
-          } else {
-            focusGeneratorUrlInput();
+          } else if (generatorUrlInput && typeof generatorUrlInput.scrollIntoView === "function") {
+            generatorUrlInput.scrollIntoView({ block: "center" });
           }
         });
       }
