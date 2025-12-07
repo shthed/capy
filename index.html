@@ -521,6 +521,57 @@
         "advancedOnly": true
       },
       {
+        "id": "uiScalePreset",
+        "title": "Interface scale",
+        "items": [
+          {
+            "type": "select",
+            "id": "uiScale",
+            "label": "Interface size",
+            "outputFor": "uiScale",
+            "options": [
+              {
+                "value": 0.85,
+                "label": "Compact (85%)"
+              },
+              {
+                "value": 1,
+                "label": "Standard (100%)",
+                "selected": true
+              },
+              {
+                "value": 1.15,
+                "label": "Comfortable (115%)"
+              },
+              {
+                "value": 1.3,
+                "label": "Roomy (130%)"
+              },
+              {
+                "value": 1.5,
+                "label": "Large (150%)"
+              },
+              {
+                "value": 1.75,
+                "label": "Extra large (175%)"
+              },
+              {
+                "value": 2,
+                "label": "Huge (200%)"
+              },
+              {
+                "value": 2.5,
+                "label": "Giant (250%)"
+              }
+            ]
+          },
+          {
+            "type": "note",
+            "text": "Choose a preset for buttons and menus without affecting puzzle colours. Default 100%."
+          }
+        ]
+      },
+      {
         "id": "labeling",
         "title": "Labels & zoom",
         "items": [
