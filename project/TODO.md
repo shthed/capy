@@ -26,3 +26,5 @@ Actionable maintenance items collected during the project review. Keep entries s
 - [ ] Trim palette dock padding on small screens so the first/last swatches are fully visible without horizontal scrolling.
 - [ ] Capture updated dark/light theme screenshots of the refreshed start hint for `project/CHANGELOG.md`.
 - [x] Reorganize the settings panel into grouped toggles with adjustable hint intensity controls (see `project/notes/screenshot-review.md`).
+- [ ] Add live preview + keyboard shortcuts to the interface scale dropdown (25–400%) so users can jump to a preset and recover the control after large jumps.
+- [ ] Extend the scroll-into-view affordance to other settings (label scale, zoom limits, palette sort) to keep the active control visible after value changes.

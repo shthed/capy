@@ -1,12 +1,26 @@
 [
   {
-    "id": "basics",
-    "label": "Basics",
+    "id": "saves",
+    "label": "Saves",
     "default": true,
     "heading": {
-      "title": "Basics",
-      "helpLabel": "Everyday controls",
-      "helpText": "Stay in a single view for quick play: preview, playstyle, hints, and sizing live here."
+      "title": "Saves",
+      "helpLabel": "Manage saves",
+      "helpText": "Load, rename, and export snapshots without leaving the puzzle."
+    },
+    "sections": [
+      {
+        "type": "save-manager"
+      }
+    ]
+  },
+  {
+    "id": "options",
+    "label": "Options",
+    "heading": {
+      "title": "Options",
+      "helpLabel": "Gameplay, assists, and display",
+      "helpText": "Adjust play style, assists, display, and controls from one place."
     },
     "sections": [
       {
@@ -18,7 +32,7 @@
             "type": "action",
             "id": "previewToggle",
             "label": "Show preview",
-            "icon": "\ud83d\uddbc",
+            "icon": "🖼",
             "ariaLabel": "Show preview",
             "testId": "preview-toggle",
             "ariaPressed": false,
@@ -28,7 +42,7 @@
             "type": "action",
             "id": "fullscreenButton",
             "label": "Enter fullscreen",
-            "icon": "\u26f6",
+            "icon": "⛶",
             "ariaLabel": "Enter fullscreen",
             "testId": "fullscreen-button",
             "ariaPressed": false
@@ -109,7 +123,7 @@
             "format": "percent"
           }
         ],
-        "note": "Toggle hint pulses and set their brightness here. Adjust timing from Assists & timing."
+        "note": "Toggle hint pulses and set their brightness here. Adjust timing from Assists."
       },
       {
         "id": "lookAndFeel",
@@ -136,20 +150,8 @@
             ]
           }
         ],
-        "note": "Adjust the colour theme. Interface scale presets live in Display & zoom."
-      }
-    ]
-  },
-  {
-    "id": "hints",
-    "label": "Assists & timing",
-    "advancedOnly": true,
-    "heading": {
-      "title": "Assists & timing",
-      "helpLabel": "Hint timing and palette order",
-      "helpText": "Fine-tune hint timing and palette order once you need extra control."
-    },
-    "sections": [
+        "note": "Adjust the colour theme. Interface scale presets now live under Display."
+      },
       {
         "id": "hintTiming",
         "title": "Hint timing",
@@ -166,7 +168,8 @@
             "format": "seconds"
           }
         ],
-        "note": "Control how long hint flashes stay visible. Default 1.2 s."
+        "note": "Control how long hint flashes stay visible. Default 1.2 s.",
+        "advancedOnly": true
       },
       {
         "id": "paletteOrder",
@@ -197,7 +200,7 @@
               },
               {
                 "value": "warmth",
-                "label": "Warm \u2192 cool"
+                "label": "Warm → cool"
               },
               {
                 "value": "lightness",
@@ -206,20 +209,77 @@
             ]
           }
         ],
-        "note": "Reorder swatches after a puzzle loads: by number, remaining regions, colour name, or spectrum."
-      }
-    ]
-  },
-  {
-    "id": "appearance",
-    "label": "Display & zoom",
-    "advancedOnly": true,
-    "heading": {
-      "title": "Display & zoom",
-      "helpLabel": "Canvas and contrast tweaks",
-      "helpText": "Change label size, zoom limits, renderer, and backgrounds without affecting puzzle data."
-    },
-    "sections": [
+        "note": "Reorder swatches after a puzzle loads: by number, remaining regions, colour name, or spectrum.",
+        "advancedOnly": true
+      },
+      {
+        "id": "uiScalePreset",
+        "title": "Interface scale",
+        "items": [
+          {
+            "type": "select",
+            "id": "uiScale",
+            "label": "Interface size",
+            "outputFor": "uiScale",
+            "options": [
+              {
+                "value": 0.25,
+                "label": "25%"
+              },
+              {
+                "value": 0.5,
+                "label": "50%"
+              },
+              {
+                "value": 0.75,
+                "label": "75%"
+              },
+              {
+                "value": 1,
+                "label": "100%",
+                "selected": true
+              },
+              {
+                "value": 1.25,
+                "label": "125%"
+              },
+              {
+                "value": 1.5,
+                "label": "150%"
+              },
+              {
+                "value": 1.75,
+                "label": "175%"
+              },
+              {
+                "value": 2,
+                "label": "200%"
+              },
+              {
+                "value": 2.5,
+                "label": "250%"
+              },
+              {
+                "value": 3,
+                "label": "300%"
+              },
+              {
+                "value": 3.5,
+                "label": "350%"
+              },
+              {
+                "value": 4,
+                "label": "400%"
+              }
+            ]
+          },
+          {
+            "type": "note",
+            "text": "Choose a preset between 25% and 400% for buttons and menus without affecting puzzle colours. Default 100%."
+          }
+        ],
+        "advancedOnly": true
+      },
       {
         "id": "uiScalePreset",
         "title": "Interface scale",
@@ -296,7 +356,8 @@
             "type": "note",
             "text": "Rendering is handled by the simplified SVG backend."
           }
-        ]
+        ],
+        "advancedOnly": true
       },
       {
         "id": "backgrounds",
@@ -322,19 +383,9 @@
             "type": "note",
             "text": "Adjust the area surrounding the puzzle canvas."
           }
-        ]
-      }
-    ]
-  },
-  {
-    "id": "controls",
-    "label": "Controls & gestures",
-    "heading": {
-      "title": "Controls & gestures",
-      "helpLabel": "Mouse bindings and input feel",
-      "helpText": "Remap clicks and drags or change gesture defaults for advanced setups."
-    },
-    "sections": [
+        ],
+        "advancedOnly": true
+      },
       {
         "id": "mouseControlsHeading",
         "title": "Mouse controls",
@@ -526,18 +577,18 @@
             "type": "note",
             "text": "Drag-to-zoom adjusts the view by moving up to zoom in or down to zoom out."
           }
-        ]
+        ],
+        "advancedOnly": true
       }
-    ],
-    "advancedOnly": true
+    ]
   },
   {
-    "id": "generator",
-    "label": "Puzzle builder",
+    "id": "create",
+    "label": "Create",
     "heading": {
-      "title": "Puzzle builder",
-      "helpLabel": "Generator and import controls",
-      "helpText": "Set clustering, imports, and metadata for new puzzles and reloads."
+      "title": "Create",
+      "helpLabel": "Puzzle creation",
+      "helpText": "Tune imports and generation settings for new puzzles."
     },
     "blocks": [
       {
@@ -593,7 +644,7 @@
           },
           {
             "type": "note",
-            "text": "Higher values merge smaller areas for fewer regions. Default 60 px\u00b2."
+            "text": "Higher values merge smaller areas for fewer regions. Default 60 px²."
           },
           {
             "type": "range",
@@ -676,7 +727,7 @@
           },
           {
             "type": "note",
-            "text": "Each pass blends stray pixels into neighbouring regions before segmentation\u2014set to 0 to keep edges as crisp as the source. Default 0 passes."
+            "text": "Each pass blends stray pixels into neighbouring regions before segmentation—set to 0 to keep edges as crisp as the source. Default 0 passes."
           },
           {
             "type": "details",
@@ -759,104 +810,7 @@
     "advancedOnly": true
   },
   {
-    "id": "saves",
-    "label": "Saves & storage",
-    "heading": {
-      "title": "Saves & storage",
-      "helpLabel": "Manage snapshots and cached images",
-      "helpText": "Export progress, reset a puzzle, or change how large stored images can be."
-    },
-    "sections": [
-      {
-        "id": "saveStartHeading",
-        "title": "Start a puzzle",
-        "items": [
-          {
-            "type": "action-row",
-            "className": "save-start-actions",
-            "actions": [
-              {
-                "type": "button",
-                "id": "selectImage",
-                "label": "Upload Image",
-                "ariaLabel": "Upload image or JSON puzzle"
-              },
-              {
-                "type": "button",
-                "id": "samplePuzzle",
-                "label": "Load capybara sample",
-                "ariaLabel": "Load capybara sample puzzle",
-                "dataset": {
-                  "action": "load-sample"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "type": "save-manager"
-      },
-      {
-        "id": "storageHeading",
-        "title": "Save storage",
-        "items": [
-          {
-            "type": "note",
-            "text": "",
-            "outputId": "saveStorageSummary"
-          },
-          {
-            "type": "select",
-            "id": "sourceImageLimit",
-            "label": "Stored image size",
-            "outputFor": "sourceImageLimit",
-            "options": [
-              {
-                "value": 262144,
-                "label": "256 KB"
-              },
-              {
-                "value": 524288,
-                "label": "512 KB"
-              },
-              {
-                "value": 1048576,
-                "label": "1 MB",
-                "selected": true
-              },
-              {
-                "value": 2097152,
-                "label": "2 MB"
-              },
-              {
-                "value": 5242880,
-                "label": "5 MB"
-              }
-            ]
-          },
-          {
-            "type": "note",
-            "text": "Caps the compressed original image that ships with saves and exports. Changes apply to the next puzzle you generate or import."
-          },
-          {
-            "type": "button-row",
-            "className": "log-actions",
-            "actions": [
-              {
-                "type": "button",
-                "id": "deleteAllSaves",
-                "label": "Delete all saves"
-              }
-            ]
-          }
-        ]
-      }
-    ],
-    "advancedOnly": true
-  },
-  {
-    "id": "help",
+    "id": "guides",
     "label": "Guides",
     "heading": {
       "title": "Guides",
@@ -872,40 +826,41 @@
             "type": "definition-list",
             "items": [
               {
-                "term": "\ud83d\uddbc Preview",
+                "term": "🖼 Preview",
                 "description": "Toggle the finished artwork overlay to compare your progress."
               },
               {
-                "term": "\ud83c\udf9b Generator",
+                "term": "🎛 Generator",
                 "description": "Adjust clustering sliders, choose capybara detail presets, reload the current source image, and monitor generation progress. The sheet mirrors the k-means pipeline inputs used for puzzle creation."
               },
               {
-                "term": "\ud83c\udf9a Detail",
+                "term": "🎚 Detail",
                 "description": "Toggle the capybara detail chips in the Generator sheet to reload the sample with tuned palette sizes, minimum region areas, resize targets, and the region counts noted above."
               },
               {
-                "term": "\u26f6 Fullscreen",
+                "term": "⛶ Fullscreen",
                 "description": "Expand the app to fill the display or exit back to windowed mode."
               },
               {
-                "term": "\u2b06 Import",
+                "term": "⬆ Import",
                 "description": "Load a new image or JSON puzzle from disk."
               },
               {
-                "term": "\ud83d\udcbe Saves",
-                "description": "Manage snapshots \u2014 load, rename, export, or delete stored games."
+                "term": "💾 Saves",
+                "description": "Manage snapshots — load, rename, export, or delete stored games."
               },
               {
-                "term": "\u2139 Help",
+                "term": "ℹ Help",
                 "description": "Open this guide and review tips for palette controls, gestures, and shortcuts."
               },
               {
-                "term": "\u2699 Menu",
+                "term": "⚙ Menu",
                 "description": "Toggle auto-advance, customise hints, change the background or theme, sort the palette, and adjust the interface scale. Advanced options expose accessibility tweaks for the hint animations."
               }
             ]
           }
-        ]
+        ],
+        "advancedOnly": true
       },
       {
         "id": "controlsHeading",
@@ -918,21 +873,22 @@
               "Right click Select the colour under the pointer.",
               "Select a palette swatch to set the active colour and flash every matching region.",
               "Enable Easy difficulty in the menu to let clicks auto-select the tapped region's colour.",
-              "Mouse wheel or +/\u2212 Zoom in or out around the cursor.",
+              "Mouse wheel or +/− Zoom in or out around the cursor.",
               "Middle click or Space + drag Pan the canvas.",
               "Drag & drop an image or JSON file anywhere on the window to import it."
             ]
           }
-        ]
+        ],
+        "advancedOnly": true
       }
     ],
     "advancedOnly": true
   },
   {
-    "id": "diagnostics",
-    "label": "Diagnostics",
+    "id": "debug",
+    "label": "Debug",
     "heading": {
-      "title": "Diagnostics",
+      "title": "Debug",
       "helpLabel": "Debug and system info",
       "helpText": "Inspect logs and service worker state while troubleshooting."
     },
@@ -950,7 +906,7 @@
             "items": [
               {
                 "term": "Service worker",
-                "description": "Waiting to register\u2026",
+                "description": "Waiting to register…",
                 "dataTarget": "service-worker-state"
               },
               {
@@ -973,13 +929,27 @@
       },
       {
         "type": "section",
+        "id": "saveMaintenance",
+        "title": "Saves",
+        "items": [
+          {
+            "type": "button-row",
+            "className": "log-actions",
+            "actions": [
+              {
+                "type": "button",
+                "id": "deleteAllSaves",
+                "label": "Delete all saves"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "section",
         "id": "debugHeading",
         "title": "Debug log",
         "items": [
-          {
-            "type": "note",
-            "text": "Recent actions, selections, and generation events appear here while you play."
-          },
           {
             "type": "logger",
             "id": "debugLog"
