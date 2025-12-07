@@ -3781,6 +3781,7 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
           const saveButton = section.querySelector("[data-save-snapshot]");
           const resetButton = section.querySelector("[data-reset-progress]");
           const downloadButton = section.querySelector("#downloadJson");
+          const downloadSvgButton = section.querySelector("#downloadSvg");
           section.hidden = false;
           section.setAttribute("aria-hidden", "false");
           if (list) {
