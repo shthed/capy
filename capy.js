@@ -2848,11 +2848,14 @@ function canUseGenerationWorker() {
     return { wrapper, headingId };
   }
 
-  function readSettingsDefinition() {
-    const script = document.getElementById("settingsDefinition");
-    if (!script) return [];
+  async function readSettingsDefinition() {
     try {
-      const parsed = JSON.parse(script.textContent || "[]");
+      const response = await fetch("./settings-menu.json");
+      if (!response.ok) {
+        console.error("Failed to fetch settings-menu.json", response.statusText);
+        return [];
+      }
+      const parsed = await response.json();
       return Array.isArray(parsed) ? parsed : [];
     } catch (error) {
       console.error("Failed to parse settings definition", error);
@@ -3661,8 +3664,10 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
 
           const dom = createUiKit(document);
           const settingsSheet = document.getElementById("settingsSheet");
-          const settingsDefinition =
-            (globalThis.capySettingsMenu?.readSettingsDefinition?.() || []).filter(Boolean);
+          const settingsDefinition = capyGlobal.settingsDefinition || [];
+          if (settingsDefinition.length === 0) {
+            console.warn("Settings definition not loaded, menu may be empty.");
+          }
           if (settingsSheet && settingsDefinition.length && globalThis.capySettingsMenu?.renderSettingsMenu) {
             globalThis.capySettingsMenu.renderSettingsMenu(settingsSheet, settingsDefinition);
           }
