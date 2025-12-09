@@ -1,4 +1,4 @@
-import { createVectorScenePayload } from "./render.js";
+import { capy } from "./capy.js";
 
 const GENERATION_STAGE_MESSAGES = {
   prepare: "Preparing image…",
@@ -1189,6 +1189,7 @@ function runGenerationSynchronously(jobId, payload, hooks = {}) {
 }
 
 export async function createPuzzleData(image, options = {}, hooks = {}) {
+  const { createVectorScenePayload } = capy.renderer;
   if (!image || typeof image.width !== "number" || typeof image.height !== "number") {
     throw new Error("Invalid image supplied for puzzle generation");
   }

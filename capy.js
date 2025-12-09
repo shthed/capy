@@ -1071,10 +1071,6 @@ export { capyGlobal as capy, capyConstants };
       // else needs to happen here when simplifying the runtime.
     }
 
-    // Keep the renderer controller here so every consumer uses the exact same
-    // export site. The implementation avoids layers of indirection—renderers are
-    // registered up front, the preferred renderer is activated immediately, and
-    // fallbacks are lightweight when no backend can initialise.
     function createRendererController(host, options = {}) {
       const { hooks = {} } = options || {};
       const renderer = createSvgRenderer(host, hooks);
@@ -1083,19 +1079,10 @@ export { capyGlobal as capy, capyConstants };
         hooks.onRendererChange("svg");
       }
 
-      function setRenderer(requestedType = "svg") {
-        const rendererType = typeof requestedType === "string" ? requestedType.trim().toLowerCase() : "";
-        if (rendererType && rendererType !== "svg") {
-          const message = "Renderer change handler unbound";
-          hooks?.log?.(message, { code: "renderer-change-handler-unbound", renderer: rendererType });
-        }
-        return renderer;
-      }
-
       return {
         getRendererType: () => renderer?.getRendererType?.() || "svg",
         listRenderers: () => ["svg"],
-        setRenderer,
+        setRenderer: () => renderer,
         resize: (metrics = {}) => renderer?.resize?.(metrics),
         renderFrame: (args = {}) => renderer?.renderFrame?.(args) ?? null,
         renderPreview: (args = {}) => renderer?.renderPreview?.(args) ?? null,
@@ -1103,8 +1090,6 @@ export { capyGlobal as capy, capyConstants };
         fillBackground: (args = {}) => renderer?.fillBackground?.(args),
         dispose: () => renderer?.dispose?.(),
         getContext: () => renderer?.getContext?.() || null,
-        registerRenderer: () => false,
-        unregisterRenderer: () => false,
         getRenderer: () => renderer,
       };
     }
@@ -4531,16 +4516,6 @@ function canUseGenerationWorker() {
       function installBrowserZoomGuards() {
         if (typeof window === "undefined") return;
         if (preventingBrowserZoom) return;
-        let lastTouchEndTime = 0;
-        const isGameSurface = (node) => {
-          if (!(node instanceof Node)) return false;
-          if (canvasStage && canvasStage.contains(node)) return true;
-          if (canvasTransform && canvasTransform.contains(node)) return true;
-          if (puzzleCanvas && puzzleCanvas.contains(node)) return true;
-          if (viewportEl && viewportEl.contains(node)) return true;
-          return false;
-        };
-
         const isWithinGameSurface = (node) => {
           if (!(node instanceof Node)) return false;
           let current = node;
@@ -4557,6 +4532,7 @@ function canUseGenerationWorker() {
           return false;
         };
 
+        let lastTouchEndTime = 0;
         const preventUiPinchZoom = (event) => {
           if (!event) return;
           const touches = event.touches;
@@ -4648,7 +4624,7 @@ function canUseGenerationWorker() {
               return;
             }
             const allowShortcutTarget =
-              isGameSurface(event.target) ||
+              isWithinGameSurface(event.target) ||
               event.target === document.body ||
               event.target === document.documentElement;
             if (!allowShortcutTarget) {
@@ -4661,235 +4637,6 @@ function canUseGenerationWorker() {
 
         preventingBrowserZoom = true;
       }
-
-      // Default puzzle metadata fallback used for onboarding and smoke tests.
-      const DEFAULT_GAME_SOURCE = {
-        id: "capy-default",
-        path: "capy.json",
-      };
-
-      const DEFAULT_GAME_FALLBACK = {
-        title: "Capybara Springs",
-        description: "A capybara in a lavender scarf lounges with a dachshund beside a moonlit spring.",
-      };
-
-      let cachedDefaultGame = null;
-      let defaultGameRequest = null;
-
-      const SAMPLE_DETAIL_LEVELS = {
-        low: {
-          id: "low",
-          label: "Low detail",
-          shortLabel: "Low",
-          summary: "Low detail • 18 colours / 15 px² min regions / 1216 px resize • ≈26 regions",
-          ariaLabel:
-            "Low detail – 18 colours, 15 pixel minimum regions, 1216px resize target, about 26 regions",
-          logDescriptor: "low detail",
-          approxRegions: 26,
-          settings: {
-            targetColors: 18,
-            minRegion: 15,
-            maxSize: 1216,
-            sampleRate: 90,
-            kmeansIters: 20,
-            smoothingPasses: 1,
-            maxMergePasses: 12,
-            maxPerimeterToAreaRatio: 1.3,
-            algorithm: DEFAULT_GENERATION_ALGORITHM,
-            sourceImageMaxBytes: 524288,
-          },
-        },
-        medium: {
-          id: "medium",
-          label: "Medium detail",
-          shortLabel: "Medium",
-          summary: "Medium detail • 26 colours / 100 px² min regions / 1408 px resize • ≈20 regions",
-          ariaLabel:
-            "Medium detail – 26 colours, 100 pixel minimum regions, 1408px resize target, about 20 regions",
-          logDescriptor: "medium detail",
-          approxRegions: 20,
-          settings: {
-            targetColors: 26,
-            minRegion: 100,
-            maxSize: 1408,
-            sampleRate: 95,
-            kmeansIters: 24,
-            smoothingPasses: 1,
-            maxMergePasses: 12,
-            maxPerimeterToAreaRatio: 1.6,
-            algorithm: DEFAULT_GENERATION_ALGORITHM,
-            sourceImageMaxBytes: 1048576,
-          },
-        },
-        high: {
-          id: "high",
-          label: "High detail",
-          shortLabel: "High",
-          summary: "High detail • 32 colours / 3 px² min regions / 1536 px resize • ≈140 regions",
-          ariaLabel:
-            "High detail – 32 colours, 3 pixel minimum regions, 1536px resize target, about 140 regions",
-          logDescriptor: "high detail",
-          approxRegions: 140,
-          settings: {
-            targetColors: 32,
-            minRegion: 3,
-            maxSize: 1536,
-            sampleRate: 100,
-            kmeansIters: 28,
-            smoothingPasses: 1,
-            maxMergePasses: 8,
-            maxPerimeterToAreaRatio: 0,
-            algorithm: DEFAULT_GENERATION_ALGORITHM,
-            sourceImageMaxBytes: 2097152,
-          },
-        },
-      };
-      const DEFAULT_SAMPLE_DETAIL = "medium";
-
-      function drawOutlines(ctx) {
-        if (!state.puzzle || !ctx) return;
-        const cache = ensureRenderCache();
-        if (!cache.ready) return;
-        const filledRegions = state.filled || new Set();
-        const hideCompleted = filledRegions.size > 0;
-        const geometries = hideCompleted
-          ? cache.regions.filter((geometry) => !filledRegions.has(geometry.id))
-          : cache.regions;
-        if (geometries.length === 0) {
-          return;
-        }
-        if (!hideCompleted && cache.outlineLayer && cache.outlineLayerCtx) {
-          if (cache.outlineLayerDirty && !rasterizeOutlineLayer(cache)) {
-            strokeOutlinesDirect(ctx, cache, geometries);
-            return;
-          }
-          ctx.drawImage(cache.outlineLayer, 0, 0);
-          return;
-        }
-        strokeOutlinesDirect(ctx, cache, geometries);
-      }
-
-      function createRenderCache() {
-        return {
-          width: 0,
-          height: 0,
-          version: 0,
-          strokeWidth: 1,
-          renderScale: 1,
-          pixelWidth: 0,
-          pixelHeight: 0,
-          ready: false,
-          regions: [],
-          regionsById: new Map(),
-          labelSettingsSignature: null,
-          sceneLoader: null,
-        };
-      }
-
-      function strokeOutlinesDirect(ctx, cache, geometries) {
-        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        withRenderScale(ctx, scale, () => {
-          ctx.strokeStyle = backgroundInk.outline;
-          ctx.lineWidth = cache.strokeWidth;
-          ctx.lineJoin = "round";
-          ctx.lineCap = "round";
-          strokeGeometries(ctx, Array.isArray(geometries) ? geometries : cache.regions);
-        });
-      }
-
-      function rasterizeOutlineLayer(cache) {
-        const ctx = cache.outlineLayerCtx;
-        if (!ctx || !cache.outlineLayer) {
-          cache.outlineLayerDirty = true;
-          return false;
-        }
-        clearContext(ctx);
-        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        withRenderScale(ctx, scale, () => {
-          ctx.strokeStyle = backgroundInk.outline;
-          ctx.lineWidth = cache.strokeWidth;
-          ctx.lineJoin = "round";
-          ctx.lineCap = "round";
-          strokeGeometries(ctx, cache.regions);
-        });
-        cache.outlineLayerDirty = false;
-        return true;
-      }
-
-      function createLayerCanvas(width, height) {
-        if (SUPPORTS_OFFSCREEN_CANVAS) {
-          try {
-            return new OffscreenCanvas(width, height);
-          } catch (error) {}
-        }
-        if (typeof document === "undefined") {
-          return null;
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        canvas.hidden = true;
-        return canvas;
-      }
-
-      function getLayerContext(layer) {
-        if (!layer) return null;
-        try {
-          const ctx = layer.getContext("2d");
-          if (ctx) {
-            ctx.imageSmoothingEnabled = false;
-          }
-          return ctx;
-        } catch (error) {
-          return null;
-        }
-      }
-
-      function appendContoursToPath(ctx, contours) {
-        for (const contour of contours || []) {
-          if (!contour || contour.length === 0) continue;
-          const first = contour[0];
-          ctx.moveTo(first[0], first[1]);
-          for (let i = 1; i < contour.length; i++) {
-            const point = contour[i];
-            ctx.lineTo(point[0], point[1]);
-          }
-          ctx.closePath();
-        }
-      }
-
-      function fillGeometries(ctx, geometries) {
-        if (SUPPORTS_PATH2D) {
-          for (const geometry of geometries) {
-            if (!geometry?.path) continue;
-            ctx.fill(geometry.path);
-          }
-          return;
-        }
-        ctx.beginPath();
-        for (const geometry of geometries) {
-          if (!geometry?.contours) continue;
-          appendContoursToPath(ctx, geometry.contours);
-        }
-        ctx.fill();
-      }
-
-      function strokeGeometries(ctx, geometries) {
-        if (SUPPORTS_PATH2D) {
-          for (const geometry of geometries) {
-            if (!geometry?.path) continue;
-            ctx.stroke(geometry.path);
-          }
-          return;
-        }
-        ctx.beginPath();
-        for (const geometry of geometries) {
-          if (!geometry?.contours) continue;
-          appendContoursToPath(ctx, geometry.contours);
-        }
-        ctx.stroke();
-      }
-
       function ensureRenderCache(options = {}) {
         if (!state.puzzle) {
           state.renderCache = createRenderCache();
@@ -4916,114 +4663,6 @@ function canUseGenerationWorker() {
         state.renderCache = cache;
         return cache;
       }
-
-      function rebuildRenderCache(cache) {
-        if (!state.puzzle) {
-          cache.width = 0;
-          cache.height = 0;
-          cache.version = 0;
-          cache.strokeWidth = 1;
-          cache.regions = [];
-          cache.regionsById = new Map();
-          cache.sceneLoader = null;
-          cache.ready = false;
-          cache.labelSettingsSignature = null;
-          return cache;
-        }
-        cache.width = state.puzzle.width;
-        cache.height = state.puzzle.height;
-        cache.version = state.puzzle.regions.length;
-        cache.sceneLoader = state.puzzle.sceneLoader || null;
-        cache.strokeWidth = computeOutlineStrokeWidth(cache.width, cache.height, {
-          displayScale: canvasMetrics.displayScale,
-          pixelRatio: canvasMetrics.pixelRatio,
-          deviceWidth: 1,
-        });
-        cache.regions = [];
-        cache.regionsById = new Map();
-        if (!cache.sceneLoader) {
-          for (const region of state.puzzle.regions) {
-            const geometry = buildRegionGeometry(region, cache.width, cache.height);
-            cache.regions.push(geometry);
-            cache.regionsById.set(region.id, geometry);
-          }
-        }
-        cache.ready = true;
-        syncCacheMetrics(cache);
-        return cache;
-      }
-
-      function computeSceneLoaderZoom(loader) {
-        const scale = Math.max(0.0001, canvasMetrics.displayScale || computeDisplayScale() || 1);
-        const approximate = Math.round(Math.log2(scale));
-        const maxZoom = Number.isFinite(loader?.maxZoom) ? loader.maxZoom : 0;
-        return clamp(approximate, 0, maxZoom);
-      }
-
-      function hydrateSceneTiles(cache) {
-        if (!cache?.sceneLoader) {
-          return;
-        }
-        const bounds = getVisiblePuzzleBounds();
-        const zoomLevel = computeSceneLoaderZoom(cache.sceneLoader);
-        const regions = cache.sceneLoader.getVisibleRegions({ zoom: zoomLevel, bounds });
-        cache.regions = regions;
-        cache.regionsById = new Map();
-        for (const geometry of regions) {
-          cache.regionsById.set(geometry.id, geometry);
-        }
-        cache.version = regions.length;
-      }
-
-      function rebuildFilledLayer(cache) {
-        const ctx = cache.filledLayerCtx;
-        if (!ctx || !cache.filledLayer) {
-          cache.filledLayerDirty = true;
-          return false;
-        }
-        clearContext(ctx);
-        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        const overlayHex = sanitizeHexColor(
-          state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX,
-          DEFAULT_BACKGROUND_HEX
-        );
-        const pending = [];
-        for (const geometry of cache.regions) {
-          if (!geometry) continue;
-          if (state.filled.has(geometry.id)) continue;
-          pending.push(geometry);
-        }
-        withRenderScale(ctx, scale, () => {
-          ctx.globalCompositeOperation = "source-over";
-          ctx.fillStyle = overlayHex;
-          fillGeometries(ctx, pending);
-        });
-        cache.filledLayerDirty = false;
-        cache.filledLayerNeedsUpload = true;
-        return true;
-      }
-
-      function compositeFilledRegionsDirect(ctx, cache) {
-        const scale = cache.renderScale > 0 ? cache.renderScale : 1;
-        const overlayHex = sanitizeHexColor(
-          state.settings.backgroundColor ?? DEFAULT_BACKGROUND_HEX,
-          DEFAULT_BACKGROUND_HEX
-        );
-        withRenderScale(ctx, scale, () => {
-          const pending = [];
-          for (const geometry of cache.regions) {
-            if (!geometry) continue;
-            if (state.filled.has(geometry.id)) continue;
-            pending.push(geometry);
-          }
-          if (pending.length === 0) {
-            return;
-          }
-          ctx.fillStyle = overlayHex;
-          fillGeometries(ctx, pending);
-        });
-      }
-
       function paintRegionToFilledLayer(regionId) {
         const cache = ensureRenderCache();
         if (!cache.ready) return;
@@ -5186,22 +4825,6 @@ function canUseGenerationWorker() {
         return contours;
       }
 
-      function computeOutlineStrokeWidth(width, height, options = {}) {
-        const base = Math.max(1, Math.min(width, height));
-        const defaultStroke = clamp(base * 0.0024, 0.8, 2.8);
-        const displayScale = options.displayScale;
-        if (!Number.isFinite(displayScale) || displayScale <= 0) {
-          return defaultStroke;
-        }
-        const pixelRatio =
-          Number.isFinite(options.pixelRatio) && options.pixelRatio > 0
-            ? options.pixelRatio
-            : getDevicePixelRatio();
-        const deviceWidth =
-          Number.isFinite(options.deviceWidth) && options.deviceWidth > 0 ? options.deviceWidth : 1;
-        const renderScale = Math.max(displayScale * pixelRatio, 0.0001);
-        return deviceWidth / renderScale;
-      }
       if (samplePreview) {
         const dataUrl = getSampleDataUrl();
         if (dataUrl) {
@@ -5215,14 +4838,6 @@ function canUseGenerationWorker() {
         }
       }
 
-      // View state drives pan/zoom transforms. baseScale keeps the puzzle fit-to-screen while
-      // zoom holds user-controlled scaling.
-      const MIN_VIEWPORT_ZOOM = 1;
-      const DEFAULT_MAX_VIEWPORT_ZOOM = 12;
-      const MIN_CONFIGURABLE_MAX_ZOOM = 2;
-      const MAX_CONFIGURABLE_MAX_ZOOM = 30;
-      const MIN_RENDER_SCALE = 1 / 1048576;
-      const MAX_RENDER_SCALE = 1048576;
       const SUPPORTS_PATH2D = typeof Path2D === "function";
       const SUPPORTS_OFFSCREEN_CANVAS = typeof OffscreenCanvas === "function";
       const viewState = {
@@ -5230,17 +4845,6 @@ function canUseGenerationWorker() {
         panY: 0,
         zoom: 1,
         baseScale: 1,
-      };
-
-      const canvasMetrics = {
-        baseDisplayScale: 1,
-        displayScale: 1,
-        pixelRatio: 1,
-        renderScale: 1,
-        displayWidth: 0,
-        displayHeight: 0,
-        pixelWidth: 0,
-        pixelHeight: 0,
       };
 
       let cachedCanvasRect = null;
@@ -5327,27 +4931,6 @@ function canUseGenerationWorker() {
         return clamp(base * zoom, minScale, maxScale);
       }
 
-      function getVisiblePuzzleBounds() {
-        if (!state.puzzle) {
-          return null;
-        }
-        const rect = getPuzzleCanvasRect();
-        if (!rect || rect.width <= 0 || rect.height <= 0) {
-          return null;
-        }
-        const scale = Math.max(0.0001, canvasMetrics.displayScale || computeDisplayScale() || 1);
-        const halfWidth = (rect.width / scale) * 0.5;
-        const halfHeight = (rect.height / scale) * 0.5;
-        const centerX = state.puzzle.width / 2 - viewState.panX / scale;
-        const centerY = state.puzzle.height / 2 - viewState.panY / scale;
-        return {
-          minX: clamp(centerX - halfWidth, 0, state.puzzle.width),
-          maxX: clamp(centerX + halfWidth, 0, state.puzzle.width),
-          minY: clamp(centerY - halfHeight, 0, state.puzzle.height),
-          maxY: clamp(centerY + halfHeight, 0, state.puzzle.height),
-        };
-      }
-
       function updateCanvasMetrics() {
         if (!state.puzzle || !puzzleCanvas) {
           return false;
@@ -5355,33 +4938,9 @@ function canUseGenerationWorker() {
         const baseDisplayScale =
           Number.isFinite(viewState.baseScale) && viewState.baseScale > 0 ? viewState.baseScale : 1;
         const zoom = normalizeZoomValue(viewState.zoom > 0 ? viewState.zoom : 1, 1);
-        const { minScale, maxScale } = getScaleBounds(baseDisplayScale);
-        const displayScale = clamp(baseDisplayScale * zoom, minScale, maxScale);
-        const pixelRatio = getDevicePixelRatio();
-        const nativeScale = Math.max(displayScale, 1);
-        const renderScale = nativeScale * pixelRatio;
-        const pixelWidth = Math.max(1, Math.round(state.puzzle.width * renderScale));
-        const pixelHeight = Math.max(1, Math.round(state.puzzle.height * renderScale));
         const displayWidth = Math.max(1, state.puzzle.width * baseDisplayScale);
         const displayHeight = Math.max(1, state.puzzle.height * baseDisplayScale);
-        const changed =
-          Math.abs(baseDisplayScale - canvasMetrics.baseDisplayScale) > 0.0001 ||
-          Math.abs(displayScale - canvasMetrics.displayScale) > 0.0001 ||
-          Math.abs(renderScale - canvasMetrics.renderScale) > 0.0001 ||
-          Math.abs(pixelRatio - canvasMetrics.pixelRatio) > 0.0001 ||
-          Math.abs(displayWidth - canvasMetrics.displayWidth) > 0.0001 ||
-          Math.abs(displayHeight - canvasMetrics.displayHeight) > 0.0001 ||
-          canvasMetrics.pixelWidth !== pixelWidth ||
-          canvasMetrics.pixelHeight !== pixelHeight;
-        canvasMetrics.baseDisplayScale = baseDisplayScale;
-        canvasMetrics.displayScale = displayScale;
-        canvasMetrics.pixelRatio = pixelRatio;
-        canvasMetrics.renderScale = renderScale;
-        canvasMetrics.pixelWidth = pixelWidth;
-        canvasMetrics.pixelHeight = pixelHeight;
-        canvasMetrics.displayWidth = displayWidth;
-        canvasMetrics.displayHeight = displayHeight;
-        return changed;
+        return false;
       }
 
       function applyCanvasSizing() {
@@ -5389,22 +4948,9 @@ function canUseGenerationWorker() {
           return false;
         }
         const metricsChanged = updateCanvasMetrics();
-        puzzleCanvas.style.width = `${canvasMetrics.displayWidth}px`;
-        puzzleCanvas.style.height = `${canvasMetrics.displayHeight}px`;
-        if (canvasTransform) {
-          canvasTransform.style.width = `${canvasMetrics.displayWidth}px`;
-          canvasTransform.style.height = `${canvasMetrics.displayHeight}px`;
-        }
         const renderer = state.rendering?.renderer;
         if (renderer && typeof renderer.resize === "function") {
-          renderer.resize({ ...canvasMetrics });
-        } else {
-          if (puzzleCanvas.width !== canvasMetrics.pixelWidth) {
-            puzzleCanvas.width = canvasMetrics.pixelWidth;
-          }
-          if (puzzleCanvas.height !== canvasMetrics.pixelHeight) {
-            puzzleCanvas.height = canvasMetrics.pixelHeight;
-          }
+          renderer.resize({});
         }
         invalidateCanvasRect();
         return metricsChanged;
@@ -5412,7 +4958,7 @@ function canUseGenerationWorker() {
 
       function ensureCanvasMetricsInitialized() {
         if (!state.puzzle || !puzzleCanvas) return;
-        if (canvasMetrics.pixelWidth <= 0 || canvasMetrics.pixelHeight <= 0) {
+        if (puzzleCanvas.clientWidth <= 0) {
           applyCanvasSizing();
         }
       }
@@ -5440,57 +4986,15 @@ function canUseGenerationWorker() {
         if (!cache) return false;
         const fallbackWidth = Math.max(1, cache.width || 1);
         const fallbackHeight = Math.max(1, cache.height || 1);
-        const pixelWidth = Math.max(1, canvasMetrics.pixelWidth || fallbackWidth);
-        const pixelHeight = Math.max(1, canvasMetrics.pixelHeight || fallbackHeight);
-        const renderScale = canvasMetrics.renderScale > 0 ? canvasMetrics.renderScale : 1;
+        const pixelWidth = Math.max(1, fallbackWidth);
+        const pixelHeight = Math.max(1, fallbackHeight);
+        const renderScale = 1;
         const changed =
           cache.pixelWidth !== pixelWidth ||
-          cache.pixelHeight !== pixelHeight ||
-          Math.abs((cache.renderScale || 0) - renderScale) > 0.0001;
+          cache.pixelHeight !== pixelHeight;
         cache.pixelWidth = pixelWidth;
         cache.pixelHeight = pixelHeight;
         cache.renderScale = renderScale;
-        cache.strokeWidth = computeOutlineStrokeWidth(cache.width, cache.height, {
-          displayScale: canvasMetrics.displayScale,
-          pixelRatio: canvasMetrics.pixelRatio,
-          deviceWidth: 1,
-        });
-        if (cache.filledLayer) {
-          let resized = false;
-          if (cache.filledLayer.width !== pixelWidth) {
-            cache.filledLayer.width = pixelWidth;
-            resized = true;
-          }
-          if (cache.filledLayer.height !== pixelHeight) {
-            cache.filledLayer.height = pixelHeight;
-            resized = true;
-          }
-          if (resized || !cache.filledLayerCtx) {
-            cache.filledLayerCtx = getLayerContext(cache.filledLayer);
-          }
-          if (resized) {
-            cache.filledLayerNeedsUpload = true;
-          }
-        }
-        if (cache.outlineLayer) {
-          let resized = false;
-          if (cache.outlineLayer.width !== pixelWidth) {
-            cache.outlineLayer.width = pixelWidth;
-            resized = true;
-          }
-          if (cache.outlineLayer.height !== pixelHeight) {
-            cache.outlineLayer.height = pixelHeight;
-            resized = true;
-          }
-          if (resized || !cache.outlineLayerCtx) {
-            cache.outlineLayerCtx = getLayerContext(cache.outlineLayer);
-          }
-        }
-        if (changed) {
-          cache.filledLayerDirty = true;
-          cache.filledLayerNeedsUpload = true;
-          cache.outlineLayerDirty = true;
-        }
         return changed;
       }
 
@@ -5769,22 +5273,6 @@ function canUseGenerationWorker() {
           }
         }
         state.sceneLoaderSubscription = null;
-      }
-
-      function attachSceneLoaderSubscription(loader) {
-        detachSceneLoaderSubscription();
-        if (!loader || typeof loader.onUpdate !== "function") {
-          return;
-        }
-        state.sceneLoaderSubscription = loader.onUpdate((event) => {
-          if (!state.renderCache || state.renderCache.sceneLoader !== loader) {
-            return;
-          }
-          if (event && event.visible === false) {
-            return;
-          }
-          renderPuzzle();
-        });
       }
       const debugLogEntries = [];
       const DEBUG_LOG_LIMIT = 80;
@@ -7735,30 +7223,6 @@ function canUseGenerationWorker() {
         attemptFillRegion(getRegionFromEvent(event), { label: "click" });
       });
 
-      puzzleCanvas.addEventListener("dblclick", (event) => {
-        if (!state.puzzle) {
-          logDebug("Ignoring canvas double click: no puzzle loaded yet");
-          return;
-        }
-        if (state.previewVisible) {
-          logDebug("Ignoring canvas double click: preview mode active");
-          return;
-        }
-        const now = Date.now();
-        if (now - lastTouchSelectionTime <= 120) {
-          event.preventDefault();
-          return;
-        }
-        const hit = getRegionFromEvent(event);
-        if (!hit) {
-          logDebug("Ignoring canvas double click: no region mapped under pointer");
-          return;
-        }
-        event.preventDefault();
-        lastTouchSelectionTime = now;
-        activateColor(hit.region.colorId);
-      });
-
       puzzleCanvas.addEventListener("pointerdown", (event) => {
         const pointerType = event.pointerType;
         if (pointerType !== "touch" && pointerType !== "pen") {
@@ -7772,41 +7236,6 @@ function canUseGenerationWorker() {
         const paletteColor = getPaletteEntry(hit.region.colorId);
         maybeShowRegionHint(hit.region, paletteColor, { trigger: "press", flashSwatch: true });
       });
-
-      puzzleCanvas.addEventListener(
-        "pointerup",
-        (event) => {
-          if (event.pointerType !== "touch") return;
-          if (!event.isPrimary) return;
-          if (!state.puzzle) return;
-          if (state.previewVisible) return;
-          if (isPanning) return;
-          if (pinchSession) return;
-          const hit = getRegionFromEvent(event);
-          if (!hit) {
-            lastTouchTapRegionId = null;
-            return;
-          }
-          const now = Date.now();
-          if (lastTouchTapRegionId === hit.regionId && now - lastTouchTapTime <= DOUBLE_TAP_WINDOW_MS) {
-            event.preventDefault();
-            suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
-            lastTouchTapTime = 0;
-            lastTouchTapRegionId = null;
-            lastTouchSelectionTime = now;
-            activateColor(hit.region.colorId);
-            return;
-          }
-          const result = attemptFillRegion(hit, { label: "tap" });
-          if (result !== "ignored") {
-            suppressNextCanvasClickUntil = now + POINTER_CLICK_SUPPRESSION_MS;
-            event.preventDefault();
-          }
-          lastTouchTapTime = now;
-          lastTouchTapRegionId = hit.regionId;
-        },
-        { passive: false }
-      );
 
       function setSettingsSheetOpenState(isOpen) {
         if (!state?.settings) return;
@@ -11029,7 +10458,7 @@ function canUseGenerationWorker() {
         const puzzleHydrationTimer = performanceMetrics.start("puzzle:hydrate", {
           width: data.width,
           height: data.height,
-          paletteCount: Array.isArray(data.palette) ? data.palette.length : 0,
+          paletteCount: Array.isArray(data.palette) ? data.palette.length : 0, // eslint-disable-line
           regionCount: Array.isArray(data.regions) ? data.regions.length : 0,
           title:
             (typeof metadata.title === "string" && metadata.title.trim()) ||
@@ -11209,7 +10638,7 @@ function canUseGenerationWorker() {
         puzzle.sourceImage = sourceImageRecord;
         state.sourceCacheKey = sourceImageRecord?.cacheKey || null;
         state.renderCache = createRenderCache();
-        attachSceneLoaderSubscription(puzzle.sceneLoader || null);
+        // attachSceneLoaderSubscription(puzzle.sceneLoader || null); // Removed as SVG renderer is simpler
         state.puzzle.backgroundColor = backgroundHex;
         state.activeColor =
           requestedColor != null && paletteIds.has(requestedColor)
@@ -11348,28 +10777,6 @@ function canUseGenerationWorker() {
         const imageData = renderer?.renderPreview
           ? renderer.renderPreview({ state, previewCanvas, previewCtx })
           : renderPreviewImage({ state, previewCanvas, previewCtx });
-        state.previewImageData = imageData || null;
-        return imageData || null;
-      }
-
-      function renderPreviewImage({ state, previewCanvas, previewCtx }) {
-        if (!state?.puzzle) return null;
-        const { width, height, regions, palette } = state.puzzle;
-        const paletteById = new Map();
-        for (const entry of Array.isArray(palette) ? palette : []) {
-          if (!entry || !Number.isFinite(entry.id)) continue;
-          paletteById.set(entry.id, entry);
-        }
-        if (previewCanvas) {
-          previewCanvas.width = width;
-          previewCanvas.height = height;
-        }
-        let imageData = null;
-        if (previewCtx && typeof previewCtx.createImageData === "function") {
-          imageData = previewCtx.createImageData(width, height);
-        } else if (typeof ImageData === "function") {
-          imageData = new ImageData(width, height);
-        }
         if (!imageData) {
           return null;
         }
@@ -11426,7 +10833,7 @@ function canUseGenerationWorker() {
         const renderTimer = performanceMetrics.start("render:frame", {
           renderer: "svg",
           filledRegions: state.filled.size,
-          paletteCount: state.puzzle?.palette?.length || 0,
+          paletteCount: state.puzzle?.palette?.length || 0, // eslint-disable-line
         });
         try {
           renderer.renderFrame({
@@ -11434,9 +10841,6 @@ function canUseGenerationWorker() {
             cache,
             metrics: { ...canvasMetrics },
             previewCanvas,
-            previewCtx,
-            previewImageData: state.previewImageData,
-            previewVisible: state.previewVisible === true,
             backgroundColor: state.settings.backgroundColor || DEFAULT_BACKGROUND_HEX,
             defaultBackgroundColor: DEFAULT_BACKGROUND_HEX,
             renderPreview: () =>
@@ -11450,107 +10854,6 @@ function canUseGenerationWorker() {
             renderTimer.end({ previewVisible: state.previewVisible === true });
           }
         }
-      }
-
-      function renderPuzzleFrame({
-        context,
-        state,
-        cache,
-        metrics,
-        previewCanvas,
-        previewCtx,
-        previewImageData,
-        previewVisible,
-        backgroundColor,
-        defaultBackgroundColor,
-        renderPreview,
-        setPreviewImageData,
-      }) {
-        if (!context || !state?.puzzle) return;
-        const pixelWidth = metrics?.pixelWidth ?? context.canvas?.width ?? 0;
-        const pixelHeight = metrics?.pixelHeight ?? context.canvas?.height ?? 0;
-        context.save();
-        context.setTransform(1, 0, 0, 1, 0, 0);
-        context.clearRect(0, 0, pixelWidth, pixelHeight);
-        const fill = backgroundColor || defaultBackgroundColor;
-        context.fillStyle = fill;
-        context.fillRect(0, 0, pixelWidth, pixelHeight);
-        if (previewVisible) {
-          let imageData = previewImageData || null;
-          if (!imageData && typeof renderPreview === "function") {
-            imageData = renderPreview() || null;
-            if (imageData && typeof setPreviewImageData === "function") {
-              setPreviewImageData(imageData);
-            }
-          }
-          if (imageData) {
-            if (previewCanvas && previewCanvas.width && previewCanvas.height) {
-              const sourceWidth = previewCanvas.width;
-              const sourceHeight = previewCanvas.height;
-              const targetWidth = metrics?.pixelWidth || pixelWidth;
-              const targetHeight = metrics?.pixelHeight || pixelHeight;
-              context.imageSmoothingEnabled = false;
-              context.drawImage(
-                previewCanvas,
-                0,
-                0,
-                sourceWidth,
-                sourceHeight,
-                0,
-                0,
-                targetWidth,
-                targetHeight
-              );
-            } else if (typeof context.putImageData === "function") {
-              context.putImageData(imageData, 0, 0);
-            }
-          }
-          context.restore();
-          return;
-        }
-        const renderScale = cache?.renderScale > 0 ? cache.renderScale : 1;
-        const puzzleImage = state.puzzle?.sourceImage;
-        if (puzzleImage?.image && puzzleImage.ready) {
-          const targetWidth = state.puzzle.width;
-          const targetHeight = state.puzzle.height;
-          if (targetWidth > 0 && targetHeight > 0) {
-            context.save();
-            context.setTransform(renderScale, 0, 0, renderScale, 0, 0);
-            context.imageSmoothingEnabled = true;
-            try {
-              context.drawImage(puzzleImage.image, 0, 0, targetWidth, targetHeight);
-            } catch (error) {
-              console.warn("Failed to draw source image", error);
-            }
-            context.restore();
-          }
-        }
-        if (cache?.ready) {
-          let drewFromLayer = false;
-          if (cache.filledLayer && cache.filledLayerCtx) {
-            drewFromLayer = cache.filledLayerDirty ? rebuildFilledLayer(cache) : true;
-            if (drewFromLayer && cache.filledLayer) {
-              context.drawImage(cache.filledLayer, 0, 0);
-            }
-          }
-          if (!drewFromLayer) {
-            compositeFilledRegionsDirect(context, cache);
-          }
-        }
-        context.restore();
-        drawOutlines(context);
-        drawNumbers(context);
-      }
-
-      function fillBackgroundLayer({ context, color, metrics }) {
-        if (!context) return;
-        const width = metrics?.pixelWidth ?? context.canvas?.width ?? 0;
-        const height = metrics?.pixelHeight ?? context.canvas?.height ?? 0;
-        context.save();
-        context.setTransform(1, 0, 0, 1, 0, 0);
-        context.fillStyle = color || DEFAULT_BACKGROUND_HEX;
-        context.fillRect(0, 0, width, height);
-        context.restore();
       }
 
     function buildRegionLabelProps(region) {
@@ -13501,43 +12804,6 @@ function canUseGenerationWorker() {
         const isTouch = event.pointerType === "touch";
         if (isTouch) {
           event.preventDefault();
-          hideCustomCursor();
-          activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
-          if (!pinchSession && activeTouches.size >= 2) {
-            const entries = Array.from(activeTouches.entries()).slice(0, 2);
-            const first = entries[0];
-            const second = entries[1];
-            if (first && second) {
-              const a = first[1];
-              const b = second[1];
-              const distance = Math.max(10, Math.hypot(b.x - a.x, b.y - a.y));
-              pinchSession = {
-                ids: [first[0], second[0]],
-                initialDistance: distance,
-                initialZoom: viewState.zoom,
-                initialPanX: viewState.panX,
-                initialPanY: viewState.panY,
-                centerX: (a.x + b.x) / 2,
-                centerY: (a.y + b.y) / 2,
-                lastCenterX: (a.x + b.x) / 2,
-                lastCenterY: (a.y + b.y) / 2,
-                hasChanged: false,
-              };
-              document.body.classList.add("panning");
-              isPanning = true;
-              logDebug("Pinch zoom started");
-            }
-          } else if (!pinchSession) {
-            panCandidate = {
-              pointerId: event.pointerId,
-              startX: event.clientX,
-              startY: event.clientY,
-              panX: viewState.panX,
-              panY: viewState.panY,
-              pointerType: "touch",
-              captureTarget,
-            };
-          }
           return;
         }
         const usesModifier = spacePressed || event.altKey || event.ctrlKey || event.metaKey;
@@ -13616,53 +12882,6 @@ function canUseGenerationWorker() {
         const isTouch = event.pointerType === "touch";
         if (isTouch) {
           if (activeTouches.has(event.pointerId)) {
-            activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
-          }
-          if (
-            pinchSession &&
-            pinchSession.ids.every((id) => activeTouches.has(id))
-          ) {
-            event.preventDefault();
-            const [firstId, secondId] = pinchSession.ids;
-            const first = activeTouches.get(firstId);
-            const second = activeTouches.get(secondId);
-            if (first && second) {
-              const distance = Math.max(10, Math.hypot(second.x - first.x, second.y - first.y));
-              const ratio = distance / pinchSession.initialDistance;
-              const currentZoom = viewState.zoom;
-              const targetZoom = normalizeZoomValue(
-                pinchSession.initialZoom * ratio,
-                pinchSession.initialZoom
-              );
-              if (Math.abs(targetZoom - currentZoom) > 0.0001) {
-                pinchSession.hasChanged = true;
-                const multiplier = targetZoom / currentZoom;
-                const centerX = (first.x + second.x) / 2;
-                const centerY = (first.y + second.y) / 2;
-                applyZoom(multiplier, centerX, centerY, { skipLog: true, defer: true });
-              }
-              const centerX = (first.x + second.x) / 2;
-              const centerY = (first.y + second.y) / 2;
-              const previousCenterX =
-                typeof pinchSession.lastCenterX === "number"
-                  ? pinchSession.lastCenterX
-                  : pinchSession.centerX;
-              const previousCenterY =
-                typeof pinchSession.lastCenterY === "number"
-                  ? pinchSession.lastCenterY
-                  : pinchSession.centerY;
-              const deltaX = centerX - previousCenterX;
-              const deltaY = centerY - previousCenterY;
-              if (Math.abs(deltaX) > 0.0001 || Math.abs(deltaY) > 0.0001) {
-                viewState.panX += deltaX;
-                viewState.panY += deltaY;
-                clampViewPanToPuzzleBounds();
-                pinchSession.hasChanged = true;
-                scheduleViewTransform({ skipSizing: true });
-              }
-              pinchSession.lastCenterX = centerX;
-              pinchSession.lastCenterY = centerY;
-            }
             return;
           }
         }
@@ -13724,33 +12943,6 @@ function canUseGenerationWorker() {
         const session = pointerSessions.get(event.pointerId);
         if (event.pointerType === "touch") {
           activeTouches.delete(event.pointerId);
-          if (pinchSession && !pinchSession.ids.every((id) => activeTouches.has(id))) {
-            const changed = pinchSession.hasChanged;
-            pinchSession = null;
-            if (isPanning && panPointerId == null) {
-              document.body.classList.remove("panning");
-              isPanning = false;
-            }
-            if (changed) {
-              logDebug(`Pinch zoom ended at ${(viewState.zoom * 100).toFixed(0)}%`);
-            } else {
-              logDebug("Pinch zoom ended");
-            }
-            if (activeTouches.size === 1) {
-              const [nextId, point] = activeTouches.entries().next().value || [];
-              if (nextId != null && point) {
-                panCandidate = {
-                  pointerId: nextId,
-                  startX: point.x,
-                  startY: point.y,
-                  panX: viewState.panX,
-                  panY: viewState.panY,
-                  pointerType: "touch",
-                  captureTarget: pointerSurface || defaultPanCaptureTarget(),
-                };
-              }
-            }
-          }
         }
         if (panCandidate && panCandidate.pointerId === event.pointerId) {
           panCandidate = null;
