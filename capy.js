@@ -2848,21 +2848,6 @@ function canUseGenerationWorker() {
     return { wrapper, headingId };
   }
 
-  async function readSettingsDefinition() {
-    try {
-      const response = await fetch("./settings-menu.json");
-      if (!response.ok) {
-        console.error("Failed to fetch settings-menu.json", response.statusText);
-        return [];
-      }
-      const parsed = await response.json();
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (error) {
-      console.error("Failed to parse settings definition", error);
-      return [];
-    }
-  }
-
   function renderActionButton(item) {
     const button = createElement(
       "button",
@@ -3426,257 +3411,183 @@ function canUseGenerationWorker() {
     }
   }
 
-  function renderSettingsMenu(sheet, definition = []) {
-    if (!sheet || !Array.isArray(definition)) return [];
-    const nav = sheet.querySelector("[data-settings-nav]") || sheet.querySelector(".settings-tabs");
-    const content = sheet.querySelector("[data-settings-scroll]") || sheet.querySelector(".settings-content") || sheet;
-    if (!nav || !content) return [];
-
-    nav.innerHTML = "";
-    content.innerHTML = "";
-    const defaultId =
-      definition.find((tab) => tab && tab.default && typeof tab.id === "string")?.id || definition[0]?.id;
-
-    const rendered = [];
-    for (const tab of definition) {
-      if (!tab || typeof tab.id !== "string" || typeof tab.label !== "string") {
-        continue;
-      }
-      const tabId = tab.id;
-      const isAdvancedTab = tab.advancedOnly === true;
-      const panelId = `settingsPanel-${tabId}`;
-      const button = document.createElement("button");
-      button.className = "settings-tab";
-      button.type = "button";
-      button.role = "tab";
-      button.id = `settingsTab-${tabId}`;
-      button.dataset.settingsTab = tabId;
-      button.dataset.settingsTier = isAdvancedTab ? "advanced" : "basic";
-      button.dataset.settingsAvailable = isAdvancedTab ? "false" : "true";
-      button.hidden = isAdvancedTab;
-      button.setAttribute("aria-hidden", isAdvancedTab ? "true" : "false");
-      button.setAttribute("aria-controls", panelId);
-      const isDefault = tab.default || tabId === defaultId;
-      if (isDefault) {
-        button.setAttribute("data-settings-tab-default", "");
-      }
-      button.setAttribute("aria-selected", isDefault ? "true" : "false");
-      button.textContent = tab.label;
-      nav.appendChild(button);
-
-      const panel = document.createElement("section");
-      panel.className = "settings-section settings-page";
-      panel.id = panelId;
-      panel.dataset.settingsPanel = tabId;
-      panel.dataset.settingsTier = isAdvancedTab ? "advanced" : "basic";
-      panel.dataset.settingsAvailable = isAdvancedTab ? "false" : "true";
-      panel.hidden = isAdvancedTab;
-      panel.setAttribute("aria-hidden", isAdvancedTab ? "true" : "false");
-      panel.setAttribute("role", "tabpanel");
-      panel.setAttribute("aria-labelledby", button.id);
-
-      const { wrapper, headingId } = createHeading({ tabId, heading: tab.heading || {} });
-      panel.appendChild(wrapper);
-
-      const panelGroup = createElement("div", {
-        className: "settings-panel",
-        attrs: { role: "group", "aria-labelledby": headingId },
-      });
-
-      const blocks = Array.isArray(tab.blocks)
-        ? tab.blocks
-        : Array.isArray(tab.sections)
-        ? tab.sections.map((section) => ({ ...section, type: "section" }))
-        : [];
-
-      renderTabBlocks(blocks, panelGroup, headingId, { advanced: isAdvancedTab });
-      panel.appendChild(panelGroup);
-      content.appendChild(panel);
-      rendered.push(tabId);
-    }
-
-    return rendered;
-  }
-
   const settingsSheet = document.getElementById("settingsSheet");
-  const settingsDefinition = readSettingsDefinition();
-  capyGlobal.settingsDefinition = settingsDefinition;
-  renderSettingsMenu(settingsSheet, settingsDefinition);
+  // const settingsDefinition = readSettingsDefinition(); // Removed as settings are now static
+  // capyGlobal.settingsDefinition = settingsDefinition; // Removed as settings are now static
+  // renderSettingsMenu(settingsSheet, settingsDefinition); // Removed as settings are now static
 
-  globalThis.capySettingsMenu = { readSettingsDefinition, renderSettingsMenu };
+  // globalThis.capySettingsMenu = { readSettingsDefinition, renderSettingsMenu }; // Removed as settings are now static
 })();
 
 // Settings fallback bootstrap for pre-runtime interactions
 (() => {
-        if (
-          typeof window === "undefined" ||
-          typeof document === "undefined" ||
-          typeof document.querySelector !== "function"
-        ) {
-          return;
-        }
-        function createUiKit(root = document) {
-          const cache = new Map();
-          const get = (selector) => {
-            if (!selector) return null;
-            if (cache.has(selector)) {
-              const cached = cache.get(selector);
-              if (cached) return cached;
-            }
-            const node = root.querySelector(selector);
-            if (node) {
-              cache.set(selector, node);
-            }
-            return node || null;
-          };
-          const all = (selector) => Array.from(root.querySelectorAll(selector));
-          const toggle = (target, className, force) => {
-            const node = typeof target === "string" ? get(target) : target;
-            if (!node || !className) return node;
-            node.classList.toggle(className, force);
-            return node;
-          };
-          return { get, all, toggle };
-        }
+  if (
+    typeof window === "undefined" ||
+    typeof document === "undefined" ||
+    typeof document.querySelector !== "function"
+  ) {
+    return;
+  }
+  function createUiKit(root = document) {
+    const cache = new Map();
+    const get = (selector) => {
+      if (!selector) return null;
+      if (cache.has(selector)) {
+        const cached = cache.get(selector);
+        if (cached) return cached;
+      }
+      const node = root.querySelector(selector);
+      if (node) {
+        cache.set(selector, node);
+      }
+      return node || null;
+    };
+    const all = (selector) => Array.from(root.querySelectorAll(selector));
+    const toggle = (target, className, force) => {
+      const node = typeof target === "string" ? get(target) : target;
+      if (!node || !className) return node;
+      node.classList.toggle(className, force);
+      return node;
+    };
+    return { get, all, toggle };
+  }
 
-        window.capyUiKit = createUiKit;
-        const ui = createUiKit(document);
-        const sheet = ui.get("#settingsSheet");
-        const settingsButton = ui.get("#settingsButton");
-        const closeButtons = ui.all('[data-sheet-close="settings"]');
-        const consoleEl = ui.get("#settingsLoadConsole");
+  window.capyUiKit = createUiKit;
+  const ui = createUiKit(document);
+  const sheet = ui.get("#settingsSheet");
+  const settingsButton = ui.get("#settingsButton");
+  const closeButtons = ui.all('[data-sheet-close="settings"]');
+  const consoleEl = ui.get("#settingsLoadConsole");
 
-        function log(message) {
-          if (!consoleEl) return;
-          const timestamp = new Date();
-          const entry = document.createElement("div");
-          entry.className = "log-entry";
-          const time = document.createElement("time");
-          time.dateTime = timestamp.toISOString();
-          time.textContent = timestamp
-            .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-            .replace(/\s+/g, " ");
-          const messageEl = document.createElement("span");
-          messageEl.textContent = `[settings] ${message || "Ready"}`;
-          entry.appendChild(time);
-          entry.appendChild(messageEl);
-          consoleEl.appendChild(entry);
-          consoleEl.scrollTop = consoleEl.scrollHeight;
-        }
+  function log(message) {
+    if (!consoleEl) return;
+    const timestamp = new Date();
+    const entry = document.createElement("div");
+    entry.className = "log-entry";
+    const time = document.createElement("time");
+    time.dateTime = timestamp.toISOString();
+    time.textContent = timestamp
+      .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      .replace(/\s+/g, " ");
+    const messageEl = document.createElement("span");
+    messageEl.textContent = `[settings] ${message || "Ready"}`;
+    entry.appendChild(time);
+    entry.appendChild(messageEl);
+    consoleEl.appendChild(entry);
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
 
-        function setOpen(nextOpen) {
-          const targetSheet = ui.get("#settingsSheet") || sheet || document.getElementById("settingsSheet");
-          if (!targetSheet) return;
-          const open = Boolean(nextOpen);
-          ui.toggle(targetSheet, "hidden", !open);
-          targetSheet.setAttribute("aria-hidden", open ? "false" : "true");
-          settingsButton?.setAttribute("aria-expanded", open ? "true" : "false");
-        }
+  function setOpen(nextOpen) {
+    const targetSheet = ui.get("#settingsSheet") || sheet || document.getElementById("settingsSheet");
+    if (!targetSheet) return;
+    const open = Boolean(nextOpen);
+    ui.toggle(targetSheet, "hidden", !open);
+    targetSheet.setAttribute("aria-hidden", open ? "false" : "true");
+    settingsButton?.setAttribute("aria-expanded", open ? "true" : "false");
+  }
 
-        const attachSettingsButtonHandler = (button) => {
-          button?.addEventListener("click", () => {
-            const isHidden = sheet?.classList.contains("hidden") ?? true;
-            setOpen(true);
-            if (isHidden) {
-              log("Opened from launcher before full app load");
-            }
-          });
-        };
-        if (settingsButton) {
-          attachSettingsButtonHandler(settingsButton);
-        } else {
-          window.addEventListener("DOMContentLoaded", () => {
-            attachSettingsButtonHandler(document.getElementById("settingsButton"));
-          });
-        }
+  const attachSettingsButtonHandler = (button) => {
+    button?.addEventListener("click", () => {
+      const isHidden = sheet?.classList.contains("hidden") ?? true;
+      setOpen(true);
+      if (isHidden) {
+        log("Opened from launcher before full app load");
+      }
+    });
+  };
+  if (settingsButton) {
+    attachSettingsButtonHandler(settingsButton);
+  } else {
+    window.addEventListener("DOMContentLoaded", () => {
+      attachSettingsButtonHandler(document.getElementById("settingsButton"));
+    });
+  }
 
-        closeButtons.forEach((button) =>
-          button.addEventListener("click", () => {
-            setOpen(false);
-            log("Closed while in fallback mode");
-          })
-        );
+  closeButtons.forEach((button) =>
+    button.addEventListener("click", () => {
+      setOpen(false);
+      log("Closed while in fallback mode");
+    })
+  );
 
-        window.capySettingsBootstrap = {
-          log,
-          setOpen,
-          recordError(message) {
-            log(message || "Unknown settings error");
-          },
-          syncJson(text) {
-            const view = document.getElementById("settingsJsonView");
-            if (view && typeof text === "string") {
-              view.value = text;
-            }
-          },
-        };
+  window.capySettingsBootstrap = {
+    log,
+    setOpen,
+    recordError(message) {
+      log(message || "Unknown settings error");
+    },
+    syncJson(text) {
+      const view = document.getElementById("settingsJsonView");
+      if (view && typeof text === "string") {
+        view.value = text;
+      }
+    },
+  };
 
-        log("Settings fallback ready before renderer bootstrap");
+  log("Settings fallback ready before renderer bootstrap");
 })();
 
 // Main runtime wiring
 (() => {
-        if (
-          typeof window === "undefined" ||
-          typeof document === "undefined" ||
-          typeof document.querySelector !== "function"
-        ) {
-          return;
-        }
-const { html, renderTemplate } = globalThis.capyTemplates || {};
+  if (
+    typeof window === "undefined" ||
+    typeof document === "undefined" ||
+    typeof document.querySelector !== "function"
+  ) {
+    return;
+  }
+  const { html, renderTemplate } = globalThis.capyTemplates || {};
 
-        
+  const runtime = window.capyRuntime;
+  const { beginRendererBootstrap, completeRendererBootstrap, createRendererController } = runtime || {};
 
-        const runtime = window.capyRuntime;
-        const { beginRendererBootstrap, completeRendererBootstrap, createRendererController } = runtime || {};
+  if (!runtime) {
+    console.error("Capy runtime failed to load");
+  }
 
-        if (!runtime) {
-          console.error("Capy runtime failed to load");
-        }
+  (() => {
+    if (!runtime) {
+      return;
+    }
+    const settingsBootstrap =
+      window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
+    settingsBootstrap.log("Renderer bootstrap starting");
 
-        (() => {
-          if (!runtime) {
-            return;
+    const createUiKit =
+      window.capyUiKit ||
+      function createUiKit(root = document) {
+        const cache = new Map();
+        const get = (selector) => {
+          if (!selector) return null;
+          if (cache.has(selector)) {
+            const cached = cache.get(selector);
+            if (cached) return cached;
           }
-          const settingsBootstrap =
-            window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
-          settingsBootstrap.log("Renderer bootstrap starting");
-
-          const createUiKit =
-            window.capyUiKit ||
-            function createUiKit(root = document) {
-              const cache = new Map();
-              const get = (selector) => {
-                if (!selector) return null;
-                if (cache.has(selector)) {
-                  const cached = cache.get(selector);
-                  if (cached) return cached;
-                }
-                const node = root.querySelector(selector);
-                if (node) {
-                  cache.set(selector, node);
-                }
-                return node || null;
-              };
-              const all = (selector) => Array.from(root.querySelectorAll(selector));
-              return { get, all };
-            };
-
-          const dom = createUiKit(document);
-          const settingsSheet = document.getElementById("settingsSheet");
-          const settingsDefinition = capyGlobal.settingsDefinition || [];
-          if (settingsDefinition.length === 0) {
-            console.warn("Settings definition not loaded, menu may be empty.");
+          const node = root.querySelector(selector);
+          if (node) {
+            cache.set(selector, node);
           }
-          if (settingsSheet && settingsDefinition.length && globalThis.capySettingsMenu?.renderSettingsMenu) {
-            globalThis.capySettingsMenu.renderSettingsMenu(settingsSheet, settingsDefinition);
-          }
+          return node || null;
+        };
+        const all = (selector) => Array.from(root.querySelectorAll(selector));
+        return { get, all };
+      };
 
-          const skipBootstrap = beginRendererBootstrap();
-          if (skipBootstrap) {
-            return;
-          }
-          let bootstrapSucceeded = false;
+    const dom = createUiKit(document);
+    const settingsSheet = document.getElementById("settingsSheet");
+    // const settingsDefinition = capyGlobal.settingsDefinition || []; // Removed as settings are now static
+    // if (settingsDefinition.length === 0) { // Removed as settings are now static
+    //   console.warn("Settings definition not loaded, menu may be empty."); // Removed as settings are now static
+    // } // Removed as settings are now static
+    // if (settingsSheet && settingsDefinition.length && globalThis.capySettingsMenu?.renderSettingsMenu) { // Removed as settings are now static
+    //   globalThis.capySettingsMenu.renderSettingsMenu(settingsSheet, settingsDefinition); // Removed as settings are now static
+    // } // Removed as settings are now static
+
+    const skipBootstrap = beginRendererBootstrap();
+    if (skipBootstrap) {
+      return;
+    }
+    let bootstrapSucceeded = false;
       try {
       function createComponent(root, render) {
         if (!root) {
@@ -3914,68 +3825,8 @@ const { html, renderTemplate } = globalThis.capyTemplates || {};
         settingsSheet?.querySelector(".sheet-body") ||
         null;
       function ensureSaveManagerSection() {
-        const existing = document.querySelector('[data-save-section="dialog"]');
-        if (existing) return existing;
-        if (!settingsBody) return null;
-
-        const section = document.createElement("section");
-        section.className = "sheet-section save-manager";
-        section.id = "saveManagerSection";
-        section.dataset.saveSection = "dialog";
-        section.dataset.settingsBlock = "save-manager";
-        section.dataset.settingsTier = "basic";
-        section.dataset.settingsAvailable = "true";
-        section.setAttribute("role", "group");
-        section.setAttribute("aria-labelledby", "saveManagerHeading");
-
-        const heading = document.createElement("h3");
-        heading.id = "saveManagerHeading";
-        heading.textContent = "Your saves";
-        section.appendChild(heading);
-
-        const list = document.createElement("div");
-        list.className = "save-manager-list";
-        list.dataset.saveList = "";
-        list.setAttribute("role", "list");
-        list.setAttribute("aria-live", "polite");
-        list.setAttribute("aria-labelledby", "saveManagerHeading");
-        section.appendChild(list);
-
-        const empty = document.createElement("p");
-        empty.className = "save-manager-empty";
-        empty.dataset.saveEmpty = "";
-        empty.hidden = true;
-        empty.textContent = "No saves yet. Create one above to start autosaving progress.";
-        section.appendChild(empty);
-
-        const actions = document.createElement("div");
-        actions.className = "save-manager-actions";
-
-        const saveButton = document.createElement("button");
-        saveButton.type = "button";
-        saveButton.dataset.saveSnapshot = "";
-        saveButton.disabled = true;
-        saveButton.textContent = "Save current puzzle";
-        actions.appendChild(saveButton);
-
-        const resetButton = document.createElement("button");
-        resetButton.type = "button";
-        resetButton.dataset.resetProgress = "";
-        resetButton.disabled = true;
-        resetButton.textContent = "Reset puzzle progress";
-        actions.appendChild(resetButton);
-
-        const exportButton = document.createElement("button");
-        exportButton.type = "button";
-        exportButton.id = "downloadJson";
-        exportButton.disabled = true;
-        exportButton.textContent = "Export puzzle JSON";
-        actions.appendChild(exportButton);
-
-        section.appendChild(actions);
-
-        settingsBody.appendChild(section);
-        return section;
+        // This function is no longer needed as the save manager section is now static HTML.
+        return document.getElementById("saveManagerSection");
       }
 
       const startSaveManagerSection = ensureSaveManagerSection();
