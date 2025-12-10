@@ -1,63 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
   <!--
-    Developer Map
-    ==========
     Layout overview
     --------------
     - UI chrome (command rail, modal sheets, and the debug console) exposes primary actions wired
-      to script handlers. Scan for "Command button" listeners when adjusting layout interactions.
+      to script handlers in `capy.js`.
     - Viewport + stage: #viewport, #canvasStage, and #canvasTransform cooperate with viewState for
       pan/zoom. Pointer handlers (handlePanStart/Move/End) and applyZoom feed navigation updates.
-    - Puzzle state & rendering: state holds palette, fills, and metadata. renderPuzzle →
-      drawOutlines/drawNumbers use ensureRenderCache to hydrate canvases and labels.
-    - Generation pipeline: loadImage → createPuzzleData orchestrates quantization, segmentation,
-      and palette prep. Regeneration, fixture loading, and saves all call applyPuzzleResult.
+    - Puzzle state & rendering: `state` holds palette, fills, and metadata. `renderPuzzle` uses
+      `ensureRenderCache` to hydrate canvases and labels.
+    - Generation pipeline: `createPuzzleData` in `puzzle-generation.js` orchestrates quantization,
+      segmentation, and palette prep. `loadImage` calls this, and `applyPuzzleResult` hydrates the UI.
     - Persistence + exports: createGameSaveManager backs the Saves sheet. Autosave,
       manual saves, and exports live alongside serializeCurrentPuzzle.
-    - External API: window.capyGenerator exposes devtools entry points; keep signatures stable when
-      reorganizing internal wiring.
 
     Script organization
     -------------------
-    1. Cached DOM references, constants, and default settings.
-    2. Canvas metrics, view state, pointer capture, and custom cursor helpers.
-    3. Generation + rendering pipeline (loadDefaultPuzzle, createPuzzleData, renderPuzzle, etc.).
-    4. Palette interactions, keyboard/mouse handlers, and hint overlay animation loop.
-    5. Autosave + storage encoding, save manager wiring, and UI refresh routines.
-    6. window.capyGenerator bindings exported last for manual QA tooling.
+    - `capy.js`: Main application runtime. Handles UI, state management, rendering, and user interactions.
+    - `puzzle-generation.js`: Contains the logic for creating puzzles from images (quantization, segmentation, etc.).
+    - `index.html`: Static layout and settings menu structure.
+    - `styles.css`: All application styles.
 
     Function highlights
     -------------------
-    - installBrowserZoomGuards(): Prevents browser zoom from intercepting wheel gestures on the
-      canvas.
-    - applyViewTransform(options): Pushes viewState pan/zoom changes to the stage and pointer
-      overlays.
-    - applyZoom(multiplier, clientX, clientY, options): Normalizes zoom gestures around the pointer
-      focus and updates viewState.
-    - resetView(options): Fits the puzzle to the viewport and recenters the stage.
-    - loadSamplePuzzle(options) / loadDefaultPuzzle(options): Bootstrap the bundled sample or
-      fallback puzzle payload.
-    - createPuzzleData(image, options): Invokes the generation worker to quantize colors and
-      segment regions.
-    - applyPuzzleResult(data, metadata): Hydrates puzzle state, triggers canvas redraw, and updates
-      metadata surfaces.
-    - renderPuzzle() / renderPreview(): Draw the active puzzle and thumbnail preview using the
-      shared render cache.
-    - renderPalette(): Rebuilds the palette dock and accessibility metadata for the active colors.
-    - attemptFillRegion(hit, { label }): Processes paint interactions, updates fills, and schedules
-      autosave.
-    - useHint(): Coordinates palette flashing + overlay animations to guide the next region.
-    - updateCommandStates(): Enables/disables command rail buttons based on current puzzle state.
-    - applyTheme(theme, options) / applyBackgroundColor(hex, options): Refresh UI theming tokens and
-      persist preferences.
-    - scheduleAutosave(reason) / persistAutosave(reason): Manage background save cadence and writes
-      to storage.
-    - saveCurrentSnapshot(): Captures a manual save entry and refreshes manager lists.
-    - refreshGameSelection() / refreshSaveList(): Render save management surfaces from shared
-      templates.
-    - createGameSaveManager(): Wraps persistence with list, subscribe, and persist helpers for UI
-      consumers.
+    - `applyPuzzleResult(data, metadata)`: Core function to hydrate the UI with a new puzzle.
+    - `createPuzzleData(image, options)`: Entry point to the puzzle generation pipeline.
+    - `renderPuzzle()`: Main rendering loop function.
+    - `applyZoom()` / `handlePanMove()`: Central handlers for viewport navigation.
+    - `attemptFillRegion()`: Handles the logic for filling a region with a color.
   -->
   <head>
     <meta charset="utf-8" />

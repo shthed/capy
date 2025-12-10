@@ -1,3 +1,15 @@
+/*
+ * Capy stylesheet overview:
+ * - :root defines global variables for layout, sizing, and the default (dark) theme.
+ * - body[data-theme="light"] and body[data-theme="colorful"] override the root variables
+ *   to apply alternate color schemes.
+ * - UI scale is computed from `--ui-scale-user` (user preference) and `--ui-scale-auto`
+ *   (viewport-derived) to create a responsive base font size.
+ * - Most component styles are self-contained, using CSS variables for theming and sizing.
+ * - Media queries at the end of the file adjust layouts for smaller screens and portrait
+ *   orientations.
+ */
+
 :root {
   color-scheme: light dark;
   font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui,
