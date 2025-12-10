@@ -3,19 +3,17 @@
  * - Renderer/vector scene helpers (capy.js:9-170): SVG drawing, palette ink styles, scene export payloads.
  * - Runtime bootstrap & renderer controller (capy.js:173-371): preboot metrics, UI scale, renderer wiring.
  * - Template utilities (capy.js:374-446): tagged template + HTML rendering helpers.
- * - Puzzle generation pipeline (capy.js:449-1700): quantisation, smoothing, worker bootstrap, `createPuzzleData`.
- * - Settings UI/render helpers (capy.js:1701+): DOM builders, controls, colour utilities, save/export commands.
+ * - UI, Settings & Gameplay Runtime (capy.js:449+): Core application logic, state management, event handlers, and settings persistence.
  *
 * Function index (reference each section in the overview bullets above):
  * Renderer & Vector Scene Helpers:
  *   - formatNumber (capy.js:15) – format number.
  *   - buildPathData (capy.js:22) – build path data.
- *   - computeInkStyles (capy.js:42) – compute ink styles.
- *   - hexToRgb (capy.js:51) – hex to rgb.
- *   - relativeLuminance (capy.js:60) – relative luminance.
- *   - createVectorScenePayload (capy.js:70) – create vector scene payload.
- *   - createSvgRenderer (capy.js:90) – create svg renderer.
- *   - clear (capy.js:130) – clear.
+ *   - computeInkStyles (capy.js:42) – compute ink styles. Hex to RGB, relative luminance, and other color utilities are here.
+ *   - createVectorScenePayload (capy.js:70) – create vector scene payload. Bundles geometry for SVG export.
+ *   - createVectorSceneLoader (capy.js:90) – create vector scene loader. Hydrates a puzzle from a vector scene payload.
+ *   - createSvgRenderer (capy.js:173) – create svg renderer. The main SVG rendering backend.
+ *   - clear (capy.js:213) – clear.
  *   - renderFrame (capy.js:136) – render frame.
  *   - dispose (capy.js:160) – dispose.
  * Runtime Bootstrap & Renderer Controller:
@@ -30,465 +28,239 @@
  *   - completeRendererBootstrap (capy.js:314) – complete renderer bootstrap.
  *   - createRendererController (capy.js:323) – create renderer controller.
  *   - setRenderer (capy.js:331) – set renderer.
- * Template Utilities:
  *   - escapeHtml (capy.js:386) – escape html.
  *   - serializeValue (capy.js:408) – serialize value.
  *   - html (capy.js:426) – html.
  *   - unsafeHTML (capy.js:437) – unsafe html.
  *   - renderTemplate (capy.js:441) – render template.
  * Puzzle Generation & Worker Pipeline:
- *   - clamp (capy.js:511) – clamp.
- *   - normalizeAlgorithm (capy.js:518) – normalize algorithm.
- *   - toHex (capy.js:533) – to hex.
- *   - accumulate (capy.js:537) – accumulate.
- *   - floodFill (capy.js:555) – flood fill.
- *   - segmentRegions (capy.js:615) – segment regions.
- *   - finalizeGeneratedRegions (capy.js:723) – finalize generated regions.
- *   - serializeAssignments (capy.js:752) – serialize assignments.
- *   - kmeansQuantize (capy.js:774) – kmeans quantize.
- *   - posterizeQuantize (capy.js:838) – posterize quantize.
- *   - organicQuantize (capy.js:924) – organic quantize.
- *   - performQuantization (capy.js:1033) – perform quantization.
- *   - smoothAssignments (capy.js:1053) – smooth assignments.
- *   - canvasToBlob (capy.js:1102) – canvas to blob.
- *   - blobToDataUrl (capy.js:1129) – blob to data url.
- *   - estimateDataUrlBytes (capy.js:1154) – estimate data url bytes.
- *   - resizeCanvas (capy.js:1170) – resize canvas.
- *   - compressCanvasImage (capy.js:1194) – async compress canvas image.
- *   - buildGenerationWorkerSource (capy.js:1271) – build generation worker source.
- *   - normalizeOptions (capy.js:1288) – normalize options.
- *   - postProgress (capy.js:1297) – post progress.
- *   - canUseGenerationWorker (capy.js:1368) – can use generation worker.
- *   - ensureGenerationWorker (capy.js:1377) – ensure generation worker.
- *   - disposeGenerationWorker (capy.js:1399) – dispose generation worker.
- *   - runGenerationWorker (capy.js:1414) – run generation worker.
- *   - runGenerationSynchronously (capy.js:1483) – run generation synchronously.
- *   - createPuzzleData (capy.js:1548) – async create puzzle data.
  * UI, Settings & Gameplay Runtime:
- *   - createElement (capy.js:1798) – create element.
- *   - formatValue (capy.js:1828) – format value.
- *   - createHeading (capy.js:1835) – create heading.
- *   - readSettingsDefinition (capy.js:1869) – read settings definition.
- *   - renderActionButton (capy.js:1881) – render action button.
- *   - renderToggle (capy.js:1906) – render toggle.
- *   - renderSelect (capy.js:1914) – render select.
- *   - renderRange (capy.js:1947) – render range.
- *   - renderMouseControls (capy.js:1980) – render mouse controls.
- *   - renderDetailCallout (capy.js:2007) – render detail callout.
- *   - renderNote (capy.js:2023) – render note.
- *   - renderTextarea (capy.js:2040) – render textarea.
- *   - renderList (capy.js:2048) – render list.
- *   - renderDefinitionList (capy.js:2053) – render definition list.
- *   - renderLogger (capy.js:2067) – render logger.
- *   - renderButtonsRow (capy.js:2075) – render buttons row.
- *   - renderJsonView (capy.js:2099) – render json view.
- *   - renderSection (capy.js:2120) – render section.
- *   - renderTabBlocks (capy.js:2217) – render tab blocks.
- *   - renderSettingsMenu (capy.js:2379) – render settings menu.
- *   - createUiKit (capy.js:2458) – create ui kit.
- *   - log (capy.js:2486) – log.
- *   - setOpen (capy.js:2504) – set open.
- *   - createUiKit (capy.js:2574) – create ui kit.
- *   - createComponent (capy.js:2603) – create component.
- *   - emit (capy.js:2615) – emit.
- *   - on (capy.js:2618) – on.
- *   - update (capy.js:2622) – update.
- *   - createPaletteDockComponent (capy.js:2629) – create palette dock component.
- *   - emitPaletteWheel (capy.js:2694) – emit palette wheel.
- *   - createSaveManagerComponent (capy.js:2702) – create save manager component.
- *   - buildCacheRequest (capy.js:3112) – build cache request.
- *   - warmRuntimeCache (capy.js:3118) – async warm runtime cache.
- *   - setServiceWorkerLabel (capy.js:3133) – set service worker label.
- *   - formatServiceWorkerTimestamp (capy.js:3138) – format service worker timestamp.
- *   - updateServiceWorkerSummary (capy.js:3146) – update service worker summary.
- *   - describeServiceWorkerState (capy.js:3159) – describe service worker state.
- *   - logServiceWorkerEvent (capy.js:3176) – log service worker event.
- *   - summarizeServiceWorkerUrl (capy.js:3190) – summarize service worker url.
- *   - watchServiceWorker (capy.js:3202) – watch service worker.
- *   - handleServiceWorkerMessage (capy.js:3221) – handle service worker message.
- *   - registerServiceWorker (capy.js:3259) – register service worker.
- *   - cacheSourceImageBlob (capy.js:3337) – async cache source image blob.
- *   - cacheSourceImageDataUrl (capy.js:3364) – async cache source image data url.
- *   - cacheSourceImageUrl (capy.js:3378) – async cache source image url.
- *   - readCachedSourceImage (capy.js:3405) – async read cached source image.
- *   - normalizeMouseClickAction (capy.js:3432) – normalize mouse click action.
- *   - normalizeMouseDragAction (capy.js:3442) – normalize mouse drag action.
- *   - normalizeMouseControls (capy.js:3452) – normalize mouse controls.
- *   - cloneMouseControls (capy.js:3466) – clone mouse controls.
- *   - getMouseControls (capy.js:3475) – get mouse controls.
- *   - getMouseControlsForButton (capy.js:3479) – get mouse controls for button.
- *   - getMouseButtonName (capy.js:3487) – get mouse button name.
- *   - describeMouseButton (capy.js:3493) – describe mouse button.
- *   - describeMouseClickAction (capy.js:3497) – describe mouse click action.
- *   - describeMouseDragAction (capy.js:3515) – describe mouse drag action.
- *   - isInteractiveElementForZoomGuard (capy.js:3529) – is interactive element for zoom guard.
- *   - installBrowserZoomGuards (capy.js:3540) – install browser zoom guards.
- *   - drawOutlines (capy.js:3752) – draw outlines.
- *   - createRenderCache (capy.js:3775) – create render cache.
- *   - strokeOutlinesDirect (capy.js:3799) – stroke outlines direct.
- *   - rasterizeOutlineLayer (capy.js:3810) – rasterize outline layer.
- *   - createLayerCanvas (capy.js:3829) – create layer canvas.
- *   - getLayerContext (capy.js:3845) – get layer context.
- *   - appendContoursToPath (capy.js:3858) – append contours to path.
- *   - fillGeometries (capy.js:3871) – fill geometries.
- *   - strokeGeometries (capy.js:3887) – stroke geometries.
- *   - ensureRenderCache (capy.js:3903) – ensure render cache.
- *   - rebuildRenderCache (capy.js:3930) – rebuild render cache.
- *   - computeSceneLoaderZoom (capy.js:3982) – compute scene loader zoom.
- *   - hydrateSceneTiles (capy.js:3989) – hydrate scene tiles.
- *   - rebuildFilledLayer (capy.js:4004) – rebuild filled layer.
- *   - compositeFilledRegionsDirect (capy.js:4032) – composite filled regions direct.
- *   - paintRegionToFilledLayer (capy.js:4053) – paint region to filled layer.
- *   - markFilledLayerDirty (capy.js:4060) – mark filled layer dirty.
- *   - markOutlineLayerDirty (capy.js:4067) – mark outline layer dirty.
- *   - buildRegionGeometry (capy.js:4073) – build region geometry.
- *   - buildRegionContours (capy.js:4101) – build region contours.
- *   - computeOutlineStrokeWidth (capy.js:4215) – compute outline stroke width.
- *   - clampViewPanToPuzzleBounds (capy.js:4279) – clamp view pan to puzzle bounds.
- *   - invalidateCanvasRect (capy.js:4318) – invalidate canvas rect.
- *   - getPuzzleCanvasRect (capy.js:4322) – get puzzle canvas rect.
- *   - getDevicePixelRatio (capy.js:4338) – get device pixel ratio.
- *   - computeDisplayScale (capy.js:4349) – compute display scale.
- *   - getVisiblePuzzleBounds (capy.js:4356) – get visible puzzle bounds.
- *   - updateCanvasMetrics (capy.js:4377) – update canvas metrics.
- *   - applyCanvasSizing (capy.js:4413) – apply canvas sizing.
- *   - ensureCanvasMetricsInitialized (capy.js:4439) – ensure canvas metrics initialized.
- *   - withRenderScale (capy.js:4446) – with render scale.
- *   - clearContext (capy.js:4457) – clear context.
- *   - syncCacheMetrics (capy.js:4465) – sync cache metrics.
- *   - syncSettingsSheetSize (capy.js:4560) – sync settings sheet size.
- *   - syncCommandRailMetrics (capy.js:4581) – sync command rail metrics.
- *   - scheduleCommandRailMetricsSync (capy.js:4608) – schedule command rail metrics sync.
- *   - getLauncherSizeEstimate (capy.js:4625) – get launcher size estimate.
- *   - clampLauncherPixels (capy.js:4637) – clamp launcher pixels.
- *   - normalizeLauncherPositionFromPixels (capy.js:4654) – normalize launcher position from pixels.
- *   - resolveLauncherPixels (capy.js:4667) – resolve launcher pixels.
- *   - applySettingsLauncherPosition (capy.js:4677) – apply settings launcher position.
- *   - clampSettingsSheetPosition (capy.js:4692) – clamp settings sheet position.
- *   - setSettingsSheetPosition (capy.js:4715) – set settings sheet position.
- *   - ensureSettingsSheetPosition (capy.js:4728) – ensure settings sheet position.
- *   - detachSceneLoaderSubscription (capy.js:4788) – detach scene loader subscription.
- *   - attachSceneLoaderSubscription (capy.js:4799) – attach scene loader subscription.
- *   - logRendererEvent (capy.js:4834) – log renderer event.
- *   - handleRendererChange (capy.js:4845) – handle renderer change.
- *   - registerRendererControls (capy.js:4850) – register renderer controls.
- *   - disableSampleAutoload (capy.js:4894) – disable sample autoload.
- *   - maybeAutoLoadSample (capy.js:4898) – maybe auto load sample.
- *   - getDefaultGameTitle (capy.js:4939) – get default game title.
- *   - getDefaultGameDescription (capy.js:4951) – get default game description.
- *   - getSampleArtwork (capy.js:4963) – get sample artwork.
- *   - getSampleDataUrl (capy.js:4967) – get sample data url.
- *   - getSampleTitle (capy.js:4976) – get sample title.
- *   - getSampleDescription (capy.js:4985) – get sample description.
- *   - applyDefaultGameMetadata (capy.js:4994) – apply default game metadata.
- *   - applySampleArtwork (capy.js:5018) – apply sample artwork.
- *   - normalizeSampleArtwork (capy.js:5027) – normalize sample artwork.
- *   - fetchDefaultGamePayload (capy.js:5050) – async fetch default game payload.
- *   - normalizeRendererType (capy.js:5119) – normalize renderer type.
- *   - formatRendererLabel (capy.js:5125) – format renderer label.
- *   - updateRendererModeAvailability (capy.js:5134) – update renderer mode availability.
- *   - applyRendererMode (capy.js:5144) – apply renderer mode.
- *   - applyGameplaySettings (capy.js:5169) – apply gameplay settings.
- *   - requestUpload (capy.js:5681) – async request upload.
- *   - handleSettingsJsonImport (capy.js:5700) – handle settings json import.
- *   - beginSettingsLauncherDrag (capy.js:5758) – begin settings launcher drag.
- *   - moveSettingsLauncher (capy.js:5778) – move settings launcher.
- *   - endSettingsLauncherDrag (capy.js:5796) – end settings launcher drag.
- *   - hasFiles (capy.js:6341) – has files.
- *   - getRegionAtPoint (capy.js:6435) – get region at point.
- *   - getRegionFromEvent (capy.js:6462) – get region from event.
- *   - maybeShowRegionHint (capy.js:6530) – maybe show region hint.
- *   - attemptFillRegion (capy.js:6565) – attempt fill region.
- *   - setSettingsSheetOpenState (capy.js:6788) – set settings sheet open state.
- *   - openSheet (capy.js:6796) – open sheet.
- *   - beginSettingsSheetDrag (capy.js:6816) – begin settings sheet drag.
- *   - moveSettingsSheet (capy.js:6836) – move settings sheet.
- *   - endSettingsSheetDrag (capy.js:6845) – end settings sheet drag.
- *   - closeSheet (capy.js:6858) – close sheet.
- *   - showSettingsSheet (capy.js:6874) – show settings sheet.
- *   - showStartScreen (capy.js:6890) – show start screen.
- *   - hideStartScreen (capy.js:6912) – hide start screen.
- *   - updatePreviewState (capy.js:6918) – update preview state.
- *   - updateFullscreenState (capy.js:6947) – update fullscreen state.
- *   - toggleFullscreen (capy.js:6965) – toggle fullscreen.
- *   - syncComputedUiScale (capy.js:6987) – sync computed ui scale.
- *   - updateViewportMetrics (capy.js:7015) – update viewport metrics.
- *   - handleViewportChange (capy.js:7062) – handle viewport change.
- *   - applySampleDetailLevel (capy.js:7077) – apply sample detail level.
- *   - loadSamplePuzzle (capy.js:7200) – load sample puzzle.
- *   - loadDefaultPuzzle (capy.js:7238) – async load default puzzle.
- *   - updateCommandStates (capy.js:7284) – update command states.
- *   - renderDebugLog (capy.js:7296) – render debug log.
- *   - recordTelemetryEvent (capy.js:7324) – record telemetry event.
- *   - trackExceptionEvent (capy.js:7333) – track exception event.
- *   - trackPerformanceMetrics (capy.js:7353) – track performance metrics.
- *   - recordUserEvent (capy.js:7375) – record user event.
- *   - createPerformanceMetrics (capy.js:7382) – create performance metrics.
- *   - normalizeMetadata (capy.js:7409) – normalize metadata.
- *   - pushEvent (capy.js:7428) – push event.
- *   - maybeFlush (capy.js:7436) – maybe flush.
- *   - recordDuration (capy.js:7446) – record duration.
- *   - start (capy.js:7490) – start.
- *   - mark (capy.js:7519) – mark.
- *   - buildSummary (capy.js:7530) – build summary.
- *   - flush (capy.js:7569) – flush.
- *   - resetMetrics (capy.js:7580) – reset metrics.
- *   - logDebug (capy.js:7600) – log debug.
- *   - hideGlobalErrorNotice (capy.js:7620) – hide global error notice.
- *   - showGlobalErrorNotice (capy.js:7625) – show global error notice.
- *   - extractStackFromValue (capy.js:7654) – extract stack from value.
- *   - deriveStackFromArgs (capy.js:7667) – derive stack from args.
- *   - deriveStackFromEvent (capy.js:7680) – derive stack from event.
- *   - formatConsoleValue (capy.js:7684) – format console value.
- *   - joinConsoleArguments (capy.js:7711) – join console arguments.
- *   - installConsoleErrorForwarder (capy.js:7727) – install console error forwarder.
- *   - recordErrorEvent (capy.js:7773) – record error event.
- *   - activateSettingsTab (capy.js:7832) – activate settings tab.
- *   - scrollSettingsPanelIntoView (capy.js:7865) – scroll settings panel into view.
- *   - resolveUiScalePreset (capy.js:7894) – resolve ui scale preset.
- *   - scrollUiScaleControlIntoView (capy.js:7912) – keep ui scale control visible.
- *   - applyUiScale (capy.js:7933) – apply ui scale.
- *   - applyMaxZoom (capy.js:7972) – apply max zoom.
- *   - applyLabelScale (capy.js:7978) – apply label scale.
- *   - updateChatGptLink (capy.js:8013) – update chat gpt link.
- *   - applyImageDescription (capy.js:8025) – apply image description.
- *   - applyArtPrompt (capy.js:8051) – apply art prompt.
- *   - applyRegionLabelVisibility (capy.js:8072) – apply region label visibility.
- *   - applyTheme (capy.js:8095) – apply theme.
- *   - applyBackgroundColor (capy.js:8124) – apply background color.
- *   - applyStageBackgroundColor (capy.js:8183) – apply stage background color.
- *   - resolveSourceImageLimit (capy.js:8214) – resolve source image limit.
- *   - formatSourceImageLimitLabel (capy.js:8228) – format source image limit label.
- *   - updateOptionOutputs (capy.js:8239) – update option outputs.
- *   - formatSliderDefaultValue (capy.js:8302) – format slider default value.
- *   - normalizeGenerationAlgorithm (capy.js:8349) – normalize generation algorithm.
- *   - hydrateAlgorithmOptions (capy.js:8359) – hydrate algorithm options.
- *   - markOptionsDirty (capy.js:8414) – mark options dirty.
- *   - getCurrentOptions (capy.js:8439) – get current options.
- *   - regenerateFromSource (capy.js:8454) – regenerate from source.
- *   - isJsonFile (capy.js:8459) – is json file.
- *   - describeImportIntent (capy.js:8470) – describe import intent.
- *   - shouldAutoImport (capy.js:8497) – should auto import.
- *   - updateImportNotice (capy.js:8501) – update import notice.
- *   - clearPendingImport (capy.js:8550) – clear pending import.
- *   - normalizeExternalImageUrl (capy.js:8556) – normalize external image url.
- *   - deriveSourceTitleFromUrl (capy.js:8575) – derive source title from url.
- *   - clearSourceUrlError (capy.js:8602) – clear source url error.
- *   - showSourceUrlError (capy.js:8612) – show source url error.
- *   - updateSourceUrlSubmitState (capy.js:8619) – update source url submit state.
- *   - handleSourceImageUrl (capy.js:8634) – handle source image url.
- *   - openLocalFileWithPicker (capy.js:8674) – async open local file with picker.
- *   - prepareImport (capy.js:8720) – prepare import.
- *   - executePendingImport (capy.js:8744) – execute pending import.
- *   - handleFile (capy.js:8756) – async handle file.
- *   - loadImage (capy.js:8844) – load image.
- *   - resetPuzzleUI (capy.js:9023) – reset puzzle ui.
- *   - loadPuzzleGenerationModule (capy.js:9060) – load puzzle generation module.
- *   - createPuzzleData (capy.js:9067) – async create puzzle data.
- *   - resolvePaletteEntrySnapshot (capy.js:9080) – resolve palette entry snapshot.
- *   - encodeCompactPaletteEntry (capy.js:9141) – encode compact palette entry.
- *   - resolveRegionEntrySnapshot (capy.js:9165) – resolve region entry snapshot.
- *   - encodeCompactRegionEntry (capy.js:9208) – encode compact region entry.
- *   - decodeFilledRegionList (capy.js:9224) – decode filled region list.
- *   - resolveFilledRegions (capy.js:9266) – resolve filled regions.
- *   - isProbablyDataUrl (capy.js:9291) – is probably data url.
- *   - estimateDataUrlBytes (capy.js:9298) – estimate data url bytes.
- *   - normalizeSourceImageSnapshot (capy.js:9314) – normalize source image snapshot.
- *   - toBinaryByteView (capy.js:9458) – to binary byte view.
- *   - cloneSerializable (capy.js:9471) – clone serializable.
- *   - normalizeVectorSceneSnapshot (capy.js:9482) – normalize vector scene snapshot.
- *   - resolveVectorSceneBinaryBuffer (capy.js:9506) – resolve vector scene binary buffer.
- *   - hydrateSourceImageSnapshot (capy.js:9535) – hydrate source image snapshot.
- *   - buildGeneratedSourceImageSnapshot (capy.js:9596) – build generated source image snapshot.
- *   - applyPuzzleResult (capy.js:9657) – apply puzzle result.
- *   - loadPuzzleFixtureData (capy.js:9946) – load puzzle fixture data.
- *   - renderPreview (capy.js:9973) – render preview.
- *   - renderPreviewImage (capy.js:9986) – render preview image.
- *   - renderPuzzle (capy.js:10021) – render puzzle.
- *   - renderPuzzleFrame (capy.js:10057) – render puzzle frame.
- *   - fillBackgroundLayer (capy.js:10147) – fill background layer.
- *   - drawNumbers (capy.js:10158) – draw numbers.
- *   - computeLabelSettingsSignature (capy.js:10238) – compute label settings signature.
- *   - computeRegionLabelFontSize (capy.js:10259) – compute region label font size.
- *   - computeRegionLabelStrokeWidth (capy.js:10311) – compute region label stroke width.
- *   - getRegionLabelText (capy.js:10316) – get region label text.
- *   - getRegionCenter (capy.js:10341) – get region center.
- *   - ensureRegionBounds (capy.js:10360) – ensure region bounds.
- *   - calculateRegionBounds (capy.js:10369) – calculate region bounds.
- *   - measureLabelMetrics (capy.js:10398) – measure label metrics.
- *   - getMeasurementContext (capy.js:10438) – get measurement context.
- *   - findRegionLabelAnchor (capy.js:10469) – find region label anchor.
- *   - findRegionLabelAnchorPolylabel (capy.js:10502) – find region label anchor polylabel.
- *   - findRegionLabelAnchorLegacy (capy.js:10578) – find region label anchor legacy.
- *   - resolvePolylabelPrecision (capy.js:10710) – resolve polylabel precision.
- *   - ensureRegionVisualCenter (capy.js:10719) – ensure region visual center.
- *   - ensureRegionLabelPolygon (capy.js:10740) – ensure region label polygon.
- *   - buildRegionLabelPolygon (capy.js:10769) – build region label polygon.
- *   - normalizePolygonRing (capy.js:10872) – normalize polygon ring.
- *   - polygonArea (capy.js:10900) – polygon area.
- *   - pointsEqual (capy.js:10913) – points equal.
- *   - computeRegionPolylabel (capy.js:10922) – compute region polylabel.
- *   - createPolylabelCell (capy.js:11004) – create polylabel cell.
- *   - getCentroidPolylabelCell (capy.js:11016) – get centroid polylabel cell.
- *   - pointToPolygonDistance (capy.js:11043) – point to polygon distance.
- *   - pointToSegmentDistanceSquared (capy.js:11069) – point to segment distance squared.
- *   - createPolylabelMaxHeap (capy.js:11089) – create polylabel max heap.
- *   - isEmpty (capy.js:11092) – is empty.
- *   - push (capy.js:11096) – push.
- *   - pop (capy.js:11102) – pop.
- *   - siftUp (capy.js:11113) – sift up.
- *   - siftDown (capy.js:11125) – sift down.
- *   - rectangleFitsRegion (capy.js:11149) – rectangle fits region.
- *   - estimateAnchorSlack (capy.js:11165) – estimate anchor slack.
- *   - scrollPaletteToColor (capy.js:11190) – scroll palette to color.
- *   - activateColor (capy.js:11226) – activate color.
- *   - resolvePaletteSortMode (capy.js:11253) – resolve palette sort mode.
- *   - getPaletteEntryOrder (capy.js:11266) – get palette entry order.
- *   - renderPalette (capy.js:11427) – render palette.
- *   - getColorDisplayNumber (capy.js:11485) – get color display number.
- *   - describeColour (capy.js:11509) – describe colour.
- *   - handlePaletteWheel (capy.js:11523) – handle palette wheel.
- *   - updateGenerationProgress (capy.js:11546) – update generation progress.
- *   - clearGenerationProgress (capy.js:11568) – clear generation progress.
- *   - beginGenerationJob (capy.js:11578) – begin generation job.
- *   - isLatestGenerationJob (capy.js:11584) – is latest generation job.
- *   - reportGenerationStage (capy.js:11588) – report generation stage.
- *   - setProgressMessage (capy.js:11608) – set progress message.
- *   - updateProgress (capy.js:11629) – update progress.
- *   - updateMouseControlInputs (capy.js:11656) – update mouse control inputs.
- *   - applyMouseControls (capy.js:11673) – apply mouse controls.
- *   - setMouseControl (capy.js:11716) – set mouse control.
- *   - applyPaletteSort (capy.js:11743) – apply palette sort.
- *   - handleKeyDown (capy.js:11778) – handle key down.
- *   - handleKeyUp (capy.js:11822) – handle key up.
- *   - defaultPanCaptureTarget (capy.js:11828) – default pan capture target.
- *   - resolvePanCaptureTarget (capy.js:11832) – resolve pan capture target.
- *   - attachGlobalPanListeners (capy.js:11846) – attach global pan listeners.
- *   - detachGlobalPanListeners (capy.js:11856) – detach global pan listeners.
- *   - handlePanCaptureLost (capy.js:11866) – handle pan capture lost.
- *   - handleMouseDragFill (capy.js:11878) – handle mouse drag fill.
- *   - handleMouseDragZoom (capy.js:11910) – handle mouse drag zoom.
- *   - finalizeMouseSession (capy.js:11940) – finalize mouse session.
- *   - beginPanSession (capy.js:12038) – begin pan session.
- *   - handlePanStart (capy.js:12089) – handle pan start.
- *   - handlePanMove (capy.js:12207) – handle pan move.
- *   - handlePanEnd (capy.js:12315) – handle pan end.
- *   - hideCustomCursor (capy.js:12385) – hide custom cursor.
- *   - applyCustomCursor (capy.js:12402) – apply custom cursor.
- *   - updateCustomCursor (capy.js:12453) – update custom cursor.
- *   - refreshCustomCursorHighlight (capy.js:12499) – refresh custom cursor highlight.
- *   - setupCustomCursorPreference (capy.js:12515) – setup custom cursor preference.
- *   - resolveMaxZoomCandidate (capy.js:12541) – resolve max zoom candidate.
- *   - getConfiguredMaxViewportZoom (capy.js:12555) – get configured max viewport zoom.
- *   - getZoomBounds (capy.js:12563) – get zoom bounds.
- *   - normalizeZoomValue (capy.js:12568) – normalize zoom value.
- *   - getScaleBounds (capy.js:12576) – get scale bounds.
- *   - applyZoom (capy.js:12584) – apply zoom.
- *   - handleWheel (capy.js:12628) – handle wheel.
- *   - applyViewTransform (capy.js:12652) – apply view transform.
- *   - scheduleViewTransform (capy.js:12680) – schedule view transform.
- *   - computeFitScale (capy.js:12721) – compute fit scale.
- *   - resetView (capy.js:12739) – reset view.
- *   - restoreViewport (capy.js:12779) – restore viewport.
- *   - useHint (capy.js:12806) – use hint.
- *   - flashColorRegions (capy.js:12832) – flash color regions.
- *   - flashRegion (capy.js:12866) – flash region.
- *   - queueOverlayAnimation (capy.js:12887) – queue overlay animation.
- *   - scheduleOverlayFrame (capy.js:12914) – schedule overlay frame.
- *   - stepOverlayAnimations (capy.js:12931) – step overlay animations.
- *   - resolveOverlayTint (capy.js:12993) – resolve overlay tint.
- *   - parseTintToRgb (capy.js:13009) – parse tint to rgb.
- *   - getNow (capy.js:13016) – get now.
- *   - clearOverlayAnimations (capy.js:13023) – clear overlay animations.
- *   - normalizeHintFadeDuration (capy.js:13038) – normalize hint fade duration.
- *   - normalizeHintIntensity (capy.js:13047) – normalize hint intensity.
- *   - normalizeHintTypes (capy.js:13062) – normalize hint types.
- *   - isHintTypeEnabled (capy.js:13078) – is hint type enabled.
- *   - syncHintTypeToggles (capy.js:13092) – sync hint type toggles.
- *   - resolveDifficulty (capy.js:13103) – resolve difficulty.
- *   - normalizeColorId (capy.js:13113) – normalize color id.
- *   - buildPaletteAdjacency (capy.js:13126) – build palette adjacency.
- *   - areColorsAdjacent (capy.js:13163) – are colors adjacent.
- *   - autoAdvanceColor (capy.js:13183) – auto advance color.
- *   - getRegionsByColor (capy.js:13210) – get regions by color.
- *   - getCompletedColorIds (capy.js:13220) – get completed color ids.
- *   - getPaletteEntry (capy.js:13237) – get palette entry.
- *   - paintRegions (capy.js:13243) – paint regions.
- *   - flashRegionsWithContext (capy.js:13252) – flash regions with context.
- *   - flashPaletteSwatch (capy.js:13303) – flash palette swatch.
- *   - compactPuzzleSnapshot (capy.js:13328) – compact puzzle snapshot.
- *   - serializeCurrentPuzzle (capy.js:13436) – serialize current puzzle.
- *   - isSettingsAutosaveReason (capy.js:13578) – is settings autosave reason.
- *   - normalizeLauncherPosition (capy.js:13582) – normalize launcher position.
- *   - getUserSettingsSnapshot (capy.js:13591) – get user settings snapshot.
- *   - persistUserSettings (capy.js:13662) – persist user settings.
- *   - scheduleSettingsPersist (capy.js:13686) – schedule settings persist.
- *   - normalizeStoredUserSettings (capy.js:13730) – normalize stored user settings.
- *   - loadUserSettings (capy.js:13851) – load user settings.
- *   - refreshSettingsJsonView (capy.js:13892) – refresh settings json view.
- *   - applySettingsSnapshot (capy.js:13907) – apply settings snapshot.
- *   - flushPendingAutosave (capy.js:13935) – flush pending autosave.
- *   - scheduleAutosave (capy.js:13943) – schedule autosave.
- *   - persistAutosave (capy.js:13978) – persist autosave.
- *   - getLatestBackupRecord (capy.js:14014) – get latest backup record.
- *   - getStoredStringSize (capy.js:14038) – get stored string size.
- *   - collectSaveStorageStats (capy.js:14053) – collect save storage stats.
- *   - formatBytes (capy.js:14080) – format bytes.
- *   - logStorageFailureDetails (capy.js:14095) – log storage failure details.
- *   - updateStorageUsageSummary (capy.js:14125) – update storage usage summary.
- *   - loadInitialSession (capy.js:14185) – load initial session.
- *   - packFilledRegions (capy.js:14217) – pack filled regions.
- *   - unpackFilledRegions (capy.js:14250) – unpack filled regions.
- *   - packRegionMap (capy.js:14287) – pack region map.
- *   - unpackRegionMap (capy.js:14308) – unpack region map.
- *   - encodeUtf8String (capy.js:14353) – encode utf 8 string.
- *   - decodeUtf8Bytes (capy.js:14370) – decode utf 8 bytes.
- *   - encodeBytesToBase64 (capy.js:14387) – encode bytes to base 64.
- *   - decodeBase64ToBytes (capy.js:14398) – decode base 64 to bytes.
- *   - simpleLZ77Decompress (capy.js:14411) – simple 77 decompress.
- *   - decodeStoredPuzzleSnapshot (capy.js:14515) – decode stored puzzle snapshot.
- *   - encodeStoredSnapshot (capy.js:14560) – encode stored snapshot.
- *   - encodeSaveStorageEntry (capy.js:14568) – encode save storage entry.
- *   - decodeSaveStorageEntry (capy.js:14589) – decode save storage entry.
- *   - createGameSaveManager (capy.js:14615) – create game save manager.
- *   - notify (capy.js:14620) – notify.
- *   - normalizeEntry (capy.js:14631) – normalize entry.
- *   - readFromStorage (capy.js:14667) – read from storage.
- *   - writeToStorage (capy.js:14687) – write to storage.
- *   - hydrate (capy.js:14712) – hydrate.
- *   - persist (capy.js:14719) – persist.
- *   - list (capy.js:14737) – list.
- *   - clear (capy.js:14741) – clear.
- *   - subscribe (capy.js:14751) – subscribe.
- *   - resetCurrentProgress (capy.js:14792) – reset current progress.
- *   - saveCurrentSnapshot (capy.js:14810) – save current snapshot.
- *   - estimateSaveEntryBytes (capy.js:14856) – estimate save entry bytes.
- *   - describeSaveEntry (capy.js:14867) – describe save entry.
- *   - renderSavePreview (capy.js:14912) – render save preview.
- *   - renderSaveSelectionItem (capy.js:14934) – render save selection item.
- *   - renderSaveActionButtons (capy.js:14962) – render save action buttons.
- *   - renderSaveManagementItem (capy.js:14968) – render save management item.
- *   - renderDefaultGameSelectionItem (capy.js:15006) – render default game selection item.
- *   - refreshGameSelection (capy.js:15030) – refresh game selection.
- *   - refreshSaveList (capy.js:15043) – refresh save list.
- *   - persistSaves (capy.js:15054) – persist saves.
- *   - loadSavedEntries (capy.js:15058) – load saved entries.
- *   - loadSaveEntry (capy.js:15062) – load save entry.
- *   - deleteSaveEntry (capy.js:15086) – delete save entry.
- *   - clearAllSaveData (capy.js:15097) – clear all save data.
- *   - renameSaveEntry (capy.js:15106) – rename save entry.
- *   - exportSaveEntry (capy.js:15119) – export save entry.
- *   - sanitizeHexColor (capy.js:15138) – sanitize hex color.
- *   - computeInkStyles (capy.js:15150) – compute ink styles.
- *   - computePointerNumberColor (capy.js:15165) – compute pointer number color.
- *   - computeSwatchLabelStyles (capy.js:15181) – compute swatch label styles.
- *   - relativeLuminance (capy.js:15235) – relative luminance.
- *   - contrastRatio (capy.js:15246) – contrast ratio.
- *   - oklchFromHex (capy.js:15252) – oklch from hex.
- *   - oklabFromRgb (capy.js:15267) – oklab from rgb.
- *   - hexToRgb (capy.js:15294) – hex to rgb.
- *   - rgbaFromHex (capy.js:15306) – rgba from hex.
- *   - clamp (capy.js:15312) – clamp.
+ *   - buildCacheRequest (capy.js:449) – build cache request.
+ *   - cacheSourceImageBlob (capy.js:453) – async cache source image blob.
+ *   - cacheSourceImageDataUrl (capy.js:480) – async cache source image data url.
+ *   - cacheSourceImageUrl (capy.js:493) – async cache source image url.
+ *   - readCachedSourceImage (capy.js:520) – async read cached source image.
+ *   - normalizeMouseClickAction (capy.js:547) – normalize mouse click action.
+ *   - normalizeMouseDragAction (capy.js:557) – normalize mouse drag action.
+ *   - normalizeMouseControls (capy.js:567) – normalize mouse controls.
+ *   - cloneMouseControls (capy.js:581) – clone mouse controls.
+ *   - getMouseControls (capy.js:590) – get mouse controls.
+ *   - getMouseControlsForButton (capy.js:594) – get mouse controls for button.
+ *   - getMouseButtonName (capy.js:602) – get mouse button name.
+ *   - describeMouseButton (capy.js:608) – describe mouse button.
+ *   - describeMouseClickAction (capy.js:612) – describe mouse click action.
+ *   - describeMouseDragAction (capy.js:630) – describe mouse drag action.
+ *   - isInteractiveElementForZoomGuard (capy.js:644) – is interactive element for zoom guard.
+ *   - installBrowserZoomGuards (capy.js:655) – install browser zoom guards.
+ *   - createRenderCache (capy.js:860) – create render cache.
+ *   - ensureRenderCache (capy.js:884) – ensure render cache.
+ *   - paintRegionToFilledLayer (capy.js:911) – paint region to filled layer.
+ *   - markFilledLayerDirty (capy.js:918) – mark filled layer dirty.
+ *   - markOutlineLayerDirty (capy.js:925) – mark outline layer dirty.
+ *   - buildRegionGeometry (capy.js:931) – build region geometry.
+ *   - buildRegionContours (capy.js:959) – build region contours.
+ *   - computeOutlineStrokeWidth (capy.js:1073) – compute outline stroke width.
+ *   - clampViewPanToPuzzleBounds (capy.js:1137) – clamp view pan to puzzle bounds.
+ *   - invalidateCanvasRect (capy.js:1176) – invalidate canvas rect.
+ *   - getPuzzleCanvasRect (capy.js:1180) – get puzzle canvas rect.
+ *   - getDevicePixelRatio (capy.js:1196) – get device pixel ratio.
+ *   - computeDisplayScale (capy.js:1207) – compute display scale.
+ *   - updateCanvasMetrics (capy.js:1235) – update canvas metrics.
+ *   - applyCanvasSizing (capy.js:1251) – apply canvas sizing.
+ *   - ensureCanvasMetricsInitialized (capy.js:1267) – ensure canvas metrics initialized.
+ *   - withRenderScale (capy.js:1274) – with render scale.
+ *   - clearContext (capy.js:1285) – clear context.
+ *   - syncCacheMetrics (capy.js:1293) – sync cache metrics.
+ *   - syncSettingsSheetSize (capy.js:1388) – sync settings sheet size.
+ *   - syncCommandRailMetrics (capy.js:1409) – sync command rail metrics.
+ *   - scheduleCommandRailMetricsSync (capy.js:1436) – schedule command rail metrics sync.
+ *   - getLauncherSizeEstimate (capy.js:1453) – get launcher size estimate.
+ *   - clampLauncherPixels (capy.js:1465) – clamp launcher pixels.
+ *   - normalizeLauncherPositionFromPixels (capy.js:1482) – normalize launcher position from pixels.
+ *   - resolveLauncherPixels (capy.js:1495) – resolve launcher pixels.
+ *   - applySettingsLauncherPosition (capy.js:1505) – apply settings launcher position.
+ *   - clampSettingsSheetPosition (capy.js:1520) – clamp settings sheet position.
+ *   - setSettingsSheetPosition (capy.js:1543) – set settings sheet position.
+ *   - ensureSettingsSheetPosition (capy.js:1556) – ensure settings sheet position.
+ *   - detachSceneLoaderSubscription (capy.js:1616) – detach scene loader subscription.
+ *   - logRendererEvent (capy.js:1662) – log renderer event.
+ *   - handleRendererChange (capy.js:1673) – handle renderer change.
+ *   - registerRendererControls (capy.js:1678) – register renderer controls.
+ *   - disableSampleAutoload (capy.js:1722) – disable sample autoload.
+ *   - maybeAutoLoadSample (capy.js:1726) – maybe auto load sample.
+ *   - getDefaultGameTitle (capy.js:1767) – get default game title.
+ *   - getDefaultGameDescription (capy.js:1779) – get default game description.
+ *   - getSampleArtwork (capy.js:1791) – get sample artwork.
+ *   - getSampleDataUrl (capy.js:1795) – get sample data url.
+ *   - getSampleTitle (capy.js:1804) – get sample title.
+ *   - getSampleDescription (capy.js:1813) – get sample description.
+ *   - applyDefaultGameMetadata (capy.js:1822) – apply default game metadata.
+ *   - applySampleArtwork (capy.js:1846) – apply sample artwork.
+ *   - normalizeSampleArtwork (capy.js:1855) – normalize sample artwork.
+ *   - fetchDefaultGamePayload (capy.js:1878) – async fetch default game payload.
+ *   - normalizeRendererType (capy.js:1947) – normalize renderer type.
+ *   - formatRendererLabel (capy.js:1953) – format renderer label.
+ *   - updateRendererModeAvailability (capy.js:1962) – update renderer mode availability.
+ *   - applyRendererMode (capy.js:1972) – apply renderer mode.
+ *   - applyGameplaySettings (capy.js:1997) – apply gameplay settings.
+ *   - requestUpload (capy.js:2509) – async request upload.
+ *   - handleSettingsJsonImport (capy.js:2528) – handle settings json import.
+ *   - beginSettingsLauncherDrag (capy.js:2586) – begin settings launcher drag.
+ *   - moveSettingsLauncher (capy.js:2606) – move settings launcher.
+ *   - endSettingsLauncherDrag (capy.js:2624) – end settings launcher drag.
+ *   - hasFiles (capy.js:3169) – has files.
+ *   - getRegionAtPoint (capy.js:3263) – get region at point.
+ *   - getRegionFromEvent (capy.js:3290) – get region from event.
+ *   - maybeShowRegionHint (capy.js:3358) – maybe show region hint.
+ *   - attemptFillRegion (capy.js:3393) – attempt fill region.
+ *   - setSettingsSheetOpenState (capy.js:3616) – set settings sheet open state.
+ *   - openSheet (capy.js:3624) – open sheet.
+ *   - beginSettingsSheetDrag (capy.js:3644) – begin settings sheet drag.
+ *   - moveSettingsSheet (capy.js:3664) – move settings sheet.
+ *   - endSettingsSheetDrag (capy.js:3673) – end settings sheet drag.
+ *   - closeSheet (capy.js:3686) – close sheet.
+ *   - showSettingsSheet (capy.js:3702) – show settings sheet.
+ *   - showStartScreen (capy.js:3718) – show start screen.
+ *   - hideStartScreen (capy.js:3740) – hide start screen.
+ *   - updatePreviewState (capy.js:3746) – update preview state.
+ *   - updateFullscreenState (capy.js:3775) – update fullscreen state.
+ *   - toggleFullscreen (capy.js:3793) – toggle fullscreen.
+ *   - syncComputedUiScale (capy.js:3815) – sync computed ui scale.
+ *   - updateViewportMetrics (capy.js:3843) – update viewport metrics.
+ *   - handleViewportChange (capy.js:3890) – handle viewport change.
+ *   - loadSamplePuzzle (capy.js:3928) – load sample puzzle.
+ *   - loadDefaultPuzzle (capy.js:3966) – async load default puzzle.
+ *   - updateCommandStates (capy.js:4012) – update command states.
+ *   - renderDebugLog (capy.js:4024) – render debug log.
+ *   - recordTelemetryEvent (capy.js:4052) – record telemetry event.
+ *   - trackExceptionEvent (capy.js:4061) – track exception event.
+ *   - trackPerformanceMetrics (capy.js:4081) – track performance metrics.
+ *   - recordUserEvent (capy.js:4103) – record user event.
+ *   - createPerformanceMetrics (capy.js:4110) – create performance metrics.
+ *   - normalizeMetadata (capy.js:4137) – normalize metadata.
+ *   - pushEvent (capy.js:4156) – push event.
+ *   - maybeFlush (capy.js:4164) – maybe flush.
+ *   - recordDuration (capy.js:4174) – record duration.
+ *   - start (capy.js:4218) – start.
+ *   - mark (capy.js:4247) – mark.
+ *   - buildSummary (capy.js:4258) – build summary.
+ *   - flush (capy.js:4297) – flush.
+ *   - resetMetrics (capy.js:4308) – reset metrics.
+ *   - logDebug (capy.js:4328) – log debug.
+ *   - hideGlobalErrorNotice (capy.js:4348) – hide global error notice.
+ *   - showGlobalErrorNotice (capy.js:4353) – show global error notice.
+ *   - extractStackFromValue (capy.js:4382) – extract stack from value.
+ *   - deriveStackFromArgs (capy.js:4395) – derive stack from args.
+ *   - deriveStackFromEvent (capy.js:4408) – derive stack from event.
+ *   - formatConsoleValue (capy.js:4412) – format console value.
+ *   - joinConsoleArguments (capy.js:4439) – join console arguments.
+ *   - installConsoleErrorForwarder (capy.js:4455) – install console error forwarder.
+ *   - recordErrorEvent (capy.js:4501) – record error event.
+ *   - activateSettingsTab (capy.js:4560) – activate settings tab.
+ *   - scrollSettingsPanelIntoView (capy.js:4593) – scroll settings panel into view.
+ *   - resolveUiScalePreset (capy.js:4622) – resolve ui scale preset.
+ *   - scrollUiScaleControlIntoView (capy.js:4640) – keep ui scale control visible.
+ *   - applyUiScale (capy.js:4661) – apply ui scale.
+ *   - applyMaxZoom (capy.js:4700) – apply max zoom.
+ *   - applyLabelScale (capy.js:4706) – apply label scale.
+ *   - updateChatGptLink (capy.js:4741) – update chat gpt link.
+ *   - applyImageDescription (capy.js:4753) – apply image description.
+ *   - applyArtPrompt (capy.js:4779) – apply art prompt.
+ *   - applyRegionLabelVisibility (capy.js:4800) – apply region label visibility.
+ *   - applyTheme (capy.js:4823) – apply theme.
+ *   - applyBackgroundColor (capy.js:4852) – apply background color.
+ *   - applyStageBackgroundColor (capy.js:4911) – apply stage background color.
+ *   - resolveSourceImageLimit (capy.js:4942) – resolve source image limit.
+ *   - formatSourceImageLimitLabel (capy.js:4956) – format source image limit label.
+ *   - updateOptionOutputs (capy.js:4967) – update option outputs.
+ *   - formatSliderDefaultValue (capy.js:5030) – format slider default value.
+ *   - normalizeGenerationAlgorithm (capy.js:5077) – normalize generation algorithm.
+ *   - hydrateAlgorithmOptions (capy.js:5087) – hydrate algorithm options.
+ *   - markOptionsDirty (capy.js:5142) – mark options dirty.
+ *   - getCurrentOptions (capy.js:5167) – get current options.
+ *   - regenerateFromSource (capy.js:5182) – regenerate from source.
+ *   - isJsonFile (capy.js:5187) – is json file.
+ *   - describeImportIntent (capy.js:5198) – describe import intent.
+ *   - shouldAutoImport (capy.js:5225) – should auto import.
+ *   - updateImportNotice (capy.js:5229) – update import notice.
+ *   - clearPendingImport (capy.js:5278) – clear pending import.
+ *   - normalizeExternalImageUrl (capy.js:5284) – normalize external image url.
+ *   - deriveSourceTitleFromUrl (capy.js:5303) – derive source title from url.
+ *   - clearSourceUrlError (capy.js:5330) – clear source url error.
+ *   - showSourceUrlError (capy.js:5340) – show source url error.
+ *   - updateSourceUrlSubmitState (capy.js:5347) – update source url submit state.
+ *   - handleSourceImageUrl (capy.js:5362) – handle source image url.
+ *   - openLocalFileWithPicker (capy.js:5402) – async open local file with picker.
+ *   - prepareImport (capy.js:5448) – prepare import.
+ *   - executePendingImport (capy.js:5472) – execute pending import.
+ *   - handleFile (capy.js:5484) – async handle file.
+ *   - loadImage (capy.js:5572) – load image.
+ *   - resetPuzzleUI (capy.js:5751) – reset puzzle ui.
+ *   - loadPuzzleGenerationModule (capy.js:5788) – load puzzle generation module.
+ *   - createPuzzleData (capy.js:5795) – async create puzzle data.
+ *   - resolvePaletteEntrySnapshot (capy.js:5808) – resolve palette entry snapshot.
+ *   - encodeCompactPaletteEntry (capy.js:5869) – encode compact palette entry.
+ *   - resolveRegionEntrySnapshot (capy.js:5893) – resolve region entry snapshot.
+ *   - encodeCompactRegionEntry (capy.js:5936) – encode compact region entry.
+ *   - decodeFilledRegionList (capy.js:5952) – decode filled region list.
+ *   - resolveFilledRegions (capy.js:5994) – resolve filled regions.
+ *   - isProbablyDataUrl (capy.js:6019) – is probably data url.
+ *   - estimateDataUrlBytes (capy.js:6026) – estimate data url bytes.
+ *   - normalizeSourceImageSnapshot (capy.js:6042) – normalize source image snapshot.
+ *   - toBinaryByteView (capy.js:6186) – to binary byte view.
+ *   - cloneSerializable (capy.js:6199) – clone serializable.
+ *   - normalizeVectorSceneSnapshot (capy.js:6210) – normalize vector scene snapshot.
+ *   - resolveVectorSceneBinaryBuffer (capy.js:6234) – resolve vector scene binary buffer.
+ *   - hydrateSourceImageSnapshot (capy.js:6263) – hydrate source image snapshot.
+ *   - buildGeneratedSourceImageSnapshot (capy.js:6324) – build generated source image snapshot.
+ *   - applyPuzzleResult (capy.js:6385) – apply puzzle result.
+ *   - loadPuzzleFixtureData (capy.js:6674) – load puzzle fixture data.
+ *   - renderPreview (capy.js:6701) – render preview.
+ *   - renderPreviewImage (capy.js:6714) – render preview image.
+ *   - renderPuzzle (capy.js:6749) – render puzzle.
+ *   - buildRegionLabelProps (capy.js:6827) – build region label props.
+ *   - drawNumbers (capy.js:6985) – draw numbers.
+ *   - computeLabelSettingsSignature (capy.js:7066) – compute label settings signature.
+ *   - computeRegionLabelFontSize (capy.js:7087) – compute region label font size.
+ *   - computeRegionLabelStrokeWidth (capy.js:7139) – compute region label stroke width.
+ *   - getRegionLabelText (capy.js:7144) – get region label text.
+ *   - getRegionCenter (capy.js:7169) – get region center.
+ *   - ensureRegionBounds (capy.js:7188) – ensure region bounds.
+ *   - calculateRegionBounds (capy.js:7197) – calculate region bounds.
+ *   - measureLabelMetrics (capy.js:7226) – measure label metrics.
+ *   - getMeasurementContext (capy.js:7266) – get measurement context.
+ *   - findRegionLabelAnchor (capy.js:7297) – find region label anchor.
+ *   - findRegionLabelAnchorPolylabel (capy.js:7330) – find region label anchor polylabel.
+ *   - findRegionLabelAnchorLegacy (capy.js:7406) – find region label anchor legacy.
+ *   - resolvePolylabelPrecision (capy.js:7538) – resolve polylabel precision.
+ *   - ensureRegionVisualCenter (capy.js:7547) – ensure region visual center.
+ *   - ensureRegionLabelPolygon (capy.js:7568) – ensure region label polygon.
+ *   - buildRegionLabelPolygon (capy.js:7597) – build region label polygon.
+ *   - normalizePolygonRing (capy.js:7700) – normalize polygon ring.
+ *   - polygonArea (capy.js:7728) – polygon area.
+ *   - pointsEqual (capy.js:7741) – points equal.
+ *   - computeRegionPolylabel (capy.js:7750) – compute region polylabel.
+ *   - createPolylabelCell (capy.js:7832) – create polylabel cell.
+ *   - getCentroidPolylabelCell (capy.js:7844) – get centroid polylabel cell.
+ *   - pointToPolygonDistance (capy.js:7871) – point to polygon distance.
+ *   - pointToSegmentDistanceSquared (capy.js:7897) – point to segment distance squared.
+ *   - createPolylabelMaxHeap (capy.js:7917) – create polylabel max heap.
+ *   - isEmpty (capy.js:7920) – is empty.
+ *   - push (capy.js:7924) – push.
+ *   - pop (capy.js:7930) – pop.
+ *   - siftUp (capy.js:7941) – sift up.
+ *   - siftDown (capy.js:7953) – sift down.
+ *   - rectangleFitsRegion (capy.js:7977) – rectangle fits region.
+ *   - estimateAnchorSlack (capy.js:7993) – estimate anchor slack.
+ *   - scrollPaletteToColor (capy.js:8018) – scroll palette to color.
+ *   - activateColor (capy.js:8054) – activate color.
+ *   - resolvePaletteSortMode (capy.js:8081) – resolve palette sort mode.
+ *   - getPaletteEntryOrder (capy.js:8094) – get palette entry order.
+ *   - renderPalette (capy.js:8255) – render palette.
+ *   - getColorDisplayNumber (capy.js:8313) – get color display number.
+ *   - describeColour (capy.js:8337) – describe colour.
+ *   - handlePaletteWheel (capy.js:8351) – handle palette wheel.
+ *   - updateGenerationProgress (capy.js:8374) – update generation progress.
  *
  * Additional notes for new contributors:
  * - The runtime bootstraps immediately; the `capyRuntime` object is the main entry for renderer + metrics hooks.
@@ -504,43 +276,11 @@ const capyConstants = (() => {
     DEFAULT_UI_SCALE: 1,
     MIN_UI_SCALE: 0.25,
     MAX_UI_SCALE: 4,
+    MIN_VIEWPORT_ZOOM: 1,
+    DEFAULT_MAX_VIEWPORT_ZOOM: 4,
+    MIN_CONFIGURABLE_MAX_ZOOM: 1,
+    MAX_CONFIGURABLE_MAX_ZOOM: 16,
     UI_SCALE_PRESETS: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4],
-    DISABLED_SETTINGS: new Set([
-      "settings-guide",
-      "settings-feedback",
-      "settings-report-issue",
-      "settings-share",
-      "settings-capy-saves",
-      "settings-load-saves",
-      "settings-save-settings",
-      "settings-load-settings",
-      "settings-save-ui-kit",
-      "settings-load-ui-kit",
-      "settings-json-view",
-      "settings-json-import",
-      "settings-region-merge-passes",
-      "settings-perimeter-to-area-ratio",
-      "settings-hint-visibility",
-      "settings-auto-advance",
-      "settings-hint-animations",
-      "settings-hint-matching",
-      "settings-hint-hover",
-      "settings-difficulty",
-      "settings-hint-fade",
-      "settings-hint-intensity",
-      "settings-ui-scale",
-      "settings-label-scale",
-      "settings-max-zoom",
-      "settings-image-description",
-      "settings-art-prompt",
-      "settings-region-labels",
-      "settings-theme",
-      "settings-mouse-controls",
-      "settings-palette-sort",
-      "settings-launcher-position",
-      "background-colour",
-      "stage-background-colour",
-    ]),
     DEFAULT_BACKGROUND_HEX: "#f8fafc",
     DEFAULT_STAGE_BACKGROUND_HEX: "#000000",
     DEFAULT_LAUNCHER_POSITION: { x: 0.92, y: 0.08 },
@@ -1196,2322 +936,6 @@ export { capyGlobal as capy, capyConstants };
   globalThis.capyTemplates = capyTemplates;
 })();
 
-(() => {
-
-  const { createVectorScenePayload, createVectorSceneLoader } = globalThis.capyRenderer || {};
-  if (typeof createVectorScenePayload !== "function") {
-    return;
-  }
-
-  const GENERATION_STAGE_MESSAGES = {
-    prepare: "Preparing image…",
-    quantize: "Quantizing colours",
-    smooth: "Smoothing regions",
-    smoothSkip: "Skipping smoothing",
-    segment: "Segmenting regions",
-    finalize: "Finalizing metadata",
-    complete: "Generation complete",
-  };
-
-  const DEFAULT_GENERATION_ALGORITHM = "local-kmeans";
-  const DEFAULT_SOURCE_IMAGE_MAX_BYTES = 1048576;
-  const SOURCE_IMAGE_VARIANT_ORIGINAL = "original";
-  const DEFAULT_REGION_MERGE_PASSES = 12;
-  const DEFAULT_MAX_PERIMETER_TO_AREA_RATIO = 1.6;
-
-  const GENERATION_ALGORITHMS = {
-    "local-kmeans": {
-      id: "local-kmeans",
-      label: "Local palette clustering (k-means)",
-      mode: "local",
-    },
-    "local-posterize": {
-      id: "local-posterize",
-      label: "Local posterize & merge",
-      mode: "local",
-    },
-    "organic-slic": {
-      id: "organic-slic",
-      label: "Organic superpixels (curved gradients)",
-      mode: "local",
-    },
-  };
-
-  const GENERATION_ALGORITHM_CATALOG = Object.freeze(
-    Object.values(GENERATION_ALGORITHMS).map(({ id, label, mode }) => ({ id, label, mode }))
-  );
-
-  const DEFAULT_GENERATION_ALGORITHM_ID = DEFAULT_GENERATION_ALGORITHM;
-
-  let generationWorkerInstance = null;
-  let generationWorkerUrl = null;
-
-  const now =
-    typeof performance !== "undefined" && typeof performance.now === "function"
-      ? () => performance.now()
-      : () => Date.now();
-
-  function clamp(value, min, max) {
-    if (Number.isNaN(value)) return min;
-    if (value < min) return min;
-    if (value > max) return max;
-    return value;
-  }
-
-  function normalizeAlgorithm(value) {
-    if (typeof value === "string") {
-      const key = value.trim();
-      switch (key) {
-        case "local-kmeans":
-        case "local-posterize":
-        case "organic-slic":
-          return key;
-        default:
-          break;
-      }
-    }
-    return DEFAULT_GENERATION_ALGORITHM;
-  }
-
-  function toHex(value) {
-    return value.toString(16).padStart(2, "0");
-  }
-
-  function accumulate(counter, touchedColors, color, weight = 1, touchedCount = 0) {
-    if (color < 0 || !Number.isFinite(color)) {
-      return touchedCount;
-    }
-    if (color >= counter.length) {
-      return touchedCount;
-    }
-    const amount = Number.isFinite(weight) ? weight : 0;
-    if (amount === 0) {
-      return touchedCount;
-    }
-    if (counter[color] === 0) {
-      touchedColors[touchedCount++] = color;
-    }
-    counter[color] += amount;
-    return touchedCount;
-  }
-
-  function floodFill(width, height, indexMap) {
-    const regionMap = new Int32Array(width * height);
-    regionMap.fill(-1);
-    const regions = [];
-    let regionId = 0;
-    const stack = [];
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const startIdx = y * width + x;
-        if (regionMap[startIdx] !== -1) continue;
-        const colorId = indexMap[startIdx];
-        stack.push(startIdx);
-        regionMap[startIdx] = regionId;
-        const pixels = [];
-        while (stack.length) {
-          const idx = stack.pop();
-          pixels.push(idx);
-          const px = idx % width;
-          const py = (idx / width) | 0;
-          if (px > 0) {
-            const n = idx - 1;
-            if (regionMap[n] === -1 && indexMap[n] === colorId) {
-              regionMap[n] = regionId;
-              stack.push(n);
-            }
-          }
-          if (px < width - 1) {
-            const n = idx + 1;
-            if (regionMap[n] === -1 && indexMap[n] === colorId) {
-              regionMap[n] = regionId;
-              stack.push(n);
-            }
-          }
-          if (py > 0) {
-            const n = idx - width;
-            if (regionMap[n] === -1 && indexMap[n] === colorId) {
-              regionMap[n] = regionId;
-              stack.push(n);
-            }
-          }
-          if (py < height - 1) {
-            const n = idx + width;
-            if (regionMap[n] === -1 && indexMap[n] === colorId) {
-              regionMap[n] = regionId;
-              stack.push(n);
-            }
-          }
-        }
-        regions.push({
-          id: regionId,
-          colorId,
-          pixels,
-          pixelCount: pixels.length,
-        });
-        regionId += 1;
-      }
-    }
-    return { regionMap, regions };
-  }
-
-  function segmentRegions(width, height, assignments, options) {
-    const indexMap = new Uint16Array(assignments);
-    let minRegion = 1;
-    let maxMergePasses = DEFAULT_REGION_MERGE_PASSES;
-    let maxPerimeterToAreaRatio = DEFAULT_MAX_PERIMETER_TO_AREA_RATIO;
-    if (Number.isFinite(options)) {
-      minRegion = Math.max(1, options);
-    } else if (options && typeof options === "object") {
-      minRegion = Math.max(1, Number(options.minRegion) || 1);
-      const mergePassesCandidate = Number(options.maxMergePasses);
-      maxMergePasses = Math.max(
-        1,
-        Number.isFinite(mergePassesCandidate) ? mergePassesCandidate : DEFAULT_REGION_MERGE_PASSES
-      );
-      const perimeterCandidate = Number(options.maxPerimeterToAreaRatio);
-      maxPerimeterToAreaRatio = Math.max(
-        0,
-        Number.isFinite(perimeterCandidate)
-          ? perimeterCandidate
-          : DEFAULT_MAX_PERIMETER_TO_AREA_RATIO
-      );
-    }
-    let maxColorId = 0;
-    for (let i = 0; i < indexMap.length; i++) {
-      if (indexMap[i] > maxColorId) {
-        maxColorId = indexMap[i];
-      }
-    }
-    const paletteSize = Math.max(1, maxColorId + 1);
-    const neighborCounter = new Uint32Array(paletteSize);
-    const touchedColors = new Uint16Array(paletteSize);
-    let threshold = Math.max(1, minRegion);
-    let mergePass = 0;
-    let lastSegmentation = null;
-
-    while (mergePass < maxMergePasses) {
-      const segmentation = floodFill(width, height, indexMap);
-      const { regionMap, regions } = segmentation;
-      lastSegmentation = segmentation;
-      const perimeters =
-        maxPerimeterToAreaRatio > 0 ? new Uint32Array(Math.max(1, regions.length)) : null;
-      if (perimeters && maxPerimeterToAreaRatio > 0) {
-        for (let idx = 0; idx < regionMap.length; idx++) {
-          const regionId = regionMap[idx];
-          if (regionId < 0) continue;
-          const x = idx % width;
-          const y = (idx / width) | 0;
-          if (x === 0 || regionMap[idx - 1] !== regionId) {
-            perimeters[regionId] += 1;
-          }
-          if (x === width - 1 || regionMap[idx + 1] !== regionId) {
-            perimeters[regionId] += 1;
-          }
-          if (y === 0 || regionMap[idx - width] !== regionId) {
-            perimeters[regionId] += 1;
-          }
-          if (y === height - 1 || regionMap[idx + width] !== regionId) {
-            perimeters[regionId] += 1;
-          }
-        }
-      }
-
-      const candidates = [];
-      for (const region of regions) {
-        const slender =
-          perimeters && region.pixelCount > 0
-            ? perimeters[region.id] / region.pixelCount >= maxPerimeterToAreaRatio
-            : false;
-        if (region.pixelCount < threshold || slender) {
-          candidates.push(region);
-        }
-      }
-
-      if (candidates.length === 0 && threshold <= 1) {
-        break;
-      }
-
-      let changed = false;
-      for (const region of candidates) {
-        let touchedCount = 0;
-        for (const idx of region.pixels) {
-          const x = idx % width;
-          const y = (idx / width) | 0;
-          if (x > 0) {
-            const n = idx - 1;
-            const color = indexMap[n];
-            if (color !== region.colorId) {
-              touchedCount = accumulate(
-                neighborCounter,
-                touchedColors,
-                color,
-                1,
-                touchedCount
-              );
-            }
-          }
-          if (x < width - 1) {
-            const n = idx + 1;
-            const color = indexMap[n];
-            if (color !== region.colorId) {
-              touchedCount = accumulate(
-                neighborCounter,
-                touchedColors,
-                color,
-                1,
-                touchedCount
-              );
-            }
-          }
-          if (y > 0) {
-            const n = idx - width;
-            const color = indexMap[n];
-            if (color !== region.colorId) {
-              touchedCount = accumulate(
-                neighborCounter,
-                touchedColors,
-                color,
-                1,
-                touchedCount
-              );
-            }
-          }
-          if (y < height - 1) {
-            const n = idx + width;
-            const color = indexMap[n];
-            if (color !== region.colorId) {
-              touchedCount = accumulate(
-                neighborCounter,
-                touchedColors,
-                color,
-                1,
-                touchedCount
-              );
-            }
-          }
-        }
-        if (touchedCount === 0) {
-          continue;
-        }
-        let bestColor = region.colorId;
-        let bestVotes = -1;
-        for (let i = 0; i < touchedCount; i++) {
-          const color = touchedColors[i];
-          const votes = neighborCounter[color];
-          if (votes > bestVotes) {
-            bestVotes = votes;
-            bestColor = color;
-          }
-        }
-        if (bestColor !== region.colorId) {
-          changed = true;
-          for (const idx of region.pixels) {
-            indexMap[idx] = bestColor;
-          }
-        }
-        for (let i = 0; i < touchedCount; i++) {
-          neighborCounter[touchedColors[i]] = 0;
-        }
-      }
-
-      mergePass += 1;
-      if (!changed) {
-        const nextThreshold = Math.max(1, Math.floor(threshold / 2));
-        if (nextThreshold === threshold) {
-          break;
-        }
-        threshold = nextThreshold;
-      }
-    }
-
-    return lastSegmentation || floodFill(width, height, indexMap);
-  }
-
-  function finalizeGeneratedRegions(regions, width) {
-    if (!Array.isArray(regions)) {
-      return;
-    }
-    for (const region of regions) {
-      const hasPixels = Array.isArray(region.pixels) && region.pixels.length > 0;
-      const count =
-        typeof region.pixelCount === "number" && Number.isFinite(region.pixelCount)
-          ? region.pixelCount
-          : hasPixels
-          ? region.pixels.length
-          : 0;
-      if (hasPixels && count > 0) {
-        let sumX = 0;
-        let sumY = 0;
-        for (const idx of region.pixels) {
-          sumX += idx % width;
-          sumY += (idx / width) | 0;
-        }
-        region.cx = sumX / count;
-        region.cy = sumY / count;
-      } else {
-        region.cx = 0;
-        region.cy = 0;
-      }
-      region.colorId += 1;
-    }
-  }
-
-  function serializeAssignments(pixels, centroids) {
-    const assignments = new Uint16Array(pixels.length / 4);
-    for (let i = 0; i < assignments.length; i++) {
-      const base = i * 4;
-      let best = 0;
-      let bestDist = Infinity;
-      for (let c = 0; c < centroids.length; c++) {
-        const centroid = centroids[c];
-        const dr = pixels[base] - centroid[0];
-        const dg = pixels[base + 1] - centroid[1];
-        const db = pixels[base + 2] - centroid[2];
-        const dist = dr * dr + dg * dg + db * db;
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = c;
-        }
-      }
-      assignments[i] = best;
-    }
-    return assignments;
-  }
-
-  function kmeansQuantize(pixels, width, height, targetColors, iterations, sampleRate) {
-    const totalPixels = width * height;
-    const sampleCount = Math.max(targetColors * 4, Math.floor(totalPixels * clamp(sampleRate, 0.05, 1)));
-    const sampleIndexes = new Uint32Array(Math.min(sampleCount, totalPixels));
-    const step = Math.max(1, Math.floor(totalPixels / sampleIndexes.length));
-    let pointer = 0;
-    for (let idx = 0; idx < totalPixels && pointer < sampleIndexes.length; idx += step) {
-      sampleIndexes[pointer++] = idx;
-    }
-    while (pointer < sampleIndexes.length) {
-      sampleIndexes[pointer++] = Math.floor(Math.random() * totalPixels);
-    }
-    const centroids = [];
-    for (let i = 0; i < targetColors; i++) {
-      const sampleIdx = sampleIndexes[i % sampleIndexes.length];
-      const base = sampleIdx * 4;
-      centroids.push([
-        pixels[base],
-        pixels[base + 1],
-        pixels[base + 2],
-      ]);
-    }
-    const sums = new Array(targetColors).fill(null).map(() => [0, 0, 0, 0]);
-    for (let iter = 0; iter < iterations; iter++) {
-      for (let i = 0; i < targetColors; i++) {
-        sums[i][0] = 0;
-        sums[i][1] = 0;
-        sums[i][2] = 0;
-        sums[i][3] = 0;
-      }
-      for (let i = 0; i < sampleIndexes.length; i++) {
-        const idx = sampleIndexes[i];
-        const base = idx * 4;
-        let best = 0;
-        let bestDist = Infinity;
-        for (let c = 0; c < centroids.length; c++) {
-          const centroid = centroids[c];
-          const dr = pixels[base] - centroid[0];
-          const dg = pixels[base + 1] - centroid[1];
-          const db = pixels[base + 2] - centroid[2];
-          const dist = dr * dr + dg * dg + db * db;
-          if (dist < bestDist) {
-            bestDist = dist;
-            best = c;
-          }
-        }
-        sums[best][0] += pixels[base];
-        sums[best][1] += pixels[base + 1];
-        sums[best][2] += pixels[base + 2];
-        sums[best][3] += 1;
-      }
-      for (let c = 0; c < centroids.length; c++) {
-        const bucket = sums[c];
-        if (bucket[3] === 0) continue;
-        centroids[c][0] = bucket[0] / bucket[3];
-        centroids[c][1] = bucket[1] / bucket[3];
-        centroids[c][2] = bucket[2] / bucket[3];
-      }
-    }
-    const rounded = centroids.map((c) => c.map((value) => Math.round(value)));
-    const assignments = serializeAssignments(pixels, rounded);
-    return { centroids: rounded, assignments };
-  }
-
-  function posterizeQuantize(pixels, width, height, targetColors) {
-    const totalPixels = Math.max(1, width * height);
-    const quantizedKeys = new Uint32Array(totalPixels);
-    const buckets = new Map();
-    const normalizedTarget = Math.max(1, Math.floor(targetColors));
-    const levels = Math.max(1, Math.round(Math.cbrt(normalizedTarget)));
-
-    const quantizeChannel = (value) => {
-      if (levels <= 1) {
-        return clamp(value, 0, 255);
-      }
-      const steps = levels - 1;
-      const scaled = Math.round((clamp(value, 0, 255) / 255) * steps);
-      return clamp(Math.round((scaled / steps) * 255), 0, 255);
-    };
-
-    for (let i = 0; i < totalPixels; i++) {
-      const base = i * 4;
-      const r = quantizeChannel(pixels[base]);
-      const g = quantizeChannel(pixels[base + 1]);
-      const b = quantizeChannel(pixels[base + 2]);
-      const key = (r << 16) | (g << 8) | b;
-      quantizedKeys[i] = key;
-      let bucket = buckets.get(key);
-      if (!bucket) {
-        bucket = { r: 0, g: 0, b: 0, count: 0 };
-        buckets.set(key, bucket);
-      }
-      bucket.r += pixels[base];
-      bucket.g += pixels[base + 1];
-      bucket.b += pixels[base + 2];
-      bucket.count += 1;
-    }
-
-    const entries = Array.from(buckets.entries()).map(([key, bucket]) => ({
-      key,
-      count: bucket.count,
-      color: [
-        Math.round(bucket.r / bucket.count),
-        Math.round(bucket.g / bucket.count),
-        Math.round(bucket.b / bucket.count),
-      ],
-    }));
-
-    entries.sort((a, b) => b.count - a.count);
-    const paletteLimit = Math.max(1, Math.min(normalizedTarget, entries.length));
-    const selected = entries.slice(0, paletteLimit);
-    const centroids = selected.map((entry) => entry.color);
-
-    if (centroids.length === 0) {
-      centroids.push([0, 0, 0]);
-    }
-
-    const assignments = new Uint16Array(totalPixels);
-    const keyToIndex = new Map();
-    for (let idx = 0; idx < selected.length; idx++) {
-      keyToIndex.set(selected[idx].key, idx);
-    }
-
-    for (let i = 0; i < totalPixels; i++) {
-      const key = quantizedKeys[i];
-      let paletteIndex = keyToIndex.get(key);
-      if (paletteIndex == null) {
-        const base = i * 4;
-        let best = 0;
-        let bestDist = Infinity;
-        for (let c = 0; c < centroids.length; c++) {
-          const centroid = centroids[c];
-          const dr = pixels[base] - centroid[0];
-          const dg = pixels[base + 1] - centroid[1];
-          const db = pixels[base + 2] - centroid[2];
-          const dist = dr * dr + dg * dg + db * db;
-          if (dist < bestDist) {
-            bestDist = dist;
-            best = c;
-          }
-        }
-        paletteIndex = best;
-        keyToIndex.set(key, paletteIndex);
-      }
-      assignments[i] = paletteIndex;
-    }
-
-    return { centroids, assignments };
-  }
-
-  function organicQuantize(pixels, width, height, targetColors) {
-    const totalPixels = Math.max(1, width * height);
-    const clusterCount = Math.max(1, Math.round(targetColors));
-    const step = Math.max(4, Math.sqrt(totalPixels / clusterCount));
-    const centroids = [];
-    const halfStep = step / 2;
-    for (let y = halfStep; y < height && centroids.length < clusterCount; y += step) {
-      for (let x = halfStep; x < width && centroids.length < clusterCount; x += step) {
-        const px = Math.min(width - 1, Math.round(x));
-        const py = Math.min(height - 1, Math.round(y));
-        const base = (py * width + px) * 4;
-        centroids.push([
-          pixels[base],
-          pixels[base + 1],
-          pixels[base + 2],
-          px,
-          py,
-        ]);
-      }
-    }
-
-    while (centroids.length < clusterCount) {
-      const px = Math.floor(Math.random() * width);
-      const py = Math.floor(Math.random() * height);
-      const base = (py * width + px) * 4;
-      centroids.push([
-        pixels[base],
-        pixels[base + 1],
-        pixels[base + 2],
-        px,
-        py,
-      ]);
-    }
-
-    const labels = new Int32Array(totalPixels);
-    const distances = new Float32Array(totalPixels);
-    const spatialWeight = 10;
-    const iterations = 4;
-    const searchRadius = step * 2;
-
-    for (let iter = 0; iter < iterations; iter++) {
-      labels.fill(-1);
-      distances.fill(Infinity);
-      const sums = new Array(centroids.length).fill(null).map(() => [0, 0, 0, 0, 0, 0]);
-
-      for (let c = 0; c < centroids.length; c++) {
-        const [cr, cg, cb, cx, cy] = centroids[c];
-        const minX = Math.max(0, Math.floor(cx - searchRadius));
-        const maxX = Math.min(width - 1, Math.ceil(cx + searchRadius));
-        const minY = Math.max(0, Math.floor(cy - searchRadius));
-        const maxY = Math.min(height - 1, Math.ceil(cy + searchRadius));
-        for (let y = minY; y <= maxY; y++) {
-          const rowOffset = y * width;
-          for (let x = minX; x <= maxX; x++) {
-            const idx = rowOffset + x;
-            const base = idx * 4;
-            const dr = pixels[base] - cr;
-            const dg = pixels[base + 1] - cg;
-            const db = pixels[base + 2] - cb;
-            const colorDist = dr * dr + dg * dg + db * db;
-            const spatialDist = (x - cx) * (x - cx) + (y - cy) * (y - cy);
-            const distance = colorDist + (spatialWeight * spatialDist) / (step * step);
-            if (distance < distances[idx]) {
-              distances[idx] = distance;
-              labels[idx] = c;
-            }
-          }
-        }
-      }
-
-      for (let idx = 0; idx < totalPixels; idx++) {
-        const label = labels[idx];
-        if (label < 0) continue;
-        const base = idx * 4;
-        const bucket = sums[label];
-        bucket[0] += pixels[base];
-        bucket[1] += pixels[base + 1];
-        bucket[2] += pixels[base + 2];
-        bucket[3] += idx % width;
-        bucket[4] += (idx / width) | 0;
-        bucket[5] += 1;
-      }
-
-      for (let c = 0; c < centroids.length; c++) {
-        const bucket = sums[c];
-        if (bucket[5] === 0) continue;
-        centroids[c][0] = bucket[0] / bucket[5];
-        centroids[c][1] = bucket[1] / bucket[5];
-        centroids[c][2] = bucket[2] / bucket[5];
-        centroids[c][3] = bucket[3] / bucket[5];
-        centroids[c][4] = bucket[4] / bucket[5];
-      }
-    }
-
-    const rounded = centroids.map((c) => [
-      Math.round(clamp(c[0], 0, 255)),
-      Math.round(clamp(c[1], 0, 255)),
-      Math.round(clamp(c[2], 0, 255)),
-    ]);
-
-    const assignments = new Uint16Array(totalPixels);
-    for (let i = 0; i < totalPixels; i++) {
-      const label = labels[i];
-      assignments[i] = label >= 0 && label < rounded.length ? label : 0;
-    }
-
-    return { centroids: rounded, assignments };
-  }
-
-  function performQuantization(algorithm, pixels, width, height, options) {
-    const resolved = normalizeAlgorithm(algorithm);
-    switch (resolved) {
-      case "organic-slic":
-        return organicQuantize(pixels, width, height, options.targetColors);
-      case "local-posterize":
-        return posterizeQuantize(pixels, width, height, options.targetColors);
-      case "local-kmeans":
-      default:
-        return kmeansQuantize(
-          pixels,
-          width,
-          height,
-          options.targetColors,
-          options.kmeansIters,
-          options.sampleRate
-        );
-    }
-  }
-
-  function smoothAssignments(assignments, width, height, passes) {
-    let current = new Uint16Array(assignments);
-    const totalPixels = width * height;
-    if (passes <= 0 || totalPixels === 0) {
-      return current;
-    }
-
-    let maxPaletteIndex = 0;
-    for (let i = 0; i < current.length; i++) {
-      if (current[i] > maxPaletteIndex) {
-        maxPaletteIndex = current[i];
-      }
-    }
-    const counter = new Uint32Array(maxPaletteIndex + 1);
-    const touchedColors = new Uint16Array(5);
-
-    for (let pass = 0; pass < passes; pass++) {
-      const next = new Uint16Array(current.length);
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = y * width + x;
-          const baseColor = current[idx];
-          let touchedCount = 0;
-          touchedCount = accumulate(counter, touchedColors, baseColor, 2, touchedCount);
-          if (x > 0) touchedCount = accumulate(counter, touchedColors, current[idx - 1], 1, touchedCount);
-          if (x < width - 1) touchedCount = accumulate(counter, touchedColors, current[idx + 1], 1, touchedCount);
-          if (y > 0) touchedCount = accumulate(counter, touchedColors, current[idx - width], 1, touchedCount);
-          if (y < height - 1) touchedCount = accumulate(counter, touchedColors, current[idx + width], 1, touchedCount);
-          let bestColor = baseColor;
-          let bestScore = -Infinity;
-          for (let i = 0; i < touchedCount; i++) {
-            const color = touchedColors[i];
-            const score = counter[color];
-            if (score > bestScore) {
-              bestScore = score;
-              bestColor = color;
-            }
-          }
-          next[idx] = bestColor;
-          for (let i = 0; i < touchedCount; i++) {
-            counter[touchedColors[i]] = 0;
-          }
-        }
-      }
-      current = next;
-    }
-    return current;
-  }
-
-  function canvasToBlob(canvas, type, quality) {
-    if (!canvas) {
-      return Promise.resolve(null);
-    }
-    if (typeof canvas.convertToBlob === "function") {
-      return canvas
-        .convertToBlob({ type, quality })
-        .catch(() => null);
-    }
-    if (typeof canvas.toBlob === "function") {
-      return new Promise((resolve) => {
-        try {
-          canvas.toBlob(
-            (blob) => {
-              resolve(blob || null);
-            },
-            type,
-            quality
-          );
-        } catch (error) {
-          resolve(null);
-        }
-      });
-    }
-    return Promise.resolve(null);
-  }
-
-  function blobToDataUrl(blob) {
-    return new Promise((resolve, reject) => {
-      if (!blob) {
-        resolve(null);
-        return;
-      }
-      if (typeof FileReader !== "function") {
-        reject(new Error("FileReader unavailable"));
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        resolve(typeof reader.result === "string" ? reader.result : null);
-      };
-      reader.onerror = () => {
-        reject(reader.error || new Error("Failed to read blob"));
-      };
-      try {
-        reader.readAsDataURL(blob);
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
-
-  function estimateDataUrlBytes(dataUrl) {
-    if (typeof dataUrl !== "string") {
-      return null;
-    }
-    const commaIndex = dataUrl.indexOf(",");
-    if (commaIndex === -1) {
-      return null;
-    }
-    const payload = dataUrl.slice(commaIndex + 1);
-    if (!payload) {
-      return 0;
-    }
-    const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
-    return Math.max(0, Math.floor(payload.length / 4) * 3 - padding);
-  }
-
-  function resizeCanvas(sourceCanvas, scale) {
-    if (!sourceCanvas || !Number.isFinite(scale) || scale <= 0) {
-      return sourceCanvas;
-    }
-    if (scale === 1) {
-      return sourceCanvas;
-    }
-    const width = Math.max(1, Math.round(sourceCanvas.width * scale));
-    const height = Math.max(1, Math.round(sourceCanvas.height * scale));
-    if (width === sourceCanvas.width && height === sourceCanvas.height) {
-      return sourceCanvas;
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      return sourceCanvas;
-    }
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(sourceCanvas, 0, 0, width, height);
-    return canvas;
-  }
-
-  async function compressCanvasImage(canvas, options = {}) {
-    if (!canvas) {
-      return null;
-    }
-    const maxBytes = Number.isFinite(options.maxBytes) && options.maxBytes > 0 ? options.maxBytes : null;
-    const qualityLevels = maxBytes
-      ? [0.92, 0.82, 0.72, 0.62, 0.52, 0.42, 0.32, 0.25, 0.18, 0.1]
-      : [0.92];
-    const scaleLevels = maxBytes ? [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4] : [1];
-    const formats = ["image/png", "image/webp", "image/jpeg"];
-    let best = null;
-    for (const scale of scaleLevels) {
-      const workingCanvas = scale === 1 ? canvas : resizeCanvas(canvas, scale);
-      if (!workingCanvas) {
-        continue;
-      }
-      for (const type of formats) {
-        for (const quality of qualityLevels) {
-          let dataUrl = null;
-          let blob = null;
-          try {
-            blob = await canvasToBlob(workingCanvas, type, quality);
-          } catch (error) {
-            blob = null;
-          }
-          if (blob) {
-            try {
-              dataUrl = await blobToDataUrl(blob);
-            } catch (error) {
-              dataUrl = null;
-            }
-          }
-          if (!dataUrl) {
-            try {
-              dataUrl = workingCanvas.toDataURL(type, quality);
-            } catch (error) {
-              dataUrl = null;
-            }
-          }
-          if (!dataUrl) {
-            continue;
-          }
-          const mimeType = blob?.type || (/^data:([^;,]+)[;,]/.exec(dataUrl)?.[1] || type);
-          const bytes = blob?.size ?? estimateDataUrlBytes(dataUrl);
-          const candidate = {
-            dataUrl,
-            mimeType: mimeType || type,
-            bytes: Number.isFinite(bytes) ? bytes : null,
-            width: workingCanvas.width,
-            height: workingCanvas.height,
-            scale,
-          };
-          if (!maxBytes) {
-            const candidateBytes = candidate.bytes;
-            const bestBytes = best?.bytes;
-            const candidateBeatsBest =
-              candidateBytes != null && (bestBytes == null || candidateBytes > bestBytes);
-            if (!best || candidateBeatsBest) {
-              best = candidate;
-            }
-            continue;
-          }
-          if (
-            !best ||
-            (candidate.bytes != null && (best.bytes == null || candidate.bytes < best.bytes))
-          ) {
-            best = candidate;
-          }
-          if (candidate.bytes != null && candidate.bytes <= maxBytes) {
-            return candidate;
-          }
-        }
-      }
-    }
-    return best;
-  }
-
-  async function readImageFromBlob(blob) {
-    if (!(blob instanceof Blob)) {
-      return null;
-    }
-    const objectUrl = URL.createObjectURL(blob);
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        URL.revokeObjectURL(objectUrl);
-        resolve({
-          image: img,
-          width: img.naturalWidth || img.width,
-          height: img.naturalHeight || img.height,
-        });
-      };
-      img.onerror = (error) => {
-        URL.revokeObjectURL(objectUrl);
-        reject(error instanceof Error ? error : new Error("Unable to read source image"));
-      };
-      img.src = objectUrl;
-    });
-  }
-
-  async function dataUrlToBlob(dataUrl, fallbackType = "image/png") {
-    if (typeof dataUrl !== "string" || !dataUrl) {
-      return null;
-    }
-    try {
-      const response = await fetch(dataUrl);
-      if (!response || !response.ok) {
-        return null;
-      }
-      const blob = await response.blob();
-      if (blob && blob.type) {
-        return blob;
-      }
-      const buffer = await response.arrayBuffer();
-      return new Blob([buffer], { type: fallbackType });
-    } catch (error) {
-      return null;
-    }
-  }
-
-  async function prepareSourceImageBlob(blob, options = {}) {
-    if (!(blob instanceof Blob)) {
-      return null;
-    }
-    const maxBytes = Number.isFinite(options.maxBytes) && options.maxBytes > 0 ? options.maxBytes : null;
-    const maxSize = Number.isFinite(options.maxSize) && options.maxSize > 0 ? options.maxSize : null;
-    const baseBytes = typeof blob.size === "number" && blob.size > 0 ? blob.size : null;
-    const needsSizeCheck = maxBytes != null && baseBytes != null && baseBytes > maxBytes;
-    if (!needsSizeCheck && !maxSize) {
-      return {
-        blob,
-        bytes: baseBytes,
-        mimeType: blob.type || null,
-        width: null,
-        height: null,
-      };
-    }
-    const imagePayload = await readImageFromBlob(blob);
-    if (!imagePayload || !imagePayload.image) {
-      return null;
-    }
-    const sourceWidth = imagePayload.width || imagePayload.image.width || 0;
-    const sourceHeight = imagePayload.height || imagePayload.image.height || 0;
-    const scale = maxSize
-      ? Math.min(maxSize / sourceWidth, maxSize / sourceHeight, 1)
-      : 1;
-    const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
-    const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) {
-      return null;
-    }
-    ctx.drawImage(imagePayload.image, 0, 0, targetWidth, targetHeight);
-    const compressed = await compressCanvasImage(canvas, { maxBytes: maxBytes || undefined });
-    if (!compressed || !compressed.dataUrl) {
-      return null;
-    }
-    if (maxBytes && compressed.bytes != null && compressed.bytes > maxBytes) {
-      return { error: "limit" };
-    }
-    const processedBlob = await dataUrlToBlob(compressed.dataUrl, compressed.mimeType || blob.type);
-    if (!processedBlob) {
-      return null;
-    }
-    const processedBytes =
-      Number.isFinite(compressed.bytes) && compressed.bytes > 0
-        ? compressed.bytes
-        : typeof processedBlob.size === "number"
-          ? processedBlob.size
-          : null;
-    return {
-      blob: processedBlob,
-      bytes: processedBytes,
-      mimeType: processedBlob.type || compressed.mimeType || blob.type || null,
-      width: compressed.width,
-      height: compressed.height,
-    };
-  }
-
-  function buildGenerationWorkerSource() {
-    const stageMessages = JSON.stringify(GENERATION_STAGE_MESSAGES);
-    return `const STAGE_MESSAGES = ${stageMessages};
-const DEFAULT_GENERATION_ALGORITHM = "${DEFAULT_GENERATION_ALGORITHM}";
-const DEFAULT_REGION_MERGE_PASSES = ${DEFAULT_REGION_MERGE_PASSES};
-const DEFAULT_MAX_PERIMETER_TO_AREA_RATIO = ${DEFAULT_MAX_PERIMETER_TO_AREA_RATIO};
-const now = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now())
-;
-${clamp.toString()}
-${accumulate.toString()}
-${floodFill.toString()}
-${segmentRegions.toString()}
-${finalizeGeneratedRegions.toString()}
-${serializeAssignments.toString()}
-${kmeansQuantize.toString()}
-${posterizeQuantize.toString()}
-${organicQuantize.toString()}
-${normalizeAlgorithm.toString()}
-${performQuantization.toString()}
-${smoothAssignments.toString()}
-function normalizeOptions(options) {
-  const targetColors = Math.max(1, Number(options?.targetColors) || 16);
-  const minRegion = Math.max(1, Number(options?.minRegion) || 1);
-  const mergePassesCandidate = Number(options?.maxMergePasses);
-  const maxMergePasses = Math.max(
-    1,
-    Number.isFinite(mergePassesCandidate) ? mergePassesCandidate : DEFAULT_REGION_MERGE_PASSES
-  );
-  const perimeterCandidate = Number(options?.maxPerimeterToAreaRatio);
-  const maxPerimeterToAreaRatio = Math.max(
-    0,
-    Number.isFinite(perimeterCandidate)
-      ? perimeterCandidate
-      : DEFAULT_MAX_PERIMETER_TO_AREA_RATIO
-  );
-  const sampleRate = typeof options?.sampleRate === "number" ? options.sampleRate : 1;
-  const kmeansIters = Math.max(1, Number(options?.kmeansIters) || 1);
-  const smoothingPasses = Math.max(0, Number(options?.smoothingPasses) || 0);
-  const algorithm = normalizeAlgorithm(options?.algorithm);
-  return {
-    targetColors,
-    minRegion,
-    maxMergePasses,
-    maxPerimeterToAreaRatio,
-    sampleRate,
-    kmeansIters,
-    smoothingPasses,
-    algorithm,
-  };
-}
-function postProgress(id, stage, progress, message) {
-  self.postMessage({ type: "progress", id, stage, progress, message: message || STAGE_MESSAGES[stage] || "" });
-}
-self.onmessage = (event) => {
-  const data = event?.data || {};
-  const id = data.id;
-  const width = data.width;
-  const height = data.height;
-  const options = normalizeOptions(data.options || {});
-  const pixelsSource = data.pixels || data.pixelsBuffer;
-  if (!Number.isFinite(width) || !Number.isFinite(height) || !pixelsSource) {
-    self.postMessage({ type: "error", id, error: { message: "Invalid generation payload" } });
-    return;
-  }
-  try {
-    const pixels = pixelsSource instanceof Uint8ClampedArray
-      ? pixelsSource
-      : pixelsSource instanceof ArrayBuffer
-      ? new Uint8ClampedArray(pixelsSource)
-      : new Uint8ClampedArray(pixelsSource);
-    const timings = {};
-    const totalStart = now();
-    postProgress(id, "quantize", 0.15, STAGE_MESSAGES.quantize);
-    const quantStart = now();
-    const { centroids, assignments } = performQuantization(
-      options.algorithm,
-      pixels,
-      width,
-      height,
-      options
-    );
-    timings.quantize = now() - quantStart;
-    let workingAssignments = assignments;
-    if (options.smoothingPasses > 0) {
-      postProgress(id, "smooth", 0.45, STAGE_MESSAGES.smooth);
-      const smoothStart = now();
-      workingAssignments = smoothAssignments(
-        assignments,
-        width,
-        height,
-        options.smoothingPasses
-      );
-      timings.smoothing = now() - smoothStart;
-    } else {
-      postProgress(id, "smoothSkip", 0.45, STAGE_MESSAGES.smoothSkip);
-      timings.smoothing = 0;
-    }
-    postProgress(id, "segment", 0.75, STAGE_MESSAGES.segment);
-    const segmentStart = now();
-    const { regionMap, regions } = segmentRegions(
-      width,
-      height,
-      workingAssignments,
-      options
-    );
-    timings.segment = now() - segmentStart;
-    postProgress(id, "finalize", 0.9, STAGE_MESSAGES.finalize);
-    finalizeGeneratedRegions(regions, width);
-    timings.total = now() - totalStart;
-    const regionMapBuffer = regionMap.buffer;
-    self.postMessage(
-      { type: "result", id, payload: { centroids, regions, regionMap: regionMapBuffer, timings } },
-      [regionMapBuffer]
-    );
-  } catch (error) {
-    self.postMessage({ type: "error", id, error: { message: error?.message || String(error) } });
-  }
-};
-`;
-  }
-function canUseGenerationWorker() {
-    return (
-      typeof Worker === "function" &&
-      typeof Blob === "function" &&
-      typeof URL !== "undefined" &&
-      typeof URL.createObjectURL === "function"
-    );
-  }
-
-  function ensureGenerationWorker() {
-    if (generationWorkerInstance) {
-      return generationWorkerInstance;
-    }
-    if (!canUseGenerationWorker()) {
-      return null;
-    }
-    try {
-      const source = buildGenerationWorkerSource();
-      const blob = new Blob([source], { type: "application/javascript" });
-      generationWorkerUrl = URL.createObjectURL(blob);
-      generationWorkerInstance = new Worker(generationWorkerUrl, {
-        name: "capy-generation-worker",
-      });
-    } catch (error) {
-      console.error("Failed to initialise generation worker", error);
-      disposeGenerationWorker();
-      return null;
-    }
-    return generationWorkerInstance;
-  }
-
-  function disposeGenerationWorker() {
-    if (generationWorkerInstance) {
-      try {
-        generationWorkerInstance.terminate();
-      } catch (error) {
-        // ignore termination errors
-      }
-      generationWorkerInstance = null;
-    }
-    if (generationWorkerUrl) {
-      URL.revokeObjectURL(generationWorkerUrl);
-      generationWorkerUrl = null;
-    }
-  }
-
-  function runGenerationWorker(message, { onProgress } = {}) {
-    const worker = ensureGenerationWorker();
-    if (!worker) {
-      const error = new Error("Generation worker unavailable");
-      error.code = "WORKER_UNAVAILABLE";
-      return Promise.reject(error);
-    }
-    return new Promise((resolve, reject) => {
-      const jobId = message && typeof message.id === "number" ? message.id : null;
-      if (!Number.isFinite(jobId)) {
-        reject(new Error("Generation job missing identifier"));
-        return;
-      }
-      const handleMessage = (event) => {
-        const data = event?.data;
-        if (!data || data.id !== jobId) {
-          return;
-        }
-        if (data.type === "progress") {
-          if (typeof onProgress === "function") {
-            try {
-              onProgress(data);
-            } catch (error) {
-              console.error("Progress handler failed", error);
-            }
-          }
-          return;
-        }
-        cleanup();
-        if (data.type === "result") {
-          resolve(data.payload);
-          return;
-        }
-        if (data.type === "error") {
-          const error = new Error(data.error?.message || "Generation worker failed");
-          error.code = data.error?.code || "WORKER_ERROR";
-          reject(error);
-          return;
-        }
-        reject(new Error("Unknown worker response"));
-      };
-      const handleError = (event) => {
-        cleanup();
-        disposeGenerationWorker();
-        const error =
-          event?.error instanceof Error
-            ? event.error
-            : new Error(event?.message || "Generation worker error");
-        error.code = "WORKER_ERROR";
-        reject(error);
-      };
-      const cleanup = () => {
-        worker.removeEventListener("message", handleMessage);
-        worker.removeEventListener("error", handleError);
-      };
-      worker.addEventListener("message", handleMessage);
-      worker.addEventListener("error", handleError);
-      try {
-        worker.postMessage(message);
-      } catch (error) {
-        cleanup();
-        disposeGenerationWorker();
-        const wrapped = error instanceof Error ? error : new Error(String(error));
-        wrapped.code = "WORKER_ERROR";
-        reject(wrapped);
-      }
-    });
-  }
-
-  function runGenerationSynchronously(jobId, payload, hooks = {}) {
-    if (!payload || typeof payload !== "object") {
-      return null;
-    }
-    const { width, height, pixels, options } = payload;
-    if (!pixels || !options) {
-      return null;
-    }
-    const { reportStage } = hooks;
-    const timings = {};
-    const totalStart = now();
-    if (typeof reportStage === "function") {
-      reportStage(jobId, 0.15, GENERATION_STAGE_MESSAGES.quantize);
-    }
-    const quantStart = now();
-    const mergePassesCandidate = Number(options.maxMergePasses);
-    const maxMergePasses = Math.max(
-      1,
-      Number.isFinite(mergePassesCandidate) ? mergePassesCandidate : DEFAULT_REGION_MERGE_PASSES
-    );
-    const perimeterCandidate = Number(options.maxPerimeterToAreaRatio);
-    const maxPerimeterToAreaRatio = Math.max(
-      0,
-      Number.isFinite(perimeterCandidate)
-        ? perimeterCandidate
-        : DEFAULT_MAX_PERIMETER_TO_AREA_RATIO
-    );
-    const normalizedOptions = {
-      ...options,
-      minRegion: Math.max(1, Number(options.minRegion) || 1),
-      maxMergePasses,
-      maxPerimeterToAreaRatio,
-      algorithm: normalizeAlgorithm(options.algorithm),
-    };
-    const { centroids, assignments } = performQuantization(
-      normalizedOptions.algorithm,
-      pixels,
-      width,
-      height,
-      normalizedOptions
-    );
-    timings.quantize = now() - quantStart;
-    let workingAssignments = assignments;
-    if (normalizedOptions.smoothingPasses > 0) {
-      if (typeof reportStage === "function") {
-        reportStage(jobId, 0.45, GENERATION_STAGE_MESSAGES.smooth);
-      }
-      const smoothStart = now();
-      workingAssignments = smoothAssignments(
-        assignments,
-        width,
-        height,
-        normalizedOptions.smoothingPasses
-      );
-      timings.smoothing = now() - smoothStart;
-    } else {
-      if (typeof reportStage === "function") {
-        reportStage(jobId, 0.45, GENERATION_STAGE_MESSAGES.smoothSkip);
-      }
-      timings.smoothing = 0;
-    }
-    if (typeof reportStage === "function") {
-      reportStage(jobId, 0.75, GENERATION_STAGE_MESSAGES.segment);
-    }
-    const segmentStart = now();
-    const { regionMap, regions } = segmentRegions(
-      width,
-      height,
-      workingAssignments,
-      normalizedOptions
-    );
-    timings.segment = now() - segmentStart;
-    if (typeof reportStage === "function") {
-      reportStage(jobId, 0.9, GENERATION_STAGE_MESSAGES.finalize);
-    }
-    finalizeGeneratedRegions(regions, width);
-    timings.total = now() - totalStart;
-    return { centroids, regions, regionMap, timings };
-  }
-
-  async function createPuzzleData(image, options = {}, hooks = {}) {
-    if (!image || typeof image.width !== "number" || typeof image.height !== "number") {
-      throw new Error("Invalid image supplied for puzzle generation");
-    }
-    const {
-      beginJob,
-      reportStage,
-      isLatestJob,
-      logDebug,
-    } = hooks;
-    const debug = typeof logDebug === "function" ? logDebug : (...args) => console.debug(...args);
-    const jobIdRaw = typeof beginJob === "function" ? beginJob() : Date.now();
-    const jobId = Number.isFinite(jobIdRaw) ? jobIdRaw : Date.now();
-    if (typeof reportStage === "function") {
-      reportStage(jobId, 0, GENERATION_STAGE_MESSAGES.prepare);
-    }
-
-    const {
-      targetColors = 12,
-      minRegion = 60,
-      maxSize = 640,
-      sampleRate = 0.5,
-      kmeansIters = 12,
-      smoothingPasses = 0,
-      algorithm = DEFAULT_GENERATION_ALGORITHM,
-      maxMergePasses = DEFAULT_REGION_MERGE_PASSES,
-      maxPerimeterToAreaRatio = DEFAULT_MAX_PERIMETER_TO_AREA_RATIO,
-      sourceImageMaxBytes = DEFAULT_SOURCE_IMAGE_MAX_BYTES,
-    } = options;
-    const vectorSceneEnabled = Boolean(options?.features?.vectorScene);
-    const vectorSceneOptions = options?.vectorSceneOptions || null;
-
-    const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
-    const width = Math.max(8, Math.round(image.width * scale));
-    const height = Math.max(8, Math.round(image.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) {
-      throw new Error("Canvas 2D context unavailable");
-    }
-    ctx.drawImage(image, 0, 0, width, height);
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const pixels = imageData.data;
-    const normalizedAlgorithm = normalizeAlgorithm(algorithm);
-    const provider = GENERATION_ALGORITHMS[normalizedAlgorithm];
-    const payloadOptions = {
-      targetColors,
-      minRegion,
-      maxMergePasses,
-      maxPerimeterToAreaRatio,
-      sampleRate,
-      kmeansIters,
-      smoothingPasses,
-      algorithm: normalizedAlgorithm,
-    };
-    if (provider) {
-      debug(`Using ${provider.label} generator (${provider.mode})`);
-    } else {
-      debug(`Using ${normalizedAlgorithm} generator`);
-    }
-    const workerMessage = {
-      id: jobId,
-      width,
-      height,
-      pixels,
-      options: payloadOptions,
-    };
-
-    let result = null;
-    if (canUseGenerationWorker()) {
-      try {
-        result = await runGenerationWorker(workerMessage, {
-          onProgress: (event) => {
-            if (!event || event.id !== jobId) {
-              return;
-            }
-            const label =
-              typeof event.message === "string" && event.message
-                ? event.message
-                : GENERATION_STAGE_MESSAGES[event.stage] || null;
-            if (typeof reportStage === "function") {
-              reportStage(jobId, event.progress, label);
-            }
-          },
-        });
-      } catch (error) {
-        if (!error || error.code !== "WORKER_UNAVAILABLE") {
-          console.warn(
-            "Generation worker unavailable, falling back to main-thread processing.",
-            error
-          );
-        }
-        debug("Generation worker fallback to main thread");
-        disposeGenerationWorker();
-      }
-    }
-    if (!result) {
-      result = runGenerationSynchronously(jobId, {
-        width,
-        height,
-        pixels,
-        options: payloadOptions,
-      }, hooks);
-    }
-    if (!result) {
-      throw new Error("Generation pipeline returned no data");
-    }
-    const isLatest = typeof isLatestJob === "function" ? isLatestJob(jobId) : true;
-    if (!isLatest) {
-      debug("Discarded superseded generation result");
-      return null;
-    }
-    if (typeof reportStage === "function") {
-      reportStage(jobId, 1, GENERATION_STAGE_MESSAGES.complete);
-    }
-    const { centroids, regions, regionMap, timings } = result;
-    const resolvedRegionMap =
-      regionMap instanceof Int32Array ? regionMap : new Int32Array(regionMap);
-    const palette = centroids.map((c, idx) => {
-      const hex = `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`;
-      return {
-        id: idx + 1,
-        hex,
-        rgba: c,
-        name: hex.toUpperCase(),
-      };
-    });
-    const formatDuration = (value) =>
-      Number.isFinite(value) ? `${Math.round(value)} ms` : "n/a";
-    debug(`Quantized ${targetColors} colours in ${formatDuration(timings?.quantize)}`);
-    if (smoothingPasses > 0) {
-      debug(
-        `Smoothed assignments (${smoothingPasses} passes) in ${formatDuration(timings?.smoothing)}`
-      );
-    }
-    const ratioDescriptor =
-      maxPerimeterToAreaRatio > 0
-        ? `, ≤${maxPerimeterToAreaRatio.toFixed(2)} perimeter/area`
-        : "";
-    debug(
-      `Segmented ${regions.length} regions (≥${minRegion}px²${ratioDescriptor}, ${maxMergePasses} merge passes) in ${formatDuration(timings?.segment)}`
-    );
-    debug(`Generation pipeline finished in ${formatDuration(timings?.total)}`);
-    let sourceImage = null;
-    try {
-      const normalizedLimit =
-        Number.isFinite(sourceImageMaxBytes) && sourceImageMaxBytes >= 0
-          ? sourceImageMaxBytes
-          : 0;
-      const compressed = await compressCanvasImage(canvas, { maxBytes: normalizedLimit });
-      if (compressed && compressed.dataUrl) {
-        sourceImage = {
-          dataUrl: compressed.dataUrl,
-          mimeType: compressed.mimeType,
-          bytes: compressed.bytes,
-          width: compressed.width,
-          height: compressed.height,
-          originalWidth: image.width,
-          originalHeight: image.height,
-          scale: compressed.width && width > 0 ? compressed.width / width : 1,
-          variant: SOURCE_IMAGE_VARIANT_ORIGINAL,
-        };
-      }
-    } catch (error) {
-      debug(`Source image compression skipped: ${error?.message || error}`);
-    }
-    let vectorScene = null;
-    if (vectorSceneEnabled) {
-      try {
-        const payload = createVectorScenePayload({
-          width,
-          height,
-          regions,
-          options: vectorSceneOptions,
-        });
-        vectorScene = { metadata: payload.json, binary: payload.binary };
-      } catch (error) {
-        debug(`Vector scene export skipped: ${error?.message || error}`);
-      }
-    }
-
-    return {
-      width,
-      height,
-      palette,
-      regions,
-      regionMap: resolvedRegionMap,
-      sourceImage,
-      originalWidth: image.width,
-      originalHeight: image.height,
-      vectorScene,
-    };
-  }
-
-  if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
-    window.addEventListener("unload", () => {
-      try {
-        disposeGenerationWorker();
-      } catch (error) {
-        // ignore
-      }
-    });
-  }
-
-  const capyGeneration = {
-    GENERATION_ALGORITHM_CATALOG,
-    DEFAULT_GENERATION_ALGORITHM_ID,
-    prepareSourceImageBlob,
-    disposeGenerationWorker,
-    createPuzzleData,
-    __smoothAssignmentsForTests: smoothAssignments,
-    __segmentRegionsForTests: segmentRegions,
-  };
-  globalThis.capyGeneration = capyGeneration;
-})();
-
-
-// Apply preboot metrics after module load
-(() => {
-  if (typeof window === "undefined") return;
-  const runtime = window.capyRuntime;
-  if (runtime && typeof runtime.applyPrebootMetrics === "function") {
-    runtime.applyPrebootMetrics();
-  }
-})();
-
-// Settings menu renderer
-(() => {
-  if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
-
-  const VALUE_FORMATTERS = {
-    percent(value) {
-      return `${Math.round(Number(value) || 0)}%`;
-    },
-    "unit-percent"(value) {
-      const numeric = Number(value) || 0;
-      return `${Math.round(numeric * 100)}%`;
-    },
-    "zoom-percent"(value) {
-      const numeric = Number(value) || 0;
-      return `${Math.round(numeric * 100)}%`;
-    },
-    seconds(value) {
-      const seconds = (Number(value) || 0) / 1000;
-      return `${Number.parseFloat(seconds.toFixed(1))} s`;
-    },
-    px(value) {
-      return `${Math.round(Number(value) || 0)} px`;
-    },
-    px2(value) {
-      return `${Math.round(Number(value) || 0)} px²`;
-    },
-    integer(value) {
-      return `${Math.round(Number(value) || 0)}`;
-    },
-    ratio(value) {
-      const numeric = Number(value) || 0;
-      if (!Number.isFinite(numeric) || numeric <= 0) {
-        return "Off";
-      }
-      return `${Number(numeric.toFixed(2))}:1`;
-    },
-  };
-
-  function createElement(tag, { className, attrs = {}, dataset = {}, text, id } = {}, children = []) {
-    const el = document.createElement(tag);
-    if (className) {
-      el.className = className;
-    }
-    if (id) {
-      el.id = id;
-    }
-    if (text) {
-      el.textContent = text;
-    }
-    Object.entries(attrs).forEach(([key, value]) => {
-      if (value === false || value === null || value === undefined) return;
-      if (value === true) {
-        el.setAttribute(key, "");
-        return;
-      }
-      el.setAttribute(key, String(value));
-    });
-    Object.entries(dataset).forEach(([key, value]) => {
-      if (value === undefined || value === null) return;
-      el.dataset[key] = String(value);
-    });
-    for (const child of children) {
-      if (child === null || child === undefined) continue;
-      el.appendChild(child);
-    }
-    return el;
-  }
-
-  function formatValue(value, format) {
-    if (format && typeof VALUE_FORMATTERS[format] === "function") {
-      return VALUE_FORMATTERS[format](value);
-    }
-    return `${value ?? ""}`;
-  }
-
-  function createHeading({ tabId, heading = {} }) {
-    const headingId = heading.id || `settingsHeading-${tabId}`;
-    const headingRow = createElement(
-      "div",
-      { className: "settings-heading-row" },
-      [
-        createElement("h3", { id: headingId, attrs: { "data-settings-heading": "" } }, [
-          document.createTextNode(heading.title || "")]),
-        heading.helpText
-          ? createElement(
-              "button",
-              {
-                className: "help-chip",
-                attrs: {
-                  type: "button",
-                  "aria-label": heading.helpLabel || heading.helpText,
-                  "aria-describedby": `tooltip-${tabId}`,
-                },
-              },
-              [document.createTextNode("?")],
-            )
-          : null,
-        heading.helpText
-          ? createElement("span", { className: "help-chip-bubble", id: `tooltip-${tabId}`, attrs: { role: "tooltip" } }, [
-              document.createTextNode(heading.helpText),
-            ])
-          : null,
-      ].filter(Boolean),
-    );
-
-    const wrapper = createElement("div", { className: "settings-section-heading" }, [headingRow]);
-    return { wrapper, headingId };
-  }
-
-  function renderActionButton(item) {
-    const button = createElement(
-      "button",
-      {
-        className: "quick-action",
-        attrs: {
-          type: "button",
-          id: item.id,
-          "aria-label": item.ariaLabel || item.label,
-          title: item.title || item.label,
-          "aria-pressed": item.ariaPressed ? "true" : "false",
-          disabled: item.disabled,
-        },
-        dataset: item.testId ? { testid: item.testId } : {},
-      },
-      [
-        createElement("span", { className: "icon", attrs: { "aria-hidden": "true" } }, [
-          document.createTextNode(item.icon || ""),
-        ]),
-        createElement("span", { className: "label" }, [document.createTextNode(item.label || "")]),
-      ],
-    );
-    return button;
-  }
-
-  function renderToggle(item) {
-    const input = createElement("input", {
-      attrs: { type: "checkbox", id: item.id, checked: item.checked ? "" : undefined },
-    });
-    const label = createElement("label", { className: "toggle" }, [input, createElement("span", { text: item.label || "" })]);
-    return label;
-  }
-
-  function renderSelect(item) {
-    const select = createElement(
-      "select",
-      {
-        attrs: { id: item.id, disabled: item.disabled },
-        dataset: item.testId ? { testid: item.testId } : {},
-      },
-      (item.options || []).map((option) =>
-        createElement("option", { attrs: { value: option.value, selected: option.selected } }, [
-          document.createTextNode(option.label || ""),
-        ]),
-      ),
-    );
-
-    let labelContent;
-    if (item.outputFor) {
-      const selectedOption = (item.options || []).find((option) => option.selected) || item.options?.[0] || {};
-      const output = createElement("output", {
-        attrs: { [`data-for`]: item.outputFor },
-        text: item.outputText || selectedOption.label || "",
-      });
-      labelContent = createElement("span", {}, [
-        document.createTextNode(item.label || ""),
-        document.createTextNode(" "),
-        output,
-      ]);
-    } else {
-      labelContent = createElement("span", { text: item.label || "" });
-    }
-
-    return createElement("label", { className: "control" }, [labelContent, select]);
-  }
-
-  function renderRange(item) {
-    const output = createElement("output", { attrs: { [`data-for`]: item.id }, text: formatValue(item.value, item.format) });
-    const label = createElement("label", { attrs: { for: item.id } }, [
-      createElement("span", {}, [document.createTextNode(item.label || ""), document.createTextNode(" "), output]),
-    ]);
-    const reset = createElement(
-      "button",
-      {
-        className: "control-reset",
-        attrs: {
-          type: "button",
-          "data-reset-target": item.id,
-          "data-reset-default": item.default,
-        },
-      },
-      [document.createTextNode("Default")],
-    );
-
-    const header = createElement("div", { className: "control-header" }, [label, reset]);
-    const input = createElement("input", {
-      attrs: {
-        id: item.id,
-        type: "range",
-        min: item.min,
-        max: item.max,
-        step: item.step,
-        value: item.value,
-        "data-default": item.default,
-      },
-    });
-    return createElement("div", { className: "control control-range" }, [header, input]);
-  }
-
-  function renderMouseControls(item) {
-    const groups = (item.groups || []).map((group) => {
-      const rows = (group.options || []).map((opt) => {
-        const select = createElement(
-          "select",
-          { attrs: { id: opt.id } },
-          (opt.choices || []).map((choice) =>
-            createElement(
-              "option",
-              { attrs: { value: choice.value, selected: choice.selected } },
-              [document.createTextNode(choice.label || "")],
-            ),
-          ),
-        );
-
-        return createElement("label", { className: "control mouse-control-row" }, [
-          createElement("span", { className: "mouse-control-row-label", text: opt.label || "" }),
-          select,
-        ]);
-      });
-
-      return createElement(
-        "div",
-        {
-          className: "mouse-control-card",
-          attrs: { role: "group", "aria-label": group.title || "Mouse button" },
-        },
-        [
-          createElement("div", { className: "mouse-control-card-header" }, [
-            createElement("span", { className: "mouse-control-title", text: group.title || "" }),
-            createElement("span", {
-              className: "mouse-control-subtitle",
-              text: "Click and drag bindings",
-              attrs: { "aria-hidden": "true" },
-            }),
-          ]),
-          createElement("div", { className: "mouse-control-rows" }, rows),
-        ],
-      );
-    });
-
-    return createElement("div", { className: "mouse-controls" }, [
-      createElement("div", { className: "mouse-controls-grid", attrs: { role: "group", "aria-label": "Mouse controls" } }, groups),
-    ]);
-  }
-
-  function renderDetailCallout(item) {
-    const chips = (item.levels || []).map((level) =>
-      createElement("button", {
-        className: "detail-chip",
-        attrs: { type: "button" },
-        dataset: { detailLevel: level.level },
-        text: level.label,
-      }),
-    );
-    return createElement("div", { className: "detail-callout" }, [
-      createElement("p", { className: "detail-intro", text: "Capybara sample detail presets" }),
-      createElement("div", { className: "detail-picker", attrs: { role: "group", "aria-label": "Capybara sample detail presets" } }, chips),
-      createElement("p", { className: "detail-caption", dataset: { detailCaption: "" } }),
-    ]);
-  }
-
-  function renderNote(item) {
-    if (item.link) {
-      const link = createElement("a", {
-        className: "chatgpt-link",
-        attrs: { id: item.link.id, href: item.link.href, target: "_blank", rel: "noopener noreferrer" },
-      }, [document.createTextNode(item.link.text || ""), createElement("span", { attrs: { "aria-hidden": "true" }, text: " ↗" })]);
-      return createElement("p", { className: "control-note" }, [link]);
-    }
-    const attrs = { ...(item.attrs || {}) };
-    if (item.outputId) {
-      attrs.id = item.outputId;
-    }
-    return createElement("p", { className: item.className || "control-note", attrs }, [
-      document.createTextNode(item.text || ""),
-    ]);
-  }
-
-  function renderTextarea(item) {
-    const textarea = createElement("textarea", {
-      attrs: { id: item.id, rows: item.rows || 3, placeholder: item.placeholder },
-    });
-    const label = createElement("label", { className: "control" }, [createElement("span", { text: item.label || "" }), textarea]);
-    return label;
-  }
-
-  function renderList(item) {
-    const listItems = (item.items || []).map((text) => createElement("li", {}, [document.createTextNode(text)]));
-    return createElement("ul", { className: "control-list" }, listItems);
-  }
-
-  function renderDefinitionList(item) {
-    const items = (item.items || []).map((entry) =>
-      createElement("div", {}, [
-        createElement("dt", {}, [document.createTextNode(entry.term || "")]),
-        createElement(
-          "dd",
-          entry.dataTarget ? { attrs: { [`data-${entry.dataTarget}`]: "" } } : {},
-          [document.createTextNode(entry.description || "")],
-        ),
-      ]),
-    );
-    return createElement("dl", { className: "command-list" }, items);
-  }
-
-  function renderLogger(item) {
-    return createElement("div", {
-      id: item.id,
-      className: item.className || "debug-log",
-      attrs: { role: "log", "aria-live": "polite", "aria-relevant": "additions text" },
-    });
-  }
-
-  function renderButtonsRow(item) {
-    const wrapperClass = item.className || "panel-actions";
-    const buttons = (item.actions || []).map((action) =>
-      createElement(
-        "button",
-        {
-          className: action.className,
-          attrs: {
-            type: "button",
-            id: action.id,
-            disabled: action.disabled,
-            "aria-label": action.ariaLabel,
-            title: action.title,
-          },
-          dataset: action.dataset,
-        },
-        [
-          document.createTextNode(action.label || ""),
-        ],
-      ),
-    );
-    return createElement("div", { className: wrapperClass }, buttons);
-  }
-
-  function renderJsonView() {
-    const textarea = createElement("textarea", {
-      className: "json-view",
-      attrs: { id: "settingsJsonView", rows: "8", spellcheck: "false" },
-    });
-    const label = createElement("label", { className: "visually-hidden", attrs: { for: "settingsJsonView" } }, [
-      document.createTextNode("Preferences JSON"),
-    ]);
-    const upload = createElement("label", { className: "json-upload" }, [
-      createElement("input", { attrs: { id: "importSettingsFile", type: "file", accept: "application/json", hidden: "" } }),
-      createElement("span", { attrs: { role: "button", "aria-controls": "importSettingsFile" }, text: "Upload file" }),
-    ]);
-    const actions = createElement("div", { className: "json-actions" }, [
-      createElement("button", { attrs: { id: "refreshSettingsJson", type: "button" }, text: "Refresh" }),
-      createElement("button", { attrs: { id: "exportSettingsJson", type: "button" }, text: "Export JSON" }),
-      createElement("button", { attrs: { id: "applySettingsJson", type: "button" }, text: "Import JSON" }),
-      upload,
-    ]);
-    return createElement("div", {}, [label, textarea, actions]);
-  }
-
-  function renderSection(section) {
-    const isAdvancedSection = section.advancedOnly === true;
-    const sectionEl = createElement("section", {
-      className: "sheet-section",
-      attrs: { "aria-labelledby": section.id, hidden: isAdvancedSection },
-      dataset: {
-        settingsBlock: section.id,
-        settingsTier: isAdvancedSection ? "advanced" : "basic",
-        settingsAvailable: isAdvancedSection ? "false" : "true",
-      },
-    });
-    if (isAdvancedSection) {
-      sectionEl.setAttribute("aria-hidden", "true");
-    }
-    const headerChildren = [];
-    if (section.title) {
-      headerChildren.push(createElement("h3", { id: section.id, text: section.title }));
-    }
-    if (section.description) {
-      headerChildren.push(renderNote({ text: section.description, className: "control-note section-description" }));
-    }
-    if (headerChildren.length) {
-      sectionEl.appendChild(createElement("div", { className: "sheet-section-header" }, headerChildren));
-    }
-
-    const body = createElement("div", { className: "sheet-section-body" });
-
-    if (section.layout === "actions") {
-      const group = createElement("div", {
-        className: "quick-actions",
-        attrs: { role: "group", "aria-label": "Puzzle quick actions" },
-      });
-      (section.items || []).forEach((item) => {
-        if (item.type === "action") {
-          group.appendChild(renderActionButton(item));
-        }
-      });
-      body.appendChild(group);
-      sectionEl.appendChild(body);
-      if (section.note) {
-        sectionEl.appendChild(renderNote({ text: section.note, className: "control-note section-note" }));
-      }
-      return sectionEl;
-    }
-
-    (section.items || []).forEach((item) => {
-      switch (item.type) {
-        case "toggle":
-          body.appendChild(renderToggle(item));
-          break;
-        case "select":
-          body.appendChild(renderSelect(item));
-          break;
-        case "range":
-          body.appendChild(renderRange(item));
-          break;
-        case "note":
-          body.appendChild(renderNote(item));
-          break;
-        case "mouse-controls":
-          body.appendChild(renderMouseControls(item));
-          break;
-        case "detail-callout":
-          body.appendChild(renderDetailCallout(item));
-          break;
-        case "details": {
-          const details = createElement("details", { className: "advanced-options", attrs: { id: item.id || "generatorAdvanced" } });
-          details.appendChild(createElement("summary", { text: item.summary || "Details" }));
-          (item.items || []).forEach((child) => {
-            switch (child.type) {
-              case "textarea":
-                details.appendChild(renderTextarea(child));
-                break;
-              case "note":
-                details.appendChild(renderNote(child));
-                break;
-              default:
-                break;
-            }
-          });
-          body.appendChild(details);
-          break;
-        }
-        case "textarea":
-          body.appendChild(renderTextarea(item));
-          break;
-        case "list":
-          body.appendChild(renderList(item));
-          break;
-        case "definition-list":
-          body.appendChild(renderDefinitionList(item));
-          break;
-        case "logger":
-          body.appendChild(renderLogger(item));
-          break;
-        case "button-row":
-          body.appendChild(renderButtonsRow(item));
-          break;
-        case "json-view":
-          body.appendChild(renderJsonView());
-          break;
-        default:
-          break;
-      }
-    });
-
-    if (body.childElementCount) {
-      sectionEl.appendChild(body);
-    }
-
-    if (section.note) {
-      sectionEl.appendChild(renderNote({ text: section.note, className: "control-note section-note" }));
-    }
-
-    return sectionEl;
-  }
-
-  function renderTabBlocks(blocks = [], panel, headingId, options = {}) {
-    const tabIsAdvanced = options.advanced === true;
-    for (const block of blocks) {
-      if (!block) continue;
-      const isAdvancedBlock = tabIsAdvanced || block.advancedOnly === true;
-      switch (block.type) {
-        case "import-notice": {
-          const notice = createElement(
-            "div",
-            {
-              className: "generator-import-notice",
-              attrs: {
-                "data-import-notice": "",
-                role: "status",
-                "aria-live": "polite",
-                hidden: isAdvancedBlock,
-                "aria-hidden": isAdvancedBlock ? "true" : "false",
-              },
-              dataset: {
-                settingsBlock: block.id || "import-notice",
-                settingsTier: isAdvancedBlock ? "advanced" : "basic",
-                settingsAvailable: isAdvancedBlock ? "false" : "true",
-              },
-            },
-            [
-              createElement("p", { className: "generator-import-title" }, [
-                createElement("strong", { dataset: { importFile: "" } }),
-              ]),
-              createElement("p", { className: "generator-import-description", dataset: { importDescription: "" } }),
-              createElement("div", { className: "generator-import-actions" }, [
-                createElement("button", { attrs: { id: "confirmImport", type: "button", "data-import-confirm": "" } }, [
-                  document.createTextNode("Generate puzzle"),
-                ]),
-                createElement("button", { className: "close-button", attrs: { type: "button", "data-import-cancel": "" } }, [
-                  document.createTextNode("Cancel"),
-                ]),
-              ]),
-            ],
-          );
-          panel.appendChild(notice);
-          break;
-        }
-        case "source-url-form": {
-          const form = createElement("form", { className: "sheet-section", attrs: { "data-source-url-form": "" } });
-          form.appendChild(createElement("h3", { id: "sourceUrlHeading", text: "Import from URL" }));
-          form.appendChild(renderNote({ text: "Enter an https:// link to load an image directly." }));
-          const input = createElement("input", {
-            attrs: {
-              type: "url",
-              inputmode: "url",
-              "data-source-url-input": "",
-              "aria-describedby": "sourceUrlHint sourceUrlError",
-            },
-          });
-          form.appendChild(createElement("label", { className: "control" }, [
-            createElement("span", { text: "Image URL" }),
-            input,
-          ]));
-          form.appendChild(
-            renderNote({
-              text: "External sites must allow cross-origin image access.",
-              className: "control-note",
-              outputId: "sourceUrlHint",
-            }),
-          );
-          form.appendChild(
-            renderNote({
-              text: "",
-              className: "control-note",
-              outputId: "sourceUrlError",
-              attrs: { role: "alert", hidden: "" },
-            }),
-          );
-          form.appendChild(
-            createElement("div", { className: "panel-actions" }, [
-              createElement("button", { attrs: { type: "submit", "data-source-url-submit": "", disabled: "" } }, [
-                document.createTextNode("Load image"),
-              ]),
-            ]),
-          );
-          panel.appendChild(form);
-          break;
-        }
-        case "sheet-actions":
-          panel.appendChild(renderButtonsRow({
-            className: "sheet-actions",
-            actions: [{ id: "applyOptions", label: "Apply changes", disabled: true }],
-          }));
-          break;
-        case "generator-progress": {
-          const bar = createElement("div", {
-            className: "generator-progress",
-            attrs: { "data-generator-progress": "", role: "status", "aria-live": "polite", hidden: "" },
-          });
-          bar.appendChild(createElement("p", { className: "generator-progress-message", dataset: { generatorProgressMessage: "" } }));
-          const meter = createElement(
-            "div",
-            {
-              className: "generator-progress-meter",
-              dataset: { generatorProgressMeter: "" },
-              attrs: {
-                role: "progressbar",
-                "aria-label": "Puzzle generation progress",
-                "aria-valuemin": "0",
-                "aria-valuemax": "100",
-                "aria-valuenow": "0",
-                "aria-hidden": "true",
-              },
-            },
-            [createElement("div", { className: "generator-progress-bar", dataset: { generatorProgressBar: "" } })],
-          );
-          bar.appendChild(meter);
-          panel.appendChild(bar);
-          break;
-        }
-        case "loader-console": {
-          const section = createElement("section", { className: "sheet-section", attrs: { "aria-label": "Menu loader console" } });
-          section.appendChild(createElement("div", { className: "visually-hidden", id: "settingsLoadHeading", text: "Menu loader console" }));
-          section.appendChild(
-            createElement("div", {
-              id: "settingsLoadConsole",
-              className: "debug-log settings-loading-console",
-              attrs: {
-                role: "log",
-                "aria-labelledby": "settingsLoadHeading",
-                "aria-live": "polite",
-                "aria-relevant": "additions text",
-              },
-            }),
-          );
-          panel.appendChild(section);
-          break;
-        }
-        case "save-manager": {
-          const section = createElement("section", {
-            className: "sheet-section save-manager",
-            attrs: {
-              role: "group",
-              "aria-labelledby": "saveManagerHeading",
-              hidden: isAdvancedBlock,
-              "aria-hidden": isAdvancedBlock ? "true" : "false",
-            },
-            dataset: {
-              saveSection: "dialog",
-              settingsBlock: block.id || "save-manager",
-              settingsTier: isAdvancedBlock ? "advanced" : "basic",
-              settingsAvailable: isAdvancedBlock ? "false" : "true",
-            },
-            id: "saveManagerSection",
-          });
-          section.appendChild(createElement("h3", { id: "saveManagerHeading", text: "Your saves" }));
-          section.appendChild(
-            createElement("div", {
-              className: "save-manager-list",
-              attrs: { "aria-live": "polite", role: "list", "aria-labelledby": "saveManagerHeading" },
-              dataset: { saveList: "" },
-            }),
-          );
-          section.appendChild(
-            createElement("p", { className: "save-manager-empty", dataset: { saveEmpty: "" }, attrs: { hidden: "" }, text: "No saves yet. Create one above to start autosaving progress." }),
-          );
-          section.appendChild(
-            createElement("div", { className: "save-manager-actions" }, [
-              createElement("button", { attrs: { type: "button", "data-save-snapshot": "", disabled: "" } }, [
-                document.createTextNode("Save current puzzle"),
-              ]),
-              createElement("button", { attrs: { type: "button", "data-reset-progress": "", disabled: "" } }, [
-                document.createTextNode("Reset puzzle progress"),
-              ]),
-              createElement("button", { attrs: { id: "downloadJson", type: "button", disabled: "" } }, [
-                document.createTextNode("Export puzzle JSON"),
-              ]),
-              createElement("button", { attrs: { id: "downloadSvg", type: "button", disabled: "" } }, [
-                document.createTextNode("Export puzzle SVG"),
-              ]),
-            ]),
-          );
-          panel.appendChild(section);
-          break;
-        }
-        case "section":
-        default:
-          panel.appendChild(renderSection({ ...block, advancedOnly: isAdvancedBlock }));
-          break;
-      }
-    }
-  }
-
-  const settingsSheet = document.getElementById("settingsSheet");
-  // const settingsDefinition = readSettingsDefinition(); // Removed as settings are now static
-  // capyGlobal.settingsDefinition = settingsDefinition; // Removed as settings are now static
-  // renderSettingsMenu(settingsSheet, settingsDefinition); // Removed as settings are now static
-
-  // globalThis.capySettingsMenu = { readSettingsDefinition, renderSettingsMenu }; // Removed as settings are now static
-})();
-
-// Settings fallback bootstrap for pre-runtime interactions
-(() => {
-  if (
-    typeof window === "undefined" ||
-    typeof document === "undefined" ||
-    typeof document.querySelector !== "function"
-  ) {
-    return;
-  }
-  function createUiKit(root = document) {
-    const cache = new Map();
-    const get = (selector) => {
-      if (!selector) return null;
-      if (cache.has(selector)) {
-        const cached = cache.get(selector);
-        if (cached) return cached;
-      }
-      const node = root.querySelector(selector);
-      if (node) {
-        cache.set(selector, node);
-      }
-      return node || null;
-    };
-    const all = (selector) => Array.from(root.querySelectorAll(selector));
-    const toggle = (target, className, force) => {
-      const node = typeof target === "string" ? get(target) : target;
-      if (!node || !className) return node;
-      node.classList.toggle(className, force);
-      return node;
-    };
-    return { get, all, toggle };
-  }
-
-  window.capyUiKit = createUiKit;
-  const ui = createUiKit(document);
-  const sheet = ui.get("#settingsSheet");
-  const settingsButton = ui.get("#settingsButton");
-  const closeButtons = ui.all('[data-sheet-close="settings"]');
-  const consoleEl = ui.get("#settingsLoadConsole");
-
-  function log(message) {
-    if (!consoleEl) return;
-    const timestamp = new Date();
-    const entry = document.createElement("div");
-    entry.className = "log-entry";
-    const time = document.createElement("time");
-    time.dateTime = timestamp.toISOString();
-    time.textContent = timestamp
-      .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-      .replace(/\s+/g, " ");
-    const messageEl = document.createElement("span");
-    messageEl.textContent = `[settings] ${message || "Ready"}`;
-    entry.appendChild(time);
-    entry.appendChild(messageEl);
-    consoleEl.appendChild(entry);
-    consoleEl.scrollTop = consoleEl.scrollHeight;
-  }
-
-  function setOpen(nextOpen) {
-    const targetSheet = ui.get("#settingsSheet") || sheet || document.getElementById("settingsSheet");
-    if (!targetSheet) return;
-    const open = Boolean(nextOpen);
-    ui.toggle(targetSheet, "hidden", !open);
-    targetSheet.setAttribute("aria-hidden", open ? "false" : "true");
-    settingsButton?.setAttribute("aria-expanded", open ? "true" : "false");
-  }
-
-  const attachSettingsButtonHandler = (button) => {
-    button?.addEventListener("click", () => {
-      const isHidden = sheet?.classList.contains("hidden") ?? true;
-      setOpen(true);
-      if (isHidden) {
-        log("Opened from launcher before full app load");
-      }
-    });
-  };
-  if (settingsButton) {
-    attachSettingsButtonHandler(settingsButton);
-  } else {
-    window.addEventListener("DOMContentLoaded", () => {
-      attachSettingsButtonHandler(document.getElementById("settingsButton"));
-    });
-  }
-
-  closeButtons.forEach((button) =>
-    button.addEventListener("click", () => {
-      setOpen(false);
-      log("Closed while in fallback mode");
-    })
-  );
-
-  window.capySettingsBootstrap = {
-    log,
-    setOpen,
-    recordError(message) {
-      log(message || "Unknown settings error");
-    },
-    syncJson(text) {
-      const view = document.getElementById("settingsJsonView");
-      if (view && typeof text === "string") {
-        view.value = text;
-      }
-    },
-  };
-
-  log("Settings fallback ready before renderer bootstrap");
-})();
-
 // Main runtime wiring
 (() => {
   if (
@@ -3530,6 +954,22 @@ function canUseGenerationWorker() {
     console.error("Capy runtime failed to load");
   }
 
+  // Apply preboot metrics after module load
+  if (typeof window !== "undefined") {
+    const runtime = window.capyRuntime;
+    if (runtime && typeof runtime.applyPrebootMetrics === "function") {
+      runtime.applyPrebootMetrics();
+    }
+  }
+
+  if (
+    typeof window === "undefined" ||
+    typeof document === "undefined" ||
+    typeof document.querySelector !== "function"
+  ) {
+    console.error("Capy runtime failed to load");
+  }
+
   (() => {
     if (!runtime) {
       return;
@@ -3537,7 +977,21 @@ function canUseGenerationWorker() {
     const settingsBootstrap =
       window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
     settingsBootstrap.log("Renderer bootstrap starting");
-
+    const {
+      DEFAULT_BACKGROUND_HEX,
+      DEFAULT_STAGE_BACKGROUND_HEX,
+      DEFAULT_LAUNCHER_POSITION,
+      MIN_UI_SCALE,
+      MAX_UI_SCALE,
+      MIN_VIEWPORT_ZOOM,
+      DEFAULT_UI_SCALE,
+      MIN_CONFIGURABLE_MAX_ZOOM,
+      MAX_CONFIGURABLE_MAX_ZOOM,
+      UI_SCALE_PRESETS,
+      DEFAULT_LABEL_SCALE,
+      DEFAULT_UI_THEME,
+      DEFAULT_MAX_VIEWPORT_ZOOM,
+    } = capyConstants;
     const createUiKit =
       window.capyUiKit ||
       function createUiKit(root = document) {
@@ -3562,6 +1016,7 @@ function canUseGenerationWorker() {
     const settingsSheet = document.getElementById("settingsSheet");
     // const settingsDefinition = capyGlobal.settingsDefinition || []; // Removed as settings are now static
     // if (settingsDefinition.length === 0) { // Removed as settings are now static
+    // The settings menu is now rendered from static HTML, so dynamic rendering from settings-menu.json is no longer needed.
     //   console.warn("Settings definition not loaded, menu may be empty."); // Removed as settings are now static
     // } // Removed as settings are now static
     // if (settingsSheet && settingsDefinition.length && globalThis.capySettingsMenu?.renderSettingsMenu) { // Removed as settings are now static
@@ -3573,7 +1028,7 @@ function canUseGenerationWorker() {
       return;
     }
     let bootstrapSucceeded = false;
-      try {
+    try {
       function createComponent(root, render) {
         if (!root) {
           return {
@@ -3685,958 +1140,21 @@ function canUseGenerationWorker() {
           const downloadSvgButton = section.querySelector("#downloadSvg");
           section.hidden = false;
           section.setAttribute("aria-hidden", "false");
-          if (list) {
-            list.hidden = false;
-          }
-          const defaultEmptyMessage =
-            "No saves yet. Create one above to start autosaving progress.";
-          let currentEntries = [];
-          let hasPuzzle = false;
-          let hasProgress = false;
 
           const component = createComponent(section, ({ props, emit }) => {
-            const nextEntriesProvided = Array.isArray(props.entries);
-            if (nextEntriesProvided) {
-              currentEntries = props.entries;
-              if (list) {
-                const markup =
-                  currentEntries.length > 0
-                    ? html`${currentEntries.map(renderSaveManagementItem)}`
-                    : "";
-                renderTemplate(list, markup);
-              }
-            }
-
-            const entriesForEmptyState = currentEntries;
-            const emptyMessage =
-              typeof props.emptyMessage === "string" && props.emptyMessage.trim()
-                ? props.emptyMessage
-                : defaultEmptyMessage;
-            if (empty) {
-              empty.hidden = entriesForEmptyState.length > 0;
-              if (entriesForEmptyState.length === 0) {
-                empty.textContent = emptyMessage;
-              }
-            }
-
-            hasPuzzle = props.hasPuzzle ?? hasPuzzle;
-            hasProgress = props.hasProgress ?? hasProgress;
-            if (saveButton) {
-              saveButton.disabled = !hasPuzzle;
-            }
-            if (resetButton) {
-              resetButton.disabled = !hasPuzzle || !hasProgress;
-            }
-            if (downloadButton) {
-              downloadButton.disabled = !hasPuzzle;
-            }
-            if (downloadSvgButton) {
-              downloadSvgButton.disabled = !hasPuzzle;
-            }
+            if (saveButton) saveButton.disabled = !props.hasPuzzle;
+            if (resetButton) resetButton.disabled = !props.hasPuzzle || !props.hasProgress;
+            if (downloadButton) downloadButton.disabled = !props.hasPuzzle;
+            if (downloadSvgButton) downloadSvgButton.disabled = !props.hasPuzzle;
           });
 
-          if (list) {
-            list.addEventListener("click", (event) => {
-              const target = event.target;
-              if (!(target instanceof HTMLElement)) return;
-              const explicitId = target.getAttribute("data-target-id");
-              let id = explicitId || null;
-              if (!id) {
-                const entryEl = target.closest("[data-save-id]");
-                if (entryEl) {
-                  id = entryEl.getAttribute("data-save-id");
-                }
-              }
-              if (!id) return;
-              const action = target.dataset.action;
-              if (action) {
-                component.emit("action", { id, action });
-              }
-            });
-          }
-          if (saveButton) {
-            saveButton.addEventListener("click", () => component.emit("save"));
-          }
-          if (resetButton) {
-            resetButton.addEventListener("click", () => component.emit("reset"));
-          }
-          if (downloadButton) {
-            downloadButton.addEventListener("click", () => component.emit("download"));
-          }
-          if (downloadSvgButton) {
-            downloadSvgButton.addEventListener("click", () => component.emit("downloadSvg"));
-          }
+          if (saveButton) saveButton.addEventListener("click", () => component.emit("save"));
+          if (resetButton) resetButton.addEventListener("click", () => component.emit("reset"));
+          if (downloadButton) downloadButton.addEventListener("click", () => component.emit("download"));
+          if (downloadSvgButton) downloadSvgButton.addEventListener("click", () => component.emit("downloadSvg"));
 
           return { root: section, update: component.update, on: component.on };
         }
-
-      // Cached DOM references so we can wire handlers without repeated lookups.
-      const appEl = dom.get("#app");
-      const commandRail = dom.get("#commandRail");
-      const fileInput = dom.get("#fileInput");
-      const selectButton = dom.get("#selectImage");
-      const settingsUploadButton = dom.get("#settingsUploadButton");
-      const settingsLoadConsole = dom.get("#settingsLoadConsole");
-      const sampleButtons = dom.all('[data-action="load-sample"]');
-      const sampleDetailButtons = dom.all("[data-detail-level]");
-      const sampleDetailCaptions = dom.all("[data-detail-caption]");
-      const samplePreview = dom.get("#sampleArtPreview");
-      const errorToast = dom.get("#errorToast");
-      const errorToastMessage = errorToast?.querySelector("[data-error-message]") || null;
-      const errorToastStack = errorToast?.querySelector("[data-error-stack]") || null;
-      const errorToastCopyButton = errorToast?.querySelector("[data-error-copy]") || null;
-      const errorToastCloseButton = errorToast?.querySelector("[data-error-close]") || null;
-      const defaultErrorCopyLabel = errorToastCopyButton?.textContent || "Copy error";
-      const gameSelectionList = dom.get("#gameSelectionList");
-      const gameSelectionEmpty = dom.get("#gameSelectionEmpty");
-      const startHint = document.getElementById("startHint");
-      const startHintCloseButton = document.getElementById("closeStartHint");
-      const startHintUploadButton = document.getElementById("startHintUpload");
-      const previewToggle = document.getElementById("previewToggle");
-      const fullscreenButton = document.getElementById("fullscreenButton");
-      const settingsButton = document.getElementById("settingsButton");
-      settingsButton?.addEventListener("click", () => {
-        if (typeof window.capySettingsBootstrap?.setOpen === "function") {
-          window.capySettingsBootstrap.setOpen(true);
-          requestAnimationFrame(() => window.capySettingsBootstrap.setOpen(true));
-        }
-        if (typeof openSheet === "function" && settingsSheet) {
-          openSheet(settingsSheet);
-        }
-      });
-      const settingsSheetHeader = settingsSheet?.querySelector(".sheet-header") || null;
-      const settingsBody =
-        settingsSheet?.querySelector("[data-settings-scroll]") ||
-        settingsSheet?.querySelector(".sheet-body") ||
-        null;
-      function ensureSaveManagerSection() {
-        // This function is no longer needed as the save manager section is now static HTML.
-        return document.getElementById("saveManagerSection");
-      }
-
-      const startSaveManagerSection = ensureSaveManagerSection();
-      const advancedModeToggle = document.getElementById("advancedModeToggle");
-      const settingsTabs = settingsSheet ? Array.from(settingsSheet.querySelectorAll("[data-settings-tab]")) : [];
-      const settingsPanels = settingsSheet
-        ? Array.from(settingsSheet.querySelectorAll("[data-settings-panel]"))
-        : [];
-      const settingsBlocks = settingsSheet
-        ? Array.from(settingsSheet.querySelectorAll("[data-settings-block]"))
-        : [];
-      const generatorPanel = settingsSheet?.querySelector('[data-settings-panel="create"]') || null;
-      const defaultSettingsTabId =
-        settingsTabs.find((tab) => tab.hasAttribute("data-settings-tab-default"))?.dataset.settingsTab ||
-        settingsPanels[0]?.dataset.settingsPanel ||
-        null;
-      const sheetRegistry = [settingsSheet].filter(Boolean);
-      const serviceWorkerStateLabel = document.querySelector("[data-service-worker-state]");
-      const serviceWorkerCacheLabel = document.querySelector("[data-service-worker-cache]");
-      const serviceWorkerUpdatedLabel = document.querySelector("[data-service-worker-updated]");
-      const debugLogEl = document.getElementById("debugLog");
-      const clearDebugLogButton = document.getElementById("clearDebugLog");
-      const settingsJsonView = document.getElementById("settingsJsonView");
-      const refreshSettingsJsonButton = document.getElementById("refreshSettingsJson");
-      const exportSettingsJsonButton = document.getElementById("exportSettingsJson");
-      const applySettingsJsonButton = document.getElementById("applySettingsJson");
-      const importSettingsFileInput = document.getElementById("importSettingsFile");
-      const saveStorageSummary = document.getElementById("saveStorageSummary");
-      const deleteAllSavesButton = document.getElementById("deleteAllSaves");
-      const viewportEl = document.getElementById("viewport");
-      const canvasStage = document.getElementById("canvasStage");
-      const canvasTransform = document.getElementById("canvasTransform");
-      const cursorOverlay = document.getElementById("pointerOverlay");
-      const cursorNumberEl = cursorOverlay?.querySelector("[data-pointer-number]") || null;
-      const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
-      const hintFlashToggle = document.getElementById("hintFlashToggle");
-      const hintMatchingToggle = document.getElementById("hintMatchingToggle");
-      const hintHoverToggle = document.getElementById("hintHoverToggle");
-      const hintFadeDurationInput = document.getElementById("hintFadeDuration");
-      const hintIntensityInput = document.getElementById("hintIntensity");
-      const difficultySelect = document.getElementById("difficultySelect");
-      const mouseControlInputs = {
-        left: {
-          click: document.getElementById("mouseLeftClick"),
-          drag: document.getElementById("mouseLeftDrag"),
-        },
-        middle: {
-          click: document.getElementById("mouseMiddleClick"),
-          drag: document.getElementById("mouseMiddleDrag"),
-        },
-        right: {
-          click: document.getElementById("mouseRightClick"),
-          drag: document.getElementById("mouseRightDrag"),
-        },
-      };
-      const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
-      const uiThemeSelect = document.getElementById("uiTheme");
-      const rendererModeSelect = document.getElementById("rendererMode");
-      const backgroundColorInput = document.getElementById("backgroundColor");
-      const stageBackgroundColorInput = document.getElementById("stageBackgroundColor");
-      const uiScaleInput = document.getElementById("uiScale");
-      const labelScaleInput = document.getElementById("labelScale");
-      const maxZoomInput = document.getElementById("maxZoom");
-      const colorCountEl = document.getElementById("colorCount");
-      const minRegionEl = document.getElementById("minRegion");
-      const detailEl = document.getElementById("detailLevel");
-      const algorithmEl = document.getElementById("generationAlgorithm");
-      const sampleRateEl = document.getElementById("sampleRate");
-      const kmeansItersEl = document.getElementById("kmeansIters");
-      const smoothingEl = document.getElementById("smoothingPasses");
-      const mergePassesEl = document.getElementById("mergePasses");
-      const perimeterRatioEl = document.getElementById("perimeterRatio");
-      const sliderResetButtons = settingsSheet
-        ? Array.from(settingsSheet.querySelectorAll("[data-reset-target]"))
-        : [];
-      const artPromptInput = document.getElementById("artPrompt");
-      const imageDescriptionInput = document.getElementById("imageDescription");
-      const sourceImageLimitSelect = document.getElementById("sourceImageLimit");
-      const chatGptLink = document.getElementById("chatGptLink");
-      const applyBtn = document.getElementById("applyOptions");
-      const saveManagerComponent = createSaveManagerComponent(startSaveManagerSection);
-      const paletteDock = createPaletteDockComponent({
-        root: document.getElementById("palette"),
-        sortControl: document.getElementById("paletteSort"),
-      });
-      const paletteSortEl = paletteDock.sortControl;
-      let rendererController = null;
-      paletteDock.on("select", (event) => {
-        const { colorId } = event?.detail || {};
-        if (colorId == null) return;
-        activateColor(colorId);
-      });
-      const ALLOWED_PALETTE_SORT_MODES = new Set([
-        "region",
-        "remaining",
-        "name",
-        "spectrum",
-        "warmth",
-        "lightness",
-      ]);
-      const WARM_HUE_PIVOT_RADIANS = (40 * Math.PI) / 180;
-      const generatorImportNotice =
-        generatorPanel?.querySelector("[data-import-notice]") || null;
-      const generatorImportFileEl = generatorPanel?.querySelector("[data-import-file]") || null;
-      const generatorImportDescriptionEl =
-        generatorPanel?.querySelector("[data-import-description]") || null;
-      const confirmImportBtn = document.getElementById("confirmImport");
-      const cancelImportBtn = generatorPanel?.querySelector("[data-import-cancel]") || null;
-      const generatorUrlForm = generatorPanel?.querySelector("[data-source-url-form]") || null;
-      const generatorUrlInput = generatorPanel?.querySelector("[data-source-url-input]") || null;
-      const generatorUrlSubmit = generatorPanel?.querySelector("[data-source-url-submit]") || null;
-      const generatorUrlHint = generatorPanel?.querySelector("[data-source-url-hint]") || null;
-      const generatorUrlError = generatorPanel?.querySelector("[data-source-url-error]") || null;
-      const generatorProgressEl = generatorPanel?.querySelector("[data-generator-progress]") || null;
-      const generatorProgressMessageEl =
-        generatorPanel?.querySelector("[data-generator-progress-message]") || null;
-      const generatorProgressMeterEl =
-        generatorPanel?.querySelector("[data-generator-progress-meter]") || null;
-      const generatorProgressBarEl =
-        generatorPanel?.querySelector("[data-generator-progress-bar]") || null;
-      const defaultProgressLabel =
-        generatorProgressMeterEl?.getAttribute("aria-label") || "Puzzle generation progress";
-      const DEFAULT_PROGRESS_MESSAGE = "";
-      const PROGRESS_MESSAGES = {
-        loading: "Loading puzzle…",
-        generating: "Processing image…",
-        complete: "All done!",
-      };
-      const puzzleCanvas = document.getElementById("puzzleCanvas");
-      const previewCanvas = document.createElement("canvas");
-      const previewCtx = previewCanvas.getContext("2d");
-      let svgRenderer = null;
-      let pendingSourceUrlLoad = false;
-
-      // Sheet output mirrors we update while users drag sliders.
-      const generatorOutputs = generatorPanel
-        ? {
-            colorCount: generatorPanel.querySelector('output[data-for="colorCount"]'),
-            minRegion: generatorPanel.querySelector('output[data-for="minRegion"]'),
-            detail: generatorPanel.querySelector('output[data-for="detailLevel"]'),
-            sample: generatorPanel.querySelector('output[data-for="sampleRate"]'),
-            iterations: generatorPanel.querySelector('output[data-for="kmeansIters"]'),
-            smoothing: generatorPanel.querySelector('output[data-for="smoothingPasses"]'),
-            mergePasses: generatorPanel.querySelector('output[data-for="mergePasses"]'),
-            perimeterRatio: generatorPanel.querySelector('output[data-for="perimeterRatio"]'),
-          }
-        : {};
-      const sourceImageLimitOutput = document.querySelector('output[data-for="sourceImageLimit"]');
-      const settingsOutputs = settingsSheet
-        ? {
-            uiScale: settingsSheet.querySelector('output[data-for="uiScale"]'),
-            labelScale: settingsSheet.querySelector('output[data-for="labelScale"]'),
-            maxZoom: settingsSheet.querySelector('output[data-for="maxZoom"]'),
-            hintFadeDuration: settingsSheet.querySelector('output[data-for="hintFadeDuration"]'),
-            hintIntensity: settingsSheet.querySelector('output[data-for="hintIntensity"]'),
-          }
-        : {};
-      const SAVE_STORAGE_KEY = "capy.saves.v2";
-      const LAST_IMAGE_STORAGE_KEY = "capy.last-uploaded-image.v1";
-      const { SETTINGS_STORAGE_KEY, SETTINGS_VERSION_STAMP } = capyConstants;
-      const SERVICE_WORKER_ENABLED = false;
-      const RUNTIME_CACHE_NAME = "capy-offline-cache-v4";
-      const CACHE_ORIGIN = "https://capy.local";
-      const SOURCE_IMAGE_CACHE_PREFIX = "source-images/";
-      const RUNTIME_CACHE_ASSETS = [
-        "./",
-        "./index.html",
-        "./styles.css",
-        "./capy.js",
-        "./capy.json",
-        "./service-worker-cache.js",
-      ];
-      const SETTINGS_AUTOSAVE_REASONS = new Set([
-        "settings-renderer",
-        "settings-auto-advance",
-        "settings-hint-animations",
-        "settings-hint-matching",
-        "settings-hint-hover",
-        "settings-difficulty",
-        "settings-hint-fade",
-        "settings-hint-intensity",
-        "settings-ui-scale",
-        "settings-label-scale",
-        "settings-max-zoom",
-        "settings-image-description",
-        "settings-art-prompt",
-        "settings-region-labels",
-        "settings-theme",
-        "settings-mouse-controls",
-        "settings-palette-sort",
-        "settings-launcher-position",
-        "background-colour",
-        "stage-background-colour",
-      ]);
-      const {
-        DEFAULT_BACKGROUND_HEX,
-        DEFAULT_STAGE_BACKGROUND_HEX,
-        DEFAULT_LAUNCHER_POSITION,
-        MIN_UI_SCALE,
-        MAX_UI_SCALE,
-        DEFAULT_UI_SCALE,
-        UI_SCALE_PRESETS,
-        DEFAULT_LABEL_SCALE,
-        DEFAULT_UI_THEME,
-        DEFAULT_GENERATION_ALGORITHM,
-        DEFAULT_REGION_MERGE_PASSES,
-        DEFAULT_MAX_PERIMETER_TO_AREA_RATIO,
-        VALID_GENERATION_ALGORITHMS,
-        VALID_UI_THEMES,
-        DEFAULT_HINT_FADE_DURATION,
-        MIN_HINT_FADE_DURATION,
-        MAX_HINT_FADE_DURATION,
-        DEFAULT_HINT_INTENSITY,
-        MIN_HINT_INTENSITY,
-        MAX_HINT_INTENSITY,
-        DEFAULT_HINT_TYPES,
-        HINT_TYPE_KEYS,
-        DEFAULT_SOURCE_IMAGE_MAX_BYTES,
-        SOURCE_IMAGE_LIMIT_OPTIONS,
-        MAX_SOURCE_IMAGE_LIMIT,
-        SOURCE_IMAGE_VARIANT_ORIGINAL,
-        SOURCE_IMAGE_VARIANT_GENERATED,
-        DEFAULT_DIFFICULTY,
-        VALID_DIFFICULTY_LEVELS,
-        MOUSE_BUTTON_KEYS,
-        MOUSE_BUTTON_LABELS,
-        DEFAULT_MOUSE_CONTROLS,
-        VALID_MOUSE_CLICK_ACTIONS,
-        VALID_MOUSE_DRAG_ACTIONS,
-        DOUBLE_TAP_GUARD_MS,
-      } = capyConstants;
-      let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
-      let settingsPersistTimer = null;
-      let pendingSettingsPersistPayload = null;
-      let lastStoredSettingsJson = null;
-      let suppressSettingsPersist = 0;
-      let hasStoredUserSettings = false;
-      const gameSaveManager = createGameSaveManager();
-      let autosaveTimer = null;
-      let pendingAutosaveReason = null;
-      let storageSummaryUpdateToken = 0;
-      let preventingBrowserZoom = false;
-
-      const performanceMetrics = createPerformanceMetrics({
-        flushInterval: 8000,
-        maxEvents: 32,
-        maxSamples: 8,
-        now:
-          typeof performance !== "undefined" && typeof performance.now === "function"
-            ? () => performance.now()
-            : () => Date.now(),
-        onFlush(snapshot, reason = "update") {
-          if (!snapshot || !snapshot.durations) {
-            return;
-          }
-          const entries = [];
-          for (const [label, stats] of Object.entries(snapshot.durations)) {
-            if (!stats || !stats.count) continue;
-            entries.push(
-              `${label} avg ${stats.average.toFixed(1)}ms (p${stats.count}, max ${stats.max.toFixed(1)}ms)`
-            );
-          }
-          if (entries.length > 0) {
-            const context = reason === "interval" ? "interval" : reason;
-            console.info(`[Performance] ${context} – ${entries.join("; ")}`);
-            trackPerformanceMetrics(snapshot, context);
-          }
-        },
-      });
-      const bootPerformanceTimer = performanceMetrics.start("app:boot", {
-        stage: "initializing",
-      });
-
-      function buildCacheRequest(cacheKey) {
-        const key = typeof cacheKey === "string" ? cacheKey.replace(/^\/+/, "") : "";
-        const url = `${CACHE_ORIGIN.replace(/\/$/, "")}/${key}`;
-        return new Request(url);
-      }
-
-      async function warmRuntimeCache() {
-        if (!SERVICE_WORKER_ENABLED) {
-          return;
-        }
-        if (typeof caches === "undefined" || typeof caches.open !== "function") {
-          return;
-        }
-        try {
-          const cache = await caches.open(RUNTIME_CACHE_NAME);
-          await cache.addAll(RUNTIME_CACHE_ASSETS);
-        } catch (error) {
-          console.warn("Failed to warm runtime cache", error);
-        }
-      }
-
-      function setServiceWorkerLabel(target, message) {
-        if (!target || message == null) return;
-        target.textContent = message;
-      }
-
-      function formatServiceWorkerTimestamp(value) {
-        const timestamp = value instanceof Date ? value : new Date(value);
-        if (Number.isNaN(timestamp.getTime())) {
-          return null;
-        }
-        return timestamp.toLocaleString([], { hour12: false });
-      }
-
-      function updateServiceWorkerSummary({ state, cacheName, updatedAt } = {}) {
-        if (cacheName) {
-          setServiceWorkerLabel(serviceWorkerCacheLabel, cacheName);
-        }
-        if (state) {
-          setServiceWorkerLabel(serviceWorkerStateLabel, state);
-        }
-        if (updatedAt !== undefined) {
-          const label = formatServiceWorkerTimestamp(updatedAt) || "Not available yet";
-          setServiceWorkerLabel(serviceWorkerUpdatedLabel, label);
-        }
-      }
-
-      function describeServiceWorkerState(state) {
-        switch (state) {
-          case "installing":
-            return "Installing…";
-          case "installed":
-            return "Installed";
-          case "activating":
-            return "Activating…";
-          case "activated":
-            return "Active";
-          case "redundant":
-            return "Replaced";
-          default:
-            return state || "Unknown";
-        }
-      }
-
-      function logServiceWorkerEvent(message, details = {}, timestamp = null) {
-        if (!message) return;
-        const suffix =
-          details && typeof details === "object" && Object.keys(details).length > 0
-            ? ` (${Object.entries(details)
-                .map(([key, value]) => `${key}: ${value}`)
-                .join(", ")})`
-            : "";
-        logDebug(`[sw] ${message}${suffix}`);
-        if (timestamp != null) {
-          updateServiceWorkerSummary({ updatedAt: timestamp });
-        }
-      }
-
-      function summarizeServiceWorkerUrl(url) {
-        if (!url || typeof url !== "string") {
-          return "request";
-        }
-        try {
-          const parsed = new URL(url, window.location.href);
-          return parsed.pathname || parsed.href;
-        } catch (_error) {
-          return url;
-        }
-      }
-
-      function watchServiceWorker(registration) {
-        if (!registration) {
-          return;
-        }
-        const monitor = (worker) => {
-          if (!worker) return;
-          updateServiceWorkerSummary({ state: describeServiceWorkerState(worker.state) });
-          worker.addEventListener("statechange", () => {
-            updateServiceWorkerSummary({
-              state: describeServiceWorkerState(worker.state),
-              updatedAt: Date.now(),
-            });
-            logServiceWorkerEvent(`Service worker ${worker.state}`, { scope: registration.scope });
-          });
-        };
-
-        monitor(registration.installing || registration.waiting || registration.active);
-      }
-
-      function handleServiceWorkerMessage(event) {
-        const data = event?.data;
-        if (!data || data.type !== "capy-sw") {
-          return;
-        }
-        const { event: swEvent, details = {}, timestamp } = data;
-        if (details.cacheName) {
-          updateServiceWorkerSummary({ cacheName: details.cacheName });
-        }
-        if (timestamp != null) {
-          updateServiceWorkerSummary({ updatedAt: timestamp });
-        }
-
-        switch (swEvent) {
-          case "install-complete":
-            updateServiceWorkerSummary({ state: "Installed" });
-            logServiceWorkerEvent("Installed offline assets", details, timestamp ?? Date.now());
-            break;
-          case "activate-complete":
-            updateServiceWorkerSummary({ state: "Active" });
-            logServiceWorkerEvent("Activated service worker", details, timestamp ?? Date.now());
-            break;
-          case "cache-skip": {
-            const urlSummary = summarizeServiceWorkerUrl(details.url);
-            const reasonLabel = details.reason ? ` (reason: ${details.reason})` : "";
-            logServiceWorkerEvent(
-              `Skipped caching ${urlSummary}${reasonLabel}`,
-              { cache: details.cacheName || RUNTIME_CACHE_NAME },
-              timestamp ?? Date.now()
-            );
-            break;
-          }
-          default:
-            logServiceWorkerEvent(`Service worker event: ${swEvent || "message"}`, details, timestamp ?? Date.now());
-            break;
-        }
-      }
-
-      function registerServiceWorker() {
-        if (!SERVICE_WORKER_ENABLED) {
-          updateServiceWorkerSummary({
-            cacheName: RUNTIME_CACHE_NAME,
-            state: "Disabled (offline cache paused)",
-          });
-          logServiceWorkerEvent("Service worker temporarily disabled");
-          if (typeof navigator !== "undefined" && navigator.serviceWorker) {
-            const teardownServiceWorker = async () => {
-              try {
-                const registrations =
-                  typeof navigator.serviceWorker.getRegistrations === "function"
-                    ? await navigator.serviceWorker.getRegistrations()
-                    : [];
-                let unregistered = 0;
-                for (const registration of registrations) {
-                  try {
-                    const didUnregister = await registration.unregister();
-                    if (didUnregister) {
-                      unregistered += 1;
-                    }
-                  } catch (error) {
-                    console.warn("Service worker unregister failed", error);
-                  }
-                }
-                if (unregistered > 0) {
-                  logServiceWorkerEvent("Unregistered service worker", { count: unregistered });
-                }
-              } catch (error) {
-                console.warn("Unable to enumerate service workers", error);
-              }
-              if (typeof caches !== "undefined" && typeof caches.delete === "function") {
-                try {
-                  await caches.delete(RUNTIME_CACHE_NAME);
-                } catch (cacheError) {
-                  console.warn("Unable to clear runtime cache", cacheError);
-                }
-              }
-            };
-            teardownServiceWorker();
-          }
-          return;
-        }
-        if (typeof navigator === "undefined" || !navigator.serviceWorker) {
-          updateServiceWorkerSummary({
-            cacheName: RUNTIME_CACHE_NAME,
-            state: "Unavailable (no service worker support)",
-          });
-          return;
-        }
-        updateServiceWorkerSummary({ cacheName: RUNTIME_CACHE_NAME, state: "Registering…" });
-        navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
-        navigator.serviceWorker.addEventListener("controllerchange", () => {
-          updateServiceWorkerSummary({ state: "Active (controller)", updatedAt: Date.now() });
-          logServiceWorkerEvent("Service worker is controlling this page");
-        });
-        navigator.serviceWorker
-          .register("./service-worker.js", { type: "module" })
-          .then((registration) => {
-            logServiceWorkerEvent("Registered service worker", { scope: registration?.scope });
-            watchServiceWorker(registration);
-            if (registration && typeof registration.update === "function") {
-              registration.update();
-            }
-            return navigator.serviceWorker.ready.catch(() => null);
-          })
-          .then((readyRegistration) => {
-            if (readyRegistration) {
-              watchServiceWorker(readyRegistration);
-              updateServiceWorkerSummary({ state: "Active", updatedAt: Date.now() });
-            }
-          })
-          .catch((error) => {
-            updateServiceWorkerSummary({ state: "Registration failed" });
-            logServiceWorkerEvent("Service worker registration failed", { error: error?.message || error });
-          });
-      }
-
-      async function cacheSourceImageBlob(blob, options = {}) {
-        if (
-          !SERVICE_WORKER_ENABLED ||
-          !blob ||
-          typeof caches === "undefined" ||
-          typeof caches.open !== "function"
-        ) {
-          return null;
-        }
-        try {
-          const cache = await caches.open(RUNTIME_CACHE_NAME);
-          const cacheKey =
-            typeof options.cacheKey === "string" && options.cacheKey.trim()
-              ? options.cacheKey.trim()
-              : `${SOURCE_IMAGE_CACHE_PREFIX}${Date.now()}-${Math.random().toString(16).slice(2)}`;
-          const request = buildCacheRequest(cacheKey);
-          const response = new Response(blob, {
-            headers: { "Content-Type": blob.type || "application/octet-stream" },
-          });
-          await cache.put(request, response);
-          return cacheKey;
-        } catch (error) {
-          console.warn("Unable to cache source image", error);
-          return null;
-        }
-      }
-
-      async function cacheSourceImageDataUrl(dataUrl, options = {}) {
-        if (!SERVICE_WORKER_ENABLED || typeof dataUrl !== "string" || !dataUrl) {
-          return null;
-        }
-        try {
-          const response = await fetch(dataUrl);
-          const blob = await response.blob();
-          return cacheSourceImageBlob(blob, options);
-        } catch (error) {
-          console.warn("Unable to cache data URL", error);
-          return null;
-        }
-      }
-
-      async function cacheSourceImageUrl(url, options = {}) {
-        if (
-          !SERVICE_WORKER_ENABLED ||
-          typeof caches === "undefined" ||
-          typeof caches.open !== "function" ||
-          !url
-        ) {
-          return null;
-        }
-        try {
-          const response = await fetch(url, { mode: "cors" });
-          if (!response || !response.ok) {
-            return null;
-          }
-          const cacheKey =
-            typeof options.cacheKey === "string" && options.cacheKey.trim()
-              ? options.cacheKey.trim()
-              : `${SOURCE_IMAGE_CACHE_PREFIX}${Date.now()}-${Math.random().toString(16).slice(2)}`;
-          const cache = await caches.open(RUNTIME_CACHE_NAME);
-          await cache.put(buildCacheRequest(cacheKey), response.clone());
-          return cacheKey;
-        } catch (error) {
-          console.warn("Unable to cache external image", error);
-          return null;
-        }
-      }
-
-      async function readCachedSourceImage(cacheKey) {
-        if (
-          !SERVICE_WORKER_ENABLED ||
-          typeof caches === "undefined" ||
-          typeof caches.open !== "function"
-        ) {
-          return null;
-        }
-        const normalizedKey = typeof cacheKey === "string" ? cacheKey.trim() : "";
-        if (!normalizedKey) {
-          return null;
-        }
-        try {
-          const cache = await caches.open(RUNTIME_CACHE_NAME);
-          const match = await cache.match(buildCacheRequest(normalizedKey));
-          if (!match) {
-            return null;
-          }
-          const blob = await match.blob();
-          const objectUrl = URL.createObjectURL(blob);
-          return { blob, objectUrl };
-        } catch (error) {
-          console.warn("Unable to read cached image", error);
-          return null;
-        }
-      }
-
-      function normalizeMouseClickAction(value, fallback = DEFAULT_MOUSE_CONTROLS.left.click) {
-        if (typeof value === "string" && VALID_MOUSE_CLICK_ACTIONS.has(value)) {
-          return value;
-        }
-        if (typeof fallback === "string" && VALID_MOUSE_CLICK_ACTIONS.has(fallback)) {
-          return fallback;
-        }
-        return DEFAULT_MOUSE_CONTROLS.left.click;
-      }
-
-      function normalizeMouseDragAction(value, fallback = DEFAULT_MOUSE_CONTROLS.left.drag) {
-        if (typeof value === "string" && VALID_MOUSE_DRAG_ACTIONS.has(value)) {
-          return value;
-        }
-        if (typeof fallback === "string" && VALID_MOUSE_DRAG_ACTIONS.has(fallback)) {
-          return fallback;
-        }
-        return DEFAULT_MOUSE_CONTROLS.left.drag;
-      }
-
-      function normalizeMouseControls(input, fallback = DEFAULT_MOUSE_CONTROLS) {
-        const base = fallback && typeof fallback === "object" ? fallback : DEFAULT_MOUSE_CONTROLS;
-        const normalized = {};
-        for (const key of MOUSE_BUTTON_KEYS) {
-          const entry = input && typeof input === "object" ? input[key] : null;
-          const baseEntry = base[key] || DEFAULT_MOUSE_CONTROLS[key];
-          normalized[key] = {
-            click: normalizeMouseClickAction(entry?.click, baseEntry?.click),
-            drag: normalizeMouseDragAction(entry?.drag, baseEntry?.drag),
-          };
-        }
-        return normalized;
-      }
-
-      function cloneMouseControls(source = DEFAULT_MOUSE_CONTROLS) {
-        const normalized = normalizeMouseControls(source);
-        return {
-          left: { ...normalized.left },
-          middle: { ...normalized.middle },
-          right: { ...normalized.right },
-        };
-      }
-
-      function getMouseControls() {
-        return normalizeMouseControls(state.settings?.mouseControls, DEFAULT_MOUSE_CONTROLS);
-      }
-
-      function getMouseControlsForButton(button) {
-        const controls = getMouseControls();
-        if (controls[button]) {
-          return controls[button];
-        }
-        return cloneMouseControls(DEFAULT_MOUSE_CONTROLS)[button];
-      }
-
-      function getMouseButtonName(buttonIndex) {
-        if (buttonIndex === 1) return "middle";
-        if (buttonIndex === 2) return "right";
-        return "left";
-      }
-
-      function describeMouseButton(button) {
-        return MOUSE_BUTTON_LABELS[button] || "Mouse button";
-      }
-
-      function describeMouseClickAction(action) {
-        switch (action) {
-          case "fill":
-            return "Fill region";
-          case "select-fill":
-            return "Select and fill region";
-          case "select":
-            return "Select colour";
-          case "zoom-in":
-            return "Zoom in";
-          case "zoom-out":
-            return "Zoom out";
-          case "none":
-          default:
-            return "No action";
-        }
-      }
-
-      function describeMouseDragAction(action) {
-        switch (action) {
-          case "pan":
-            return "Pan view";
-          case "fill":
-            return "Fill while dragging";
-          case "zoom":
-            return "Drag to zoom";
-          case "none":
-          default:
-            return "No action";
-        }
-      }
-
-      function isInteractiveElementForZoomGuard(node) {
-        return (
-          node instanceof Element &&
-          Boolean(
-            node.closest(
-              "input, textarea, select, button, [role=\"button\"], [role=\"textbox\"], [role=\"slider\"], [contenteditable=\"true\"]"
-            )
-          )
-        );
-      }
-
-      function installBrowserZoomGuards() {
-        if (typeof window === "undefined") return;
-        if (preventingBrowserZoom) return;
-        const isWithinGameSurface = (node) => {
-          if (!(node instanceof Node)) return false;
-          let current = node;
-          while (current) {
-            if (isGameSurface(current)) {
-              return true;
-            }
-            if (typeof ShadowRoot !== "undefined" && current instanceof ShadowRoot) {
-              current = current.host;
-            } else {
-              current = current.parentNode || null;
-            }
-          }
-          return false;
-        };
-
-        let lastTouchEndTime = 0;
-        const preventUiPinchZoom = (event) => {
-          if (!event) return;
-          const touches = event.touches;
-          if (!touches || touches.length < 2) return;
-          const path = typeof event.composedPath === "function" ? event.composedPath() : null;
-          if (Array.isArray(path) && path.some((node) => isWithinGameSurface(node))) {
-            return;
-          }
-          if (isWithinGameSurface(event.target)) {
-            return;
-          }
-          if (event.cancelable) {
-            event.preventDefault();
-          }
-        };
-
-        window.addEventListener(
-          "touchend",
-          (event) => {
-            const now = Date.now();
-            const remainingTouches = event.touches ? event.touches.length : 0;
-            if (remainingTouches === 0 && now - lastTouchEndTime <= DOUBLE_TAP_GUARD_MS) {
-              if (!isInteractiveElementForZoomGuard(event.target)) {
-                event.preventDefault();
-              }
-            }
-            lastTouchEndTime = now;
-          },
-          { passive: false }
-        );
-
-        window.addEventListener("touchstart", preventUiPinchZoom, {
-          passive: false,
-          capture: true,
-        });
-
-        window.addEventListener("touchmove", preventUiPinchZoom, {
-          passive: false,
-          capture: true,
-        });
-
-        ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
-          window.addEventListener(
-            type,
-            (event) => {
-              if (event && typeof event.preventDefault === "function") {
-                event.preventDefault();
-              }
-            },
-            { passive: false }
-          );
-        });
-
-        window.addEventListener(
-          "wheel",
-          (event) => {
-            if (!event) return;
-            if (!event.ctrlKey && !event.metaKey) return;
-            const isInteractive = isInteractiveElementForZoomGuard(event.target);
-            const isStageTarget = isGameSurface(event.target);
-            if (isInteractive || isStageTarget) {
-              return;
-            }
-            event.preventDefault();
-          },
-          { passive: false, capture: true }
-        );
-
-        window.addEventListener(
-          "keydown",
-          (event) => {
-            if (!event) return;
-            if (!event.ctrlKey && !event.metaKey) return;
-            if (event.altKey) return;
-            const isInteractive = isInteractiveElementForZoomGuard(event.target);
-            if (isInteractive) return;
-            const key = event.key;
-            const code = event.code;
-            const wantsReset = key === "0" || code === "Digit0" || code === "Numpad0";
-            const wantsZoomIn =
-              key === "+" || key === "=" || code === "Equal" || code === "NumpadAdd";
-            const wantsZoomOut = key === "-" || code === "Minus" || code === "NumpadSubtract";
-            if (!wantsReset && !wantsZoomIn && !wantsZoomOut) {
-              return;
-            }
-            event.preventDefault();
-            if (wantsReset) {
-              resetView({ preserveZoom: false, recenter: true });
-              return;
-            }
-            const allowShortcutTarget =
-              isWithinGameSurface(event.target) ||
-              event.target === document.body ||
-              event.target === document.documentElement;
-            if (!allowShortcutTarget) {
-              return;
-            }
-            applyZoom(wantsZoomIn ? 1.1 : 0.9, undefined, undefined, { defer: true });
-          },
-          { capture: true }
-        );
-
-        preventingBrowserZoom = true;
-      }
       function ensureRenderCache(options = {}) {
         if (!state.puzzle) {
           state.renderCache = createRenderCache();
@@ -5212,6 +1730,23 @@ function canUseGenerationWorker() {
         return setSettingsSheetPosition(nextPosition);
       }
 
+      function createRenderCache(options = {}) {
+        const cache = {
+          ready: false,
+          width: 0,
+          height: 0,
+          pixelWidth: 0,
+          pixelHeight: 0,
+          renderScale: 1,
+          version: 0,
+          regions: [],
+          regionsById: new Map(),
+          labelSettingsSignature: null,
+        };
+        syncCacheMetrics(cache);
+        return cache;
+      }
+
       // Primary puzzle state bag. applyPuzzleResult populates it and render* helpers read from it.
       const state = {
         puzzle: null,
@@ -5222,7 +1757,6 @@ function canUseGenerationWorker() {
         sourceCacheKey: null,
         lastFileHandle: null,
         lastOptions: null,
-        sampleDetailLevel: DEFAULT_SAMPLE_DETAIL,
         paletteSort: "region",
         settings: {
           autoAdvance: true,
@@ -5254,12 +1788,6 @@ function canUseGenerationWorker() {
         sceneLoaderSubscription: null,
         rendering: { renderer: null },
         paletteAdjacency: new Map(),
-        defaultGame: {
-          id: DEFAULT_GAME_SOURCE.id,
-          path: DEFAULT_GAME_SOURCE.path,
-          title: DEFAULT_GAME_FALLBACK.title,
-          description: DEFAULT_GAME_FALLBACK.description,
-        },
         sampleArtwork: null,
         paletteDisplayNumbers: new Map(),
       };
@@ -5288,9 +1816,6 @@ function canUseGenerationWorker() {
       if (typeof window !== "undefined") {
         window.__capyDebugLogEntries = debugLogEntries;
       }
-
-      registerServiceWorker();
-      warmRuntimeCache();
 
       const storedUserSettings = loadUserSettings();
       if (storedUserSettings) {
@@ -5321,6 +1846,23 @@ function canUseGenerationWorker() {
       function handleRendererChange(type) {
         const normalized = normalizeRendererType(type) ?? state.settings.renderer ?? "svg";
         return applyRendererMode(normalized, { skipAutosave: true, skipLog: true });
+      }
+
+      function renderPreviewImage(args = {}) {
+        const { state, previewCanvas, previewCtx } = args;
+        if (!state?.puzzle || !previewCanvas || !previewCtx) {
+          return null;
+        }
+        if (state.previewImageData) {
+          return state.previewImageData;
+        }
+        const { width, height } = state.puzzle;
+        const imageData = previewCtx.createImageData(width, height);
+        if (imageData) {
+          state.previewImageData = imageData;
+        }
+        renderPreview();
+        return state.previewImageData;
       }
 
       function registerRendererControls() {
@@ -5354,9 +1896,16 @@ function canUseGenerationWorker() {
       let pendingImportFile = null;
       let pendingImportAutoStart = false;
       updateImportNotice();
-      let shouldAutoLoadSample = false;
+      let shouldAutoLoadSample = true;
       let algorithmOptionsHydrated = false;
       updateMouseControlInputs();
+
+      let cachedDefaultGame = null;
+      let defaultGameRequest = null;
+
+      function hasDefaultGame() {
+        return Boolean(cachedDefaultGame || defaultGameRequest || getSampleDataUrl());
+      }
 
       function disableSampleAutoload() {
         shouldAutoLoadSample = false;
@@ -5374,14 +1923,13 @@ function canUseGenerationWorker() {
           return;
         }
         const dataUrl = getSampleDataUrl();
-        const hasDefaultGame = Boolean(DEFAULT_GAME_SOURCE?.path);
-        if (!dataUrl && !hasDefaultGame) {
+        const defaultGameIsAvailable = hasDefaultGame();
+        if (!dataUrl && !defaultGameIsAvailable) {
           return;
         }
         disableSampleAutoload();
         const { announce = false } = options;
         loadSamplePuzzle({
-          detailLevel: state.sampleDetailLevel,
           skipDetailUpdate: true,
           announce,
         });
@@ -5404,27 +1952,16 @@ function canUseGenerationWorker() {
       });
 
       function getDefaultGameTitle() {
-        const title = state.defaultGame?.title;
-        if (typeof title === "string" && title.trim()) {
-          return title.trim();
-        }
-        const fallback = DEFAULT_GAME_FALLBACK.title;
-        if (typeof fallback === "string" && fallback.trim()) {
-          return fallback.trim();
-        }
-        return DEFAULT_GAME_SOURCE.path;
+        const artwork = getSampleArtwork();
+        return artwork?.title || "Capybara";
       }
 
       function getDefaultGameDescription() {
-        const description = state.defaultGame?.description;
-        if (typeof description === "string" && description.trim()) {
-          return description.trim();
+        const artwork = getSampleArtwork();
+        if (artwork && typeof artwork.description === "string" && artwork.description.trim()) {
+          return artwork.description.trim();
         }
-        const fallback = DEFAULT_GAME_FALLBACK.description;
-        if (typeof fallback === "string" && fallback.trim()) {
-          return fallback.trim();
-        }
-        return "";
+        return "A sample puzzle featuring a capybara.";
       }
 
       function getSampleArtwork() {
@@ -5459,36 +1996,12 @@ function canUseGenerationWorker() {
       }
 
       function applyDefaultGameMetadata(metadata = {}) {
-        const fallbackTitle = DEFAULT_GAME_FALLBACK.title;
-        const fallbackDescription = DEFAULT_GAME_FALLBACK.description;
-        const titleValue =
-          typeof metadata.title === "string" && metadata.title.trim()
-            ? metadata.title.trim()
-            : typeof fallbackTitle === "string" && fallbackTitle.trim()
-            ? fallbackTitle.trim()
-            : "";
-        const descriptionValue =
-          typeof metadata.description === "string" && metadata.description.trim()
-            ? metadata.description.trim()
-            : typeof fallbackDescription === "string" && fallbackDescription.trim()
-            ? fallbackDescription.trim()
-            : "";
-        state.defaultGame = {
-          id: DEFAULT_GAME_SOURCE.id,
-          path: DEFAULT_GAME_SOURCE.path,
-          title: titleValue,
-          description: descriptionValue,
-        };
+        // This function is now a no-op as default game metadata is handled differently.
         refreshGameSelection();
       }
 
       function applySampleArtwork(artwork) {
         state.sampleArtwork = artwork || null;
-        applySampleDetailLevel(state.sampleDetailLevel, {
-          skipReload: true,
-          skipLog: true,
-          skipOptions: true,
-        });
       }
 
       function normalizeSampleArtwork(source, defaults = {}) {
@@ -5523,17 +2036,17 @@ function canUseGenerationWorker() {
           return defaultGameRequest;
         }
         const request = (async () => {
-          const response = await fetch(DEFAULT_GAME_SOURCE.path, { cache: "no-store" });
+          const response = await fetch("capy.json", { cache: "no-store" });
           if (!response.ok) {
             throw new Error(`Request failed with status ${response.status}`);
           }
-          const payload = await response.json();
-          const requestedTitle =
-            typeof payload.title === "string" && payload.title.trim() ? payload.title.trim() : "";
-          const requestedDescription =
-            typeof payload.description === "string" && payload.description.trim()
-              ? payload.description.trim()
-              : "";
+          const text = await response.text();
+          if (!text) {
+            return { payload: null, resolvedTitle: "", resolvedDescription: "" };
+          }
+          const payload = JSON.parse(text);
+          const requestedTitle = (typeof payload.title === "string" && payload.title.trim()) || "";
+          const requestedDescription = (typeof payload.description === "string" && payload.description.trim()) || "";
           applyDefaultGameMetadata({
             title: requestedTitle,
             description: requestedDescription,
@@ -6101,15 +2614,14 @@ function canUseGenerationWorker() {
         if (!button) continue;
         button.setAttribute("type", "button");
         button.addEventListener("click", () => {
-          const hasSampleArtwork = Boolean(getSampleDataUrl());
-          const hasDefaultPuzzle = Boolean(DEFAULT_GAME_SOURCE?.path);
+          const hasSampleArtwork = Boolean(getSampleDataUrl()) || hasDefaultGame();
           if (!hasSampleArtwork && !hasDefaultPuzzle) {
             return;
           }
           if (settingsSheet && settingsSheet.contains(button)) {
             closeSheet(settingsSheet);
           }
-          loadSamplePuzzle({ detailLevel: state.sampleDetailLevel });
+          loadSamplePuzzle();
         });
       }
 
@@ -6118,8 +2630,7 @@ function canUseGenerationWorker() {
           const target = event.target.closest("[data-game-id]");
           if (!target) return;
           const gameId = target.getAttribute("data-game-id");
-          if (!gameId) return;
-          if (gameId === DEFAULT_GAME_SOURCE.id) {
+          if (!gameId || gameId === "default-game") {
             loadDefaultPuzzle({ announce: true });
           } else {
             loadSaveEntry(gameId);
@@ -6127,16 +2638,7 @@ function canUseGenerationWorker() {
         });
       }
 
-      for (const button of sampleDetailButtons) {
-        if (!button) continue;
-        button.setAttribute("type", "button");
-        button.addEventListener("click", (event) => {
-          const target = event?.currentTarget?.dataset?.detailLevel;
-          applySampleDetailLevel(target);
-        });
-      }
-
-      applySampleDetailLevel(DEFAULT_SAMPLE_DETAIL, { skipReload: true, skipLog: true });
+      // applySampleDetailLevel(DEFAULT_SAMPLE_DETAIL, { skipReload: true, skipLog: true });
 
       const restoredSession = loadInitialSession();
       shouldAutoLoadSample = !restoredSession;
@@ -7527,144 +4029,11 @@ function canUseGenerationWorker() {
         hideCustomCursor();
       }
 
-      function applySampleDetailLevel(level, options = {}) {
-        const { skipReload = false, skipLog = false, skipOptions = false } = options;
-        const normalized = level && SAMPLE_DETAIL_LEVELS[level] ? level : DEFAULT_SAMPLE_DETAIL;
-        const config = SAMPLE_DETAIL_LEVELS[normalized];
-        if (!config) return null;
-        const previousLevel = state.sampleDetailLevel;
-        state.sampleDetailLevel = config.id;
-        const sampleTitle = getSampleTitle();
-        const sampleDescription = getSampleDescription();
-        const sampleDataUrl = getSampleDataUrl();
-        const sampleAvailable = Boolean(sampleDataUrl);
-        const canReloadSample = sampleAvailable || Boolean(DEFAULT_GAME_SOURCE?.path);
-        const reloadLabel = sampleTitle ? `Reload ${sampleTitle}` : "Reload sample puzzle";
-
-        for (const button of sampleDetailButtons) {
-          if (!button) continue;
-          const targetLevel = button.dataset.detailLevel;
-          const targetConfig = SAMPLE_DETAIL_LEVELS[targetLevel];
-          if (targetConfig) {
-            button.textContent = targetConfig.shortLabel;
-            button.setAttribute("aria-label", targetConfig.ariaLabel);
-            button.title = targetConfig.ariaLabel;
-          }
-          const isActive = targetLevel === config.id;
-          button.setAttribute("aria-pressed", isActive ? "true" : "false");
-        }
-        for (const caption of sampleDetailCaptions) {
-          if (caption) {
-            caption.textContent = config.summary;
-          }
-        }
-        for (const button of sampleButtons) {
-          if (!button) continue;
-          const detailSummary = config.summary || config.label;
-          const defaultLabel = `${reloadLabel} – ${config.label}`;
-          const titleText = detailSummary ? `${reloadLabel} – ${detailSummary}` : defaultLabel;
-          const ariaText = detailSummary
-            ? `${reloadLabel} (${detailSummary})`
-            : `${reloadLabel} (${config.label})`;
-          button.title = titleText;
-          button.setAttribute("aria-label", ariaText);
-          button.disabled = !canReloadSample;
-          if (config.approxRegions != null) {
-            button.dataset.detailRegions = String(config.approxRegions);
-          } else {
-            delete button.dataset.detailRegions;
-          }
-        }
-        if (samplePreview) {
-          const previewSummary = config.summary || config.label;
-          const previewTitle = sampleTitle || "Sample puzzle";
-          if (sampleAvailable) {
-            samplePreview.src = sampleDataUrl;
-            samplePreview.alt = sampleDescription || previewTitle;
-          } else {
-            samplePreview.removeAttribute("src");
-            samplePreview.alt = "";
-          }
-          samplePreview.title = previewSummary
-            ? `${previewTitle} – ${previewSummary}`
-            : `${previewTitle} – ${config.label}`;
-          if (config.approxRegions != null) {
-            samplePreview.dataset.detailRegions = String(config.approxRegions);
-          } else {
-            delete samplePreview.dataset.detailRegions;
-          }
-        }
-        if (!skipOptions) {
-          const settings = config.settings || {};
-          if (colorCountEl && typeof settings.targetColors === "number") {
-            colorCountEl.value = String(settings.targetColors);
-          }
-          if (minRegionEl && typeof settings.minRegion === "number") {
-            minRegionEl.value = String(settings.minRegion);
-          }
-          if (detailEl && typeof settings.maxSize === "number") {
-            detailEl.value = String(settings.maxSize);
-          }
-          if (sampleRateEl && typeof settings.sampleRate === "number") {
-            sampleRateEl.value = String(settings.sampleRate);
-          }
-          if (kmeansItersEl && typeof settings.kmeansIters === "number") {
-            kmeansItersEl.value = String(settings.kmeansIters);
-          }
-          if (smoothingEl && typeof settings.smoothingPasses === "number") {
-            smoothingEl.value = String(settings.smoothingPasses);
-          }
-          if (mergePassesEl && typeof settings.maxMergePasses === "number") {
-            mergePassesEl.value = String(settings.maxMergePasses);
-          }
-          if (perimeterRatioEl && typeof settings.maxPerimeterToAreaRatio === "number") {
-            perimeterRatioEl.value = String(settings.maxPerimeterToAreaRatio);
-          }
-          if (algorithmEl && typeof settings.algorithm === "string") {
-            const normalizedAlgorithm = normalizeGenerationAlgorithm(settings.algorithm);
-            if (algorithmEl.value !== normalizedAlgorithm) {
-              algorithmEl.value = normalizedAlgorithm;
-            }
-          } else if (algorithmEl && !settings.algorithm) {
-            if (algorithmEl.value !== DEFAULT_GENERATION_ALGORITHM) {
-              algorithmEl.value = DEFAULT_GENERATION_ALGORITHM;
-            }
-          }
-          if (sourceImageLimitSelect) {
-            if (typeof settings.sourceImageMaxBytes === "number") {
-              const limitValue = resolveSourceImageLimit(settings.sourceImageMaxBytes);
-              const limitText = String(limitValue);
-              if (sourceImageLimitSelect.value !== limitText) {
-                sourceImageLimitSelect.value = limitText;
-              }
-            } else {
-              const defaultLimit = String(DEFAULT_SOURCE_IMAGE_MAX_BYTES);
-              if (sourceImageLimitSelect.value !== defaultLimit) {
-                sourceImageLimitSelect.value = defaultLimit;
-              }
-            }
-          }
-          updateOptionOutputs();
-          markOptionsDirty();
-        }
-        if (!skipLog && previousLevel !== config.id) {
-          logDebug(`Sample detail set to ${config.label} – ${config.summary}`);
-        }
-        if (!skipReload && sampleAvailable && state.sourceUrl === sampleDataUrl) {
-          loadSamplePuzzle({ detailLevel: config.id, skipDetailUpdate: true });
-        }
-        return config;
-      }
-
       function loadSamplePuzzle(options = {}) {
         const { announce = true, detailLevel, skipDetailUpdate = false } = options;
         disableSampleAutoload();
-        const targetLevel = detailLevel || state.sampleDetailLevel || DEFAULT_SAMPLE_DETAIL;
-        const detailConfig = skipDetailUpdate
-          ? SAMPLE_DETAIL_LEVELS[targetLevel] || SAMPLE_DETAIL_LEVELS[DEFAULT_SAMPLE_DETAIL]
-          : applySampleDetailLevel(targetLevel, { skipReload: true, skipLog: !announce }) ||
-            SAMPLE_DETAIL_LEVELS[targetLevel] ||
-            SAMPLE_DETAIL_LEVELS[DEFAULT_SAMPLE_DETAIL];
+        const targetLevel = detailLevel || state.sampleDetailLevel || 'medium';
+        const detailConfig = { id: targetLevel, label: targetLevel, logDescriptor: targetLevel };
         const dataUrl = getSampleDataUrl();
         if (!dataUrl) {
           return loadDefaultPuzzle({ announce });
@@ -7702,10 +4071,8 @@ function canUseGenerationWorker() {
           const { payload, resolvedTitle, resolvedDescription } = await fetchDefaultGamePayload({
             forceRefresh,
           });
-          const descriptorTitle = resolvedTitle || getDefaultGameTitle();
-          const descriptor = resolvedDescription
-            ? `${descriptorTitle} – ${resolvedDescription}`
-            : descriptorTitle;
+          const descriptorTitle = resolvedTitle || "Sample Puzzle";
+          const descriptor = resolvedDescription ? `${descriptorTitle} – ${resolvedDescription}` : descriptorTitle;
           if (announce) {
             logDebug(`Loading ${descriptor}`);
           }
@@ -7716,25 +4083,25 @@ function canUseGenerationWorker() {
             stageBackgroundColor: payload.stageBackgroundColor,
             viewport: payload.viewport,
             settings: payload.settings,
-            title: descriptorTitle || DEFAULT_GAME_SOURCE.path || "Puzzle",
+            title: descriptorTitle || "Puzzle",
             skipDefaultLog: !announce,
           });
           if (applied) {
-            state.sourceUrl = DEFAULT_GAME_SOURCE.path;
-            state.sourceTitle = descriptorTitle || DEFAULT_GAME_SOURCE.path || "Puzzle";
+            state.sourceUrl = "capy.json";
+            state.sourceTitle = descriptorTitle || "Puzzle";
             hideStartScreen();
             setProgressMessage("active");
             recordUserEvent("default_puzzle_load", {
               event_label: state.sourceTitle,
             });
             if (!announce) {
-              logDebug(`Loaded ${state.sourceTitle} from ${DEFAULT_GAME_SOURCE.path}`);
+              logDebug(`Loaded ${state.sourceTitle} from capy.json`);
             }
             return true;
           }
         } catch (error) {
           console.error("Failed to load default puzzle", error);
-          logDebug(`Unable to load ${DEFAULT_GAME_SOURCE.path}. Check the console for details.`);
+          logDebug(`Unable to load default puzzle. Check the console for details.`);
         }
         setProgressMessage("idle");
         return false;
@@ -8402,7 +4769,7 @@ function canUseGenerationWorker() {
         for (const tab of settingsTabs) {
           const isAdvanced = tab?.dataset?.settingsTier === "advanced";
           const available = !isAdvanced || allowAdvanced;
-          tab.hidden = !available;
+          tab.hidden = !available && tab.dataset.settingsTab !== 'saves';
           tab.dataset.settingsAvailable = available ? "true" : "false";
           tab.setAttribute("aria-hidden", available ? "false" : "true");
         }
@@ -15367,49 +11734,11 @@ function canUseGenerationWorker() {
         );
       }
 
-      function renderSaveManagementItem(entry) {
-        const metadata = describeSaveEntry(entry);
-        const isLoaded = Boolean(state.loadedSaveId && metadata.id === state.loadedSaveId);
-        const timestamp = metadata.timestamp
-          ? html`<time datetime="${metadata.timestamp.toISOString()}">
-              ${metadata.timestamp.toLocaleString()}
-            </time>`
-          : "";
-        const storage = metadata.storageLabel
-          ? html`<span class="save-entry-storage">Storage ${metadata.storageLabel}</span>`
-          : "";
-        const status = isLoaded
-          ? html`<div class="save-entry-status">Autosaving this slot</div>`
-          : "";
-        return html`<article
-          class="save-entry"
-          role="listitem"
-          data-save-id="${metadata.id}"
-          data-loaded="${isLoaded ? "true" : "false"}"
-        >
-          <div class="save-entry-body">
-            ${renderSavePreview(metadata)}
-            <div class="save-entry-content">
-              <header>
-                <strong>${metadata.title}</strong>
-                ${timestamp}
-              </header>
-              <div class="save-entry-meta">
-                <span>${metadata.progressText}</span>
-                ${storage}
-              </div>
-              <div class="save-actions">${renderSaveActionButtons()}</div>
-              ${status}
-            </div>
-          </div>
-        </article>`;
-      }
-
       function renderDefaultGameSelectionItem() {
-        const defaultMetadata = state.defaultGame || {};
+        const defaultMetadata = { id: "default-game" };
         const resolvedTitle = getDefaultGameTitle();
         const resolvedDescription = getDefaultGameDescription();
-        const fallbackMeta = DEFAULT_GAME_FALLBACK.description || DEFAULT_GAME_SOURCE.path;
+        const fallbackMeta = "A sample puzzle featuring a capybara.";
         const metaText = resolvedDescription || fallbackMeta;
         const hideMeta = !resolvedDescription && (!metaText || metaText === resolvedTitle);
         const labelParts = [resolvedTitle];
@@ -15420,7 +11749,7 @@ function canUseGenerationWorker() {
           <button
             type="button"
             class="game-option-button"
-            data-game-id="${defaultMetadata.id || DEFAULT_GAME_SOURCE.id}"
+            data-game-id="${defaultMetadata.id}"
             aria-label="${labelParts.join(" – ")}"
           >
             <span class="game-option-title">${resolvedTitle}</span>

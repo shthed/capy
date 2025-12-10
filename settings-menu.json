@@ -258,17 +258,6 @@
             "text": "Scale region numbers independently from the surrounding interface. Default 100%."
           },
           {
-            "type": "range",
-            "id": "maxZoom",
-            "label": "Maximum zoom",
-            "min": 2,
-            "max": 30,
-            "step": 0.5,
-            "value": 12,
-            "default": 12,
-            "format": "zoom-percent"
-          },
-          {
             "type": "note",
             "text": "Limit how far the canvas can zoom in beyond the fitted view. Default 1200%."
           },
@@ -841,37 +830,6 @@
             "type": "toggle",
             "id": "advancedModeToggle",
             "label": "Show advanced settings"
-          }
-        ]
-      },
-      {
-        "type": "section",
-        "id": "systemHeading",
-        "title": "System status",
-        "items": [
-          {
-            "type": "definition-list",
-            "items": [
-              {
-                "term": "Service worker",
-                "description": "Waiting to register…",
-                "dataTarget": "service-worker-state"
-              },
-              {
-                "term": "Runtime cache",
-                "description": "capy-offline-cache-v3",
-                "dataTarget": "service-worker-cache"
-              },
-              {
-                "term": "Last update",
-                "description": "Not available yet",
-                "dataTarget": "service-worker-updated"
-              }
-            ]
-          },
-          {
-            "type": "note",
-            "text": "Service worker registration, cache limits, and install events stream into the debug log below."
           }
         ]
       },
