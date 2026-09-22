@@ -991,6 +991,7 @@ export { capyGlobal as capy, capyConstants };
       DEFAULT_LABEL_SCALE,
       DEFAULT_UI_THEME,
       DEFAULT_MAX_VIEWPORT_ZOOM,
+      ALLOWED_PALETTE_SORT_MODES,
     } = capyConstants;
     const createUiKit =
       window.capyUiKit ||
@@ -1014,6 +1015,16 @@ export { capyGlobal as capy, capyConstants };
 
     const dom = createUiKit(document);
     const settingsSheet = document.getElementById("settingsSheet");
+    const settingsBody = settingsSheet ? settingsSheet.querySelector(".sheet-body") : null;
+    const settingsSheetHeader = settingsSheet ? settingsSheet.querySelector(".sheet-header") : null;
+    const settingsTabs = settingsSheet ? Array.from(settingsSheet.querySelectorAll("[data-settings-tab]")) : [];
+    const settingsPanels = settingsSheet ? Array.from(settingsSheet.querySelectorAll("[data-settings-panel]")) : [];
+    const settingsBlocks = settingsSheet ? Array.from(settingsSheet.querySelectorAll("[data-settings-block]")) : [];
+
+    const rendererModeSelect = document.getElementById("rendererMode");
+    const uiThemeSelect = document.getElementById("uiTheme");
+    const difficultySelect = document.getElementById("difficultySelect");
+    const advancedModeToggle = document.getElementById("advancedModeToggle");
     // const settingsDefinition = capyGlobal.settingsDefinition || []; // Removed as settings are now static
     // if (settingsDefinition.length === 0) { // Removed as settings are now static
     // The settings menu is now rendered from static HTML, so dynamic rendering from settings-menu.json is no longer needed.
@@ -4067,6 +4078,24 @@ export { capyGlobal as capy, capyConstants };
         const { announce = true, forceRefresh = false } = options;
         disableSampleAutoload();
         resetPuzzleUI();
+        try {
+          const imageRes = await fetch("capy.png");
+          if (imageRes.ok) {
+            const blob = await imageRes.blob();
+            state.sourceTitle = "Capybara";
+            state.sourceUrl = "capy.png";
+            loadImage(blob, {
+              logMessage: "Loading default capybara artwork (capy.png)...",
+              completionMessage: "Capybara artwork ready",
+              skipDefaultLog: !announce,
+            });
+            hideStartScreen();
+            setProgressMessage("active");
+            return true;
+          }
+        } catch (_err) {
+          /* Fallback to capy.json below */
+        }
         try {
           const { payload, resolvedTitle, resolvedDescription } = await fetchDefaultGamePayload({
             forceRefresh,
