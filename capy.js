@@ -1025,6 +1025,100 @@ export { capyGlobal as capy, capyConstants };
     const uiThemeSelect = document.getElementById("uiTheme");
     const difficultySelect = document.getElementById("difficultySelect");
     const advancedModeToggle = document.getElementById("advancedModeToggle");
+
+    const appEl = document.getElementById("app");
+    const viewportEl = document.getElementById("viewport");
+    const puzzleCanvas = document.getElementById("puzzleCanvas");
+    const cursorOverlay = document.getElementById("pointerOverlay");
+    const cursorNumberEl = cursorOverlay ? cursorOverlay.querySelector("[data-pointer-number]") : null;
+    const cursorSwatchEl = cursorOverlay ? cursorOverlay.querySelector("[data-pointer-color-swatch]") : null;
+
+    const commandRail = document.getElementById("commandRail");
+    const settingsButton = document.getElementById("settingsButton") || document.getElementById("settings-button");
+    const previewToggle = document.getElementById("previewToggle") || document.getElementById("preview-toggle");
+    const fullscreenButton = document.getElementById("fullscreenButton") || document.getElementById("fullscreen-button");
+
+    const startHint = document.getElementById("startHint");
+    const startHintUpload = document.getElementById("startHintUpload");
+    const startHintCloseButton = document.getElementById("closeStartHint");
+
+    const fileInput = document.getElementById("fileInput");
+    const selectButton = document.getElementById("selectButton");
+    const settingsUploadButton = document.getElementById("settingsUploadButton");
+
+    const samplePreview = document.getElementById("samplePreview");
+    const sampleButtons = Array.from(document.querySelectorAll("[data-sample-id]"));
+    const sliderResetButtons = Array.from(document.querySelectorAll("[data-reset-target]"));
+
+    const autoAdvanceToggle = document.getElementById("autoAdvanceToggle");
+    const showRegionLabelsToggle = document.getElementById("showRegionLabelsToggle");
+    const hintFlashToggle = document.getElementById("hintFlashToggle");
+    const hintMatchingToggle = document.getElementById("hintMatchingToggle");
+    const hintHoverToggle = document.getElementById("hintHoverToggle");
+    const hintIntensityInput = document.getElementById("hintIntensity");
+    const hintFadeDurationInput = document.getElementById("hintFadeDuration");
+    const labelScaleInput = document.getElementById("labelScale");
+    const maxZoomInput = document.getElementById("maxZoom");
+    const backgroundColorInput = document.getElementById("backgroundColor");
+    const stageBackgroundColorInput = document.getElementById("stageBackgroundColor");
+    const paletteSortSelect = document.getElementById("paletteSort") || document.getElementById("palette-sort");
+    const uiScalePresetSelect = document.getElementById("uiScalePreset");
+    const uiScaleInput = document.getElementById("uiScale");
+
+    const applyBtn = document.getElementById("applyOptions");
+    const colorCountEl = document.getElementById("colorCount");
+    const sourceImageLimitSelect = document.getElementById("sourceImageLimit");
+    const sourceImageLimitOutput = document.getElementById("sourceImageLimitOutput");
+
+    const generatorImportNotice = document.querySelector("[data-generator-import-notice]");
+    const generatorImportFileEl = document.querySelector("[data-generator-import-file]");
+    const generatorImportDescriptionEl = document.querySelector("[data-generator-import-description]");
+    const generatorUrlSubmit = document.querySelector("[data-source-url-submit]");
+    const generatorProgressEl = document.querySelector("[data-generator-progress]");
+    const generatorProgressMessageEl = document.querySelector("[data-generator-progress-message]");
+    const generatorProgressMeterEl = document.querySelector("[data-generator-progress-meter]");
+    const generatorProgressBarEl = document.querySelector("[data-generator-bar]");
+
+    const debugLogEl = document.getElementById("debugLog");
+    const refreshSettingsJsonButton = document.getElementById("refreshSettingsJson");
+    const exportSettingsJsonButton = document.getElementById("exportSettingsJson");
+    const applySettingsJsonButton = document.getElementById("applySettingsJson");
+    const importSettingsFileInput = document.getElementById("importSettingsFile");
+    const settingsJsonView = document.getElementById("settingsJsonView");
+    const saveStorageSummary = document.querySelector("[data-save-storage-summary]");
+    const gameSelectionList = document.querySelector("[data-game-selection-list]");
+
+    const mouseControlInputs = {};
+    for (const btnKey of ["leftClick", "leftDrag", "middleClick", "middleDrag", "rightClick", "rightDrag"]) {
+      mouseControlInputs[btnKey] = document.getElementById(`mouse${btnKey.charAt(0).toUpperCase() + btnKey.slice(1)}`);
+    }
+
+    let suppressSettingsPersist = 0;
+    let pendingSettingsPersistPayload = null;
+    let settingsPersistTimer = null;
+    let hasStoredUserSettings = false;
+    let lastStoredSettingsJson = null;
+    let pendingSourceUrlLoad = false;
+    const defaultProgressLabel = "Puzzle generation progress";
+
+    const DEFAULT_PROGRESS_MESSAGE = "Processing puzzle...";
+    const PROGRESS_MESSAGES = {
+      idle: "",
+      generating: "Generating puzzle...",
+      active: "Puzzle ready",
+    };
+
+    function installBrowserZoomGuards() {}
+
+    const paletteDock = createPaletteDockComponent({
+      root: document.getElementById("palette"),
+      sortControl: paletteSortSelect,
+    });
+
+    const saveManagerComponent = createSaveManagerComponent(document.getElementById("saveManagerSection"));
+
+    const previewCanvas = document.createElement("canvas");
+    const previewCtx = previewCanvas.getContext("2d");
     // const settingsDefinition = capyGlobal.settingsDefinition || []; // Removed as settings are now static
     // if (settingsDefinition.length === 0) { // Removed as settings are now static
     // The settings menu is now rendered from static HTML, so dynamic rendering from settings-menu.json is no longer needed.
