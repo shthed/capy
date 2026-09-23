@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('loads the app page without runtime or console errors', async ({ page }) => {
+test('loads the app page and opens settings sheet without runtime or console errors', async ({ page }) => {
   const consoleErrors = [];
   const pageErrors = [];
 
@@ -15,7 +15,11 @@ test('loads the app page without runtime or console errors', async ({ page }) =>
   });
 
   await page.goto('index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(1000);
+
+  // Click settings button to test opening sheet
+  await page.click('#settingsButton');
+  await page.waitForTimeout(1000);
 
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);

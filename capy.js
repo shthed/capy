@@ -1258,6 +1258,8 @@ export { capyGlobal as capy, capyConstants };
 
     let paletteDock = { update() {}, root: null };
     let saveManagerComponent = { update() {}, on() {}, root: null };
+    const sheetRegistry = settingsSheet ? [settingsSheet] : [];
+    const defaultSettingsTabId = "settings";
 
     const previewCanvas = document.createElement("canvas");
     const previewCtx = previewCanvas.getContext("2d");
