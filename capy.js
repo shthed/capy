@@ -6090,19 +6090,11 @@ export { capyGlobal as capy, capyConstants };
         const sourceLimit = Number.isFinite(options?.sourceImageMaxBytes)
           ? options.sourceImageMaxBytes
           : DEFAULT_SOURCE_IMAGE_MAX_BYTES;
-        const prepareSourceImage = globalThis.capyGeneration?.prepareSourceImageBlob;
-        if (typeof prepareSourceImage !== "function") {
-          console.warn("prepareSourceImageBlob unavailable; import cancelled");
-          setProgressMessage("idle");
-          if (confirmImportBtn) {
-            confirmImportBtn.disabled = false;
-          }
-          return;
-        }
-        const prepared = await prepareSourceImage(file, {
-          maxBytes: sourceLimit,
-          maxSize: options?.maxSize,
-        });
+        const genModule = await loadPuzzleGenerationModule();
+        const prepareSourceImage = genModule?.prepareSourceImageBlob || globalThis.capyGeneration?.prepareSourceImageBlob;
+        const prepared = typeof prepareSourceImage === "function"
+          ? await prepareSourceImage(file, { maxBytes: sourceLimit, maxSize: options?.maxSize })
+          : { blob: file, bytes: file.size, mimeType: file.type };
         if (!prepared) {
           setProgressMessage("idle");
           if (confirmImportBtn) {
