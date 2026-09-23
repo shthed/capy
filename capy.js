@@ -1141,6 +1141,7 @@ export { capyGlobal as capy, capyConstants };
     const generatorUrlHint = document.getElementById("sourceUrlHint");
     const generatorUrlError = document.getElementById("sourceUrlError");
 
+    const generatorPanel = document.getElementById("settingsPanel-create") || document.querySelector('[data-settings-panel="create"]');
     const confirmImportBtn = document.getElementById("confirmImport");
     const cancelImportBtn = document.getElementById("cancelImport");
     const gameSelectionEmpty = document.querySelector("[data-game-selection-empty]");
