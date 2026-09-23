@@ -324,6 +324,7 @@ const capyConstants = (() => {
     },
     VALID_MOUSE_CLICK_ACTIONS: new Set(["fill", "select-fill", "select", "zoom-in", "zoom-out", "none"]),
     VALID_MOUSE_DRAG_ACTIONS: new Set(["pan", "fill", "zoom", "none"]),
+    ALLOWED_PALETTE_SORT_MODES: new Set(["region", "hue", "lightness"]),
     DOUBLE_TAP_GUARD_MS: 350,
   };
 
@@ -978,6 +979,8 @@ export { capyGlobal as capy, capyConstants };
       window.capySettingsBootstrap || Object.freeze({ log() {}, setOpen() {}, recordError() {}, syncJson() {} });
     settingsBootstrap.log("Renderer bootstrap starting");
     const {
+      SETTINGS_STORAGE_KEY,
+      SETTINGS_VERSION_STAMP,
       DEFAULT_BACKGROUND_HEX,
       DEFAULT_STAGE_BACKGROUND_HEX,
       DEFAULT_LAUNCHER_POSITION,
@@ -992,6 +995,28 @@ export { capyGlobal as capy, capyConstants };
       DEFAULT_UI_THEME,
       DEFAULT_MAX_VIEWPORT_ZOOM,
       ALLOWED_PALETTE_SORT_MODES,
+      DEFAULT_HINT_FADE_DURATION,
+      MIN_HINT_FADE_DURATION,
+      MAX_HINT_FADE_DURATION,
+      DEFAULT_HINT_INTENSITY,
+      MIN_HINT_INTENSITY,
+      MAX_HINT_INTENSITY,
+      DEFAULT_HINT_TYPES,
+      HINT_TYPE_KEYS,
+      DEFAULT_DIFFICULTY,
+      VALID_DIFFICULTY_LEVELS,
+      DEFAULT_MOUSE_CONTROLS,
+      VALID_MOUSE_CLICK_ACTIONS,
+      VALID_MOUSE_DRAG_ACTIONS,
+      MOUSE_BUTTON_KEYS,
+      DEFAULT_GENERATION_ALGORITHM,
+      DEFAULT_REGION_MERGE_PASSES,
+      DEFAULT_MAX_PERIMETER_TO_AREA_RATIO,
+      VALID_GENERATION_ALGORITHMS,
+      DEFAULT_SOURCE_IMAGE_MAX_BYTES,
+      VALID_UI_THEMES,
+      SOURCE_IMAGE_VARIANT_ORIGINAL,
+      SOURCE_IMAGE_VARIANT_GENERATED,
     } = capyConstants;
     const createUiKit =
       window.capyUiKit ||
@@ -1029,6 +1054,8 @@ export { capyGlobal as capy, capyConstants };
     const appEl = document.getElementById("app");
     const viewportEl = document.getElementById("viewport");
     const puzzleCanvas = document.getElementById("puzzleCanvas");
+    const canvasStage = puzzleCanvas;
+    const canvasTransform = puzzleCanvas;
     const cursorOverlay = document.getElementById("pointerOverlay");
     const cursorNumberEl = cursorOverlay ? cursorOverlay.querySelector("[data-pointer-number]") : null;
     const cursorSwatchEl = cursorOverlay ? cursorOverlay.querySelector("[data-pointer-color-swatch]") : null;
@@ -1067,8 +1094,58 @@ export { capyGlobal as capy, capyConstants };
 
     const applyBtn = document.getElementById("applyOptions");
     const colorCountEl = document.getElementById("colorCount");
+    const minRegionEl = document.getElementById("minRegion");
+    const detailEl = document.getElementById("detailLevel");
+    const sampleRateEl = document.getElementById("sampleRate");
+    const kmeansItersEl = document.getElementById("kmeansIters");
+    const smoothingEl = document.getElementById("smoothingPasses");
+    const mergePassesEl = document.getElementById("mergePasses");
+    const perimeterRatioEl = document.getElementById("perimeterRatio");
     const sourceImageLimitSelect = document.getElementById("sourceImageLimit");
     const sourceImageLimitOutput = document.getElementById("sourceImageLimitOutput");
+
+    const generatorOutputs = {
+      colorCount: document.querySelector("[data-color-count-output]"),
+      minRegion: document.querySelector("[data-min-region-output]"),
+      detail: document.querySelector("[data-detail-output]"),
+      sample: document.querySelector("[data-sample-output]"),
+      iterations: document.querySelector("[data-iterations-output]"),
+      smoothing: document.querySelector("[data-smoothing-output]"),
+      mergePasses: document.querySelector("[data-merge-passes-output]"),
+      perimeterRatio: document.querySelector("[data-perimeter-ratio-output]"),
+    };
+
+    const settingsOutputs = {
+      uiScale: document.querySelector("[data-ui-scale-output]"),
+      labelScale: document.querySelector("[data-label-scale-output]"),
+      maxZoom: document.querySelector("[data-max-zoom-output]"),
+      hintFadeDuration: document.querySelector("[data-hint-fade-duration-output]"),
+      hintIntensity: document.querySelector("[data-hint-intensity-output]"),
+    };
+
+    const artPromptInput = document.getElementById("artPrompt");
+    const imageDescriptionInput = document.getElementById("imageDescription");
+    const algorithmEl = document.getElementById("generationAlgorithm");
+
+    const errorToast = document.getElementById("errorToast");
+    const errorToastCopyButton = errorToast ? errorToast.querySelector("[data-copy]") : null;
+    const errorToastCloseButton = errorToast ? errorToast.querySelector("[data-close]") : null;
+    const errorToastMessage = errorToast ? errorToast.querySelector("[data-message]") : null;
+    const errorToastStack = errorToast ? errorToast.querySelector("[data-stack]") : null;
+
+    const clearDebugLogButton = document.getElementById("clearDebugLog");
+    const deleteAllSavesButton = document.getElementById("deleteAllSaves");
+
+    const generatorUrlForm = document.querySelector("[data-source-url-form]");
+    const generatorUrlInput = document.querySelector("[data-source-url-input]");
+    const generatorUrlHint = document.getElementById("sourceUrlHint");
+    const generatorUrlError = document.getElementById("sourceUrlError");
+
+    const confirmImportBtn = document.getElementById("confirmImport");
+    const cancelImportBtn = document.getElementById("cancelImport");
+    const gameSelectionEmpty = document.querySelector("[data-game-selection-empty]");
+    const startHintUploadButton = document.getElementById("startHintUpload");
+    const paletteSortEl = document.getElementById("paletteSort") || document.getElementById("palette-sort");
 
     const generatorImportNotice = document.querySelector("[data-generator-import-notice]");
     const generatorImportFileEl = document.querySelector("[data-generator-import-file]");
@@ -1099,6 +1176,9 @@ export { capyGlobal as capy, capyConstants };
     let hasStoredUserSettings = false;
     let lastStoredSettingsJson = null;
     let pendingSourceUrlLoad = false;
+    let storageSummaryUpdateToken = 0;
+    const bootPerformanceTimer = null;
+    const SAVE_STORAGE_KEY = "capy.saves.v1";
     const defaultProgressLabel = "Puzzle generation progress";
 
     const DEFAULT_PROGRESS_MESSAGE = "Processing puzzle...";
@@ -1110,15 +1190,78 @@ export { capyGlobal as capy, capyConstants };
 
     function installBrowserZoomGuards() {}
 
-    const paletteDock = createPaletteDockComponent({
-      root: document.getElementById("palette"),
-      sortControl: paletteSortSelect,
-    });
+    async function cacheSourceImageBlob(blob, options = {}) { return options.cacheKey || null; }
+    async function cacheSourceImageDataUrl(dataUrl, options = {}) { return options.cacheKey || null; }
 
-    const saveManagerComponent = createSaveManagerComponent(document.getElementById("saveManagerSection"));
+    const performanceMetrics = {
+      start() { return { stop() {}, end() {} }; },
+      mark() {},
+      flush() {},
+      getSummary() { return null; },
+      reset() { return null; },
+    };
+
+    const canvasMetrics = {
+      displayScale: 1,
+      pixelRatio: 1,
+      pixelWidth: 800,
+      pixelHeight: 600,
+    };
+
+    const computeInkStyles = capyRenderer?.computeInkStyles || (() => ({ outline: "rgba(15,23,42,0.65)", number: "rgba(15,23,42,0.95)" }));
+    let backgroundInk = computeInkStyles(DEFAULT_BACKGROUND_HEX);
+    function rebuildRenderCache(cache) {
+      if (!cache) return;
+      cache.ready = true;
+    }
+    function computeOutlineStrokeWidth() { return 1; }
+    function hydrateSceneTiles() {}
+
+    function normalizeMouseControls(candidate) {
+      if (!candidate || typeof candidate !== "object") {
+        return DEFAULT_MOUSE_CONTROLS;
+      }
+      const next = {};
+      for (const btn of MOUSE_BUTTON_KEYS) {
+        const val = candidate[btn] || {};
+        next[btn] = {
+          click: VALID_MOUSE_CLICK_ACTIONS.has(val.click) ? val.click : DEFAULT_MOUSE_CONTROLS[btn].click,
+          drag: VALID_MOUSE_DRAG_ACTIONS.has(val.drag) ? val.drag : DEFAULT_MOUSE_CONTROLS[btn].drag,
+        };
+      }
+      return next;
+    }
+
+    function cloneMouseControls(controls) {
+      const src = controls || DEFAULT_MOUSE_CONTROLS;
+      const copy = {};
+      for (const btn of MOUSE_BUTTON_KEYS) {
+        copy[btn] = { ...(src[btn] || DEFAULT_MOUSE_CONTROLS[btn]) };
+      }
+      return copy;
+    }
+
+    let state = null;
+
+    function getMouseControls() {
+      return state?.settings?.mouseControls || DEFAULT_MOUSE_CONTROLS;
+    }
+
+    const gameSaveManager = {
+      hydrate() { return []; },
+      subscribe() {},
+      save() {},
+      delete() {},
+    };
+
+    let rendererController = null;
+
+    let paletteDock = { update() {}, root: null };
+    let saveManagerComponent = { update() {}, on() {}, root: null };
 
     const previewCanvas = document.createElement("canvas");
     const previewCtx = previewCanvas.getContext("2d");
+
     // const settingsDefinition = capyGlobal.settingsDefinition || []; // Removed as settings are now static
     // if (settingsDefinition.length === 0) { // Removed as settings are now static
     // The settings menu is now rendered from static HTML, so dynamic rendering from settings-menu.json is no longer needed.
@@ -1260,6 +1403,14 @@ export { capyGlobal as capy, capyConstants };
 
           return { root: section, update: component.update, on: component.on };
         }
+
+        paletteDock = createPaletteDockComponent({
+          root: document.getElementById("palette"),
+          sortControl: paletteSortSelect,
+        });
+
+        saveManagerComponent = createSaveManagerComponent(document.getElementById("saveManagerSection"));
+
       function ensureRenderCache(options = {}) {
         if (!state.puzzle) {
           state.renderCache = createRenderCache();
@@ -4173,24 +4324,6 @@ export { capyGlobal as capy, capyConstants };
         disableSampleAutoload();
         resetPuzzleUI();
         try {
-          const imageRes = await fetch("capy.png");
-          if (imageRes.ok) {
-            const blob = await imageRes.blob();
-            state.sourceTitle = "Capybara";
-            state.sourceUrl = "capy.png";
-            loadImage(blob, {
-              logMessage: "Loading default capybara artwork (capy.png)...",
-              completionMessage: "Capybara artwork ready",
-              skipDefaultLog: !announce,
-            });
-            hideStartScreen();
-            setProgressMessage("active");
-            return true;
-          }
-        } catch (_err) {
-          /* Fallback to capy.json below */
-        }
-        try {
           const { payload, resolvedTitle, resolvedDescription } = await fetchDefaultGamePayload({
             forceRefresh,
           });
@@ -4199,28 +4332,30 @@ export { capyGlobal as capy, capyConstants };
           if (announce) {
             logDebug(`Loading ${descriptor}`);
           }
-          const applied = applyPuzzleResult(payload, {
-            options: payload.options || getCurrentOptions(),
-            activeColor: payload.activeColor,
-            backgroundColor: payload.backgroundColor,
-            stageBackgroundColor: payload.stageBackgroundColor,
-            viewport: payload.viewport,
-            settings: payload.settings,
-            title: descriptorTitle || "Puzzle",
-            skipDefaultLog: !announce,
-          });
-          if (applied) {
-            state.sourceUrl = "capy.json";
-            state.sourceTitle = descriptorTitle || "Puzzle";
-            hideStartScreen();
-            setProgressMessage("active");
-            recordUserEvent("default_puzzle_load", {
-              event_label: state.sourceTitle,
+          if (payload) {
+            const applied = applyPuzzleResult(payload, {
+              options: payload.options || getCurrentOptions(),
+              activeColor: payload.activeColor,
+              backgroundColor: payload.backgroundColor,
+              stageBackgroundColor: payload.stageBackgroundColor,
+              viewport: payload.viewport,
+              settings: payload.settings,
+              title: descriptorTitle || "Puzzle",
+              skipDefaultLog: !announce,
             });
-            if (!announce) {
-              logDebug(`Loaded ${state.sourceTitle} from capy.json`);
+            if (applied) {
+              state.sourceUrl = "capy.json";
+              state.sourceTitle = descriptorTitle || "Puzzle";
+              hideStartScreen();
+              setProgressMessage("active");
+              recordUserEvent("default_puzzle_load", {
+                event_label: state.sourceTitle,
+              });
+              if (!announce) {
+                logDebug(`Loaded ${state.sourceTitle} from capy.json`);
+              }
+              return true;
             }
-            return true;
           }
         } catch (error) {
           console.error("Failed to load default puzzle", error);
