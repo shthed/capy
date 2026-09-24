@@ -326,6 +326,11 @@ const capyConstants = (() => {
     VALID_MOUSE_DRAG_ACTIONS: new Set(["pan", "fill", "zoom", "none"]),
     ALLOWED_PALETTE_SORT_MODES: new Set(["region", "hue", "lightness"]),
     DOUBLE_TAP_GUARD_MS: 350,
+    SOURCE_IMAGE_CACHE_PREFIX: "capy.source-image.",
+    WARM_HUE_PIVOT_RADIANS: (30 * Math.PI) / 180,
+    MIN_RENDER_SCALE: 0.1,
+    MAX_RENDER_SCALE: 16,
+    SETTINGS_AUTOSAVE_REASONS: new Set(["change", "preset", "reset", "menu", "theme", "scale", "settings-launcher-position"]),
   };
 
   constants.MAX_SOURCE_IMAGE_LIMIT = constants.SOURCE_IMAGE_LIMIT_OPTIONS.reduce((max, option) => {
@@ -1017,6 +1022,11 @@ export { capyGlobal as capy, capyConstants };
       VALID_UI_THEMES,
       SOURCE_IMAGE_VARIANT_ORIGINAL,
       SOURCE_IMAGE_VARIANT_GENERATED,
+      SOURCE_IMAGE_CACHE_PREFIX,
+      WARM_HUE_PIVOT_RADIANS,
+      MIN_RENDER_SCALE,
+      MAX_RENDER_SCALE,
+      SETTINGS_AUTOSAVE_REASONS,
     } = capyConstants;
     const createUiKit =
       window.capyUiKit ||
