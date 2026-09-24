@@ -1201,6 +1201,12 @@ export { capyGlobal as capy, capyConstants };
 
     function installBrowserZoomGuards() {}
 
+    function buildCacheRequest(cacheKey) {
+      return { url: typeof cacheKey === "string" ? cacheKey : "" };
+    }
+    async function readCachedSourceImage(cacheKey) {
+      return null;
+    }
     async function cacheSourceImageBlob(blob, options = {}) { return options.cacheKey || null; }
     async function cacheSourceImageDataUrl(dataUrl, options = {}) { return options.cacheKey || null; }
 
