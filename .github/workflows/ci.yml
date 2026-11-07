@@ -11,7 +11,7 @@ on:
 
 jobs:
   android-test:
-    name: Android Unit Tests (app/)
+    name: Android Unit Tests & APK Build (app/)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,8 +25,15 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Run Android Unit Tests
-        run: ./gradlew app:testDebugUnitTest
+      - name: Run Android Unit Tests & Assemble Debug APK
+        run: ./gradlew app:testDebugUnitTest app:assembleDebug
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: capy-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
 
   web-verify:
     name: Web Build & Typecheck (web/)
@@ -54,10 +61,7 @@ jobs:
         run: npm run build
 
   web1-verify:
-    name: Legacy Web Smoke Tests (web1/)
-    defaults:
-      run:
-        working-directory: web1
+    name: Web & Web1 Playwright Smoke Tests
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -67,13 +71,28 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: web1/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            web1/package-lock.json
 
-      - name: Install dependencies
+      - name: Build Updated Web (web/)
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install Legacy Web (web1/) dependencies
+        working-directory: web1
         run: npm ci
 
       - name: Provision Playwright browsers
+        working-directory: web1
         run: npx playwright install --with-deps chromium
 
-      - name: Run Playwright Web1 Smoke Suite
-        run: npm test --silent
+      - name: Run Playwright Smoke Suite on web1/ and built web/dist/
+        working-directory: web1
+        run: |
+          rm -rf web-dist-test
+          cp -r ../web/dist web-dist-test
+          npm test --silent
+          rm -rf web-dist-test

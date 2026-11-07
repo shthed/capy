@@ -9,6 +9,7 @@
 
 - **Launch Updated Web App (`web/`)**: [https://shthed.github.io/capy/](https://shthed.github.io/capy/)
 - **Launch Legacy Web App v1 (`web1/`)**: [https://shthed.github.io/capy/web1/](https://shthed.github.io/capy/web1/)
+- **Download Android APK (`app/`)**: [https://shthed.github.io/capy/capy.apk](https://shthed.github.io/capy/capy.apk)
 
 ---
 

@@ -17,7 +17,7 @@ on:
         type: boolean
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -91,6 +91,7 @@ jobs:
               `Target directory: ${targetDir}`,
               `Preview URL (Web): ${previewUrl}`,
               `Preview URL (Web1): ${previewUrl}web1/`,
+              `Android APK URL: ${previewUrl}capy.apk`,
             ];
 
             if (shouldSkip) {
@@ -105,6 +106,29 @@ jobs:
             core.setOutput('skip', shouldSkip ? 'true' : 'false');
 
             core.summary.addRaw(summaryLines.join('\n')).write();
+
+      - name: Set up JDK 17
+        if: steps.target.outputs.skip != 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        if: steps.target.outputs.skip != 'true'
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build Android Debug APK (app/)
+        if: steps.target.outputs.skip != 'true'
+        run: ./gradlew app:assembleDebug
+
+      - name: Upload Android APK Artifact
+        if: steps.target.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: capy-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
 
       - name: Use Node.js 20
         if: steps.target.outputs.skip != 'true'
@@ -137,8 +161,6 @@ jobs:
             rm -rf pages/*
           fi
 
-          rm -rf pages/.git
-
       - name: Prepare site content
         if: steps.target.outputs.skip != 'true'
         env:
@@ -152,6 +174,7 @@ jobs:
             DEST_DIR="pages"
             mkdir -p "${DEST_DIR}"
             rsync -av --delete \
+              --exclude '.git/' \
               --exclude 'pull/' \
               --exclude 'web1/' \
               --exclude 'README/' \
@@ -162,6 +185,8 @@ jobs:
             rsync -av --delete \
               web/dist/ "${DEST_DIR}/"
           fi
+
+          cp app/build/outputs/apk/debug/app-debug.apk "${DEST_DIR}/capy.apk"
 
           mkdir -p "${DEST_DIR}/web1"
           rsync -av --delete \
@@ -179,6 +204,27 @@ jobs:
             --exclude 'server.js' \
             web1/ "${DEST_DIR}/web1/"
 
+      - name: Sync gh-pages branch and remove .git before artifact upload
+        if: steps.target.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
+        run: |
+          set -euo pipefail
+          if [ -d pages/.git ]; then
+            cd pages
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -m "Deploy ${TARGET_DIR}"
+              git push origin gh-pages || echo "Warning: gh-pages push skipped"
+            fi
+            cd ..
+            rm -rf pages/.git
+          fi
+
       - name: Capture deployment directory listing
         if: steps.target.outputs.skip != 'true'
         env:
@@ -188,7 +234,7 @@ jobs:
 
           LIST_PATH="pages/${TARGET_DIR}"
           echo "Listing contents for ${LIST_PATH} and ${LIST_PATH}/web1" > deployment-directory-listing.txt
-          ls -la "${LIST_PATH}" "${LIST_PATH}/web1" | tee -a deployment-directory-listing.txt
+          ls -lh "${LIST_PATH}" "${LIST_PATH}/web1" | tee -a deployment-directory-listing.txt
 
       - name: Upload Pages artifact
         if: steps.target.outputs.skip != 'true'
@@ -212,6 +258,7 @@ jobs:
           {
             echo "Preview (Web): ${{ steps.target.outputs.preview_url }}"
             echo "Preview (Web1): ${{ steps.target.outputs.preview_url }}web1/"
+            echo "Android APK: ${{ steps.target.outputs.preview_url }}capy.apk"
             echo ""
             echo "Deployment directory listing (pages/${TARGET_DIR}):"
             echo '```'

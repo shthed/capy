@@ -56,6 +56,7 @@ jobs:
               link('Run', runUrl),
               link('Preview (Web)', previewUrl),
               link('Preview (Web1)', `${previewUrl}web1/`),
+              link('Android APK', `${previewUrl}capy.apk`),
               link('Tests', testsUrl),
               artifactUrl ? link('Artifact', artifactUrl) : 'Artifact: unavailable',
               link('Rerun', runUrl),
