@@ -223,6 +223,10 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
       className={`fixed bottom-0 left-0 right-0 z-20 flex items-center px-3 pt-2 bg-slate-950/90 backdrop-blur-md border-t border-slate-800/80 shadow-2xl transition-all ${
         raiseDock ? 'safe-bottom-raised' : 'safe-bottom'
       }`}
+      style={{
+        paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
+        paddingRight: 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
+      }}
       aria-label="Palette dock"
     >
       <div className="flex items-center w-full max-w-7xl mx-auto gap-2.5 overflow-hidden">

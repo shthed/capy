@@ -22,9 +22,11 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
 }) => {
   return (
     <div
-      className={`fixed right-4 z-20 flex flex-col items-end gap-2.5 transition-all ${
-        raiseDock ? 'bottom-24' : 'bottom-20'
-      }`}
+      className="fixed z-20 flex flex-col items-end gap-2.5 transition-all"
+      style={{
+        bottom: `calc(${raiseDock ? '6.25rem' : '5rem'} + var(--sab, 0px))`,
+        right: 'calc(1rem + var(--sar, 0px))',
+      }}
     >
       {showZoomButtons && (
         <>

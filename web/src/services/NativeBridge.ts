@@ -8,6 +8,7 @@ interface CapyAndroidInterface {
   shareImage?: (title: string, dataUrl: string) => void;
   consumePendingSharedImage?: () => string | null;
   getAppVersion?: () => string;
+  getSafeAreaInsets?: () => string;
 }
 
 declare global {
@@ -31,6 +32,8 @@ class NativeBridgeService {
 
   constructor() {
     if (typeof window !== 'undefined') {
+      this.applySafeAreaInsets();
+
       window.__capyCloseModal = () => {
         if (this.modalCloseHandler) {
           this.modalCloseHandler();
@@ -56,6 +59,35 @@ class NativeBridgeService {
 
   get isNative(): boolean {
     return this.platform !== 'web';
+  }
+
+  getSafeAreaInsets(): { top: number; bottom: number; left: number; right: number } {
+    try {
+      if (typeof window !== 'undefined' && window.CapyAndroid?.getSafeAreaInsets) {
+        const raw = window.CapyAndroid.getSafeAreaInsets();
+        if (raw) return JSON.parse(raw);
+      }
+    } catch {
+      // ignore
+    }
+    return { top: 0, bottom: 0, left: 0, right: 0 };
+  }
+
+  applySafeAreaInsets(): void {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const insets = this.getSafeAreaInsets();
+    if (insets.top > 0) {
+      document.documentElement.style.setProperty('--safe-area-top', `${insets.top}px`);
+    }
+    if (insets.bottom > 0) {
+      document.documentElement.style.setProperty('--safe-area-bottom', `${insets.bottom}px`);
+    }
+    if (insets.left > 0) {
+      document.documentElement.style.setProperty('--safe-area-left', `${insets.left}px`);
+    }
+    if (insets.right > 0) {
+      document.documentElement.style.setProperty('--safe-area-right', `${insets.right}px`);
+    }
   }
 
   haptic(type: HapticType = 'tick', enabled: boolean = true): void {

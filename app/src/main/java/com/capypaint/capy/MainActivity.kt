@@ -122,6 +122,7 @@ class MainActivity : ComponentActivity() {
                 override fun onPageFinished(view: WebView, url: String?) {
                     super.onPageFinished(view, url)
                     isPageLoaded = true
+                    applySafeAreaInsetsToWebView()
                     deliverPendingSharedImageIfNeeded()
                 }
             }
@@ -147,11 +148,23 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        ViewCompat.setOnApplyWindowInsetsListener(wv) { view, windowInsets ->
+        val density = resources.displayMetrics.density
+        val defaultTop = (getStatusBarHeight() / density).toInt()
+        val defaultBottom = (getNavigationBarHeight() / density).toInt()
+        bridge.updateSafeAreaInsets(defaultTop, defaultBottom, 0, 0)
+
+        ViewCompat.setOnApplyWindowInsetsListener(wv) { _, windowInsets ->
             val insets = windowInsets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
             )
-            view.setPadding(insets.left, insets.top, insets.right, insets.bottom)
+            val d = resources.displayMetrics.density
+            val topCss = (insets.top / d).toInt()
+            val bottomCss = (insets.bottom / d).toInt()
+            val leftCss = (insets.left / d).toInt()
+            val rightCss = (insets.right / d).toInt()
+
+            bridge.updateSafeAreaInsets(topCss, bottomCss, leftCss, rightCss)
+            applySafeAreaInsetsToWebView()
             WindowInsetsCompat.CONSUMED
         }
 
@@ -160,6 +173,41 @@ class MainActivity : ComponentActivity() {
 
         handleIncomingIntent(intent)
         wv.loadUrl(START_URL)
+    }
+
+    private fun applySafeAreaInsetsToWebView() {
+        val wv = webView ?: return
+        val topCss = bridge.safeAreaTopCss
+        val bottomCss = bridge.safeAreaBottomCss
+        val leftCss = bridge.safeAreaLeftCss
+        val rightCss = bridge.safeAreaRightCss
+        wv.post {
+            wv.evaluateJavascript(
+                """
+                (function() {
+                    try {
+                        document.documentElement.style.setProperty('--safe-area-top', '${topCss}px');
+                        document.documentElement.style.setProperty('--safe-area-bottom', '${bottomCss}px');
+                        document.documentElement.style.setProperty('--safe-area-left', '${leftCss}px');
+                        document.documentElement.style.setProperty('--safe-area-right', '${rightCss}px');
+                    } catch (e) {}
+                })();
+                """.trimIndent(),
+                null,
+            )
+        }
+    }
+
+    @SuppressLint("InternalInsetResource", "DiscouragedApi")
+    private fun getStatusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
+    }
+
+    @SuppressLint("InternalInsetResource", "DiscouragedApi")
+    private fun getNavigationBarHeight(): Int {
+        val resourceId = resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
     }
 
     override fun onNewIntent(intent: Intent) {
