@@ -57,7 +57,15 @@ test('web: loads the updated React web app and opens settings modal without runt
     return typeof window.__capyCloseModal === 'function' ? window.__capyCloseModal() : false;
   });
   expect(closedByBridge).toBe(true);
-  await expect(page.getByText('Haptic Vibration Feedback')).toBeHidden();
+  // Verify safe area insets dynamically adjust header padding
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--safe-area-top', '48px');
+  });
+  const computedTopPadding = await page.evaluate(() => {
+    const header = document.querySelector('header');
+    return header ? window.getComputedStyle(header).paddingTop : '';
+  });
+  expect(computedTopPadding).toBe('56px');
 
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);

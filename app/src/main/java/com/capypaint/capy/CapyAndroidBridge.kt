@@ -25,6 +25,30 @@ class CapyAndroidBridge(
     @Volatile
     var pendingSharedImageJson: String? = null
 
+    @Volatile
+    var safeAreaTopCss: Int = 0
+
+    @Volatile
+    var safeAreaBottomCss: Int = 0
+
+    @Volatile
+    var safeAreaLeftCss: Int = 0
+
+    @Volatile
+    var safeAreaRightCss: Int = 0
+
+    fun updateSafeAreaInsets(top: Int, bottom: Int, left: Int, right: Int) {
+        safeAreaTopCss = top
+        safeAreaBottomCss = bottom
+        safeAreaLeftCss = left
+        safeAreaRightCss = right
+    }
+
+    @JavascriptInterface
+    fun getSafeAreaInsets(): String {
+        return formatSafeAreaInsetsJson(safeAreaTopCss, safeAreaBottomCss, safeAreaLeftCss, safeAreaRightCss)
+    }
+
     private val backupDir: File
         get() = File(context.filesDir, BACKUP_FOLDER_NAME)
 
@@ -137,6 +161,10 @@ class CapyAndroidBridge(
                 .replace("\\", "\\\\")
                 .replace("\"", "\\\"")
             return """{"title":"$escapedTitle","dataUrl":"$escapedUrl"}"""
+        }
+
+        fun formatSafeAreaInsetsJson(top: Int, bottom: Int, left: Int, right: Int): String {
+            return """{"top":$top,"bottom":$bottom,"left":$left,"right":$right}"""
         }
 
         private fun performHaptic(context: Context, view: View, type: String) {
