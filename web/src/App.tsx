@@ -10,6 +10,7 @@ import {
   UserSettings,
 } from './types';
 import { StorageService } from './services/StorageService';
+import { NativeBridge } from './services/NativeBridge';
 import { GenerationCancelledError, PuzzleWorkerService } from './services/PuzzleWorkerService';
 import { getDisplayNumberMap, getDockPalette, getVisiblePalette } from './components/PaletteDock';
 import { PuzzleCanvas } from './components/PuzzleCanvas';
@@ -32,6 +33,8 @@ export const App: React.FC = () => {
   const [filledRegionIds, setFilledRegionIds] = useState<Set<number>>(new Set());
   const [hintRegionId, setHintRegionId] = useState<number | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
+  const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
+  const [zoomOutTrigger, setZoomOutTrigger] = useState<number>(0);
 
   // Spatial Viewport
   const [visibleColorIds, setVisibleColorIds] = useState<Set<number>>(new Set());
@@ -48,6 +51,11 @@ export const App: React.FC = () => {
 
   // Hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync modal state with native hardware back button handler
+  useEffect(() => {
+    NativeBridge.setBackModalOpen(showSettings, () => setShowSettings(false));
+  }, [showSettings]);
 
   // Sync settings updates to storage
   const handleUpdateSettings = (newSettings: UserSettings) => {
@@ -270,6 +278,17 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  // Listen for images shared directly from Android/iOS OS share sheet
+  useEffect(() => {
+    return NativeBridge.onSharedImage((title, dataUrl) => {
+      const img = new Image();
+      img.onload = () => {
+        loadArtworkFromImage(img, title, settings.generatorConfig);
+      };
+      img.src = dataUrl;
+    });
+  }, [loadArtworkFromImage, settings.generatorConfig]);
+
   // Display number mapping
   const displayNumberMap = useMemo(() => {
     if (!puzzle) return new Map<number, string>();
@@ -299,6 +318,16 @@ export const App: React.FC = () => {
 
       // Check completion
       const isComplete = nextFilled.size >= puzzle.regions.length;
+      const remainingForColor = puzzle.regions.filter(
+        (r) => r.colorId === region.colorId && !nextFilled.has(r.id)
+      );
+
+      if (isComplete || remainingForColor.length === 0) {
+        NativeBridge.haptic('success', settings.hapticsEnabled);
+      } else {
+        NativeBridge.haptic('tick', settings.hapticsEnabled);
+      }
+
       if (isComplete) {
         confetti({
           particleCount: 100,
@@ -383,11 +412,14 @@ export const App: React.FC = () => {
 
         const isComplete = nextFilled.size >= puzzle.regions.length;
         if (isComplete) {
+          NativeBridge.haptic('success', settings.hapticsEnabled);
           confetti({
             particleCount: 100,
             spread: 70,
             origin: { y: 0.6 },
           });
+        } else {
+          NativeBridge.haptic('tick', settings.hapticsEnabled);
         }
 
         if (activeSnapshotId) {
@@ -440,12 +472,14 @@ export const App: React.FC = () => {
       );
       if (unfilled.length === 0) return;
 
+      NativeBridge.haptic('warning', settings.hapticsEnabled);
+
       // Prefer on-screen regions if available
       const onScreen = unfilled.find((r) => visibleRegionIds.has(r.id));
       const target = onScreen || unfilled[0];
       setHintRegionId(target.id);
     },
-    [puzzle, activeColorId, filledRegionIds, visibleRegionIds]
+    [puzzle, activeColorId, filledRegionIds, visibleRegionIds, settings.hapticsEnabled]
   );
 
   // File Upload
@@ -569,6 +603,8 @@ export const App: React.FC = () => {
         showNextRegionHint={settings.showNextRegionHint}
         hintIntensity={settings.hintIntensity}
         displayNumberMap={displayNumberMap}
+        zoomInTrigger={zoomInTrigger}
+        zoomOutTrigger={zoomOutTrigger}
         onRegionClicked={attemptFillRegion}
         onBatchRegionsClicked={attemptBatchFillRegions}
         onVisibleColorsChanged={setVisibleColorIds}
@@ -583,13 +619,12 @@ export const App: React.FC = () => {
           showZoomButtons={settings.showZoomButtons}
           raiseDock={settings.raisePaletteDock}
           onTriggerHint={() => triggerHint()}
-          onTogglePaintMode={() => handleUpdateSettings({ ...settings, isPaintMode: !settings.isPaintMode })}
-          onZoomIn={() => {
-            // Handled via wheel or pinch
+          onTogglePaintMode={() => {
+            NativeBridge.haptic('tick', settings.hapticsEnabled);
+            handleUpdateSettings({ ...settings, isPaintMode: !settings.isPaintMode });
           }}
-          onZoomOut={() => {
-            // Handled via wheel or pinch
-          }}
+          onZoomIn={() => setZoomInTrigger((prev) => prev + 1)}
+          onZoomOut={() => setZoomOutTrigger((prev) => prev + 1)}
         />
       )}
 
@@ -605,6 +640,7 @@ export const App: React.FC = () => {
           visibleColorIds={visibleColorIds}
           raiseDock={settings.raisePaletteDock}
           onColorSelected={(colId) => {
+            NativeBridge.haptic('tick', settings.hapticsEnabled);
             setActiveColorId(colId);
             setHintRegionId(null);
           }}

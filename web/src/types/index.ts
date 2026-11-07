@@ -80,6 +80,7 @@ export interface UserSettings {
   showZoomButtons: boolean;
   paletteSort: PaletteSortOrder;
   prioritizeOnScreen: boolean;
+  hapticsEnabled: boolean;
   generatorConfig: GeneratorConfig;
 }
 

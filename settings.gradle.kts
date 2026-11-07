@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Capy"
 include(":app")
+include(":app1")
