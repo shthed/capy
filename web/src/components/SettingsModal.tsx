@@ -350,6 +350,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     label: 'Show Zoom (+ / -) Buttons',
                     desc: 'Floating zoom buttons above hint trigger',
                   },
+                  {
+                    key: 'hapticsEnabled' as const,
+                    label: 'Haptic Vibration Feedback',
+                    desc: 'Tactile vibration ticks when painting and completing colours',
+                  },
                 ].map((item) => (
                   <div
                     key={item.key}

@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Capy Paint</string>
+    <string name="menu_pick_image">Choose Photo</string>
+    <string name="menu_hint">Hint</string>
+    <string name="menu_preview">Original</string>
+    <string name="menu_settings">Settings</string>
+</resources>

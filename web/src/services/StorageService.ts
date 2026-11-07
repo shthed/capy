@@ -1,4 +1,5 @@
 import { PuzzleData, SavedSnapshot, UserSettings } from '../types';
+import { NativeBridge } from './NativeBridge';
 
 const SETTINGS_KEY = 'capy_user_settings_v8';
 const SNAPSHOTS_KEY = 'capy_snapshots_v8';
@@ -32,6 +33,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   showZoomButtons: false,
   paletteSort: 'NUMBER',
   prioritizeOnScreen: true,
+  hapticsEnabled: true,
   generatorConfig: {
     algorithm: 'AUTO',
     lineHandling: 'ABSORB_LINES',
@@ -71,10 +73,17 @@ export class StorageService {
 
   static loadSettings(): UserSettings {
     try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
+      const raw = localStorage.getItem(SETTINGS_KEY) || NativeBridge.loadBackup(SETTINGS_KEY);
       if (!raw) return DEFAULT_SETTINGS;
       const parsed = JSON.parse(raw);
-      return { ...DEFAULT_SETTINGS, ...parsed };
+      return {
+        ...DEFAULT_SETTINGS,
+        ...parsed,
+        generatorConfig: {
+          ...DEFAULT_SETTINGS.generatorConfig,
+          ...(parsed.generatorConfig || {}),
+        },
+      };
     } catch {
       return DEFAULT_SETTINGS;
     }
@@ -82,7 +91,9 @@ export class StorageService {
 
   static saveSettings(settings: UserSettings): void {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      const serialized = JSON.stringify(settings);
+      localStorage.setItem(SETTINGS_KEY, serialized);
+      NativeBridge.saveBackup(SETTINGS_KEY, serialized);
     } catch {
       // ignore
     }
@@ -90,7 +101,7 @@ export class StorageService {
 
   static loadSnapshots(): SavedSnapshot[] {
     try {
-      const raw = localStorage.getItem(SNAPSHOTS_KEY);
+      const raw = localStorage.getItem(SNAPSHOTS_KEY) || NativeBridge.loadBackup(SNAPSHOTS_KEY);
       if (!raw) return [];
       return JSON.parse(raw);
     } catch {
@@ -100,7 +111,9 @@ export class StorageService {
 
   static saveSnapshots(snapshots: SavedSnapshot[]): void {
     try {
-      localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snapshots));
+      const serialized = JSON.stringify(snapshots);
+      localStorage.setItem(SNAPSHOTS_KEY, serialized);
+      NativeBridge.saveBackup(SNAPSHOTS_KEY, serialized);
     } catch {
       // ignore
     }
@@ -244,7 +257,9 @@ export class StorageService {
     panOffsetY: number;
   }): void {
     try {
-      localStorage.setItem(ACTIVE_STATE_KEY, JSON.stringify(state));
+      const serialized = JSON.stringify(state);
+      localStorage.setItem(ACTIVE_STATE_KEY, serialized);
+      NativeBridge.saveBackup(ACTIVE_STATE_KEY, serialized);
     } catch {
       // ignore
     }
@@ -259,7 +274,7 @@ export class StorageService {
     panOffsetY: number;
   } | null {
     try {
-      const raw = localStorage.getItem(ACTIVE_STATE_KEY);
+      const raw = localStorage.getItem(ACTIVE_STATE_KEY) || NativeBridge.loadBackup(ACTIVE_STATE_KEY);
       if (!raw) return null;
       return JSON.parse(raw);
     } catch {

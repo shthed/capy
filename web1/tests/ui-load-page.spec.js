@@ -47,7 +47,17 @@ test('web: loads the updated React web app and opens settings modal without runt
   await page.goto('web-dist-test/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('button[title="Settings and Menu"]', { timeout: 10000 });
   await page.click('button[title="Settings and Menu"]');
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(500);
+
+  // Verify Haptic Vibration Feedback toggle is present in Settings
+  await expect(page.getByText('Haptic Vibration Feedback')).toBeVisible();
+
+  // Verify Android hardware back button bridge closes the Settings modal
+  const closedByBridge = await page.evaluate(() => {
+    return typeof window.__capyCloseModal === 'function' ? window.__capyCloseModal() : false;
+  });
+  expect(closedByBridge).toBe(true);
+  await expect(page.getByText('Haptic Vibration Feedback')).toBeHidden();
 
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);

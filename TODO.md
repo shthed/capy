@@ -1,11 +1,25 @@
 # Capy Monorepo — Master TODO & Roadmap
 
-This document tracks cross-project tasks, post-merge cleanups, puzzle engine unification plans, and platform improvements across the unified **Capy** monorepo (`web/`, `web1/`, and `app/`).
+This document tracks cross-project tasks, post-merge cleanups, puzzle engine unification plans, and platform improvements across the unified **Capy** monorepo (`web/`, `web1/`, `app/`, and `app1/`).
 
 For target-specific deep dives, see also:
-- **Android Detailed Optimization Roadmap**: [`app/CAPY-TODO.md`](./app/CAPY-TODO.md)
+- **Legacy Android v1 Detailed Optimization Roadmap**: [`app1/CAPY-TODO.md`](./app1/CAPY-TODO.md)
 - **Legacy Web v1 Maintenance Checklist**: [`web1/docs/TODO.md`](./web1/docs/TODO.md)
 - **Puzzle Generation Engine Reference**: [`PUZZLE.md`](./PUZZLE.md)
+
+---
+
+## ✅ Completed: Single-Codebase Web & Android Unification
+
+- [x] **Preserve Native Jetpack Compose Android v1 in [`app1/`](./app1)**:
+  - Renamed the original Jetpack Compose Android implementation to `app1/` (`:app1`), preserving all custom Kotlin K-Means/segmentation code and JUnit4 tests intact.
+- [x] **Unified Web-Wrapper Android Launcher in [`app/`](./app)**:
+  - Created a lightweight native Android shell (`MainActivity.kt` + `CapyAndroidBridge.kt`) serving `web/dist/` offline via `WebViewAssetLoader` (`https://appassets.androidplatform.net/assets/www/index.html`).
+  - Integrated native tactile haptics (`Vibrator` / `HapticFeedbackConstants`), hardware back gesture modal closing, native `PickVisualMedia` photo picker, `Intent.ACTION_SEND` image sharing into Capy, and persistent JSON save backups in `filesDir/capy_saves`.
+  - Automated `syncWebAssets` in [`app/build.gradle.kts`](./app/build.gradle.kts) and linked `web-dist` in [`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml).
+- [x] **60/120 FPS Offscreen Canvas Layer Caching in [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**:
+  - Cached the base puzzle layer (`baseCanvasRef` with incremental dirty-rect updates on region fill) and highlight layer (`highlightCanvasRef` with GPU alpha modulation), eliminating per-frame full-canvas pixel iteration and DOM allocations.
+  - Added 2-finger focal-point pinch-to-zoom and mobile safe-area inset support (`viewport-fit=cover`, `.safe-top`, `.safe-bottom`).
 
 ---
 
@@ -14,7 +28,7 @@ For target-specific deep dives, see also:
 - [x] **Consolidate Repositories into `shthed/capy`**:
   - Imported Updated Web App (`React 19 + TypeScript + Vite 6 + Tailwind CSS 4`) from `shthed/capy-web` into [`web/`](./web).
   - Relocated Legacy Vanilla JS Web App v1 (`1fa28eb` + PR #430 fixes) into [`web1/`](./web1).
-  - Imported Native Android Jetpack Compose App (`com.capypaint.capy`) and Gradle 9.3.1 wrapper from `shthed/capy-g2` into [`app/`](./app).
+  - Imported Native Android Jetpack Compose App (`com.capypaint.capy`) and Gradle 9.3.1 wrapper from `shthed/capy-g2` into [`app1/`](./app1).
 - [x] **Multi-Target GitHub Pages & APK Deployment**:
   - Updated Web (`web/`) deployed at `/` (`https://shthed.github.io/capy/`) and `/pull/<pr>/`.
   - Legacy Web v1 (`web1/`) deployed at `/web1/` (`https://shthed.github.io/capy/web1/`) and `/pull/<pr>/web1/`.
@@ -32,20 +46,6 @@ For target-specific deep dives, see also:
 - [ ] **Archive or Delete Redundant Secondary Repositories**:
   - Archive or delete `shthed/capy-g`, `shthed/capy-g2`, `shthed/capy-web`, and `shthed/capyg` on GitHub now that all active code and history are unified in `shthed/capy`.
   - Detach the retired repositories from workspace resources so all future development targets `shthed/capy` exclusively.
-
----
-
-## 🧠 Milestone 1: Puzzle Generation Engine Review & Unification
-
-*(Note: Both [`web/src/engine/`](./web/src/engine) and [`app/src/main/java/com/capypaint/capy/engine/`](./app/src/main/java/com/capypaint/capy/engine) were preserved untouched during the repository merge for dedicated architectural review.)*
-
-- [ ] **Audit & Compare Web (`web/src/engine/`) vs. Android (`app/.../engine/`) Pipelines**:
-  - Compare `web/src/engine/` (5-stage pipeline: `ImageAnalyzer`, `LineArtExtractor`, `ColorQuantizer`, `RegionSegmenter` supporting `watershed`, `slic`, `floodfill`, `felzenszwalb`, and `voronoi` strategies + Lab-guided bilateral filtering) against `app/src/main/java/com/capypaint/capy/engine/` (`ImageAnalyzer`, `ColorQuantizer`, `RegionSegmenter` with `DrawingPuzzleGenerator` and `PhotoPuzzleGenerator`).
-  - Evaluate legacy `web1/puzzle-generation.js` & `web1/capy.js` for any unique heuristics worth preserving.
-- [ ] **Port 5-Strategy Segmentation & `LineArtExtractor` to Android (`app/`)**:
-  - Port `LineArtExtractor` (`ABSORB_LINES` medial-axis watershed expansion vs. `UNIFIED_BLACK_REGION` continuous ink region) and the Kuwahara / SLIC / Felzenszwalb / Voronoi strategies to Kotlin in `com.capypaint.capy.engine`.
-- [ ] **Cross-Platform Engine Parity Suite**:
-  - Create shared reference image fixtures and unit tests verifying consistent color quantization, region counts, zero-gap boundaries, and pole-of-inaccessibility interior centroids across TypeScript (`web/`) and Kotlin (`app/`).
 
 ---
 

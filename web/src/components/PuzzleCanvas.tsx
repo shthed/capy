@@ -6,6 +6,7 @@ import {
   PaletteColor,
   PaletteSortOrder,
   PuzzleData,
+  Region,
   RegionColorMode,
   RegionHighlightStyle,
 } from '../types';
@@ -34,6 +35,8 @@ interface PuzzleCanvasProps {
   showNextRegionHint: boolean;
   hintIntensity: number;
   displayNumberMap: Map<number, string>;
+  zoomInTrigger?: number;
+  zoomOutTrigger?: number;
   initialZoomScale?: number;
   initialPanOffsetX?: number;
   initialPanOffsetY?: number;
@@ -54,7 +57,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   isPreviewMode,
   isPaintMode,
   canvasBgColor,
-  sortOrder,
   regionColorMode,
   showRegionLabels,
   showPreviewLabels,
@@ -68,6 +70,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   showNextRegionHint,
   hintIntensity,
   displayNumberMap,
+  zoomInTrigger = 0,
+  zoomOutTrigger = 0,
   initialZoomScale = 1.0,
   initialPanOffsetX = 0,
   initialPanOffsetY = 0,
@@ -81,6 +85,22 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Offscreen cached layer canvases (prevents 60 FPS full-pixel iteration)
+  const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const baseImageDataRef = useRef<ImageData | null>(null);
+  const paintedCacheRef = useRef<Set<number>>(new Set());
+  const sourcePixelsRef = useRef<Uint8ClampedArray | null>(null);
+  const regionByIdRef = useRef<Map<number, Region>>(new Map());
+  const paletteByIdRef = useRef<Map<number, PaletteColor>>(new Map());
+  const lastBasePuzzleRef = useRef<PuzzleData | null>(null);
+  const lastBaseModeRef = useRef<RegionColorMode | null>(null);
+  const lastBaseImageRef = useRef<HTMLImageElement | null>(null);
+
+  const highlightCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hasHighlightPixelsRef = useRef<boolean>(false);
+  const borderCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastBorderPuzzleRef = useRef<PuzzleData | null>(null);
+
   // Transform state
   const [scale, setScale] = useState(initialZoomScale);
   const [offset, setOffset] = useState({ x: initialPanOffsetX, y: initialPanOffsetY });
@@ -91,19 +111,37 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   // Animation pulse
   const [pulseAlpha, setPulseAlpha] = useState(0.6);
 
-  // Drag interaction tracking
+  // Drag & Pinch interaction tracking
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastPointerPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const totalDragDistanceRef = useRef(0);
   const isRightClickRef = useRef(false);
   const touchStartDistRef = useRef<number | null>(null);
+  const touchLastCenterRef = useRef<{ x: number; y: number } | null>(null);
   const initialTouchScaleRef = useRef(1);
 
-  // Pulse animation frame
+  // Reset zoom/offset when a brand-new puzzle object is loaded
+  useEffect(() => {
+    setScale(initialZoomScale);
+    setOffset({ x: initialPanOffsetX, y: initialPanOffsetY });
+  }, [puzzle]);
+
+  // Handle FloatingActions zoom in/out button triggers
+  useEffect(() => {
+    if (zoomInTrigger <= 0) return;
+    setScale((prev) => Math.min(12.0, prev * 1.25));
+  }, [zoomInTrigger]);
+
+  useEffect(() => {
+    if (zoomOutTrigger <= 0) return;
+    setScale((prev) => Math.max(0.5, prev * 0.8));
+  }, [zoomOutTrigger]);
+
+  // Pulse animation frame (only runs when animateHint is active)
   useEffect(() => {
     let animId: number;
-    let startTime = performance.now();
+    const startTime = performance.now();
 
     const loop = (now: number) => {
       const elapsed = now - startTime;
@@ -133,10 +171,341 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     return () => clearInterval(interval);
   }, [tapDot]);
 
+  // Helper to paint a single region into baseImageData
+  const writeRegionToImageData = useCallback(
+    (
+      data: Uint8ClampedArray,
+      puzzleData: PuzzleData,
+      region: Region,
+      isFilled: boolean,
+      isDetailMode: boolean,
+      srcPixels: Uint8ClampedArray | null,
+      paletteMap: Map<number, PaletteColor>
+    ) => {
+      const { borderMap } = puzzleData;
+      const col = paletteMap.get(region.colorId);
+      const r = col?.r ?? 71;
+      const g = col?.g ?? 85;
+      const b = col?.b ?? 105;
+      const borderR = Math.floor(r * 0.72);
+      const borderG = Math.floor(g * 0.72);
+      const borderB = Math.floor(b * 0.72);
+
+      const pixels = region.pixels;
+      for (let i = 0; i < pixels.length; i++) {
+        const pIndex = pixels[i];
+        const idx = pIndex * 4;
+        const isBorder = borderMap[pIndex] === 1;
+
+        if (isFilled) {
+          if (isBorder) {
+            data[idx] = borderR;
+            data[idx + 1] = borderG;
+            data[idx + 2] = borderB;
+            data[idx + 3] = 255;
+          } else if (isDetailMode && srcPixels) {
+            data[idx] = srcPixels[idx];
+            data[idx + 1] = srcPixels[idx + 1];
+            data[idx + 2] = srcPixels[idx + 2];
+            data[idx + 3] = 255;
+          } else {
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = 255;
+          }
+        } else {
+          if (isBorder) {
+            data[idx] = 51;
+            data[idx + 1] = 65;
+            data[idx + 2] = 85;
+            data[idx + 3] = 255;
+          } else {
+            data[idx] = 255;
+            data[idx + 1] = 255;
+            data[idx + 2] = 255;
+            data[idx + 3] = 255;
+          }
+        }
+      }
+    },
+    []
+  );
+
+  // 1. Update Offscreen Base Canvas (Incremental Dirty-Rect on region fill!)
+  useEffect(() => {
+    if (!puzzle) {
+      baseCanvasRef.current = null;
+      baseImageDataRef.current = null;
+      lastBasePuzzleRef.current = null;
+      return;
+    }
+
+    const { width, height, regions, palette, regionMap, borderMap } = puzzle;
+    const isDetailMode = regionColorMode === 'DETAIL';
+
+    const needsFullRebuild =
+      lastBasePuzzleRef.current !== puzzle ||
+      lastBaseModeRef.current !== regionColorMode ||
+      lastBaseImageRef.current !== sourceImage ||
+      !baseCanvasRef.current ||
+      !baseImageDataRef.current;
+
+    if (needsFullRebuild) {
+      // Cache lookup maps
+      const regMap = new Map<number, Region>();
+      for (const r of regions) regMap.set(r.id, r);
+      regionByIdRef.current = regMap;
+
+      const palMap = new Map<number, PaletteColor>();
+      for (const p of palette) palMap.set(p.id, p);
+      paletteByIdRef.current = palMap;
+
+      // Extract source pixels once if available
+      if (sourceImage && sourceImage.complete && (sourceImage.naturalWidth > 0 || sourceImage.width > 0)) {
+        const tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = width;
+        tmpCanvas.height = height;
+        const tmpCtx = tmpCanvas.getContext('2d');
+        if (tmpCtx) {
+          tmpCtx.drawImage(sourceImage, 0, 0, width, height);
+          sourcePixelsRef.current = tmpCtx.getImageData(0, 0, width, height).data;
+        }
+      } else {
+        sourcePixelsRef.current = null;
+      }
+
+      if (!baseCanvasRef.current) {
+        baseCanvasRef.current = document.createElement('canvas');
+      }
+      baseCanvasRef.current.width = width;
+      baseCanvasRef.current.height = height;
+      const baseCtx = baseCanvasRef.current.getContext('2d')!;
+      const imgData = baseCtx.createImageData(width, height);
+      const data = imgData.data;
+      const srcPixels = sourcePixelsRef.current;
+      const total = width * height;
+
+      // Initialize background & unfilled pixels
+      for (let i = 0; i < total; i++) {
+        const rId = regionMap[i];
+        const isFilled = filledRegionIds.has(rId);
+        const isBorder = borderMap[i] === 1;
+        const idx = i * 4;
+
+        if (isFilled) {
+          const reg = regMap.get(rId);
+          const col = reg ? palMap.get(reg.colorId) : undefined;
+          if (isBorder) {
+            data[idx] = col ? Math.floor(col.r * 0.72) : 71;
+            data[idx + 1] = col ? Math.floor(col.g * 0.72) : 85;
+            data[idx + 2] = col ? Math.floor(col.b * 0.72) : 105;
+            data[idx + 3] = 255;
+          } else if (isDetailMode && srcPixels) {
+            data[idx] = srcPixels[idx];
+            data[idx + 1] = srcPixels[idx + 1];
+            data[idx + 2] = srcPixels[idx + 2];
+            data[idx + 3] = 255;
+          } else {
+            data[idx] = col ? col.r : 255;
+            data[idx + 1] = col ? col.g : 255;
+            data[idx + 2] = col ? col.b : 255;
+            data[idx + 3] = 255;
+          }
+        } else {
+          if (isBorder) {
+            data[idx] = 51;
+            data[idx + 1] = 65;
+            data[idx + 2] = 85;
+            data[idx + 3] = 255;
+          } else {
+            data[idx] = 255;
+            data[idx + 1] = 255;
+            data[idx + 2] = 255;
+            data[idx + 3] = 255;
+          }
+        }
+      }
+
+      baseCtx.putImageData(imgData, 0, 0);
+      baseImageDataRef.current = imgData;
+      paintedCacheRef.current = new Set(filledRegionIds);
+      lastBasePuzzleRef.current = puzzle;
+      lastBaseModeRef.current = regionColorMode;
+      lastBaseImageRef.current = sourceImage;
+      return;
+    }
+
+    // Incremental update: only repaint regions whose filled status changed!
+    const prevPainted = paintedCacheRef.current;
+    const baseCtx = baseCanvasRef.current!.getContext('2d')!;
+    const imgData = baseImageDataRef.current!;
+    const data = imgData.data;
+    const regMap = regionByIdRef.current;
+    const palMap = paletteByIdRef.current;
+    const srcPixels = sourcePixelsRef.current;
+
+    let minDirtyX = width;
+    let minDirtyY = height;
+    let maxDirtyX = -1;
+    let maxDirtyY = -1;
+
+    // Check newly filled regions
+    for (const rId of filledRegionIds) {
+      if (!prevPainted.has(rId)) {
+        const reg = regMap.get(rId);
+        if (reg) {
+          writeRegionToImageData(data, puzzle, reg, true, isDetailMode, srcPixels, palMap);
+          if (reg.minX < minDirtyX) minDirtyX = reg.minX;
+          if (reg.minY < minDirtyY) minDirtyY = reg.minY;
+          if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
+          if (reg.maxY > maxDirtyY) maxDirtyY = reg.maxY;
+        }
+      }
+    }
+
+    // Check any regions that were unfilled (e.g., Reset Progress)
+    for (const rId of prevPainted) {
+      if (!filledRegionIds.has(rId)) {
+        const reg = regMap.get(rId);
+        if (reg) {
+          writeRegionToImageData(data, puzzle, reg, false, isDetailMode, srcPixels, palMap);
+          if (reg.minX < minDirtyX) minDirtyX = reg.minX;
+          if (reg.minY < minDirtyY) minDirtyY = reg.minY;
+          if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
+          if (reg.maxY > maxDirtyY) maxDirtyY = reg.maxY;
+        }
+      }
+    }
+
+    if (maxDirtyX >= minDirtyX && maxDirtyY >= minDirtyY) {
+      baseCtx.putImageData(
+        imgData,
+        0,
+        0,
+        minDirtyX,
+        minDirtyY,
+        maxDirtyX - minDirtyX + 1,
+        maxDirtyY - minDirtyY + 1
+      );
+    }
+
+    paintedCacheRef.current = new Set(filledRegionIds);
+  }, [puzzle, sourceImage, regionColorMode, filledRegionIds, writeRegionToImageData]);
+
+  // 2. Update Offscreen Highlight Layer (Only rebuilt when activeColorId/hintRegionId/style changes)
+  useEffect(() => {
+    if (
+      !puzzle ||
+      (highlightStyle !== 'FULL_REGION' && highlightStyle !== 'BOUNDARY_ONLY') ||
+      (!highlightMatching && hintRegionId === null)
+    ) {
+      hasHighlightPixelsRef.current = false;
+      return;
+    }
+
+    const { width, height, borderMap } = puzzle;
+    if (!highlightCanvasRef.current) {
+      highlightCanvasRef.current = document.createElement('canvas');
+    }
+    if (highlightCanvasRef.current.width !== width || highlightCanvasRef.current.height !== height) {
+      highlightCanvasRef.current.width = width;
+      highlightCanvasRef.current.height = height;
+    }
+
+    const hCtx = highlightCanvasRef.current.getContext('2d')!;
+    const imgData = hCtx.createImageData(width, height);
+    const data = imgData.data;
+
+    const hr = (hintColorArgb >> 16) & 0xff;
+    const hg = (hintColorArgb >> 8) & 0xff;
+    const hb = hintColorArgb & 0xff;
+    const isBoundaryOnly = highlightStyle === 'BOUNDARY_ONLY';
+    let anyPixel = false;
+
+    for (const reg of puzzle.regions) {
+      if (filledRegionIds.has(reg.id)) continue;
+      const isHinted = reg.id === hintRegionId;
+      const isActive = reg.colorId === activeColorId;
+
+      if (!isHinted && (!highlightMatching || !isActive)) continue;
+
+      const pixels = reg.pixels;
+      for (let i = 0; i < pixels.length; i++) {
+        const idx = pixels[i];
+        if (isBoundaryOnly && borderMap[idx] !== 1) continue;
+
+        const px = idx % width;
+        const py = Math.floor(idx / width);
+
+        let shouldFill = true;
+        if (!isBoundaryOnly) {
+          if (hintFillStyle === 'CHECKER') {
+            shouldFill = ((px >> 2) + (py >> 2)) % 2 === 0;
+          } else if (hintFillStyle === 'STRIPES') {
+            shouldFill = ((px + py) >> 2) % 2 === 0;
+          }
+        }
+
+        if (shouldFill) {
+          const pIdx = idx * 4;
+          data[pIdx] = hr;
+          data[pIdx + 1] = hg;
+          data[pIdx + 2] = hb;
+          data[pIdx + 3] = 255;
+          anyPixel = true;
+        }
+      }
+    }
+
+    if (anyPixel) {
+      hCtx.putImageData(imgData, 0, 0);
+    }
+    hasHighlightPixelsRef.current = anyPixel;
+  }, [
+    puzzle,
+    activeColorId,
+    hintRegionId,
+    filledRegionIds,
+    highlightMatching,
+    highlightStyle,
+    hintFillStyle,
+    hintColorArgb,
+  ]);
+
+  // 3. Update Offscreen Preview Border Layer (built lazily once per puzzle)
+  useEffect(() => {
+    if (!puzzle || !showPreviewBorders) return;
+    if (lastBorderPuzzleRef.current === puzzle && borderCanvasRef.current) return;
+
+    const { width, height, borderMap } = puzzle;
+    if (!borderCanvasRef.current) {
+      borderCanvasRef.current = document.createElement('canvas');
+    }
+    borderCanvasRef.current.width = width;
+    borderCanvasRef.current.height = height;
+    const bCtx = borderCanvasRef.current.getContext('2d')!;
+    const imgData = bCtx.createImageData(width, height);
+    const data = imgData.data;
+    const total = width * height;
+
+    for (let i = 0; i < total; i++) {
+      if (borderMap[i] === 1) {
+        const idx = i * 4;
+        data[idx] = 51;
+        data[idx + 1] = 65;
+        data[idx + 2] = 85;
+        data[idx + 3] = 255;
+      }
+    }
+    bCtx.putImageData(imgData, 0, 0);
+    lastBorderPuzzleRef.current = puzzle;
+  }, [puzzle, showPreviewBorders]);
+
   // Pan to center hinted region
   useEffect(() => {
     if (!puzzle || hintRegionId === null || !containerRef.current) return;
-    const region = puzzle.regions.find((r) => r.id === hintRegionId);
+    const region = regionByIdRef.current.get(hintRegionId) || puzzle.regions.find((r) => r.id === hintRegionId);
     if (!region) return;
 
     const { clientWidth: w, clientHeight: h } = containerRef.current;
@@ -274,7 +643,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     return () => clearTimeout(timer);
   }, [scale, offset, puzzle, filledRegionIds, onVisibleColorsChanged, onVisibleRegionsChanged]);
 
-  // Main rendering loop onto HTML5 Canvas
+  // Main GPU-Accelerated Composite Rendering Loop
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -318,49 +687,38 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
     const isEffectivePreview = isPreviewMode;
 
-    // 1. Draw Layer: Completed Artwork / Preview Artwork
+    // 1. Draw Base Layer from cached offscreen canvas (0 CPU pixel loops!)
     if (isEffectivePreview) {
       if (sourceImage && sourceImage.complete) {
         ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
-      } else {
-        // Fallback: draw solid palette color fills
-        renderSolidColors(ctx, puzzle, new Set(puzzle.regions.map((r) => r.id)));
+      } else if (baseCanvasRef.current) {
+        ctx.drawImage(baseCanvasRef.current, 0, 0);
       }
 
-      if (showPreviewBorders) {
-        renderBorders(ctx, puzzle);
+      if (showPreviewBorders && borderCanvasRef.current) {
+        ctx.drawImage(borderCanvasRef.current, 0, 0);
       }
     } else {
-      // Vector puzzle mode
-      if (regionColorMode === 'DETAIL' && sourceImage && sourceImage.complete) {
-        // Layer 1: original image underneath
-        ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
-      } else {
-        // Layer 1: solid color fills for painted regions
-        renderSolidColors(ctx, puzzle, filledRegionIds);
+      if (baseCanvasRef.current) {
+        ctx.drawImage(baseCanvasRef.current, 0, 0);
       }
 
-      // Layer 2: Unfilled regions mask (off-white) + Hairline Borders
-      renderUnfilledMaskAndBorders(ctx, puzzle, filledRegionIds, regionColorMode === 'DETAIL');
-
-      // Layer 3: Hint & Active Color matching highlights
-      renderHighlights(
-        ctx,
-        puzzle,
-        activeColorId,
-        hintRegionId,
-        filledRegionIds,
-        highlightMatching,
-        highlightStyle,
-        hintFillStyle,
-        hintColorArgb,
-        pulseAlpha,
-        hintIntensity,
-        animateHint
-      );
+      // 2. Draw Highlight Overlay Layer with hardware-accelerated alpha pulse
+      if (
+        hasHighlightPixelsRef.current &&
+        highlightCanvasRef.current &&
+        (highlightStyle === 'FULL_REGION' || highlightStyle === 'BOUNDARY_ONLY')
+      ) {
+        ctx.save();
+        ctx.globalAlpha = animateHint
+          ? Math.min(1, Math.max(0.05, pulseAlpha * hintIntensity))
+          : Math.min(1, Math.max(0.05, hintIntensity * 0.78));
+        ctx.drawImage(highlightCanvasRef.current, 0, 0);
+        ctx.restore();
+      }
     }
 
-    // Layer 4: Number labels
+    // 3. Draw Visible Number Labels & Centroid Glows
     const drawLabelsNow = isEffectivePreview
       ? showRegionLabels && showPreviewLabels
       : showRegionLabels;
@@ -394,7 +752,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       );
     }
 
-    // Layer 5: Tap feedback animation dot
+    // 4. Tap feedback animation dot
     if (tapDot && tapDot.alpha > 0) {
       ctx.beginPath();
       ctx.arc(tapDot.x, tapDot.y, 7 / effScale, 0, Math.PI * 2);
@@ -432,7 +790,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
   // Pointer event handlers for touch/mouse
   const handlePointerDown = (e: React.PointerEvent) => {
-    // Detect right click: button 2 or secondary mouse button
     const isRightClick = e.button === 2 || (e.buttons & 2) !== 0;
     isRightClickRef.current = isRightClick;
 
@@ -451,7 +808,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDraggingRef.current) return;
+    if (!isDraggingRef.current || touchStartDistRef.current !== null) return;
 
     const dx = e.clientX - lastPointerPosRef.current.x;
     const dy = e.clientY - lastPointerPosRef.current.y;
@@ -464,12 +821,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
     const isRightClick = isRightClickRef.current || (e.buttons & 2) !== 0;
 
-    // Paint only on left-click in paint mode; right-click pans canvas
     if (!isRightClick && isPaintMode && !isPreviewMode && prevCoords && currCoords) {
       hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y);
       setTapDot({ x: currCoords.x, y: currCoords.y, alpha: 1 });
     } else {
-      // Pan canvas
       setOffset((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
     }
   };
@@ -480,10 +835,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     isDraggingRef.current = false;
     isRightClickRef.current = false;
 
-    // Do not trigger single-tap painting or preview if right-click was used
-    if (wasRightClick) return;
+    if (wasRightClick || touchStartDistRef.current !== null) return;
 
-    // Single tap detection
+    // Single tap detection with 3x3 neighborhood micro-region fallback
     if (totalDragDistanceRef.current < 12) {
       if (isPreviewMode) {
         onTogglePreview();
@@ -535,26 +889,62 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     setScale(newScale);
   };
 
-  // Multi-touch pinch to zoom
+  // Multi-touch 2-finger focal-point pinch-to-zoom & pan
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      touchStartDistRef.current = dist;
+      isDraggingRef.current = false;
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      touchStartDistRef.current = Math.max(1, dist);
+      touchLastCenterRef.current = {
+        x: (t0.clientX + t1.clientX) / 2,
+        y: (t0.clientY + t1.clientY) / 2,
+      };
       initialTouchScaleRef.current = scale;
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 2 && touchStartDistRef.current !== null) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
+    if (
+      e.touches.length === 2 &&
+      touchStartDistRef.current !== null &&
+      touchLastCenterRef.current !== null &&
+      containerRef.current &&
+      canvasRef.current &&
+      puzzle
+    ) {
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      const centerX = (t0.clientX + t1.clientX) / 2;
+      const centerY = (t0.clientY + t1.clientY) / 2;
+
       const ratio = dist / touchStartDistRef.current;
       const newScale = Math.min(12.0, Math.max(0.5, initialTouchScaleRef.current * ratio));
+      const actualZoom = newScale / scale;
+
+      const rect = canvasRef.current.getBoundingClientRect();
+      const focalScreenX = centerX - rect.left;
+      const focalScreenY = centerY - rect.top;
+
+      const panDx = centerX - touchLastCenterRef.current.x;
+      const panDy = centerY - touchLastCenterRef.current.y;
+      touchLastCenterRef.current = { x: centerX, y: centerY };
+
+      const w = containerRef.current.clientWidth;
+      const h = containerRef.current.clientHeight;
+      const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
+      const baseOffsetX = (w - puzzle.width * baseScale) / 2;
+      const baseOffsetY = (h - puzzle.height * baseScale) / 2;
+
+      const focalX = focalScreenX - (offset.x + baseOffsetX);
+      const focalY = focalScreenY - (offset.y + baseOffsetY);
+
+      setOffset((prev) => ({
+        x: prev.x + panDx - focalX * (actualZoom - 1),
+        y: prev.y + panDy - focalY * (actualZoom - 1),
+      }));
       setScale(newScale);
     }
   };
@@ -562,6 +952,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (e.touches.length < 2) {
       touchStartDistRef.current = null;
+      touchLastCenterRef.current = null;
     }
   };
 
@@ -586,201 +977,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   );
 };
 
-// --- Canvas Sub-rendering Functions ---
-
-function renderSolidColors(
-  ctx: CanvasRenderingContext2D,
-  puzzle: PuzzleData,
-  paintedSet: Set<number>
-) {
-  const { width, height, regions, palette } = puzzle;
-  const paletteMap = new Map<number, PaletteColor>(palette.map((p) => [p.id, p]));
-
-  const imgData = ctx.createImageData(width, height);
-  const data = imgData.data;
-
-  for (const region of regions) {
-    if (!paintedSet.has(region.id)) continue;
-    const color = paletteMap.get(region.colorId);
-    if (!color) continue;
-
-    const r = color.r;
-    const g = color.g;
-    const b = color.b;
-
-    for (let i = 0; i < region.pixels.length; i++) {
-      const idx = region.pixels[i] * 4;
-      data[idx] = r;
-      data[idx + 1] = g;
-      data[idx + 2] = b;
-      data[idx + 3] = 255;
-    }
-  }
-
-  // Draw offscreen
-  const offCanvas = document.createElement('canvas');
-  offCanvas.width = width;
-  offCanvas.height = height;
-  const offCtx = offCanvas.getContext('2d')!;
-  offCtx.putImageData(imgData, 0, 0);
-  ctx.drawImage(offCanvas, 0, 0);
-}
-
-function renderUnfilledMaskAndBorders(
-  ctx: CanvasRenderingContext2D,
-  puzzle: PuzzleData,
-  filledRegionIds: Set<number>,
-  isDetailMode: boolean
-) {
-  const { width, height, regionMap, borderMap, regions, palette } = puzzle;
-  const paletteMap = new Map<number, PaletteColor>(palette.map((p) => [p.id, p]));
-  const regionMapLookup = new Map<number, number>();
-  for (const r of regions) {
-    regionMapLookup.set(r.id, r.colorId);
-  }
-
-  const imgData = ctx.createImageData(width, height);
-  const data = imgData.data;
-  const total = width * height;
-
-  for (let i = 0; i < total; i++) {
-    const rId = regionMap[i];
-    const isFilled = filledRegionIds.has(rId);
-    const isBorder = borderMap[i] === 1;
-    const idx = i * 4;
-
-    if (isFilled) {
-      if (isBorder) {
-        // Subtle outline on painted regions to keep the line-art styling neat
-        const colorId = regionMapLookup.get(rId);
-        const col = colorId ? paletteMap.get(colorId) : undefined;
-        if (col) {
-          data[idx] = Math.floor(col.r * 0.72);
-          data[idx + 1] = Math.floor(col.g * 0.72);
-          data[idx + 2] = Math.floor(col.b * 0.72);
-          data[idx + 3] = 255;
-        } else {
-          data[idx] = 71;
-          data[idx + 1] = 85;
-          data[idx + 2] = 105;
-          data[idx + 3] = 255;
-        }
-      }
-      // If interior of painted region, leave alpha = 0 so Layer 1 (renderSolidColors) shines through!
-    } else {
-      // Unfilled region: pure crisp canvas paper with dark line art ink boundaries
-      if (isBorder) {
-        // Crisp dark line-art ink outline (#334155 Slate-700)
-        data[idx] = 51;
-        data[idx + 1] = 65;
-        data[idx + 2] = 85;
-        data[idx + 3] = 255;
-      } else {
-        // Pure crisp white canvas coloring sheet
-        data[idx] = 255;
-        data[idx + 1] = 255;
-        data[idx + 2] = 255;
-        data[idx + 3] = 255;
-      }
-    }
-  }
-
-  const offCanvas = document.createElement('canvas');
-  offCanvas.width = width;
-  offCanvas.height = height;
-  const offCtx = offCanvas.getContext('2d')!;
-  offCtx.putImageData(imgData, 0, 0);
-  ctx.drawImage(offCanvas, 0, 0);
-}
-
-function renderBorders(ctx: CanvasRenderingContext2D, puzzle: PuzzleData) {
-  const { width, height, borderMap } = puzzle;
-  const imgData = ctx.createImageData(width, height);
-  const data = imgData.data;
-  const total = width * height;
-
-  for (let i = 0; i < total; i++) {
-    if (borderMap[i] === 1) {
-      const idx = i * 4;
-      data[idx] = 51;
-      data[idx + 1] = 65;
-      data[idx + 2] = 85;
-      data[idx + 3] = 255;
-    }
-  }
-
-  const offCanvas = document.createElement('canvas');
-  offCanvas.width = width;
-  offCanvas.height = height;
-  const offCtx = offCanvas.getContext('2d')!;
-  offCtx.putImageData(imgData, 0, 0);
-  ctx.drawImage(offCanvas, 0, 0);
-}
-
-function renderHighlights(
-  ctx: CanvasRenderingContext2D,
-  puzzle: PuzzleData,
-  activeColorId: number,
-  hintRegionId: number | null,
-  filledRegionIds: Set<number>,
-  highlightMatching: boolean,
-  highlightStyle: RegionHighlightStyle,
-  hintFillStyle: HintFillStyle,
-  hintColorArgb: number,
-  pulseAlpha: number,
-  hintIntensity: number,
-  animateHint: boolean
-) {
-  if (highlightStyle !== 'FULL_REGION') return;
-
-  const { width, height } = puzzle;
-  const hr = (hintColorArgb >> 16) & 0xff;
-  const hg = (hintColorArgb >> 8) & 0xff;
-  const hb = hintColorArgb & 0xff;
-
-  const effAlpha = animateHint
-    ? Math.floor(pulseAlpha * hintIntensity * 255)
-    : Math.floor(hintIntensity * 200);
-
-  const imgData = ctx.createImageData(width, height);
-  const data = imgData.data;
-
-  for (const reg of puzzle.regions) {
-    if (filledRegionIds.has(reg.id)) continue;
-    const isHinted = reg.id === hintRegionId;
-    const isActive = reg.colorId === activeColorId;
-
-    if (!isHinted && (!highlightMatching || !isActive)) continue;
-
-    for (let i = 0; i < reg.pixels.length; i++) {
-      const idx = reg.pixels[i];
-      const px = idx % width;
-      const py = Math.floor(idx / width);
-
-      let shouldFill = true;
-      if (hintFillStyle === 'CHECKER') {
-        shouldFill = (Math.floor(px / 4) + Math.floor(py / 4)) % 2 === 0;
-      } else if (hintFillStyle === 'STRIPES') {
-        shouldFill = Math.floor((px + py) / 4) % 2 === 0;
-      }
-
-      if (shouldFill) {
-        const pIdx = idx * 4;
-        data[pIdx] = hr;
-        data[pIdx + 1] = hg;
-        data[pIdx + 2] = hb;
-        data[pIdx + 3] = effAlpha;
-      }
-    }
-  }
-
-  const offCanvas = document.createElement('canvas');
-  offCanvas.width = width;
-  offCanvas.height = height;
-  const offCtx = offCanvas.getContext('2d')!;
-  offCtx.putImageData(imgData, 0, 0);
-  ctx.drawImage(offCanvas, 0, 0);
-}
+// --- Canvas Label & Centroid Glow Renderer ---
 
 function renderLabels(
   ctx: CanvasRenderingContext2D,
@@ -815,7 +1012,7 @@ function renderLabels(
     const isActive = region.colorId === activeColorId;
     const isHinted = region.id === hintRegionId;
 
-    // Viewport culling
+    // Viewport frustum culling
     if (!isActive && !isHinted) {
       if (
         region.centroidX < visLeft ||
@@ -861,7 +1058,7 @@ function renderLabels(
     const baseFontSize = isActive || isHinted ? 18 : 15;
     const defaultTextSize = (baseFontSize * labelScale) / effScale;
     const regionMaxTextSize =
-      region.maxRadius > 0 ? (region.maxRadius * 1.35 * labelScale) : defaultTextSize;
+      region.maxRadius > 0 ? region.maxRadius * 1.35 * labelScale : defaultTextSize;
 
     const targetTextSize = Math.max(
       (6 * labelScale) / effScale,
@@ -880,9 +1077,9 @@ function renderLabels(
           : `rgba(251, 191, 36, ${pulseAlpha * 0.85})`;
         ctx.fillStyle = pulseCol;
       } else if (isActive || isHinted) {
-        ctx.fillStyle = 'rgba(254, 243, 199, 0.92)'; // Light amber
+        ctx.fillStyle = 'rgba(254, 243, 199, 0.92)';
       } else {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.82)'; // Clean white pill
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.82)';
       }
       ctx.fill();
     }

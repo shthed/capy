@@ -17,9 +17,10 @@
 
 | Directory | Target | Tech Stack | Hosted Path |
 | :--- | :--- | :--- | :--- |
-| **[`web/`](./web)** | **Updated Web App** | React 19, TypeScript, Vite 6, Tailwind CSS 4, Web Workers | `/` |
+| **[`web/`](./web)** | **Updated Web App (Single Source of Truth)** | React 19, TypeScript, Vite 6, Tailwind CSS 4, Web Workers | `/` |
 | **[`web1/`](./web1)** | **Legacy Web App (v1)** | Zero-build Vanilla JS (`capy.js`, `puzzle-generation.js`) + Playwright | `/web1/` |
-| **[`app/`](./app)** | **Native Android App** | Kotlin, Jetpack Compose, Material 3, Coroutines | Android APK |
+| **[`app/`](./app)** | **Unified Android App** | Kotlin, AndroidX WebKit (`WebViewAssetLoader`), Native Haptics & Storage Bridge | `/capy.apk` |
+| **[`app1/`](./app1)** | **Legacy Native Android App (v1)** | Kotlin, Jetpack Compose, Material 3, Custom K-Means Engine | `:app1` |
 
 ---
 
@@ -48,8 +49,8 @@
 
 - **Master Project Roadmap & TODO**: [`TODO.md`](./TODO.md)
 - **Puzzle Generation Engine Reference**: [`PUZZLE.md`](./PUZZLE.md)
-- **Android Architecture & Binary Save Spec**: [`app/CAPY.md`](./app/CAPY.md)
-- **Android Development Roadmap**: [`app/CAPY-TODO.md`](./app/CAPY-TODO.md)
+- **Legacy Android v1 Architecture & Binary Save Spec**: [`app1/CAPY.md`](./app1/CAPY.md)
+- **Legacy Android v1 Development Roadmap**: [`app1/CAPY-TODO.md`](./app1/CAPY-TODO.md)
 - **Legacy Web v1 Technical Reference**: [`web1/docs/TECH.md`](./web1/docs/TECH.md)
 - **Contributor & Agent Playbook**: [`AGENTS.md`](./AGENTS.md)
 

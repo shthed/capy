@@ -220,8 +220,8 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   return (
     <footer
       ref={footerRef}
-      className={`fixed bottom-0 left-0 right-0 z-20 flex items-center px-3 py-2 bg-slate-950/90 backdrop-blur-md border-t border-slate-800/80 shadow-2xl transition-all ${
-        raiseDock ? 'pb-6' : 'pb-2'
+      className={`fixed bottom-0 left-0 right-0 z-20 flex items-center px-3 pt-2 bg-slate-950/90 backdrop-blur-md border-t border-slate-800/80 shadow-2xl transition-all ${
+        raiseDock ? 'safe-bottom-raised' : 'safe-bottom'
       }`}
       aria-label="Palette dock"
     >

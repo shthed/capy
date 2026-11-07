@@ -1,154 +1,227 @@
 package com.capypaint.capy
 
+import android.annotation.SuppressLint
+import android.content.Intent
+import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.view.KeyEvent
-import android.view.MotionEvent
+import android.util.Base64
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.capypaint.capy.ui.screens.GameScreen
-import com.capypaint.capy.ui.theme.CapyTheme
-import com.capypaint.capy.util.CapyLogger
-import com.capypaint.capy.viewmodel.GameViewModel
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.WebViewAssetLoader
 
-@Suppress("RestrictedApi")
 class MainActivity : ComponentActivity() {
 
-    private var gameViewModel: GameViewModel? = null
+    private var webView: WebView? = null
+    private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
+    private lateinit var bridge: CapyAndroidBridge
+    private var isPageLoaded: Boolean = false
 
+    private val pickMediaLauncher = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri: Uri? ->
+        val callback = fileUploadCallback
+        fileUploadCallback = null
+        if (uri != null) {
+            callback?.onReceiveValue(arrayOf(uri))
+        } else {
+            callback?.onReceiveValue(null)
+        }
+    }
+
+    private val backPressedCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            val wv = webView
+            if ((wv != null) && bridge.isModalOpen) {
+                wv.evaluateJavascript("window.__capyCloseModal && window.__capyCloseModal();", null)
+            } else {
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+            }
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        CapyLogger.init(applicationContext)
-        CapyLogger.i("CapyApp", "MainActivity.onCreate() invoked")
 
-        window.decorView.isFocusable = true
-        window.decorView.isFocusableInTouchMode = true
-        window.decorView.requestFocus()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        @Suppress("DEPRECATION")
+        window.statusBarColor = Color.TRANSPARENT
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = Color.BLACK
 
-        // Attach View-level OnGenericMotionListener for physical USB/Bluetooth mouse & virtual device mousewheel scrolls
-        window.decorView.setOnGenericMotionListener { _, ev ->
-            if ((ev.actionMasked == MotionEvent.ACTION_SCROLL) || (ev.action == MotionEvent.ACTION_SCROLL)) {
-                val scrollAxisVal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    ev.getAxisValue(MotionEvent.AXIS_SCROLL)
-                } else 0f
-                val vScroll = ev.getAxisValue(MotionEvent.AXIS_VSCROLL).takeIf { it != 0f } ?: scrollAxisVal
-                val scrollVal = if (vScroll != 0f) vScroll else ev.getAxisValue(MotionEvent.AXIS_HSCROLL)
+        onBackPressedDispatcher.addCallback(this, backPressedCallback)
 
-                CapyLogger.d(
-                    "CapyInput",
-                    "setOnGenericMotionListener -> mousewheel scrollVal=$scrollVal at (${ev.x.toInt()}, ${ev.y.toInt()})",
-                )
-
-                if (scrollVal != 0f) {
-                    if (scrollVal > 0f) {
-                        gameViewModel?.zoomIn()
-                    } else {
-                        gameViewModel?.zoomOut()
-                    }
-                    true
-                } else false
-            } else false
-        }
-
-        enableEdgeToEdge()
-        setContent {
-            val viewModel: GameViewModel = viewModel()
-            gameViewModel = viewModel
-            val settings by viewModel.settings.collectAsState()
-            CapyTheme(themeMode = settings.themeMode) {
-                GameScreen(viewModel = viewModel)
-            }
-        }
-    }
-
-    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
-        val actionStr = MotionEvent.actionToString(ev.action)
-        val scrollAxisVal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ev.getAxisValue(MotionEvent.AXIS_SCROLL)
-        } else 0f
-        val vScroll = ev.getAxisValue(MotionEvent.AXIS_VSCROLL).takeIf { it != 0f } ?: scrollAxisVal
-        val hScroll = ev.getAxisValue(MotionEvent.AXIS_HSCROLL)
-        val scrollVal = if (vScroll != 0f) vScroll else hScroll
-
-        CapyLogger.v(
-            "CapyRawInput",
-            "RAW GenericMotionEvent -> action=$actionStr (${ev.action}), pos=(${ev.x.toInt()}, ${ev.y.toInt()}), vScroll=$vScroll, hScroll=$hScroll, deviceId=${ev.deviceId}, source=${ev.source}",
-        )
-
-        if ((ev.actionMasked == MotionEvent.ACTION_SCROLL) || (ev.action == MotionEvent.ACTION_SCROLL)) {
-            if (scrollVal != 0f) {
-                CapyLogger.d("CapyInput", "dispatchGenericMotionEvent mousewheel zoom -> scrollVal=$scrollVal")
-                if (scrollVal > 0f) {
-                    gameViewModel?.zoomIn()
-                } else {
-                    gameViewModel?.zoomOut()
+        bridge = CapyAndroidBridge(
+            context = applicationContext,
+            rootViewProvider = { webView },
+            onModalStateChanged = { isOpen ->
+                runOnUiThread {
+                    backPressedCallback.isEnabled = isOpen
                 }
-                return true
+            },
+        )
+
+        val assetLoader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
+
+        val wv = WebView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+            setBackgroundColor(Color.BLACK)
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isVerticalScrollBarEnabled = false
+            isHorizontalScrollBarEnabled = false
+
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                allowFileAccess = false
+                allowContentAccess = true
+                mediaPlaybackRequiresUserGesture = false
+                cacheMode = WebSettings.LOAD_DEFAULT
+                setSupportZoom(false)
+                builtInZoomControls = false
+                displayZoomControls = false
+                textZoom = 100
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    safeBrowsingEnabled = false
+                }
             }
-        }
 
-        return super.dispatchGenericMotionEvent(ev)
-    }
+            addJavascriptInterface(bridge, "CapyAndroid")
 
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        val actionStr = MotionEvent.actionToString(ev.action)
-        CapyLogger.v(
-            "CapyRawInput",
-            "RAW TouchEvent -> action=$actionStr (${ev.action}), pointers=${ev.pointerCount}, pos=(${ev.x.toInt()}, ${ev.y.toInt()})",
-        )
-        return super.dispatchTouchEvent(ev)
-    }
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val actionStr = when (event.action) {
-            KeyEvent.ACTION_DOWN -> "ACTION_DOWN"
-            KeyEvent.ACTION_UP -> "ACTION_UP"
-            else -> event.action.toString()
-        }
-        CapyLogger.v(
-            "CapyRawInput",
-            "RAW KeyEvent -> action=$actionStr, keyCode=${event.keyCode} (${KeyEvent.keyCodeToString(event.keyCode)})",
-        )
-
-        // Physical Keyboard / Mouse shortcut zoom handling
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_PLUS,
-                KeyEvent.KEYCODE_EQUALS,
-                KeyEvent.KEYCODE_NUMPAD_ADD,
-                KeyEvent.KEYCODE_ZOOM_IN,
-                -> {
-                    CapyLogger.d("CapyInput", "Physical Keyboard Zoom In key pressed (${event.keyCode})")
-                    gameViewModel?.zoomIn()
-                    return true
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView,
+                    request: WebResourceRequest,
+                ): WebResourceResponse? {
+                    return assetLoader.shouldInterceptRequest(request.url)
                 }
 
-                KeyEvent.KEYCODE_MINUS,
-                KeyEvent.KEYCODE_NUMPAD_SUBTRACT,
-                KeyEvent.KEYCODE_ZOOM_OUT,
-                -> {
-                    CapyLogger.d("CapyInput", "Physical Keyboard Zoom Out key pressed (${event.keyCode})")
-                    gameViewModel?.zoomOut()
-                    return true
+                override fun onPageFinished(view: WebView, url: String?) {
+                    super.onPageFinished(view, url)
+                    isPageLoaded = true
+                    deliverPendingSharedImageIfNeeded()
+                }
+            }
+
+            webChromeClient = object : WebChromeClient() {
+                override fun onShowFileChooser(
+                    webView: WebView?,
+                    filePathCallback: ValueCallback<Array<Uri>>?,
+                    fileChooserParams: FileChooserParams?,
+                ): Boolean {
+                    fileUploadCallback?.onReceiveValue(null)
+                    fileUploadCallback = filePathCallback
+                    return try {
+                        pickMediaLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                        true
+                    } catch (_: Exception) {
+                        fileUploadCallback = null
+                        false
                     }
+                }
             }
         }
 
-        return super.dispatchKeyEvent(event)
+        ViewCompat.setOnApplyWindowInsetsListener(wv) { view, windowInsets ->
+            val insets = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
+            view.setPadding(insets.left, insets.top, insets.right, insets.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
+
+        webView = wv
+        setContentView(wv)
+
+        handleIncomingIntent(intent)
+        wv.loadUrl(START_URL)
     }
 
-    override fun onResume() {
-        super.onResume()
-        CapyLogger.d("CapyApp", "MainActivity.onResume()")
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
     }
 
-    override fun onPause() {
-        super.onPause()
-        CapyLogger.d("CapyApp", "MainActivity.onPause()")
-        gameViewModel?.flushActiveGameState()
+    private fun handleIncomingIntent(intent: Intent?) {
+        if ((intent == null) || (intent.action != Intent.ACTION_SEND)) return
+        val type = intent.type ?: return
+        if (!type.startsWith("image/")) return
+
+        val imageUri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+        if (imageUri == null) return
+
+        try {
+            val bytes = contentResolver.openInputStream(imageUri)?.use { it.readBytes() } ?: return
+            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            val dataUrl = "data:$type;base64,$base64"
+            val title = imageUri.lastPathSegment?.substringAfterLast('/') ?: "Shared Photo"
+            bridge.pendingSharedImageJson = CapyAndroidBridge.formatSharedImageJson(title, dataUrl)
+            if (isPageLoaded) {
+                deliverPendingSharedImageIfNeeded()
+            }
+        } catch (_: Exception) {
+            // Ignore unreadable URI
+        }
+    }
+
+    private fun deliverPendingSharedImageIfNeeded() {
+        val pendingJson = bridge.consumePendingSharedImage() ?: return
+        val wv = webView ?: return
+        wv.post {
+            wv.evaluateJavascript(
+                """
+                (function() {
+                    try {
+                        var payload = $pendingJson;
+                        if (window.__capyReceiveSharedImage && payload && payload.dataUrl) {
+                            window.__capyReceiveSharedImage(payload.title || "Shared Photo", payload.dataUrl);
+                        }
+                    } catch (e) {}
+                })();
+                """.trimIndent(),
+                null,
+            )
+        }
+    }
+
+    override fun onDestroy() {
+        webView?.destroy()
+        webView = null
+        super.onDestroy()
+    }
+
+    companion object {
+        const val START_URL = "https://appassets.androidplatform.net/assets/www/index.html"
     }
 }

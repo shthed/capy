@@ -29,10 +29,17 @@ concurrency:
 jobs:
   android:
     name: Android Unit Tests & APK Build
+    needs: [web]
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Download built Web bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -45,8 +52,8 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Run unit tests & build Debug APK (app/)
-        run: ./gradlew app:testDebugUnitTest app:assembleDebug --build-cache
+      - name: Run unit tests (app & app1) and build Debug APK (app/)
+        run: ./gradlew app:testDebugUnitTest app:assembleDebug app1:testDebugUnitTest --build-cache
 
       - name: Upload Android APK Artifact
         uses: actions/upload-artifact@v4
