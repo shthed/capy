@@ -1,8 +1,8 @@
-# CAPY-TODO: Master Development & Optimization Roadmap
+# CAPY-TODO: Android Development & Optimization Roadmap
 
-This document outlines all planned improvements, performance optimizations, debugging enhancements, and feature roadmaps for the **Capy - Color by Number** Android application (`com.capypaint.capy`). 
+This document outlines all planned improvements, performance optimizations, debugging enhancements, and feature roadmaps for the **Capy - Color by Number** Android application (`com.capypaint.capy` in `app/`). For cross-platform monorepo tasks, see the root [`TODO.md`](../TODO.md).
 
-Items are organized by prioritized tiers (**P0** = Critical Performance & System Fixes, **P1** = Memory, Rendering & Debugging Infrastructure, **P2** = High-Value Gameplay & UX Features, **P3** = Long-Term Platform & Social Features). Each item includes a detailed implementation plan with exact file references and technical specifications.
+Items are organized by prioritized tiers (**P0** = Critical Performance & System Fixes, **P1** = Engine Unification, Memory, Rendering & Release Build, **P2** = High-Value Gameplay & UX Features, **P3** = Long-Term Platform & Social Features).
 
 ---
 
@@ -11,7 +11,7 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 | Tier | Area | Focus | Key Tasks |
 | :--- | :--- | :--- | :--- |
 | **P0** | **Critical Performance & System** | Speed up image loading, reduce main thread/disk I/O strain, system compatibility | Parallelize & Cap Segmentation, Debounce Save Disk I/O, Enable Predictive Back |
-| **P1** | **Memory, Rendering & Debugging** | Eliminate GC pauses, optimize Compose canvas rendering, strict debugging | Eliminate Overlay Bitmap Allocations, Bitmap Pooling, Partial Dirty-Rect Updates, Complete CapyLogger Migration, StrictMode & Trace Markers |
+| **P1** | **Engine Unification, Memory & Release** | Align with 5-strategy Web engine, R8 release APK, eliminate GC pauses | Port 5-Strategy Engine (`LineArtExtractor`), R8 Release APK Minification, Eliminate Overlay Bitmap Allocations, Partial Dirty-Rect Updates, CapyLogger Migration |
 | **P2** | **Core Gameplay & UX** | High-demand user features, desktop ergonomics, precision tapping | Cursor-Centric Mouse Wheel Zooming, Micro-Region Tap Tolerance, Magnifying Glass Loupe, Expanded Sample Gallery |
 | **P3** | **Platform & Cloud** | Advanced media generation, social features, sync | Time-Lapse Video/GIF Export, Daily Challenge, Palette Filters, Google Drive Sync, Material You |
 
@@ -22,9 +22,9 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 ### 1. [x] Parallelize & Downsample Image Segmentation Engine
 * **Priority**: `P0 - Critical Performance`
 * **Target Files**:
-  * [`app/src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt)
-  * [`app/src/main/java/com/capypaint/capy/engine/RegionSegmenter.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/engine/RegionSegmenter.kt)
-  * [`app/src/main/java/com/capypaint/capy/engine/PuzzleGenerator.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/engine/PuzzleGenerator.kt)
+  * [`app/src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt`](./src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt)
+  * [`app/src/main/java/com/capypaint/capy/engine/RegionSegmenter.kt`](./src/main/java/com/capypaint/capy/engine/RegionSegmenter.kt)
+  * [`app/src/main/java/com/capypaint/capy/engine/PuzzleGenerator.kt`](./src/main/java/com/capypaint/capy/engine/PuzzleGenerator.kt)
 * **Status**: **Completed**
 * **Accomplished Solution**:
   1. **Maximum Processing Resolution Capping**: `DrawingPuzzleGenerator` and `PhotoPuzzleGenerator` scale input bitmaps to `config.resolution` (default 640px–1000px, max 4096px).
@@ -36,8 +36,8 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 ### 2. [x] Debounce & Throttle Progress Save Operations
 * **Priority**: `P0 - Disk I/O & UI Responsiveness`
 * **Target Files**:
-  * [`app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt)
-  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
+  * [`app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt`](./src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt)
+  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](./src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
 * **Status**: **Completed**
 * **Accomplished Solution**:
   1. **In-Memory UI Feedback**: Region taps update `_uiState` and `_snapshots` state flows instantly on the Main thread for zero-latency 60 FPS UI feedback.
@@ -48,19 +48,46 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 ### 3. [x] Enable Predictive Back Navigation (`android:enableOnBackInvokedCallback`)
 * **Priority**: `P0 - System Standards & Logs`
 * **Target File**:
-  * [`app/src/main/AndroidManifest.xml`](file:///C:/Spunk/code/capy-g2/app/src/main/AndroidManifest.xml)
+  * [`app/src/main/AndroidManifest.xml`](./src/main/AndroidManifest.xml)
 * **Status**: **Completed**
 * **Accomplished Solution**:
   Added `android:enableOnBackInvokedCallback="true"` to the `<application>` element in `AndroidManifest.xml`, resolving system back dispatcher logcat warnings and enabling predictive back animations on Android 13+ (API 33+).
 
 ---
 
-## 🟡 P1: Memory, Rendering & Debugging Infrastructure
+## 🟡 P1: Engine Unification, Memory, Rendering & Release Build
 
-### 4. [ ] Eliminate Canvas Overlay Bitmap Heap Allocations
+### 4. [ ] Unify Puzzle Generation Engine with 5-Strategy Web Pipeline
+* **Priority**: `P1 - Engine Parity & Image Quality`
+* **Target Files**:
+  * [`app/src/main/java/com/capypaint/capy/engine/PuzzleGenerator.kt`](./src/main/java/com/capypaint/capy/engine/PuzzleGenerator.kt)
+  * [`app/src/main/java/com/capypaint/capy/engine/RegionSegmenter.kt`](./src/main/java/com/capypaint/capy/engine/RegionSegmenter.kt)
+  * Reference: [`web/src/engine/`](../web/src/engine) and [`PUZZLE.md`](../PUZZLE.md)
+* **Problem**:
+  The updated web app (`web/src/engine/`) implements a 5-stage pipeline with `LineArtExtractor` (`ABSORB_LINES` medial-axis watershed expansion vs. `UNIFIED_BLACK_REGION`), Lab-guided bilateral smoothing, and 5 segmentation strategies (`watershed`, `slic`, `floodfill`, `felzenszwalb`, `voronoi`), whereas the Android engine currently uses the earlier 2-strategy (`DrawingPuzzleGenerator` / `PhotoPuzzleGenerator`) pipeline.
+* **Implementation Plan**:
+  1. Port `LineArtExtractor` to Kotlin (`com.capypaint.capy.engine.LineArtExtractor`) to extract binary ink masks before spatial filtering.
+  2. Port the 5 segmentation strategies and Kuwahara/bilateral pre-filters into `RegionSegmenter.kt` and `PuzzleGenerator.kt`.
+  3. Add cross-platform JUnit4 parity tests in `app/src/test/` matching `web/src/engine/` outputs.
+
+---
+
+### 5. [ ] Configure R8 Minification & Resource Shrinking for Release APK
+* **Priority**: `P1 - APK Size & Runtime Performance`
+* **Target File**:
+  * [`app/build.gradle.kts`](./build.gradle.kts)
+* **Problem**:
+  The downloadable `capy.apk` currently uses the unminified debug build (~18.8 MB). Enabling R8 code shrinking, obfuscation, and resource shrinking will reduce APK size to ~3–5 MB and optimize Compose runtime performance.
+* **Implementation Plan**:
+  1. Configure `isMinifyEnabled = true` and `isShrinkResources = true` on the `release` build type in `app/build.gradle.kts` with a deterministic signing config.
+  2. Add ProGuard/R8 keep rules in `app/proguard-rules.pro` for serialized `SavedSnapshot` / `UserSettings` models if needed.
+
+---
+
+### 6. [ ] Eliminate Canvas Overlay Bitmap Heap Allocations
 * **Priority**: `P1 - Memory & GC Optimization`
 * **Target File**:
-  * [`app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt)
+  * [`app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`](./src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt)
 * **Problem**:
   In `PuzzleCanvas.kt`, `borderBitmap` and `highlightBitmap` instantiate full $W \times H$ `ARGB_8888` bitmaps (allocating up to 16MB of RAM each) inside Compose `remember` blocks whenever region fills, active color, or revision state changes. On high-resolution puzzles, this triggers repeated Garbage Collection pauses (`Background young concurrent mark compact GC freed...`).
 * **Implementation Plan**:
@@ -70,11 +97,11 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 
 ---
 
-### 5. [ ] Eliminate ViewModel GC Pauses via Bitmap Pooling & Immediate Recycling
+### 7. [ ] Eliminate ViewModel GC Pauses via Bitmap Pooling & Immediate Recycling
 * **Priority**: `P1 - Memory & GC Optimization`
 * **Target Files**:
-  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
-  * [`app/src/main/java/com/capypaint/capy/engine/PuzzleGenerator.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/engine/PuzzleGenerator.kt)
+  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](./src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
+  * [`app/src/main/java/com/capypaint/capy/engine/PuzzleGenerator.kt`](./src/main/java/com/capypaint/capy/engine/PuzzleGenerator.kt)
 * **Problem**:
   `loadBitmap()`, `generateProgressPreviewBitmap()`, and `restoreSnapshotDataAndBitmap()` in `GameViewModel.kt` construct intermediate `displayBitmap`, `previewBitmap`, and `progressPreviewBmp` instances without recycling old bitmaps when switching between save slots.
 * **Implementation Plan**:
@@ -84,10 +111,10 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 
 ---
 
-### 6. [ ] Optimize Canvas Rendering with Partial Dirty-Rect Updates & Viewport Culling
+### 8. [ ] Optimize Canvas Rendering with Partial Dirty-Rect Updates & Viewport Culling
 * **Priority**: `P1 - Render Performance`
 * **Target File**:
-  * [`app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt)
+  * [`app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`](./src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt)
 * **Problem**:
   1. **Full-Bitmap Re-draws**: When a user paints a single region, `displayBitmap.setPixels()` re-writes pixels across the entire image buffer.
   2. **Unculled Text Labels**: `PuzzleCanvas` iterates through all `puzzle.regions` to compute text sizes and draw region numbers, even for regions located outside the current zoom viewport bounds (`scale` + `offset`).
@@ -100,27 +127,27 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 
 ---
 
-### 7. [ ] Complete Centralized Logging Migration (`Log.*` -> `CapyLogger`)
+### 9. [ ] Complete Centralized Logging Migration (`Log.*` -> `CapyLogger`)
 * **Priority**: `P1 - Production Hygiene & Diagnostics`
 * **Target Files**:
-  * [`app/src/main/java/com/capypaint/capy/util/CapyLogger.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/util/CapyLogger.kt)
-  * [`app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt)
-  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
+  * [`app/src/main/java/com/capypaint/capy/util/CapyLogger.kt`](./src/main/java/com/capypaint/capy/util/CapyLogger.kt)
+  * [`app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt`](./src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt)
+  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](./src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
 * **Problem**:
-  While `CapyLogger` is implemented and active, over 20 raw `android.util.Log.d` / `Log.e` / `Log.w` calls remain scattered in `GamePreferencesRepository` (lines 255, 288, 475, 484, 486, 512, 518, 527, 535, 539, 542) and `GameViewModel` (lines 141, 168, 270, 462, 475, 486, 509, 835, 860, 864, 868, 882, 889, 894, 899, 903, 926, 960, 1029, 1032), bypassing `CapyLogger`'s ring-buffer and crash dump recording.
+  While `CapyLogger` is implemented and active, raw `android.util.Log.d` / `Log.e` / `Log.w` calls remain in `GamePreferencesRepository` and `GameViewModel`, bypassing `CapyLogger`'s ring-buffer and crash dump recording.
 * **Implementation Plan**:
   1. Replace all raw `Log.d("CapyRepo", ...)`, `Log.d("CapyVM", ...)`, and `Log.d("CapySave", ...)` calls with `CapyLogger.d(...)`, `CapyLogger.e(...)`, and `CapyLogger.w(...)`.
   2. Ensure all log tags are standardized (`CapyRepo`, `CapyVM`, `CapySave`, `CapyEngine`, `CapyInput`).
 
 ---
 
-### 8. [ ] Add Stage-by-Stage Trace Markers & Perfetto Integration
+### 10. [ ] Add Stage-by-Stage Trace Markers & Perfetto Integration
 * **Priority**: `P1 - Telemetry & Profiling`
 * **Target Files**:
-  * [`app/build.gradle.kts`](file:///C:/Spunk/code/capypaint/capy/app/build.gradle.kts)
-  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
-  * [`app/src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt)
-  * [`app/src/main/java/com/capypaint/capy/engine/RegionSegmenter.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/engine/RegionSegmenter.kt)
+  * [`app/build.gradle.kts`](./build.gradle.kts)
+  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](./src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
+  * [`app/src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt`](./src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt)
+  * [`app/src/main/java/com/capypaint/capy/engine/RegionSegmenter.kt`](./src/main/java/com/capypaint/capy/engine/RegionSegmenter.kt)
 * **Problem**:
   Overall puzzle load times are currently recorded as aggregate numbers, making fine-grained execution analysis difficult during performance tuning.
 * **Implementation Plan**:
@@ -135,11 +162,11 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 
 ---
 
-### 9. [ ] Enable StrictMode & LeakCanary in Debug Builds
+### 11. [ ] Enable StrictMode & LeakCanary in Debug Builds
 * **Priority**: `P1 - Debugging & Quality`
 * **Target Files**:
-  * [`app/src/main/java/com/capypaint/capy/MainActivity.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/MainActivity.kt)
-  * [`app/build.gradle.kts`](file:///C:/Spunk/code/capypaint/capy/app/build.gradle.kts)
+  * [`app/src/main/java/com/capypaint/capy/MainActivity.kt`](./src/main/java/com/capypaint/capy/MainActivity.kt)
+  * [`app/build.gradle.kts`](./build.gradle.kts)
 * **Problem**:
   Accidental disk I/O on the main thread or retained ViewModel references need automated detection during development.
 * **Implementation Plan**:
@@ -157,12 +184,12 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 
 ## 🟢 P2: Core Gameplay, UX & Desktop/Mouse Ergonomics
 
-### 10. [ ] Cursor-Centric Mouse Wheel Zooming
+### 12. [ ] Cursor-Centric Mouse Wheel Zooming
 * **Priority**: `P2 - Desktop Ergonomics & Input`
 * **Target Files**:
-  * [`app/src/main/java/com/capypaint/capy/MainActivity.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/MainActivity.kt)
-  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
-  * [`app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt)
+  * [`app/src/main/java/com/capypaint/capy/MainActivity.kt`](./src/main/java/com/capypaint/capy/MainActivity.kt)
+  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](./src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
+  * [`app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`](./src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt)
 * **Problem**:
   When using a physical USB/Bluetooth mouse or running on Chromebooks/Desktop/Emulators, mouse wheel scrolling currently triggers `gameViewModel?.zoomIn()` / `zoomOut()`, which zooms around the screen center rather than zooming relative to the mouse cursor position $(x, y)$.
 * **Implementation Plan**:
@@ -174,10 +201,10 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 
 ---
 
-### 11. [ ] Micro-Region Touch Tap Tolerance
+### 13. [ ] Micro-Region Touch Tap Tolerance
 * **Priority**: `P2 - Precision & Ergonomics`
 * **Target File**:
-  * [`app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt)
+  * [`app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`](./src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt)
 * **Problem**:
   On dense photo puzzles, user touch taps near region boundaries may hit a 1-pixel hairline border or adjacent region, causing missed region fill taps.
 * **Implementation Plan**:
@@ -187,10 +214,10 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 
 ---
 
-### 12. [ ] Magnifying Glass Loupe for Micro-Regions
+### 14. [ ] Magnifying Glass Loupe for Micro-Regions
 * **Priority**: `P2 - Accessibility & Precision`
 * **Target File**:
-  * [`app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt)
+  * [`app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`](./src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt)
 * **Problem**:
   Extremely small regions on high-resolution photo puzzles can be covered by the user's finger during touch/drag events.
 * **Implementation Plan**:
@@ -199,29 +226,27 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 
 ---
 
-### 13. [ ] Expand Built-in Sample Artwork Gallery
+### 15. [ ] Expand Built-in Sample Artwork Gallery
 * **Priority**: `P2 - Content Expansion`
 * **Target Files**:
-  * [`app/src/main/java/com/capypaint/capy/model/SettingsModel.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/model/SettingsModel.kt)
-  * `app/src/main/res/drawable/` / `assets/`
+  * [`app/src/main/java/com/capypaint/capy/model/SettingsModel.kt`](./src/main/java/com/capypaint/capy/model/SettingsModel.kt)
+  * `app/src/main/res/drawable/`
 * **Problem**:
-  Currently, the app relies on a single bundled sample artwork (`Capybara Sample`).
+  Currently, the Android app bundles a single sample artwork (`Capybara Sample`), while `web/public/assets/` includes `capybara.webp`, `capy_forest.webp`, and `snail_guitar.webp`.
 * **Implementation Plan**:
-  1. Add 6–8 curated, royalty-free sample artworks across categories: *Capybaras, Landscapes, Anime/Cartoons, Mandalas*.
-  2. Define sample artwork metadata model `SampleArtwork(id, title, category, assetPath, defaultColorCount)`.
+  1. Bundle shared sample artworks (`capy_forest`, `snail_guitar`, and additional curated artwork) into `app/src/main/res/drawable/`.
+  2. Define sample artwork metadata model `SampleArtwork(id, title, category, drawableRes, defaultColorCount)`.
   3. Build a `SampleGallery` selection grid in `SettingsMenuSheet`'s Create tab.
 
 ---
 
 ## 🔵 P3: Platform, Social & Cloud Features
 
-### 14. [ ] Time-Lapse Video / GIF Export
+### 16. [ ] Time-Lapse Video / GIF Export
 * **Priority**: `P3 - Social Sharing`
 * **Target Files**:
   * New `app/src/main/java/com/capypaint/capy/util/TimeLapseRecorder.kt`
-  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
-* **Problem**:
-  Users enjoy sharing speed-paint time-lapse videos of their completed puzzles on social media.
+  * [`app/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt`](./src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt)
 * **Implementation Plan**:
   1. Record low-resolution thumbnail frame snapshots in temporary storage as regions are painted (e.g., every 5% completion step or every $N$ filled regions).
   2. Use Android's `MediaMuxer` & `MediaCodec` (or `Animated GIF` generator) to render a 1080p MP4 time-lapse video on puzzle completion.
@@ -229,53 +254,41 @@ Items are organized by prioritized tiers (**P0** = Critical Performance & System
 
 ---
 
-### 15. [ ] Daily Capy Challenge & Streak Tracker
+### 17. [ ] Daily Capy Challenge & Streak Tracker
 * **Priority**: `P3 - Retention & Engagement`
 * **Target Files**:
-  * [`app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt)
-  * [`app/src/main/java/com/capypaint/capy/ui/screens/GameScreen.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/ui/screens/GameScreen.kt)
-* **Problem**:
-  Providing daily fresh content increases user retention.
+  * [`app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt`](./src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt)
+  * [`app/src/main/java/com/capypaint/capy/ui/screens/GameScreen.kt`](./src/main/java/com/capypaint/capy/ui/screens/GameScreen.kt)
 * **Implementation Plan**:
   1. Implement a daily seeded puzzle generator using `EpochDay` (`LocalDate.now().toEpochDay()`) that produces a unique daily puzzle.
   2. Track consecutive daily completion streaks in `GamePreferencesRepository` and display a flame streak counter on `GameTopBar`.
 
 ---
 
-### 16. [ ] Custom Palette Color Filters
+### 18. [ ] Custom Palette Color Filters
 * **Priority**: `P3 - Customization`
 * **Target File**:
-  * [`app/src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt)
-* **Problem**:
-  Users want options to alter the aesthetic feel of imported photos (e.g., Pastel, Warm Retro, Cyberpunk Neon, Vintage B&W).
+  * [`app/src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt`](./src/main/java/com/capypaint/capy/engine/ColorQuantizer.kt)
 * **Implementation Plan**:
   1. Add `PaletteFilter` enum (`NATURAL`, `PASTEL`, `RETRO_WARM`, `NEON_NIGHT`, `MONOCHROME`).
-  2. Post-process quantized palette colors in `ColorQuantizer.quantize()` by remapping HSV/saturation/hue shift values:
-     * `PASTEL`: Reduce saturation by 30%, boost lightness by +15%.
-     * `RETRO_WARM`: Shift hue +10°, boost warm red/yellow tones.
-     * `NEON_NIGHT`: Boost saturation to 100%, increase contrast.
-     * `MONOCHROME`: Desaturate to balanced grayscale spectrum.
+  2. Post-process quantized palette colors in `ColorQuantizer.quantize()` by remapping HSV/saturation/hue shift values.
 
 ---
 
-### 17. [ ] Google Drive Cloud Sync
+### 19. [ ] Google Drive Cloud Sync
 * **Priority**: `P3 - Cloud Persistence`
 * **Target File**:
-  * [`app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt)
-* **Problem**:
-  Allow users to seamlessly sync their save files (`puzzle_data_$id.bin`) across multiple Android devices.
+  * [`app/src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt`](./src/main/java/com/capypaint/capy/data/GamePreferencesRepository.kt)
 * **Implementation Plan**:
   1. Integrate Google Drive REST API using App Data Folder (`drive.appdata` scope).
   2. Perform two-way sync of `snapshots.json` manifest and GZIP binary save files on app launch and save creation with conflict resolution based on `lastOpened` timestamp.
 
 ---
 
-### 18. [ ] Material You Dynamic Theming (Android 12+)
+### 20. [ ] Material You Dynamic Theming (Android 12+)
 * **Priority**: `P3 - System Polish`
 * **Target File**:
-  * [`app/src/main/java/com/capypaint/capy/ui/theme/Theme.kt`](file:///C:/Spunk/code/capy-g2/app/src/main/java/com/capypaint/capy/ui/theme/Theme.kt)
-* **Problem**:
-  The app UI can dynamically match the user's Android wallpaper accent colors on modern devices.
+  * [`app/src/main/java/com/capypaint/capy/ui/theme/Theme.kt`](./src/main/java/com/capypaint/capy/ui/theme/Theme.kt)
 * **Implementation Plan**:
   1. Enable `dynamicLightColorScheme(context)` and `dynamicDarkColorScheme(context)` in `CapyTheme` for API 31+ devices.
   2. Retain custom palette swatch rendering on the game canvas independent of system theme colors.

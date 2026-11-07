@@ -1,30 +1,24 @@
-# TODO
+# Legacy Web v1 (`web1/`) — Maintenance TODO
 
-Actionable maintenance items collected during the project review. Keep entries short, measurable, and update them as work lands so the list stays trustworthy.
+Actionable maintenance items for the Legacy Vanilla JS Web v1 target (`web1/`, deployed to `/web1/`). For cross-project monorepo items (Updated Web `web/`, Android `app/`, and engine unification), see the root [`TODO.md`](../../TODO.md).
 
 ## High priority
-- [ ] Reinstate full CI coverage: run the Node + Playwright harness (`npm test --silent`) in `.github/workflows/ci.yml`, publish reports, and make failing tests block merges (with opt-outs only when browsers are unavailable).
+- [x] Reinstate full CI coverage: run the Node + Playwright harness (`npm test --silent`) in [`.github/workflows/deploy-branch.yml`](../../.github/workflows/deploy-branch.yml) against both `web1/` and `web/dist/`, and make failing tests block deployments.
 - [x] Add Cache Storage limits/eviction to `service-worker.js` (or gate which requests are cached) so user sessions cannot grow the offline cache without bound. (Service worker removed)
-- [ ] Add regression tests for preboot sizing/settings in `capy.js` (malformed or missing `localStorage` data) to keep UI scale and orientation tokens stable.
+- [ ] Add regression tests for preboot sizing/settings in `web1/capy.js` (malformed or missing `localStorage` data) to keep UI scale and orientation tokens stable.
 - [x] Fix runtime boot errors where `handleRendererChange` is undefined (shows the error toast and blocks the settings button), ensuring renderer toggles are registered before UI events fire.
 - [ ] Restore Playwright puzzle fixtures so `window.capyGenerator.loadPuzzleFixture` succeeds and the smoke suite can exercise renderer switching, palette updates, save/restore, and performance metrics.
-- [ ] Refresh the start-screen bootstrap to match the bundled Three Bands vector sample so first paint shows the stripes instead of the blank white viewport shown in the latest smoke screenshot.
-- [ ] Rehydrate puzzle rendering output: the stage currently shows only the white background with no outlines or numbers even though `capy.json` hydrates, and palette metadata is missing from `window.capyGenerator.getState()`.
-- [ ] Re-enable the multi-renderer pipeline (Canvas2D/WebGL) so `createRendererController`, `applyRendererMode`, and `window.capyGenerator` can switch backends instead of hard-coding SVG with a disabled selector.
-- [ ] Reconcile renderer documentation and coverage: `TECH.md` still promises switchable Canvas/WebGL renderers while `project/tests/render-controller.spec.js` only asserts SVG globals; update docs and tests once the controller work lands.
+- [ ] Re-enable the multi-renderer pipeline (Canvas2D/WebGL) in `web1/capy.js` if desired, or finalize SVG-only mode in `web1/docs/TECH.md`.
 
 ## Maintenance
-- [ ] Split the renderer section of `capy.js` into smaller modules (renderer implementations, controller utilities, shared helpers) to trim its ~2,300 lines and make per-renderer changes safer.
+- [ ] Split the renderer section of `web1/capy.js` into smaller modules (renderer implementations, controller utilities, shared helpers) to trim its ~2,300 lines and make per-renderer changes safer.
 - [x] Extend service-worker coverage with tests that simulate cache growth and offline restores once eviction rules land. (Service worker removed)
-- [ ] Restore and publish artwork/segmentation documentation once a refreshed pipeline is ready, replacing the placeholder note in `TECH.md`.
-- [ ] Add an `actionlint` (or equivalent workflow validation) step so `.github/workflows/*.yml` files fail CI when they reference unsupported contexts, catching env-scope errors before pushes.
-- [ ] Add preview renderer coverage for rebuilding region pixels from region maps when palette IDs are non-sequential.
+- [ ] Convert or share `web1/capy.png` (5.8 MB) with `web/public/assets/capybara.webp` (564 KB) to reduce repository and GitHub Pages size.
 - [ ] Pass vector scene export options (e.g., `maxZoom`) through `createVectorScenePayload` so loaders respect authored zoom limits.
 
 ## UI polish
 - [ ] Add a portrait-friendly start hint layout that centers the welcome card without overlapping the palette dock.
 - [ ] Trim palette dock padding on small screens so the first/last swatches are fully visible without horizontal scrolling.
-- [ ] Capture updated dark/light theme screenshots of the refreshed start hint for `project/CHANGELOG.md`.
-- [x] Reorganize the settings panel into grouped toggles with adjustable hint intensity controls (see `project/notes/screenshot-review.md`).
+- [x] Reorganize the settings panel into grouped toggles with adjustable hint intensity controls (see `web1/notes/screenshot-review.md`).
 - [ ] Add live preview + keyboard shortcuts to the interface scale dropdown (25–400%) so users can jump to a preset and recover the control after large jumps.
 - [ ] Extend the scroll-into-view affordance to other settings (label scale, zoom limits, palette sort) to keep the active control visible after value changes.

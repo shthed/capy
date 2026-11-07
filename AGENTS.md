@@ -57,11 +57,13 @@ From the repository root:
 
 - **Session kick-off**: Run `git fetch --all --prune` and rebase onto `origin/main` before starting work.
 - **Branch naming**: Use short-lived feature branches (`automation/<change>` or `feature/<change>`) and open PRs so CI and preview deployments run automatically.
-- **Branch deployments (`.github/workflows/deploy-branch.yml`)**:
-  - `main` deploys `web/dist/` to `/` (`https://shthed.github.io/capy/`) and `web1/` to `/web1/` (`https://shthed.github.io/capy/web1/`).
-  - Open PR branches deploy previews to `/pull/<number>/` (updated web) and `/pull/<number>/web1/` (legacy web v1).
+- **Unified CI & Branch Deployments ([`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml))**:
+  - Runs Android unit tests + debug APK build (`android`), Web + Web1 build & Playwright smoke tests (`web`), and GitHub Pages deployment (`deploy`).
+  - `main` deploys `web/dist/` to `/` (`https://shthed.github.io/capy/`), `web1/` to `/web1/` (`https://shthed.github.io/capy/web1/`), and the Android APK to `/capy.apk` (`https://shthed.github.io/capy/capy.apk`).
+  - Open PR branches deploy previews to `/pull/<number>/`, `/pull/<number>/web1/`, and `/pull/<number>/capy.apk`.
+  - `gh-pages` commits are squashed to a single orphan commit on every push so binary `.apk` files never accumulate in Git history.
 - **No unsolicited Android device deployment**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
-- **Documentation hygiene**: Keep [`PUZZLE.md`](./PUZZLE.md), [`app/CAPY.md`](./app/CAPY.md), [`app/CAPY-TODO.md`](./app/CAPY-TODO.md), and [`web1/docs/TECH.md`](./web1/docs/TECH.md) in sync with architectural or runtime changes.
+- **Documentation hygiene**: Keep [`TODO.md`](./TODO.md), [`PUZZLE.md`](./PUZZLE.md), [`app/CAPY.md`](./app/CAPY.md), [`app/CAPY-TODO.md`](./app/CAPY-TODO.md), and [`web1/docs/TECH.md`](./web1/docs/TECH.md) in sync with architectural or runtime changes.
 
 ---
 

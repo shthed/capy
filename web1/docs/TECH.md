@@ -1,163 +1,56 @@
-# Capy Technical Guide
+# Capy Legacy Web v1 (`web1/`) — Technical Guide
 
-Play the latest build at https://shthed.github.io/capy/ (branch previews deploy
-to `/pull/<number>/`). Repository: https://github.com/shthed/capy.
+Play the Legacy Web v1 build at https://shthed.github.io/capy/web1/ (branch previews deploy
+to `/pull/<number>/web1/`, alongside the Updated Web App at `/` and Android APK at `/capy.apk`).
+Repository: https://github.com/shthed/capy.
 
-This document collects all technical, architectural, and QA details that were
-previously tracked in the README. Keep it accurate alongside feature work so
-both contributors and automation agents have a single source of truth. New
-developers should start with `project/ONBOARDING.md` for setup and workflow
-expectations before diving into the deeper references below.
+This document collects the technical, architectural, and QA details for the Legacy Vanilla JS Web v1 target (`web1/`). For the Updated React 19 Web App (`web/`), Android App (`app/`), and cross-project roadmap, see the root [`README.md`](../../README.md), [`TODO.md`](../../TODO.md), [`PUZZLE.md`](../../PUZZLE.md), and [`app/CAPY.md`](../../app/CAPY.md).
 
-## Project Overview
+## Project Overview (`web1/`)
 
-Capy turns any bitmap image into a colour-by-number puzzle entirely in the
-browser. Drop a file (or load one via the hidden file picker) and the app will
-resize it, run the selected quantization pipeline (k-means palette clustering or
-the posterize-and-merge pass) to build a discrete palette, merge tiny regions,
-and paint an SVG scene you can immediately play. Everything ships as static
-runtime files in the repository root so the single-page app can be served
-directly without a build step.
-Offline play is temporarily disabled while the service worker (`service-worker.js`)
-and its cache are paused. The runtime still ships the worker file for when
-offline support returns, but loads now unregister any existing service worker
-and clear the runtime cache before continuing. Imported images fall back to
-in-memory URLs instead of Cache Storage while this pause is in effect.
+`web1/` turns any bitmap image into a colour-by-number puzzle entirely in the
+browser using zero-build Vanilla JS. Everything inside `web1/` ships as static
+runtime files (`index.html`, `capy.js`, `puzzle-generation.js`, `render.js`, `styles.css`)
+so the single-page app can be served directly without a build step.
 
-## Repository Map
+## Repository Map (`web1/`)
 
-- **Runtime (repository root)**
-  - `index.html` – Single-page host document containing markup and wiring for renderer selection, saves, generator controls, and automation helpers.
-  - `styles.css` – Primary stylesheet housing theme tokens, responsive layout rules, and component styles (preboot UI scale variables stay inline in `index.html`).
-  - `capy.js` – Combined runtime, renderer helpers, and puzzle generation logic; hosts the SVG renderer, preboot sizing, and worker-friendly generation entry points.
-  - `capy.json` – Bundled "Three Bands" puzzle fixture (vector stripes) used for previews and branch deployments alongside the runtime payload.
-- **Documentation**
-  - `AGENTS.md` – Contributor workflow and automation expectations; mirrored to `/AGENTS/index.html` during deployments.
-  - `README.md` – Player-facing quick start and gameplay overview.
-  - `TECH.md` – This technical reference.
-  - `project/STYLEGUIDE.md` – CSS conventions, load-order expectations, and maintenance tips for the runtime stylesheet.
-- **Testing & QA**
-  - `project/tests/ui-review.spec.js` – Playwright smoke suite that loads the bundled runtime, switches between renderers, paints automation fixtures, and exercises saves reloads.
-  - `project/tests/render-controller.spec.js` – Node-based unit coverage that mocks renderer registrations and asserts the controller's fallback hooks and error paths.
-  - `project/tests/generator.spec.js` / `project/tests/smoothing.spec.mjs` – Node-driven generator coverage with typed-array fixtures under `project/tests/fixtures/` plus shared helpers in `project/tests/utils/fixtures.js`.
-  - `project/scripts/run-tests.js` – Harness invoked by `npm test --silent`; runs the Node test runner before handing off to Playwright so both suites share a single entry point and exit code.
-  - `project/scripts/capture-preview-screenshot.js` – Playwright helper that loads the configured `PLAYWRIGHT_BASE_URL` (falling back to the local dev server) and writes a full-page preview screenshot to `artifacts/ui-review/preview.png` for upload.
-  - `project/artifacts/ui-review/` – Drop Playwright reports and screenshots here when you capture them locally.
-  - **Playwright local setup** – Inside `project/`, run `npm install` followed by `npm run setup:playwright` when provisioning a new machine so the bundled Chromium binary and its shared library dependencies are ready for UI review runs.
-- **Tooling & metadata**
-  - `project/package.json` – npm scripts plus the `http-server` dependency required to run the app locally; `npm run dev` serves the repository root at http://localhost:8000.
-  - `project/package-lock.json` – Locked dependency tree that keeps local installs and CI runs deterministic.
-  - `.gitignore` – Ignores dependency installs, legacy automation artifacts, and transient reports.
-  - `project/scripts/build-pages-site.mjs` – GitHub Markdown renderer used by deployments to turn Markdown sources (README, AGENTS, etc.) into styled HTML mirrors for GitHub Pages previews.
-  - `project/scripts/generate_readme_html.py` – Local helper that mirrors the markdown-to-HTML conversion pipeline for manual testing or offline builds.
-- **Styling stack**
-  - `styles.css` owns the full runtime stylesheet without external CSS dependencies. Layout, form styling, and color tokens are defined locally to keep the zero-build pipeline lean and avoid vendored frameworks.
-- **CI & Deployment**
-  - `.github/workflows/ci.yml` – Placeholder workflow that currently checks installs while the automated test suite is offline.
-  - `.github/workflows/deploy-branch.yml` – Deploys branches with open PRs to GitHub Pages under subfolders; `main` always deploys to root.
-  - `.github/workflows/cleanup-branches.yml` – Nightly job and post-deploy follow-up (triggered asynchronously) that prunes stale `codex` branches with no open PR and no commits in the last 30 days by calling `project/scripts/cleanup-branches.mjs`.
-
-## Project Health Snapshot
-
-- **Zero-build runtime.** The app still ships as plain HTML/JS/CSS and must remain directly loadable without bundling. Optimisations should respect this constraint and avoid minified dependency drops.
-  - **Binary hygiene.** Do not generate or commit binary assets (for example, screenshots or rendered previews) directly into the repository. Capture UI evidence as external PR artifacts instead so the runtime stays text-only and diffs remain lightweight.
-  - **Cache hygiene.** Offline caching is paused; when re-enabled the service worker (`service-worker.js`) will continue to cap Cache Storage at roughly 25 MB or 80 entries with LRU eviction and skip uploads larger than ~6 MB. Keep those limits in mind before introducing larger assets or new fetch endpoints so storage stays within budget once the cache returns.
-  - **Module registration.** The service worker registers as an ES module so `service-worker-cache.js` can load without MIME-type errors on GitHub Pages; stick to module-friendly helpers when adjusting its imports.
-  - **Automation coverage.** The shared Node + Playwright harness remains the expected entry point (`npm test --silent`), but CI currently only validates installs. Manual smoke checks stay required until the hosted automation suite returns.
-  - **Documentation sources.** Planning and work intake now live in `project/ROADMAP.md` (direction) and `project/TODO.md` (actionable tasks); update them when behaviour, tooling, or QA coverage shifts. The in-app Help panel fetches the `/README/` mirror that renders `README.md`, so keep that endpoint available when relocating docs.
-
-## Repository Review Findings
-
-- **Renderer structure.** `capy.js` now bundles the SVG implementation alongside the controller. The controller still exposes
-  registration hooks but defaults to the simple SVG backend. The SVG renderer draws regions and labels directly into a
-  `viewBox`-aligned scene so fills, outlines, and numbers stay crisp at any zoom level.
-- **Vector scenes.** `capy.js` can hydrate `capy.scene+simple` metadata (including optional binary buffers) into scene loaders that feed the SVG renderer; the bundled Three Bands sample ships both vector metadata and per-region pixel lists for preview rendering.
-- **Preboot + settings.** `capy.js` performs preboot sizing and UI-scale selection before the app loads, pulling stored
-  settings from `localStorage` when available and falling back to defaults otherwise. Pair this with tests that cover missing or
-  malformed settings data so boot-time CSS variables stay predictable.
-- **Offline cache risk.** Offline caching is disabled for now; when restored, `service-worker.js` will resume precaching the
-    runtime payload with the ≈25 MB / 80-entry LRU cap and continue skipping cached uploads above ~6 MB. Revisit those limits
-    before adding larger assets or new fetch targets so storage usage stays predictable once caching returns.
-- **Automation entry point.** `project/scripts/run-tests.js` still drives the Node generator specs and Playwright UI smoke tests,
-  but the workflow in `.github/workflows/ci.yml` currently serves as a placeholder. Decide whether to re-enable the Playwright
-  portion in CI or gate it behind an environment flag so coverage expectations match automation reality.
-- **Workflow context guardrails.** GitHub parses the workflow `env:` blocks before it exposes the job-level `env.*` context, so
-  referencing `${{ env.SOME_VALUE }}` while defining the same block fails validation with `Unrecognized named-value: 'env'`.
-  Keep `env:` assignments limited to literals/contexts that GitHub resolves at parse time (such as `github.*`, `inputs.*`, or
-  direct strings) and reuse those exports inside the shell scripts to avoid invalid deployments.
+- **Runtime (`web1/`)**
+  - `web1/index.html` – Single-page host document containing markup and wiring for renderer selection, saves, generator controls, and automation helpers.
+  - `web1/styles.css` – Primary stylesheet housing theme tokens, responsive layout rules, and component styles.
+  - `web1/capy.js`, `web1/puzzle-generation.js`, `web1/render.js` – Runtime, renderer helpers, and puzzle generation logic.
+  - `web1/capy.json` – Bundled puzzle fixture used for fast boot and previews.
+- **Documentation (`web1/docs/`)**
+  - [`AGENTS.md`](../../AGENTS.md) – Monorepo contributor workflow and automation expectations.
+  - [`README.md`](../../README.md) – Player-facing quick start and monorepo overview.
+  - [`TODO.md`](../../TODO.md) & [`web1/docs/TODO.md`](./TODO.md) – Monorepo and `web1/` task checklists.
+  - `web1/docs/TECH.md` – This technical reference.
+  - `web1/docs/STYLEGUIDE.md` – CSS conventions and maintenance tips for `web1/styles.css`.
+- **Testing & QA (`web1/tests/` & `web1/scripts/`)**
+  - `web1/tests/ui-load-page.spec.js` – Playwright smoke suite verifying both `web1/index.html` and the built `web/dist/` bundle in headless Chromium.
+  - `web1/scripts/run-tests.js` – Harness invoked by `npm test --silent`.
+  - `web1/package.json` & `web1/package-lock.json` – npm scripts (`npm run dev`, `npm test`, `npm run setup:playwright`).
+- **CI & Deployment (`.github/workflows/`)**
+  - `.github/workflows/deploy-branch.yml` – Unified CI & GitHub Pages workflow: runs `android` (`./gradlew app:testDebugUnitTest app:assembleDebug`), `web` (`web` build + `web1` & `web` Playwright smoke tests), and `deploy` (deploys `web/dist/` to `/`, `web1/` to `/web1/`, and `capy.apk` to `/capy.apk`, squashing `gh-pages` history to a single orphan commit).
+  - `.github/workflows/cleanup-branches.yml` & `.github/workflows/cleanup-closed-pr.yml` – Prunes merged branches and removes closed PR preview directories (`pull/<number>/`) from `gh-pages` using `web1/scripts/cleanup-branches.mjs` and `web1/scripts/cleanup-gh-pages-previews.mjs`.
 
 ## Deployment & Branch Previews
 
-Branch previews are driven by `.github/workflows/deploy-branch.yml`, which runs
-on every push (all branches) plus optional manual dispatches (trigger the manual
-run from `main` and provide the `target_branch` input so the workflow checks out
-the right source). The workflow computes the target ref and preview URL in its
-first step, then deploys directly to `gh-pages`:
+Branch previews and production deployments are driven by `.github/workflows/deploy-branch.yml`:
 
-1. **Checkout & PR discovery.** The action checks out the triggering branch
-   (shallow fetch for speed) and the `gh-pages` deployment branch, then resolves
-   the open PR attached to the branch. `main` publishes to the Pages root;
-   everything else publishes to `/pull/<pr-number>/` when a PR is present or
-   falls back to `/pull/<safe-branch>/` if no PR is found. The summary logs the
-   branch, PR lookup result, target directory, and preview URL on every run.
-2. **Content sync.** The workflow wipes the target directory, then rsyncs the
-   repository root into place while excluding `.git/`, `.github/`, `project/`,
-   and any prior `pages/` checkout. The deployment mirrors the repository tree
-   directly—no build or doc regeneration steps run here.
-3. **Preview surfacing.** After copying files, the workflow commits straight to
-   `gh-pages`, pushes the update, uploads the published directory as an artifact
-   (`gh-pages-pr-<number>` when a PR is found, otherwise `gh-pages-<safe>`), and
-   echoes the preview URL in the job summary so reviewers can copy it quickly.
-
-If the sync step finds nothing new to commit, the workflow exits after noting
-there are no changes to deploy while leaving the previously published preview
-in place. The compute step logs the resolved branch, PR number (when
-applicable), target directory, and preview URL so runs stay self-documenting.
+1. **Parallel Build & Test (`android` + `web` jobs)**:
+   - `android` runs unit tests and builds `app-debug.apk` (`capy-debug-apk` artifact) using cached Gradle state.
+   - `web` builds `web/` (`web-dist` artifact) and runs Playwright smoke tests in `web1/` against both `web1/` and `web/dist/` using cached npm & Playwright Chromium binaries.
+2. **Artifact Sync & Squashed `gh-pages` Commit (`deploy` job)**:
+   - Downloads `web-dist` and `capy-debug-apk` without rebuilding, syncs `web/dist/` to the target root (`.` for `main`, `pull/<pr>` for open PRs), copies `capy.apk`, and syncs `web1/` runtime files to `web1/`.
+   - Commits `gh-pages` as a single parentless orphan commit (`git checkout --orphan gh-pages-squashed && git push --force origin gh-pages`) so binary APK blobs never accumulate in Git history, then deploys to GitHub Pages and comments the preview + APK links on the PR.
 
 ### Keeping branch directories and artifacts lean
 
-- **Prune Git branches regularly.** `.github/workflows/cleanup-branches.yml`
-  runs nightly (and after every successful Pages deployment) to invoke
-  `project/scripts/cleanup-branches.mjs`. The script deletes unprotected
-  branches matching the configured prefixes (defaults to `automation/`) when
-  they have no open PR activity and have not received commits within the
-  configurable cutoff window (defaults to 60 minutes), ensuring future deploy
-  runs stop re-copying previews nobody needs. Trigger the workflow manually via
-  the **Cleanup stale automation branches** action whenever you close a large
-  batch of PRs so stale heads disappear immediately.
-- **Cleanup also trims Pages previews.** After refreshing remote branches,
-  `.github/workflows/cleanup-branches.yml` and
-  `.github/workflows/cleanup-closed-pr.yml` still prune stale branches from the
-  Pages tree, but deployment itself no longer checks PR state. Branch runs land
-  in `gh-pages/pull/<pr-number>/` when a PR exists (or `/pull/<safe-branch>/`
-  when it does not) and `main` continues to publish to the root.
-- **Manual cleanup remains available.** If you need to reclaim space before the
-  next deployment runs (or before triggering **Deploy GitHub Pages previews**
-  by hand), delete the stale `pull/<branch>` directories on `gh-pages` and push
-  the commit.
-
-Tweaking the deployment:
-
-- The publish step now clones `gh-pages`, wipes the target directory, and
-  copies the repository root (excluding `.github/`, `project/`, and any prior
-  `pages/` working tree) into place. Adjust the `rsync` excludes or add more
-  files if the runtime payload grows.
-- Branch previews map to `pull/<pr-number>` when a PR exists and fall back to
-  `pull/<safe-branch>` otherwise; update the path construction in
-  `.github/workflows/deploy-branch.yml` if a different layout is needed.
-- Swap the publish branch from `gh-pages` if you need a different hosting
-  target.
-
-### Post-deploy branch updates
-
-- **Trigger.** The `Post-deploy branch tests` workflow runs after every
-  completed deployment.
-- **Preview discovery.** The workflow rebuilds the preview URL using the PR
-  number (matching `/pull/<pr-number>/`) and posts it back to the PR alongside
-  links to the deployment run, artifact bundle, and rerun entry point.
-- **No automated tests.** The job no longer installs dependencies or runs
-  Playwright; it only reports the latest preview location so reviewers can
-  click through directly.
+- **Prune Git branches & previews regularly.** `.github/workflows/cleanup-branches.yml` (daily cron) and `.github/workflows/cleanup-closed-pr.yml` (on PR close) invoke
+  `web1/scripts/cleanup-branches.mjs` and `web1/scripts/cleanup-gh-pages-previews.mjs`.
+- **Squashed `gh-pages` history.** Both `.github/workflows/deploy-branch.yml` and the cleanup workflows commit to `gh-pages` using a single parentless orphan commit (`git checkout --orphan gh-pages-squashed && git push --force origin gh-pages`) so binary `capy.apk` files never accumulate in Git history.
+- **Automatic PR comments.** At the end of `.github/workflows/deploy-branch.yml`, open PRs automatically receive an updated `<!-- capy-pages-preview -->` comment with direct links to the workflow run, Updated Web Preview (`/pull/<pr>/`), Legacy Web1 Preview (`/pull/<pr>/web1/`), and Android Debug APK (`/pull/<pr>/capy.apk`).
 
 ## UI & Feature Tour
 

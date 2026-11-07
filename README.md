@@ -46,6 +46,7 @@
 
 ## 🛠️ Architecture & Documentation
 
+- **Master Project Roadmap & TODO**: [`TODO.md`](./TODO.md)
 - **Puzzle Generation Engine Reference**: [`PUZZLE.md`](./PUZZLE.md)
 - **Android Architecture & Binary Save Spec**: [`app/CAPY.md`](./app/CAPY.md)
 - **Android Development Roadmap**: [`app/CAPY-TODO.md`](./app/CAPY-TODO.md)

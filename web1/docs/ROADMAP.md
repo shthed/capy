@@ -1,18 +1,13 @@
-# Roadmap
+# Roadmap (`web1/`)
 
-Direction for upcoming work. Use this as the planning spine; keep individual tasks in `TODO.md` and reflect major shifts here after each milestone.
+Direction for Legacy Web v1 (`web1/`, deployed at `/web1/`). For the overall Capy monorepo roadmap across `web/`, `web1/`, and `app/`, see the root [`TODO.md`](../../TODO.md).
 
-## Now (stabilise)
-- Bring CI back to the full Node + Playwright harness (with Playwright opt-outs only when browsers are unavailable) and restore hosted smoke checks so deployments regain automatic coverage.
-- Harden offline support by adding cache caps/eviction to the service worker before introducing larger assets or remote fetches; follow with tests that simulate cache growth and offline restores.
-- Keep handbook docs (`TECH.md`, `AGENTS.md`, `STYLEGUIDE.md`) aligned with runtime behaviour so contributors land on accurate guidance, especially around preboot sizing and renderer bootstraps.
+## Completed
+- Restored full Playwright CI smoke coverage in [`.github/workflows/deploy-branch.yml`](../../.github/workflows/deploy-branch.yml) verifying both `web1/` and `web/dist/` on every push.
+- Relocated Legacy Web v1 into `web1/` and published at `/web1/` alongside the Updated Web App (`web/` at `/`) and Android APK (`/capy.apk`).
+- Updated handbook docs (`TECH.md`, `AGENTS.md`, `STYLEGUIDE.md`, `ONBOARDING.md`) to reflect the unified monorepo structure.
 
 ## Next (maintainability)
-- Decompose the renderer section of `capy.js` into renderer-specific modules and shared helpers to cut line count and simplify backend swaps.
+- Decompose the renderer section of `web1/capy.js` into renderer-specific modules and shared helpers to cut line count and simplify backend swaps.
 - Expand test coverage for settings/bootstrap paths (UI scale, renderer selection, persistence fallbacks) to catch regressions outside Playwright flows.
-- Document the preferred low-abstraction DOM patterns (template cloning, delegated events, small helpers) with examples in the codebase to reduce incidental complexity.
-
-## Later (experience)
-- Publish refreshed artwork/segmentation documentation once the pipeline is ready, keeping sample assets in sync.
-- Explore renderer refinements (SVG and WebGL paths) for accessibility and export fidelity while preserving the zero-build constraint.
-- Revisit save/export UX after renderer refactors so compact bundles and metadata stay portable across browsers and devices.
+- Deduplicate/compress sample artwork (`web1/capy.png` vs `web/public/assets/capybara.webp`).

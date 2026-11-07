@@ -270,7 +270,7 @@ jobs:
             --exclude 'server.js' \
             web1/ "${DEST_DIR}/web1/"
 
-      - name: Sync gh-pages branch and remove .git before artifact upload
+      - name: Sync gh-pages branch (squashed history) and remove .git before artifact upload
         if: steps.target.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -283,9 +283,12 @@ jobs:
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
             git add -A
-            if ! git diff --cached --quiet; then
+            if ! git diff --cached --quiet || git cat-file -p HEAD | grep -q '^parent '; then
+              git checkout --orphan gh-pages-squashed
+              git add -A
               git commit -m "Deploy ${TARGET_DIR}"
-              git push origin gh-pages || echo "Warning: gh-pages push skipped"
+              git branch -M gh-pages
+              git push --force origin gh-pages || echo "Warning: gh-pages push skipped"
             fi
             cd ..
             rm -rf pages/.git
