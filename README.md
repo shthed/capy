@@ -49,6 +49,7 @@
 
 - **Master Project Roadmap & TODO**: [`TODO.md`](./TODO.md)
 - **Puzzle Generation Engine Reference**: [`PUZZLE.md`](./PUZZLE.md)
+- **Unified Android Launcher Architecture & Native Bridge**: [`app/CAPY.md`](./app/CAPY.md)
 - **Legacy Android v1 Architecture & Binary Save Spec**: [`app1/CAPY.md`](./app1/CAPY.md)
 - **Legacy Android v1 Development Roadmap**: [`app1/CAPY-TODO.md`](./app1/CAPY-TODO.md)
 - **Legacy Web v1 Technical Reference**: [`web1/docs/TECH.md`](./web1/docs/TECH.md)
