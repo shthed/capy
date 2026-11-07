@@ -43,20 +43,8 @@ java {
     }
 }
 
-val buildWebIfNeeded by tasks.registering(Exec::class) {
-    workingDir = rootProject.file("web")
-    val isWindows = System.getProperty("os.name").lowercase().contains("win")
-    val npmCmd = if (isWindows) "npm.cmd" else "npm"
-    commandLine(npmCmd, "run", "build")
-    onlyIf {
-        !rootProject.file("web/dist/index.html").exists()
-    }
-}
-
 val syncWebAssets by tasks.registering(Sync::class) {
-    dependsOn(buildWebIfNeeded)
-    val webDistDir = rootProject.file("web/dist")
-    from(webDistDir) {
+    from(layout.projectDirectory.dir("../web/dist")) {
         exclude("**/capy.png")
     }
     into(layout.projectDirectory.dir("src/main/assets/www"))
