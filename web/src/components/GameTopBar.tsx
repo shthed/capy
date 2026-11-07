@@ -23,7 +23,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
   onOpenSaves,
 }) => {
   return (
-    <header className="fixed top-0 left-0 right-0 z-30 pointer-events-none p-3 flex justify-end items-center">
+    <header className="fixed top-0 left-0 right-0 z-30 pointer-events-none px-3 pb-3 safe-top flex justify-end items-center">
       <div className="pointer-events-auto flex items-center gap-2">
         {/* Progress % / Title Pill */}
         <button
