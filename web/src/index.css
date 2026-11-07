@@ -15,16 +15,23 @@
   }
 }
 
+:root {
+  --sat: max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px));
+  --sab: max(env(safe-area-inset-bottom, 0px), var(--safe-area-bottom, 0px));
+  --sal: max(env(safe-area-inset-left, 0px), var(--safe-area-left, 0px));
+  --sar: max(env(safe-area-inset-right, 0px), var(--safe-area-right, 0px));
+}
+
 .safe-top {
-  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+  padding-top: max(0.75rem, calc(var(--sat) + 0.5rem));
 }
 
 .safe-bottom {
-  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  padding-bottom: max(0.5rem, calc(var(--sab) + 0.25rem));
 }
 
 .safe-bottom-raised {
-  padding-bottom: max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem));
+  padding-bottom: max(1.5rem, calc(var(--sab) + 1.25rem));
 }
 
 /* Custom scrollbars */

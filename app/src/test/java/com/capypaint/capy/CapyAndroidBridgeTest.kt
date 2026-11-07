@@ -58,4 +58,18 @@ class CapyAndroidBridgeTest {
             json,
         )
     }
+
+    @Test
+    fun `formatSafeAreaInsetsJson formats CSS pixel insets correctly`() {
+        val json = CapyAndroidBridge.formatSafeAreaInsetsJson(
+            top = 48,
+            bottom = 24,
+            left = 0,
+            right = 0,
+        )
+        assertEquals(
+            """{"top":48,"bottom":24,"left":0,"right":0}""",
+            json,
+        )
+    }
 }
