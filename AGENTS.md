@@ -67,7 +67,7 @@ From the repository root:
   - Open PR branches deploy previews to `/pull/<number>/`, `/pull/<number>/web1/`, and `/pull/<number>/capy.apk`.
   - `gh-pages` commits are squashed to a single orphan commit on every push so binary `.apk` files never accumulate in Git history.
 - **No unsolicited Android device deployment**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
-- **Documentation hygiene**: Keep [`TODO.md`](./TODO.md), [`PUZZLE.md`](./PUZZLE.md), [`app/CAPY.md`](./app/CAPY.md), [`app/CAPY-TODO.md`](./app/CAPY-TODO.md), and [`web1/docs/TECH.md`](./web1/docs/TECH.md) in sync with architectural or runtime changes.
+- **Documentation hygiene**: Keep [`TODO.md`](./TODO.md), [`PUZZLE.md`](./PUZZLE.md), [`app/CAPY.md`](./app/CAPY.md), [`app1/CAPY.md`](./app1/CAPY.md), [`app1/CAPY-TODO.md`](./app1/CAPY-TODO.md), and [`web1/docs/TECH.md`](./web1/docs/TECH.md) in sync with architectural or runtime changes.
 
 ---
 

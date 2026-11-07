@@ -19,7 +19,13 @@ For target-specific deep dives, see also:
   - Automated `syncWebAssets` in [`app/build.gradle.kts`](./app/build.gradle.kts) and linked `web-dist` in [`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml).
 - [x] **60/120 FPS Offscreen Canvas Layer Caching in [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**:
   - Cached the base puzzle layer (`baseCanvasRef` with incremental dirty-rect updates on region fill) and highlight layer (`highlightCanvasRef` with GPU alpha modulation), eliminating per-frame full-canvas pixel iteration and DOM allocations.
-  - Added 2-finger focal-point pinch-to-zoom and mobile safe-area inset support (`viewport-fit=cover`, `.safe-top`, `.safe-bottom`).
+  - Added 2-finger focal-point pinch-to-zoom math, 1-finger panning, Bresenham stroke interpolation for paint mode, and visual tap feedback dots.
+- [x] **Dynamic Safe-Area Insets Bridge & Edge-to-Edge System UI ([`app/`](./app) & [`web/`](./web))**:
+  - Solved Android WebView's lack of CSS `env(safe-area-inset-*)` support by bridging physical `systemBars() or displayCutout()` insets from `MainActivity.kt` into CSS custom properties (`--safe-area-top`, `--safe-area-bottom`, `--safe-area-left`, `--safe-area-right`).
+  - Added fallback status/navigation bar query on startup to eliminate frame-0 layout flicker.
+  - Formulated cross-platform `:root` fallback variables in [`web/src/index.css`](./web/src/index.css) (`.safe-top`, `.safe-bottom`, `.safe-bottom-raised`).
+  - Verified on Google Pixel 7: completely prevents top bar buttons and bottom palette swatches from overlapping the status bar (clock, Wi-Fi, battery) or gesture navigation bar.
+  - Added Playwright test verification in [`web1/tests/ui-load-page.spec.js`](./web1/tests/ui-load-page.spec.js) and JUnit4 test in [`CapyAndroidBridgeTest.kt`](./app/src/test/java/com/capypaint/capy/CapyAndroidBridgeTest.kt).
 
 ---
 
@@ -54,20 +60,18 @@ For target-specific deep dives, see also:
 - [ ] **Cross-Link Web, Legacy Web1 & Android APK in UI**:
   - Add links in `web/src/components/SettingsModal.tsx` (and `web1/index.html`) allowing players to switch between the Updated Web App (`/`), Legacy Web v1 (`/web1/`), and direct Android APK download (`capy.apk`).
 - [ ] **Optimize & Deduplicate Sample Artwork Assets**:
-  - Convert or share the 5.8 MB `capy.png` (`web1/capy.png` and `web/public/assets/capy.png`) using WebP (`capybara.webp` is 564 KB) to save ~5.5 MB in repository checkout and GitHub Pages artifact size.
-- [ ] **Expand Built-In Sample Artwork Gallery**:
-  - Bundle `capy_forest.webp` and `snail_guitar.webp` (currently in `web/public/assets/`) into the Android app (`app/src/main/res/drawable/`) so both Web and Android offer the same multi-image starter gallery.
+  - Replace the uncompressed 5.8 MB `capy.png` (`web1/capy.png` and `web/public/assets/capy.png`) with WebP (`capybara.webp` is 564 KB) to save ~5.5 MB in repository checkout and GitHub Pages artifact size.
+- [ ] **Dynamic Theme Sync (System Dark/Light Mode)**:
+  - Add Android `uiMode` configuration listener in `MainActivity.kt` and bridge into `NativeBridge.ts` so system theme changes automatically adjust `canvasBgColor`.
 
 ---
 
-## 📱 Milestone 3: Android App Release & Performance (`app/`)
+## 📱 Milestone 3: Android Release Build & Multi-Platform Packaging
 
-*(See [`app/CAPY-TODO.md`](./app/CAPY-TODO.md) for full implementation specifications.)*
-
-- [ ] **R8 Minified Release APK Build**:
-  - Configure `isMinifyEnabled = true` and `isShrinkResources = true` in [`app/build.gradle.kts`](./app/build.gradle.kts) with signing configuration so `capy.apk` shrinks from ~18.8 MB to ~3–5 MB with full R8 bytecode optimization.
-- [ ] **Canvas Memory & Dirty-Rect Rendering Optimizations**:
-  - Eliminate full-canvas overlay bitmap heap allocations (`borderBitmap` / `highlightBitmap`) in [`app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`](./app/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt).
-  - Use region bounding-box partial `setPixels()` updates and viewport frustum culling for region number labels.
-- [ ] **Desktop/Mouse & Precision Touch Ergonomics**:
-  - Implement cursor-centric mouse wheel zooming, micro-region touch tap tolerance ($5 \times 5$ neighborhood fallback), and a magnifying glass loupe overlay.
+- [ ] **R8 Minified Release APK Build (`app/`)**:
+  - Configure `isMinifyEnabled = true` and `isShrinkResources = true` in [`app/build.gradle.kts`](./app/build.gradle.kts) with release signing configuration so `capy.apk` shrinks to ~3–5 MB.
+- [ ] **iOS WKWebView Wrapper Packaging**:
+  - Leverage [`NativeBridge.ts`](./web/src/services/NativeBridge.ts)'s existing `window.webkit.messageHandlers.CapyIOS` dispatch mechanism to create a lightweight Swift iOS wrapper around `web/dist/`.
+- [ ] **Preserved Native Jetpack Compose App Optimization (`app1/`)**:
+  - *(See [`app1/CAPY-TODO.md`](./app1/CAPY-TODO.md) for full implementation specifications.)*
+  - Eliminate overlay bitmap heap allocations and add partial dirty-rect updates to `app1/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`.
