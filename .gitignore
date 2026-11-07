@@ -1,6 +1,32 @@
+# Node / Web Dependencies & Build Outputs
 node_modules/
+web/node_modules/
+web/dist/
+web1/node_modules/
+web1/artifacts/
+web1/test-results/
+web1/playwright-report/
 project/node_modules/
 project/artifacts/
 project/test-results/
 project/playwright-report/
-project/artifacts/menu-compact.png
+
+# Gradle / Kotlin / Android Build Artifacts
+.gradle/
+.kotlin/
+**/build/
+local.properties
+.artifacts/
+
+# IDE / Editor / System Configuration
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Android Build Outputs & Reports
+*.apk
+*.aab
+*.aar
+/inspect/

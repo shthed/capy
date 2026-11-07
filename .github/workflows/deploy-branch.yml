@@ -89,7 +89,8 @@ jobs:
               `Branch: ${branch}`,
               prNumber ? `PR: #${prNumber}` : 'PR: none found',
               `Target directory: ${targetDir}`,
-              `Preview URL: ${previewUrl}`,
+              `Preview URL (Web): ${previewUrl}`,
+              `Preview URL (Web1): ${previewUrl}web1/`,
             ];
 
             if (shouldSkip) {
@@ -104,6 +105,21 @@ jobs:
             core.setOutput('skip', shouldSkip ? 'true' : 'false');
 
             core.summary.addRaw(summaryLines.join('\n')).write();
+
+      - name: Use Node.js 20
+        if: steps.target.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build updated web app (web/)
+        if: steps.target.outputs.skip != 'true'
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
 
       - name: Retrieve existing gh-pages content
         if: steps.target.outputs.skip != 'true'
@@ -136,23 +152,32 @@ jobs:
             DEST_DIR="pages"
             mkdir -p "${DEST_DIR}"
             rsync -av --delete \
-              --exclude '.git/' \
-              --exclude 'project/' \
-              --exclude '.github/' \
-              --exclude 'pages/' \
               --exclude 'pull/' \
+              --exclude 'web1/' \
               --exclude 'README/' \
-              ./ "${DEST_DIR}/"
+              web/dist/ "${DEST_DIR}/"
           else
             rm -rf "${DEST_DIR}"
             mkdir -p "${DEST_DIR}"
             rsync -av --delete \
-              --exclude '.git/' \
-              --exclude 'project/' \
-              --exclude '.github/' \
-              --exclude 'pages/' \
-              ./ "${DEST_DIR}/"
+              web/dist/ "${DEST_DIR}/"
           fi
+
+          mkdir -p "${DEST_DIR}/web1"
+          rsync -av --delete \
+            --exclude 'node_modules/' \
+            --exclude 'docs/' \
+            --exclude 'notes/' \
+            --exclude 'scripts/' \
+            --exclude 'tests/' \
+            --exclude 'artifacts/' \
+            --exclude 'playwright-report/' \
+            --exclude 'test-results/' \
+            --exclude 'package.json' \
+            --exclude 'package-lock.json' \
+            --exclude 'playwright.config.js' \
+            --exclude 'server.js' \
+            web1/ "${DEST_DIR}/web1/"
 
       - name: Capture deployment directory listing
         if: steps.target.outputs.skip != 'true'
@@ -162,8 +187,8 @@ jobs:
           set -euo pipefail
 
           LIST_PATH="pages/${TARGET_DIR}"
-          echo "Listing contents for ${LIST_PATH}" > deployment-directory-listing.txt
-          ls -la "${LIST_PATH}" | tee -a deployment-directory-listing.txt
+          echo "Listing contents for ${LIST_PATH} and ${LIST_PATH}/web1" > deployment-directory-listing.txt
+          ls -la "${LIST_PATH}" "${LIST_PATH}/web1" | tee -a deployment-directory-listing.txt
 
       - name: Upload Pages artifact
         if: steps.target.outputs.skip != 'true'
@@ -185,7 +210,8 @@ jobs:
           TARGET_DIR: ${{ steps.target.outputs.target_dir }}
         run: |
           {
-            echo "Preview: ${{ steps.target.outputs.preview_url }}"
+            echo "Preview (Web): ${{ steps.target.outputs.preview_url }}"
+            echo "Preview (Web1): ${{ steps.target.outputs.preview_url }}web1/"
             echo ""
             echo "Deployment directory listing (pages/${TARGET_DIR}):"
             echo '```'

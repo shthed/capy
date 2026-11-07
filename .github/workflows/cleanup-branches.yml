@@ -42,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          node ./project/scripts/cleanup-branches.mjs | tee cleanup-branches.log
+          node ./web1/scripts/cleanup-branches.mjs | tee cleanup-branches.log
 
           {
             echo "## Branch cleanup output";
@@ -69,7 +69,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          node ./project/scripts/cleanup-gh-pages-previews.mjs --pages-dir ./gh-pages
+          node ./web1/scripts/cleanup-gh-pages-previews.mjs --pages-dir ./gh-pages
 
       - name: Commit and push gh-pages updates
         env:
