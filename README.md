@@ -1,126 +1,103 @@
-# Capy: Color-By-Number Playground
+# Capy: Color-by-Number Suite (Web, Web1 Legacy & Android)
 
-A browser-based paint-by-numbers generator and player. Runs fully client-side. Usable in desktop and mobile browsers.
+[![Web](https://img.shields.io/badge/Web-React%2019%20%2B%20Vite%206-blue.svg)](https://shthed.github.io/capy/)
+[![Web1](https://img.shields.io/badge/Legacy%20Web-Vanilla%20JS-amber.svg)](https://shthed.github.io/capy/web1/)
+[![Android](https://img.shields.io/badge/Platform-Android%20Jetpack%20Compose-green.svg)](https://developer.android.com)
+[![Kotlin](https://img.shields.io/badge/Language-Kotlin%20%2F%20TypeScript-purple.svg)](https://kotlinlang.org)
 
-<a href="https://shthed.github.io/capy/">Launch Capy</a>
+**Capy** is a serene, high-performance color-by-number generator and player across web and Android platforms. Import any photo or drawing from your device or play built-in sample artwork — Capy segments images into crisp numbered color regions, builds an adaptive palette, and lets you paint with tap or drag-to-color **Paint Mode**.
 
-## Overview
+- **Launch Updated Web App (`web/`)**: [https://shthed.github.io/capy/](https://shthed.github.io/capy/)
+- **Launch Legacy Web App v1 (`web1/`)**: [https://shthed.github.io/capy/web1/](https://shthed.github.io/capy/web1/)
+- **Download Android APK (`app/`)**: [https://shthed.github.io/capy/capy.apk](https://shthed.github.io/capy/capy.apk)
 
-- Converts imported images (PNG/JPG/WebP/GIF) into numbered colour regions.
-- Bundles a lightweight "Three Bands" sample puzzle (vector-backed stripes) for instant play.
-- Supports Canvas 2D, WebGL, and SVG renderers.
-- Saves progress locally with autosave and manual snapshots.
-- Stores puzzles as pure vector geometry; saves and exports avoid embedding raster snapshots or packed region maps.
-- Runs fully client-side; the service worker and offline cache are temporarily disabled.
+---
 
-## How to Play
+## Repository Structure
 
-1. Open the app and let the bundled "Three Bands" sample load.
-2. Select a palette tile along the bottom bar.
-3. Click/tap/pen-fill matching regions. Mouse right-click acts as an eyedropper by default.
-4. Use hints or preview to locate remaining regions.
+| Directory | Target | Tech Stack | Hosted Path |
+| :--- | :--- | :--- | :--- |
+| **[`web/`](./web)** | **Updated Web App** | React 19, TypeScript, Vite 6, Tailwind CSS 4, Web Workers | `/` |
+| **[`web1/`](./web1)** | **Legacy Web App (v1)** | Zero-build Vanilla JS (`capy.js`, `puzzle-generation.js`) + Playwright | `/web1/` |
+| **[`app/`](./app)** | **Native Android App** | Kotlin, Jetpack Compose, Material 3, Coroutines | Android APK |
 
-Image import: drop a file anywhere or use **Import** in the command rail. The puzzle regenerates immediately using the new asset.
+---
 
-## Offline and Install Behavior
+## 🎨 How to Play
 
-- Offline caching is currently paused: the service worker unregisters itself on load and the runtime cache is cleared.
-- Play requires an online connection while the cache is disabled; reload after re-enabling to restore offline support.
-- If a deployment looks stale once offline support returns, perform a hard refresh to update the cache before continuing.
+1. **Starting a Puzzle**:
+   - **Sample Artwork**: Built-in sample artwork (*Capybara*, *Capy Forest*, *Snail Guitar*) is ready on launch.
+   - **Importing Photos**: Tap the **Image / Upload** icon to convert any photo or drawing from your device into a playable puzzle.
+2. **Selecting & Painting Colors**:
+   - Tap any numbered color swatch in the bottom **Palette Dock**.
+   - Tap regions on the canvas matching the selected color number to paint them, or switch to **Easy Mode** (auto-selects and fills the tapped region's color).
+3. **Paint Mode (Drag-to-Color)**:
+   - Toggle the **Paint Mode** brush button to continuously fill matching regions as you drag across the canvas.
+4. **Canvas Controls & Gestures**:
+   - **Pinch-to-Zoom / Mouse Wheel**: Zoom up to **10x** for micro-regions.
+   - **Pan / Drag**: Click-and-drag or two-finger drag to pan around the zoomed canvas.
+5. **Hints & Preview**:
+   - **Hint Assist**: Tap the **Hint** lightbulb icon or re-tap the active swatch to center and pulse an unpainted region.
+   - **Preview Finished Artwork**: Toggle the **Preview** eye icon in the top bar to inspect the source artwork without region boundaries.
+6. **Settings, Generator Tuning & Saves**:
+   - Open **Settings** to customize Region Fill Style (*Original Detail* vs *Solid Palette*), Canvas Background, Palette Swatch Order (*Number*, *Remaining*, *Hue Rainbow*, *Lightness*), Hint styles, Generator tuning presets (*Low*, *Medium*, *High*, *Custom*), and saved puzzle sessions.
 
-## Key Controls
+---
 
-- **Mouse / Trackpad:** Left-click fill, right-click eyedropper, click-drag to pan (or hold <kbd>Space</kbd>). Button mappings can be reassigned under **Settings → Mouse controls**.
-- **Touch:** Tap to paint, pinch to zoom, two-finger drag to pan. Double taps stay within the canvas area.
-- **Keyboard:** Arrow keys or <kbd>Tab</kbd> to move through palette colours; <kbd>Enter</kbd>/<kbd>Space</kbd> to select; <kbd>+</kbd>/<kbd>-</kbd> (or <kbd>Shift</kbd> + <kbd>=</kbd>/<kbd>-</kbd>) to zoom.
+## 🛠️ Architecture & Documentation
 
-## Command Rail Actions
+- **Master Project Roadmap & TODO**: [`TODO.md`](./TODO.md)
+- **Puzzle Generation Engine Reference**: [`PUZZLE.md`](./PUZZLE.md)
+- **Android Architecture & Binary Save Spec**: [`app/CAPY.md`](./app/CAPY.md)
+- **Android Development Roadmap**: [`app/CAPY-TODO.md`](./app/CAPY-TODO.md)
+- **Legacy Web v1 Technical Reference**: [`web1/docs/TECH.md`](./web1/docs/TECH.md)
+- **Contributor & Agent Playbook**: [`AGENTS.md`](./AGENTS.md)
 
-- Preview finished artwork overlay.
-- Generator tuning for palette size, smoothing, and detail.
-- Fullscreen toggle.
-- Import new images or Capy puzzle files.
-- Saves management, reset, and sample reload.
-- Help panel with manual and activity log.
-- Settings for numbers, hints, palette sorting, renderer, and accessibility options.
+---
 
-## Generator Defaults
+## 💻 Build, Run & Test Commands
 
-New puzzles start from lighter-weight clustering settings to keep the first render approachable:
+### 1. Updated Web App (`web/`)
+```bash
+cd web
 
-- 12 target colours.
-- Minimum region size of 60 px².
-- 640 px longest edge when resizing the source image.
-- 50% sampling rate.
-- 0 smoothing passes and 12 k-means iterations.
+# Install dependencies
+npm install
 
-## Saving and Exporting
+# Start development server (http://localhost:3000)
+npm run dev
 
-- Autosaves restore the last session automatically.
-- Manual snapshots allow rename, duplicate, delete, and reload operations.
-- Exports: JSON or compact `.capy` archives (`capy-export@2`) with compressed metadata and fill state.
-- Reset puzzle progress without removing stored saves.
+# Run TypeScript typecheck
+npm run lint
 
-## Accessibility and Comfort
-
-- Palette sorting by number, remaining regions, hue, or brightness.
-- Contrast-aware palette labels.
-- Hint animation intensity controls.
-- Background colour selection for contrast preferences.
-- Renderer choice under **Settings → Appearance** to balance compatibility and fidelity.
-
-## Troubleshooting
-
-- Blocky image: increase detail preset or palette size.
-- Too many small regions: use Low detail preset or raise minimum region size before regenerating.
-- Low storage: delete or export saves before clearing.
-- Fresh start: run `window.capyGenerator.deleteAllSiteData()` in devtools to wipe local saves, caches, cookies, and workers.
-- Canvas stuck: hold <kbd>Space</kbd> while dragging or use two-finger pan.
-- WebGL disabled: hardware fallback to Canvas 2D; update drivers or continue with Canvas/SVG.
-
-## Automation
-
-`window.capyGenerator` provides scripted control from the devtools console:
-
-```js
-const capyFixture = await fetch("capy.json").then((r) => r.json());
-window.capyGenerator.loadPuzzleFixture(capyFixture);
-window.capyGenerator.togglePreview(true);
-window.capyGenerator.setRenderer("canvas");
-window.capyGenerator.setActiveColor(3, { flash: true });
-window.capyGenerator.fillRegion(42, { ensureColor: true, label: "qa-fill" });
+# Build production bundle (outputs to web/dist/)
+npm run build
 ```
 
-The bundled `capy.json` stores the Three Bands puzzle data, including vector scene metadata for the SVG renderer; saves and exports add fill progress and settings while relying on vector scenes for geometry (no bitmap previews, snapshots, or region maps are persisted). See [`project/TECH.md`](./project/TECH.md#puzzle-json-format) for the schema.
+### 2. Legacy Web App v1 (`web1/`)
+```bash
+cd web1
 
-See [`project/TECH.md`](./project/TECH.md#windowcapygenerator-api-reference) for full API reference.
+# Install dependencies
+npm install
 
-## Testing and QA
+# Start local static server (http://localhost:8000)
+npm run dev
 
-All tooling lives in `project/`.
+# Provision Playwright Chromium and run smoke tests
+npm run setup:playwright
+npm test
+```
 
-- Install dependencies: `cd project && npm install`.
-- Provision Playwright browsers: `npm run setup:playwright` (inside `project/`).
-- Smoke and generator tests: `npm test` (from `project/`).
-- Playwright-only quick run: `npm run test:smoke` (from `project/`).
-- Reports: open `npx playwright show-report` after a run (default output `playwright-report/`).
+### 3. Native Android App (`app/`)
+Run Gradle commands from the repository root:
+```bash
+# Run Android unit tests
+./gradlew app:testDebugUnitTest
 
-See `project/CHANGELOG.md` for dated QA notes, screenshots, and links captured
-alongside recent changes.
+# Build debug APK
+./gradlew app:assembleDebug
 
-## Local Development and Hosting
-
-- Dependencies: `cd project && npm install`.
-- Serve repository root at http://localhost:8000 with `npm run dev` (run inside `project/`). Uses `http-server` with caching disabled for fast reloads while exercising the service worker.
-
-## Contributing
-
-Review [`project/TECH.md`](./project/TECH.md) for architecture details. Contributor scripts and Playwright config live under [`project/`](./project/). Runtime assets reside at the repository root (`index.html`, `styles.css`, `capy.js`, `capy.json`, `service-worker.js`). CSS conventions live in [`project/STYLEGUIDE.md`](./project/STYLEGUIDE.md).
-
-## Agent Guide
-
-See [`AGENTS.md`](./AGENTS.md) for the full contributor playbook. Key points:
-
-- Work from short-lived `automation/<change>` branches and open draft PRs early so deployments and QA notes stay aligned.
-- Keep docs in sync: update `project/TECH.md`, `project/ROADMAP.md`, and `project/TODO.md` alongside runtime or workflow changes.
-- Prefer straightforward implementations, perform manual smoke tests, and record which automated checks ran before handing off a review.
+# Install debug APK to connected device/emulator
+./gradlew app:installDebug
+```

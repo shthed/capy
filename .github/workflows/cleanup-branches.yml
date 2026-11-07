@@ -4,19 +4,19 @@ on:
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Deploy GitHub Pages previews"]
-    types: [completed]
 
 permissions:
   contents: write
   actions: read
   pull-requests: read
 
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: false
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -28,12 +28,12 @@ jobs:
         with:
           ref: gh-pages
           path: gh-pages
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Use Node.js 18
+      - name: Use Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
 
       - name: Run branch cleanup
         env:
@@ -42,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          node ./project/scripts/cleanup-branches.mjs | tee cleanup-branches.log
+          node ./web1/scripts/cleanup-branches.mjs | tee cleanup-branches.log
 
           {
             echo "## Branch cleanup output";
@@ -69,9 +69,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          node ./project/scripts/cleanup-gh-pages-previews.mjs --pages-dir ./gh-pages
+          node ./web1/scripts/cleanup-gh-pages-previews.mjs --pages-dir ./gh-pages
 
-      - name: Commit and push gh-pages updates
+      - name: Commit and push gh-pages updates (squashed history)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -82,11 +82,14 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
-          git add .
-          if git diff --cached --quiet; then
+          git add -A
+          if git diff --cached --quiet && ! (git cat-file -p HEAD | grep -q '^parent '); then
             echo "No gh-pages changes to push."
             exit 0
           fi
 
+          git checkout --orphan gh-pages-squashed
+          git add -A
           git commit -m "Remove orphaned preview directories"
-          git push origin gh-pages
+          git branch -M gh-pages
+          git push --force origin gh-pages
