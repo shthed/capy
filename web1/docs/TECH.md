@@ -47,8 +47,8 @@ Branch previews and production deployments are driven by `.github/workflows/depl
 
 ### Keeping branch directories and artifacts lean
 
-- **Prune Git branches & previews regularly.** `.github/workflows/cleanup-branches.yml` (daily cron) and `.github/workflows/cleanup-closed-pr.yml` (on PR close) invoke
-  `web1/scripts/cleanup-branches.mjs` and `web1/scripts/cleanup-gh-pages-previews.mjs`.
+- **Prune Git branches & previews regularly.** `.github/workflows/deploy-branch.yml` automatically prunes any closed PR previews in `pull/` before deployment so that `/pull/` strictly contains only open PRs. Additionally, `.github/workflows/cleanup-branches.yml` (daily cron) and `.github/workflows/cleanup-closed-pr.yml` (on PR close) invoke
+  `web1/scripts/cleanup-branches.mjs` and `web1/scripts/cleanup-gh-pages-previews.mjs` and immediately redeploy to GitHub Pages.
 - **Squashed `gh-pages` history.** Both `.github/workflows/deploy-branch.yml` and the cleanup workflows commit to `gh-pages` using a single parentless orphan commit (`git checkout --orphan gh-pages-squashed && git push --force origin gh-pages`) so binary `capy.apk` files never accumulate in Git history.
 - **Automatic PR comments.** At the end of `.github/workflows/deploy-branch.yml`, open PRs automatically receive an updated `<!-- capy-pages-preview -->` comment with direct links to the workflow run, Updated Web Preview (`/pull/<pr>/`), Legacy Web1 Preview (`/pull/<pr>/web1/`), and Android Debug APK (`/pull/<pr>/capy.apk`).
 

@@ -153,7 +153,7 @@ const findLegacyPreviewDirectories = (rootDir) => {
   const entries = fs.readdirSync(rootDir, { withFileTypes: true });
   return entries
     .filter((entry) => entry.isDirectory())
-    .filter((entry) => !['.git', 'README', 'pull', 'assets', 'web1'].includes(entry.name))
+    .filter((entry) => !['.git', 'pull', 'assets', 'web1'].includes(entry.name))
     .filter((entry) => entry.name === sanitize(entry.name))
     .map((entry) => {
       const absolutePath = path.join(rootDir, entry.name);
@@ -257,6 +257,12 @@ const main = async () => {
     return;
   }
 
+  const legacyReadme = path.join(resolvedPagesDir, 'README');
+  if (fs.existsSync(legacyReadme)) {
+    console.log('cleanup-gh-pages: removing legacy README/ directory.');
+    deleteDirectory(legacyReadme);
+  }
+
   const defaultBranch = resolveDefaultBranch();
   const remoteBranches = fetchRemoteBranches();
 
@@ -351,29 +357,33 @@ const main = async () => {
       return false;
     }
 
-    if (entry.kind === 'legacy' && entry.hasLiveBranch) {
-      return false;
+    if (options.targetPr !== null) {
+      return matchesTargetPr;
     }
 
-    if (matchesTargetPr && options.ignoreRecency) {
-      return true;
+    if (entry.kind === 'legacy') {
+      if (entry.hasLiveBranch) {
+        return false;
+      }
+      return options.ignoreRecency || !entry.isRecent;
     }
 
-    return !entry.isRecent;
+    // For pull/ directories: only deployments for open pull requests are kept.
+    return true;
   });
 
   if (deletions.length === 0) {
     if (options.targetPr !== null) {
       console.log(`cleanup-gh-pages: no preview directories matched PR #${options.targetPr} for removal.`);
     } else {
-      console.log('cleanup-gh-pages: no preview directories met cleanup criteria (requires no branch match and age >= 1 day).');
+      console.log('cleanup-gh-pages: no preview directories met cleanup criteria.');
     }
     return;
   }
 
-  const removalReason = options.ignoreRecency && options.targetPr !== null
+  const removalReason = options.targetPr !== null
     ? `targeted removal for PR #${options.targetPr}`
-    : 'orphaned preview directories older than 1 day';
+    : 'closed or non-open pull request preview directories';
 
   console.log(`cleanup-gh-pages: removing ${removalReason}:`);
   for (const entry of deletions) {

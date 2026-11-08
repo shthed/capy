@@ -3,41 +3,43 @@ name: Deploy GitHub Pages previews
 on:
   push:
     branches:
-      - "**"
+      - main
   pull_request:
-    types: [opened, synchronize, reopened]
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       target_branch:
-        description: Branch to deploy (defaults to the event branch)
+        description: 'Optional branch name to deploy manually (defaults to the selected branch)'
         required: false
-        default: ''
+        type: string
       allow_without_pr:
-        description: Allow deployment when no open PR exists for the branch
+        description: 'Allow preview deployment even if no open PR is found'
         required: false
-        default: 'false'
         type: boolean
+        default: false
 
 permissions:
   contents: write
   pages: write
   id-token: write
+  actions: read
   pull-requests: write
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   android:
     name: Android Unit Tests & APK Build
     needs: [web]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.target_branch != '' && inputs.target_branch || (github.event.pull_request.head.ref || github.ref) }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Download built Web bundle
         uses: actions/download-artifact@v8
@@ -73,7 +75,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.target_branch != '' && inputs.target_branch || (github.event.pull_request.head.ref || github.ref) }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Use Node.js 22
         uses: actions/setup-node@v7
@@ -128,7 +130,7 @@ jobs:
   deploy:
     name: Deploy GitHub Pages & APK
     needs: [android, web]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: deploy-pages
       cancel-in-progress: false
@@ -160,7 +162,7 @@ jobs:
             const safeBranch = branch.replace(/[^a-zA-Z0-9._-]/g, '-');
 
             let prNumber = prFromPayload;
-            if (!prNumber) {
+            if (!prNumber && branch !== 'main') {
               try {
                 const { data: prs } = await github.rest.pulls.list({
                   owner: context.repo.owner,
@@ -186,10 +188,6 @@ jobs:
               ? `${basePreview}/`
               : `${basePreview}/${targetDir}/`;
 
-            const branchPreviewUrl = targetDir === '.'
-              ? `${basePreview}/`
-              : `${basePreview}/pull/${safeBranch}/`;
-
             const shouldSkip = branch !== 'main' && !prNumber && !allowWithoutPr;
 
             const summaryLines = [
@@ -197,7 +195,6 @@ jobs:
               prNumber ? `PR: #${prNumber}` : 'PR: none found',
               `Target directory: ${targetDir}`,
               `Preview URL (Web): ${previewUrl}`,
-              `Preview URL (Branch Web): ${branchPreviewUrl}`,
               `Preview URL (Web1): ${previewUrl}web1/`,
               `Android APK URL: ${previewUrl}capy.apk`,
             ];
@@ -211,7 +208,6 @@ jobs:
             core.setOutput('pr', prNumber ? String(prNumber) : '');
             core.setOutput('target_dir', targetDir);
             core.setOutput('preview_url', previewUrl);
-            core.setOutput('branch_preview_url', branchPreviewUrl);
             core.setOutput('skip', shouldSkip ? 'true' : 'false');
 
             core.summary.addRaw(summaryLines.join('\n')).write();
@@ -220,7 +216,13 @@ jobs:
         if: steps.target.outputs.skip != 'true'
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.target_branch != '' && inputs.target_branch || (github.event.pull_request.head.ref || github.ref) }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Use Node.js 22
+        if: steps.target.outputs.skip != 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
 
       - name: Download built Web bundle
         if: steps.target.outputs.skip != 'true'
@@ -252,11 +254,20 @@ jobs:
             rm -rf pages/*
           fi
 
+          rm -rf pages/README
+
+      - name: Prune closed PR previews from gh-pages
+        if: steps.target.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          node ./web1/scripts/cleanup-gh-pages-previews.mjs --pages-dir pages
+
       - name: Prepare site content
         if: steps.target.outputs.skip != 'true'
         env:
           TARGET_DIR: ${{ steps.target.outputs.target_dir }}
-          SAFE_BRANCH: ${{ steps.target.outputs.safe_branch }}
         run: |
           set -euo pipefail
 
@@ -269,7 +280,6 @@ jobs:
               --exclude '.git/' \
               --exclude 'pull/' \
               --exclude 'web1/' \
-              --exclude 'README/' \
               web/dist/ "${DEST_DIR}/"
           else
             rm -rf "${DEST_DIR}"
@@ -295,13 +305,6 @@ jobs:
             --exclude 'playwright.config.js' \
             --exclude 'server.js' \
             web1/ "${DEST_DIR}/web1/"
-
-          # Also mirror to pages/pull/${SAFE_BRANCH} if different from TARGET_DIR so both branch and PR URLs resolve
-          if [ -n "${SAFE_BRANCH:-}" ] && [ "${TARGET_DIR}" != "pull/${SAFE_BRANCH}" ] && [ "${TARGET_DIR}" != "." ]; then
-            rm -rf "pages/pull/${SAFE_BRANCH}"
-            mkdir -p "pages/pull"
-            cp -r "${DEST_DIR}" "pages/pull/${SAFE_BRANCH}"
-          fi
 
       - name: Sync gh-pages branch (squashed history) and remove .git before artifact upload
         if: steps.target.outputs.skip != 'true'
@@ -359,15 +362,13 @@ jobs:
           script: |
             const prNumber = Number('${{ steps.target.outputs.pr }}');
             const previewUrl = '${{ steps.target.outputs.preview_url }}';
-            const branchPreviewUrl = '${{ steps.target.outputs.branch_preview_url }}';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const marker = '<!-- capy-pages-preview -->';
             const body = [
               marker,
               '### 🚀 Capy Preview & APK Deployed',
               `- **Workflow Run**: [${context.runId}](${runUrl})`,
-              `- **PR Preview (\`/\`)**: ${previewUrl}`,
-              `- **Branch Preview (\`/\`)**: ${branchPreviewUrl}`,
+              `- **Updated Web App (\`/\`)**: ${previewUrl}`,
               `- **Legacy Web1 App (\`/web1/\`)**: ${previewUrl}web1/`,
               `- **Android Debug APK**: [${previewUrl}capy.apk](${previewUrl}capy.apk)`
             ].join('\n');
@@ -402,9 +403,6 @@ jobs:
         run: |
           {
             echo "Preview (Web): ${{ steps.target.outputs.preview_url }}"
-            if [ -n "${{ steps.target.outputs.safe_branch }}" ] && [ "${{ steps.target.outputs.target_dir }}" != "pull/${{ steps.target.outputs.safe_branch }}" ] && [ "${{ steps.target.outputs.target_dir }}" != "." ]; then
-              echo "Branch Preview (Web): ${{ env.BASE_PREVIEW_URL }}/pull/${{ steps.target.outputs.safe_branch }}/"
-            fi
             echo "Preview (Web1): ${{ steps.target.outputs.preview_url }}web1/"
             echo "Android APK: ${{ steps.target.outputs.preview_url }}capy.apk"
             echo ""
