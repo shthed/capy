@@ -19,6 +19,7 @@ import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
 import { SettingsModal } from './components/SettingsModal';
 import { LoadingOverlay } from './components/LoadingOverlay';
+import { VictoryModal } from './components/VictoryModal';
 
 export const App: React.FC = () => {
   // Persistence & Settings
@@ -35,6 +36,10 @@ export const App: React.FC = () => {
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
   const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState<number>(0);
+  const [resetViewTrigger, setResetViewTrigger] = useState<number>(0);
+  const [isCanvasTransformed, setIsCanvasTransformed] = useState<boolean>(false);
+  const [showVictory, setShowVictory] = useState<boolean>(false);
+  const victoryShownRef = useRef<Set<string>>(new Set());
 
   // Spatial Viewport
   const [visibleColorIds, setVisibleColorIds] = useState<Set<number>>(new Set());
@@ -123,6 +128,12 @@ export const App: React.FC = () => {
       setLoadingProgress(0.05);
       setLoadingStatus('Initializing artwork canvas...');
 
+      // Clear old puzzle when generating a new artwork so title and canvas do not desync
+      if (!existingSnapshotId || existingSnapshotId !== activeSnapshotId) {
+        setPuzzle(null);
+        setHintRegionId(null);
+      }
+
       // Prepare canvas from image
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth || img.width;
@@ -167,7 +178,17 @@ export const App: React.FC = () => {
           setPuzzle(puzzleData);
           setFilledRegionIds(initialFilledRegionIds);
 
-          const targetColor = initialActiveColorId || puzzleData.palette[0]?.id || 1;
+          // Defensively find the first available color that actually has uncompleted regions
+          const availableColors = getVisiblePalette(
+            puzzleData.palette,
+            puzzleData.regions,
+            initialFilledRegionIds,
+            settings.paletteSort
+          );
+          const targetColor =
+            initialActiveColorId && availableColors.some((c) => c.id === initialActiveColorId)
+              ? initialActiveColorId
+              : availableColors[0]?.id || puzzleData.palette[0]?.id || 1;
           setActiveColorId(targetColor);
           setHintRegionId(null);
 
@@ -237,11 +258,22 @@ export const App: React.FC = () => {
             img.crossOrigin = 'anonymous';
             img.onload = () => {
               if (!isMounted) return;
+              const filledSet = new Set(snap.filledRegionIds || []);
+              const availableColors = getVisiblePalette(
+                cachedPuzzle.palette,
+                cachedPuzzle.regions,
+                filledSet,
+                settings.paletteSort
+              );
+              const restoredColor =
+                activeState.activeColorId && availableColors.some((c) => c.id === activeState.activeColorId)
+                  ? activeState.activeColorId
+                  : availableColors[0]?.id || cachedPuzzle.palette[0]?.id || 1;
               setSourceImage(img);
               setPuzzle(cachedPuzzle);
               setActiveSnapshotId(snap.id);
-              setActiveColorId(activeState.activeColorId || cachedPuzzle.palette[0]?.id || 1);
-              setFilledRegionIds(new Set(snap.filledRegionIds || []));
+              setActiveColorId(restoredColor);
+              setFilledRegionIds(filledSet);
               setIsLoading(false);
             };
             img.src = snap.sampleAssetPath || snap.previewDataUrl || 'assets/capybara.webp';
@@ -330,10 +362,14 @@ export const App: React.FC = () => {
 
       if (isComplete) {
         confetti({
-          particleCount: 100,
-          spread: 70,
+          particleCount: 120,
+          spread: 80,
           origin: { y: 0.6 },
         });
+        if (activeSnapshotId && !victoryShownRef.current.has(activeSnapshotId)) {
+          victoryShownRef.current.add(activeSnapshotId);
+          setTimeout(() => setShowVictory(true), 350);
+        }
       }
 
       // Debounced persistence
@@ -414,10 +450,14 @@ export const App: React.FC = () => {
         if (isComplete) {
           NativeBridge.haptic('success', settings.hapticsEnabled);
           confetti({
-            particleCount: 100,
-            spread: 70,
+            particleCount: 120,
+            spread: 80,
             origin: { y: 0.6 },
           });
+          if (activeSnapshotId && !victoryShownRef.current.has(activeSnapshotId)) {
+            victoryShownRef.current.add(activeSnapshotId);
+            setTimeout(() => setShowVictory(true), 350);
+          }
         } else {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
         }
@@ -514,10 +554,18 @@ export const App: React.FC = () => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
+        const filledSet = new Set(snapshot.filledRegionIds || []);
+        const availableColors = getVisiblePalette(
+          cachedPuzzle.palette,
+          cachedPuzzle.regions,
+          filledSet,
+          settings.paletteSort
+        );
+        const restoredColor = availableColors[0]?.id || cachedPuzzle.palette[0]?.id || 1;
         setSourceImage(img);
         setPuzzle(cachedPuzzle);
-        setActiveColorId(cachedPuzzle.palette[0]?.id || 1);
-        setFilledRegionIds(new Set(snapshot.filledRegionIds || []));
+        setActiveColorId(restoredColor);
+        setFilledRegionIds(filledSet);
         setIsLoading(false);
       };
       img.src = snapshot.sampleAssetPath || snapshot.previewDataUrl || 'assets/capybara.webp';
@@ -548,6 +596,47 @@ export const App: React.FC = () => {
   const filledCount = filledRegionIds.size;
   const progressPercentage = totalCount > 0 ? Math.round((filledCount * 100) / totalCount) : 0;
   const isCompleted = totalCount > 0 && filledCount >= totalCount;
+
+  // Export full-resolution colored artwork as PNG
+  const handleExportArtwork = useCallback(() => {
+    if (!puzzle || !sourceImage) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = puzzle.width;
+    canvas.height = puzzle.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+
+    if (filledRegionIds.size < puzzle.regions.length) {
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = puzzle.width;
+      maskCanvas.height = puzzle.height;
+      const mCtx = maskCanvas.getContext('2d');
+      if (mCtx) {
+        const imgData = mCtx.createImageData(puzzle.width, puzzle.height);
+        const data = imgData.data;
+        for (let i = 0; i < puzzle.width * puzzle.height; i++) {
+          const rId = puzzle.regionMap[i];
+          if (!filledRegionIds.has(rId)) {
+            const idx = i * 4;
+            data[idx] = 248;
+            data[idx + 1] = 250;
+            data[idx + 2] = 252;
+            data[idx + 3] = 230;
+          }
+        }
+        mCtx.putImageData(imgData, 0, 0);
+        ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    const titleStr = activeTitle || 'capy-artwork';
+    const link = document.createElement('a');
+    link.download = `${titleStr.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }, [puzzle, sourceImage, filledRegionIds, activeTitle]);
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-black select-none">
@@ -605,6 +694,10 @@ export const App: React.FC = () => {
         displayNumberMap={displayNumberMap}
         zoomInTrigger={zoomInTrigger}
         zoomOutTrigger={zoomOutTrigger}
+        resetViewTrigger={resetViewTrigger}
+        onViewExtentChanged={(zoom, panX, panY) => {
+          setIsCanvasTransformed(zoom > 1.05 || Math.abs(panX) > 6 || Math.abs(panY) > 6);
+        }}
         onRegionClicked={attemptFillRegion}
         onBatchRegionsClicked={attemptBatchFillRegions}
         onVisibleColorsChanged={setVisibleColorIds}
@@ -618,6 +711,7 @@ export const App: React.FC = () => {
           isPaintMode={settings.isPaintMode}
           showZoomButtons={settings.showZoomButtons}
           raiseDock={settings.raisePaletteDock}
+          isZoomedOrPanned={isCanvasTransformed}
           onTriggerHint={() => triggerHint()}
           onTogglePaintMode={() => {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
@@ -625,6 +719,7 @@ export const App: React.FC = () => {
           }}
           onZoomIn={() => setZoomInTrigger((prev) => prev + 1)}
           onZoomOut={() => setZoomOutTrigger((prev) => prev + 1)}
+          onResetView={() => setResetViewTrigger((prev) => prev + 1)}
         />
       )}
 
@@ -720,6 +815,25 @@ export const App: React.FC = () => {
           img.src = sample.assetPath;
         }}
         onUploadImage={() => fileInputRef.current?.click()}
+      />
+
+      {/* Victory Celebration Modal */}
+      <VictoryModal
+        isOpen={showVictory}
+        title={activeTitle}
+        regionCount={totalCount}
+        previewDataUrl={
+          puzzle && sourceImage
+            ? generatePreviewDataUrl(puzzle, sourceImage, filledRegionIds)
+            : undefined
+        }
+        onClose={() => setShowVictory(false)}
+        onExportImage={handleExportArtwork}
+        onOpenCreate={() => {
+          setShowVictory(false);
+          setSettingsInitialTab(2);
+          setShowSettings(true);
+        }}
       />
     </div>
   );

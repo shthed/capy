@@ -1,24 +1,28 @@
 import React from 'react';
-import { Lightbulb, Paintbrush, Plus, Minus } from 'lucide-react';
+import { Lightbulb, Paintbrush, Plus, Minus, Maximize2 } from 'lucide-react';
 
 interface FloatingActionsProps {
   isPaintMode: boolean;
   showZoomButtons: boolean;
   raiseDock: boolean;
+  isZoomedOrPanned?: boolean;
   onTriggerHint: () => void;
   onTogglePaintMode: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  onResetView?: () => void;
 }
 
 export const FloatingActions: React.FC<FloatingActionsProps> = ({
   isPaintMode,
   showZoomButtons,
   raiseDock,
+  isZoomedOrPanned = false,
   onTriggerHint,
   onTogglePaintMode,
   onZoomIn,
   onZoomOut,
+  onResetView,
 }) => {
   return (
     <div
@@ -28,6 +32,18 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
         right: 'calc(1rem + var(--sar, 0px))',
       }}
     >
+      {/* Fit to Screen (Reset View) Button - visible whenever camera is zoomed or panned */}
+      {isZoomedOrPanned && onResetView && (
+        <button
+          type="button"
+          onClick={onResetView}
+          title="Fit to Screen (Reset View)"
+          className="p-2.5 rounded-full bg-slate-900/90 text-amber-400 border border-amber-400/50 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 animate-in fade-in zoom-in-90 duration-200"
+        >
+          <Maximize2 size={18} />
+        </button>
+      )}
+
       {showZoomButtons && (
         <>
           <button
