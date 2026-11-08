@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - "**"
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       target_branch:
@@ -23,7 +25,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -34,6 +36,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target_branch != '' && inputs.target_branch || (github.event.pull_request.head.ref || github.ref) }}
 
       - name: Download built Web bundle
         uses: actions/download-artifact@v8
@@ -68,6 +72,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target_branch != '' && inputs.target_branch || (github.event.pull_request.head.ref || github.ref) }}
 
       - name: Use Node.js 22
         uses: actions/setup-node@v7
@@ -140,7 +146,9 @@ jobs:
             const inputs = context.payload?.inputs || {};
             const branchInput = inputs.target_branch || '';
             const allowWithoutPrInput = inputs.allow_without_pr;
-            const branch = branchInput || context.ref.replace('refs/heads/', '');
+            const prFromPayload = context.payload?.pull_request?.number;
+            const branchFromPayload = context.payload?.pull_request?.head?.ref;
+            const branch = branchInput || branchFromPayload || context.ref.replace('refs/heads/', '');
             const allowWithoutPr = String(allowWithoutPrInput).toLowerCase() === 'true';
 
             if (!branch) {
@@ -151,19 +159,21 @@ jobs:
             const basePreview = process.env.BASE_PREVIEW_URL;
             const safeBranch = branch.replace(/[^a-zA-Z0-9._-]/g, '-');
 
-            let prNumber = undefined;
-            try {
-              const { data: prs } = await github.rest.pulls.list({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                head: `${context.repo.owner}:${branch}`,
-                state: 'open',
-                per_page: 1,
-              });
+            let prNumber = prFromPayload;
+            if (!prNumber) {
+              try {
+                const { data: prs } = await github.rest.pulls.list({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  head: `${context.repo.owner}:${branch}`,
+                  state: 'open',
+                  per_page: 1,
+                });
 
-              prNumber = prs[0]?.number;
-            } catch (error) {
-              core.warning(`Failed to look up PR for ${branch}: ${error.message}`);
+                prNumber = prs[0]?.number;
+              } catch (error) {
+                core.warning(`Failed to look up PR for ${branch}: ${error.message}`);
+              }
             }
 
             const targetDir = branch === 'main'
@@ -176,6 +186,10 @@ jobs:
               ? `${basePreview}/`
               : `${basePreview}/${targetDir}/`;
 
+            const branchPreviewUrl = targetDir === '.'
+              ? `${basePreview}/`
+              : `${basePreview}/pull/${safeBranch}/`;
+
             const shouldSkip = branch !== 'main' && !prNumber && !allowWithoutPr;
 
             const summaryLines = [
@@ -183,6 +197,7 @@ jobs:
               prNumber ? `PR: #${prNumber}` : 'PR: none found',
               `Target directory: ${targetDir}`,
               `Preview URL (Web): ${previewUrl}`,
+              `Preview URL (Branch Web): ${branchPreviewUrl}`,
               `Preview URL (Web1): ${previewUrl}web1/`,
               `Android APK URL: ${previewUrl}capy.apk`,
             ];
@@ -196,6 +211,7 @@ jobs:
             core.setOutput('pr', prNumber ? String(prNumber) : '');
             core.setOutput('target_dir', targetDir);
             core.setOutput('preview_url', previewUrl);
+            core.setOutput('branch_preview_url', branchPreviewUrl);
             core.setOutput('skip', shouldSkip ? 'true' : 'false');
 
             core.summary.addRaw(summaryLines.join('\n')).write();
@@ -203,6 +219,8 @@ jobs:
       - name: Check out source
         if: steps.target.outputs.skip != 'true'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target_branch != '' && inputs.target_branch || (github.event.pull_request.head.ref || github.ref) }}
 
       - name: Download built Web bundle
         if: steps.target.outputs.skip != 'true'
@@ -238,6 +256,7 @@ jobs:
         if: steps.target.outputs.skip != 'true'
         env:
           TARGET_DIR: ${{ steps.target.outputs.target_dir }}
+          SAFE_BRANCH: ${{ steps.target.outputs.safe_branch }}
         run: |
           set -euo pipefail
 
@@ -276,6 +295,13 @@ jobs:
             --exclude 'playwright.config.js' \
             --exclude 'server.js' \
             web1/ "${DEST_DIR}/web1/"
+
+          # Also mirror to pages/pull/${SAFE_BRANCH} if different from TARGET_DIR so both branch and PR URLs resolve
+          if [ -n "${SAFE_BRANCH:-}" ] && [ "${TARGET_DIR}" != "pull/${SAFE_BRANCH}" ] && [ "${TARGET_DIR}" != "." ]; then
+            rm -rf "pages/pull/${SAFE_BRANCH}"
+            mkdir -p "pages/pull"
+            cp -r "${DEST_DIR}" "pages/pull/${SAFE_BRANCH}"
+          fi
 
       - name: Sync gh-pages branch (squashed history) and remove .git before artifact upload
         if: steps.target.outputs.skip != 'true'
@@ -333,13 +359,15 @@ jobs:
           script: |
             const prNumber = Number('${{ steps.target.outputs.pr }}');
             const previewUrl = '${{ steps.target.outputs.preview_url }}';
+            const branchPreviewUrl = '${{ steps.target.outputs.branch_preview_url }}';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const marker = '<!-- capy-pages-preview -->';
             const body = [
               marker,
               '### 🚀 Capy Preview & APK Deployed',
               `- **Workflow Run**: [${context.runId}](${runUrl})`,
-              `- **Updated Web App (\`/\`)**: ${previewUrl}`,
+              `- **PR Preview (\`/\`)**: ${previewUrl}`,
+              `- **Branch Preview (\`/\`)**: ${branchPreviewUrl}`,
               `- **Legacy Web1 App (\`/web1/\`)**: ${previewUrl}web1/`,
               `- **Android Debug APK**: [${previewUrl}capy.apk](${previewUrl}capy.apk)`
             ].join('\n');
@@ -374,6 +402,9 @@ jobs:
         run: |
           {
             echo "Preview (Web): ${{ steps.target.outputs.preview_url }}"
+            if [ -n "${{ steps.target.outputs.safe_branch }}" ] && [ "${{ steps.target.outputs.target_dir }}" != "pull/${{ steps.target.outputs.safe_branch }}" ] && [ "${{ steps.target.outputs.target_dir }}" != "." ]; then
+              echo "Branch Preview (Web): ${{ env.BASE_PREVIEW_URL }}/pull/${{ steps.target.outputs.safe_branch }}/"
+            fi
             echo "Preview (Web1): ${{ steps.target.outputs.preview_url }}web1/"
             echo "Android APK: ${{ steps.target.outputs.preview_url }}capy.apk"
             echo ""
