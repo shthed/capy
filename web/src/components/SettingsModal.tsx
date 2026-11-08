@@ -150,33 +150,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   });
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
-      style={{
-        paddingTop: 'max(0.75rem, calc(var(--sat, 0px) + 0.5rem))',
-        paddingBottom: 'max(0.75rem, calc(var(--sab, 0px) + 0.5rem))',
-        paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.5rem))',
-        paddingRight: 'max(0.75rem, calc(var(--sar, 0px) + 0.5rem))',
-      }}
-    >
-      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-100">
+    <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none">
+      <div className="relative w-full h-full sm:h-[88vh] sm:max-h-[860px] sm:max-w-2xl flex flex-col bg-slate-900 sm:border sm:border-slate-800 sm:rounded-2xl shadow-2xl overflow-hidden text-slate-100">
         {/* Header Bar */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800/80 bg-slate-950/60">
+        <div
+          className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-800/80 bg-slate-950/80 flex-shrink-0"
+          style={{
+            paddingTop: 'max(0.75rem, calc(var(--sat, 0px) + 0.6rem))',
+            paddingLeft: 'max(1rem, calc(var(--sal, 0px) + 0.75rem))',
+            paddingRight: 'max(1rem, calc(var(--sar, 0px) + 0.75rem))',
+          }}
+        >
           <div className="flex items-center gap-2">
-            <span className="text-amber-400 font-extrabold text-lg">Capy</span>
-            <span className="text-slate-400 font-semibold text-sm">Settings & Controls</span>
+            <span className="text-amber-400 font-extrabold text-base sm:text-lg">Capy</span>
+            <span className="text-slate-400 font-semibold text-xs sm:text-sm">Settings & Controls</span>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            title="Close"
           >
             <X size={20} />
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-800 bg-slate-950/40 px-2 sm:px-3 overflow-x-auto no-scrollbar">
+        <div
+          className="flex border-b border-slate-800 bg-slate-950/50 px-2 sm:px-3 overflow-x-auto no-scrollbar flex-shrink-0"
+          style={{
+            paddingLeft: 'max(0.5rem, calc(var(--sal, 0px) + 0.5rem))',
+            paddingRight: 'max(0.5rem, calc(var(--sar, 0px) + 0.5rem))',
+          }}
+        >
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -185,13 +191,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-shrink-0 flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold border-b-2 transition-all ${
+                className={`flex-shrink-0 flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-all ${
                   isActive
                     ? 'border-amber-400 text-amber-400'
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
                 }`}
               >
-                <Icon size={16} />
+                <Icon size={15} />
                 <span>{tab.label}</span>
               </button>
             );
@@ -199,16 +205,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Tab Contents */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 pb-12 space-y-6">
+        <div
+          className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4 sm:space-y-5"
+          style={{
+            paddingBottom: 'max(2.5rem, calc(var(--sab, 0px) + 1.75rem))',
+            paddingLeft: 'max(0.875rem, calc(var(--sal, 0px) + 0.75rem))',
+            paddingRight: 'max(0.875rem, calc(var(--sar, 0px) + 0.75rem))',
+          }}
+        >
           {/* TAB 0: SETTINGS */}
           {activeTab === 0 && (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-5">
               {/* Canvas Background */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="space-y-1.5">
+                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                   Canvas Background
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 sm:gap-2">
                   {(Object.keys(CANVAS_BG_MAP) as CanvasBgColor[]).map((key) => {
                     const item = CANVAS_BG_MAP[key];
                     const isSelected = settings.canvasBgColor === key;
@@ -220,17 +233,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           updateSetting('canvasBgColor', key);
                           updateSetting('canvasBgArgb', item.argb);
                         }}
-                        className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition-all ${
+                        className={`flex items-center gap-1.5 p-2 rounded-lg border text-xs font-semibold transition-all ${
                           isSelected
                             ? 'border-amber-400 bg-slate-800 text-white ring-1 ring-amber-400'
                             : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
                         }`}
                       >
                         <span
-                          className="w-4 h-4 rounded-full border border-slate-700 flex-shrink-0"
+                          className="w-3.5 h-3.5 rounded-full border border-slate-700 flex-shrink-0"
                           style={{ backgroundColor: item.hex }}
                         />
-                        <span className="truncate">{item.label}</span>
+                        <span className="truncate text-[11px] sm:text-xs">{item.label}</span>
                       </button>
                     );
                   })}
@@ -238,8 +251,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Region Color Mode */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="space-y-1.5">
+                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                   Color Mode
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -253,22 +266,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       key={mode.key}
                       type="button"
                       onClick={() => updateSetting('regionColorMode', mode.key as RegionColorMode)}
-                      className={`flex flex-col text-left p-3 rounded-xl border transition-all ${
+                      className={`flex flex-col text-left p-2.5 rounded-lg border transition-all ${
                         settings.regionColorMode === mode.key
                           ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
                           : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
                       }`}
                     >
-                      <span className="text-sm font-bold text-slate-100">{mode.label}</span>
-                      <span className="text-xs text-slate-400 mt-0.5">{mode.desc}</span>
+                      <span className="text-xs sm:text-sm font-bold text-slate-100">{mode.label}</span>
+                      <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">{mode.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               {/* Difficulty */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="space-y-1.5">
+                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                   Difficulty (Tap Forgiveness)
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -282,25 +295,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       key={diff.key}
                       type="button"
                       onClick={() => updateSetting('difficulty', diff.key as Difficulty)}
-                      className={`flex flex-col text-left p-3 rounded-xl border transition-all ${
+                      className={`flex flex-col text-left p-2.5 rounded-lg border transition-all ${
                         settings.difficulty === diff.key
                           ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
                           : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
                       }`}
                     >
-                      <span className="text-sm font-bold text-slate-100">{diff.label}</span>
-                      <span className="text-xs text-slate-400 mt-0.5">{diff.desc}</span>
+                      <span className="text-xs sm:text-sm font-bold text-slate-100">{diff.label}</span>
+                      <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">{diff.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               {/* Palette Order */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="space-y-1.5">
+                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                   Palette Order
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
                   {(
                     [
                       { key: 'NUMBER', label: 'By Number' },
@@ -313,7 +326,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       key={item.key}
                       type="button"
                       onClick={() => updateSetting('paletteSort', item.key as PaletteSortOrder)}
-                      className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all ${
+                      className={`py-2 px-1.5 rounded-lg border text-xs font-bold text-center transition-all ${
                         settings.paletteSort === item.key
                           ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
                           : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
@@ -326,74 +339,79 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Toggles List */}
-              <div className="space-y-3 pt-2">
-                {[
-                  {
-                    key: 'prioritizeOnScreen' as const,
-                    label: 'Prioritise On-Screen Colours',
-                    desc: 'Brings visible viewport colours to front of dock',
-                  },
-                  {
-                    key: 'autoAdvance' as const,
-                    label: 'Auto-Advance When Completed',
-                    desc: 'Jumps to next remaining colour automatically',
-                  },
-                  {
-                    key: 'showRegionLabels' as const,
-                    label: 'Show Numbers on Regions',
-                    desc: 'Displays numbers inside region centroids',
-                  },
-                  {
-                    key: 'showPreviewBorders' as const,
-                    label: 'Show Borders in Preview Mode',
-                    desc: 'Keeps hairline vector outlines visible in preview',
-                  },
-                  {
-                    key: 'raisePaletteDock' as const,
-                    label: 'Raise Palette Dock',
-                    desc: 'Leaves extra gap at bottom for mobile gestures',
-                  },
-                  {
-                    key: 'showZoomButtons' as const,
-                    label: 'Show Zoom (+ / -) Buttons',
-                    desc: 'Floating zoom buttons above hint trigger',
-                  },
-                  {
-                    key: 'hapticsEnabled' as const,
-                    label: 'Haptic Vibration Feedback',
-                    desc: 'Tactile vibration ticks when painting and completing colours',
-                  },
-                ].map((item) => (
-                  <div
-                    key={item.key}
-                    className="flex items-center justify-between p-3 rounded-xl bg-slate-950/40 border border-slate-800/80"
-                  >
-                    <div>
-                      <div className="text-sm font-semibold text-slate-200">{item.label}</div>
-                      <div className="text-xs text-slate-400">{item.desc}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => updateSetting(item.key, !settings[item.key])}
-                      className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors ${
-                        settings[item.key] ? 'bg-amber-500' : 'bg-slate-700'
-                      }`}
+              <div className="space-y-1.5">
+                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Preferences & Gameplay
+                </label>
+                <div className="rounded-xl bg-slate-950/40 border border-slate-800/80 divide-y divide-slate-800/60 overflow-hidden">
+                  {[
+                    {
+                      key: 'prioritizeOnScreen' as const,
+                      label: 'Prioritise On-Screen Colours',
+                      desc: 'Brings visible viewport colours to front of dock',
+                    },
+                    {
+                      key: 'autoAdvance' as const,
+                      label: 'Auto-Advance When Completed',
+                      desc: 'Jumps to next remaining colour automatically',
+                    },
+                    {
+                      key: 'showRegionLabels' as const,
+                      label: 'Show Numbers on Regions',
+                      desc: 'Displays numbers inside region centroids',
+                    },
+                    {
+                      key: 'showPreviewBorders' as const,
+                      label: 'Show Borders in Preview Mode',
+                      desc: 'Keeps hairline vector outlines visible in preview',
+                    },
+                    {
+                      key: 'raisePaletteDock' as const,
+                      label: 'Raise Palette Dock',
+                      desc: 'Leaves extra gap at bottom for mobile gestures',
+                    },
+                    {
+                      key: 'showZoomButtons' as const,
+                      label: 'Show Zoom (+ / -) Buttons',
+                      desc: 'Floating zoom buttons above hint trigger',
+                    },
+                    {
+                      key: 'hapticsEnabled' as const,
+                      label: 'Haptic Vibration Feedback',
+                      desc: 'Tactile vibration ticks when painting and completing colours',
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.key}
+                      className="flex items-center justify-between p-2.5 sm:p-3 px-3 sm:px-3.5 hover:bg-slate-800/20 transition-colors"
                     >
-                      <div
-                        className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                          settings[item.key] ? 'translate-x-6' : 'translate-x-0'
+                      <div className="pr-3 min-w-0">
+                        <div className="text-xs sm:text-sm font-semibold text-slate-200">{item.label}</div>
+                        <div className="text-[11px] text-slate-400 leading-tight">{item.desc}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateSetting(item.key, !settings[item.key])}
+                        className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
+                          settings[item.key] ? 'bg-amber-500' : 'bg-slate-700'
                         }`}
-                      />
-                    </button>
-                  </div>
-                ))}
+                      >
+                        <div
+                          className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                            settings[item.key] ? 'translate-x-4.5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Label Scale Slider */}
-              <div className="space-y-2 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80">
-                <div className="flex justify-between items-center text-sm font-semibold">
+              <div className="space-y-1.5 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80">
+                <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
                   <span className="text-slate-200">Label Text Size</span>
-                  <span className="text-amber-400 font-mono">
+                  <span className="text-amber-400 font-mono font-bold">
                     {Math.round(settings.labelScale * 100)}%
                   </span>
                 </div>
@@ -404,7 +422,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   step="0.05"
                   value={settings.labelScale}
                   onChange={(e) => updateSetting('labelScale', parseFloat(e.target.value))}
-                  className="w-full accent-amber-400 cursor-pointer"
+                  className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                 />
               </div>
             </div>
@@ -412,10 +430,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* TAB 1: HINTS */}
           {activeTab === 1 && (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-5">
               {/* Highlight Style */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="space-y-1.5">
+                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                   Highlight Style
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -433,25 +451,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onClick={() =>
                         updateSetting('highlightStyle', style.key as RegionHighlightStyle)
                       }
-                      className={`flex flex-col text-left p-3 rounded-xl border transition-all ${
+                      className={`flex flex-col text-left p-2.5 rounded-lg border transition-all ${
                         settings.highlightStyle === style.key
                           ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
                           : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
                       }`}
                     >
-                      <span className="text-sm font-bold text-slate-100">{style.label}</span>
-                      <span className="text-xs text-slate-400 mt-0.5">{style.desc}</span>
+                      <span className="text-xs sm:text-sm font-bold text-slate-100">{style.label}</span>
+                      <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">{style.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               {/* Hint Pattern (for Entire Region Fill) */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="space-y-1.5">
+                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                   Hint Fill Pattern
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                   {(
                     [
                       { key: 'SOLID', label: 'Solid' },
@@ -463,7 +481,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       key={pat.key}
                       type="button"
                       onClick={() => updateSetting('hintFillStyle', pat.key as HintFillStyle)}
-                      className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all ${
+                      className={`py-2 px-1.5 rounded-lg border text-xs font-bold text-center transition-all ${
                         settings.hintFillStyle === pat.key
                           ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
                           : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
@@ -476,10 +494,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Hint Intensity Slider */}
-              <div className="space-y-2 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80">
-                <div className="flex justify-between items-center text-sm font-semibold">
+              <div className="space-y-1.5 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80">
+                <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
                   <span className="text-slate-200">Hint Intensity (Opacity)</span>
-                  <span className="text-amber-400 font-mono">
+                  <span className="text-amber-400 font-mono font-bold">
                     {Math.round(settings.hintIntensity * 100)}%
                   </span>
                 </div>
@@ -490,81 +508,86 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   step="0.05"
                   value={settings.hintIntensity}
                   onChange={(e) => updateSetting('hintIntensity', parseFloat(e.target.value))}
-                  className="w-full accent-amber-400 cursor-pointer"
+                  className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                 />
               </div>
 
               {/* Toggles */}
-              <div className="space-y-3">
-                {[
-                  {
-                    key: 'highlightMatching' as const,
-                    label: 'Highlight Every Matching Region',
-                    desc: 'Highlights all uncompleted regions of the active colour',
-                  },
-                  {
-                    key: 'animateHint' as const,
-                    label: 'Animate Hint Pulse',
-                    desc: 'Smooth breathing pulse effect on hints and active swatches',
-                  },
-                  {
-                    key: 'showNextRegionHint' as const,
-                    label: 'Pan to Center Region (Hint Assist)',
-                    desc: 'Automatically pans canvas to center the hinted region',
-                  },
-                ].map((item) => (
-                  <div
-                    key={item.key}
-                    className="flex items-center justify-between p-3 rounded-xl bg-slate-950/40 border border-slate-800/80"
-                  >
-                    <div>
-                      <div className="text-sm font-semibold text-slate-200">{item.label}</div>
-                      <div className="text-xs text-slate-400">{item.desc}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => updateSetting(item.key, !settings[item.key])}
-                      className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors ${
-                        settings[item.key] ? 'bg-amber-500' : 'bg-slate-700'
-                      }`}
+              <div className="space-y-1.5">
+                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Assistance & Animation
+                </label>
+                <div className="rounded-xl bg-slate-950/40 border border-slate-800/80 divide-y divide-slate-800/60 overflow-hidden">
+                  {[
+                    {
+                      key: 'highlightMatching' as const,
+                      label: 'Highlight Every Matching Region',
+                      desc: 'Highlights all uncompleted regions of the active colour',
+                    },
+                    {
+                      key: 'animateHint' as const,
+                      label: 'Animate Hint Pulse',
+                      desc: 'Smooth breathing pulse effect on hints and active swatches',
+                    },
+                    {
+                      key: 'showNextRegionHint' as const,
+                      label: 'Pan to Center Region (Hint Assist)',
+                      desc: 'Automatically pans canvas when zoomed in to center hinted region',
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.key}
+                      className="flex items-center justify-between p-2.5 sm:p-3 px-3 sm:px-3.5 hover:bg-slate-800/20 transition-colors"
                     >
-                      <div
-                        className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                          settings[item.key] ? 'translate-x-6' : 'translate-x-0'
+                      <div className="pr-3 min-w-0">
+                        <div className="text-xs sm:text-sm font-semibold text-slate-200">{item.label}</div>
+                        <div className="text-[11px] text-slate-400 leading-tight">{item.desc}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateSetting(item.key, !settings[item.key])}
+                        className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
+                          settings[item.key] ? 'bg-amber-500' : 'bg-slate-700'
                         }`}
-                      />
-                    </button>
-                  </div>
-                ))}
+                      >
+                        <div
+                          className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                            settings[item.key] ? 'translate-x-4.5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
           {/* TAB 2: CREATE / GENERATOR */}
           {activeTab === 2 && (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-5">
               {/* Built-in Sample Artwork Gallery */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="space-y-1.5">
+                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                   Built-in Sample Artwork
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   {SAMPLE_GALLERY.map((sample) => (
                     <div
                       key={sample.id}
                       className="group relative flex flex-col rounded-xl overflow-hidden border border-slate-800 bg-slate-950/60 hover:border-amber-400/60 transition-all shadow-md"
                     >
-                      <div className="h-28 w-full overflow-hidden bg-slate-900">
+                      <div className="h-16 sm:h-24 w-full overflow-hidden bg-slate-900">
                         <img
                           src={sample.assetPath}
                           alt={sample.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                       </div>
-                      <div className="p-2.5 flex items-center justify-between">
-                        <div>
-                          <div className="text-xs font-bold text-slate-200">{sample.title}</div>
-                          <div className="text-[10px] text-slate-400">{sample.category}</div>
+                      <div className="p-1.5 sm:p-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                        <div className="min-w-0">
+                          <div className="text-[11px] sm:text-xs font-bold text-slate-200 truncate">{sample.title}</div>
+                          <div className="text-[9px] text-slate-400 hidden sm:block">{sample.category}</div>
                         </div>
                         <button
                           type="button"
@@ -572,7 +595,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onSelectSample(sample);
                             onClose();
                           }}
-                          className="px-2.5 py-1 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow"
+                          className="w-full sm:w-auto px-2 py-1 text-[11px] sm:text-xs font-bold bg-amber-400 text-slate-950 rounded-md sm:rounded-lg hover:bg-amber-300 transition-colors shadow text-center"
                         >
                           Play
                         </button>
@@ -583,26 +606,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Upload Custom Image Button */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onUploadImage();
-                    onClose();
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 text-sm font-bold transition-colors"
-                >
-                  <ImageIcon size={18} />
-                  <span>Choose Photo from Device</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onUploadImage();
+                  onClose();
+                }}
+                className="w-full flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 text-xs sm:text-sm font-bold transition-colors"
+              >
+                <ImageIcon size={16} />
+                <span>Choose Photo from Device</span>
+              </button>
 
               {/* Generation Algorithm Strategy */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="space-y-1.5">
+                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                   Segmentation Algorithm
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
                   {(
                     [
                       { key: 'AUTO', label: 'Auto Detect', desc: 'Analyzes lines & photos' },
@@ -622,14 +643,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           imageType: alg.key === 'PAINTERLY' ? 'PHOTO' : alg.key === 'LINE_ART' ? 'DRAWING' : 'AUTO',
                         }))
                       }
-                      className={`p-2.5 rounded-xl border text-left transition-all ${
+                      className={`p-2 sm:p-2.5 rounded-lg border text-left transition-all ${
                         (localConfig.algorithm || 'AUTO') === alg.key
                           ? 'border-amber-400 bg-slate-800 text-white ring-1 ring-amber-400'
                           : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
                       }`}
                     >
                       <div className="text-xs font-bold text-slate-100">{alg.label}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">{alg.desc}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">{alg.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -637,22 +658,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Black Border & Outline Handling */}
               {((localConfig.algorithm || 'AUTO') === 'AUTO' || localConfig.algorithm === 'LINE_ART') && (
-                <div className="space-y-2 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                  <label className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                <div className="space-y-1.5 p-2.5 sm:p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-amber-400">
                     Artwork Black Border Handling
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                     {(
                       [
                         {
                           key: 'ABSORB_LINES',
                           label: 'Boundaries Follow Artwork Lines',
-                          desc: 'Symmetrically absorbs lines so region borders run along the center of the artwork strokes',
+                          desc: 'Symmetrically absorbs lines so region borders run along stroke centers',
                         },
                         {
                           key: 'UNIFIED_BLACK_REGION',
                           label: 'Continuous Black Line Region',
-                          desc: 'Unifies continuous black ink lines into a single playable line-art region with black swatch',
+                          desc: 'Unifies black ink lines into a single playable line-art region with swatch',
                         },
                       ] as const
                     ).map((mode) => (
@@ -665,14 +686,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             lineHandling: mode.key as LineHandlingMode,
                           }))
                         }
-                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                        className={`p-2 sm:p-2.5 rounded-lg border text-left transition-all ${
                           (localConfig.lineHandling || 'ABSORB_LINES') === mode.key
                             ? 'border-amber-400 bg-slate-800 text-white ring-1 ring-amber-400'
                             : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
                         }`}
                       >
                         <div className="text-xs font-bold text-slate-100">{mode.label}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{mode.desc}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">{mode.desc}</div>
                       </button>
                     ))}
                   </div>
@@ -680,11 +701,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
 
               {/* Palette Detail Level */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="space-y-1.5">
+                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                   Detail Level Preset
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                   {(
                     [
                       { key: 'AUTO', label: 'Auto' },
@@ -698,7 +719,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       key={det.key}
                       type="button"
                       onClick={() => setLocalConfig((prev) => ({ ...prev, paletteDetail: det.key as PaletteDetail }))}
-                      className={`p-2 rounded-xl border text-xs font-bold text-center transition-all ${
+                      className={`py-1.5 px-1 rounded-lg border text-xs font-bold text-center transition-all ${
                         localConfig.paletteDetail === det.key
                           ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
                           : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
@@ -711,13 +732,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Manual Fine-Tuning Sliders */}
-              <div className="space-y-5 p-4 rounded-xl bg-slate-950/50 border border-slate-800">
-                <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="space-y-3.5 p-3 rounded-xl bg-slate-950/50 border border-slate-800">
+                <div className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                   Manual Fine-Tuning & Constraints
                 </div>
 
                 {/* Colors Count */}
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   <div className="flex justify-between text-xs font-semibold">
                     <span className="text-slate-300">Target Palette Colours</span>
                     <span className="text-amber-400 font-mono font-bold">{localConfig.colorCount} colours</span>
@@ -731,12 +752,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={(e) =>
                       setLocalConfig((prev) => ({ ...prev, colorCount: parseInt(e.target.value) }))
                     }
-                    className="w-full accent-amber-400 cursor-pointer"
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
                 </div>
 
                 {/* Max Regions (Piece Count) */}
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-semibold">
                     <span className="text-slate-300">Max Regions (Puzzle Pieces)</span>
                     <span className="text-amber-400 font-mono font-bold">
@@ -755,9 +776,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         maxRegions: parseInt(e.target.value),
                       }))
                     }
-                    className="w-full accent-amber-400 cursor-pointer"
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1">
                     {[
                       { label: 'Simple (~100)', val: 100 },
                       { label: 'Standard (~250)', val: 250 },
@@ -771,7 +792,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() =>
                           setLocalConfig((prev) => ({ ...prev, maxRegions: rPreset.val }))
                         }
-                        className={`px-1.5 py-1.5 rounded-lg border text-[10px] font-bold text-center transition-all ${
+                        className={`px-1 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
                           (localConfig.maxRegions || 200) === rPreset.val
                             ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
                             : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
@@ -781,13 +802,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </button>
                     ))}
                   </div>
-                  <p className="text-[10px] text-slate-400">
-                    Controls total puzzle piece count (supports from 40 up to 2,000 pieces).
-                  </p>
                 </div>
 
                 {/* Minimum Region Area */}
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-semibold">
                     <span className="text-slate-300">Minimum Region Area</span>
                     <span className="text-amber-400 font-mono font-bold">
@@ -806,9 +824,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         minRegionArea: parseInt(e.target.value),
                       }))
                     }
-                    className="w-full accent-amber-400 cursor-pointer"
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
                     {[
                       { label: 'Fine (24 px²)', val: 24 },
                       { label: 'Balanced (48 px²)', val: 48 },
@@ -821,7 +839,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() =>
                           setLocalConfig((prev) => ({ ...prev, minRegionArea: aPreset.val }))
                         }
-                        className={`px-2 py-1.5 rounded-lg border text-[11px] font-bold text-center transition-all ${
+                        className={`px-1.5 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
                           localConfig.minRegionArea === aPreset.val
                             ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
                             : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
@@ -831,13 +849,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </button>
                     ))}
                   </div>
-                  <p className="text-[10px] text-slate-400">
-                    Strict minimum: all smaller specks are merged into adjacent compatible regions with zero dust slivers left behind.
-                  </p>
                 </div>
 
                 {/* Resolution with Snapping */}
-                <div className="space-y-2.5">
+                <div className="space-y-2">
                   <div className="flex justify-between items-center text-xs font-semibold">
                     <span className="text-slate-300">Max Canvas Resolution</span>
                     <span className="text-amber-400 font-mono font-bold">
@@ -846,7 +861,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
 
                   {nativeMax > 0 && (
-                    <div className="text-[11px] text-slate-400 flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                    <div className="text-[11px] text-slate-400 flex items-center justify-between px-2.5 py-1 rounded-lg bg-slate-900/60 border border-slate-800/80">
                       <span>Source Artwork Resolution:</span>
                       <span className="font-mono text-amber-300 font-bold">
                         {nativeW} × {nativeH} px
@@ -864,7 +879,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       const snapped = snapResolution(parseInt(e.target.value));
                       setLocalConfig((prev) => ({ ...prev, resolution: snapped }));
                     }}
-                    className="w-full accent-amber-400 cursor-pointer"
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
 
                   {/* Artwork percentage snaps */}
@@ -873,7 +888,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         Snap to Artwork Scale
                       </div>
-                      <div className="grid grid-cols-5 gap-1.5">
+                      <div className="grid grid-cols-5 gap-1">
                         {PERCENTAGE_SNAPS.map((snap) => (
                           <button
                             key={snap.label}
@@ -881,7 +896,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onClick={() =>
                               setLocalConfig((prev) => ({ ...prev, resolution: snap.val }))
                             }
-                            className={`px-1 py-1.5 rounded-lg border text-[10px] font-bold text-center transition-all ${
+                            className={`px-1 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
                               localConfig.resolution === snap.val
                                 ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
                                 : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
@@ -899,7 +914,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       Snap to Standard Resolutions
                     </div>
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
                       {STANDARD_RESOLUTIONS.map((res) => (
                         <button
                           key={res.val}
@@ -907,7 +922,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           onClick={() =>
                             setLocalConfig((prev) => ({ ...prev, resolution: res.val }))
                           }
-                          className={`px-1 py-1.5 rounded-lg border text-[10px] font-bold text-center transition-all ${
+                          className={`px-1 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
                             localConfig.resolution === res.val
                               ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
                               : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
@@ -929,7 +944,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onRegenerate(localConfig);
                   onClose();
                 }}
-                className="w-full py-3 rounded-xl bg-amber-400 text-slate-950 font-extrabold text-sm hover:bg-amber-300 transition-colors shadow-lg active:scale-98"
+                className="w-full py-2.5 sm:py-3 rounded-xl bg-amber-400 text-slate-950 font-extrabold text-xs sm:text-sm hover:bg-amber-300 transition-colors shadow-lg active:scale-98"
               >
                 Regenerate Artwork with Settings
               </button>
@@ -938,9 +953,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* TAB 3: SAVES / SNAPSHOTS */}
           {activeTab === 3 && (
-            <div className="space-y-4">
+            <div className="space-y-3.5">
               {/* Top Controls */}
-              <div className="flex items-center justify-between gap-2 pb-2">
+              <div className="flex items-center justify-between gap-2 pb-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-400 font-semibold">Sort by:</span>
                   <select
@@ -967,7 +982,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Snapshots List */}
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {sortedSnapshots.map((snap) => {
                   const isActive = snap.id === activeSnapshotId;
                   const isRenaming = renamingId === snap.id;
@@ -980,14 +995,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   return (
                     <div
                       key={snap.id}
-                      className={`relative flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                      className={`relative flex items-center gap-2.5 p-2.5 rounded-xl border transition-all ${
                         isActive
                           ? 'border-amber-400 bg-amber-500/10 shadow-md ring-1 ring-amber-400/40'
                           : 'border-slate-800 bg-slate-950/40 hover:bg-slate-800/40'
                       }`}
                     >
                       {/* Thumbnail Preview */}
-                      <div className="w-14 h-14 rounded-lg bg-slate-800 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      <div className="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center">
                         {snap.previewDataUrl ? (
                           <img
                             src={snap.previewDataUrl}
@@ -1001,7 +1016,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <ImageIcon size={20} className="text-slate-500" />
+                          <ImageIcon size={18} className="text-slate-500" />
                         )}
                       </div>
 
@@ -1026,23 +1041,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               }}
                               className="p-1 text-amber-400 hover:text-white"
                             >
-                              <Check size={16} />
+                              <Check size={15} />
                             </button>
                             <button
                               type="button"
                               onClick={() => setRenamingId(null)}
                               className="p-1 text-slate-400 hover:text-white"
                             >
-                              <X size={16} />
+                              <X size={15} />
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-bold text-slate-200 truncate">
+                          <div className="flex items-center gap-1.5">
+                            <h4 className="text-xs sm:text-sm font-bold text-slate-200 truncate">
                               {snap.title}
                             </h4>
                             {isActive && (
-                              <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-amber-400 text-slate-950">
+                              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-400 text-slate-950">
                                 Active
                               </span>
                             )}
@@ -1054,12 +1069,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               }}
                               className="text-slate-500 hover:text-slate-300 p-0.5"
                             >
-                              <Edit2 size={12} />
+                              <Edit2 size={11} />
                             </button>
                           </div>
                         )}
 
-                        <div className="flex items-center gap-2 mt-1 text-xs text-slate-400 font-medium">
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400 font-medium">
                           <span className="text-amber-400 font-bold">{progressPct}%</span>
                           <span>•</span>
                           <span>
@@ -1069,7 +1084,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
                         {!isActive && (
                           <button
                             type="button"
@@ -1077,7 +1092,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               onLoadSnapshot(snap);
                               onClose();
                             }}
-                            className="px-3 py-1.5 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow active:scale-95"
+                            className="px-2.5 py-1 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow active:scale-95"
                           >
                             Load
                           </button>
@@ -1091,14 +1106,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 onDeleteSnapshot(snap.id);
                                 setConfirmDeleteId(null);
                               }}
-                              className="px-2 py-1 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-500"
+                              className="px-2 py-1 text-[11px] font-bold bg-red-600 text-white rounded hover:bg-red-500"
                             >
                               Confirm
                             </button>
                             <button
                               type="button"
                               onClick={() => setConfirmDeleteId(null)}
-                              className="px-2 py-1 text-xs bg-slate-800 text-slate-300 rounded hover:bg-slate-700"
+                              className="px-2 py-1 text-[11px] bg-slate-800 text-slate-300 rounded hover:bg-slate-700"
                             >
                               Cancel
                             </button>
@@ -1108,9 +1123,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             type="button"
                             onClick={() => setConfirmDeleteId(snap.id)}
                             title="Delete Save"
-                            className="p-1.5 text-slate-500 hover:text-red-400 transition-colors"
+                            className="p-1 text-slate-500 hover:text-red-400 transition-colors"
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={15} />
                           </button>
                         )}
                       </div>
@@ -1127,7 +1142,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Bottom Actions */}
               {snapshots.length > 0 && (
-                <div className="pt-4 border-t border-slate-800/80 flex justify-between items-center">
+                <div className="pt-3 border-t border-slate-800/80 flex justify-between items-center">
                   {confirmClearAll ? (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-red-400 font-semibold">
