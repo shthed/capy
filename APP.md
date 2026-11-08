@@ -72,9 +72,22 @@ On modern edge-to-edge Android devices (e.g. Pixel 7, Galaxy S23, cutouts/punch-
 
 ## 4. Build & Gradle Lifecycle
 
-- **Asset Synchronization**: [`app/build.gradle.kts`](./app/build.gradle.kts) defines:
+- **Web Bundle Compilation & Synchronization**: [`app/build.gradle.kts`](./app/build.gradle.kts) provides:
+  - `:app:buildWeb`: An `Exec` task that invokes `npm run build` in `web/` with incremental caching tracking `web/src/`, `package.json`, and config files.
+  - `:app:syncWebAssets`: A `Sync` task that validates the presence of `web/dist/index.html` (throwing an actionable error if the frontend bundle hasn't been built yet) and synchronizes `web/dist/` into `src/main/assets/www/` before compilation.
   ```kotlin
-  val syncWebAssets by tasks.registering(Sync::class) {
+  val syncWebAssets = tasks.register<Sync>("syncWebAssets") {
+      val distIndex = layout.projectDirectory.file("../web/dist/index.html").asFile
+      doFirst {
+          if (!distIndex.exists()) {
+              throw GradleException(
+                  "Missing web frontend distribution bundle at '${distIndex.absolutePath}'.\n" +
+                  "Before compiling the Android launcher, please build the web assets by running:\n" +
+                  "  cd web && npm ci && npm run build\n" +
+                  "or run the Gradle task ':app:buildWeb' (if Node.js / npm is installed)."
+              )
+          }
+      }
       from(layout.projectDirectory.dir("../web/dist")) {
           exclude("**/capy.png")
       }
@@ -84,7 +97,7 @@ On modern edge-to-edge Android devices (e.g. Pixel 7, Galaxy S23, cutouts/punch-
       dependsOn(syncWebAssets)
   }
   ```
-  Whenever `app` is built, the compiled assets in `web/dist/` are automatically synchronized into `src/main/assets/www/` before compilation.
+  Whenever `:app` is compiled or tested, `web/dist/` is validated and synced into `src/main/assets/www/`.
 - **R8 / ProGuard (`app/proguard-rules.pro`)**:
   ```proguard
   -keepclassmembers class * {
@@ -100,6 +113,11 @@ On modern edge-to-edge Android devices (e.g. Pixel 7, Galaxy S23, cutouts/punch-
 ## 5. Build, Test & Run Commands
 
 ```bash
+# Build web frontend bundle (via npm or Gradle)
+cd web && npm ci && npm run build
+# OR directly via Gradle:
+./gradlew app:buildWeb
+
 # Run unit tests for the Android launcher
 ./gradlew app:testDebugUnitTest
 
@@ -109,3 +127,40 @@ On modern edge-to-edge Android devices (e.g. Pixel 7, Galaxy S23, cutouts/punch-
 # Deploy to connected USB/Wi-Fi Android device (ONLY run when explicitly asked by user)
 ./gradlew app:installDebug
 ```
+
+---
+
+## 6. Android Studio & Local Debugging
+
+### Opening the Project in Android Studio
+1. Open Android Studio and select **Open** (or `File > Open...`).
+2. Select the **monorepo root directory** (`/path/to/capy`), **NOT** the `/app` subdirectory.
+   - Gradle discovers both `:app` (unified modern launcher) and `:app1` (legacy Jetpack Compose implementation).
+3. Android Studio will automatically perform a Gradle Sync. The project specifies:
+   - Gradle Daemon JVM / Toolchain: **JDK 17** (or compatible vendor toolchain resolved automatically via Foojay).
+   - SDK: Android API 35 (`compileSdk = 35`, `minSdk = 24`, `targetSdk = 35`).
+
+### Running the App Locally
+1. In the top toolbar run configuration selector, choose **`app`**.
+2. Select an Android emulator (recommended: **Pixel 7** running API 34 or 35) or a physical Android device connected with USB debugging.
+3. Click the **Run** button (green play icon / `Shift+F10`).
+   - If `web/dist` has not been generated yet, run `./gradlew app:buildWeb` or double-click `Tasks > build > buildWeb` in the Android Studio Gradle panel.
+
+### Debugging the Native Kotlin Layer
+- Set breakpoints in [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt) or [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt).
+- Click **Debug 'app'** (green bug icon / `Shift+F9`).
+- You can inspect incoming share intents, window insets, modal back-press states, and atomic disk backup reads/writes.
+
+### Debugging the Frontend WebView (Chrome DevTools)
+In debug builds (`BuildConfig.DEBUG == true`), `MainActivity` enables `WebView.setWebContentsDebuggingEnabled(true)`:
+1. Launch the app in an emulator or physical device.
+2. Open desktop Google Chrome (or Microsoft Edge) and navigate to:
+   ```
+   chrome://inspect/#devices
+   ```
+3. Locate `com.capypaint.capy` under **Remote Target** and click **Inspect**.
+4. You get full Chrome Developer Tools inside the running Android WebView:
+   - **Console**: View `console.log`, `console.warn`, and unhandled errors. Test bridge calls live (e.g. `CapyAndroid.getSafeAreaInsets()` or `CapyAndroid.haptic("tick")`).
+   - **Elements**: Inspect live DOM tree, canvas nodes, and CSS variables (`--safe-area-top`, `--sat`, `--sab`).
+   - **Sources**: Set breakpoints in TypeScript source code and Web Workers.
+   - **Network**: Monitor offline `WebViewAssetLoader` asset resolutions (`https://appassets.androidplatform.net/assets/www/*`).

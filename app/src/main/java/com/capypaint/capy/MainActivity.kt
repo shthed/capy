@@ -60,6 +60,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        if (BuildConfig.DEBUG) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
+
         WindowCompat.setDecorFitsSystemWindows(window, false)
         @Suppress("DEPRECATION")
         window.statusBarColor = Color.TRANSPARENT
@@ -95,7 +99,6 @@ class MainActivity : ComponentActivity() {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                databaseEnabled = true
                 allowFileAccess = false
                 allowContentAccess = true
                 mediaPlaybackRequiresUserGesture = false
