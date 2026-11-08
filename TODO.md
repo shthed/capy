@@ -41,3 +41,4 @@ For target-specific deep dives, see also:
 - [ ] **Retire Legacy Targets (`web1/` & `app1/`)**:
   - Remove deprecated legacy vanilla JS app (`web1/`) and legacy Jetpack Compose app (`app1/`) from repository now that the unified React 19 web app and Android wrapper are fully operational.
   - Relocate any reusable maintenance scripts from `web1/scripts/` to `scripts/`.
+  - CI pipeline has already been streamlined to bypass legacy builds and skip docs-only commits.
