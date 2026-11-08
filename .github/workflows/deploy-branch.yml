@@ -236,17 +236,18 @@ jobs:
           if [ "${TARGET_DIR}" = "." ]; then
             DEST_DIR="pages"
             mkdir -p "${DEST_DIR}"
-            rsync -av --delete \
+            rsync -avc --delete \
               --exclude '.git/' \
               --exclude 'pull/' \
               staging/web/ "${DEST_DIR}/"
           else
             rm -rf "${DEST_DIR}"
             mkdir -p "${DEST_DIR}"
-            rsync -av --delete \
+            rsync -avc --delete \
               staging/web/ "${DEST_DIR}/"
           fi
 
+          cp -f staging/web/index.html "${DEST_DIR}/index.html"
           cp staging/apk/capy.apk "${DEST_DIR}/capy.apk"
 
       - name: Sync gh-pages branch (squashed history) and remove .git before artifact upload
