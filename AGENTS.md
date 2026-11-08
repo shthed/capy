@@ -81,3 +81,54 @@ From the repository root:
 4. **Compose Modifiers**: Keep `modifier: Modifier = Modifier` as the first optional parameter in Composable signatures.
 5. **Data Classes with Array Properties**: Explicitly override `equals()` and `hashCode()` using `contentEquals()` and `contentHashCode()` on any `data class` holding `IntArray` or `BooleanArray`.
 6. **Zero-Allocation Engine Loops**: Use primitive array buffers over object allocations in high-frequency quantization, segmentation, and rendering loops.
+
+---
+
+## 5. Maintaining & Updating Dependencies
+
+To keep all target environments (Updated Web `web/`, Legacy Web `web1/`, Android `:app`, and `:app1`) up to date with security patches and new library releases, follow these workflows:
+
+### A. Updated Web Application (`web/`)
+1. **Check for outdated packages**:
+   ```cmd
+   cd web
+   npm outdated
+   ```
+2. **Update within SemVer range & refresh lockfile**:
+   ```cmd
+   cd web
+   npm update
+   ```
+3. **Verify linting & production build**:
+   ```cmd
+   cd web
+   npm run lint    # tsc --noEmit
+   npm run build   # tsc && vite build
+   ```
+
+### B. Legacy Web Application v1 (`web1/`)
+1. **Check & update test/server dependencies**:
+   ```cmd
+   cd web1
+   npm outdated
+   npm update
+   ```
+2. **Verify Playwright smoke tests**:
+   ```cmd
+   cd web1
+   npm test -- --silent
+   ```
+
+### C. Native Android Applications (`app/` & `app1/`)
+1. **Centralized Version Catalog (`gradle/libs.versions.toml`)**:
+   - All Android dependency versions are centralized in `gradle/libs.versions.toml`.
+   - Inspect recommended updates using IDE inspection tools or `version_lookup`.
+2. **`compileSdk` Alignment**:
+   - When bumping Android libraries (e.g., `coreKtx`, `activityCompose`, `composeBom`), check that the library requirements align with `compileSdk` in `app/build.gradle.kts` and `app1/build.gradle.kts` (currently `compileSdk = 35`).
+   - If a newer library version requires `compileSdk 36+` or API level 37+, update `compileSdk` in both `:app` and `:app1` build scripts or keep the library pinned to the latest stable release supporting API 35.
+3. **Verify Android builds & unit tests**:
+   ```bash
+   ./gradlew app:testDebugUnitTest app1:testDebugUnitTest
+   ./gradlew app:assembleDebug app1:assembleDebug
+   ```
+
