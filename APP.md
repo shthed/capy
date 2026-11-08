@@ -164,3 +164,25 @@ In debug builds (`BuildConfig.DEBUG == true`), `MainActivity` enables `WebView.s
    - **Elements**: Inspect live DOM tree, canvas nodes, and CSS variables (`--safe-area-top`, `--sat`, `--sab`).
    - **Sources**: Set breakpoints in TypeScript source code and Web Workers.
    - **Network**: Monitor offline `WebViewAssetLoader` asset resolutions (`https://appassets.androidplatform.net/assets/www/*`).
+
+### Logging & Logcat Inspection
+`MainActivity.kt` and `CapyAndroidBridge.kt` provide structured `android.util.Log` output and route JavaScript console messages into Android Studio's **Logcat** tool window:
+
+1. **Web Console Forwarding**:
+   - `WebChromeClient.onConsoleMessage` catches all `console.log()`, `console.warn()`, and `console.error()` calls from Vite, React 19, and TypeScript.
+   - Messages appear formatted as `[WebView:filename:line] message` under `tag:CapyApp`.
+2. **Logcat Tags**:
+   - `tag:CapyApp`: Android Activity lifecycle events, WebView page finish/error events (`onReceivedError`), incoming share intent processing (`Intent.ACTION_SEND`), and photo picker launches.
+   - `tag:CapyBridge`: Native bridge operations including haptic triggers (`haptic`), safe-area insets retrieval, modal state changes (`setModalOpen`), atomic disk backup writes/reads (`saveBackup`, `loadBackup`), and OS share chooser dispatch (`shareImage`).
+3. **Recommended Logcat Query Filters**:
+   - Filter all Capy logs: `package:com.capypaint.capy` or `package:mine`
+   - Filter bridge and app logs only: `tag:CapyApp | tag:CapyBridge`
+   - Filter web console errors: `tag:CapyApp level:error`
+4. **Command Line Logcat (via adb)**:
+   ```bash
+   # Stream all Capy native and web logs
+   adb logcat -s CapyApp:V CapyBridge:V
+
+   # Clear Logcat buffer and start fresh
+   adb logcat -c && adb logcat -s CapyApp:V CapyBridge:V
+   ```

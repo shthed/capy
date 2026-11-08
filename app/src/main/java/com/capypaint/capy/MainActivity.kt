@@ -7,10 +7,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Base64
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.ConsoleMessage
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -125,12 +128,35 @@ class MainActivity : ComponentActivity() {
                 override fun onPageFinished(view: WebView, url: String?) {
                     super.onPageFinished(view, url)
                     isPageLoaded = true
+                    Log.d(TAG, "WebView page finished loading: $url")
                     applySafeAreaInsetsToWebView()
                     deliverPendingSharedImageIfNeeded()
+                }
+
+                override fun onReceivedError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    error: WebResourceError,
+                ) {
+                    super.onReceivedError(view, request, error)
+                    Log.e(TAG, "WebView error loading ${request.url}: ${error.description} (code: ${error.errorCode})")
                 }
             }
 
             webChromeClient = object : WebChromeClient() {
+                override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                    if (BuildConfig.DEBUG && (consoleMessage != null)) {
+                        val level = consoleMessage.messageLevel()
+                        val text = "[WebView:${consoleMessage.sourceId()}:${consoleMessage.lineNumber()}] ${consoleMessage.message()}"
+                        when (level) {
+                            ConsoleMessage.MessageLevel.ERROR -> Log.e(TAG, text)
+                            ConsoleMessage.MessageLevel.WARNING -> Log.w(TAG, text)
+                            else -> Log.d(TAG, text)
+                        }
+                    }
+                    return super.onConsoleMessage(consoleMessage)
+                }
+
                 override fun onShowFileChooser(
                     webView: WebView?,
                     filePathCallback: ValueCallback<Array<Uri>>?,
@@ -143,7 +169,8 @@ class MainActivity : ComponentActivity() {
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                         )
                         true
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to launch visual media picker", e)
                         fileUploadCallback = null
                         false
                     }
@@ -237,12 +264,13 @@ class MainActivity : ComponentActivity() {
             val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
             val dataUrl = "data:$type;base64,$base64"
             val title = imageUri.lastPathSegment?.substringAfterLast('/') ?: "Shared Photo"
+            Log.i(TAG, "Processed incoming shared image '$title' (${bytes.size} bytes)")
             bridge.pendingSharedImageJson = CapyAndroidBridge.formatSharedImageJson(title, dataUrl)
             if (isPageLoaded) {
                 deliverPendingSharedImageIfNeeded()
             }
-        } catch (_: Exception) {
-            // Ignore unreadable URI
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to resolve incoming share image URI: $imageUri", e)
         }
     }
 
@@ -273,6 +301,7 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        const val TAG = "CapyApp"
         const val START_URL = "https://appassets.androidplatform.net/assets/www/index.html"
     }
 }
