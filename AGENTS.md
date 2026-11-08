@@ -71,6 +71,10 @@ From the repository root:
   - `main` deploys `web/dist/` to `/` (`https://shthed.github.io/capy/`) and the Android APK to `/capy.apk` (`https://shthed.github.io/capy/capy.apk`).
   - Open PR branches deploy previews to `/pull/<number>/` and `/pull/<number>/capy.apk`.
   - `gh-pages` commits are squashed to a single orphan commit on every push so binary `.apk` files never accumulate in Git history.
+- **Always wait for explicit confirmation before merging**: Never merge a pull request or push directly to `main` without explicit confirmation and approval from the user. Create the pull request, verify that CI tests and preview deployments pass, share the PR link and preview URL with the user, and wait for approval before merging.
+- **PR preview lifecycle & cleanup ([`.github/workflows/cleanup-closed-pr.yml`](./.github/workflows/cleanup-closed-pr.yml))**:
+  - While a PR is open, its preview is served at `https://shthed.github.io/capy/pull/<number>/`.
+  - When a PR is closed or merged, `cleanup-closed-pr.yml` automatically deletes the `/pull/<number>/` preview directory from `gh-pages` and redeploys. Once merged, the changes are live on the root site `https://shthed.github.io/capy/`.
 - **No unsolicited Android device deployment**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
 - **Documentation hygiene**: Keep [`TODO.md`](./TODO.md), [`WEB.md`](./WEB.md), [`PUZZLE.md`](./PUZZLE.md), [`APP.md`](./APP.md), [`app1/APP1.md`](./app1/APP1.md), and [`web1/WEB1.md`](./web1/WEB1.md) in sync with architectural or runtime changes.
 
