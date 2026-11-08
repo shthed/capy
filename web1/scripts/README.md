@@ -38,4 +38,4 @@ node ./scripts/run-tests.js
 
 ## `cleanup-branches.mjs` & `cleanup-gh-pages-previews.mjs`
 
-Used by `.github/workflows/cleanup-branches.yml` and `.github/workflows/cleanup-closed-pr.yml` to prune merged branches and remove closed PR preview directories (`pull/<number>/`) from `gh-pages` while preserving root assets (`assets/`, `web1/`, `README/`).
+Used by `.github/workflows/cleanup-branches.yml` and `.github/workflows/cleanup-closed-pr.yml` to prune merged branches and remove closed PR preview directories (`pull/<number>/`) from `gh-pages` while preserving root assets (`assets/`, `web1/`).

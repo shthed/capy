@@ -153,7 +153,7 @@ const findLegacyPreviewDirectories = (rootDir) => {
   const entries = fs.readdirSync(rootDir, { withFileTypes: true });
   return entries
     .filter((entry) => entry.isDirectory())
-    .filter((entry) => !['.git', 'README', 'pull', 'assets', 'web1'].includes(entry.name))
+    .filter((entry) => !['.git', 'pull', 'assets', 'web1'].includes(entry.name))
     .filter((entry) => entry.name === sanitize(entry.name))
     .map((entry) => {
       const absolutePath = path.join(rootDir, entry.name);
@@ -255,6 +255,12 @@ const main = async () => {
     console.error(`cleanup-gh-pages: pages directory not found at ${resolvedPagesDir}`);
     process.exitCode = 1;
     return;
+  }
+
+  const legacyReadme = path.join(resolvedPagesDir, 'README');
+  if (fs.existsSync(legacyReadme)) {
+    console.log('cleanup-gh-pages: removing legacy README/ directory.');
+    deleteDirectory(legacyReadme);
   }
 
   const defaultBranch = resolveDefaultBranch();
