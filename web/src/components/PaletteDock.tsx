@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
+import { Palette } from 'lucide-react';
 import {
   PaletteColor,
   PalettePreset,
@@ -17,8 +18,10 @@ interface PaletteDockProps {
   visibleColorIds: Set<number>;
   raiseDock: boolean;
   isFreeColorMode?: boolean;
+  showCustomColorButton?: boolean;
   onColorSelected: (colorId: number) => void;
   onColorHintRequested: (colorId: number) => void;
+  onOpenPaletteOptions?: () => void;
   onAddCustomColor?: (hex: string) => void;
   onUpdateColor?: (colorId: number, hex: string) => void;
   onApplyPresetPalette?: (preset: PalettePreset) => void;
@@ -151,8 +154,10 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   visibleColorIds,
   raiseDock,
   isFreeColorMode = false,
+  showCustomColorButton = false,
   onColorSelected,
   onColorHintRequested,
+  onOpenPaletteOptions,
   onAddCustomColor,
   onUpdateColor,
   onApplyPresetPalette,
@@ -234,6 +239,18 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
+  const activeSwatchRef = useRef<HTMLButtonElement | null>(null);
+
+  // Smoothly center the active color in view when activeColorId changes
+  useEffect(() => {
+    if (activeSwatchRef.current) {
+      activeSwatchRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+  }, [activeColorId]);
 
   // Enable horizontal mouse wheel scrolling across the color chooser
   useEffect(() => {
@@ -277,7 +294,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
       ref={footerRef}
       className="fixed z-20 left-0 right-0 pointer-events-none transition-all flex items-center"
       style={{
-        bottom: `calc(${raiseDock ? '0.75rem' : '0.25rem'} + var(--sab, 0px))`,
+        bottom: `calc(${raiseDock ? '2rem' : '0.375rem'} + var(--sab, 0px))`,
       }}
       aria-label="Palette dock"
     >
@@ -287,7 +304,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
         className="pointer-events-auto w-full flex items-center gap-2 overflow-x-auto no-scrollbar py-1"
         style={{
           paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
-          paddingRight: 'max(5.25rem, calc(var(--sar, 0px) + 5.25rem))',
+          paddingRight: 'max(4.5rem, calc(var(--sar, 0px) + 4.5rem))',
         }}
       >
         {dockPalette.map((color) => {
@@ -301,6 +318,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
           return (
             <button
               key={color.id}
+              ref={isActive ? activeSwatchRef : undefined}
               type="button"
               onClick={() => handleSwatchClick(color)}
               title={`Color #${dispNum}${
@@ -334,6 +352,21 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
             </button>
           );
         })}
+
+        {/* Button to open custom colour picker & palette options at the end of the dock */}
+        {showCustomColorButton && onOpenPaletteOptions && (
+          <button
+            type="button"
+            onClick={onOpenPaletteOptions}
+            title="Custom Colour & Palette Options"
+            className="flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-md hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
+          >
+            <Palette size={18} />
+            <span className="text-[8.5px] font-bold text-slate-300 leading-none mt-0.5">
+              Custom
+            </span>
+          </button>
+        )}
       </div>
     </div>
   );

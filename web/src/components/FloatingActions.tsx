@@ -1,12 +1,11 @@
 import React from 'react';
-import { Lightbulb, Maximize2, Minus, Paintbrush, Palette, Plus } from 'lucide-react';
+import { Lightbulb, Maximize2, Minus, Paintbrush, Plus } from 'lucide-react';
 import { PaletteColor } from '../types';
 
 interface FloatingActionsProps {
   isPaintMode: boolean;
   showZoomButtons: boolean;
   showResetViewButton?: boolean;
-  showPaletteOptionsButton?: boolean;
   raiseDock: boolean;
   isZoomedOrPanned?: boolean;
   activeColor?: PaletteColor | null;
@@ -25,7 +24,6 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
   isPaintMode,
   showZoomButtons,
   showResetViewButton = false,
-  showPaletteOptionsButton = false,
   raiseDock,
   isZoomedOrPanned = false,
   activeColor,
@@ -43,7 +41,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
     <div
       className="fixed z-20 flex flex-col items-end gap-2.5 transition-all"
       style={{
-        bottom: `calc(${raiseDock ? '4.25rem' : '3.5rem'} + var(--sab, 0px))`,
+        bottom: `calc(${raiseDock ? '5.5rem' : '3.75rem'} + var(--sab, 0px))`,
         right: 'calc(1rem + var(--sar, 0px))',
       }}
     >
@@ -139,18 +137,6 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
       >
         <Paintbrush size={20} />
       </button>
-
-      {/* Smaller button in the bottom right for choosing a custom colour & changing palette options */}
-      {showPaletteOptionsButton && onOpenPaletteOptions && (
-        <button
-          type="button"
-          onClick={onOpenPaletteOptions}
-          title="Custom Colour & Palette Options"
-          className="p-2.5 rounded-full bg-slate-900/90 text-amber-400 border border-slate-700/70 shadow-xl backdrop-blur-md hover:bg-slate-800 hover:scale-105 transition-all active:scale-95"
-        >
-          <Palette size={18} />
-        </button>
-      )}
     </div>
   );
 };

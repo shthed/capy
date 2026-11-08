@@ -1150,9 +1150,6 @@ export const App: React.FC = () => {
           isPaintMode={settings.isPaintMode}
           showZoomButtons={settings.showZoomButtons}
           showResetViewButton={settings.showResetViewButton}
-          showPaletteOptionsButton={Boolean(
-            isFreeColorMode || puzzle.isFreeColor || settings.enableCustomColorForAllPuzzles
-          )}
           raiseDock={settings.raisePaletteDock}
           isZoomedOrPanned={isCanvasTransformed}
           activeColor={puzzle.palette.find((c) => c.id === activeColorId) || null}
@@ -1190,12 +1187,16 @@ export const App: React.FC = () => {
           visibleColorIds={visibleColorIds}
           raiseDock={settings.raisePaletteDock}
           isFreeColorMode={isFreeColorMode}
+          showCustomColorButton={Boolean(
+            isFreeColorMode || puzzle.isFreeColor || settings.enableCustomColorForAllPuzzles
+          )}
           onColorSelected={(colId) => {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             setActiveColorId(colId);
             setHintRegionId(null);
           }}
           onColorHintRequested={(colId) => triggerHint(colId)}
+          onOpenPaletteOptions={() => setShowPaletteOptions(true)}
           onAddCustomColor={handleAddCustomColor}
           onUpdateColor={handleUpdateColor}
           onApplyPresetPalette={handleApplyPresetPalette}
