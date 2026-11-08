@@ -266,7 +266,7 @@
  * - The runtime bootstraps immediately; the `capyRuntime` object is the main entry for renderer + metrics hooks.
  * - Generation helpers rely on typed arrays and workers; mutations always happen through `createPuzzleData`.
  * - UI code is declarative—`createElement` and block renderers convert JSON definitions into DOM tree fragments.
- * - Service worker + save subsystems live near the bottom; adjust `TECH.md` when their flows change.
+ * - Service worker + save subsystems live near the bottom; adjust `docs/WEB1.md` when their flows change.
  */
 
 const capyConstants = (() => {

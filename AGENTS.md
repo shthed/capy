@@ -9,20 +9,21 @@ Capy is a multi-platform color-by-number suite living in https://github.com/shth
 1. **`web/` — Updated Web Application & Single Source of Truth (Deployed to `/`)**
    - Built with **React 19**, **TypeScript**, **Vite 6**, **Tailwind CSS 4**, offscreen cached 2D canvas rendering (`PuzzleCanvas.tsx`), and a 5-strategy Web Worker puzzle engine (`web/src/engine/`).
    - Shared across both the Web deployment and the Android (`app/`) wrapper via `web/src/services/NativeBridge.ts`.
-   - Technical reference for the puzzle engine: [`PUZZLE.md`](./PUZZLE.md).
+   - Technical reference for the puzzle engine: [`docs/PUZZLE.md`](./docs/PUZZLE.md).
    - Keep asset references relative (`assets/...` and `base: './'` in `web/vite.config.ts`) so deployments work at the GitHub Pages root (`/`), PR preview paths (`/pull/<number>/`), and Android `WebViewAssetLoader` (`https://appassets.androidplatform.net/assets/www/`).
 
 2. **`web1/` — Legacy Web Application v1 (Deployed to `/web1/`)**
    - Zero-build vanilla JavaScript runtime (`web1/index.html`, `web1/capy.js`, `web1/puzzle-generation.js`, `web1/styles.css`, `web1/settings-menu.json`).
-   - Documentation lives in [`web1/docs/`](./web1/docs/) (`TECH.md`, `ONBOARDING.md`, `ROADMAP.md`, `STYLEGUIDE.md`, `TODO.md`, `CHANGELOG.md`).
+   - Technical guide & style reference live in [`docs/WEB1.md`](./docs/WEB1.md).
    - Playwright smoke tests and GitHub Pages helper scripts live in `web1/tests/` and `web1/scripts/`.
 
 3. **`app/` — Unified Native Android Application (`com.capypaint.capy`, Deployed to `/capy.apk`)**
    - Lightweight native Android launcher wrapping `web/dist/` via AndroidX `WebViewAssetLoader` (`MainActivity.kt`) and `CapyAndroidBridge.kt` (`@JavascriptInterface`).
+   - Architecture and native bridge specifications live in [`docs/APP.md`](./docs/APP.md).
    - Provides native Android tactile haptic feedback (`Vibrator` / `HapticFeedbackConstants`), hardware back gesture modal closing, native `PickVisualMedia` photo picker, `Intent.ACTION_SEND` image receiver, and persistent JSON disk backups (`filesDir/capy_saves`).
 
 4. **`app1/` — Legacy Native Jetpack Compose Android Application v1 (`:app1`)**
-   - Preserved standalone Kotlin + Jetpack Compose implementation (`app1/CAPY.md`, `app1/CAPY-TODO.md`).
+   - Preserved standalone Kotlin + Jetpack Compose implementation documented in [`docs/APP1.md`](./docs/APP1.md).
 
 ---
 
@@ -67,7 +68,7 @@ From the repository root:
   - Open PR branches deploy previews to `/pull/<number>/`, `/pull/<number>/web1/`, and `/pull/<number>/capy.apk`.
   - `gh-pages` commits are squashed to a single orphan commit on every push so binary `.apk` files never accumulate in Git history.
 - **No unsolicited Android device deployment**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
-- **Documentation hygiene**: Keep [`TODO.md`](./TODO.md), [`PUZZLE.md`](./PUZZLE.md), [`app/CAPY.md`](./app/CAPY.md), [`app1/CAPY.md`](./app1/CAPY.md), [`app1/CAPY-TODO.md`](./app1/CAPY-TODO.md), and [`web1/docs/TECH.md`](./web1/docs/TECH.md) in sync with architectural or runtime changes.
+- **Documentation hygiene**: Keep [`TODO.md`](./TODO.md), [`docs/PUZZLE.md`](./docs/PUZZLE.md), [`docs/APP.md`](./docs/APP.md), [`docs/APP1.md`](./docs/APP1.md), and [`docs/WEB1.md`](./docs/WEB1.md) in sync with architectural or runtime changes.
 
 ---
 

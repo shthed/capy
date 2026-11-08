@@ -3,9 +3,10 @@
 This document tracks cross-project tasks, post-merge cleanups, puzzle engine unification plans, and platform improvements across the unified **Capy** monorepo (`web/`, `web1/`, `app/`, and `app1/`).
 
 For target-specific deep dives, see also:
-- **Legacy Android v1 Detailed Optimization Roadmap**: [`app1/CAPY-TODO.md`](./app1/CAPY-TODO.md)
-- **Legacy Web v1 Maintenance Checklist**: [`web1/docs/TODO.md`](./web1/docs/TODO.md)
-- **Puzzle Generation Engine Reference**: [`PUZZLE.md`](./PUZZLE.md)
+- **Puzzle Generation Engine Reference**: [`docs/PUZZLE.md`](./docs/PUZZLE.md)
+- **Unified Android Launcher Architecture & Native Bridge**: [`docs/APP.md`](./docs/APP.md)
+- **Legacy Android v1 Architecture & Roadmap**: [`docs/APP1.md`](./docs/APP1.md)
+- **Legacy Web v1 Technical Reference & Style Guide**: [`docs/WEB1.md`](./docs/WEB1.md)
 
 ---
 
@@ -100,5 +101,14 @@ For target-specific deep dives, see also:
 - [ ] **iOS WKWebView Wrapper Packaging**:
   - Leverage [`NativeBridge.ts`](./web/src/services/NativeBridge.ts)'s existing `window.webkit.messageHandlers.CapyIOS` dispatch mechanism to create a lightweight Swift iOS wrapper around `web/dist/`.
 - [ ] **Preserved Native Jetpack Compose App Optimization (`app1/`)**:
-  - *(See [`app1/CAPY-TODO.md`](./app1/CAPY-TODO.md) for full implementation specifications.)*
+  - *(See [`docs/APP1.md`](./docs/APP1.md) for full implementation specifications.)*
   - Eliminate overlay bitmap heap allocations and add partial dirty-rect updates to `app1/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`.
+
+---
+
+## 🧹 Legacy Web v1 (`web1/`) Maintenance & Polish
+
+- [ ] **Preboot Sizing & Storage Fallbacks**: Add regression tests for malformed or missing `localStorage` data in `web1/capy.js` to ensure scale tokens stay resilient.
+- [ ] **Playwright Test Fixtures**: Restore `window.capyGenerator.loadPuzzleFixture` in Playwright smoke checks to exercise renderer switching and palette updates.
+- [ ] **Renderer Module Decomposition**: Split the renderer section of `web1/capy.js` into modular components to streamline maintenance.
+- [ ] **UI Polish**: Trim palette dock horizontal padding on mobile viewports and enhance settings scroll-into-view behavior.

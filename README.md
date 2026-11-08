@@ -48,11 +48,10 @@
 ## 🛠️ Architecture & Documentation
 
 - **Master Project Roadmap & TODO**: [`TODO.md`](./TODO.md)
-- **Puzzle Generation Engine Reference**: [`PUZZLE.md`](./PUZZLE.md)
-- **Unified Android Launcher Architecture & Native Bridge**: [`app/CAPY.md`](./app/CAPY.md)
-- **Legacy Android v1 Architecture & Binary Save Spec**: [`app1/CAPY.md`](./app1/CAPY.md)
-- **Legacy Android v1 Development Roadmap**: [`app1/CAPY-TODO.md`](./app1/CAPY-TODO.md)
-- **Legacy Web v1 Technical Reference**: [`web1/docs/TECH.md`](./web1/docs/TECH.md)
+- **Puzzle Generation Engine Reference**: [`docs/PUZZLE.md`](./docs/PUZZLE.md)
+- **Unified Android Launcher Architecture & Native Bridge**: [`docs/APP.md`](./docs/APP.md)
+- **Legacy Android v1 Architecture & Roadmap**: [`docs/APP1.md`](./docs/APP1.md)
+- **Legacy Web v1 Technical Reference & Style Guide**: [`docs/WEB1.md`](./docs/WEB1.md)
 - **Contributor & Agent Playbook**: [`AGENTS.md`](./AGENTS.md)
 
 ---
