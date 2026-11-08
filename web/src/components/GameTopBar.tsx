@@ -1,13 +1,15 @@
 import React from 'react';
-import { Eye, EyeOff, ImagePlus, Settings } from 'lucide-react';
+import { Eye, EyeOff, ImagePlus, Maximize2, Minimize2, Settings } from 'lucide-react';
 
 interface GameTopBarProps {
   activeTitle?: string | null;
   progressPercentage: number;
   isPreviewMode: boolean;
   isCompleted: boolean;
+  isFullscreen?: boolean;
   onPickImage: () => void;
   onTogglePreview: () => void;
+  onToggleFullscreen?: () => void;
   onOpenSettings: () => void;
   onOpenSaves: () => void;
 }
@@ -17,8 +19,10 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
   progressPercentage,
   isPreviewMode,
   isCompleted,
+  isFullscreen,
   onPickImage,
   onTogglePreview,
+  onToggleFullscreen,
   onOpenSettings,
   onOpenSaves,
 }) => {
@@ -64,6 +68,23 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
         >
           {isPreviewMode ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
+
+        {/* Toggle Full Screen Button */}
+        {onToggleFullscreen && (
+          <button
+            type="button"
+            onClick={onToggleFullscreen}
+            title={isFullscreen ? 'Exit Full Screen' : 'Display Full Screen'}
+            aria-label={isFullscreen ? 'Exit Full Screen' : 'Display Full Screen'}
+            className={`p-2 rounded-full shadow-lg backdrop-blur-md border transition-all active:scale-95 ${
+              isFullscreen
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 ring-1 ring-amber-400'
+                : 'bg-slate-900/80 text-slate-200 border-slate-700/60 hover:bg-slate-800/80'
+            }`}
+          >
+            {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+          </button>
+        )}
 
         {/* Pick Image Button */}
         <button

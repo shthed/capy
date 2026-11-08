@@ -38,8 +38,10 @@ interface SettingsModalProps {
   snapshots: SavedSnapshot[];
   activeSnapshotId: string | null;
   sourceImage?: HTMLImageElement | null;
+  isFullscreen?: boolean;
   onClose: () => void;
   onUpdateSettings: (newSettings: UserSettings) => void;
+  onToggleFullscreen?: () => void;
   onLoadSnapshot: (snapshot: SavedSnapshot) => void;
   onRenameSnapshot: (id: string, newTitle: string) => void;
   onDeleteSnapshot: (id: string) => void;
@@ -57,8 +59,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   snapshots,
   activeSnapshotId,
   sourceImage,
+  isFullscreen,
   onClose,
   onUpdateSettings,
+  onToggleFullscreen,
   onLoadSnapshot,
   onRenameSnapshot,
   onDeleteSnapshot,
@@ -152,56 +156,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none">
       <div className="relative w-full h-full sm:h-[88vh] sm:max-h-[860px] sm:max-w-2xl flex flex-col bg-slate-900 sm:border sm:border-slate-800 sm:rounded-2xl shadow-2xl overflow-hidden text-slate-100">
-        {/* Header Bar */}
+        {/* Top Tab Bar: Tab headings & close button directly at the top (no wasted space header) */}
         <div
-          className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-800/80 bg-slate-950/80 flex-shrink-0"
+          className="flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-2 sm:px-3 flex-shrink-0"
           style={{
-            paddingTop: 'max(0.75rem, calc(var(--sat, 0px) + 0.6rem))',
-            paddingLeft: 'max(1rem, calc(var(--sal, 0px) + 0.75rem))',
-            paddingRight: 'max(1rem, calc(var(--sar, 0px) + 0.75rem))',
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-amber-400 font-extrabold text-base sm:text-lg">Capy</span>
-            <span className="text-slate-400 font-semibold text-xs sm:text-sm">Settings & Controls</span>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-            title="Close"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Tab Navigation */}
-        <div
-          className="flex border-b border-slate-800 bg-slate-950/50 px-2 sm:px-3 overflow-x-auto no-scrollbar flex-shrink-0"
-          style={{
+            paddingTop: 'max(0.6rem, calc(var(--sat, 0px) + 0.5rem))',
             paddingLeft: 'max(0.5rem, calc(var(--sal, 0px) + 0.5rem))',
             paddingRight: 'max(0.5rem, calc(var(--sar, 0px) + 0.5rem))',
           }}
         >
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-shrink-0 flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-all ${
-                  isActive
-                    ? 'border-amber-400 text-amber-400'
-                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                }`}
-              >
-                <Icon size={15} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
+          {/* Tab Navigation */}
+          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-2">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs sm:text-sm font-bold rounded-lg transition-all ${
+                    isActive
+                      ? 'bg-amber-400 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Icon size={15} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 ml-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
+            title="Close"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         {/* Tab Contents */}
@@ -344,6 +339,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   Preferences & Gameplay
                 </label>
                 <div className="rounded-xl bg-slate-950/40 border border-slate-800/80 divide-y divide-slate-800/60 overflow-hidden">
+                  {onToggleFullscreen && (
+                    <div className="flex items-center justify-between p-2.5 sm:p-3 px-3 sm:px-3.5 hover:bg-slate-800/20 transition-colors">
+                      <div className="pr-3 min-w-0">
+                        <div className="text-xs sm:text-sm font-semibold text-slate-200 flex items-center gap-1.5">
+                          <span>Full Screen Mode</span>
+                          {isFullscreen && (
+                            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-400 text-slate-950">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-400 leading-tight">
+                          {isFullscreen
+                            ? 'Canvas occupies full display (tap to exit)'
+                            : 'Expand game to fill entire screen and hide browser chrome'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={onToggleFullscreen}
+                        className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
+                          isFullscreen ? 'bg-amber-500' : 'bg-slate-700'
+                        }`}
+                        title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen'}
+                      >
+                        <div
+                          className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                            isFullscreen ? 'translate-x-4.5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  )}
                   {[
                     {
                       key: 'prioritizeOnScreen' as const,

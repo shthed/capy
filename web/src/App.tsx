@@ -54,6 +54,56 @@ export const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<number>(0);
 
+  // Fullscreen State
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() => {
+    if (typeof document === 'undefined') return false;
+    return Boolean(
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement
+    );
+  });
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const active = Boolean(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement
+      );
+      setIsFullscreen(active);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const handleToggleFullscreen = useCallback(async () => {
+    try {
+      if (
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement
+      ) {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        }
+      } else {
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+          await el.requestFullscreen();
+        } else if ((el as any).webkitRequestFullscreen) {
+          await (el as any).webkitRequestFullscreen();
+        }
+      }
+    } catch (err) {
+      console.warn('Fullscreen request failed or was blocked:', err);
+    }
+  }, []);
+
   // Hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -655,8 +705,10 @@ export const App: React.FC = () => {
         progressPercentage={progressPercentage}
         isPreviewMode={isPreviewMode}
         isCompleted={isCompleted}
+        isFullscreen={isFullscreen}
         onPickImage={() => fileInputRef.current?.click()}
         onTogglePreview={() => setIsPreviewMode((prev) => !prev)}
+        onToggleFullscreen={handleToggleFullscreen}
         onOpenSettings={() => {
           setSettingsInitialTab(0);
           setShowSettings(true);
@@ -758,8 +810,10 @@ export const App: React.FC = () => {
         snapshots={snapshots}
         activeSnapshotId={activeSnapshotId}
         sourceImage={sourceImage}
+        isFullscreen={isFullscreen}
         onClose={() => setShowSettings(false)}
         onUpdateSettings={handleUpdateSettings}
+        onToggleFullscreen={handleToggleFullscreen}
         onLoadSnapshot={handleLoadSnapshot}
         onRenameSnapshot={(id, newTitle) => {
           const updated = StorageService.renameSnapshot(id, newTitle);
