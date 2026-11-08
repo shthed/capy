@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
   actions: read
   pull-requests: read
 
@@ -16,6 +18,8 @@ concurrency:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -67,6 +71,7 @@ jobs:
             --ignore-recency
 
       - name: Commit and push gh-pages updates (squashed history)
+        id: sync_pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -80,6 +85,7 @@ jobs:
           git add -A
           if git diff --cached --quiet && ! (git cat-file -p HEAD | grep -q '^parent '); then
             echo "No gh-pages changes to push."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -88,3 +94,17 @@ jobs:
           git commit -m "Cleanup preview for PR #${{ github.event.pull_request.number }}"
           git branch -M gh-pages
           git push --force origin gh-pages
+          cd ..
+          rm -rf gh-pages/.git
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Pages artifact
+        if: steps.sync_pages.outputs.has_changes == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: gh-pages
+
+      - name: Deploy to GitHub Pages
+        if: steps.sync_pages.outputs.has_changes == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v5

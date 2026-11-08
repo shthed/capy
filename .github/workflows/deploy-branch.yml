@@ -222,6 +222,12 @@ jobs:
         with:
           ref: ${{ inputs.target_branch != '' && inputs.target_branch || (github.event.pull_request.head.ref || github.ref) }}
 
+      - name: Use Node.js 22
+        if: steps.target.outputs.skip != 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
       - name: Download built Web bundle
         if: steps.target.outputs.skip != 'true'
         uses: actions/download-artifact@v8
@@ -251,6 +257,14 @@ jobs:
             git clone --depth 1 "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages
             rm -rf pages/*
           fi
+
+      - name: Prune closed PR previews from gh-pages
+        if: steps.target.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          node ./web1/scripts/cleanup-gh-pages-previews.mjs --pages-dir pages
 
       - name: Prepare site content
         if: steps.target.outputs.skip != 'true'
