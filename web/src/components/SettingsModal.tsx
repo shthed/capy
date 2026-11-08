@@ -10,10 +10,14 @@ import {
   Edit2,
   RotateCcw,
   Image as ImageIcon,
+  Pipette,
 } from 'lucide-react';
 import {
   CANVAS_BG_MAP,
   CanvasBgColor,
+  PresetCanvasBgColor,
+  argbToHex,
+  hexToArgb,
   Difficulty,
   GeneratorAlgorithm,
   GeneratorConfig,
@@ -242,11 +246,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="space-y-4 sm:space-y-5">
               {/* Canvas Background */}
               <div className="space-y-1.5">
-                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Canvas Background
-                </label>
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 sm:gap-2">
-                  {(Object.keys(CANVAS_BG_MAP) as CanvasBgColor[]).map((key) => {
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Canvas Background
+                  </label>
+                  {settings.canvasBgColor === 'CUSTOM' && (
+                    <span className="text-[11px] font-mono font-semibold text-amber-400">
+                      {argbToHex(settings.canvasBgArgb).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 sm:gap-2">
+                  {(Object.keys(CANVAS_BG_MAP) as PresetCanvasBgColor[]).map((key) => {
                     const item = CANVAS_BG_MAP[key];
                     const isSelected = settings.canvasBgColor === key;
                     return (
@@ -271,6 +282,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </button>
                     );
                   })}
+                  {/* Custom Background Color Picker */}
+                  <label
+                    className={`relative flex items-center gap-1.5 p-2 rounded-lg border text-xs font-semibold cursor-pointer transition-all ${
+                      settings.canvasBgColor === 'CUSTOM'
+                        ? 'border-amber-400 bg-slate-800 text-white ring-1 ring-amber-400'
+                        : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <input
+                      type="color"
+                      value={argbToHex(settings.canvasBgArgb)}
+                      onChange={(e) => {
+                        updateSetting('canvasBgColor', 'CUSTOM');
+                        updateSetting('canvasBgArgb', hexToArgb(e.target.value));
+                      }}
+                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    />
+                    <span
+                      className="w-3.5 h-3.5 rounded-full border border-slate-700 flex-shrink-0 shadow-inner"
+                      style={{ backgroundColor: argbToHex(settings.canvasBgArgb) }}
+                    />
+                    <span className="truncate text-[11px] sm:text-xs">
+                      {settings.canvasBgColor === 'CUSTOM' ? 'Custom' : 'Custom...'}
+                    </span>
+                  </label>
                 </div>
               </div>
 
@@ -533,6 +569,76 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">{style.desc}</span>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Hint Highlight Colour */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Hint Highlight Colour
+                  </label>
+                  <span className="text-[11px] font-mono font-semibold text-amber-400">
+                    {argbToHex(settings.hintColorArgb).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {[
+                    { label: 'Amber', hex: '#f59e0b' },
+                    { label: 'Yellow', hex: '#eab308' },
+                    { label: 'Orange', hex: '#f97316' },
+                    { label: 'Cyan', hex: '#06b6d4' },
+                    { label: 'Emerald', hex: '#10b981' },
+                    { label: 'Rose', hex: '#ec4899' },
+                    { label: 'Purple', hex: '#a855f7' },
+                    { label: 'White', hex: '#ffffff' },
+                  ].map((col) => {
+                    const colHex = col.hex.toLowerCase();
+                    const currentHex = argbToHex(settings.hintColorArgb).toLowerCase();
+                    const isSelected = currentHex === colHex;
+                    return (
+                      <button
+                        key={col.hex}
+                        type="button"
+                        title={col.label}
+                        onClick={() => updateSetting('hintColorArgb', hexToArgb(col.hex))}
+                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
+                          isSelected
+                            ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
+                            : 'border-slate-700/80 hover:scale-105'
+                        }`}
+                        style={{ backgroundColor: col.hex }}
+                      >
+                        {isSelected && (
+                          <Check
+                            className={`w-3.5 h-3.5 ${
+                              col.hex === '#ffffff' || col.hex === '#eab308'
+                                ? 'text-slate-900'
+                                : 'text-white'
+                            }`}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                  {/* Custom Hint Colour Picker */}
+                  <label
+                    title="Custom Hint Colour"
+                    className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-slate-700/80 hover:border-slate-500 flex items-center justify-center cursor-pointer transition-all hover:scale-105 overflow-hidden bg-slate-800"
+                  >
+                    <input
+                      type="color"
+                      value={argbToHex(settings.hintColorArgb)}
+                      onChange={(e) => updateSetting('hintColorArgb', hexToArgb(e.target.value))}
+                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    />
+                    <div
+                      className="w-full h-full flex items-center justify-center"
+                      style={{ backgroundColor: argbToHex(settings.hintColorArgb) }}
+                    >
+                      <Pipette className="w-3.5 h-3.5 text-slate-900 drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]" />
+                    </div>
+                  </label>
                 </div>
               </div>
 

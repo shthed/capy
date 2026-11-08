@@ -120,6 +120,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   isFreeColorMode = false,
   paintedRegionColors,
   canvasBgColor,
+  canvasBgArgb,
   regionColorMode,
   showRegionLabels,
   showPreviewLabels,
@@ -880,7 +881,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     ctx.scale(dpr, dpr);
 
     // Canvas stage background
-    ctx.fillStyle = CANVAS_BG_MAP[canvasBgColor]?.hex || '#000000';
+    const bgHex =
+      canvasBgColor === 'CUSTOM' || !CANVAS_BG_MAP[canvasBgColor]
+        ? `#${(canvasBgArgb & 0x00ffffff).toString(16).padStart(6, '0')}`
+        : CANVAS_BG_MAP[canvasBgColor].hex;
+    ctx.fillStyle = bgHex;
     ctx.fillRect(0, 0, w, h);
 
     if (!puzzle) {
@@ -982,6 +987,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         drawLabelsNow,
         highlightMatching,
         highlightStyle,
+        hintColorArgb,
         hintIntensity,
         pulseAlpha,
         animateHint,
@@ -1016,6 +1022,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     isPreviewMode,
     isFreeColorMode,
     canvasBgColor,
+    canvasBgArgb,
     regionColorMode,
     showRegionLabels,
     showPreviewLabels,
@@ -1486,6 +1493,7 @@ function renderLabels(
   drawLabelsNow: boolean,
   highlightMatching: boolean,
   highlightStyle: RegionHighlightStyle,
+  hintColorArgb: number,
   hintIntensity: number,
   pulseAlpha: number,
   animateHint: boolean,
@@ -1499,6 +1507,10 @@ function renderLabels(
 ) {
   const drawGlowCircle = highlightStyle === 'CENTROID_GLOW';
   const isNumberOnly = highlightStyle === 'NUMBER_ONLY';
+
+  const hr = (hintColorArgb >> 16) & 0xff;
+  const hg = (hintColorArgb >> 8) & 0xff;
+  const hb = hintColorArgb & 0xff;
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -1541,7 +1553,7 @@ function renderLabels(
       ctx.beginPath();
       const radius = Math.max(8 / effScale, minDim * 0.45);
       ctx.arc(region.centroidX, region.centroidY, radius, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(245, 158, 11, ${alpha})`;
+      ctx.fillStyle = `rgba(${hr}, ${hg}, ${hb}, ${alpha})`;
       ctx.fill();
     }
 
@@ -1574,10 +1586,12 @@ function renderLabels(
 
       if (isNumberOnly && (isActive || isHinted)) {
         const pulseCol = isHinted
-          ? `rgba(245, 158, 11, ${pulseAlpha * 0.9})`
+          ? `rgba(${hr}, ${hg}, ${hb}, ${pulseAlpha * 0.9})`
           : `rgba(251, 191, 36, ${pulseAlpha * 0.85})`;
         ctx.fillStyle = pulseCol;
-      } else if (isActive || isHinted) {
+      } else if (isHinted) {
+        ctx.fillStyle = `rgba(${hr}, ${hg}, ${hb}, 0.35)`;
+      } else if (isActive) {
         ctx.fillStyle = 'rgba(254, 243, 199, 0.92)';
       } else {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.82)';
@@ -1587,8 +1601,9 @@ function renderLabels(
 
     // Label number text
     ctx.font = `600 ${targetTextSize}px "Inter", -apple-system, sans-serif`;
+    const hintTextCol = `rgb(${Math.floor(hr * 0.6)}, ${Math.floor(hg * 0.6)}, ${Math.floor(hb * 0.6)})`;
     ctx.fillStyle = isHinted
-      ? '#b45309'
+      ? hintTextCol
       : isActive
       ? '#d97706'
       : isEffectivePreview

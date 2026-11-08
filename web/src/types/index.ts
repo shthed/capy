@@ -38,7 +38,8 @@ export type LineHandlingMode = 'ABSORB_LINES' | 'UNIFIED_BLACK_REGION';
 export type PaletteDetail = 'AUTO' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CUSTOM';
 export type Difficulty = 'NORMAL' | 'EASY';
 export type PaletteSortOrder = 'NUMBER' | 'REMAINING' | 'HUE' | 'LIGHTNESS';
-export type CanvasBgColor = 'BLACK' | 'DARK_SLATE' | 'CHARCOAL' | 'LIGHT_GRAY' | 'PURE_WHITE';
+export type PresetCanvasBgColor = 'BLACK' | 'DARK_SLATE' | 'CHARCOAL' | 'LIGHT_GRAY' | 'PURE_WHITE';
+export type CanvasBgColor = PresetCanvasBgColor | 'CUSTOM';
 export type RegionColorMode = 'DETAIL' | 'SOLID';
 export type RegionHighlightStyle = 'CENTROID_GLOW' | 'NUMBER_ONLY' | 'FULL_REGION' | 'BOUNDARY_ONLY';
 export type HintFillStyle = 'SOLID' | 'CHECKER' | 'STRIPES';
@@ -158,10 +159,19 @@ export const SAMPLE_GALLERY: SampleArtwork[] = [
   { id: 'snail_guitar', title: 'Snail Guitar', assetPath: 'assets/snail_guitar.webp', category: 'Music' },
 ];
 
-export const CANVAS_BG_MAP: Record<CanvasBgColor, { label: string; hex: string; argb: number }> = {
+export const CANVAS_BG_MAP: Record<PresetCanvasBgColor, { label: string; hex: string; argb: number }> = {
   BLACK: { label: 'Deep Black', hex: '#000000', argb: 0xff000000 },
   DARK_SLATE: { label: 'Dark Slate', hex: '#0f172a', argb: 0xff0f172a },
   CHARCOAL: { label: 'Charcoal', hex: '#18181b', argb: 0xff18181b },
   LIGHT_GRAY: { label: 'Light Gray', hex: '#e2e8f0', argb: 0xffe2e8f0 },
   PURE_WHITE: { label: 'Pure White', hex: '#ffffff', argb: 0xffffffff },
 };
+
+export function argbToHex(argb: number): string {
+  return `#${(argb & 0x00ffffff).toString(16).padStart(6, '0')}`;
+}
+
+export function hexToArgb(hex: string): number {
+  const clean = hex.replace('#', '');
+  return (0xff000000 | parseInt(clean, 16)) >>> 0;
+}
