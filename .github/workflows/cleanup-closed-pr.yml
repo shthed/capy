@@ -17,14 +17,14 @@ concurrency:
 
 jobs:
   cleanup:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Checkout gh-pages branch
         uses: actions/checkout@v7
@@ -42,10 +42,11 @@ jobs:
         if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
 
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          BRANCH_NAME="${HEAD_REF}"
 
           if [ -z "${BRANCH_NAME}" ]; then
             echo "No branch provided; skipping delete."
@@ -62,18 +63,20 @@ jobs:
       - name: Run gh-pages preview cleanup
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
 
           node ./web1/scripts/cleanup-gh-pages-previews.mjs \
             --pages-dir ./gh-pages \
-            --target-pr ${{ github.event.pull_request.number }} \
+            --target-pr "${TARGET_PR}" \
             --ignore-recency
 
       - name: Commit and push gh-pages updates (squashed history)
         id: sync_pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           cd gh-pages
@@ -91,7 +94,7 @@ jobs:
 
           git checkout --orphan gh-pages-squashed
           git add -A
-          git commit -m "Cleanup preview for PR #${{ github.event.pull_request.number }}"
+          git commit -m "Cleanup preview for PR #${PR_NUMBER}"
           git branch -M gh-pages
           git push --force origin gh-pages
           cd ..

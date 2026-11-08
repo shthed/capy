@@ -64,7 +64,9 @@ From the repository root:
 - **Session kick-off**: Run `git fetch --all --prune` and rebase onto `origin/main` before starting work.
 - **Branch naming**: Use short-lived feature branches (`automation/<change>` or `feature/<change>`) and open PRs so CI and preview deployments run automatically.
 - **Unified CI & Branch Deployments ([`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml))**:
-  - Consolidates Web compilation/typecheck (`web`), Android unit tests + debug APK build (`app`), and GitHub Pages deployment (`deploy`) into a unified, high-speed single-runner pipeline (`~45-50s`).
+  - Two-job pipeline separating unprivileged code execution from privileged deployment:
+    - `build` job runs under read-only permissions (`contents: read`), compiling Web (`web/`), running Android unit tests, and assembling debug APK (`app/`). Builds across PRs execute concurrently in parallel without locking.
+    - `deploy` job runs under privileged deployment permissions (`contents: write`, `pages: write`, `id-token: write`, `pull-requests: write`) and acquires the `deploy-pages` concurrency lock to serialize artifact publishing and PR comments.
   - Automatically skips CI builds and deployments when commits exclusively modify documentation (`paths-ignore: ['**.md', 'docs/**', 'notes/**', '.gitignore', 'LICENSE']`), consuming zero runner minutes.
   - `main` deploys `web/dist/` to `/` (`https://shthed.github.io/capy/`) and the Android APK to `/capy.apk` (`https://shthed.github.io/capy/capy.apk`).
   - Open PR branches deploy previews to `/pull/<number>/` and `/pull/<number>/capy.apk`.
