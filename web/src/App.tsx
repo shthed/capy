@@ -1088,11 +1088,9 @@ export const App: React.FC = () => {
         isPreviewMode={isPreviewMode}
         isCompleted={isCompleted}
         isFullscreen={isFullscreen}
-        isFreeColorMode={isFreeColorMode}
         onPickImage={() => fileInputRef.current?.click()}
         onTogglePreview={() => setIsPreviewMode((prev) => !prev)}
         onToggleFullscreen={handleToggleFullscreen}
-        onToggleFreeColorMode={handleToggleFreeColorMode}
         onOpenSettings={() => {
           setSettingsInitialTab(0);
           setShowSettings(true);

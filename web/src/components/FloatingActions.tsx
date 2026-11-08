@@ -28,7 +28,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
     <div
       className="fixed z-20 flex flex-col items-end gap-2.5 transition-all"
       style={{
-        bottom: `calc(${raiseDock ? '5.5rem' : '3.75rem'} + var(--sab, 0px))`,
+        bottom: `calc(${raiseDock ? '6.25rem' : '4.625rem'} + var(--sab, 0px))`,
         right: 'calc(1rem + var(--sar, 0px))',
       }}
     >

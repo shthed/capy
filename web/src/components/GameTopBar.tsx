@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, EyeOff, ImagePlus, Maximize2, Minimize2, Paintbrush, Settings } from 'lucide-react';
+import { Eye, EyeOff, ImagePlus, Maximize2, Minimize2, Settings } from 'lucide-react';
 
 interface GameTopBarProps {
   activeTitle?: string | null;
@@ -7,11 +7,9 @@ interface GameTopBarProps {
   isPreviewMode: boolean;
   isCompleted: boolean;
   isFullscreen?: boolean;
-  isFreeColorMode?: boolean;
   onPickImage: () => void;
   onTogglePreview: () => void;
   onToggleFullscreen?: () => void;
-  onToggleFreeColorMode?: () => void;
   onOpenSettings: () => void;
   onOpenSaves: () => void;
 }
@@ -22,52 +20,22 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
   isPreviewMode,
   isCompleted,
   isFullscreen,
-  isFreeColorMode = false,
   onPickImage,
   onTogglePreview,
   onToggleFullscreen,
-  onToggleFreeColorMode,
   onOpenSettings,
   onOpenSaves,
 }) => {
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-30 pointer-events-none px-3 pb-3 safe-top flex justify-end items-center"
+      className="fixed top-0 left-0 right-0 z-30 pointer-events-none px-3 pb-3 safe-top flex justify-between items-center"
       style={{
         paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
         paddingRight: 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
       }}
     >
-      <div className="pointer-events-auto flex items-center gap-2">
-        {/* Toggle Free Colour Mode Button */}
-        {onToggleFreeColorMode && (
-          <button
-            type="button"
-            onClick={onToggleFreeColorMode}
-            title={
-              isFreeColorMode
-                ? 'Free Colour Mode is ON (Click to switch to By Number)'
-                : 'Color by Number is ON (Click to switch to Free Colour)'
-            }
-            aria-label={
-              isFreeColorMode
-                ? 'Switch to Color by Number'
-                : 'Switch to Free Colour Mode'
-            }
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold shadow-lg backdrop-blur-md border transition-all active:scale-95 ${
-              isFreeColorMode
-                ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 shadow-amber-500/20'
-                : 'bg-slate-900/80 text-slate-300 border-slate-700/60 hover:bg-slate-800/80 hover:text-white'
-            }`}
-          >
-            <Paintbrush size={14} />
-            <span className="hidden sm:inline">
-              {isFreeColorMode ? 'Free Colour' : 'By Number'}
-            </span>
-          </button>
-        )}
-
-        {/* Progress % / Title Pill */}
+      {/* Top Left: Progress % / Title Pill */}
+      <div className="pointer-events-auto">
         <button
           type="button"
           onClick={onOpenSaves}
@@ -79,14 +47,17 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
           }`}
         >
           {activeTitle ? (
-            <span className="truncate max-w-[120px]">{activeTitle}</span>
+            <span className="truncate max-w-[120px] sm:max-w-[200px]">{activeTitle}</span>
           ) : (
             <span>Capy</span>
           )}
           <span>•</span>
           <span>{progressPercentage}%</span>
         </button>
+      </div>
 
+      {/* Top Right: Actions */}
+      <div className="pointer-events-auto flex items-center gap-2">
         {/* Toggle Preview Button */}
         <button
           type="button"
