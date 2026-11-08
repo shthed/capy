@@ -434,13 +434,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     },
                     {
                       key: 'showZoomButtons' as const,
-                      label: 'Show Zoom In (+) Button',
-                      desc: 'Floating zoom in button in the bottom right',
+                      label: 'Show Zoom (+ / -) Buttons',
+                      desc: 'Floating zoom in and out buttons in the bottom right',
                     },
                     {
-                      key: 'showZoomOutButton' as const,
-                      label: 'Show Zoom Out (-) Button',
-                      desc: 'Floating zoom out button (disabled by default)',
+                      key: 'showResetViewButton' as const,
+                      label: 'Show Reset View (Extent) Button',
+                      desc: 'Floating button with diagonal arrows to fit puzzle to screen (disabled by default)',
                     },
                     {
                       key: 'hapticsEnabled' as const,

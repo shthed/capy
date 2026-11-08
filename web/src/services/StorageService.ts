@@ -32,7 +32,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   hintIntensity: 0.65,
   labelScale: 1.0,
   showZoomButtons: false,
-  showZoomOutButton: false,
+  showResetViewButton: false,
   paletteSort: 'NUMBER',
   prioritizeOnScreen: true,
   hapticsEnabled: true,

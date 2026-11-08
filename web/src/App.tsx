@@ -1149,7 +1149,7 @@ export const App: React.FC = () => {
         <FloatingActions
           isPaintMode={settings.isPaintMode}
           showZoomButtons={settings.showZoomButtons}
-          showZoomOutButton={settings.showZoomOutButton}
+          showResetViewButton={settings.showResetViewButton}
           raiseDock={settings.raisePaletteDock}
           isZoomedOrPanned={isCanvasTransformed}
           activeColor={puzzle.palette.find((c) => c.id === activeColorId) || null}
