@@ -209,6 +209,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const borderG = Math.floor(g * 0.72);
       const borderB = Math.floor(b * 0.72);
 
+      const isColoring = Boolean(isFreeColor || puzzleData.isFreeColor);
       const pixels = region.pixels;
       for (let i = 0; i < pixels.length; i++) {
         const pIndex = pixels[i];
@@ -216,12 +217,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         const isBorder = borderMap[pIndex] === 1;
 
         if (isFilled) {
-          if (isBorder) {
+          if (isColoring) {
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = 255;
+          } else if (isBorder) {
             data[idx] = borderR;
             data[idx + 1] = borderG;
             data[idx + 2] = borderB;
             data[idx + 3] = 255;
-          } else if (isDetailMode && !isFreeColor && srcPixels) {
+          } else if (isDetailMode && srcPixels) {
             data[idx] = srcPixels[idx];
             data[idx + 1] = srcPixels[idx + 1];
             data[idx + 2] = srcPixels[idx + 2];
@@ -233,7 +239,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
             data[idx + 3] = 255;
           }
         } else {
-          if (isBorder) {
+          if (isColoring) {
+            data[idx] = 255;
+            data[idx + 1] = 255;
+            data[idx + 2] = 255;
+            data[idx + 3] = 255;
+          } else if (isBorder) {
             data[idx] = 51;
             data[idx + 1] = 65;
             data[idx + 2] = 85;
@@ -305,6 +316,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const srcPixels = sourcePixelsRef.current;
       const total = width * height;
 
+      const isColoring = Boolean(isFreeColorMode || puzzle.isFreeColor);
       // Initialize background & unfilled pixels
       for (let i = 0; i < total; i++) {
         const rId = regionMap[i];
@@ -316,12 +328,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           const reg = regMap.get(rId);
           const targetColorId = reg ? (paintedRegionColors?.get(rId) ?? reg.colorId) : undefined;
           const col = targetColorId !== undefined ? palMap.get(targetColorId) : undefined;
-          if (isBorder) {
+          if (isColoring) {
+            data[idx] = col ? col.r : 255;
+            data[idx + 1] = col ? col.g : 255;
+            data[idx + 2] = col ? col.b : 255;
+            data[idx + 3] = 255;
+          } else if (isBorder) {
             data[idx] = col ? Math.floor(col.r * 0.72) : 71;
             data[idx + 1] = col ? Math.floor(col.g * 0.72) : 85;
             data[idx + 2] = col ? Math.floor(col.b * 0.72) : 105;
             data[idx + 3] = 255;
-          } else if (isDetailMode && !isFreeColorMode && srcPixels) {
+          } else if (isDetailMode && srcPixels) {
             data[idx] = srcPixels[idx];
             data[idx + 1] = srcPixels[idx + 1];
             data[idx + 2] = srcPixels[idx + 2];
@@ -333,7 +350,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
             data[idx + 3] = 255;
           }
         } else {
-          if (isBorder) {
+          if (isColoring) {
+            data[idx] = 255;
+            data[idx + 1] = 255;
+            data[idx + 2] = 255;
+            data[idx + 3] = 255;
+          } else if (isBorder) {
             data[idx] = 51;
             data[idx + 1] = 65;
             data[idx + 2] = 85;
@@ -785,6 +807,20 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           ? Math.min(1, Math.max(0.05, pulseAlpha * hintIntensity))
           : Math.min(1, Math.max(0.05, hintIntensity * 0.78));
         ctx.drawImage(highlightCanvasRef.current, 0, 0);
+        ctx.restore();
+      }
+
+      // 3. For coloring book / free color mode: composite authentic ink artwork on top with multiply blend!
+      const isColoring = Boolean(isFreeColorMode || puzzle.isFreeColor);
+      if (
+        isColoring &&
+        sourceImage &&
+        sourceImage.complete &&
+        (sourceImage.naturalWidth > 0 || sourceImage.width > 0)
+      ) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
         ctx.restore();
       }
     }

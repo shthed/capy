@@ -219,8 +219,12 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
     }
 
     // 4. Line-aware segmentation with region color recalibration and strict maxRegions
-    const minArea = Math.max(16, config.minRegionArea || 48);
-    const maxRegs = Math.max(30, config.maxRegions || 200);
+    const minArea = isBwColoring
+      ? Math.max(10, config.minRegionArea || 12)
+      : Math.max(16, config.minRegionArea || 48);
+    const maxRegs = isBwColoring
+      ? Math.max(1600, config.maxRegions || 800)
+      : Math.max(30, config.maxRegions || 200);
     const lineHandling = config.lineHandling || 'ABSORB_LINES';
 
     const segmentation = RegionSegmenter.segment(

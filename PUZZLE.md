@@ -153,15 +153,22 @@ When small regions (such as red mushrooms, bright berries, or flowers) sit insid
 ### 4.5 Free Colour Mode & Black & White Coloring Book Segmentation
 When opening black and white line art or coloring book pages (such as coloring sheets, ink sketches, or line drawings):
 1. **Black & White Detection**: `ImageAnalyzer` evaluates pixel saturation and color diversity. If colored pixels make up $< 8\%$ of the image, `isBlackAndWhite` is flagged.
-2. **Dynamic Inked Line Ratio Ceiling**: `LineArtExtractor` accommodates high-density line drawings with an expanded line coverage threshold (up to 35% line pixels) so detailed coloring book drawings are cleanly categorized as `LINE_ART` rather than being misclassified as noisy photos.
-3. **Graph Coloring Cell Assignment**: Pure black and white images lack interior color information. The generator dynamically produces a vibrant 20-color curated starter palette and performs balanced greedy graph coloring so touching regions receive distinct, non-clashing colors when viewed in "By Number" mode.
-4. **Free Colour Painting Engine**: When Free Colour Mode is active:
+2. **Adaptive Otsu Line Extraction for Paper Drawings**:
+   * Evaluates paper background luminance ratio ($\ge 45\%$ pixels with luminance $\ge 190$).
+   * For paper drawings, computes Otsu's optimal inter-class variance threshold ($\tau_{\text{eff}} = \min(125, \max(85, \lfloor 0.75 \times \text{Otsu} \rfloor))$) and expands gradient edge luminance limits. This reliably captures faint, pencil, or anti-aliased ink strokes across the entire canvas (including lighter upper regions) without clipping strokes.
+   * Accommodates high-density line drawings with an expanded line coverage threshold (up to 35% line pixels) so detailed coloring book drawings are cleanly categorized as `LINE_ART`.
+3. **Natural Cell Preservation**:
+   * For coloring pages, region count caps are relaxed (`maxRegs` up to 2,000, `minArea = 10`) so intricate closed cells (e.g. mushroom spots, leaf veins, grass blades) are preserved as distinct paintable regions rather than being merged into adjacent background areas.
+4. **Graph Coloring Cell Assignment**: Pure black and white images lack interior color information. The generator dynamically produces a vibrant 20-color curated starter palette and performs balanced greedy graph coloring so touching regions receive distinct, non-clashing colors when viewed in "By Number" mode.
+5. **Free Colour Painting Engine**: When Free Colour Mode is active:
    * Players can tap or drag with any selected color swatch to fill any region freely.
    * Regions can be repainted at any time with different colors without penalty.
    * Custom colors can be added on the fly via the palette color picker (`+` button).
    * Color swatches can be individually edited or swapped using curated theme presets (Vibrant Classic, Mushroom Fantasy, Pastel Dreams, Earthy Nature, Neon Pop).
    * Region number labels are hidden by default for a clean coloring book experience.
-5. **Multiply Composite Export**: When rendering previews or exporting high-resolution artwork, custom painted colors are rendered underneath the original source ink strokes using `multiply` blend mode, preserving crisp black line outlines.
+6. **Multiply Composite Canvas Rendering**:
+   * During both active gameplay (`PuzzleCanvas.tsx`) and high-resolution export, the authentic source image is composited on top of the user's painted fills using `ctx.globalCompositeOperation = 'multiply'`.
+   * White paper in the source image leaves underlying colors 100% vibrant, while ink outlines, pen textures, and cross-hatching multiply to produce perfectly sharp, continuous, original artist black outlines over the entire canvas.
 
 ---
 

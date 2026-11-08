@@ -21,30 +21,75 @@ export class LineArtExtractor {
     rgbaData: Uint8ClampedArray | Uint8Array,
     width: number,
     height: number,
-    darkThreshold: number = 35,
-    maxStrokeRadius: number = 3
+    darkThreshold?: number,
+    maxStrokeRadius?: number
   ): LineArtAnalysis {
     const total = width * height;
     const lum = new Uint8Array(total);
+    const hist = new Int32Array(256);
+    let brightCount = 0;
 
-    // 1. Calculate luminance map
+    // 1. Calculate luminance map and histogram
     for (let i = 0; i < total; i++) {
       const idx = i * 4;
       const r = rgbaData[idx];
       const g = rgbaData[idx + 1];
       const b = rgbaData[idx + 2];
-      lum[i] = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+      const l = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+      lum[i] = l;
+      hist[l]++;
+      if (l >= 190) brightCount++;
+    }
+
+    const brightRatio = brightCount / total;
+    const isPaperDrawing = brightRatio >= 0.45;
+
+    let effectiveThreshold = darkThreshold;
+    let effectiveMaxRadius = maxStrokeRadius;
+
+    if (effectiveThreshold === undefined) {
+      if (isPaperDrawing) {
+        // Calculate Otsu threshold on bright paper drawing (separating dark ink from white paper)
+        let sumT = 0;
+        for (let i = 0; i < 256; i++) sumT += i * hist[i];
+        let weightBg = 0;
+        let sumBg = 0;
+        let currentMax = 0;
+        let otsu = 128;
+        for (let i = 0; i < 256; i++) {
+          weightBg += hist[i];
+          if (weightBg === 0) continue;
+          const weightFg = total - weightBg;
+          if (weightFg === 0) break;
+          sumBg += i * hist[i];
+          const meanBg = sumBg / weightBg;
+          const meanFg = (sumT - sumBg) / weightFg;
+          const varBetween = weightBg * weightFg * ((meanBg - meanFg) * (meanBg - meanFg));
+          if (varBetween > currentMax) {
+            currentMax = varBetween;
+            otsu = i;
+          }
+        }
+        effectiveThreshold = Math.min(125, Math.max(85, Math.round(otsu * 0.75)));
+        effectiveMaxRadius = effectiveMaxRadius ?? 16;
+      } else {
+        effectiveThreshold = 35;
+        effectiveMaxRadius = effectiveMaxRadius ?? 3;
+      }
+    } else {
+      effectiveMaxRadius = effectiveMaxRadius ?? (isPaperDrawing ? 16 : 3);
     }
 
     // 2. Identify candidate dark pixels
     const isDark = new Uint8Array(total);
     for (let i = 0; i < total; i++) {
-      if (lum[i] <= darkThreshold) {
+      if (lum[i] <= effectiveThreshold) {
         isDark[i] = 1;
       }
     }
 
     // Also include anti-aliased edges (moderately dark + sharp local gradient)
+    const edgeLuminanceLimit = isPaperDrawing ? Math.min(160, effectiveThreshold + 40) : 55;
     for (let y = 1; y < height - 1; y++) {
       const row = y * width;
       for (let x = 1; x < width - 1; x++) {
@@ -52,7 +97,7 @@ export class LineArtExtractor {
         if (isDark[idx] === 1) continue;
 
         const l = lum[idx];
-        if (l <= 55) {
+        if (l <= edgeLuminanceLimit) {
           const gx =
             lum[idx - width + 1] + 2 * lum[idx + 1] + lum[idx + width + 1] -
             (lum[idx - width - 1] + 2 * lum[idx - 1] + lum[idx + width - 1]);
@@ -68,57 +113,65 @@ export class LineArtExtractor {
       }
     }
 
-    // 3. Distance transform from non-dark pixels to measure stroke thickness.
-    // Real drawn outlines have stroke radius <= maxStrokeRadius (1 to 3 px).
-    // Solid dark areas (like dark patches, black hair, shadows) have radius > 4 px.
-    const strokeDist = new Int32Array(total);
-    strokeDist.fill(999);
-    const queue = new Int32Array(total);
-    let head = 0;
-    let tail = 0;
-
-    for (let y = 0; y < height; y++) {
-      const row = y * width;
-      for (let x = 0; x < width; x++) {
-        const idx = row + x;
-        if (isDark[idx] === 0) {
-          strokeDist[idx] = 0;
-          queue[tail++] = idx;
-        }
-      }
-    }
-
-    while (head < tail) {
-      const curr = queue[head++];
-      const d = strokeDist[curr];
-      const cx = curr % width;
-      const cy = Math.floor(curr / width);
-
-      const neighbors = [
-        cx > 0 ? curr - 1 : -1,
-        cx < width - 1 ? curr + 1 : -1,
-        cy > 0 ? curr - width : -1,
-        cy < height - 1 ? curr + width : -1,
-      ];
-
-      for (const n of neighbors) {
-        if (n >= 0 && strokeDist[n] > d + 1) {
-          strokeDist[n] = d + 1;
-          if (d + 1 <= maxStrokeRadius + 1) {
-            queue[tail++] = n;
-          }
-        }
-      }
-    }
-
-    // 4. Thin line strokes: dark pixels with distance from non-dark <= maxStrokeRadius
+    // 3. Line mask generation
     const cleanLineMask = new Uint8Array(total);
     let linePixelCount = 0;
 
-    for (let i = 0; i < total; i++) {
-      if (isDark[i] === 1 && strokeDist[i] >= 1 && strokeDist[i] <= maxStrokeRadius) {
-        cleanLineMask[i] = 1;
-        linePixelCount++;
+    if (isPaperDrawing) {
+      // In drawings on white paper, all dark ink strokes are genuine line boundaries
+      for (let i = 0; i < total; i++) {
+        if (isDark[i] === 1) {
+          cleanLineMask[i] = 1;
+          linePixelCount++;
+        }
+      }
+    } else {
+      // Distance transform from non-dark pixels to measure stroke thickness (filters massive dark patches in photos)
+      const strokeDist = new Int32Array(total);
+      strokeDist.fill(999);
+      const queue = new Int32Array(total);
+      let head = 0;
+      let tail = 0;
+
+      for (let y = 0; y < height; y++) {
+        const row = y * width;
+        for (let x = 0; x < width; x++) {
+          const idx = row + x;
+          if (isDark[idx] === 0) {
+            strokeDist[idx] = 0;
+            queue[tail++] = idx;
+          }
+        }
+      }
+
+      while (head < tail) {
+        const curr = queue[head++];
+        const d = strokeDist[curr];
+        const cx = curr % width;
+        const cy = Math.floor(curr / width);
+
+        const neighbors = [
+          cx > 0 ? curr - 1 : -1,
+          cx < width - 1 ? curr + 1 : -1,
+          cy > 0 ? curr - width : -1,
+          cy < height - 1 ? curr + width : -1,
+        ];
+
+        for (const n of neighbors) {
+          if (n >= 0 && strokeDist[n] > d + 1) {
+            strokeDist[n] = d + 1;
+            if (d + 1 <= effectiveMaxRadius + 1) {
+              queue[tail++] = n;
+            }
+          }
+        }
+      }
+
+      for (let i = 0; i < total; i++) {
+        if (isDark[i] === 1 && strokeDist[i] >= 1 && strokeDist[i] <= effectiveMaxRadius) {
+          cleanLineMask[i] = 1;
+          linePixelCount++;
+        }
       }
     }
 
