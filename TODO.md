@@ -14,7 +14,7 @@ For target-specific deep dives, see also:
 
 ---
 
-## 🧹 Immediate Post-Merge Cleanup
+## Immediate Post-Merge Cleanup
 
 - [ ] **Archive or Delete Redundant Secondary Repositories**:
   - Archive or delete `shthed/capy-g`, `shthed/capy-g2`, `shthed/capy-web`, and `shthed/capyg` on GitHub now that all active code and history are unified in `shthed/capy`.
@@ -22,7 +22,7 @@ For target-specific deep dives, see also:
 
 ---
 
-## 🔗 Milestone 2: Cross-App UX & Asset Optimization
+## Milestone 2: Cross-App UX and Asset Optimization
 
 - [ ] **Cross-Link Web, Legacy Web1 & Android APK in UI**:
   - Add links in `web/src/components/SettingsModal.tsx` (and `web1/index.html`) allowing players to switch between the Updated Web App (`/`), Legacy Web v1 (`/web1/`), and direct Android APK download (`capy.apk`).
@@ -31,7 +31,8 @@ For target-specific deep dives, see also:
 
 ---
 
-## 📱 Milestone 3: Android Release Build & Multi-Platform Packaging
+## Milestone 3: Android Release Build and Multi-Platform Packaging
+
 
 - [ ] **R8 Minified Release APK Build (`app/`)**:
   - Configure `isMinifyEnabled = true` and `isShrinkResources = true` in [`app/build.gradle.kts`](./app/build.gradle.kts) with release signing configuration so `capy.apk` shrinks to ~3–5 MB.
