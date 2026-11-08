@@ -47,6 +47,7 @@ object SampleGallery {
         SampleArtwork("capybara_sample", "Capybara", "capybara.webp", "Animals"),
         SampleArtwork("capy_forest", "Capy Forest", "capy_forest.webp", "Nature"),
         SampleArtwork("snail_guitar", "Snail Guitar", "snail_guitar.webp", "Music"),
+        SampleArtwork("mushrooms", "Mushroom Forest", "mushrooms.webp", "Coloring"),
     )
 }
 

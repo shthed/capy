@@ -19,6 +19,8 @@ interface PuzzleCanvasProps {
   hintRegionId: number | null;
   isPreviewMode: boolean;
   isPaintMode: boolean;
+  isFreeColorMode?: boolean;
+  paintedRegionColors?: Map<number, number>;
   canvasBgColor: CanvasBgColor;
   canvasBgArgb: number;
   sortOrder: PaletteSortOrder;
@@ -57,6 +59,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   hintRegionId,
   isPreviewMode,
   isPaintMode,
+  isFreeColorMode = false,
+  paintedRegionColors,
   canvasBgColor,
   regionColorMode,
   showRegionLabels,
@@ -97,6 +101,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const lastBasePuzzleRef = useRef<PuzzleData | null>(null);
   const lastBaseModeRef = useRef<RegionColorMode | null>(null);
   const lastBaseImageRef = useRef<HTMLImageElement | null>(null);
+  const lastBaseFreeColorRef = useRef<boolean>(false);
+  const prevColorsRef = useRef<Map<number, number>>(new Map());
 
   const highlightCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const hasHighlightPixelsRef = useRef<boolean>(false);
@@ -189,10 +195,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       isFilled: boolean,
       isDetailMode: boolean,
       srcPixels: Uint8ClampedArray | null,
-      paletteMap: Map<number, PaletteColor>
+      paletteMap: Map<number, PaletteColor>,
+      customColors?: Map<number, number>,
+      isFreeColor?: boolean
     ) => {
       const { borderMap } = puzzleData;
-      const col = paletteMap.get(region.colorId);
+      const targetColorId = customColors?.get(region.id) ?? region.colorId;
+      const col = paletteMap.get(targetColorId);
       const r = col?.r ?? 71;
       const g = col?.g ?? 85;
       const b = col?.b ?? 105;
@@ -212,7 +221,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
             data[idx + 1] = borderG;
             data[idx + 2] = borderB;
             data[idx + 3] = 255;
-          } else if (isDetailMode && srcPixels) {
+          } else if (isDetailMode && !isFreeColor && srcPixels) {
             data[idx] = srcPixels[idx];
             data[idx + 1] = srcPixels[idx + 1];
             data[idx + 2] = srcPixels[idx + 2];
@@ -257,6 +266,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       lastBasePuzzleRef.current !== puzzle ||
       lastBaseModeRef.current !== regionColorMode ||
       lastBaseImageRef.current !== sourceImage ||
+      lastBaseFreeColorRef.current !== isFreeColorMode ||
       !baseCanvasRef.current ||
       !baseImageDataRef.current;
 
@@ -304,13 +314,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
         if (isFilled) {
           const reg = regMap.get(rId);
-          const col = reg ? palMap.get(reg.colorId) : undefined;
+          const targetColorId = reg ? (paintedRegionColors?.get(rId) ?? reg.colorId) : undefined;
+          const col = targetColorId !== undefined ? palMap.get(targetColorId) : undefined;
           if (isBorder) {
             data[idx] = col ? Math.floor(col.r * 0.72) : 71;
             data[idx + 1] = col ? Math.floor(col.g * 0.72) : 85;
             data[idx + 2] = col ? Math.floor(col.b * 0.72) : 105;
             data[idx + 3] = 255;
-          } else if (isDetailMode && srcPixels) {
+          } else if (isDetailMode && !isFreeColorMode && srcPixels) {
             data[idx] = srcPixels[idx];
             data[idx + 1] = srcPixels[idx + 1];
             data[idx + 2] = srcPixels[idx + 2];
@@ -339,14 +350,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       baseCtx.putImageData(imgData, 0, 0);
       baseImageDataRef.current = imgData;
       paintedCacheRef.current = new Set(filledRegionIds);
+      prevColorsRef.current = new Map(paintedRegionColors || []);
       lastBasePuzzleRef.current = puzzle;
       lastBaseModeRef.current = regionColorMode;
       lastBaseImageRef.current = sourceImage;
+      lastBaseFreeColorRef.current = isFreeColorMode;
       return;
     }
 
-    // Incremental update: only repaint regions whose filled status changed!
+    // Incremental update: repaint regions whose filled status or painted color changed!
     const prevPainted = paintedCacheRef.current;
+    const prevColors = prevColorsRef.current;
     const baseCtx = baseCanvasRef.current!.getContext('2d')!;
     const imgData = baseImageDataRef.current!;
     const data = imgData.data;
@@ -359,12 +373,26 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     let maxDirtyX = -1;
     let maxDirtyY = -1;
 
-    // Check newly filled regions
+    // Check newly filled or repainted regions
     for (const rId of filledRegionIds) {
-      if (!prevPainted.has(rId)) {
+      const curCol = paintedRegionColors?.get(rId);
+      const prevCol = prevColors.get(rId);
+      const colorChanged = curCol !== undefined && curCol !== prevCol;
+
+      if (!prevPainted.has(rId) || colorChanged) {
         const reg = regMap.get(rId);
         if (reg) {
-          writeRegionToImageData(data, puzzle, reg, true, isDetailMode, srcPixels, palMap);
+          writeRegionToImageData(
+            data,
+            puzzle,
+            reg,
+            true,
+            isDetailMode,
+            srcPixels,
+            palMap,
+            paintedRegionColors,
+            isFreeColorMode
+          );
           if (reg.minX < minDirtyX) minDirtyX = reg.minX;
           if (reg.minY < minDirtyY) minDirtyY = reg.minY;
           if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
@@ -378,7 +406,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       if (!filledRegionIds.has(rId)) {
         const reg = regMap.get(rId);
         if (reg) {
-          writeRegionToImageData(data, puzzle, reg, false, isDetailMode, srcPixels, palMap);
+          writeRegionToImageData(
+            data,
+            puzzle,
+            reg,
+            false,
+            isDetailMode,
+            srcPixels,
+            palMap,
+            paintedRegionColors,
+            isFreeColorMode
+          );
           if (reg.minX < minDirtyX) minDirtyX = reg.minX;
           if (reg.minY < minDirtyY) minDirtyY = reg.minY;
           if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
@@ -400,7 +438,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
 
     paintedCacheRef.current = new Set(filledRegionIds);
-  }, [puzzle, sourceImage, regionColorMode, filledRegionIds, writeRegionToImageData]);
+    prevColorsRef.current = new Map(paintedRegionColors || []);
+    lastBaseFreeColorRef.current = isFreeColorMode;
+  }, [puzzle, sourceImage, regionColorMode, filledRegionIds, paintedRegionColors, isFreeColorMode, writeRegionToImageData]);
 
   // 2. Update Offscreen Highlight Layer (Only rebuilt when activeColorId/hintRegionId/style changes)
   useEffect(() => {
@@ -752,6 +792,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     // 3. Draw Visible Number Labels & Centroid Glows
     const drawLabelsNow = isEffectivePreview
       ? showRegionLabels && showPreviewLabels
+      : isFreeColorMode
+      ? false
       : showRegionLabels;
 
     if (drawLabelsNow || highlightMatching || hintRegionId !== null) {
@@ -802,6 +844,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     filledRegionIds,
     hintRegionId,
     isPreviewMode,
+    isFreeColorMode,
     canvasBgColor,
     regionColorMode,
     showRegionLabels,

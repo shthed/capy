@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import confetti from 'canvas-confetti';
 import {
   GeneratorConfig,
+  PaletteColor,
+  PalettePreset,
   PaletteSortOrder,
   PuzzleData,
   SAMPLE_GALLERY,
@@ -32,6 +34,7 @@ export const App: React.FC = () => {
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
   const [activeColorId, setActiveColorId] = useState<number>(1);
   const [filledRegionIds, setFilledRegionIds] = useState<Set<number>>(new Set());
+  const [paintedRegionColors, setPaintedRegionColors] = useState<Map<number, number>>(new Map());
   const [hintRegionId, setHintRegionId] = useState<number | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
   const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
@@ -120,37 +123,82 @@ export const App: React.FC = () => {
 
   // Generate thumbnail data URL
   const generatePreviewDataUrl = useCallback(
-    (puzzleData: PuzzleData, sourceImg: HTMLImageElement, filledSet: Set<number>): string => {
+    (
+      puzzleData: PuzzleData,
+      sourceImg: HTMLImageElement,
+      filledSet: Set<number>,
+      customColors?: Map<number, number>
+    ): string => {
       const canvas = document.createElement('canvas');
       canvas.width = Math.min(240, puzzleData.width);
       canvas.height = Math.min(240, puzzleData.height);
       const ctx = canvas.getContext('2d');
       if (!ctx) return '';
 
-      // Draw scaled source image
-      ctx.drawImage(sourceImg, 0, 0, canvas.width, canvas.height);
+      const paletteMap = new Map<number, PaletteColor>(
+        puzzleData.palette.map((c) => [c.id, c])
+      );
 
-      // Mask unfilled regions with translucent white if not completely filled
-      if (filledSet.size < puzzleData.regions.length) {
-        const maskCanvas = document.createElement('canvas');
-        maskCanvas.width = puzzleData.width;
-        maskCanvas.height = puzzleData.height;
-        const mCtx = maskCanvas.getContext('2d');
-        if (mCtx) {
-          const imgData = mCtx.createImageData(puzzleData.width, puzzleData.height);
+      if (puzzleData.isFreeColor || (customColors && customColors.size > 0)) {
+        // Free colour / coloring page rendering: render filled regions and blend line art
+        const fullCanvas = document.createElement('canvas');
+        fullCanvas.width = puzzleData.width;
+        fullCanvas.height = puzzleData.height;
+        const fCtx = fullCanvas.getContext('2d');
+        if (fCtx) {
+          const imgData = fCtx.createImageData(puzzleData.width, puzzleData.height);
           const data = imgData.data;
-          for (let i = 0; i < puzzleData.width * puzzleData.height; i++) {
-            const rId = puzzleData.regionMap[i];
-            if (!filledSet.has(rId)) {
-              const idx = i * 4;
-              data[idx] = 248;
-              data[idx + 1] = 250;
-              data[idx + 2] = 252;
-              data[idx + 3] = 230;
+          data.fill(255);
+
+          for (const region of puzzleData.regions) {
+            if (filledSet.has(region.id)) {
+              const colId = customColors?.get(region.id) ?? region.colorId;
+              const col = paletteMap.get(colId);
+              const r = col?.r ?? 71;
+              const g = col?.g ?? 85;
+              const b = col?.b ?? 105;
+              for (let i = 0; i < region.pixels.length; i++) {
+                const idx = region.pixels[i] * 4;
+                data[idx] = r;
+                data[idx + 1] = g;
+                data[idx + 2] = b;
+                data[idx + 3] = 255;
+              }
             }
           }
-          mCtx.putImageData(imgData, 0, 0);
-          ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
+          fCtx.putImageData(imgData, 0, 0);
+          fCtx.globalCompositeOperation = 'multiply';
+          fCtx.drawImage(sourceImg, 0, 0);
+          fCtx.globalCompositeOperation = 'source-over';
+
+          ctx.drawImage(fullCanvas, 0, 0, canvas.width, canvas.height);
+        }
+      } else {
+        // Standard photo rendering
+        ctx.drawImage(sourceImg, 0, 0, canvas.width, canvas.height);
+
+        // Mask unfilled regions with translucent white if not completely filled
+        if (filledSet.size < puzzleData.regions.length) {
+          const maskCanvas = document.createElement('canvas');
+          maskCanvas.width = puzzleData.width;
+          maskCanvas.height = puzzleData.height;
+          const mCtx = maskCanvas.getContext('2d');
+          if (mCtx) {
+            const imgData = mCtx.createImageData(puzzleData.width, puzzleData.height);
+            const data = imgData.data;
+            for (let i = 0; i < puzzleData.width * puzzleData.height; i++) {
+              const rId = puzzleData.regionMap[i];
+              if (!filledSet.has(rId)) {
+                const idx = i * 4;
+                data[idx] = 248;
+                data[idx + 1] = 250;
+                data[idx + 2] = 252;
+                data[idx + 3] = 230;
+              }
+            }
+            mCtx.putImageData(imgData, 0, 0);
+            ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
+          }
         }
       }
 
@@ -227,6 +275,11 @@ export const App: React.FC = () => {
           setSourceImage(img);
           setPuzzle(puzzleData);
           setFilledRegionIds(initialFilledRegionIds);
+          setPaintedRegionColors(new Map());
+
+          if (puzzleData.isFreeColor) {
+            handleUpdateSettings({ ...settings, isFreeColorMode: true });
+          }
 
           // Defensively find the first available color that actually has uncompleted regions
           const availableColors = getVisiblePalette(
@@ -253,7 +306,10 @@ export const App: React.FC = () => {
             1.0,
             0,
             0,
-            previewUrl
+            previewUrl,
+            undefined,
+            puzzleData.palette,
+            puzzleData.isFreeColor
           );
           setSnapshots(finalizedSnapshots);
 
@@ -265,6 +321,8 @@ export const App: React.FC = () => {
             activeSnapshotId: snapId,
             activeColorId: targetColor,
             filledRegionIds: Array.from(initialFilledRegionIds),
+            paintedRegionColors: {},
+            isFreeColorMode: Boolean(puzzleData.isFreeColor),
             zoomScale: 1.0,
             panOffsetX: 0,
             panOffsetY: 0,
@@ -319,6 +377,19 @@ export const App: React.FC = () => {
                 activeState.activeColorId && availableColors.some((c) => c.id === activeState.activeColorId)
                   ? activeState.activeColorId
                   : availableColors[0]?.id || cachedPuzzle.palette[0]?.id || 1;
+              if (snap.customPalette && snap.customPalette.length > 0) {
+                cachedPuzzle.palette = snap.customPalette;
+              }
+              if (snap.paintedRegionColors) {
+                setPaintedRegionColors(new Map(Object.entries(snap.paintedRegionColors).map(([k, v]) => [Number(k), v])));
+              } else if (activeState.paintedRegionColors) {
+                setPaintedRegionColors(new Map(Object.entries(activeState.paintedRegionColors).map(([k, v]) => [Number(k), v])));
+              }
+              if (activeState.isFreeColorMode !== undefined) {
+                setSettings((prev) => ({ ...prev, isFreeColorMode: Boolean(activeState.isFreeColorMode) }));
+              } else if (snap.isFreeColor || cachedPuzzle.isFreeColor) {
+                setSettings((prev) => ({ ...prev, isFreeColorMode: true }));
+              }
               setSourceImage(img);
               setPuzzle(cachedPuzzle);
               setActiveSnapshotId(snap.id);
@@ -377,12 +448,81 @@ export const App: React.FC = () => {
     return getDisplayNumberMap(puzzle.palette, puzzle.regions, settings.paletteSort);
   }, [puzzle, settings.paletteSort]);
 
+  // Free colour mode indicator
+  const isFreeColorMode = Boolean(settings.isFreeColorMode);
+
+  const handleToggleFreeColorMode = useCallback(() => {
+    const nextMode = !settings.isFreeColorMode;
+    handleUpdateSettings({ ...settings, isFreeColorMode: nextMode });
+    NativeBridge.haptic('tick', settings.hapticsEnabled);
+  }, [settings]);
+
   // Handle single region coloring
   const attemptFillRegion = useCallback(
     (regionId: number) => {
       if (!puzzle) return;
       const region = puzzle.regions.find((r) => r.id === regionId);
-      if (!region || filledRegionIds.has(regionId)) return;
+      if (!region) return;
+
+      if (isFreeColorMode) {
+        const currentPaintedColor = paintedRegionColors.get(regionId);
+        if (currentPaintedColor === activeColorId) return;
+
+        const nextPainted = new Map(paintedRegionColors);
+        nextPainted.set(regionId, activeColorId);
+        setPaintedRegionColors(nextPainted);
+
+        const nextFilled = new Set(filledRegionIds);
+        nextFilled.add(regionId);
+        setFilledRegionIds(nextFilled);
+        setHintRegionId(null);
+
+        NativeBridge.haptic('tick', settings.hapticsEnabled);
+
+        const isComplete = nextFilled.size >= puzzle.regions.length;
+        if (isComplete) {
+          NativeBridge.haptic('success', settings.hapticsEnabled);
+          confetti({
+            particleCount: 120,
+            spread: 80,
+            origin: { y: 0.6 },
+          });
+          if (activeSnapshotId && !victoryShownRef.current.has(activeSnapshotId)) {
+            victoryShownRef.current.add(activeSnapshotId);
+            setTimeout(() => setShowVictory(true), 350);
+          }
+        }
+
+        if (activeSnapshotId) {
+          const paintedObj = Object.fromEntries(nextPainted);
+          StorageService.updateSnapshotProgress(
+            activeSnapshotId,
+            nextFilled.size,
+            puzzle.regions.length,
+            Array.from(nextFilled),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            paintedObj,
+            puzzle.palette,
+            puzzle.isFreeColor
+          );
+          StorageService.saveActiveState({
+            activeSnapshotId,
+            activeColorId,
+            filledRegionIds: Array.from(nextFilled),
+            paintedRegionColors: paintedObj,
+            isFreeColorMode: true,
+            zoomScale: 1.0,
+            panOffsetX: 0,
+            panOffsetY: 0,
+          });
+        }
+        return;
+      }
+
+      if (filledRegionIds.has(regionId)) return;
 
       const isEasy = settings.difficulty === 'EASY';
       const canFill = isEasy || region.colorId === activeColorId;
@@ -464,13 +604,68 @@ export const App: React.FC = () => {
         }
       }
     },
-    [puzzle, filledRegionIds, settings, activeColorId, activeSnapshotId, visibleColorIds]
+    [puzzle, filledRegionIds, paintedRegionColors, isFreeColorMode, settings, activeColorId, activeSnapshotId, visibleColorIds]
   );
 
   // Handle batch fill (for Paint Mode drag-to-color)
   const attemptBatchFillRegions = useCallback(
     (regionIds: Set<number>) => {
       if (!puzzle || regionIds.size === 0) return;
+
+      if (isFreeColorMode) {
+        let changed = false;
+        const nextPainted = new Map(paintedRegionColors);
+        const nextFilled = new Set(filledRegionIds);
+
+        for (const rId of regionIds) {
+          const region = puzzle.regions.find((r) => r.id === rId);
+          if (!region) continue;
+          if (nextPainted.get(rId) !== activeColorId) {
+            nextPainted.set(rId, activeColorId);
+            nextFilled.add(rId);
+            changed = true;
+          }
+        }
+
+        if (changed) {
+          setPaintedRegionColors(nextPainted);
+          setFilledRegionIds(nextFilled);
+          setHintRegionId(null);
+          NativeBridge.haptic('tick', settings.hapticsEnabled);
+
+          const isComplete = nextFilled.size >= puzzle.regions.length;
+          if (isComplete) {
+            NativeBridge.haptic('success', settings.hapticsEnabled);
+            confetti({
+              particleCount: 120,
+              spread: 80,
+              origin: { y: 0.6 },
+            });
+            if (activeSnapshotId && !victoryShownRef.current.has(activeSnapshotId)) {
+              victoryShownRef.current.add(activeSnapshotId);
+              setTimeout(() => setShowVictory(true), 350);
+            }
+          }
+
+          if (activeSnapshotId) {
+            const paintedObj = Object.fromEntries(nextPainted);
+            StorageService.updateSnapshotProgress(
+              activeSnapshotId,
+              nextFilled.size,
+              puzzle.regions.length,
+              Array.from(nextFilled),
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              paintedObj,
+              puzzle.palette,
+              puzzle.isFreeColor
+            );
+          }
+        }
+        return;
+      }
 
       const isEasy = settings.difficulty === 'EASY';
       const isPaintMode = settings.isPaintMode;
@@ -545,7 +740,151 @@ export const App: React.FC = () => {
         }
       }
     },
-    [puzzle, settings, activeColorId, filledRegionIds, activeSnapshotId, visibleColorIds]
+    [puzzle, isFreeColorMode, paintedRegionColors, settings, activeColorId, filledRegionIds, activeSnapshotId, visibleColorIds]
+  );
+
+  // Custom Palette & Color Handlers for Free Colour Mode
+  const handleAddCustomColor = useCallback(
+    (hex: string) => {
+      if (!puzzle) return;
+      const clean = hex.replace('#', '');
+      const num = parseInt(clean, 16);
+      const rgb: [number, number, number] = [
+        (num >> 16) & 255,
+        (num >> 8) & 255,
+        num & 255,
+      ];
+      const nextId = Math.max(...puzzle.palette.map((c) => c.id), 0) + 1;
+      const isLight = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) > 160;
+      const argb = (0xff << 24) | (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+      const newColor: PaletteColor = {
+        id: nextId,
+        hex: hex.startsWith('#') ? hex : `#${hex}`,
+        isLight,
+        argb,
+        r: rgb[0],
+        g: rgb[1],
+        b: rgb[2],
+      };
+      const updatedPalette = [...puzzle.palette, newColor];
+      const updatedPuzzle = { ...puzzle, palette: updatedPalette };
+      setPuzzle(updatedPuzzle);
+      setActiveColorId(nextId);
+      NativeBridge.haptic('tick', settings.hapticsEnabled);
+
+      if (activeSnapshotId) {
+        StorageService.savePuzzleData(activeSnapshotId, updatedPuzzle);
+        StorageService.updateSnapshotProgress(
+          activeSnapshotId,
+          filledRegionIds.size,
+          puzzle.regions.length,
+          Array.from(filledRegionIds),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          Object.fromEntries(paintedRegionColors),
+          updatedPalette,
+          puzzle.isFreeColor
+        );
+      }
+    },
+    [puzzle, settings.hapticsEnabled, activeSnapshotId, filledRegionIds, paintedRegionColors]
+  );
+
+  const handleUpdateColor = useCallback(
+    (colorId: number, hex: string) => {
+      if (!puzzle) return;
+      const clean = hex.replace('#', '');
+      const num = parseInt(clean, 16);
+      const rgb: [number, number, number] = [
+        (num >> 16) & 255,
+        (num >> 8) & 255,
+        num & 255,
+      ];
+      const isLight = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) > 160;
+      const argb = (0xff << 24) | (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+      const updatedPalette = puzzle.palette.map((c) =>
+        c.id === colorId
+          ? {
+              ...c,
+              hex: hex.startsWith('#') ? hex : `#${hex}`,
+              isLight,
+              argb,
+              r: rgb[0],
+              g: rgb[1],
+              b: rgb[2],
+            }
+          : c
+      );
+      const updatedPuzzle = { ...puzzle, palette: updatedPalette };
+      setPuzzle(updatedPuzzle);
+      NativeBridge.haptic('tick', settings.hapticsEnabled);
+
+      if (activeSnapshotId) {
+        StorageService.savePuzzleData(activeSnapshotId, updatedPuzzle);
+        StorageService.updateSnapshotProgress(
+          activeSnapshotId,
+          filledRegionIds.size,
+          puzzle.regions.length,
+          Array.from(filledRegionIds),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          Object.fromEntries(paintedRegionColors),
+          updatedPalette,
+          puzzle.isFreeColor
+        );
+      }
+    },
+    [puzzle, settings.hapticsEnabled, activeSnapshotId, filledRegionIds, paintedRegionColors]
+  );
+
+  const handleApplyPresetPalette = useCallback(
+    (preset: PalettePreset) => {
+      if (!puzzle) return;
+      const updatedPalette = puzzle.palette.map((c, i) => {
+        const hex = preset.colors[i % preset.colors.length];
+        const clean = hex.replace('#', '');
+        const num = parseInt(clean, 16);
+        const r = (num >> 16) & 255;
+        const g = (num >> 8) & 255;
+        const b = num & 255;
+        const isLight = (0.299 * r + 0.587 * g + 0.114 * b) > 160;
+        const argb = (0xff << 24) | (r << 16) | (g << 8) | b;
+        return {
+          ...c,
+          hex,
+          isLight,
+          argb,
+          r,
+          g,
+          b,
+        };
+      });
+      const updatedPuzzle = { ...puzzle, palette: updatedPalette };
+      setPuzzle(updatedPuzzle);
+      NativeBridge.haptic('success', settings.hapticsEnabled);
+
+      if (activeSnapshotId) {
+        StorageService.savePuzzleData(activeSnapshotId, updatedPuzzle);
+        StorageService.updateSnapshotProgress(
+          activeSnapshotId,
+          filledRegionIds.size,
+          puzzle.regions.length,
+          Array.from(filledRegionIds),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          Object.fromEntries(paintedRegionColors),
+          updatedPalette,
+          puzzle.isFreeColor
+        );
+      }
+    },
+    [puzzle, settings.hapticsEnabled, activeSnapshotId, filledRegionIds, paintedRegionColors]
   );
 
   // Trigger hint (highlight and center uncompleted region)
@@ -605,6 +944,17 @@ export const App: React.FC = () => {
       img.crossOrigin = 'anonymous';
       img.onload = () => {
         const filledSet = new Set(snapshot.filledRegionIds || []);
+        if (snapshot.customPalette && snapshot.customPalette.length > 0) {
+          cachedPuzzle.palette = snapshot.customPalette;
+        }
+        if (snapshot.paintedRegionColors) {
+          setPaintedRegionColors(new Map(Object.entries(snapshot.paintedRegionColors).map(([k, v]) => [Number(k), v])));
+        } else {
+          setPaintedRegionColors(new Map());
+        }
+        if (snapshot.isFreeColor || cachedPuzzle.isFreeColor) {
+          handleUpdateSettings({ ...settings, isFreeColorMode: true });
+        }
         const availableColors = getVisiblePalette(
           cachedPuzzle.palette,
           cachedPuzzle.regions,
@@ -656,28 +1006,59 @@ export const App: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+    const paletteMap = new Map<number, PaletteColor>(
+      puzzle.palette.map((c) => [c.id, c])
+    );
 
-    if (filledRegionIds.size < puzzle.regions.length) {
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width = puzzle.width;
-      maskCanvas.height = puzzle.height;
-      const mCtx = maskCanvas.getContext('2d');
-      if (mCtx) {
-        const imgData = mCtx.createImageData(puzzle.width, puzzle.height);
-        const data = imgData.data;
-        for (let i = 0; i < puzzle.width * puzzle.height; i++) {
-          const rId = puzzle.regionMap[i];
-          if (!filledRegionIds.has(rId)) {
-            const idx = i * 4;
-            data[idx] = 248;
-            data[idx + 1] = 250;
-            data[idx + 2] = 252;
-            data[idx + 3] = 230;
+    if (puzzle.isFreeColor || paintedRegionColors.size > 0) {
+      const imgData = ctx.createImageData(puzzle.width, puzzle.height);
+      const data = imgData.data;
+      data.fill(255);
+
+      for (const region of puzzle.regions) {
+        if (filledRegionIds.has(region.id)) {
+          const colId = paintedRegionColors.get(region.id) ?? region.colorId;
+          const col = paletteMap.get(colId);
+          const r = col?.r ?? 71;
+          const g = col?.g ?? 85;
+          const b = col?.b ?? 105;
+          for (let i = 0; i < region.pixels.length; i++) {
+            const idx = region.pixels[i] * 4;
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = 255;
           }
         }
-        mCtx.putImageData(imgData, 0, 0);
-        ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
+      }
+      ctx.putImageData(imgData, 0, 0);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.drawImage(sourceImage, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+    } else {
+      ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+
+      if (filledRegionIds.size < puzzle.regions.length) {
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = puzzle.width;
+        maskCanvas.height = puzzle.height;
+        const mCtx = maskCanvas.getContext('2d');
+        if (mCtx) {
+          const imgData = mCtx.createImageData(puzzle.width, puzzle.height);
+          const data = imgData.data;
+          for (let i = 0; i < puzzle.width * puzzle.height; i++) {
+            const rId = puzzle.regionMap[i];
+            if (!filledRegionIds.has(rId)) {
+              const idx = i * 4;
+              data[idx] = 248;
+              data[idx + 1] = 250;
+              data[idx + 2] = 252;
+              data[idx + 3] = 230;
+            }
+          }
+          mCtx.putImageData(imgData, 0, 0);
+          ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
+        }
       }
     }
 
@@ -686,7 +1067,7 @@ export const App: React.FC = () => {
     link.download = `${titleStr.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
-  }, [puzzle, sourceImage, filledRegionIds, activeTitle]);
+  }, [puzzle, sourceImage, filledRegionIds, paintedRegionColors, activeTitle]);
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-black select-none">
@@ -706,9 +1087,11 @@ export const App: React.FC = () => {
         isPreviewMode={isPreviewMode}
         isCompleted={isCompleted}
         isFullscreen={isFullscreen}
+        isFreeColorMode={isFreeColorMode}
         onPickImage={() => fileInputRef.current?.click()}
         onTogglePreview={() => setIsPreviewMode((prev) => !prev)}
         onToggleFullscreen={handleToggleFullscreen}
+        onToggleFreeColorMode={handleToggleFreeColorMode}
         onOpenSettings={() => {
           setSettingsInitialTab(0);
           setShowSettings(true);
@@ -725,8 +1108,10 @@ export const App: React.FC = () => {
         sourceImage={sourceImage}
         activeColorId={activeColorId}
         filledRegionIds={filledRegionIds}
+        paintedRegionColors={paintedRegionColors}
         hintRegionId={hintRegionId}
         isPreviewMode={isPreviewMode}
+        isFreeColorMode={isFreeColorMode}
         isPaintMode={settings.isPaintMode}
         canvasBgColor={settings.canvasBgColor}
         canvasBgArgb={settings.canvasBgArgb}
@@ -782,16 +1167,21 @@ export const App: React.FC = () => {
           regions={puzzle.regions}
           activeColorId={activeColorId}
           filledRegionIds={filledRegionIds}
+          paintedRegionColors={paintedRegionColors}
           sortOrder={settings.paletteSort}
           prioritizeOnScreen={settings.prioritizeOnScreen}
           visibleColorIds={visibleColorIds}
           raiseDock={settings.raisePaletteDock}
+          isFreeColorMode={isFreeColorMode}
           onColorSelected={(colId) => {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             setActiveColorId(colId);
             setHintRegionId(null);
           }}
           onColorHintRequested={(colId) => triggerHint(colId)}
+          onAddCustomColor={handleAddCustomColor}
+          onUpdateColor={handleUpdateColor}
+          onApplyPresetPalette={handleApplyPresetPalette}
         />
       )}
 
@@ -849,9 +1239,10 @@ export const App: React.FC = () => {
         }}
         onResetProgress={() => {
           setFilledRegionIds(new Set());
+          setPaintedRegionColors(new Map());
           setHintRegionId(null);
           if (activeSnapshotId && puzzle) {
-            StorageService.updateSnapshotProgress(activeSnapshotId, 0, puzzle.regions.length, []);
+            StorageService.updateSnapshotProgress(activeSnapshotId, 0, puzzle.regions.length, [], undefined, undefined, undefined, undefined, {});
           }
           setShowSettings(false);
         }}
@@ -878,7 +1269,7 @@ export const App: React.FC = () => {
         regionCount={totalCount}
         previewDataUrl={
           puzzle && sourceImage
-            ? generatePreviewDataUrl(puzzle, sourceImage, filledRegionIds)
+            ? generatePreviewDataUrl(puzzle, sourceImage, filledRegionIds, paintedRegionColors)
             : undefined
         }
         onClose={() => setShowVictory(false)}

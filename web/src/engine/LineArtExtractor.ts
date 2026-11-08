@@ -123,8 +123,8 @@ export class LineArtExtractor {
     }
 
     const lineRatio = linePixelCount / total;
-    // Considered line art if thin outlines exist (> 0.5% and < 15%)
-    const isLineArt = lineRatio >= 0.005 && lineRatio <= 0.15;
+    // Considered line art if thin outlines exist (> 0.5% and < 35%)
+    const isLineArt = lineRatio >= 0.005 && lineRatio <= 0.35;
 
     return {
       isLineArt,

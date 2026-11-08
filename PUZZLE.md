@@ -150,6 +150,21 @@ When small regions (such as red mushrooms, bright berries, or flowers) sit insid
 
 ---
 
+### 4.5 Free Colour Mode & Black & White Coloring Book Segmentation
+When opening black and white line art or coloring book pages (such as coloring sheets, ink sketches, or line drawings):
+1. **Black & White Detection**: `ImageAnalyzer` evaluates pixel saturation and color diversity. If colored pixels make up $< 8\%$ of the image, `isBlackAndWhite` is flagged.
+2. **Dynamic Inked Line Ratio Ceiling**: `LineArtExtractor` accommodates high-density line drawings with an expanded line coverage threshold (up to 35% line pixels) so detailed coloring book drawings are cleanly categorized as `LINE_ART` rather than being misclassified as noisy photos.
+3. **Graph Coloring Cell Assignment**: Pure black and white images lack interior color information. The generator dynamically produces a vibrant 20-color curated starter palette and performs balanced greedy graph coloring so touching regions receive distinct, non-clashing colors when viewed in "By Number" mode.
+4. **Free Colour Painting Engine**: When Free Colour Mode is active:
+   * Players can tap or drag with any selected color swatch to fill any region freely.
+   * Regions can be repainted at any time with different colors without penalty.
+   * Custom colors can be added on the fly via the palette color picker (`+` button).
+   * Color swatches can be individually edited or swapped using curated theme presets (Vibrant Classic, Mushroom Fantasy, Pastel Dreams, Earthy Nature, Neon Pop).
+   * Region number labels are hidden by default for a clean coloring book experience.
+5. **Multiply Composite Export**: When rendering previews or exporting high-resolution artwork, custom painted colors are rendered underneath the original source ink strokes using `multiply` blend mode, preserving crisp black line outlines.
+
+---
+
 ## 5. Web Worker Background Thread Execution
 
 Puzzle generation involves computationally intensive computer-vision operations (Kuwahara filtering, K-Means++ clustering, BFS flood fills, and distance transform watershed expansions).
