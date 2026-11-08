@@ -25,7 +25,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Checkout gh-pages branch
         uses: actions/checkout@v7
@@ -42,7 +42,8 @@ jobs:
       - name: Run branch cleanup
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH_CLEANUP_PREFIXES: ''
+          BRANCH_CLEANUP_PREFIXES: 'automation/,feature/,fix/,chore/,ci/,deps/,docs/,codex/'
+          BRANCH_CLEANUP_MIN_AGE_DAYS: '1'
         run: |
           set -euo pipefail
 

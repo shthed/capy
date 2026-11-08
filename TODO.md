@@ -25,8 +25,6 @@ For target-specific deep dives, see also:
 
 - [ ] **Cross-Link Web, Legacy Web1 & Android APK in UI**:
   - Add links in `web/src/components/SettingsModal.tsx` (and `web1/index.html`) allowing players to switch between the Updated Web App (`/`), Legacy Web v1 (`/web1/`), and direct Android APK download (`capy.apk`).
-- [ ] **Optimize & Deduplicate Sample Artwork Assets**:
-  - Replace the uncompressed 5.8 MB `capy.png` (`web1/capy.png` and `web/public/assets/capy.png`) with WebP (`capybara.webp` is 564 KB) to save ~5.5 MB in repository checkout and GitHub Pages artifact size.
 - [ ] **Dynamic Theme Sync (System Dark/Light Mode)**:
   - Add Android `uiMode` configuration listener in `MainActivity.kt` and bridge into `NativeBridge.ts` so system theme changes automatically adjust `canvasBgColor`.
 
