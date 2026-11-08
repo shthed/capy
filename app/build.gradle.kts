@@ -32,6 +32,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
+    }
     buildFeatures {
         buildConfig = true
     }
@@ -43,7 +48,33 @@ java {
     }
 }
 
-val syncWebAssets by tasks.registering(Sync::class) {
+val buildWeb = tasks.register<Exec>("buildWeb") {
+    description = "Builds the web/ TypeScript/Vite frontend bundle into web/dist."
+    group = "build"
+    workingDir = layout.projectDirectory.dir("../web").asFile
+
+    val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+    commandLine(if (isWindows) listOf("cmd", "/c", "npm", "run", "build") else listOf("npm", "run", "build"))
+
+    inputs.dir(layout.projectDirectory.dir("../web/src"))
+    inputs.file(layout.projectDirectory.file("../web/package.json"))
+    inputs.file(layout.projectDirectory.file("../web/vite.config.ts"))
+    inputs.file(layout.projectDirectory.file("../web/index.html"))
+    outputs.dir(layout.projectDirectory.dir("../web/dist"))
+}
+
+val syncWebAssets = tasks.register<Sync>("syncWebAssets") {
+    val distIndex = layout.projectDirectory.file("../web/dist/index.html").asFile
+    doFirst {
+        if (!distIndex.exists()) {
+            throw GradleException(
+                "Missing web frontend distribution bundle at '${distIndex.absolutePath}'.\n" +
+                "Before compiling the Android launcher, please build the web assets by running:\n" +
+                "  cd web && npm ci && npm run build\n" +
+                "or run the Gradle task ':app:buildWeb' (if Node.js / npm is installed)."
+            )
+        }
+    }
     from(layout.projectDirectory.dir("../web/dist")) {
         exclude("**/capy.png")
     }

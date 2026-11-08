@@ -50,6 +50,7 @@ npm run dev                # Serves web1/ on http://localhost:8000
 ### Android Apps (`app/` & `app1/`)
 From the repository root:
 ```bash
+./gradlew app:buildWeb             # Compiles web/ TypeScript/Vite frontend into web/dist via Gradle
 ./gradlew app:testDebugUnitTest    # Runs JUnit4 unit tests for the unified Android wrapper
 ./gradlew app:assembleDebug        # Syncs web/dist into app/src/main/assets/www and builds debug APK
 ./gradlew app1:testDebugUnitTest   # Runs JUnit4 unit tests for the preserved Compose app (app1/)
