@@ -298,13 +298,15 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
       }}
       aria-label="Palette dock"
     >
-      {/* Scrollable swatches floating all the way to screen edges with no outer border */}
+      {/* Scrollable swatches floating all the way to screen edges with no outer border and ample vertical padding for active ring */}
       <div
         ref={scrollContainerRef}
-        className="pointer-events-auto w-full flex items-center gap-2 overflow-x-auto no-scrollbar py-1"
+        className="pointer-events-auto w-full flex items-center gap-2 overflow-x-auto no-scrollbar py-3"
         style={{
           paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
           paddingRight: 'max(4.5rem, calc(var(--sar, 0px) + 4.5rem))',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
         }}
       >
         {dockPalette.map((color) => {

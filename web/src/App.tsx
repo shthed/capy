@@ -279,9 +279,8 @@ export const App: React.FC = () => {
           setFilledRegionIds(initialFilledRegionIds);
           setPaintedRegionColors(new Map());
 
-          if (puzzleData.isFreeColor) {
-            handleUpdateSettings({ ...settings, isFreeColorMode: true });
-          }
+          const isFree = Boolean(puzzleData.isFreeColor);
+          handleUpdateSettings({ ...settings, isFreeColorMode: isFree });
 
           // Defensively find the first available color that actually has uncompleted regions
           const availableColors = getVisiblePalette(
@@ -387,11 +386,12 @@ export const App: React.FC = () => {
               } else if (activeState.paintedRegionColors) {
                 setPaintedRegionColors(new Map(Object.entries(activeState.paintedRegionColors).map(([k, v]) => [Number(k), v])));
               }
-              if (activeState.isFreeColorMode !== undefined) {
-                setSettings((prev) => ({ ...prev, isFreeColorMode: Boolean(activeState.isFreeColorMode) }));
-              } else if (snap.isFreeColor || cachedPuzzle.isFreeColor) {
-                setSettings((prev) => ({ ...prev, isFreeColorMode: true }));
-              }
+              const isFree = Boolean(
+                activeState.isFreeColorMode !== undefined
+                  ? activeState.isFreeColorMode
+                  : snap.isFreeColor || cachedPuzzle.isFreeColor
+              );
+              setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
               setSourceImage(img);
               setPuzzle(cachedPuzzle);
               setActiveSnapshotId(snap.id);
@@ -954,9 +954,8 @@ export const App: React.FC = () => {
         } else {
           setPaintedRegionColors(new Map());
         }
-        if (snapshot.isFreeColor || cachedPuzzle.isFreeColor) {
-          handleUpdateSettings({ ...settings, isFreeColorMode: true });
-        }
+        const isFree = Boolean(snapshot.isFreeColor || cachedPuzzle.isFreeColor);
+        handleUpdateSettings({ ...settings, isFreeColorMode: isFree });
         const availableColors = getVisiblePalette(
           cachedPuzzle.palette,
           cachedPuzzle.regions,
@@ -1152,17 +1151,6 @@ export const App: React.FC = () => {
           showResetViewButton={settings.showResetViewButton}
           raiseDock={settings.raisePaletteDock}
           isZoomedOrPanned={isCanvasTransformed}
-          activeColor={puzzle.palette.find((c) => c.id === activeColorId) || null}
-          activeColorDisplayNumber={displayNumberMap.get(activeColorId)}
-          activeColorBadgeVal={
-            isFreeColorMode
-              ? (paintedRegionColors
-                  ? Array.from(paintedRegionColors.values()).filter((c) => c === activeColorId).length
-                  : 0)
-              : puzzle.regions.filter((r) => r.colorId === activeColorId && !filledRegionIds.has(r.id)).length
-          }
-          isFreeColorMode={isFreeColorMode}
-          onTriggerHint={() => triggerHint()}
           onTogglePaintMode={() => {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             handleUpdateSettings({ ...settings, isPaintMode: !settings.isPaintMode });
@@ -1170,7 +1158,6 @@ export const App: React.FC = () => {
           onZoomIn={() => setZoomInTrigger((prev) => prev + 1)}
           onZoomOut={() => setZoomOutTrigger((prev) => prev + 1)}
           onResetView={() => setResetViewTrigger((prev) => prev + 1)}
-          onOpenPaletteOptions={() => setShowPaletteOptions(true)}
         />
       )}
 
