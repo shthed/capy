@@ -75,6 +75,9 @@ From the repository root:
 - **PR preview lifecycle & cleanup ([`.github/workflows/cleanup-closed-pr.yml`](./.github/workflows/cleanup-closed-pr.yml))**:
   - While a PR is open, its preview is served at `https://shthed.github.io/capy/pull/<number>/`.
   - When a PR is closed or merged, `cleanup-closed-pr.yml` automatically deletes the `/pull/<number>/` preview directory from `gh-pages` and redeploys. Once merged, the changes are live on the root site `https://shthed.github.io/capy/`.
+- **Show working thoughts**: Show thoughts for each working step minimally and directly while developing, omitting conversational step headings (no "### Working Step X" or "now I'm...") and stating actions clearly.
+- **Finish active task before switching**: Finish working on the current task instead of switching when the user sends an update with a new task, unless the comment directly relates to what is currently being worked on.
+- **Plan before executing major changes**: When starting work on a big task, write out a clear plan of what you are going to do and how you are going to implement it before jumping into code edits.
 - **No unsolicited Android device deployment**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
 - **Documentation hygiene**: Keep [`TODO.md`](./TODO.md), [`WEB.md`](./WEB.md), [`PUZZLE.md`](./PUZZLE.md), [`APP.md`](./APP.md), [`app1/APP1.md`](./app1/APP1.md), and [`web1/WEB1.md`](./web1/WEB1.md) in sync with architectural or runtime changes.
 

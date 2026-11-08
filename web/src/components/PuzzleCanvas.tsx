@@ -624,6 +624,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     const hr = (hintColorArgb >> 16) & 0xff;
     const hg = (hintColorArgb >> 8) & 0xff;
     const hb = hintColorArgb & 0xff;
+
+    // Use active colour for active matching regions, hint colour for hinted region
+    const activePal = puzzle.palette.find((c) => c.id === activeColorId);
+    const ar = activePal ? activePal.r : hr;
+    const ag = activePal ? activePal.g : hg;
+    const ab = activePal ? activePal.b : hb;
+
     const isBoundaryOnly = highlightStyle === 'BOUNDARY_ONLY';
     let anyPixel = false;
 
@@ -633,6 +640,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const isActive = reg.colorId === activeColorId;
 
       if (!isHinted && (!highlightMatching || !isActive)) continue;
+
+      const fillR = isHinted ? hr : ar;
+      const fillG = isHinted ? hg : ag;
+      const fillB = isHinted ? hb : ab;
 
       const pixels = reg.pixels;
       for (let i = 0; i < pixels.length; i++) {
@@ -653,9 +664,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
         if (shouldFill) {
           const pIdx = idx * 4;
-          data[pIdx] = hr;
-          data[pIdx + 1] = hg;
-          data[pIdx + 2] = hb;
+          data[pIdx] = fillR;
+          data[pIdx + 1] = fillG;
+          data[pIdx + 2] = fillB;
           data[pIdx + 3] = 255;
           anyPixel = true;
         }
@@ -1512,6 +1523,11 @@ function renderLabels(
   const hg = (hintColorArgb >> 8) & 0xff;
   const hb = hintColorArgb & 0xff;
 
+  const activePal = puzzle.palette.find((c) => c.id === activeColorId);
+  const ar = activePal ? activePal.r : 251;
+  const ag = activePal ? activePal.g : 191;
+  const ab = activePal ? activePal.b : 36;
+
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -1543,7 +1559,7 @@ function renderLabels(
       ctx.beginPath();
       const radius = Math.max(4 / effScale, minDim * 0.18);
       ctx.arc(region.centroidX, region.centroidY, radius, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(251, 191, 36, ${alpha})`;
+      ctx.fillStyle = `rgba(${ar}, ${ag}, ${ab}, ${alpha})`;
       ctx.fill();
     }
 
@@ -1587,7 +1603,7 @@ function renderLabels(
       if (isNumberOnly && (isActive || isHinted)) {
         const pulseCol = isHinted
           ? `rgba(${hr}, ${hg}, ${hb}, ${pulseAlpha * 0.9})`
-          : `rgba(251, 191, 36, ${pulseAlpha * 0.85})`;
+          : `rgba(${ar}, ${ag}, ${ab}, ${pulseAlpha * 0.85})`;
         ctx.fillStyle = pulseCol;
       } else if (isHinted) {
         ctx.fillStyle = `rgba(${hr}, ${hg}, ${hb}, 0.35)`;

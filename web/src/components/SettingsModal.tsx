@@ -250,13 +250,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                     Canvas Background
                   </label>
-                  {settings.canvasBgColor === 'CUSTOM' && (
-                    <span className="text-[11px] font-mono font-semibold text-amber-400">
-                      {argbToHex(settings.canvasBgArgb).toUpperCase()}
-                    </span>
-                  )}
+                  <span className="text-[11px] font-mono font-semibold text-amber-400">
+                    {argbToHex(settings.canvasBgArgb).toUpperCase()}
+                  </span>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 sm:gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {(Object.keys(CANVAS_BG_MAP) as PresetCanvasBgColor[]).map((key) => {
                     const item = CANVAS_BG_MAP[key];
                     const isSelected = settings.canvasBgColor === key;
@@ -264,30 +262,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <button
                         key={key}
                         type="button"
+                        title={item.label}
                         onClick={() => {
                           updateSetting('canvasBgColor', key);
                           updateSetting('canvasBgArgb', item.argb);
                         }}
-                        className={`flex items-center gap-1.5 p-2 rounded-lg border text-xs font-semibold transition-all ${
+                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
                           isSelected
-                            ? 'border-amber-400 bg-slate-800 text-white ring-1 ring-amber-400'
-                            : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
+                            ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
+                            : 'border-slate-700/80 hover:scale-105'
                         }`}
+                        style={{ backgroundColor: item.hex }}
                       >
-                        <span
-                          className="w-3.5 h-3.5 rounded-full border border-slate-700 flex-shrink-0"
-                          style={{ backgroundColor: item.hex }}
-                        />
-                        <span className="truncate text-[11px] sm:text-xs">{item.label}</span>
+                        {isSelected && (
+                          <Check
+                            className={`w-3.5 h-3.5 ${
+                              item.hex === '#ffffff' || item.hex === '#e2e8f0'
+                                ? 'text-slate-900'
+                                : 'text-white'
+                            }`}
+                          />
+                        )}
                       </button>
                     );
                   })}
-                  {/* Custom Background Color Picker */}
+                  {/* Custom Background Colour Picker */}
                   <label
-                    className={`relative flex items-center gap-1.5 p-2 rounded-lg border text-xs font-semibold cursor-pointer transition-all ${
+                    title="Custom Background Colour"
+                    className={`relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all hover:scale-105 flex items-center justify-center cursor-pointer overflow-hidden bg-slate-800 ${
                       settings.canvasBgColor === 'CUSTOM'
-                        ? 'border-amber-400 bg-slate-800 text-white ring-1 ring-amber-400'
-                        : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
+                        ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
+                        : 'border-slate-700/80 hover:border-slate-500'
                     }`}
                   >
                     <input
@@ -299,13 +304,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }}
                       className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
                     />
-                    <span
-                      className="w-3.5 h-3.5 rounded-full border border-slate-700 flex-shrink-0 shadow-inner"
+                    <div
+                      className="w-full h-full flex items-center justify-center"
                       style={{ backgroundColor: argbToHex(settings.canvasBgArgb) }}
-                    />
-                    <span className="truncate text-[11px] sm:text-xs">
-                      {settings.canvasBgColor === 'CUSTOM' ? 'Custom' : 'Custom...'}
-                    </span>
+                    >
+                      <Pipette
+                        className={`w-3.5 h-3.5 ${
+                          argbToHex(settings.canvasBgArgb).toLowerCase() === '#ffffff' ||
+                          argbToHex(settings.canvasBgArgb).toLowerCase() === '#e2e8f0'
+                            ? 'text-slate-900'
+                            : 'text-white'
+                        } drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]`}
+                      />
+                    </div>
                   </label>
                 </div>
               </div>

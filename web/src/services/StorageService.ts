@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   canvasBgArgb: 0xff18181b,
   saveSortOrder: 'LAST_ACTIVE',
   showSavePreviews: true,
-  highlightStyle: 'CENTROID_GLOW',
+  highlightStyle: 'FULL_REGION',
   hintFillStyle: 'CHECKER',
   hintColorArgb: 0xfffbbf24,
   showRegionLabels: true,
