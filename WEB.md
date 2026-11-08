@@ -102,14 +102,16 @@ The UI uses a fixed, layered viewport stack where pointer events pass through em
 
 | Component | Responsibility | Key Interactions |
 | :--- | :--- | :--- |
-| [**`PuzzleCanvas`**](file:///home/antigravity/shthed/capy/web/src/components/PuzzleCanvas.tsx) | Renders the puzzle, handles gestures, hit-tests pixel taps. | Single-finger drag (pan), pinch (zoom), mouse wheel, tap (color region), drag (continuous paint mode). |
+| [**`PuzzleCanvas`**](file:///home/antigravity/shthed/capy/web/src/components/PuzzleCanvas.tsx) | Renders the puzzle with 3-tier offscreen caching, handles gestures, hit-tests pixel taps. | Single-finger drag (pan), pinch (zoom), Google Maps-style one-finger double-tap-and-drag zoom, smooth pan momentum gliding, tap (color region), drag (continuous paint mode). |
 | [**`GameTopBar`**](file:///home/antigravity/shthed/capy/web/src/components/GameTopBar.tsx) | Displays puzzle title, overall completion percentage, quick actions. | Tap title to open Saves tab; toggle preview mode; enter/exit fullscreen; import image; open settings. |
-| [**`PaletteDock`**](file:///home/antigravity/shthed/capy/web/src/components/PaletteDock.tsx) | Horizontal scrolling list of numbered color swatches with completion badges. | Tap swatch to select active color; tap active swatch again to trigger hint; tap custom color button to open picker. Supports dynamic sorting (Number, Remaining, Hue, Lightness). |
+| [**`PaletteDock`**](file:///home/antigravity/shthed/capy/web/src/components/PaletteDock.tsx) | Horizontal scrolling list of numbered color swatches with completion badges. | Tap swatch to select active color; tap active swatch again to trigger hint; tap custom color button to open picker. Guarantees persistent active color selection even when 0 matching regions remain on-screen. Supports dynamic sorting (Number, Remaining, Hue, Lightness) and viewport culling. |
 | [**`FloatingActions`**](file:///home/antigravity/shthed/capy/web/src/components/FloatingActions.tsx) | Secondary floating action buttons positioned above the palette dock. | Toggle continuous Paint Mode; zoom in/out; reset view to fit screen. |
-| [**`SettingsModal`**](file:///home/antigravity/shthed/capy/web/src/components/SettingsModal.tsx) | Full modal sheet with 5 tabbed sections. | **Game**: Auto-advance, difficulty, hint styles, free color mode.<br>**Appearance**: Canvas background (Charcoal, Black, Slate, etc.), dock elevation.<br>**Generator**: Algorithm selection, color counts, min region area.<br>**Saves**: Rename, delete, restore snapshots, view thumbnails.<br>**Gallery**: Sample artwork picker, device photo upload. |
+| [**`SettingsModal`**](file:///home/antigravity/shthed/capy/web/src/components/SettingsModal.tsx) | Full modal sheet with 4 tabbed sections and automatic active tab persistence. | Automatically restores the last active tab index from `localStorage` (`capy_last_settings_tab`).<br>**Settings**: Preferences, difficulty, auto-advance, pan momentum toggle, canvas background (preset circular swatches + `<Pipette>` custom hex/color picker), dock elevation, label scale.<br>**Hints**: Hint styles, hint highlight colour (circular swatches + `<Pipette>`), hint intensity, animated hint pulse.<br>**Create**: Algorithm selection, color counts, min region area, line handling, sample artwork picker, device photo upload.<br>**Saves**: Rename, delete, restore snapshots, view thumbnails. |
+
 | [**`VictoryModal`**](file:///home/antigravity/shthed/capy/web/src/components/VictoryModal.tsx) | Celebration overlay shown upon reaching 100% completion. | Fires confetti bursts (`canvas-confetti`); exports high-resolution painted artwork; offers quick navigation to new puzzle. |
 | [**`ColorPickerPopover`**](file:///home/antigravity/shthed/capy/web/src/components/ColorPickerPopover.tsx) | Palette customization panel for Free Colour / Coloring Page mode. | Select from 5 preset palettes (Vibrant, Mushroom, Pastels, Earthy, Neon); pick custom HSL/Hex swatches; update palette colors in real time. |
 | [**`LoadingOverlay`**](file:///home/antigravity/shthed/capy/web/src/components/LoadingOverlay.tsx) | Full-screen translucent backdrop with animated spinner and progress bar. | Displays step-by-step engine status (`"Extracting line art..."`, `"Quantizing colors..."`, `"Segmenting regions..."`). |
+
 
 ---
 
@@ -176,24 +178,58 @@ When a region is filled, `baseCanvas` does not repaint the entire canvas. Instea
 - Directly updates the target pixels in `baseImageDataRef`.
 - Calls `baseCtx.putImageData(..., region.minX, region.minY, ...)` restricted strictly to the region's bounding box.
 
+### Dynamic Active Colour & Highlight Overlays
+`PuzzleCanvas` dynamically renders visual cues for active and hinted regions without redrawing base layers:
+- **Active Colour Highlighting**: When `highlightStyle` is set to `FULL_REGION` (default) or `BOUNDARY_ONLY`, unfilled regions matching `activeColorId` are filled directly with the **active palette colour** (extracted from `palette[activeColorId].rgb`). This creates an immediate visual connection between the selected palette swatch and the target puzzle shapes.
+- **Hint Highlighting**: When a hint is triggered, the target region is highlighted using `settings.hintColorArgb` (default gold `#FBBF24`), rendering a distinct checkerboard, pulse, or border pattern to avoid visual confusion with the active colour.
+- **Matching Centroid Glow & Badges**: Region centroid rings and number badges for matching regions dynamically use the active palette color for their glowing background accents.
+
 ### Centroid Label Placement & Culling
 Labels are drawn at each region's **Pole of Inaccessibility** (deepest interior point computed via BFS in the engine), avoiding thin concave edges:
 - **Spatial Culling**: Labels outside the viewport bounding box are discarded before font measurement.
 - **Scale Thresholding**: Labels only render when `region.maxRadius * effScale >= 6px`. Tiny regions suppress labels until the user zooms in.
 - **Dynamic Contrast**: Text color automatically toggles between `#FFFFFF` (with dark drop shadow) and `#000000` (with light drop shadow) based on the region's perceived luminance (`isLight`).
 
-### Viewport Pan & Zoom Clamping
-[`clampCanvasOffset`](file:///home/antigravity/shthed/capy/web/src/components/PuzzleCanvas.tsx#L59-L107) prevents the puzzle from being panned off-screen:
-- Allows smooth zoom between **0.5×** and **12.0×**.
-- Enforces elastic boundaries: when artwork is smaller than viewport, it centers with rubber-band margin; when larger, pan offsets are clamped to edge limits.
+### Viewport Pan & Zoom Clamping (`clampCanvasOffset`)
+[`clampCanvasOffset`](file:///home/antigravity/shthed/capy/web/src/components/PuzzleCanvas.tsx) keeps the artwork bounded while providing full viewport navigation:
+- **Zoom Range**: Smooth clamping between **0.5×** and **12.0×**.
+- **Dynamic Corner Panning Margins**: When zoomed in (`effScale >= fitScale`), margin caps scale dynamically with viewport size (`containerWidth * 0.72` horizontally and `containerHeight * 0.72` vertically) rather than fixed pixel offsets. This ensures players can pan all four corners of the puzzle comfortably past the center of the viewport, well clear of the bottom `PaletteDock` (~120px) and top `GameTopBar` (~60px).
+- **Centering Elasticity**: When the artwork is smaller than the container, it smoothly snaps to center.
 
-### Touch & Pointer Handling
-- **Tap**: Converts screen $(x, y)$ to canvas coordinates using current transform matrix. Looks up `regionId = regionMap[y * width + x]`.
-  - If `isFreeColorMode`: paints region with `activeColorId`.
-  - If matching `activeColorId`: marks filled and plays haptic feedback.
-  - If mismatch: triggers subtle error haptic and tap ripple.
-  - In **Easy Mode**: automatically selects the tapped region's color and fills it.
-- **Drag-to-Color (Paint Mode)**: When `isPaintMode` is active, pointer movement samples points along the stroke path and batch-fills intersecting matching regions using `onBatchRegionsClicked`.
+### Gesture Engine & Interaction Paradigms
+`PuzzleCanvas` orchestrates 5 distinct touch, mouse, and gesture interactions:
+
+1. **Tap Hit-Testing**:
+   - Converts client screen $(x, y)$ to canvas coordinates using the inverse transform matrix: `puzzleX = (clientX - rect.left - panX) / effScale`.
+   - Looks up `regionId = regionMap[y * width + x]` directly in the `Int32Array` region map.
+   - If `isFreeColorMode`: paints the region with `activeColorId`.
+   - If matching `activeColorId`: marks region filled and triggers light haptic feedback.
+   - If mismatch: triggers subtle error haptic and tap ripple feedback dot.
+   - In **Easy Mode**: automatically selects the tapped region's color and fills it immediately.
+
+2. **Google Maps-Style One-Finger Double-Tap-and-Drag Zoom**:
+   - Quick tap followed by a second tap-and-hold within 300ms (`DOUBLE_TAP_TIMEOUT = 300ms`, `DOUBLE_TAP_DIST = 40px`).
+   - Dragging **UP** (`dy < 0`) zooms **IN**; dragging **DOWN** (`dy > 0`) zooms **OUT**.
+   - Continuous exponential scale tracking: `zoomFactor = Math.pow(Math.E, -dy / 220)`.
+   - Centers zoom smoothly on the double-tap anchor point on the canvas.
+   - Eliminates jarring instant step-jumps, giving players precise one-handed zoom control on mobile devices.
+
+3. **Smooth Pan Momentum (Inertial Gliding)**:
+   - Tracks pointer movement history over a sliding 100ms window (`pointerHistoryRef`).
+   - On pointer release, calculates the flick velocity vector $(v_x, v_y)$ in pixels per millisecond.
+   - If velocity magnitude $\ge 0.18\text{ px/ms}$, kicks off an inertial animation loop via `requestAnimationFrame`.
+   - Applies exponential friction decay: $v_{t} = v_0 \cdot 0.92^{\Delta t / 16}$.
+   - Clamps offsets on every glide tick via `clampCanvasOffset`.
+   - Halts animation once glide velocity drops below $0.02\text{ px/ms}$ or reaches boundaries.
+   - **Zero-Latency Touch Cancellation**: Any subsequent pointer touch immediately cancels active momentum gliding with zero lag, ensuring instant tactile control.
+   - Toggleable via `settings.panMomentum` (enabled by default).
+
+4. **Multi-Touch Pinch-to-Zoom**:
+   - Two-finger touch tracking with real-time midpoint focal tracking and scale clamping between $0.5\times$ and $12.0\times$.
+
+5. **Drag-to-Color (Continuous Paint Mode)**:
+   - When `isPaintMode` is active, pointer drag samples points along the interpolated stroke path and batch-fills intersecting matching regions via `onBatchRegionsClicked`.
+
 
 ---
 
@@ -259,8 +295,43 @@ Capy uses a hybrid storage model to manage performance and browser storage quota
 2. **LocalStorage (`capy_snapshots_v8`) + Native Disk**:
    - Stores lightweight snapshot metadata (`SavedSnapshot`): completion counts, active color, zoom/pan coordinates, and a compressed **240×240 JPEG preview data URL**.
    - Enables instant rendering of the Saves gallery tab without reading megabytes of raw image data from IndexedDB.
-3. **Settings Persistence (`capy_user_settings_v8`)**:
-   - User preferences (difficulty, colors, hint styles, generator tuning) survive app updates and restarts.
+3. **Settings Persistence (`capy_user_settings_v8`) & Tab Memory**:
+   - User preferences survive app updates and browser restarts.
+   - Reopening `SettingsModal` remembers the last active tab index via `localStorage.getItem('capy_last_settings_tab')` (integer index `'0'` [Settings], `'1'` [Hints], `'2'` [Create], or `'3'` [Saves]).
+
+### 8.1 Comprehensive User Settings Reference (`UserSettings`)
+
+| Setting Key | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `autoAdvance` | `boolean` | `true` | Automatically switches to the next incomplete color when all regions for the active color are filled. |
+| `difficulty` | `'EASY' \| 'NORMAL' \| 'HARD'` | `'NORMAL'` | **EASY**: Auto-selects color upon clicking any region.<br>**NORMAL**: Requires matching active color.<br>**HARD**: Mismatches trigger error penalty feedback. |
+| `isPaintMode` | `boolean` | `false` | Enables drag-to-color continuous stroke painting. |
+| `isFreeColorMode` | `boolean` | `false` | Enables Coloring Page / Free Color mode allowing arbitrary color assignment. |
+| `raisePaletteDock` | `boolean` | `true` | Lifts the floating palette dock above navigation bars and Android gestures. |
+| `regionColorMode` | `'SOLID' \| 'ORIGINAL'` | `'SOLID'` | Renders filled regions with flat quantized palette color (`SOLID`) or sampled photographic detail (`ORIGINAL`). |
+| `canvasBgColor` | `'BLACK' \| 'DARK_SLATE' \| 'CHARCOAL' \| 'LIGHT_GRAY' \| 'PURE_WHITE' \| 'CUSTOM'` | `'CHARCOAL'` | Background fill color for the canvas viewport surrounding the artwork. |
+| `canvasBgArgb` | `number` (32-bit ARGB) | `0xff18181b` (`#18181B`) | Custom background color when `canvasBgColor` is set to `'CUSTOM'` (configured via `<Pipette>` picker). |
+| `saveSortOrder` | `'LAST_ACTIVE' \| 'NAME' \| 'PROGRESS'` | `'LAST_ACTIVE'` | Sorting order for saved game snapshots in the Saves tab. |
+| `showSavePreviews` | `boolean` | `true` | Displays 240×240 thumbnails in the Saves gallery tab. |
+| `highlightStyle` | `'NONE' \| 'CENTROID_ONLY' \| 'BOUNDARY_ONLY' \| 'FULL_REGION'` | `'FULL_REGION'` | Visual overlay style for matching active regions. `FULL_REGION` and `BOUNDARY_ONLY` fill regions in the **active palette color**. |
+| `hintFillStyle` | `'SOLID' \| 'CHECKER' \| 'STRIPED'` | `'CHECKER'` | Texture pattern applied to the active hint target region. |
+| `hintColorArgb` | `number` (32-bit ARGB) | `0xfffbbf24` (`#FBBF24`) | Custom highlight color for hint targets (configured via `<Pipette>` picker). |
+| `showRegionLabels` | `boolean` | `true` | Displays number labels at interior poles of inaccessibility. |
+| `showPreviewLabels` | `boolean` | `false` | Shows number labels even when in artwork preview mode. |
+| `showPreviewBorders` | `boolean` | `false` | Shows border lines when in artwork preview mode. |
+| `highlightMatching` | `boolean` | `true` | Toggles dynamic glow and fill overlays for matching active regions. |
+| `animateHint` | `boolean` | `true` | Enables pulsing / breathing animation for hinted region. |
+| `showNextRegionHint` | `boolean` | `true` | Highlights the next closest matching region when requesting hints. |
+| `hintIntensity` | `number` (0.0 – 1.0) | `0.65` | Opacity of hint overlays and glow animations. |
+| `labelScale` | `number` (0.5 – 2.0) | `1.0` | Global multiplier for number label font size. |
+| `showZoomButtons` | `boolean` | `false` | Displays onscreen `+` / `-` floating zoom buttons. |
+| `showResetViewButton` | `boolean` | `false` | Displays onscreen fit-to-screen view reset button. |
+| `paletteSort` | `'NUMBER' \| 'REMAINING' \| 'HUE' \| 'LIGHTNESS'` | `'NUMBER'` | Dynamic sorting order for palette swatches in `PaletteDock`. |
+| `prioritizeOnScreen`| `boolean` | `true` | Dynamically floats colors visible in current viewport to front of `PaletteDock`. |
+| `hapticsEnabled` | `boolean` | `true` | Enables native Android vibration / web vibration feedback on taps and victory. |
+| `panMomentum` | `boolean` | `true` | Enables Google Maps-style inertial gliding with friction decay on canvas pan flicks. |
+| `enableCustomColorForAllPuzzles` | `boolean` | `false` | Unlocks the palette color editor across all standard puzzle modes. |
+| `generatorConfig` | `GeneratorConfig` | *(See PUZZLE.md)* | Engine tuning: algorithm, color count, min region area, max regions, resolution. |
 
 ---
 
