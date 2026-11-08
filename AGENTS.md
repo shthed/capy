@@ -64,7 +64,8 @@ From the repository root:
 - **Session kick-off**: Run `git fetch --all --prune` and rebase onto `origin/main` before starting work.
 - **Branch naming**: Use short-lived feature branches (`automation/<change>` or `feature/<change>`) and open PRs so CI and preview deployments run automatically.
 - **Unified CI & Branch Deployments ([`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml))**:
-  - Runs Web build/typecheck (`web`) and Android unit tests + debug APK build (`android`) in parallel, followed by GitHub Pages deployment (`deploy`). Legacy `web1` and `app1` targets and Playwright smoke checks are omitted from standard CI runs.
+  - Consolidates Web compilation/typecheck (`web`), Android unit tests + debug APK build (`app`), and GitHub Pages deployment (`deploy`) into a unified, high-speed single-runner pipeline (`~45-50s`).
+  - Automatically skips CI builds and deployments when commits exclusively modify documentation (`paths-ignore: ['**.md', 'docs/**', 'notes/**', '.gitignore', 'LICENSE']`), consuming zero runner minutes.
   - `main` deploys `web/dist/` to `/` (`https://shthed.github.io/capy/`) and the Android APK to `/capy.apk` (`https://shthed.github.io/capy/capy.apk`).
   - Open PR branches deploy previews to `/pull/<number>/` and `/pull/<number>/capy.apk`.
   - `gh-pages` commits are squashed to a single orphan commit on every push so binary `.apk` files never accumulate in Git history.
