@@ -1150,6 +1150,9 @@ export const App: React.FC = () => {
           isPaintMode={settings.isPaintMode}
           showZoomButtons={settings.showZoomButtons}
           showResetViewButton={settings.showResetViewButton}
+          showPaletteOptionsButton={Boolean(
+            isFreeColorMode || puzzle.isFreeColor || settings.enableCustomColorForAllPuzzles
+          )}
           raiseDock={settings.raisePaletteDock}
           isZoomedOrPanned={isCanvasTransformed}
           activeColor={puzzle.palette.find((c) => c.id === activeColorId) || null}

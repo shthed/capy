@@ -443,6 +443,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       desc: 'Floating button with diagonal arrows to fit puzzle to screen (disabled by default)',
                     },
                     {
+                      key: 'enableCustomColorForAllPuzzles' as const,
+                      label: 'Enable Custom Colour Picker for All Puzzles',
+                      desc: 'Show the custom colour chooser button for all puzzles, not just black and white coloring pages',
+                    },
+                    {
                       key: 'hapticsEnabled' as const,
                       label: 'Haptic Vibration Feedback',
                       desc: 'Tactile vibration ticks when painting and completing colours',

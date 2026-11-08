@@ -275,65 +275,65 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   return (
     <div
       ref={footerRef}
-      className="fixed z-20 transition-all pointer-events-none"
+      className="fixed z-20 left-0 right-0 pointer-events-none transition-all flex items-center"
       style={{
-        bottom: `calc(${raiseDock ? '2.5rem' : '1.25rem'} + var(--sab, 0px))`,
-        left: 'calc(1rem + var(--sal, 0px))',
-        right: 'calc(5.25rem + var(--sar, 0px))',
+        bottom: `calc(${raiseDock ? '0.75rem' : '0.25rem'} + var(--sab, 0px))`,
       }}
       aria-label="Palette dock"
     >
-      <div className="pointer-events-auto max-w-2xl mx-auto flex items-center p-2 rounded-2xl bg-slate-900/85 backdrop-blur-md border border-slate-700/60 shadow-2xl">
-        {/* Scrollable swatches (Active color remains in place with highlight ring) */}
-        <div
-          ref={scrollContainerRef}
-          className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 flex-1"
-        >
-          {dockPalette.map((color) => {
-            const isActive = color.id === activeColorId;
-            const isVisibleOnScreen = visibleColorIds.has(color.id);
-            const dispNum = displayNumberMap.get(color.id);
-            const badgeVal = isFreeColorMode
-              ? colorUsageMap.get(color.id) || 0
-              : remainingCountMap.get(color.id) || 0;
+      {/* Scrollable swatches floating all the way to screen edges with no outer border */}
+      <div
+        ref={scrollContainerRef}
+        className="pointer-events-auto w-full flex items-center gap-2 overflow-x-auto no-scrollbar py-1"
+        style={{
+          paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
+          paddingRight: 'max(5.25rem, calc(var(--sar, 0px) + 5.25rem))',
+        }}
+      >
+        {dockPalette.map((color) => {
+          const isActive = color.id === activeColorId;
+          const isVisibleOnScreen = visibleColorIds.has(color.id);
+          const dispNum = displayNumberMap.get(color.id);
+          const badgeVal = isFreeColorMode
+            ? colorUsageMap.get(color.id) || 0
+            : remainingCountMap.get(color.id) || 0;
 
-            return (
-              <button
-                key={color.id}
-                type="button"
-                onClick={() => handleSwatchClick(color)}
-                title={`Color #${dispNum}${
-                  isFreeColorMode
-                    ? ` (${badgeVal} painted)`
-                    : ` (${badgeVal} remaining)`
-                }${isVisibleOnScreen ? ' • On Screen' : ''}${isActive ? ' (Selected)' : ''}`}
-                className={`flex-shrink-0 relative flex flex-col items-center justify-center w-[44px] h-[38px] rounded-xl transition-all active:scale-95 ${
-                  isActive
-                    ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-105 shadow-lg opacity-100 z-10'
-                    : isVisibleOnScreen && prioritizeOnScreen
-                    ? 'ring-1 ring-white/50 shadow-md opacity-95 hover:opacity-100 hover:scale-102'
-                    : 'opacity-90 hover:opacity-100 hover:scale-102'
+          return (
+            <button
+              key={color.id}
+              type="button"
+              onClick={() => handleSwatchClick(color)}
+              title={`Color #${dispNum}${
+                isFreeColorMode
+                  ? ` (${badgeVal} painted)`
+                  : ` (${badgeVal} remaining)`
+              }${isVisibleOnScreen ? ' • On Screen' : ''}${isActive ? ' (Selected)' : ''}`}
+              className={`flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl transition-all active:scale-95 shadow-md ${
+                isActive
+                  ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-105 shadow-xl opacity-100 z-10'
+                  : isVisibleOnScreen && prioritizeOnScreen
+                  ? 'ring-1 ring-white/60 shadow-md opacity-95 hover:opacity-100 hover:scale-102'
+                  : 'opacity-90 hover:opacity-100 hover:scale-102'
+              }`}
+              style={{ backgroundColor: color.hex }}
+            >
+              <span
+                className={`text-[12px] font-extrabold leading-tight ${
+                  color.isLight ? 'text-slate-950' : 'text-white'
                 }`}
-                style={{ backgroundColor: color.hex }}
               >
-                <span
-                  className={`text-[12px] font-extrabold leading-tight ${
-                    color.isLight ? 'text-slate-950' : 'text-white'
-                  }`}
-                >
-                  {dispNum}
-                </span>
-                <span
-                  className={`text-[9.5px] font-bold leading-tight ${
-                    color.isLight ? 'text-slate-900/90' : 'text-slate-100/90'
-                  }`}
-                >
-                  {badgeVal}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                {dispNum}
+              </span>
+              <span
+                className={`text-[9.5px] font-bold leading-tight ${
+                  color.isLight ? 'text-slate-900/90' : 'text-slate-100/90'
+                }`}
+              >
+                {badgeVal}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

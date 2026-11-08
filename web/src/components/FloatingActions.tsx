@@ -6,6 +6,7 @@ interface FloatingActionsProps {
   isPaintMode: boolean;
   showZoomButtons: boolean;
   showResetViewButton?: boolean;
+  showPaletteOptionsButton?: boolean;
   raiseDock: boolean;
   isZoomedOrPanned?: boolean;
   activeColor?: PaletteColor | null;
@@ -24,6 +25,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
   isPaintMode,
   showZoomButtons,
   showResetViewButton = false,
+  showPaletteOptionsButton = false,
   raiseDock,
   isZoomedOrPanned = false,
   activeColor,
@@ -41,7 +43,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
     <div
       className="fixed z-20 flex flex-col items-end gap-2.5 transition-all"
       style={{
-        bottom: `calc(${raiseDock ? '6.75rem' : '5.5rem'} + var(--sab, 0px))`,
+        bottom: `calc(${raiseDock ? '4.25rem' : '3.5rem'} + var(--sab, 0px))`,
         right: 'calc(1rem + var(--sar, 0px))',
       }}
     >
@@ -139,7 +141,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
       </button>
 
       {/* Smaller button in the bottom right for choosing a custom colour & changing palette options */}
-      {onOpenPaletteOptions && (
+      {showPaletteOptionsButton && onOpenPaletteOptions && (
         <button
           type="button"
           onClick={onOpenPaletteOptions}
