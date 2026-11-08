@@ -6,6 +6,7 @@ This document tracks active cross-project tasks, pending optimizations, and plat
 > **Task Hygiene Rule**: Do not leave completed items in `TODO.md`. When a task, feature, or milestone is finished, remove it from this file rather than checking it off. Completed history is preserved in Git commits and pull request descriptions. Keep `TODO.md` strictly focused on active, pending work.
 
 For target-specific deep dives, see also:
+- **Updated Web Architecture & UI Reference**: [`WEB.md`](./WEB.md)
 - **Puzzle Generation Engine Reference**: [`PUZZLE.md`](./PUZZLE.md)
 - **Unified Android Launcher Architecture & Native Bridge**: [`APP.md`](./APP.md)
 - **Legacy Android v1 Architecture & Roadmap**: [`app1/APP1.md`](./app1/APP1.md)

@@ -48,6 +48,7 @@
 ## 🛠️ Architecture & Documentation
 
 - **Master Project Roadmap & TODO**: [`TODO.md`](./TODO.md)
+- **Updated Web Architecture & UI Reference**: [`WEB.md`](./WEB.md)
 - **Puzzle Generation Engine Reference**: [`PUZZLE.md`](./PUZZLE.md)
 - **Unified Android Launcher Architecture & Native Bridge**: [`APP.md`](./APP.md)
 - **Legacy Android v1 Architecture & Roadmap**: [`app1/APP1.md`](./app1/APP1.md)
