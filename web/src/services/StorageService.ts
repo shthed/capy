@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   canvasBgArgb: 0xff18181b,
   saveSortOrder: 'LAST_ACTIVE',
   showSavePreviews: true,
-  highlightStyle: 'CENTROID_GLOW',
+  highlightStyle: 'FULL_REGION',
   hintFillStyle: 'CHECKER',
   hintColorArgb: 0xfffbbf24,
   showRegionLabels: true,
@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   paletteSort: 'NUMBER',
   prioritizeOnScreen: true,
   hapticsEnabled: true,
+  panMomentum: true,
   enableCustomColorForAllPuzzles: false,
   generatorConfig: {
     algorithm: 'AUTO',

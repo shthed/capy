@@ -133,10 +133,15 @@ export function getVisiblePalette(
 export function getDockPalette(
   basePalette: PaletteColor[],
   prioritizeOnScreen: boolean = false,
-  visibleColorIds: Set<number> = new Set()
+  visibleColorIds: Set<number> = new Set(),
+  activeColorId?: number
 ): PaletteColor[] {
   if (!prioritizeOnScreen || visibleColorIds.size === 0) return basePalette;
   return [...basePalette].sort((a, b) => {
+    if (activeColorId !== undefined) {
+      if (a.id === activeColorId) return -1;
+      if (b.id === activeColorId) return 1;
+    }
     const aVis = visibleColorIds.has(a.id) ? 1 : 0;
     const bVis = visibleColorIds.has(b.id) ? 1 : 0;
     return bVis - aVis;
@@ -185,13 +190,13 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
     return map;
   }, [regions, filledRegionIds, paintedRegionColors]);
 
-  // Available palette in dock
+  // Available palette in dock - never hide active colour even if all regions filled
   const uncompletedPalette = useMemo(() => {
     if (isFreeColorMode) {
       return palette;
     }
-    return palette.filter((c) => (remainingCountMap.get(c.id) || 0) > 0);
-  }, [palette, remainingCountMap, isFreeColorMode]);
+    return palette.filter((c) => (remainingCountMap.get(c.id) || 0) > 0 || c.id === activeColorId);
+  }, [palette, remainingCountMap, isFreeColorMode, activeColorId]);
 
   // Sorted base palette
   const sortedPalette = useMemo(() => {
@@ -227,15 +232,17 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
     return getDisplayNumberMap(palette, regions, sortOrder);
   }, [palette, regions, sortOrder]);
 
-  // Order with on-screen prioritization
+  // Order with on-screen prioritization - never hide or deprioritize active colour even if offscreen
   const dockPalette = useMemo(() => {
     if (!prioritizeOnScreen || visibleColorIds.size === 0) return sortedPalette;
     return [...sortedPalette].sort((a, b) => {
+      if (a.id === activeColorId) return -1;
+      if (b.id === activeColorId) return 1;
       const aVis = visibleColorIds.has(a.id) ? 1 : 0;
       const bVis = visibleColorIds.has(b.id) ? 1 : 0;
       return bVis - aVis;
     });
-  }, [sortedPalette, prioritizeOnScreen, visibleColorIds]);
+  }, [sortedPalette, prioritizeOnScreen, visibleColorIds, activeColorId]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
