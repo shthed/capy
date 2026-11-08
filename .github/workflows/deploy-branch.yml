@@ -32,29 +32,33 @@ on:
         default: false
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
-  actions: read
-  pull-requests: write
+  contents: read
 
 concurrency:
-  group: deploy-pages
-  cancel-in-progress: false
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  deploy:
-    name: Build, Test & Deploy
-    runs-on: ubuntu-24.04
-    environment:
-      name: github-pages
-      url: ${{ steps.target.outputs.preview_url }}
-    env:
-      BASE_PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      branch: ${{ steps.target.outputs.branch }}
+      safe_branch: ${{ steps.target.outputs.safe_branch }}
+      pr: ${{ steps.target.outputs.pr }}
+      target_dir: ${{ steps.target.outputs.target_dir }}
+      preview_url: ${{ steps.target.outputs.preview_url }}
+      skip: ${{ steps.target.outputs.skip }}
+      checkout_ref: ${{ steps.target.outputs.checkout_ref }}
     steps:
       - name: Determine deployment target
         id: target
         uses: actions/github-script@v9
+        env:
+          BASE_PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
         with:
           script: |
             const inputs = context.payload?.inputs || {};
@@ -102,8 +106,11 @@ jobs:
 
             const shouldSkip = branch !== 'main' && !prNumber && !allowWithoutPr;
 
+            const checkoutRef = context.payload?.pull_request?.head?.sha || branchInput || context.sha;
+
             const summaryLines = [
               `Branch: ${branch}`,
+              `Checkout ref: ${checkoutRef}`,
               prNumber ? `PR: #${prNumber}` : 'PR: none found',
               `Target directory: ${targetDir}`,
               `Preview URL (Web): ${previewUrl}`,
@@ -120,6 +127,7 @@ jobs:
             core.setOutput('target_dir', targetDir);
             core.setOutput('preview_url', previewUrl);
             core.setOutput('skip', shouldSkip ? 'true' : 'false');
+            core.setOutput('checkout_ref', checkoutRef);
 
             core.summary.addRaw(summaryLines.join('\n')).write();
 
@@ -127,7 +135,7 @@ jobs:
         if: steps.target.outputs.skip != 'true'
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ steps.target.outputs.checkout_ref }}
 
       - name: Use Node.js 22
         if: steps.target.outputs.skip != 'true'
@@ -161,8 +169,46 @@ jobs:
         if: steps.target.outputs.skip != 'true'
         run: ./gradlew app:testDebugUnitTest app:assembleDebug --build-cache
 
-      - name: Retrieve existing gh-pages content
+      - name: Stage build artifacts
         if: steps.target.outputs.skip != 'true'
+        run: |
+          mkdir -p staging/web
+          cp -r web/dist/* staging/web/
+          mkdir -p staging/apk
+          cp app/build/outputs/apk/debug/app-debug.apk staging/apk/capy.apk
+
+      - name: Upload build artifacts
+        if: steps.target.outputs.skip != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-artifacts-${{ github.run_attempt }}
+          path: staging
+          retention-days: 1
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: [build]
+    if: needs.build.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ needs.build.outputs.preview_url }}
+    concurrency:
+      group: deploy-pages
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: build-artifacts-${{ github.run_attempt }}
+          path: staging
+
+      - name: Retrieve existing gh-pages content
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -180,9 +226,8 @@ jobs:
           rm -rf pages/README
 
       - name: Prepare site content
-        if: steps.target.outputs.skip != 'true'
         env:
-          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
+          TARGET_DIR: ${{ needs.build.outputs.target_dir }}
         run: |
           set -euo pipefail
 
@@ -194,21 +239,20 @@ jobs:
             rsync -av --delete \
               --exclude '.git/' \
               --exclude 'pull/' \
-              web/dist/ "${DEST_DIR}/"
+              staging/web/ "${DEST_DIR}/"
           else
             rm -rf "${DEST_DIR}"
             mkdir -p "${DEST_DIR}"
             rsync -av --delete \
-              web/dist/ "${DEST_DIR}/"
+              staging/web/ "${DEST_DIR}/"
           fi
 
-          cp app/build/outputs/apk/debug/app-debug.apk "${DEST_DIR}/capy.apk"
+          cp staging/apk/capy.apk "${DEST_DIR}/capy.apk"
 
       - name: Sync gh-pages branch (squashed history) and remove .git before artifact upload
-        if: steps.target.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
+          TARGET_DIR: ${{ needs.build.outputs.target_dir }}
         run: |
           set -euo pipefail
           if [ -d pages/.git ]; then
@@ -222,16 +266,15 @@ jobs:
               git add -A
               git commit -m "Deploy ${TARGET_DIR}"
               git branch -M gh-pages
-              git push --force origin gh-pages || echo "Warning: gh-pages push skipped"
+              git push --force origin gh-pages
             fi
             cd ..
             rm -rf pages/.git
           fi
 
       - name: Capture deployment directory listing
-        if: steps.target.outputs.skip != 'true'
         env:
-          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
+          TARGET_DIR: ${{ needs.build.outputs.target_dir }}
         run: |
           set -euo pipefail
 
@@ -240,26 +283,24 @@ jobs:
           ls -lh "${LIST_PATH}" | tee -a deployment-directory-listing.txt
 
       - name: Upload Pages artifact
-        if: steps.target.outputs.skip != 'true'
         uses: actions/upload-pages-artifact@v5
         with:
           path: pages
           name: github-pages-${{ github.run_attempt }}
 
       - name: Deploy to GitHub Pages
-        if: steps.target.outputs.skip != 'true'
         id: deployment
         uses: actions/deploy-pages@v5
         with:
           artifact_name: github-pages-${{ github.run_attempt }}
 
       - name: Comment PR with preview & APK links
-        if: steps.target.outputs.skip != 'true' && steps.target.outputs.pr != ''
+        if: needs.build.outputs.pr != ''
         uses: actions/github-script@v9
         with:
           script: |
-            const prNumber = Number('${{ steps.target.outputs.pr }}');
-            const previewUrl = '${{ steps.target.outputs.preview_url }}';
+            const prNumber = Number('${{ needs.build.outputs.pr }}');
+            const previewUrl = '${{ needs.build.outputs.preview_url }}';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const marker = '<!-- capy-pages-preview -->';
             const body = [
@@ -294,13 +335,13 @@ jobs:
             }
 
       - name: Output preview link
-        if: steps.target.outputs.skip != 'true'
         env:
-          TARGET_DIR: ${{ steps.target.outputs.target_dir }}
+          TARGET_DIR: ${{ needs.build.outputs.target_dir }}
+          PREVIEW_URL: ${{ needs.build.outputs.preview_url }}
         run: |
           {
-            echo "Preview (Web): ${{ steps.target.outputs.preview_url }}"
-            echo "Android APK: ${{ steps.target.outputs.preview_url }}capy.apk"
+            echo "Preview (Web): ${PREVIEW_URL}"
+            echo "Android APK: ${PREVIEW_URL}capy.apk"
             echo ""
             echo "Deployment directory listing (pages/${TARGET_DIR}):"
             echo '```'

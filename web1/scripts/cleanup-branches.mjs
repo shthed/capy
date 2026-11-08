@@ -29,6 +29,9 @@ if (token) {
 
 const dryRun = (process.env.BRANCH_CLEANUP_DRY_RUN ?? 'false').toLowerCase() === 'true';
 
+const minAgeDays = Math.max(0, Number.parseFloat(process.env.BRANCH_CLEANUP_MIN_AGE_DAYS ?? '1') || 1);
+const minAgeMs = minAgeDays * 24 * 60 * 60 * 1000;
+
 const includePrefixes = (() => {
   const raw = process.env.BRANCH_CLEANUP_PREFIXES ?? '';
   return raw
@@ -138,7 +141,10 @@ const branchMatchesPrefix = (name) => {
     return false;
   }
   if (includePrefixes.length === 0) {
-    return true;
+    return false; // Safe default: require explicit prefix configuration before deleting any branch
+  }
+  if (includePrefixes.includes('*')) {
+    return true; // Explicit wildcard if user specifically requests all branches
   }
   return includePrefixes.some((prefix) => name.startsWith(prefix));
 };
@@ -155,7 +161,8 @@ const main = async () => {
   console.log('cleanup-branches: starting cleanup with configuration:');
   console.log(`- repository: ${owner}/${repo}`);
   console.log(`- dry run: ${dryRun}`);
-  console.log(`- allowed prefixes: ${includePrefixes.length > 0 ? includePrefixes.join(', ') : 'all branches'}`);
+  console.log(`- allowed prefixes: ${includePrefixes.length > 0 ? includePrefixes.join(', ') : 'none configured (safe mode: skipping all)'}`);
+  console.log(`- minimum age: ${minAgeDays} day(s)`);
 
   const pulls = await fetchOpenPulls();
   const activeBranches = new Set();
@@ -167,13 +174,17 @@ const main = async () => {
   }
 
   const closedPulls = await paginate('pulls', { state: 'closed', sort: 'updated', direction: 'desc' });
-  const mergedBranches = new Set();
+  const mergedBranches = new Map();
   for (const pull of closedPulls) {
     const branch = pull?.head?.ref;
     const merged = pull?.merged_at;
     const headRepo = pull?.head?.repo?.full_name;
     if (branch && merged && headRepo === repository) {
-      mergedBranches.add(branch);
+      const mergedTime = new Date(merged).getTime();
+      const existing = mergedBranches.get(branch) ?? 0;
+      if (mergedTime > existing) {
+        mergedBranches.set(branch, mergedTime);
+      }
     }
   }
 
@@ -187,19 +198,27 @@ const main = async () => {
       continue;
     }
 
+    const mergedAt = mergedBranches.get(name);
+
     if (name === defaultBranch) {
       diagnostics.push({ name, detail: 'skipped default branch' });
     } else if (branch.protected) {
       diagnostics.push({ name, detail: 'skipped protected branch' });
+    } else if (includePrefixes.length === 0) {
+      diagnostics.push({ name, detail: 'skipped: no allowed prefixes configured in BRANCH_CLEANUP_PREFIXES (safe mode)' });
     } else if (!branchMatchesPrefix(name)) {
-      diagnostics.push({ name, detail: `skipped unmatched prefix (allowed: ${includePrefixes.join(', ') || 'all'})` });
+      diagnostics.push({ name, detail: `skipped unmatched prefix (allowed: ${includePrefixes.join(', ')})` });
     } else if (activeBranches.has(name)) {
       diagnostics.push({ name, detail: 'skipped branch with open pull request' });
-    } else if (!mergedBranches.has(name)) {
+    } else if (!mergedAt) {
       diagnostics.push({ name, detail: 'skipped: no merged pull request found for branch' });
+    } else if (Date.now() - mergedAt < minAgeMs) {
+      const ageHours = Math.max(0, Math.round((Date.now() - mergedAt) / (1000 * 60 * 60)));
+      diagnostics.push({ name, detail: `skipped: merged recently (${ageHours}h ago < ${minAgeDays * 24}h threshold)` });
     } else {
+      const ageDays = Math.max(0, Math.round((Date.now() - mergedAt) / (1000 * 60 * 60 * 24)));
       deletions.push({ name });
-      diagnostics.push({ name, detail: 'eligible for deletion (merged pull request found)' });
+      diagnostics.push({ name, detail: `eligible for deletion (merged ${ageDays}d ago)` });
     }
   }
 
