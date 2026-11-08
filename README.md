@@ -102,3 +102,14 @@ Run Gradle commands from the repository root:
 # Install debug APK to connected device/emulator
 ./gradlew app:installDebug
 ```
+
+---
+
+## 🔄 Keeping Dependencies Updated
+
+Detailed instructions for checking and updating dependencies across all targets are documented in [`AGENTS.md`](./AGENTS.md#5-maintaining--updating-dependencies):
+
+- **Web (`web/`)**: Run `cd web && npm outdated` and `npm update`, then verify with `npm run lint` and `npm run build`.
+- **Legacy Web (`web1/`)**: Run `cd web1 && npm update`, then verify with `npm test`.
+- **Android (`app/` & `app1/`)**: Update version catalog in [`gradle/libs.versions.toml`](./gradle/libs.versions.toml), ensure `compileSdk` alignment, then verify with `./gradlew app:testDebugUnitTest app1:testDebugUnitTest` and `./gradlew app:assembleDebug app1:assembleDebug`.
+
