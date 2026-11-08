@@ -23,7 +23,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   hintFillStyle: 'CHECKER',
   hintColorArgb: 0xfffbbf24,
   showRegionLabels: true,
-  showPreviewLabels: true,
+  showPreviewLabels: false,
   showPreviewBorders: false,
   highlightMatching: true,
   animateHint: true,

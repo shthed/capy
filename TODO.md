@@ -47,6 +47,33 @@ For target-specific deep dives, see also:
 
 ---
 
+## ✅ Completed: Gameplay, Canvas & UX Refinements (`automation/gameplay-fixes`)
+
+- [x] **Ghost Active Color State Desync Fix**:
+  - Resolved bug where images with pruned empty clusters (e.g. Snail Guitar) left `activeColorId` desynced from `dockPalette[0].id`.
+  - Evaluated `getVisiblePalette` before assigning default active color across session restore, artwork load, and snapshot load, plus added defensive dock synchronization.
+- [x] **Hint Auto-Pan Clamping & Stability**:
+  - Constrained hint auto-centering to only pan if `scale > 1.05` and the region is currently off-screen.
+  - Added boundary clamping to drag and pan offsets, preventing canvas from drifting into an empty void.
+- [x] **Fit-to-Screen Reset Action & Double-Tap Gesture**:
+  - Added floating `Maximize2` "Fit to Screen" button that displays when zoomed or panned.
+  - Added double-tap detection (<300ms) to smoothly reset camera zoom to 1x and re-center the canvas.
+- [x] **Gallery Canvas Framing & Depth**:
+  - Added ambient drop shadow (`rgba(0, 0, 0, 0.55)`, blur 24px) around the artwork boundary, creating distinct framing on dark stage backgrounds.
+- [x] **Pristine Reference Preview Mode**:
+  - Defaulted `showPreviewLabels` to `false` in storage preferences.
+  - Suppressed glowing highlight circles during preview mode so players can examine the clean original artwork.
+- [x] **Micro-Region Label Culling**:
+  - Suppressed badge numbers on tiny sub-threshold regions at 1x zoom (`minDim * effScale < 14`), eliminating collision swarms while keeping active and hinted regions visible.
+- [x] **Mobile Settings Modal Responsiveness**:
+  - Enabled horizontal scroll on settings tab navigation (`overflow-x-auto no-scrollbar`) with flexible padding, preventing "Saves" tab cutoff on narrow mobile screens.
+- [x] **Palette Swatch Typography**:
+  - Enlarged swatch remaining count labels to `text-[10px]` with high-contrast text styling.
+- [x] **100% Victory Celebration & PNG Export**:
+  - Implemented `VictoryModal` with trophy badge, stats, full-resolution artwork PNG download (`handleExportArtwork`), and quick "Pick Next Artwork" action.
+
+---
+
 ## 🧹 Immediate Post-Merge Cleanup
 
 - [ ] **Archive or Delete Redundant Secondary Repositories**:

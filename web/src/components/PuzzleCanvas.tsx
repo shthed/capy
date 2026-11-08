@@ -37,6 +37,7 @@ interface PuzzleCanvasProps {
   displayNumberMap: Map<number, string>;
   zoomInTrigger?: number;
   zoomOutTrigger?: number;
+  resetViewTrigger?: number;
   initialZoomScale?: number;
   initialPanOffsetX?: number;
   initialPanOffsetY?: number;
@@ -72,6 +73,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   displayNumberMap,
   zoomInTrigger = 0,
   zoomOutTrigger = 0,
+  resetViewTrigger = 0,
   initialZoomScale = 1.0,
   initialPanOffsetX = 0,
   initialPanOffsetY = 0,
@@ -120,6 +122,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const touchStartDistRef = useRef<number | null>(null);
   const touchLastCenterRef = useRef<{ x: number; y: number } | null>(null);
   const initialTouchScaleRef = useRef(1);
+  const lastTapTimeRef = useRef(0);
 
   // Reset zoom/offset when a brand-new puzzle object is loaded
   useEffect(() => {
@@ -137,6 +140,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     if (zoomOutTrigger <= 0) return;
     setScale((prev) => Math.max(0.5, prev * 0.8));
   }, [zoomOutTrigger]);
+
+  useEffect(() => {
+    if (resetViewTrigger <= 0) return;
+    setScale(1.0);
+    setOffset({ x: 0, y: 0 });
+  }, [resetViewTrigger]);
 
   // Pulse animation frame (only runs when animateHint is active)
   useEffect(() => {
@@ -529,10 +538,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       region.maxY >= visTop &&
       region.minY <= visBottom;
 
-    if (showNextRegionHint || !isOnScreen) {
+    // Only auto-pan if the canvas is zoomed in AND the region is outside the visible viewport
+    const isZoomedIn = scale > 1.05;
+    if (showNextRegionHint && isZoomedIn && !isOnScreen) {
       const targetX = w / 2 - baseOffsetX - region.centroidX * effScale;
       const targetY = h / 2 - baseOffsetY - region.centroidY * effScale;
-      setOffset({ x: targetX, y: targetY });
+      const maxPanX = Math.max(w * 0.4, (puzzle.width * effScale) * 0.55);
+      const maxPanY = Math.max(h * 0.4, (puzzle.height * effScale) * 0.55);
+      setOffset({
+        x: Math.max(-maxPanX, Math.min(maxPanX, targetX)),
+        y: Math.max(-maxPanY, Math.min(maxPanY, targetY)),
+      });
     }
   }, [hintRegionId, puzzle, showNextRegionHint]);
 
@@ -681,6 +697,21 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     const baseOffsetY = (h - puzzle.height * baseScale) / 2;
     const effScale = scale * baseScale;
 
+    // Draw artwork drop shadow framing on stage
+    const artScreenX = offset.x + baseOffsetX;
+    const artScreenY = offset.y + baseOffsetY;
+    const artScreenW = puzzle.width * effScale;
+    const artScreenH = puzzle.height * effScale;
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+    ctx.shadowBlur = 24;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 6;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(artScreenX, artScreenY, artScreenW, artScreenH);
+    ctx.restore();
+
     ctx.save();
     ctx.translate(offset.x + baseOffsetX, offset.y + baseOffsetY);
     ctx.scale(effScale, effScale);
@@ -825,7 +856,20 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y);
       setTapDot({ x: currCoords.x, y: currCoords.y, alpha: 1 });
     } else {
-      setOffset((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+      setOffset((prev) => {
+        const container = containerRef.current;
+        if (!container || !puzzle) return { x: prev.x + dx, y: prev.y + dy };
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
+        const effScale = scale * baseScale;
+        const maxPanX = Math.max(w * 0.45, (puzzle.width * effScale) * 0.55);
+        const maxPanY = Math.max(h * 0.45, (puzzle.height * effScale) * 0.55);
+        return {
+          x: Math.max(-maxPanX, Math.min(maxPanX, prev.x + dx)),
+          y: Math.max(-maxPanY, Math.min(maxPanY, prev.y + dy)),
+        };
+      });
     }
   };
 
@@ -839,6 +883,16 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
     // Single tap detection with 3x3 neighborhood micro-region fallback
     if (totalDragDistanceRef.current < 12) {
+      const now = Date.now();
+      const timeSinceLastTap = now - lastTapTimeRef.current;
+      lastTapTimeRef.current = now;
+
+      // Double-tap resets camera zoom and center
+      if (timeSinceLastTap < 300 && (scale > 1.05 || Math.abs(offset.x) > 5 || Math.abs(offset.y) > 5)) {
+        setScale(1.0);
+        setOffset({ x: 0, y: 0 });
+        return;
+      }
       if (isPreviewMode) {
         onTogglePreview();
       } else if (!isPaintMode) {
@@ -1028,8 +1082,8 @@ function renderLabels(
     const regH = region.maxY - region.minY + 1;
     const minDim = Math.min(regW, regH);
 
-    // Glowing matching circle
-    if (isActive && highlightMatching && drawGlowCircle) {
+    // Glowing matching circle (only in puzzle mode)
+    if (!isEffectivePreview && isActive && highlightMatching && drawGlowCircle) {
       const alpha = animateHint ? pulseAlpha * hintIntensity * 0.8 : hintIntensity * 0.7;
       ctx.beginPath();
       const radius = Math.max(4 / effScale, minDim * 0.18);
@@ -1038,8 +1092,8 @@ function renderLabels(
       ctx.fill();
     }
 
-    // Glowing hinted region circle
-    if (isHinted && (drawGlowCircle || isNumberOnly)) {
+    // Glowing hinted region circle (only in puzzle mode)
+    if (!isEffectivePreview && isHinted && (drawGlowCircle || isNumberOnly)) {
       const alpha = animateHint ? pulseAlpha * hintIntensity * 0.95 : hintIntensity * 0.9;
       ctx.beginPath();
       const radius = Math.max(8 / effScale, minDim * 0.45);
@@ -1050,8 +1104,12 @@ function renderLabels(
 
     if (!drawLabelsNow) continue;
 
-    // Tiny regions skip when zoomed way out
-    if (minDim * effScale < 6 && !isActive && !isHinted) {
+    // Tiny regions skip when unzoomed (unless active or hinted)
+    if (
+      !isActive &&
+      !isHinted &&
+      (minDim * effScale < 14 || (region.maxRadius > 0 && region.maxRadius * effScale < 7))
+    ) {
       continue;
     }
 
