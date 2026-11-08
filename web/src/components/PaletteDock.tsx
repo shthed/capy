@@ -202,6 +202,13 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
     return () => footer.removeEventListener('wheel', handleWheel);
   }, []);
 
+  // Defensively sync active color if current activeColorId has 0 remaining or is not in dock
+  useEffect(() => {
+    if (dockPalette.length > 0 && !dockPalette.some((c) => c.id === activeColorId)) {
+      onColorSelected(dockPalette[0].id);
+    }
+  }, [dockPalette, activeColorId, onColorSelected]);
+
   if (dockPalette.length === 0) return null;
 
   // Active item
@@ -241,15 +248,15 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
               style={{ backgroundColor: activeColor.hex }}
             >
               <span
-                className={`text-[12.5px] font-extrabold leading-tight ${
+                className={`text-[13px] font-extrabold leading-tight ${
                   activeColor.isLight ? 'text-slate-950' : 'text-white'
                 }`}
               >
                 {displayNumberMap.get(activeColor.id)}
               </span>
               <span
-                className={`text-[9.5px] font-bold leading-tight ${
-                  activeColor.isLight ? 'text-slate-800' : 'text-slate-200'
+                className={`text-[10px] font-bold leading-tight ${
+                  activeColor.isLight ? 'text-slate-900/90' : 'text-slate-100/90'
                 }`}
               >
                 {remainingCountMap.get(activeColor.id) || 0}
@@ -289,8 +296,8 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
                   {dispNum}
                 </span>
                 <span
-                  className={`text-[9px] font-bold leading-tight ${
-                    color.isLight ? 'text-slate-800' : 'text-slate-200'
+                  className={`text-[9.5px] font-bold leading-tight ${
+                    color.isLight ? 'text-slate-900/90' : 'text-slate-100/90'
                   }`}
                 >
                   {remaining}

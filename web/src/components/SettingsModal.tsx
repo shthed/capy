@@ -176,7 +176,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-800 bg-slate-950/40 px-3">
+        <div className="flex border-b border-slate-800 bg-slate-950/40 px-2 sm:px-3 overflow-x-auto no-scrollbar">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -185,7 +185,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 transition-all ${
+                className={`flex-shrink-0 flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold border-b-2 transition-all ${
                   isActive
                     ? 'border-amber-400 text-amber-400'
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
@@ -199,7 +199,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Tab Contents */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 pb-12 space-y-6">
           {/* TAB 0: SETTINGS */}
           {activeTab === 0 && (
             <div className="space-y-6">
