@@ -64,9 +64,9 @@ From the repository root:
 - **Session kick-off**: Run `git fetch --all --prune` and rebase onto `origin/main` before starting work.
 - **Branch naming**: Use short-lived feature branches (`automation/<change>` or `feature/<change>`) and open PRs so CI and preview deployments run automatically.
 - **Unified CI & Branch Deployments ([`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml))**:
-  - Runs Android unit tests + debug APK build (`android`), Web + Web1 build & Playwright smoke tests (`web`), and GitHub Pages deployment (`deploy`).
-  - `main` deploys `web/dist/` to `/` (`https://shthed.github.io/capy/`), `web1/` to `/web1/` (`https://shthed.github.io/capy/web1/`), and the Android APK to `/capy.apk` (`https://shthed.github.io/capy/capy.apk`).
-  - Open PR branches deploy previews to `/pull/<number>/`, `/pull/<number>/web1/`, and `/pull/<number>/capy.apk`.
+  - Runs Web build/typecheck (`web`) and Android unit tests + debug APK build (`android`) in parallel, followed by GitHub Pages deployment (`deploy`). Legacy `web1` and `app1` targets and Playwright smoke checks are omitted from standard CI runs.
+  - `main` deploys `web/dist/` to `/` (`https://shthed.github.io/capy/`) and the Android APK to `/capy.apk` (`https://shthed.github.io/capy/capy.apk`).
+  - Open PR branches deploy previews to `/pull/<number>/` and `/pull/<number>/capy.apk`.
   - `gh-pages` commits are squashed to a single orphan commit on every push so binary `.apk` files never accumulate in Git history.
 - **No unsolicited Android device deployment**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
 - **Documentation hygiene**: Keep [`TODO.md`](./TODO.md), [`PUZZLE.md`](./PUZZLE.md), [`APP.md`](./APP.md), [`app1/APP1.md`](./app1/APP1.md), and [`web1/WEB1.md`](./web1/WEB1.md) in sync with architectural or runtime changes.
