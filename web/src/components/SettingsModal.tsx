@@ -434,8 +434,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     },
                     {
                       key: 'showZoomButtons' as const,
-                      label: 'Show Zoom (+ / -) Buttons',
-                      desc: 'Floating zoom buttons above hint trigger',
+                      label: 'Show Zoom In (+) Button',
+                      desc: 'Floating zoom in button in the bottom right',
+                    },
+                    {
+                      key: 'showZoomOutButton' as const,
+                      label: 'Show Zoom Out (-) Button',
+                      desc: 'Floating zoom out button (disabled by default)',
                     },
                     {
                       key: 'hapticsEnabled' as const,

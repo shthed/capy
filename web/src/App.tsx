@@ -22,6 +22,7 @@ import { FloatingActions } from './components/FloatingActions';
 import { SettingsModal } from './components/SettingsModal';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { VictoryModal } from './components/VictoryModal';
+import { ColorPickerPopover } from './components/ColorPickerPopover';
 
 export const App: React.FC = () => {
   // Persistence & Settings
@@ -56,6 +57,7 @@ export const App: React.FC = () => {
   // Modal Sheet
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<number>(0);
+  const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
 
   // Fullscreen State
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => {
@@ -1147,8 +1149,19 @@ export const App: React.FC = () => {
         <FloatingActions
           isPaintMode={settings.isPaintMode}
           showZoomButtons={settings.showZoomButtons}
+          showZoomOutButton={settings.showZoomOutButton}
           raiseDock={settings.raisePaletteDock}
           isZoomedOrPanned={isCanvasTransformed}
+          activeColor={puzzle.palette.find((c) => c.id === activeColorId) || null}
+          activeColorDisplayNumber={displayNumberMap.get(activeColorId)}
+          activeColorBadgeVal={
+            isFreeColorMode
+              ? (paintedRegionColors
+                  ? Array.from(paintedRegionColors.values()).filter((c) => c === activeColorId).length
+                  : 0)
+              : puzzle.regions.filter((r) => r.colorId === activeColorId && !filledRegionIds.has(r.id)).length
+          }
+          isFreeColorMode={isFreeColorMode}
           onTriggerHint={() => triggerHint()}
           onTogglePaintMode={() => {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
@@ -1157,10 +1170,11 @@ export const App: React.FC = () => {
           onZoomIn={() => setZoomInTrigger((prev) => prev + 1)}
           onZoomOut={() => setZoomOutTrigger((prev) => prev + 1)}
           onResetView={() => setResetViewTrigger((prev) => prev + 1)}
+          onOpenPaletteOptions={() => setShowPaletteOptions(true)}
         />
       )}
 
-      {/* Palette Dock at bottom */}
+      {/* Palette Dock floating above canvas */}
       {puzzle && (
         <PaletteDock
           palette={puzzle.palette}
@@ -1179,6 +1193,18 @@ export const App: React.FC = () => {
             setHintRegionId(null);
           }}
           onColorHintRequested={(colId) => triggerHint(colId)}
+          onAddCustomColor={handleAddCustomColor}
+          onUpdateColor={handleUpdateColor}
+          onApplyPresetPalette={handleApplyPresetPalette}
+        />
+      )}
+
+      {/* Custom Color Picker & Palette Options Popover */}
+      {puzzle && (
+        <ColorPickerPopover
+          isOpen={showPaletteOptions}
+          activeColor={puzzle.palette.find((c) => c.id === activeColorId) || null}
+          onClose={() => setShowPaletteOptions(false)}
           onAddCustomColor={handleAddCustomColor}
           onUpdateColor={handleUpdateColor}
           onApplyPresetPalette={handleApplyPresetPalette}

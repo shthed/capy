@@ -81,6 +81,7 @@ export interface UserSettings {
   hintIntensity: number;
   labelScale: number;
   showZoomButtons: boolean;
+  showZoomOutButton: boolean;
   paletteSort: PaletteSortOrder;
   prioritizeOnScreen: boolean;
   hapticsEnabled: boolean;

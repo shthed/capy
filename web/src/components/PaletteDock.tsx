@@ -1,7 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Palette, Pencil, Plus, X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
-  COLORING_PALETTE_PRESETS,
   PaletteColor,
   PalettePreset,
   PaletteSortOrder,
@@ -159,10 +157,6 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   onUpdateColor,
   onApplyPresetPalette,
 }) => {
-  const [showPresetsMenu, setShowPresetsMenu] = useState(false);
-  const addColorInputRef = useRef<HTMLInputElement>(null);
-  const editColorInputRef = useRef<HTMLInputElement>(null);
-
   // Remaining counts per color (for standard color-by-number mode)
   const remainingCountMap = useMemo(() => {
     const map = new Map<number, number>();
@@ -239,7 +233,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   }, [sortedPalette, prioritizeOnScreen, visibleColorIds]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const footerRef = useRef<HTMLElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
 
   // Enable horizontal mouse wheel scrolling across the color chooser
   useEffect(() => {
@@ -270,10 +264,6 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
 
   if (dockPalette.length === 0) return null;
 
-  // Active item
-  const activeColor = dockPalette.find((c) => c.id === activeColorId) || dockPalette[0];
-  const scrollableColors = dockPalette.filter((c) => c.id !== activeColor?.id);
-
   const handleSwatchClick = (c: PaletteColor) => {
     if (c.id === activeColorId) {
       onColorHintRequested(c.id);
@@ -283,150 +273,24 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   };
 
   return (
-    <footer
+    <div
       ref={footerRef}
-      className={`fixed bottom-0 left-0 right-0 z-20 flex flex-col items-center px-3 pt-2 bg-slate-950/90 backdrop-blur-md border-t border-slate-800/80 shadow-2xl transition-all ${
-        raiseDock ? 'safe-bottom-raised' : 'safe-bottom'
-      }`}
+      className="fixed z-20 transition-all pointer-events-none"
       style={{
-        paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
-        paddingRight: 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
+        bottom: `calc(${raiseDock ? '2.5rem' : '1.25rem'} + var(--sab, 0px))`,
+        left: 'calc(1rem + var(--sal, 0px))',
+        right: 'calc(5.25rem + var(--sar, 0px))',
       }}
       aria-label="Palette dock"
     >
-      {/* Hidden Color Picker Inputs */}
-      <input
-        ref={addColorInputRef}
-        type="color"
-        defaultValue="#ef4444"
-        onChange={(e) => {
-          onAddCustomColor?.(e.target.value);
-        }}
-        className="sr-only"
-        aria-hidden="true"
-        tabIndex={-1}
-      />
-      <input
-        ref={editColorInputRef}
-        type="color"
-        defaultValue={activeColor?.hex || '#ef4444'}
-        onChange={(e) => {
-          if (activeColor) {
-            onUpdateColor?.(activeColor.id, e.target.value);
-          }
-        }}
-        className="sr-only"
-        aria-hidden="true"
-        tabIndex={-1}
-      />
-
-      {/* Preset Palettes Menu Popover */}
-      {showPresetsMenu && onApplyPresetPalette && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md mb-2 p-3 rounded-2xl bg-slate-900 border border-slate-700/80 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150 z-30 select-none"
-        >
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
-              <Palette size={14} />
-              <span>Coloring Palettes & Themes</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowPresetsMenu(false)}
-              className="p-1 rounded text-slate-400 hover:text-white"
-              title="Close"
-            >
-              <X size={14} />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 gap-1.5 max-h-56 overflow-y-auto no-scrollbar">
-            {COLORING_PALETTE_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => {
-                  onApplyPresetPalette(preset);
-                  setShowPresetsMenu(false);
-                }}
-                className="flex items-center justify-between p-2 rounded-xl bg-slate-950/60 hover:bg-slate-800 border border-slate-800/80 transition-all text-left group"
-              >
-                <span className="text-xs font-semibold text-slate-200 group-hover:text-amber-300">
-                  {preset.name}
-                </span>
-                <div className="flex items-center gap-0.5 ml-2">
-                  {preset.colors.slice(0, 10).map((hex, idx) => (
-                    <span
-                      key={idx}
-                      className="w-3.5 h-3.5 rounded-full border border-black/30 shadow-xs"
-                      style={{ backgroundColor: hex }}
-                    />
-                  ))}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="flex items-center w-full max-w-7xl mx-auto gap-2.5 overflow-hidden">
-        {/* Pinned Active Color Swatch with Edit button */}
-        {activeColor && (
-          <div className="flex-shrink-0 flex items-center pr-2 border-r border-slate-800/80">
-            <div className="relative group">
-              <button
-                type="button"
-                onClick={() => handleSwatchClick(activeColor)}
-                title={`Color #${displayNumberMap.get(activeColor.id)}${
-                  isFreeColorMode
-                    ? ` (${colorUsageMap.get(activeColor.id) || 0} painted) - Tap to hint or choose`
-                    : ` (${remainingCountMap.get(activeColor.id) || 0} remaining) - Click for hint`
-                }`}
-                className="relative flex flex-col items-center justify-center w-[48px] h-[40px] rounded-lg shadow-lg ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-105 transition-transform"
-                style={{ backgroundColor: activeColor.hex }}
-              >
-                <span
-                  className={`text-[13px] font-extrabold leading-tight ${
-                    activeColor.isLight ? 'text-slate-950' : 'text-white'
-                  }`}
-                >
-                  {displayNumberMap.get(activeColor.id)}
-                </span>
-                <span
-                  className={`text-[10px] font-bold leading-tight ${
-                    activeColor.isLight ? 'text-slate-900/90' : 'text-slate-100/90'
-                  }`}
-                >
-                  {isFreeColorMode
-                    ? colorUsageMap.get(activeColor.id) || 0
-                    : remainingCountMap.get(activeColor.id) || 0}
-                </span>
-              </button>
-
-              {/* Edit active color button */}
-              {onUpdateColor && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    editColorInputRef.current?.click();
-                  }}
-                  title="Customize this color"
-                  className="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 rounded-full bg-slate-900 border border-amber-400 text-amber-300 flex items-center justify-center shadow-md hover:scale-110 transition-transform"
-                >
-                  <Pencil size={9} />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Scrollable swatches */}
+      <div className="pointer-events-auto max-w-2xl mx-auto flex items-center p-2 rounded-2xl bg-slate-900/85 backdrop-blur-md border border-slate-700/60 shadow-2xl">
+        {/* Scrollable swatches (Active color remains in place with highlight ring) */}
         <div
           ref={scrollContainerRef}
-          className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 flex-1"
+          className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 flex-1"
         >
-          {scrollableColors.map((color) => {
+          {dockPalette.map((color) => {
+            const isActive = color.id === activeColorId;
             const isVisibleOnScreen = visibleColorIds.has(color.id);
             const dispNum = displayNumberMap.get(color.id);
             const badgeVal = isFreeColorMode
@@ -442,11 +306,13 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
                   isFreeColorMode
                     ? ` (${badgeVal} painted)`
                     : ` (${badgeVal} remaining)`
-                }${isVisibleOnScreen ? ' • On Screen' : ''}`}
-                className={`flex-shrink-0 relative flex flex-col items-center justify-center w-[42px] h-[36px] rounded-md transition-all active:scale-95 hover:brightness-110 ${
-                  isVisibleOnScreen && prioritizeOnScreen
-                    ? 'ring-1 ring-white/50 shadow-md'
-                    : 'opacity-90'
+                }${isVisibleOnScreen ? ' • On Screen' : ''}${isActive ? ' (Selected)' : ''}`}
+                className={`flex-shrink-0 relative flex flex-col items-center justify-center w-[44px] h-[38px] rounded-xl transition-all active:scale-95 ${
+                  isActive
+                    ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-105 shadow-lg opacity-100 z-10'
+                    : isVisibleOnScreen && prioritizeOnScreen
+                    ? 'ring-1 ring-white/50 shadow-md opacity-95 hover:opacity-100 hover:scale-102'
+                    : 'opacity-90 hover:opacity-100 hover:scale-102'
                 }`}
                 style={{ backgroundColor: color.hex }}
               >
@@ -468,36 +334,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
             );
           })}
         </div>
-
-        {/* Action buttons: Pick Color & Palette Presets */}
-        <div className="flex-shrink-0 flex items-center gap-1.5 pl-2 border-l border-slate-800/80">
-          {onAddCustomColor && (
-            <button
-              type="button"
-              onClick={() => addColorInputRef.current?.click()}
-              title="Add Custom Colour (Color Picker)"
-              className="flex items-center justify-center w-[36px] h-[36px] rounded-lg border border-dashed border-amber-400/70 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 active:scale-95 transition-all shadow-sm"
-            >
-              <Plus size={16} />
-            </button>
-          )}
-
-          {onApplyPresetPalette && (
-            <button
-              type="button"
-              onClick={() => setShowPresetsMenu((prev) => !prev)}
-              title="Palette Presets & Themes"
-              className={`flex items-center justify-center w-[36px] h-[36px] rounded-lg border transition-all shadow-sm ${
-                showPresetsMenu
-                  ? 'border-amber-400 bg-amber-400/20 text-amber-300 ring-1 ring-amber-400'
-                  : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-100 hover:bg-slate-800'
-              }`}
-            >
-              <Palette size={16} />
-            </button>
-          )}
-        </div>
       </div>
-    </footer>
+    </div>
   );
 };
