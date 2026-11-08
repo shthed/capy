@@ -50,8 +50,8 @@ jobs:
       - name: Build Web assets for Android app
         working-directory: web
         run: |
-          npm ci
-          npm run build
+          npm ci --prefer-offline --no-audit --no-fund
+          npx vite build
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6
@@ -73,6 +73,8 @@ jobs:
           name: capy-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
 
   web:
     name: Web Build & Lint
@@ -93,8 +95,7 @@ jobs:
       - name: Build & typecheck updated web app (web/)
         working-directory: web
         run: |
-          npm ci
-          npm run lint
+          npm ci --prefer-offline --no-audit --no-fund
           npm run build
 
       - name: Upload built Web bundle
@@ -103,6 +104,7 @@ jobs:
           name: web-dist
           path: web/dist
           if-no-files-found: error
+          retention-days: 1
 
   deploy:
     name: Deploy GitHub Pages & APK
