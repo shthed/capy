@@ -79,22 +79,25 @@ export function clampCanvasOffset(
   const marginX = Math.min(50, containerWidth * 0.12);
   const marginY = Math.min(50, containerHeight * 0.12);
 
+  const centeredOffsetX = (containerWidth - artW) / 2 - baseOffsetX;
+  const centeredOffsetY = (containerHeight - artH) / 2 - baseOffsetY;
+
   let minOffsetX: number;
   let maxOffsetX: number;
   let minOffsetY: number;
   let maxOffsetY: number;
 
   if (artW <= containerWidth) {
-    minOffsetX = -marginX;
-    maxOffsetX = marginX;
+    minOffsetX = centeredOffsetX - marginX;
+    maxOffsetX = centeredOffsetX + marginX;
   } else {
     minOffsetX = containerWidth - marginX - baseOffsetX - artW;
     maxOffsetX = marginX - baseOffsetX;
   }
 
   if (artH <= containerHeight) {
-    minOffsetY = -marginY;
-    maxOffsetY = marginY;
+    minOffsetY = centeredOffsetY - marginY;
+    maxOffsetY = centeredOffsetY + marginY;
   } else {
     minOffsetY = containerHeight - marginY - baseOffsetY - artH;
     maxOffsetY = marginY - baseOffsetY;
@@ -167,6 +170,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   // Transform state
   const [scale, setScale] = useState(initialZoomScale);
   const [offset, setOffset] = useState({ x: initialPanOffsetX, y: initialPanOffsetY });
+  const scaleRef = useRef(initialZoomScale);
+  const offsetRef = useRef({ x: initialPanOffsetX, y: initialPanOffsetY });
+  scaleRef.current = scale;
+  offsetRef.current = offset;
 
   // Interactive feedback
   const [tapDot, setTapDot] = useState<{ x: number; y: number; alpha: number } | null>(null);
@@ -181,37 +188,76 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const totalDragDistanceRef = useRef(0);
   const isRightClickRef = useRef(false);
   const touchStartDistRef = useRef<number | null>(null);
-  const touchLastCenterRef = useRef<{ x: number; y: number } | null>(null);
+  const initialTouchCenterRef = useRef<{ x: number; y: number } | null>(null);
   const initialTouchScaleRef = useRef(1);
+  const initialTouchOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const wasPinchingRef = useRef(false);
+  const touchPointerCountRef = useRef(0);
   const lastTapTimeRef = useRef(0);
 
   // Reset zoom/offset when a brand-new puzzle object is loaded
   useEffect(() => {
+    scaleRef.current = initialZoomScale;
+    offsetRef.current = { x: initialPanOffsetX, y: initialPanOffsetY };
     setScale(initialZoomScale);
     setOffset({ x: initialPanOffsetX, y: initialPanOffsetY });
-  }, [puzzle]);
+  }, [puzzle, initialZoomScale, initialPanOffsetX, initialPanOffsetY]);
 
   // Handle FloatingActions zoom in/out button triggers
   useEffect(() => {
     if (zoomInTrigger <= 0 || !containerRef.current || !puzzle) return;
-    const newScale = Math.min(12.0, scale * 1.25);
+    const currentScale = scaleRef.current;
+    const currentOffset = offsetRef.current;
+    const newScale = Math.min(12.0, currentScale * 1.25);
+    const actualZoom = newScale / currentScale;
     const w = containerRef.current.clientWidth;
     const h = containerRef.current.clientHeight;
+    const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
+    const baseOffsetX = (w - puzzle.width * baseScale) / 2;
+    const baseOffsetY = (h - puzzle.height * baseScale) / 2;
+
+    const focalX = w / 2 - (currentOffset.x + baseOffsetX);
+    const focalY = h / 2 - (currentOffset.y + baseOffsetY);
+    const targetOffset = {
+      x: currentOffset.x - focalX * (actualZoom - 1),
+      y: currentOffset.y - focalY * (actualZoom - 1),
+    };
+    const clamped = clampCanvasOffset(targetOffset, newScale, puzzle.width, puzzle.height, w, h);
+    scaleRef.current = newScale;
+    offsetRef.current = clamped;
     setScale(newScale);
-    setOffset((prev) => clampCanvasOffset(prev, newScale, puzzle.width, puzzle.height, w, h));
+    setOffset(clamped);
   }, [zoomInTrigger]);
 
   useEffect(() => {
     if (zoomOutTrigger <= 0 || !containerRef.current || !puzzle) return;
-    const newScale = Math.max(0.5, scale * 0.8);
+    const currentScale = scaleRef.current;
+    const currentOffset = offsetRef.current;
+    const newScale = Math.max(0.5, currentScale * 0.8);
+    const actualZoom = newScale / currentScale;
     const w = containerRef.current.clientWidth;
     const h = containerRef.current.clientHeight;
+    const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
+    const baseOffsetX = (w - puzzle.width * baseScale) / 2;
+    const baseOffsetY = (h - puzzle.height * baseScale) / 2;
+
+    const focalX = w / 2 - (currentOffset.x + baseOffsetX);
+    const focalY = h / 2 - (currentOffset.y + baseOffsetY);
+    const targetOffset = {
+      x: currentOffset.x - focalX * (actualZoom - 1),
+      y: currentOffset.y - focalY * (actualZoom - 1),
+    };
+    const clamped = clampCanvasOffset(targetOffset, newScale, puzzle.width, puzzle.height, w, h);
+    scaleRef.current = newScale;
+    offsetRef.current = clamped;
     setScale(newScale);
-    setOffset((prev) => clampCanvasOffset(prev, newScale, puzzle.width, puzzle.height, w, h));
+    setOffset(clamped);
   }, [zoomOutTrigger]);
 
   useEffect(() => {
     if (resetViewTrigger <= 0) return;
+    scaleRef.current = 1.0;
+    offsetRef.current = { x: 0, y: 0 };
     setScale(1.0);
     setOffset({ x: 0, y: 0 });
   }, [resetViewTrigger]);
@@ -221,7 +267,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     if (!containerRef.current || !puzzle) return;
     const w = containerRef.current.clientWidth;
     const h = containerRef.current.clientHeight;
-    setOffset((prev) => clampCanvasOffset(prev, scale, puzzle.width, puzzle.height, w, h));
+    setOffset((prev) => {
+      const clamped = clampCanvasOffset(prev, scaleRef.current, puzzle.width, puzzle.height, w, h);
+      offsetRef.current = clamped;
+      return clamped;
+    });
   }, [scale, puzzle]);
 
   // Pulse animation frame (only runs when animateHint is active)
@@ -672,13 +722,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       region.minY <= visBottom;
 
     // Only auto-pan if the canvas is zoomed in AND the region is outside the visible viewport
-    const isZoomedIn = scale > 1.05;
+    const isZoomedIn = scaleRef.current > 1.05;
     if (showNextRegionHint && isZoomedIn && !isOnScreen) {
       const targetX = w / 2 - baseOffsetX - region.centroidX * effScale;
       const targetY = h / 2 - baseOffsetY - region.centroidY * effScale;
-      setOffset(
-        clampCanvasOffset({ x: targetX, y: targetY }, scale, puzzle.width, puzzle.height, w, h)
-      );
+      const clamped = clampCanvasOffset({ x: targetX, y: targetY }, scaleRef.current, puzzle.width, puzzle.height, w, h);
+      offsetRef.current = clamped;
+      setOffset(clamped);
     }
   }, [hintRegionId, puzzle, showNextRegionHint]);
 
@@ -703,16 +753,16 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
       const baseOffsetX = (w - puzzle.width * baseScale) / 2;
       const baseOffsetY = (h - puzzle.height * baseScale) / 2;
-      const effScale = scale * baseScale;
+      const effScale = scaleRef.current * baseScale;
 
       if (effScale <= 0) return null;
 
-      const canvasX = (screenX - offset.x - baseOffsetX) / effScale;
-      const canvasY = (screenY - offset.y - baseOffsetY) / effScale;
+      const canvasX = (screenX - offsetRef.current.x - baseOffsetX) / effScale;
+      const canvasY = (screenY - offsetRef.current.y - baseOffsetY) / effScale;
 
       return { x: canvasX, y: canvasY, screenX, screenY };
     },
-    [puzzle, scale, offset]
+    [puzzle]
   );
 
   // Bresenham line painting for smooth drag strokes
@@ -971,6 +1021,21 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     const isRightClick = e.button === 2 || (e.buttons & 2) !== 0;
     isRightClickRef.current = isRightClick;
 
+    if (e.pointerType === 'touch') {
+      touchPointerCountRef.current += 1;
+      if (touchPointerCountRef.current > 1) {
+        // Multi-touch: cancel single pointer drag and do not paint
+        isDraggingRef.current = false;
+        return;
+      }
+    }
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignored if pointer capture is not supported
+    }
+
     isDraggingRef.current = true;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     lastPointerPosRef.current = { x: e.clientX, y: e.clientY };
@@ -986,7 +1051,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDraggingRef.current || touchStartDistRef.current !== null) return;
+    if (!isDraggingRef.current || touchStartDistRef.current !== null || touchPointerCountRef.current > 1) return;
 
     const dx = e.clientX - lastPointerPosRef.current.x;
     const dy = e.clientY - lastPointerPosRef.current.y;
@@ -1003,43 +1068,96 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y);
       setTapDot({ x: currCoords.x, y: currCoords.y, alpha: 1 });
     } else {
-      setOffset((prev) => {
-        const container = containerRef.current;
-        if (!container || !puzzle) return { x: prev.x + dx, y: prev.y + dy };
-        const w = container.clientWidth;
-        const h = container.clientHeight;
-        return clampCanvasOffset(
-          { x: prev.x + dx, y: prev.y + dy },
-          scale,
-          puzzle.width,
-          puzzle.height,
-          w,
-          h
-        );
-      });
+      const container = containerRef.current;
+      if (!container || !puzzle) return;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      const targetOffset = {
+        x: offsetRef.current.x + dx,
+        y: offsetRef.current.y + dy,
+      };
+      const clamped = clampCanvasOffset(
+        targetOffset,
+        scaleRef.current,
+        puzzle.width,
+        puzzle.height,
+        w,
+        h
+      );
+      offsetRef.current = clamped;
+      setOffset(clamped);
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    if (!isDraggingRef.current) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignored
+    }
+
+    if (e.pointerType === 'touch') {
+      touchPointerCountRef.current = Math.max(0, touchPointerCountRef.current - 1);
+    }
+
+    if (!isDraggingRef.current) {
+      if (touchPointerCountRef.current === 0) {
+        wasPinchingRef.current = false;
+      }
+      return;
+    }
+
     const wasRightClick = isRightClickRef.current;
     isDraggingRef.current = false;
     isRightClickRef.current = false;
 
-    if (wasRightClick || touchStartDistRef.current !== null) return;
+    if (wasRightClick || touchStartDistRef.current !== null || wasPinchingRef.current) {
+      if (touchPointerCountRef.current === 0) {
+        wasPinchingRef.current = false;
+      }
+      return;
+    }
 
-    // Single tap detection with 3x3 neighborhood micro-region fallback
+    // Single tap / click detection with double-tap zoom/reset
     if (totalDragDistanceRef.current < 12) {
       const now = Date.now();
       const timeSinceLastTap = now - lastTapTimeRef.current;
       lastTapTimeRef.current = now;
 
-      // Double-tap resets camera zoom and center
-      if (timeSinceLastTap < 300 && (scale > 1.05 || Math.abs(offset.x) > 5 || Math.abs(offset.y) > 5)) {
-        setScale(1.0);
-        setOffset({ x: 0, y: 0 });
-        return;
+      // Double-tap resets camera zoom and center if zoomed in, or zooms in 2.5x if unzoomed
+      if (timeSinceLastTap < 300) {
+        if (scaleRef.current > 1.05 || Math.abs(offsetRef.current.x) > 5 || Math.abs(offsetRef.current.y) > 5) {
+          scaleRef.current = 1.0;
+          offsetRef.current = { x: 0, y: 0 };
+          setScale(1.0);
+          setOffset({ x: 0, y: 0 });
+          return;
+        } else if (containerRef.current && canvasRef.current && puzzle) {
+          const rect = canvasRef.current.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          const newScale = 2.5;
+          const actualZoom = newScale / scaleRef.current;
+          const w = containerRef.current.clientWidth;
+          const h = containerRef.current.clientHeight;
+          const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
+          const baseOffsetX = (w - puzzle.width * baseScale) / 2;
+          const baseOffsetY = (h - puzzle.height * baseScale) / 2;
+          const focalX = mouseX - (offsetRef.current.x + baseOffsetX);
+          const focalY = mouseY - (offsetRef.current.y + baseOffsetY);
+          const targetOffset = {
+            x: offsetRef.current.x - focalX * (actualZoom - 1),
+            y: offsetRef.current.y - focalY * (actualZoom - 1),
+          };
+          const clamped = clampCanvasOffset(targetOffset, newScale, puzzle.width, puzzle.height, w, h);
+          scaleRef.current = newScale;
+          offsetRef.current = clamped;
+          setScale(newScale);
+          setOffset(clamped);
+          return;
+        }
       }
+
       if (isPreviewMode) {
         onTogglePreview();
       } else if (!isPaintMode) {
@@ -1059,14 +1177,32 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
   };
 
+  const handlePointerCancel = (e: React.PointerEvent) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignored
+    }
+    if (e.pointerType === 'touch') {
+      touchPointerCountRef.current = Math.max(0, touchPointerCountRef.current - 1);
+    }
+    isDraggingRef.current = false;
+    isRightClickRef.current = false;
+    if (touchPointerCountRef.current === 0) {
+      wasPinchingRef.current = false;
+    }
+  };
+
   // Wheel zoom around cursor
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     if (!containerRef.current || !puzzle) return;
 
     const zoomFactor = e.deltaY < 0 ? 1.2 : 0.82;
-    const newScale = Math.min(12.0, Math.max(0.5, scale * zoomFactor));
-    const actualZoom = newScale / scale;
+    const currentScale = scaleRef.current;
+    const currentOffset = offsetRef.current;
+    const newScale = Math.min(12.0, Math.max(0.5, currentScale * zoomFactor));
+    const actualZoom = newScale / currentScale;
 
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -1080,38 +1216,43 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     const baseOffsetX = (w - puzzle.width * baseScale) / 2;
     const baseOffsetY = (h - puzzle.height * baseScale) / 2;
 
-    const focalX = mouseX - (offset.x + baseOffsetX);
-    const focalY = mouseY - (offset.y + baseOffsetY);
+    const focalX = mouseX - (currentOffset.x + baseOffsetX);
+    const focalY = mouseY - (currentOffset.y + baseOffsetY);
 
     const targetOffset = {
-      x: offset.x - focalX * (actualZoom - 1),
-      y: offset.y - focalY * (actualZoom - 1),
+      x: currentOffset.x - focalX * (actualZoom - 1),
+      y: currentOffset.y - focalY * (actualZoom - 1),
     };
-    setOffset(clampCanvasOffset(targetOffset, newScale, puzzle.width, puzzle.height, w, h));
+    const clamped = clampCanvasOffset(targetOffset, newScale, puzzle.width, puzzle.height, w, h);
+    scaleRef.current = newScale;
+    offsetRef.current = clamped;
     setScale(newScale);
+    setOffset(clamped);
   };
 
   // Multi-touch 2-finger focal-point pinch-to-zoom & pan
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
+    if (e.touches.length >= 2) {
       isDraggingRef.current = false;
+      wasPinchingRef.current = true;
       const t0 = e.touches[0];
       const t1 = e.touches[1];
       const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
       touchStartDistRef.current = Math.max(1, dist);
-      touchLastCenterRef.current = {
+      initialTouchCenterRef.current = {
         x: (t0.clientX + t1.clientX) / 2,
         y: (t0.clientY + t1.clientY) / 2,
       };
-      initialTouchScaleRef.current = scale;
+      initialTouchScaleRef.current = scaleRef.current;
+      initialTouchOffsetRef.current = { ...offsetRef.current };
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (
-      e.touches.length === 2 &&
+      e.touches.length >= 2 &&
       touchStartDistRef.current !== null &&
-      touchLastCenterRef.current !== null &&
+      initialTouchCenterRef.current !== null &&
       containerRef.current &&
       canvasRef.current &&
       puzzle
@@ -1119,20 +1260,19 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const t0 = e.touches[0];
       const t1 = e.touches[1];
       const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-      const centerX = (t0.clientX + t1.clientX) / 2;
-      const centerY = (t0.clientY + t1.clientY) / 2;
+      const currentCenterX = (t0.clientX + t1.clientX) / 2;
+      const currentCenterY = (t0.clientY + t1.clientY) / 2;
 
       const ratio = dist / touchStartDistRef.current;
       const newScale = Math.min(12.0, Math.max(0.5, initialTouchScaleRef.current * ratio));
-      const actualZoom = newScale / scale;
+      const zoomRatio = newScale / initialTouchScaleRef.current;
 
       const rect = canvasRef.current.getBoundingClientRect();
-      const focalScreenX = centerX - rect.left;
-      const focalScreenY = centerY - rect.top;
+      const focalScreenX = initialTouchCenterRef.current.x - rect.left;
+      const focalScreenY = initialTouchCenterRef.current.y - rect.top;
 
-      const panDx = centerX - touchLastCenterRef.current.x;
-      const panDy = centerY - touchLastCenterRef.current.y;
-      touchLastCenterRef.current = { x: centerX, y: centerY };
+      const panDx = currentCenterX - initialTouchCenterRef.current.x;
+      const panDy = currentCenterY - initialTouchCenterRef.current.y;
 
       const w = containerRef.current.clientWidth;
       const h = containerRef.current.clientHeight;
@@ -1140,24 +1280,33 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const baseOffsetX = (w - puzzle.width * baseScale) / 2;
       const baseOffsetY = (h - puzzle.height * baseScale) / 2;
 
-      const focalX = focalScreenX - (offset.x + baseOffsetX);
-      const focalY = focalScreenY - (offset.y + baseOffsetY);
+      const focalX = focalScreenX - (initialTouchOffsetRef.current.x + baseOffsetX);
+      const focalY = focalScreenY - (initialTouchOffsetRef.current.y + baseOffsetY);
 
-      setOffset((prev) => {
-        const targetOffset = {
-          x: prev.x + panDx - focalX * (actualZoom - 1),
-          y: prev.y + panDy - focalY * (actualZoom - 1),
-        };
-        return clampCanvasOffset(targetOffset, newScale, puzzle.width, puzzle.height, w, h);
-      });
+      const targetOffset = {
+        x: initialTouchOffsetRef.current.x + panDx - focalX * (zoomRatio - 1),
+        y: initialTouchOffsetRef.current.y + panDy - focalY * (zoomRatio - 1),
+      };
+
+      const clamped = clampCanvasOffset(targetOffset, newScale, puzzle.width, puzzle.height, w, h);
+      scaleRef.current = newScale;
+      offsetRef.current = clamped;
       setScale(newScale);
+      setOffset(clamped);
     }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (e.touches.length < 2) {
       touchStartDistRef.current = null;
-      touchLastCenterRef.current = null;
+      initialTouchCenterRef.current = null;
+      if (e.touches.length === 1) {
+        lastPointerPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
+    }
+    if (e.touches.length === 0) {
+      touchPointerCountRef.current = 0;
+      wasPinchingRef.current = false;
     }
   };
 
@@ -1171,7 +1320,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
