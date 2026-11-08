@@ -38,15 +38,7 @@ For target-specific deep dives, see also:
   - Configure `isMinifyEnabled = true` and `isShrinkResources = true` in [`app/build.gradle.kts`](./app/build.gradle.kts) with release signing configuration so `capy.apk` shrinks to ~3–5 MB.
 - [ ] **iOS WKWebView Wrapper Packaging**:
   - Leverage [`NativeBridge.ts`](./web/src/services/NativeBridge.ts)'s existing `window.webkit.messageHandlers.CapyIOS` dispatch mechanism to create a lightweight Swift iOS wrapper around `web/dist/`.
-- [ ] **Preserved Native Jetpack Compose App Optimization (`app1/`)**:
-  - *(See [`app1/APP1.md`](./app1/APP1.md) for full implementation specifications.)*
-  - Eliminate overlay bitmap heap allocations and add partial dirty-rect updates to `app1/src/main/java/com/capypaint/capy/ui/components/PuzzleCanvas.kt`.
-
----
-
-## 🧹 Legacy Web v1 (`web1/`) Maintenance & Polish
-
-- [ ] **Preboot Sizing & Storage Fallbacks**: Add regression tests for malformed or missing `localStorage` data in `web1/capy.js` to ensure scale tokens stay resilient.
-- [ ] **Playwright Test Fixtures**: Restore `window.capyGenerator.loadPuzzleFixture` in Playwright smoke checks to exercise renderer switching and palette updates.
-- [ ] **Renderer Module Decomposition**: Split the renderer section of `web1/capy.js` into modular components to streamline maintenance.
-- [ ] **UI Polish**: Trim palette dock horizontal padding on mobile viewports and enhance settings scroll-into-view behavior.
+- [ ] **Retire Legacy Targets (`web1/` & `app1/`)**:
+  - Remove deprecated legacy vanilla JS app (`web1/`) and legacy Jetpack Compose app (`app1/`) from repository now that the unified React 19 web app and Android wrapper are fully operational.
+  - Relocate any reusable maintenance scripts from `web1/scripts/` to `scripts/`.
+  - CI pipeline has already been streamlined to bypass legacy builds and skip docs-only commits.
