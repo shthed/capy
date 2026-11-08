@@ -62,7 +62,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          cache-read-only: false
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Run unit tests and build Debug APK (app/)
         run: ./gradlew app:testDebugUnitTest app:assembleDebug --build-cache
@@ -190,18 +190,6 @@ jobs:
 
             core.summary.addRaw(summaryLines.join('\n')).write();
 
-      - name: Check out source
-        if: steps.target.outputs.skip != 'true'
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Use Node.js 22
-        if: steps.target.outputs.skip != 'true'
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-
       - name: Download built Web bundle
         if: steps.target.outputs.skip != 'true'
         uses: actions/download-artifact@v8
@@ -233,14 +221,6 @@ jobs:
           fi
 
           rm -rf pages/README
-
-      - name: Prune closed PR previews from gh-pages
-        if: steps.target.outputs.skip != 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          node ./web1/scripts/cleanup-gh-pages-previews.mjs --pages-dir pages
 
       - name: Prepare site content
         if: steps.target.outputs.skip != 'true'
