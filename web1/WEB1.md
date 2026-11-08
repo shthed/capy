@@ -1,6 +1,6 @@
 # Technical Architecture: Capy Legacy Web v1 (`web1/`)
 
-This document collects the technical, architectural, interaction, and styling specifications for the Legacy Vanilla JS Web v1 application in `web1/` (deployed at [https://shthed.github.io/capy/web1/](https://shthed.github.io/capy/web1/)). For the Updated React 19 Web App (`web/`), Android App (`app/`), and master monorepo roadmap, see [`README.md`](../README.md), [`TODO.md`](../TODO.md), [`docs/PUZZLE.md`](./PUZZLE.md), and [`docs/APP.md`](./APP.md).
+This document collects the technical, architectural, interaction, and styling specifications for the Legacy Vanilla JS Web v1 application in `web1/` (deployed at [https://shthed.github.io/capy/web1/](https://shthed.github.io/capy/web1/)). For the Updated React 19 Web App (`web/`), Android App (`app/`), and master monorepo roadmap, see [`README.md`](../README.md), [`TODO.md`](../TODO.md), [`PUZZLE.md`](../PUZZLE.md), and [`APP.md`](../APP.md).
 
 ---
 
@@ -12,18 +12,18 @@ This document collects the technical, architectural, interaction, and styling sp
 
 ## 2. Runtime Map & Components
 
-- **Host & Markup**: [`web1/index.html`](../web1/index.html)
+- **Host & Markup**: [`index.html`](./index.html)
   - Single-page host document containing markup, responsive preboot scaling scripts, settings sheet templates, and devtools hooks (`window.capy`, `window.capyGenerator`).
   - Precomputes `--ui-scale-auto` from viewport dimensions before stylesheet execution to eliminate first-paint layout shifts.
-- **Styling**: [`web1/styles.css`](../web1/styles.css)
+- **Styling**: [`styles.css`](./styles.css)
   - Single stylesheet containing theme tokens (light and dark mode), responsive breakpoints, command rail positioning, and component rules.
-- **Runtime & Controllers**: [`web1/capy.js`](../web1/capy.js)
+- **Runtime & Controllers**: [`capy.js`](./capy.js)
   - Runtime bootstrap, template utilities, state management, persistence, and renderer controller.
-- **Segmentation & Quantization**: [`web1/puzzle-generation.js`](../web1/puzzle-generation.js)
+- **Segmentation & Quantization**: [`puzzle-generation.js`](./puzzle-generation.js)
   - Worker-friendly image quantization (k-means and posterize pipelines) and flood-fill segmentation.
-- **Renderer Helpers**: [`web1/render.js`](../web1/render.js)
+- **Renderer Helpers**: [`render.js`](./render.js)
   - SVG and canvas drawing helpers.
-- **Sample Fixtures**: [`web1/capy.json`](../web1/capy.json)
+- **Sample Fixtures**: [`capy.json`](./capy.json)
   - Bundled "Three Bands" sample puzzle for rapid offline boot and testing.
 
 ---
@@ -81,7 +81,7 @@ For QA testing, automated smoke runs, and console inspection:
 
 *(Consolidated from `STYLEGUIDE.md`)*
 
-Runtime styles reside in [`web1/styles.css`](../web1/styles.css). The only inline CSS in `web1/index.html` is the preboot `:root` block establishing `--ui-scale-*` tokens before first paint.
+Runtime styles reside in [`styles.css`](./styles.css). The only inline CSS in `index.html` is the preboot `:root` block establishing `--ui-scale-*` tokens before first paint.
 
 ### Styling Conventions
 1. **Single Stylesheet**: All layout, theme tokens, and component styles stay in `web1/styles.css` to keep deployment assets predictable.

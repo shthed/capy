@@ -1,6 +1,6 @@
 # Technical Architecture: Capy Legacy Android v1 (`app1/`)
 
-This document details the architecture, custom K-Means & segmentation engine, binary save specifications, and development roadmap for the preserved native Jetpack Compose Android application (`com.capypaint.capy` in `app1/`, `:app1` in Gradle). For cross-platform monorepo tasks and the unified `app/` launcher, see the root [`TODO.md`](../TODO.md) and [`docs/APP.md`](./APP.md).
+This document details the architecture, custom K-Means & segmentation engine, binary save specifications, and development roadmap for the preserved native Jetpack Compose Android application (`com.capypaint.capy` in `app1/`, `:app1` in Gradle). For cross-platform monorepo tasks and the unified `app/` launcher, see the root [`TODO.md`](../TODO.md) and [`APP.md`](../APP.md).
 
 ---
 
@@ -14,9 +14,9 @@ The Android application in `app1/` is the preserved standalone native Kotlin + J
 
 ### 2.1 Application Entry & View Model
 
-* **`com.capypaint.capy.MainActivity`** ([`app1/src/main/java/.../MainActivity.kt`](../app1/src/main/java/com/capypaint/capy/MainActivity.kt))
+* **`com.capypaint.capy.MainActivity`** ([`MainActivity.kt`](./src/main/java/com/capypaint/capy/MainActivity.kt))
   * Root `ComponentActivity`. Configures a global uncaught exception handler (`CapyCrash` logcat tag), enables edge-to-edge window rendering (`enableEdgeToEdge()`), and sets up `CapyTheme` and `GameScreen`.
-* **`com.capypaint.capy.viewmodel.GameViewModel`** ([`app1/src/main/java/.../GameViewModel.kt`](../app1/src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt))
+* **`com.capypaint.capy.viewmodel.GameViewModel`** ([`GameViewModel.kt`](./src/main/java/com/capypaint/capy/viewmodel/GameViewModel.kt))
   * Android ViewModel managing game UI state, settings, active snapshot sessions, loading progress, and haptics.
   * **Key State Flows**:
     * `uiState: StateFlow<GameUiState>` — Live UI state (loading, puzzle, display bitmap, active color, filled region IDs, paint mode, hint region ID).
@@ -146,20 +146,15 @@ Byte Structure:
 ---
 
 ## 5. Development & Optimization Roadmap
+*(Note: Completed items are pruned. Active pending tasks only.)*
 
-### P0: Critical Performance & System Integration (Completed)
-- [x] **Parallelize & Downsample Image Segmentation Engine**: Capped resolution to `config.resolution` and parallelized primitive K-Means via `ForkJoinPool` (`ColorQuantizer.kt`).
-- [x] **Debounce & Throttle Progress Save Operations**: Instant in-memory state updates with 300ms debounced background disk writes (`GameViewModel.kt`).
-- [x] **Predictive Back Navigation**: Enabled `android:enableOnBackInvokedCallback="true"` in `AndroidManifest.xml`.
-
-### P1: Engine Unification, Memory & Release Build
 - [ ] **Unify Puzzle Generation Engine with 5-Strategy Web Pipeline**:
-  - Port `LineArtExtractor` to Kotlin to extract binary ink masks before spatial filtering (see [`docs/PUZZLE.md`](./PUZZLE.md) and [`web/src/engine/`](../web/src/engine)).
+  - Port `LineArtExtractor` to Kotlin to extract binary ink masks before spatial filtering (see [`PUZZLE.md`](../PUZZLE.md) and [`web/src/engine/`](../web/src/engine)).
   - Implement `ABSORB_LINES` medial-axis watershed expansion vs. `UNIFIED_BLACK_REGION`.
 - [ ] **Eliminate Canvas Overlay Bitmap Heap Allocations**:
   - Replace full $W \times H$ `ARGB_8888` `borderBitmap` and `highlightBitmap` allocations in `PuzzleCanvas.kt` with direct DrawScope canvas paths or a single reusable pixel buffer.
 - [ ] **R8 Minification for Release APK**:
-  - Configure `isMinifyEnabled = true` and `isShrinkResources = true` in `app1/build.gradle.kts`.
+  - Configure `isMinifyEnabled = true` and `isShrinkResources = true` in `build.gradle.kts`.
 
 ---
 

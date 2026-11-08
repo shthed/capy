@@ -21,7 +21,7 @@ Instead of maintaining a separate duplicate implementation of the vector quantiz
 
 ## 2. Component Reference
 
-### [`MainActivity.kt`](../app/src/main/java/com/capypaint/capy/MainActivity.kt)
+### [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt)
 Extends `androidx.activity.ComponentActivity` with edge-to-edge window decor (`WindowCompat.setDecorFitsSystemWindows(window, false)`).
 - **`WebViewAssetLoader`**: Resolves local assets at `https://appassets.androidplatform.net/assets/www/index.html`. This ensures ES module imports, Web Workers, and Fetch APIs run seamlessly within an offline HTTPS security origin without `file://` CORS restrictions.
 - **`OnApplyWindowInsetsListener`**: Intercepts `WindowInsetsCompat.Type.systemBars() or displayCutout()`. Computes CSS pixel equivalents (`px / density`) and injects `--safe-area-top`, `--safe-area-bottom`, `--safe-area-left`, and `--safe-area-right` into `document.documentElement.style`. Also queries fallback dimension resources (`status_bar_height`, `navigation_bar_height`) on `onCreate` to prevent frame-0 layout shifts.
@@ -29,14 +29,14 @@ Extends `androidx.activity.ComponentActivity` with edge-to-edge window decor (`W
 - **`PickVisualMedia` Launcher**: Intercepts `WebChromeClient.onShowFileChooser` and delegates file picking to Android's modern photo picker contract.
 - **Share Intent Receiver**: Extracts `Intent.EXTRA_STREAM` from incoming `Intent.ACTION_SEND` (`image/*`) intents in `onCreate` and `onNewIntent`, converting images to data URLs delivered to `window.__capyReceiveSharedImage`.
 
-### [`CapyAndroidBridge.kt`](../app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt)
+### [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt)
 Class registered via `webView.addJavascriptInterface(bridge, "CapyAndroid")`.
 - `@JavascriptInterface fun haptic(type: String)`: Dispatches tactile haptics:
   - `"tick"`: `HapticFeedbackConstants.CLOCK_TICK` via `view.performHapticFeedback()`
   - `"success"`: Custom 4-pulse waveform (`[0, 14, 45, 24]`)
   - `"warning"`: One-shot 18ms pulse
   - `"error"`: Double-pulse waveform (`[0, 28, 50, 28]`)
-- `@JavascriptInterface fun getSafeAreaInsets(): String`: Returns `{"top":...,"bottom":...,"left":...,"right":...}` for immediate synchronous retrieval by [`NativeBridge.ts`](../web/src/services/NativeBridge.ts).
+- `@JavascriptInterface fun getSafeAreaInsets(): String`: Returns `{"top":...,"bottom":...,"left":...,"right":...}` for immediate synchronous retrieval by [`NativeBridge.ts`](./web/src/services/NativeBridge.ts).
 - `@JavascriptInterface fun setModalOpen(isOpen: Boolean)`: Updates `isModalOpen` and toggles `backPressedCallback.isEnabled`.
 - `@JavascriptInterface fun saveBackup(key: String, data: String): Boolean`: Writes UTF-8 JSON data atomically to `filesDir/capy_saves/<sanitized_key>.json`.
 - `@JavascriptInterface fun loadBackup(key: String): String?`: Reads backup data from `filesDir/capy_saves/<sanitized_key>.json`.
@@ -52,7 +52,7 @@ On modern edge-to-edge Android devices (e.g. Pixel 7, Galaxy S23, cutouts/punch-
 3. `MainActivity.kt` bridges the exact physical insets into CSS custom properties:
    - `--safe-area-top`: ~48px (status bar + camera cutout)
    - `--safe-area-bottom`: ~24px (gesture navigation pill)
-4. In [`web/src/index.css`](../web/src/index.css):
+4. In [`web/src/index.css`](./web/src/index.css):
    ```css
    :root {
      --sat: max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px));
@@ -72,7 +72,7 @@ On modern edge-to-edge Android devices (e.g. Pixel 7, Galaxy S23, cutouts/punch-
 
 ## 4. Build & Gradle Lifecycle
 
-- **Asset Synchronization**: [`app/build.gradle.kts`](../app/build.gradle.kts) defines:
+- **Asset Synchronization**: [`app/build.gradle.kts`](./app/build.gradle.kts) defines:
   ```kotlin
   val syncWebAssets by tasks.registering(Sync::class) {
       from(layout.projectDirectory.dir("../web/dist")) {
