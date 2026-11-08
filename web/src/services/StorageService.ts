@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   paletteSort: 'NUMBER',
   prioritizeOnScreen: true,
   hapticsEnabled: true,
+  panMomentum: true,
   enableCustomColorForAllPuzzles: false,
   generatorConfig: {
     algorithm: 'AUTO',

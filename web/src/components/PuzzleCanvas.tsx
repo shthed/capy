@@ -36,6 +36,7 @@ interface PuzzleCanvasProps {
   animateHint: boolean;
   showNextRegionHint: boolean;
   hintIntensity: number;
+  panMomentum?: boolean;
   displayNumberMap: Map<number, string>;
   zoomInTrigger?: number;
   zoomOutTrigger?: number;
@@ -75,9 +76,10 @@ export function clampCanvasOffset(
   const baseOffsetX = (containerWidth - puzzleWidth * baseScale) / 2;
   const baseOffsetY = (containerHeight - puzzleHeight * baseScale) / 2;
 
-  // Safe boundary margin: allows small rubber-band edge feel without losing the artwork
-  const marginX = Math.min(50, containerWidth * 0.12);
-  const marginY = Math.min(50, containerHeight * 0.12);
+  // Generous boundary margin: allows panning corners deep into view past the viewport center
+  const isZoomed = scale > 1.05;
+  const marginX = isZoomed ? containerWidth * 0.72 : containerWidth * 0.45;
+  const marginY = isZoomed ? containerHeight * 0.72 : containerHeight * 0.45;
 
   const centeredOffsetX = (containerWidth - artW) / 2 - baseOffsetX;
   const centeredOffsetY = (containerHeight - artH) / 2 - baseOffsetY;
@@ -133,6 +135,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   animateHint,
   showNextRegionHint,
   hintIntensity,
+  panMomentum = true,
   displayNumberMap,
   zoomInTrigger = 0,
   zoomOutTrigger = 0,
@@ -206,6 +209,23 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const dragZoomStartYRef = useRef(0);
   const initialDragZoomScaleRef = useRef(1);
   const initialDragZoomOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Smooth Pan Momentum tracking (Google Maps style inertial gliding)
+  const pointerHistoryRef = useRef<Array<{ x: number; y: number; time: number }>>([]);
+  const momentumAnimIdRef = useRef<number | null>(null);
+
+  const stopMomentum = useCallback(() => {
+    if (momentumAnimIdRef.current !== null) {
+      cancelAnimationFrame(momentumAnimIdRef.current);
+      momentumAnimIdRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopMomentum();
+    };
+  }, [stopMomentum]);
 
   // Reset zoom/offset when a brand-new puzzle object is loaded
   useEffect(() => {
@@ -1051,8 +1071,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   ]);
 
   // Pointer event handlers for touch/mouse
-  // Pointer event handlers for touch/mouse
   const handlePointerDown = (e: React.PointerEvent) => {
+    stopMomentum();
+    pointerHistoryRef.current = [{ x: e.clientX, y: e.clientY, time: performance.now() }];
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     const isRightClick = e.button === 2 || (e.buttons & 2) !== 0;
@@ -1128,9 +1149,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       }
 
       if (isOneFingerZoomingRef.current && containerRef.current && canvasRef.current && puzzle) {
-        // Drag down (dy > 0): zoom in. Drag up (dy < 0): zoom out.
+        // Drag up (dy < 0): zoom in. Drag down (dy > 0): zoom out.
         const sensitivity = 220;
-        const zoomFactor = Math.pow(Math.E, dy / sensitivity);
+        const zoomFactor = Math.pow(Math.E, -dy / sensitivity);
         const newScale = Math.min(12.0, Math.max(0.5, initialDragZoomScaleRef.current * zoomFactor));
         const actualZoom = newScale / initialDragZoomScaleRef.current;
 
@@ -1167,6 +1188,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         return;
       }
     }
+
+    const now = performance.now();
+    pointerHistoryRef.current.push({ x: e.clientX, y: e.clientY, time: now });
+    pointerHistoryRef.current = pointerHistoryRef.current.filter((p) => now - p.time <= 100);
 
     const dx = e.clientX - lastPointerPosRef.current.x;
     const dy = e.clientY - lastPointerPosRef.current.y;
@@ -1254,13 +1279,80 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
 
     const wasRightClick = isRightClickRef.current;
+    const wasPinch = wasPinchingRef.current;
+    const wasPinchPan = isPinchPanningRef.current;
     isDraggingRef.current = false;
     isRightClickRef.current = false;
 
-    if (wasRightClick || touchStartDistRef.current !== null || wasPinchingRef.current || isPinchPanningRef.current) {
-      if (touchPointerCountRef.current === 0) {
-        wasPinchingRef.current = false;
-        isPinchPanningRef.current = false;
+    if (touchPointerCountRef.current === 0) {
+      wasPinchingRef.current = false;
+      isPinchPanningRef.current = false;
+    }
+
+    if (wasRightClick || touchStartDistRef.current !== null) {
+      return;
+    }
+
+    // Trigger smooth pan momentum if dragged sufficiently
+    if (totalDragDistanceRef.current >= 12) {
+      if (panMomentum && (!isPaintMode || isPreviewMode || wasPinchPan)) {
+        const history = pointerHistoryRef.current;
+        if (history.length >= 2) {
+          const oldest = history[0];
+          const newest = history[history.length - 1];
+          const dt = newest.time - oldest.time;
+          const timeSinceLast = performance.now() - newest.time;
+
+          if (dt > 12 && timeSinceLast < 80) {
+            let vx = (newest.x - oldest.x) / dt;
+            let vy = (newest.y - oldest.y) / dt;
+            const initialSpeed = Math.hypot(vx, vy);
+
+            if (initialSpeed > 0.18) {
+              const maxSpeed = 3.5;
+              if (initialSpeed > maxSpeed) {
+                vx = (vx / initialSpeed) * maxSpeed;
+                vy = (vy / initialSpeed) * maxSpeed;
+              }
+
+              let lastTime = performance.now();
+              const stepMomentum = (nowTime: number) => {
+                const frameDt = Math.min(32, nowTime - lastTime);
+                lastTime = nowTime;
+
+                const decay = Math.pow(0.92, frameDt / 16);
+                vx *= decay;
+                vy *= decay;
+
+                const curOffset = offsetRef.current;
+                const container = containerRef.current;
+                if (!container || !puzzle) return;
+                const w = container.clientWidth;
+                const h = container.clientHeight;
+
+                const targetOffset = {
+                  x: curOffset.x + vx * frameDt,
+                  y: curOffset.y + vy * frameDt,
+                };
+                const clamped = clampCanvasOffset(targetOffset, scaleRef.current, puzzle.width, puzzle.height, w, h);
+
+                if (clamped.x === curOffset.x && Math.abs(vx) > 0.1) vx = 0;
+                if (clamped.y === curOffset.y && Math.abs(vy) > 0.1) vy = 0;
+
+                offsetRef.current = clamped;
+                setOffset(clamped);
+
+                if (Math.hypot(vx, vy) > 0.02) {
+                  momentumAnimIdRef.current = requestAnimationFrame(stepMomentum);
+                } else {
+                  momentumAnimIdRef.current = null;
+                }
+              };
+
+              momentumAnimIdRef.current = requestAnimationFrame(stepMomentum);
+            }
+          }
+        }
       }
       return;
     }
@@ -1372,6 +1464,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   // Multi-touch 2-finger focal-point pinch-to-zoom & pan
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length >= 2) {
+      stopMomentum();
       isDraggingRef.current = false;
       wasPinchingRef.current = true;
       isPinchPanningRef.current = false;

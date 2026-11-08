@@ -86,6 +86,7 @@ export interface UserSettings {
   paletteSort: PaletteSortOrder;
   prioritizeOnScreen: boolean;
   hapticsEnabled: boolean;
+  panMomentum: boolean;
   enableCustomColorForAllPuzzles: boolean;
   generatorConfig: GeneratorConfig;
 }

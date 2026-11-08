@@ -56,9 +56,11 @@ interface SettingsModalProps {
   onUploadImage: () => void;
 }
 
+const LAST_SETTINGS_TAB_KEY = 'capy_last_settings_tab';
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
-  initialTab = 0,
+  initialTab,
   settings,
   snapshots,
   activeSnapshotId,
@@ -76,17 +78,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSelectSample,
   onUploadImage,
 }) => {
-  const [activeTab, setActiveTab] = useState<number>(initialTab);
+  const [activeTab, setActiveTab] = useState<number>(() => {
+    if (initialTab !== undefined) return initialTab;
+    try {
+      const saved = localStorage.getItem(LAST_SETTINGS_TAB_KEY);
+      if (saved !== null) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 3) return parsed;
+      }
+    } catch {
+      // Ignored
+    }
+    return 0;
+  });
   const [localConfig, setLocalConfig] = useState<GeneratorConfig>(settings.generatorConfig);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState<string>('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
 
-  // Sync activeTab with initialTab when modal opens
+  // Sync activeTab when modal opens with explicit initialTab or restore last active
   useEffect(() => {
-    if (isOpen && initialTab !== undefined) {
-      setActiveTab(initialTab);
+    if (isOpen) {
+      if (initialTab !== undefined) {
+        setActiveTab(initialTab);
+        try {
+          localStorage.setItem(LAST_SETTINGS_TAB_KEY, String(initialTab));
+        } catch {
+          // Ignored
+        }
+      } else {
+        try {
+          const saved = localStorage.getItem(LAST_SETTINGS_TAB_KEY);
+          if (saved !== null) {
+            const parsed = parseInt(saved, 10);
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 3) {
+              setActiveTab(parsed);
+            }
+          }
+        } catch {
+          // Ignored
+        }
+      }
     }
   }, [isOpen, initialTab]);
 
@@ -207,7 +240,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    try {
+                      localStorage.setItem(LAST_SETTINGS_TAB_KEY, String(tab.id));
+                    } catch {
+                      // Ignored
+                    }
+                  }}
                   className={`flex-shrink-0 flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs sm:text-sm font-bold rounded-lg transition-all ${
                     isActive
                       ? 'bg-amber-400 text-slate-950 shadow-sm'
@@ -493,6 +533,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       key: 'enableCustomColorForAllPuzzles' as const,
                       label: 'Enable Custom Colour Picker for All Puzzles',
                       desc: 'Show the custom colour chooser button for all puzzles, not just black and white coloring pages',
+                    },
+                    {
+                      key: 'panMomentum' as const,
+                      label: 'Smooth Pan Momentum',
+                      desc: 'Flicking the canvas glides smoothly with momentum, like Google Maps',
                     },
                     {
                       key: 'hapticsEnabled' as const,

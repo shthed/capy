@@ -56,7 +56,7 @@ export const App: React.FC = () => {
 
   // Modal Sheet
   const [showSettings, setShowSettings] = useState<boolean>(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<number>(0);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<number | undefined>(undefined);
   const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
 
   // Fullscreen State
@@ -1092,7 +1092,7 @@ export const App: React.FC = () => {
         onTogglePreview={() => setIsPreviewMode((prev) => !prev)}
         onToggleFullscreen={handleToggleFullscreen}
         onOpenSettings={() => {
-          setSettingsInitialTab(0);
+          setSettingsInitialTab(undefined);
           setShowSettings(true);
         }}
         onOpenSaves={() => {
@@ -1127,6 +1127,7 @@ export const App: React.FC = () => {
         animateHint={settings.animateHint}
         showNextRegionHint={settings.showNextRegionHint}
         hintIntensity={settings.hintIntensity}
+        panMomentum={settings.panMomentum}
         displayNumberMap={displayNumberMap}
         zoomInTrigger={zoomInTrigger}
         zoomOutTrigger={zoomOutTrigger}
