@@ -28,14 +28,14 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
 }) => {
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-30 pointer-events-none px-3 pb-3 safe-top flex justify-end items-center"
+      className="fixed top-0 left-0 right-0 z-30 pointer-events-none px-3 pb-3 safe-top flex justify-between items-center"
       style={{
         paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
         paddingRight: 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
       }}
     >
-      <div className="pointer-events-auto flex items-center gap-2">
-        {/* Progress % / Title Pill */}
+      {/* Top Left: Progress % / Title Pill */}
+      <div className="pointer-events-auto">
         <button
           type="button"
           onClick={onOpenSaves}
@@ -47,14 +47,17 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
           }`}
         >
           {activeTitle ? (
-            <span className="truncate max-w-[120px]">{activeTitle}</span>
+            <span className="truncate max-w-[120px] sm:max-w-[200px]">{activeTitle}</span>
           ) : (
             <span>Capy</span>
           )}
           <span>•</span>
           <span>{progressPercentage}%</span>
         </button>
+      </div>
 
+      {/* Top Right: Actions */}
+      <div className="pointer-events-auto flex items-center gap-2">
         {/* Toggle Preview Button */}
         <button
           type="button"

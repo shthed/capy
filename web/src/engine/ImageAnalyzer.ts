@@ -2,6 +2,7 @@ import { ImageType, PaletteDetail } from '../types';
 
 export interface ImageAnalysisResult {
   detectedType: ImageType;
+  isBlackAndWhite: boolean;
   edgeRatio: number;
   localVariance: number;
   globalVariance: number;
@@ -127,11 +128,27 @@ export class ImageAnalyzer {
       }
     }
 
+    // Calculate saturation/chroma across sample
+    let coloredPixels = 0;
+    for (let i = 0; i < totalPixels; i++) {
+      const r = rArr[i];
+      const g = gArr[i];
+      const b = bArr[i];
+      const maxC = Math.max(r, g, b);
+      const minC = Math.min(r, g, b);
+      if (maxC - minC > 28) {
+        coloredPixels++;
+      }
+    }
+    const coloredRatio = coloredPixels / totalPixels;
+    const isBlackAndWhite = coloredRatio < 0.08;
+
     const edgeRatio = edgeCount / Math.max(1, evaluatedPatches);
     const localVariance = localVarSum / Math.max(1, evaluatedPatches);
 
     const varRatio = globalVariance > 1 ? localVariance / globalVariance : 1;
     const isDrawing =
+      isBlackAndWhite ||
       (edgeRatio > 0.08 && varRatio < 0.22) ||
       (colorClusterCount < 28 && edgeRatio > 0.05) ||
       colorClusterCount < 18;
@@ -162,6 +179,7 @@ export class ImageAnalyzer {
 
     return {
       detectedType,
+      isBlackAndWhite,
       edgeRatio,
       localVariance,
       globalVariance,

@@ -403,6 +403,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                   {[
                     {
+                      key: 'isFreeColorMode' as const,
+                      label: 'Free Colour Mode',
+                      desc: 'Choose your own colours freely and paint any region without number restrictions',
+                    },
+                    {
                       key: 'prioritizeOnScreen' as const,
                       label: 'Prioritise On-Screen Colours',
                       desc: 'Brings visible viewport colours to front of dock',
@@ -430,7 +435,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {
                       key: 'showZoomButtons' as const,
                       label: 'Show Zoom (+ / -) Buttons',
-                      desc: 'Floating zoom buttons above hint trigger',
+                      desc: 'Floating zoom in and out buttons in the bottom right',
+                    },
+                    {
+                      key: 'showResetViewButton' as const,
+                      label: 'Show Reset View (Extent) Button',
+                      desc: 'Floating button with diagonal arrows to fit puzzle to screen (disabled by default)',
+                    },
+                    {
+                      key: 'enableCustomColorForAllPuzzles' as const,
+                      label: 'Enable Custom Colour Picker for All Puzzles',
+                      desc: 'Show the custom colour chooser button for all puzzles, not just black and white coloring pages',
                     },
                     {
                       key: 'hapticsEnabled' as const,
@@ -628,18 +643,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                   Built-in Sample Artwork
                 </label>
-                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                   {SAMPLE_GALLERY.map((sample) => (
                     <div
                       key={sample.id}
                       className="group relative flex flex-col rounded-xl overflow-hidden border border-slate-800 bg-slate-950/60 hover:border-amber-400/60 transition-all shadow-md"
                     >
-                      <div className="h-16 sm:h-24 w-full overflow-hidden bg-slate-900">
+                      <div className="relative h-16 sm:h-24 w-full overflow-hidden bg-slate-900">
                         <img
                           src={sample.assetPath}
                           alt={sample.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
+                        {sample.isFreeColor && (
+                          <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-amber-400 text-slate-950 shadow">
+                            Free Colour
+                          </span>
+                        )}
                       </div>
                       <div className="p-1.5 sm:p-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                         <div className="min-w-0">

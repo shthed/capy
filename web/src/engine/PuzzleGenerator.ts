@@ -1,4 +1,4 @@
-import { GeneratorAlgorithm, GeneratorConfig, ImageType, PuzzleData } from '../types';
+import { GeneratorAlgorithm, GeneratorConfig, ImageType, PaletteColor, PuzzleData } from '../types';
 import { ColorQuantizer } from './ColorQuantizer';
 import { ImageAnalyzer } from './ImageAnalyzer';
 import { LineArtExtractor } from './LineArtExtractor';
@@ -102,51 +102,130 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
     onProgress?.(0.12, 'Detecting and tracing artwork line borders...');
     const { lineMask } = LineArtExtractor.extract(rawRgba, width, height);
 
-    // 2. Denoise with 3x3 median
-    onProgress?.(0.2, 'Denoising cel fill areas...');
-    const denoised = ColorQuantizer.applyMedianFilter(rawRgba, width, height);
+    // Check if black and white line art / coloring page
+    const fakeImgData = { width, height, data: rawRgba } as ImageData;
+    const imgAnalysis = ImageAnalyzer.analyze(fakeImgData);
+    const isBwColoring = imgAnalysis.isBlackAndWhite || Boolean(config.isFreeColor);
 
-    // 3. Quantize palette colors
-    onProgress?.(0.3, 'Quantizing cel palette colors...');
-    const { palette, assignments } = ColorQuantizer.quantize(
-      denoised,
-      width,
-      height,
-      config.colorCount,
-      16,
-      true,
-      true,
-      onProgress
-    );
+    let palette: PaletteColor[];
+    let effectiveAssignments: Int32Array;
 
-    // If UNIFIED_BLACK_REGION: assign thin line pixels to dedicated black cluster
-    const lineHandling = config.lineHandling || 'ABSORB_LINES';
-    const effectiveAssignments = new Int32Array(assignments);
+    if (isBwColoring) {
+      onProgress?.(0.3, 'Configuring coloring book palette...');
+      const coloringPaletteDef = [
+        { hex: '#EF4444', isLight: false, r: 239, g: 68, b: 68 },
+        { hex: '#F97316', isLight: false, r: 249, g: 115, b: 22 },
+        { hex: '#F59E0B', isLight: true, r: 245, g: 158, b: 11 },
+        { hex: '#EAB308', isLight: true, r: 234, g: 179, b: 8 },
+        { hex: '#84CC16', isLight: true, r: 132, g: 204, b: 22 },
+        { hex: '#22C55E', isLight: false, r: 34, g: 197, b: 94 },
+        { hex: '#10B981', isLight: false, r: 16, g: 185, b: 129 },
+        { hex: '#06B6D4', isLight: true, r: 6, g: 182, b: 212 },
+        { hex: '#3B82F6', isLight: false, r: 59, g: 130, b: 246 },
+        { hex: '#6366F1', isLight: false, r: 99, g: 102, b: 241 },
+        { hex: '#8B5CF6', isLight: false, r: 139, g: 92, b: 246 },
+        { hex: '#A855F7', isLight: false, r: 168, g: 85, b: 247 },
+        { hex: '#EC4899', isLight: false, r: 236, g: 72, b: 153 },
+        { hex: '#F43F5E', isLight: false, r: 244, g: 63, b: 94 },
+        { hex: '#B45309', isLight: false, r: 180, g: 83, b: 9 },
+        { hex: '#78350F', isLight: false, r: 120, g: 53, b: 15 },
+        { hex: '#14B8A6', isLight: true, r: 20, g: 184, b: 166 },
+        { hex: '#E0E7FF', isLight: true, r: 224, g: 231, b: 255 },
+        { hex: '#94A3B8', isLight: true, r: 148, g: 163, b: 184 },
+        { hex: '#1E293B', isLight: false, r: 30, g: 41, b: 59 },
+      ];
 
-    if (lineHandling === 'UNIFIED_BLACK_REGION') {
-      let blackCluster = palette.findIndex((p) => p.r < 30 && p.g < 30 && p.b < 30);
-      if (blackCluster === -1) {
-        palette.push({
-          id: palette.length + 1,
-          hex: '#111827',
-          isLight: false,
-          argb: 0xff111827,
-          r: 17,
-          g: 24,
-          b: 39,
-        });
-        blackCluster = palette.length - 1;
-      }
+      palette = coloringPaletteDef.map((c, idx) => ({
+        id: idx + 1,
+        hex: c.hex,
+        isLight: c.isLight,
+        argb: (0xff << 24) | (c.r << 16) | (c.g << 8) | c.b,
+        r: c.r,
+        g: c.g,
+        b: c.b,
+      }));
+
+      effectiveAssignments = new Int32Array(total);
+      const inkCluster = palette.length - 1;
+
       for (let i = 0; i < total; i++) {
         if (lineMask[i] === 1) {
-          effectiveAssignments[i] = blackCluster;
+          effectiveAssignments[i] = inkCluster;
+        } else {
+          const idx = i * 4;
+          const r = rawRgba[idx];
+          const g = rawRgba[idx + 1];
+          const b = rawRgba[idx + 2];
+          const maxC = Math.max(r, g, b);
+          const minC = Math.min(r, g, b);
+          if (maxC - minC > 35 && maxC > 50) {
+            let bestDist = 999999;
+            let bestC = 0;
+            for (let c = 0; c < palette.length - 1; c++) {
+              const d = ColorQuantizer.perceptualDistanceSq(r, g, b, palette[c].r, palette[c].g, palette[c].b);
+              if (d < bestDist) {
+                bestDist = d;
+                bestC = c;
+              }
+            }
+            effectiveAssignments[i] = bestC;
+          } else {
+            effectiveAssignments[i] = 0;
+          }
+        }
+      }
+    } else {
+      // 2. Denoise with 3x3 median
+      onProgress?.(0.2, 'Denoising cel fill areas...');
+      const denoised = ColorQuantizer.applyMedianFilter(rawRgba, width, height);
+
+      // 3. Quantize palette colors
+      onProgress?.(0.3, 'Quantizing cel palette colors...');
+      const quantized = ColorQuantizer.quantize(
+        denoised,
+        width,
+        height,
+        config.colorCount,
+        16,
+        true,
+        true,
+        onProgress
+      );
+      palette = quantized.palette;
+      effectiveAssignments = new Int32Array(quantized.assignments);
+
+      // If UNIFIED_BLACK_REGION: assign thin line pixels to dedicated black cluster
+      const lineHandling = config.lineHandling || 'ABSORB_LINES';
+      if (lineHandling === 'UNIFIED_BLACK_REGION') {
+        let blackCluster = palette.findIndex((p) => p.r < 30 && p.g < 30 && p.b < 30);
+        if (blackCluster === -1) {
+          palette.push({
+            id: palette.length + 1,
+            hex: '#111827',
+            isLight: false,
+            argb: 0xff111827,
+            r: 17,
+            g: 24,
+            b: 39,
+          });
+          blackCluster = palette.length - 1;
+        }
+        for (let i = 0; i < total; i++) {
+          if (lineMask[i] === 1) {
+            effectiveAssignments[i] = blackCluster;
+          }
         }
       }
     }
 
     // 4. Line-aware segmentation with region color recalibration and strict maxRegions
-    const minArea = Math.max(16, config.minRegionArea || 48);
-    const maxRegs = Math.max(30, config.maxRegions || 200);
+    const minArea = isBwColoring
+      ? Math.max(10, config.minRegionArea || 12)
+      : Math.max(16, config.minRegionArea || 48);
+    const maxRegs = isBwColoring
+      ? Math.max(1600, config.maxRegions || 800)
+      : Math.max(30, config.maxRegions || 200);
+    const lineHandling = config.lineHandling || 'ABSORB_LINES';
 
     const segmentation = RegionSegmenter.segment(
       width,
@@ -158,10 +237,67 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
       2.0,
       lineHandling === 'ABSORB_LINES' ? lineMask : undefined,
       lineHandling,
-      rawRgba,
+      isBwColoring ? undefined : rawRgba,
       maxRegs,
       onProgress
     );
+
+    // If black & white coloring page, balance colors across regions using greedy graph coloring
+    if (isBwColoring) {
+      const adj = Array.from({ length: segmentation.regions.length + 1 }, () => new Set<number>());
+      for (let y = 0; y < height; y++) {
+        const row = y * width;
+        for (let x = 0; x < width; x++) {
+          const idx = row + x;
+          const r1 = segmentation.regionMap[idx];
+          if (x < width - 1) {
+            const r2 = segmentation.regionMap[idx + 1];
+            if (r1 !== r2 && r1 > 0 && r2 > 0) {
+              adj[r1].add(r2);
+              adj[r2].add(r1);
+            }
+          }
+          if (y < height - 1) {
+            const r3 = segmentation.regionMap[idx + width];
+            if (r1 !== r3 && r1 > 0 && r3 > 0) {
+              adj[r1].add(r3);
+              adj[r3].add(r1);
+            }
+          }
+        }
+      }
+
+      const numColors = palette.length - 1; // keep last color (dark ink) for outlines if needed
+      const colorUsage = new Int32Array(numColors + 1);
+
+      for (let r = 1; r <= segmentation.regions.length; r++) {
+        const reg = segmentation.regions[r - 1];
+        if (!reg) continue;
+
+        // If region had an explicit color from source image (> 25% non-white pixels), keep it
+        const used = new Set<number>();
+        for (const n of adj[r]) {
+          const nc = segmentation.regions[n - 1]?.colorId;
+          if (nc) used.add(nc);
+        }
+
+        let bestC = 1;
+        let minUsage = 999999;
+        for (let c = 1; c <= numColors; c++) {
+          if (!used.has(c)) {
+            if (colorUsage[c] < minUsage) {
+              minUsage = colorUsage[c];
+              bestC = c;
+            }
+          }
+        }
+        if (minUsage === 999999) {
+          bestC = (r % numColors) + 1;
+        }
+        reg.colorId = bestC;
+        colorUsage[bestC]++;
+      }
+    }
 
     return {
       width,
@@ -170,6 +306,7 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
       regions: segmentation.regions,
       regionMap: segmentation.regionMap,
       borderMap: segmentation.borderMap,
+      isFreeColor: isBwColoring,
     };
   }
 }
@@ -487,8 +624,9 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
     // Auto routing:
     let delegate: PuzzleGenerator;
     let resolvedType: ImageType;
+    const isBw = imageAnalysis.isBlackAndWhite || Boolean(config.isFreeColor);
 
-    if (lineAnalysis.isLineArt || config.imageType === 'DRAWING') {
+    if (isBw || lineAnalysis.isLineArt || config.imageType === 'DRAWING') {
       delegate = new LineArtPuzzleGenerator();
       resolvedType = 'DRAWING';
     } else if (imageAnalysis.detectedType === 'PHOTO' || config.imageType === 'PHOTO') {
@@ -528,6 +666,7 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
       minRegionArea: calibratedMinArea,
       maxRegions: calibratedMaxRegions,
       lineHandling: config.lineHandling || 'ABSORB_LINES',
+      isFreeColor: isBw,
     };
 
     return delegate.generateFromRgba(rgbaData, width, height, effectiveConfig, onProgress);

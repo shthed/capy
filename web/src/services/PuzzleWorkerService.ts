@@ -117,6 +117,7 @@ export class PuzzleWorkerService {
               regions: reconstitutedRegions,
               regionMap: new Int32Array(pd.regionMap),
               borderMap: new Uint8Array(pd.borderMap),
+              isFreeColor: pd.isFreeColor,
             };
 
             resolve(puzzleData);

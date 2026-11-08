@@ -19,6 +19,8 @@ interface PuzzleCanvasProps {
   hintRegionId: number | null;
   isPreviewMode: boolean;
   isPaintMode: boolean;
+  isFreeColorMode?: boolean;
+  paintedRegionColors?: Map<number, number>;
   canvasBgColor: CanvasBgColor;
   canvasBgArgb: number;
   sortOrder: PaletteSortOrder;
@@ -49,6 +51,61 @@ interface PuzzleCanvasProps {
   onTogglePreview: () => void;
 }
 
+/**
+ * Strict viewport bounding for pan/zoom offsets.
+ * Guarantees that the artwork cannot be panned away into empty void
+ * while allowing full edge-to-edge navigation when zoomed in.
+ */
+export function clampCanvasOffset(
+  rawOffset: { x: number; y: number },
+  scale: number,
+  puzzleWidth: number,
+  puzzleHeight: number,
+  containerWidth: number,
+  containerHeight: number
+): { x: number; y: number } {
+  if (containerWidth <= 0 || containerHeight <= 0 || puzzleWidth <= 0 || puzzleHeight <= 0) {
+    return rawOffset;
+  }
+
+  const baseScale = Math.min(containerWidth / puzzleWidth, containerHeight / puzzleHeight) * 0.92;
+  const effScale = scale * baseScale;
+  const artW = puzzleWidth * effScale;
+  const artH = puzzleHeight * effScale;
+  const baseOffsetX = (containerWidth - puzzleWidth * baseScale) / 2;
+  const baseOffsetY = (containerHeight - puzzleHeight * baseScale) / 2;
+
+  // Safe boundary margin: allows small rubber-band edge feel without losing the artwork
+  const marginX = Math.min(50, containerWidth * 0.12);
+  const marginY = Math.min(50, containerHeight * 0.12);
+
+  let minOffsetX: number;
+  let maxOffsetX: number;
+  let minOffsetY: number;
+  let maxOffsetY: number;
+
+  if (artW <= containerWidth) {
+    minOffsetX = -marginX;
+    maxOffsetX = marginX;
+  } else {
+    minOffsetX = containerWidth - marginX - baseOffsetX - artW;
+    maxOffsetX = marginX - baseOffsetX;
+  }
+
+  if (artH <= containerHeight) {
+    minOffsetY = -marginY;
+    maxOffsetY = marginY;
+  } else {
+    minOffsetY = containerHeight - marginY - baseOffsetY - artH;
+    maxOffsetY = marginY - baseOffsetY;
+  }
+
+  return {
+    x: Math.max(minOffsetX, Math.min(maxOffsetX, rawOffset.x)),
+    y: Math.max(minOffsetY, Math.min(maxOffsetY, rawOffset.y)),
+  };
+}
+
 export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   puzzle,
   sourceImage,
@@ -57,6 +114,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   hintRegionId,
   isPreviewMode,
   isPaintMode,
+  isFreeColorMode = false,
+  paintedRegionColors,
   canvasBgColor,
   regionColorMode,
   showRegionLabels,
@@ -97,6 +156,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const lastBasePuzzleRef = useRef<PuzzleData | null>(null);
   const lastBaseModeRef = useRef<RegionColorMode | null>(null);
   const lastBaseImageRef = useRef<HTMLImageElement | null>(null);
+  const lastBaseFreeColorRef = useRef<boolean>(false);
+  const prevColorsRef = useRef<Map<number, number>>(new Map());
 
   const highlightCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const hasHighlightPixelsRef = useRef<boolean>(false);
@@ -132,13 +193,21 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
   // Handle FloatingActions zoom in/out button triggers
   useEffect(() => {
-    if (zoomInTrigger <= 0) return;
-    setScale((prev) => Math.min(12.0, prev * 1.25));
+    if (zoomInTrigger <= 0 || !containerRef.current || !puzzle) return;
+    const newScale = Math.min(12.0, scale * 1.25);
+    const w = containerRef.current.clientWidth;
+    const h = containerRef.current.clientHeight;
+    setScale(newScale);
+    setOffset((prev) => clampCanvasOffset(prev, newScale, puzzle.width, puzzle.height, w, h));
   }, [zoomInTrigger]);
 
   useEffect(() => {
-    if (zoomOutTrigger <= 0) return;
-    setScale((prev) => Math.max(0.5, prev * 0.8));
+    if (zoomOutTrigger <= 0 || !containerRef.current || !puzzle) return;
+    const newScale = Math.max(0.5, scale * 0.8);
+    const w = containerRef.current.clientWidth;
+    const h = containerRef.current.clientHeight;
+    setScale(newScale);
+    setOffset((prev) => clampCanvasOffset(prev, newScale, puzzle.width, puzzle.height, w, h));
   }, [zoomOutTrigger]);
 
   useEffect(() => {
@@ -146,6 +215,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     setScale(1.0);
     setOffset({ x: 0, y: 0 });
   }, [resetViewTrigger]);
+
+  // Ensure offset is strictly clamped whenever scale or container size changes
+  useEffect(() => {
+    if (!containerRef.current || !puzzle) return;
+    const w = containerRef.current.clientWidth;
+    const h = containerRef.current.clientHeight;
+    setOffset((prev) => clampCanvasOffset(prev, scale, puzzle.width, puzzle.height, w, h));
+  }, [scale, puzzle]);
 
   // Pulse animation frame (only runs when animateHint is active)
   useEffect(() => {
@@ -189,10 +266,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       isFilled: boolean,
       isDetailMode: boolean,
       srcPixels: Uint8ClampedArray | null,
-      paletteMap: Map<number, PaletteColor>
+      paletteMap: Map<number, PaletteColor>,
+      customColors?: Map<number, number>,
+      isFreeColor?: boolean
     ) => {
       const { borderMap } = puzzleData;
-      const col = paletteMap.get(region.colorId);
+      const targetColorId = customColors?.get(region.id) ?? region.colorId;
+      const col = paletteMap.get(targetColorId);
       const r = col?.r ?? 71;
       const g = col?.g ?? 85;
       const b = col?.b ?? 105;
@@ -200,6 +280,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const borderG = Math.floor(g * 0.72);
       const borderB = Math.floor(b * 0.72);
 
+      const isColoring = Boolean(isFreeColor || puzzleData.isFreeColor);
       const pixels = region.pixels;
       for (let i = 0; i < pixels.length; i++) {
         const pIndex = pixels[i];
@@ -207,7 +288,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         const isBorder = borderMap[pIndex] === 1;
 
         if (isFilled) {
-          if (isBorder) {
+          if (isColoring) {
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = 255;
+          } else if (isBorder) {
             data[idx] = borderR;
             data[idx + 1] = borderG;
             data[idx + 2] = borderB;
@@ -224,7 +310,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
             data[idx + 3] = 255;
           }
         } else {
-          if (isBorder) {
+          if (isColoring) {
+            data[idx] = 255;
+            data[idx + 1] = 255;
+            data[idx + 2] = 255;
+            data[idx + 3] = 255;
+          } else if (isBorder) {
             data[idx] = 51;
             data[idx + 1] = 65;
             data[idx + 2] = 85;
@@ -257,6 +348,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       lastBasePuzzleRef.current !== puzzle ||
       lastBaseModeRef.current !== regionColorMode ||
       lastBaseImageRef.current !== sourceImage ||
+      lastBaseFreeColorRef.current !== isFreeColorMode ||
       !baseCanvasRef.current ||
       !baseImageDataRef.current;
 
@@ -295,6 +387,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const srcPixels = sourcePixelsRef.current;
       const total = width * height;
 
+      const isColoring = Boolean(isFreeColorMode || puzzle.isFreeColor);
       // Initialize background & unfilled pixels
       for (let i = 0; i < total; i++) {
         const rId = regionMap[i];
@@ -304,8 +397,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
         if (isFilled) {
           const reg = regMap.get(rId);
-          const col = reg ? palMap.get(reg.colorId) : undefined;
-          if (isBorder) {
+          const targetColorId = reg ? (paintedRegionColors?.get(rId) ?? reg.colorId) : undefined;
+          const col = targetColorId !== undefined ? palMap.get(targetColorId) : undefined;
+          if (isColoring) {
+            data[idx] = col ? col.r : 255;
+            data[idx + 1] = col ? col.g : 255;
+            data[idx + 2] = col ? col.b : 255;
+            data[idx + 3] = 255;
+          } else if (isBorder) {
             data[idx] = col ? Math.floor(col.r * 0.72) : 71;
             data[idx + 1] = col ? Math.floor(col.g * 0.72) : 85;
             data[idx + 2] = col ? Math.floor(col.b * 0.72) : 105;
@@ -322,7 +421,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
             data[idx + 3] = 255;
           }
         } else {
-          if (isBorder) {
+          if (isColoring) {
+            data[idx] = 255;
+            data[idx + 1] = 255;
+            data[idx + 2] = 255;
+            data[idx + 3] = 255;
+          } else if (isBorder) {
             data[idx] = 51;
             data[idx + 1] = 65;
             data[idx + 2] = 85;
@@ -339,14 +443,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       baseCtx.putImageData(imgData, 0, 0);
       baseImageDataRef.current = imgData;
       paintedCacheRef.current = new Set(filledRegionIds);
+      prevColorsRef.current = new Map(paintedRegionColors || []);
       lastBasePuzzleRef.current = puzzle;
       lastBaseModeRef.current = regionColorMode;
       lastBaseImageRef.current = sourceImage;
+      lastBaseFreeColorRef.current = isFreeColorMode;
       return;
     }
 
-    // Incremental update: only repaint regions whose filled status changed!
+    // Incremental update: repaint regions whose filled status or painted color changed!
     const prevPainted = paintedCacheRef.current;
+    const prevColors = prevColorsRef.current;
     const baseCtx = baseCanvasRef.current!.getContext('2d')!;
     const imgData = baseImageDataRef.current!;
     const data = imgData.data;
@@ -359,12 +466,26 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     let maxDirtyX = -1;
     let maxDirtyY = -1;
 
-    // Check newly filled regions
+    // Check newly filled or repainted regions
     for (const rId of filledRegionIds) {
-      if (!prevPainted.has(rId)) {
+      const curCol = paintedRegionColors?.get(rId);
+      const prevCol = prevColors.get(rId);
+      const colorChanged = curCol !== undefined && curCol !== prevCol;
+
+      if (!prevPainted.has(rId) || colorChanged) {
         const reg = regMap.get(rId);
         if (reg) {
-          writeRegionToImageData(data, puzzle, reg, true, isDetailMode, srcPixels, palMap);
+          writeRegionToImageData(
+            data,
+            puzzle,
+            reg,
+            true,
+            isDetailMode,
+            srcPixels,
+            palMap,
+            paintedRegionColors,
+            isFreeColorMode
+          );
           if (reg.minX < minDirtyX) minDirtyX = reg.minX;
           if (reg.minY < minDirtyY) minDirtyY = reg.minY;
           if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
@@ -378,7 +499,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       if (!filledRegionIds.has(rId)) {
         const reg = regMap.get(rId);
         if (reg) {
-          writeRegionToImageData(data, puzzle, reg, false, isDetailMode, srcPixels, palMap);
+          writeRegionToImageData(
+            data,
+            puzzle,
+            reg,
+            false,
+            isDetailMode,
+            srcPixels,
+            palMap,
+            paintedRegionColors,
+            isFreeColorMode
+          );
           if (reg.minX < minDirtyX) minDirtyX = reg.minX;
           if (reg.minY < minDirtyY) minDirtyY = reg.minY;
           if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
@@ -400,7 +531,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
 
     paintedCacheRef.current = new Set(filledRegionIds);
-  }, [puzzle, sourceImage, regionColorMode, filledRegionIds, writeRegionToImageData]);
+    prevColorsRef.current = new Map(paintedRegionColors || []);
+    lastBaseFreeColorRef.current = isFreeColorMode;
+  }, [puzzle, sourceImage, regionColorMode, filledRegionIds, paintedRegionColors, isFreeColorMode, writeRegionToImageData]);
 
   // 2. Update Offscreen Highlight Layer (Only rebuilt when activeColorId/hintRegionId/style changes)
   useEffect(() => {
@@ -543,12 +676,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     if (showNextRegionHint && isZoomedIn && !isOnScreen) {
       const targetX = w / 2 - baseOffsetX - region.centroidX * effScale;
       const targetY = h / 2 - baseOffsetY - region.centroidY * effScale;
-      const maxPanX = Math.max(w * 0.4, (puzzle.width * effScale) * 0.55);
-      const maxPanY = Math.max(h * 0.4, (puzzle.height * effScale) * 0.55);
-      setOffset({
-        x: Math.max(-maxPanX, Math.min(maxPanX, targetX)),
-        y: Math.max(-maxPanY, Math.min(maxPanY, targetY)),
-      });
+      setOffset(
+        clampCanvasOffset({ x: targetX, y: targetY }, scale, puzzle.width, puzzle.height, w, h)
+      );
     }
   }, [hintRegionId, puzzle, showNextRegionHint]);
 
@@ -747,11 +877,27 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         ctx.drawImage(highlightCanvasRef.current, 0, 0);
         ctx.restore();
       }
+
+      // 3. For coloring book / free color mode: composite authentic ink artwork on top with multiply blend!
+      const isColoring = Boolean(isFreeColorMode || puzzle.isFreeColor);
+      if (
+        isColoring &&
+        sourceImage &&
+        sourceImage.complete &&
+        (sourceImage.naturalWidth > 0 || sourceImage.width > 0)
+      ) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
+        ctx.restore();
+      }
     }
 
     // 3. Draw Visible Number Labels & Centroid Glows
     const drawLabelsNow = isEffectivePreview
       ? showRegionLabels && showPreviewLabels
+      : isFreeColorMode
+      ? false
       : showRegionLabels;
 
     if (drawLabelsNow || highlightMatching || hintRegionId !== null) {
@@ -802,6 +948,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     filledRegionIds,
     hintRegionId,
     isPreviewMode,
+    isFreeColorMode,
     canvasBgColor,
     regionColorMode,
     showRegionLabels,
@@ -861,14 +1008,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         if (!container || !puzzle) return { x: prev.x + dx, y: prev.y + dy };
         const w = container.clientWidth;
         const h = container.clientHeight;
-        const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
-        const effScale = scale * baseScale;
-        const maxPanX = Math.max(w * 0.45, (puzzle.width * effScale) * 0.55);
-        const maxPanY = Math.max(h * 0.45, (puzzle.height * effScale) * 0.55);
-        return {
-          x: Math.max(-maxPanX, Math.min(maxPanX, prev.x + dx)),
-          y: Math.max(-maxPanY, Math.min(maxPanY, prev.y + dy)),
-        };
+        return clampCanvasOffset(
+          { x: prev.x + dx, y: prev.y + dy },
+          scale,
+          puzzle.width,
+          puzzle.height,
+          w,
+          h
+        );
       });
     }
   };
@@ -936,10 +1083,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     const focalX = mouseX - (offset.x + baseOffsetX);
     const focalY = mouseY - (offset.y + baseOffsetY);
 
-    setOffset({
+    const targetOffset = {
       x: offset.x - focalX * (actualZoom - 1),
       y: offset.y - focalY * (actualZoom - 1),
-    });
+    };
+    setOffset(clampCanvasOffset(targetOffset, newScale, puzzle.width, puzzle.height, w, h));
     setScale(newScale);
   };
 
@@ -995,10 +1143,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const focalX = focalScreenX - (offset.x + baseOffsetX);
       const focalY = focalScreenY - (offset.y + baseOffsetY);
 
-      setOffset((prev) => ({
-        x: prev.x + panDx - focalX * (actualZoom - 1),
-        y: prev.y + panDy - focalY * (actualZoom - 1),
-      }));
+      setOffset((prev) => {
+        const targetOffset = {
+          x: prev.x + panDx - focalX * (actualZoom - 1),
+          y: prev.y + panDy - focalY * (actualZoom - 1),
+        };
+        return clampCanvasOffset(targetOffset, newScale, puzzle.width, puzzle.height, w, h);
+      });
       setScale(newScale);
     }
   };
