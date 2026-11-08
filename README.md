@@ -13,14 +13,35 @@
 
 ---
 
+## 📸 Visual Showcase & Gallery
+
+<p align="center">
+  <img src="./docs/gallery/desktop_gameplay.png" alt="Capy Desktop Gameplay" width="90%" />
+  <br>
+  <em>Interactive color-by-number canvas with responsive Palette Dock, dynamic active region highlighting, and centroid glow badges.</em>
+</p>
+
+| **Fine Zoom & Active Highlighting** | **Free Colour / Coloring Page Mode** |
+| :---: | :---: |
+| <img src="./docs/gallery/zoomed_detail.png" alt="Fine Zoom & Active Highlighting" width="100%" /> | <img src="./docs/gallery/coloring_page_mode.png" alt="Free Colour / Coloring Page Mode" width="100%" /> |
+| *Continuous zoom up to 12× with poles-of-inaccessibility labels & active region fills* | *Mushroom Forest with custom HSL/Hex palette picker & quick presets* |
+
+| **Settings & Appearance Customizer** | **Mobile Portrait Experience** |
+| :---: | :---: |
+| <img src="./docs/gallery/settings_customizer.png" alt="Settings & Appearance Customizer" width="100%" /> | <img src="./docs/gallery/mobile_gameplay.png" alt="Mobile Portrait Experience" width="55%" /> |
+| *Circular background swatches, custom pipette color pickers & smooth pan momentum* | *Full edge-to-edge touch UI with Google Maps-style one-finger drag zoom* |
+
+---
+
 ## Repository Structure
 
-| Directory | Target | Tech Stack | Hosted Path |
-| :--- | :--- | :--- | :--- |
-| **[`web/`](./web)** | **Updated Web App (Single Source of Truth)** | React 19, TypeScript, Vite 6, Tailwind CSS 4, Web Workers | `/` |
-| **[`web1/`](./web1)** | **Legacy Web App (v1)** | Zero-build Vanilla JS (`capy.js`, `puzzle-generation.js`) + Playwright | `/web1/` |
-| **[`app/`](./app)** | **Unified Android App** | Kotlin, AndroidX WebKit (`WebViewAssetLoader`), Native Haptics & Storage Bridge | `/capy.apk` |
-| **[`app1/`](./app1)** | **Legacy Native Android App (v1)** | Kotlin, Jetpack Compose, Material 3, Custom K-Means Engine | `:app1` |
+| Directory | Target | Tech Stack | Hosted Path | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **[`web/`](./web)** | **Updated Web App (Single Source of Truth)** | React 19, TypeScript, Vite 6, Tailwind CSS 4, Web Workers | `/` | **Active** |
+| **[`app/`](./app)** | **Unified Android App** | Kotlin, AndroidX WebKit (`WebViewAssetLoader`), Native Haptics & Storage Bridge | `/capy.apk` | **Active** |
+| **[`web1/`](./web1)** | **Legacy Web App (v1)** | Zero-build Vanilla JS (`capy.js`, `puzzle-generation.js`) + Playwright | `/web1/` | *Deprecated* |
+| **[`app1/`](./app1)** | **Legacy Native Android App (v1)** | Kotlin, Jetpack Compose, Material 3, Custom K-Means Engine | `:app1` | *Deprecated* |
+
 
 ---
 
@@ -47,6 +68,7 @@
 
 ## 🛠️ Architecture & Documentation
 
+- **Testing Architecture & Verification Guide**: [`TESTING.md`](./TESTING.md)
 - **Master Project Roadmap & TODO**: [`TODO.md`](./TODO.md)
 - **Updated Web Architecture & UI Reference**: [`WEB.md`](./WEB.md)
 - **Puzzle Generation Engine Reference**: [`PUZZLE.md`](./PUZZLE.md)
@@ -74,7 +96,11 @@ npm run lint
 
 # Build production bundle (outputs to web/dist/)
 npm run build
+
+# Run automated browser test suite (tests gestures, settings, canvas)
+npm run test:game
 ```
+
 
 ### 2. Legacy Web App v1 (`web1/`)
 ```bash
