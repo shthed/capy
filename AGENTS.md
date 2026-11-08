@@ -14,15 +14,16 @@ Capy is a multi-platform color-by-number suite living in https://github.com/shth
 
 2. **`web1/` — Legacy Web Application v1 (Deployed to `/web1/`)**
    - Zero-build vanilla JavaScript runtime (`web1/index.html`, `web1/capy.js`, `web1/puzzle-generation.js`, `web1/styles.css`, `web1/settings-menu.json`).
-   - Documentation lives in [`web1/docs/`](./web1/docs/) (`TECH.md`, `ONBOARDING.md`, `ROADMAP.md`, `STYLEGUIDE.md`, `TODO.md`, `CHANGELOG.md`).
+   - Technical guide & style reference live in [`web1/WEB1.md`](./web1/WEB1.md).
    - Playwright smoke tests and GitHub Pages helper scripts live in `web1/tests/` and `web1/scripts/`.
 
 3. **`app/` — Unified Native Android Application (`com.capypaint.capy`, Deployed to `/capy.apk`)**
    - Lightweight native Android launcher wrapping `web/dist/` via AndroidX `WebViewAssetLoader` (`MainActivity.kt`) and `CapyAndroidBridge.kt` (`@JavascriptInterface`).
+   - Architecture and native bridge specifications live in [`APP.md`](./APP.md).
    - Provides native Android tactile haptic feedback (`Vibrator` / `HapticFeedbackConstants`), hardware back gesture modal closing, native `PickVisualMedia` photo picker, `Intent.ACTION_SEND` image receiver, and persistent JSON disk backups (`filesDir/capy_saves`).
 
 4. **`app1/` — Legacy Native Jetpack Compose Android Application v1 (`:app1`)**
-   - Preserved standalone Kotlin + Jetpack Compose implementation (`app1/CAPY.md`, `app1/CAPY-TODO.md`).
+   - Preserved standalone Kotlin + Jetpack Compose implementation documented in [`app1/APP1.md`](./app1/APP1.md).
 
 ---
 
@@ -67,7 +68,7 @@ From the repository root:
   - Open PR branches deploy previews to `/pull/<number>/`, `/pull/<number>/web1/`, and `/pull/<number>/capy.apk`.
   - `gh-pages` commits are squashed to a single orphan commit on every push so binary `.apk` files never accumulate in Git history.
 - **No unsolicited Android device deployment**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
-- **Documentation hygiene**: Keep [`TODO.md`](./TODO.md), [`PUZZLE.md`](./PUZZLE.md), [`app/CAPY.md`](./app/CAPY.md), [`app1/CAPY.md`](./app1/CAPY.md), [`app1/CAPY-TODO.md`](./app1/CAPY-TODO.md), and [`web1/docs/TECH.md`](./web1/docs/TECH.md) in sync with architectural or runtime changes.
+- **Documentation hygiene**: Keep [`TODO.md`](./TODO.md), [`PUZZLE.md`](./PUZZLE.md), [`APP.md`](./APP.md), [`app1/APP1.md`](./app1/APP1.md), and [`web1/WEB1.md`](./web1/WEB1.md) in sync with architectural or runtime changes.
 
 ---
 
