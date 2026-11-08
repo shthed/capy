@@ -7,6 +7,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Base64
+import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.webkit.JavascriptInterface
@@ -62,6 +63,7 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun setModalOpen(isOpen: Boolean) {
+        Log.d(TAG, "Modal state updated: isOpen=$isOpen")
         isModalOpen = isOpen
         onModalStateChanged(isOpen)
     }
@@ -115,12 +117,14 @@ class CapyAndroidBridge(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(chooser)
-        } catch (_: Exception) {
-            // Ignore share failure
+            Log.i(TAG, "Dispatched share chooser for '$title' (${bytes.size} bytes)")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to share image '$title'", e)
         }
     }
 
     companion object {
+        const val TAG = "CapyBridge"
         const val BACKUP_FOLDER_NAME = "capy_saves"
 
         fun sanitizeKey(key: String): String {
@@ -131,12 +135,15 @@ class CapyAndroidBridge(
         fun saveBackupToDir(dir: File, key: String, data: String): Boolean {
             return try {
                 if (!dir.exists() && !dir.mkdirs()) {
+                    Log.e(TAG, "Failed to create backup directory: ${dir.absolutePath}")
                     return false
                 }
                 val targetFile = File(dir, "${sanitizeKey(key)}.json")
                 targetFile.writeText(data, Charsets.UTF_8)
+                Log.d(TAG, "Saved backup: $key (${data.length} chars)")
                 true
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save backup: $key", e)
                 false
             }
         }
@@ -144,9 +151,15 @@ class CapyAndroidBridge(
         fun loadBackupFromDir(dir: File, key: String): String? {
             return try {
                 val targetFile = File(dir, "${sanitizeKey(key)}.json")
-                if (!targetFile.exists()) return null
-                targetFile.readText(Charsets.UTF_8)
-            } catch (_: Exception) {
+                if (!targetFile.exists()) {
+                    Log.d(TAG, "No backup file found for key: $key")
+                    return null
+                }
+                val content = targetFile.readText(Charsets.UTF_8)
+                Log.d(TAG, "Loaded backup: $key (${content.length} chars)")
+                content
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load backup: $key", e)
                 null
             }
         }
@@ -169,6 +182,7 @@ class CapyAndroidBridge(
 
         private fun performHaptic(context: Context, view: View, type: String) {
             try {
+                Log.d(TAG, "Triggered haptic: $type")
                 when (type) {
                     "tick" -> {
                         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
@@ -186,8 +200,8 @@ class CapyAndroidBridge(
                         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                     }
                 }
-            } catch (_: Exception) {
-                // Ignore vibration errors on unsupported devices
+            } catch (e: Exception) {
+                Log.w(TAG, "Haptic vibration not supported or failed: $type", e)
             }
         }
 
