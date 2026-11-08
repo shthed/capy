@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Sliders,
@@ -79,6 +79,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
 
+  // Sync activeTab with initialTab when modal opens
+  useEffect(() => {
+    if (isOpen && initialTab !== undefined) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   // Artwork resolution and snapping calculations
   const nativeW = sourceImage?.naturalWidth || sourceImage?.width || 0;
   const nativeH = sourceImage?.naturalHeight || sourceImage?.height || 0;
@@ -154,8 +173,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none">
-      <div className="relative w-full h-full sm:h-[88vh] sm:max-h-[860px] sm:max-w-2xl flex flex-col bg-slate-900 sm:border sm:border-slate-800 sm:rounded-2xl shadow-2xl overflow-hidden text-slate-100">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none cursor-pointer sm:cursor-default"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full h-full sm:h-[88vh] sm:max-h-[860px] sm:max-w-2xl flex flex-col bg-slate-900 sm:border sm:border-slate-800 sm:rounded-2xl shadow-2xl overflow-hidden text-slate-100 cursor-auto"
+      >
         {/* Top Tab Bar: Tab headings & close button directly at the top (no wasted space header) */}
         <div
           className="flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-2 sm:px-3 flex-shrink-0"
@@ -1023,7 +1052,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   return (
                     <div
                       key={snap.id}
-                      className={`relative flex items-center gap-2.5 p-2.5 rounded-xl border transition-all ${
+                      onDoubleClick={() => {
+                        if (!isRenaming) {
+                          if (!isActive) {
+                            onLoadSnapshot(snap);
+                          }
+                          onClose();
+                        }
+                      }}
+                      title={
+                        isActive
+                          ? 'Active save (double-click to resume game)'
+                          : 'Double-click to load save and close settings'
+                      }
+                      className={`relative flex items-center gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer ${
                         isActive
                           ? 'border-amber-400 bg-amber-500/10 shadow-md ring-1 ring-amber-400/40'
                           : 'border-slate-800 bg-slate-950/40 hover:bg-slate-800/40'
@@ -1051,7 +1093,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {/* Info & Title */}
                       <div className="flex-1 min-w-0">
                         {isRenaming ? (
-                          <div className="flex items-center gap-1.5">
+                          <div
+                            className="flex items-center gap-1.5"
+                            onDoubleClick={(e) => e.stopPropagation()}
+                          >
                             <input
                               type="text"
                               value={renameText}
@@ -1095,6 +1140,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 setRenamingId(snap.id);
                                 setRenameText(snap.title);
                               }}
+                              onDoubleClick={(e) => e.stopPropagation()}
                               className="text-slate-500 hover:text-slate-300 p-0.5"
                             >
                               <Edit2 size={11} />
@@ -1112,7 +1158,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <div
+                        className="flex items-center gap-1.5 flex-shrink-0"
+                        onDoubleClick={(e) => e.stopPropagation()}
+                      >
                         {!isActive && (
                           <button
                             type="button"

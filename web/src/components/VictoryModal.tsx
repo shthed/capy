@@ -24,7 +24,12 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 select-none"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 select-none cursor-pointer"
       style={{
         paddingTop: 'max(1rem, calc(var(--sat, 0px) + 0.75rem))',
         paddingBottom: 'max(1rem, calc(var(--sab, 0px) + 0.75rem))',
@@ -32,7 +37,10 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
         paddingRight: 'max(1rem, calc(var(--sar, 0px) + 0.75rem))',
       }}
     >
-      <div className="relative w-full max-w-md bg-slate-900 border border-amber-400/50 rounded-3xl shadow-2xl overflow-hidden text-slate-100 flex flex-col items-center p-6 text-center animate-in zoom-in-95 duration-300 ring-2 ring-amber-400/20">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md bg-slate-900 border border-amber-400/50 rounded-3xl shadow-2xl overflow-hidden text-slate-100 flex flex-col items-center p-6 text-center animate-in zoom-in-95 duration-300 ring-2 ring-amber-400/20 cursor-auto"
+      >
         {/* Close Button */}
         <button
           type="button"
