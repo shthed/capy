@@ -1,15 +1,13 @@
-# Capy: Color-by-Number Suite (Web, Web1 Legacy & Android)
+# Capy: Color-by-Number Suite
 
-[![Web](https://img.shields.io/badge/Web-React%2019%20%2B%20Vite%206-blue.svg)](https://shthed.github.io/capy/)
-[![Web1](https://img.shields.io/badge/Legacy%20Web-Vanilla%20JS-amber.svg)](https://shthed.github.io/capy/web1/)
-[![Android](https://img.shields.io/badge/Platform-Android%20Jetpack%20Compose-green.svg)](https://developer.android.com)
-[![Kotlin](https://img.shields.io/badge/Language-Kotlin%20%2F%20TypeScript-purple.svg)](https://kotlinlang.org)
+[![Web App](https://img.shields.io/badge/Web_App-Play_Online-blue?style=for-the-badge&logo=googlechrome&logoColor=white)](https://shthed.github.io/capy/)
+[![Android APK](https://img.shields.io/badge/Android-Download_APK-green?style=for-the-badge&logo=android&logoColor=white)](https://shthed.github.io/capy/capy.apk)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
-**Capy** is a serene, high-performance color-by-number generator and player across web and Android platforms. Import any photo or drawing from your device or play built-in sample artwork — Capy segments images into crisp numbered color regions, builds an adaptive palette, and lets you paint with tap or drag-to-color **Paint Mode**.
+**Capy** is a serene, delightful color-by-number game you can play directly in your web browser or on Android. Transform any photo or artwork into a crisp, playable color puzzle with smart number guides, or relax with Free Colour coloring pages!
 
-- **Launch Updated Web App (`web/`)**: [https://shthed.github.io/capy/](https://shthed.github.io/capy/)
-- **Launch Legacy Web App v1 (`web1/`)**: [https://shthed.github.io/capy/web1/](https://shthed.github.io/capy/web1/)
-- **Download Android APK (`app/`)**: [https://shthed.github.io/capy/capy.apk](https://shthed.github.io/capy/capy.apk)
+👉 **[Play Capy in Your Browser](https://shthed.github.io/capy/)**  
+📲 **[Download the Android APK](https://shthed.github.io/capy/capy.apk)**
 
 ---
 
@@ -33,110 +31,67 @@
 
 ---
 
-## Repository Structure
+## ✨ Why You'll Love Capy
 
-| Directory | Target | Tech Stack | Hosted Path | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| **[`web/`](./web)** | **Updated Web App (Single Source of Truth)** | React 19, TypeScript, Vite 6, Tailwind CSS 4, Web Workers | `/` | **Active** |
-| **[`app/`](./app)** | **Unified Android App** | Kotlin, AndroidX WebKit (`WebViewAssetLoader`), Native Haptics & Storage Bridge | `/capy.apk` | **Active** |
-| **[`web1/`](./web1)** | **Legacy Web App (v1)** | Zero-build Vanilla JS (`capy.js`, `puzzle-generation.js`) + Playwright | `/web1/` | *Deprecated* |
-| **[`app1/`](./app1)** | **Legacy Native Android App (v1)** | Kotlin, Jetpack Compose, Material 3, Custom K-Means Engine | `:app1` | *Deprecated* |
-
-
----
-
-## 🎨 How to Play
-
-1. **Starting a Puzzle**:
-   - **Sample Artwork**: Built-in sample artwork (*Capybara*, *Capy Forest*, *Snail Guitar*) is ready on launch.
-   - **Importing Photos**: Tap the **Image / Upload** icon to convert any photo or drawing from your device into a playable puzzle.
-2. **Selecting & Painting Colors**:
-   - Tap any numbered color swatch in the bottom **Palette Dock**.
-   - Tap regions on the canvas matching the selected color number to paint them, or switch to **Easy Mode** (auto-selects and fills the tapped region's color).
-3. **Paint Mode (Drag-to-Color)**:
-   - Toggle the **Paint Mode** brush button to continuously fill matching regions as you drag across the canvas.
-4. **Canvas Controls & Gestures**:
-   - **Pinch-to-Zoom / Mouse Wheel**: Zoom up to **10x** for micro-regions.
-   - **Pan / Drag**: Click-and-drag or two-finger drag to pan around the zoomed canvas.
-5. **Hints & Preview**:
-   - **Hint Assist**: Tap the **Hint** lightbulb icon or re-tap the active swatch to center and pulse an unpainted region.
-   - **Preview Finished Artwork**: Toggle the **Preview** eye icon in the top bar to inspect the source artwork without region boundaries.
-6. **Settings, Generator Tuning & Saves**:
-   - Open **Settings** to customize Region Fill Style (*Original Detail* vs *Solid Palette*), Canvas Background, Palette Swatch Order (*Number*, *Remaining*, *Hue Rainbow*, *Lightness*), Hint styles, Generator tuning presets (*Low*, *Medium*, *High*, *Custom*), and saved puzzle sessions.
+- 🎨 **Two Ways to Play**: Classic **Color by Number** guided coloring or relaxed **Free Colour** creative mode.
+- 📸 **Turn Any Photo into a Puzzle**: Tap the photo upload button to convert your favorite pictures, pets, landscapes, or drawings into instant playable puzzles.
+- 👆 **Smooth Navigation**: One-finger double-tap-and-drag zoom, fluid pinch-to-zoom up to 12×, and inertial gliding pan momentum just like Google Maps.
+- 🖌️ **Continuous Paint Mode**: Drag your finger across the screen to quickly fill connected matching regions without tapping each one individually.
+- 🎯 **Smart Hints & Assistance**: Tap a color swatch again to highlight elusive tiny regions with an animated glow ring.
+- 🌙 **Custom Themes & Haptics**: Choose from Deep Black, Charcoal, Slate, or custom background colors, and enjoy satisfying tactile vibration on mobile.
+- 🔒 **100% Offline & Private**: All image processing and coloring run entirely inside your browser. No accounts, no data tracking, and no servers required.
 
 ---
 
-## 🛠️ Architecture & Documentation
+## 🎮 How to Play
 
-- **Testing Architecture & Verification Guide**: [`TESTING.md`](./TESTING.md)
-- **Master Project Roadmap & TODO**: [`TODO.md`](./TODO.md)
-- **Updated Web Architecture & UI Reference**: [`WEB.md`](./WEB.md)
-- **Puzzle Generation Engine Reference**: [`PUZZLE.md`](./PUZZLE.md)
-- **Unified Android Launcher Architecture & Native Bridge**: [`APP.md`](./APP.md)
-- **Legacy Android v1 Architecture & Roadmap**: [`app1/APP1.md`](./app1/APP1.md)
-- **Legacy Web v1 Technical Reference & Style Guide**: [`web1/WEB1.md`](./web1/WEB1.md)
-- **Contributor & Agent Playbook**: [`AGENTS.md`](./AGENTS.md)
+1. **Pick an Artwork**: Start with built-in favorites like *Capybara*, *Capy Forest*, or *Mushroom Forest*, or import your own photo.
+2. **Choose a Color**: Tap any numbered swatch in the bottom **Palette Dock**. Matching puzzle shapes highlight instantly in that color.
+3. **Tap or Drag to Paint**: Tap the numbered shapes on the canvas to fill them. Turn on the **Paint Brush** tool to color continuously by dragging.
+4. **Zoom & Pan**: Double-tap and drag (up to zoom in, down to zoom out), or pinch with two fingers to inspect fine micro-regions.
+5. **Celebrate**: Complete all colors to trigger the victory confetti burst and download your finished masterpiece!
 
 ---
 
-## 💻 Build, Run & Test Commands
+## 🕹️ Controls & Gestures Cheat Sheet
 
-### 1. Updated Web App (`web/`)
+| Gesture / Control | Action |
+| :--- | :--- |
+| **Tap Region** | Paints the region if it matches the selected active color. |
+| **Drag Canvas** | Pans the artwork smoothly across the screen with inertial gliding momentum. |
+| **Double-Tap & Drag Up / Down** | Google Maps-style one-finger zoom: drag up to zoom in, drag down to zoom out. |
+| **Pinch / Mouse Wheel** | Multi-touch focal zoom in / zoom out up to 12×. |
+| **Brush Button (🖌️)** | Toggles continuous drag-to-paint mode. |
+| **Eye Button (👁️)** | Toggles unmasked preview of the original source artwork. |
+| **Lightbulb / Swatch Double-Tap** | Targets and animates the next unpainted region for the active color. |
+
+---
+
+## 🛠️ Developer Quick Start
+
+To run Capy locally in development mode:
+
 ```bash
 cd web
-
-# Install dependencies
 npm install
-
-# Start development server (http://localhost:3000)
 npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-# Run TypeScript typecheck
-npm run lint
-
-# Build production bundle (outputs to web/dist/)
-npm run build
-
-# Run automated browser test suite (tests gestures, settings, canvas)
+Run the automated browser test suite (tests gestures, settings, canvas):
+```bash
 npm run test:game
 ```
 
-
-### 2. Legacy Web App v1 (`web1/`)
-```bash
-cd web1
-
-# Install dependencies
-npm install
-
-# Start local static server (http://localhost:8000)
-npm run dev
-
-# Provision Playwright Chromium and run smoke tests
-npm run setup:playwright
-npm test
-```
-
-### 3. Native Android App (`app/`)
-Run Gradle commands from the repository root:
-```bash
-# Run Android unit tests
-./gradlew app:testDebugUnitTest
-
-# Build debug APK
-./gradlew app:assembleDebug
-
-# Install debug APK to connected device/emulator
-./gradlew app:installDebug
-```
-
 ---
 
-## 🔄 Keeping Dependencies Updated
+## 📚 Technical Documentation & Architecture
 
-Detailed instructions for checking and updating dependencies across all targets are documented in [`AGENTS.md`](./AGENTS.md#5-maintaining--updating-dependencies):
+All detailed architectural guides, computer vision algorithms, and native bridge specifications live in dedicated documentation files:
 
-- **Web (`web/`)**: Run `cd web && npm outdated` and `npm update`, then verify with `npm run lint` and `npm run build`.
-- **Legacy Web (`web1/`)**: Run `cd web1 && npm update`, then verify with `npm test`.
-- **Android (`app/` & `app1/`)**: Update version catalog in [`gradle/libs.versions.toml`](./gradle/libs.versions.toml), ensure `compileSdk` alignment, then verify with `./gradlew app:testDebugUnitTest app1:testDebugUnitTest` and `./gradlew app:assembleDebug app1:assembleDebug`.
-
+- 🌐 **Web Architecture & UI Reference**: [`WEB.md`](./WEB.md) — Comprehensive guide to React 19, Vite, 3-tier offscreen canvas rendering, gesture engine, and settings dictionary.
+- 🤖 **Android Native Launcher**: [`APP.md`](./APP.md) — Kotlin launcher, AndroidX `WebViewAssetLoader`, native haptics bridge, and backup specifications.
+- 🧩 **Puzzle Generation Engine**: [`PUZZLE.md`](./PUZZLE.md) — Web Worker segmentation, Sobel line extraction, Red-Mean K-Means clustering, and watershed absorption.
+- 🧪 **Testing Architecture**: [`TESTING.md`](./TESTING.md) — Playwright E2E testing guide, multi-touch gesture verification, and CI pipelines.
+- 📋 **Project Roadmap & Tasks**: [`TODO.md`](./TODO.md) — Active milestones and post-merge cleanup tracking.
+- 🧑‍💻 **Agent & Contributor Playbook**: [`AGENTS.md`](./AGENTS.md) — Monorepo workflows, development rules, and PR standards.
