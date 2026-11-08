@@ -58,6 +58,7 @@ self.onmessage = (e: MessageEvent) => {
             regionMap: puzzleData.regionMap.buffer,
             borderMap: puzzleData.borderMap.buffer,
             regions: serializedRegions,
+            isFreeColor: puzzleData.isFreeColor,
           },
         },
         transferList

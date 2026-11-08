@@ -1,17 +1,30 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { PaletteColor, PaletteSortOrder, Region } from '../types';
+import { Palette } from 'lucide-react';
+import {
+  PaletteColor,
+  PalettePreset,
+  PaletteSortOrder,
+  Region,
+} from '../types';
 
 interface PaletteDockProps {
   palette: PaletteColor[];
   regions: Region[];
   activeColorId: number;
   filledRegionIds: Set<number>;
+  paintedRegionColors?: Map<number, number>;
   sortOrder: PaletteSortOrder;
   prioritizeOnScreen: boolean;
   visibleColorIds: Set<number>;
   raiseDock: boolean;
+  isFreeColorMode?: boolean;
+  showCustomColorButton?: boolean;
   onColorSelected: (colorId: number) => void;
   onColorHintRequested: (colorId: number) => void;
+  onOpenPaletteOptions?: () => void;
+  onAddCustomColor?: (hex: string) => void;
+  onUpdateColor?: (colorId: number, hex: string) => void;
+  onApplyPresetPalette?: (preset: PalettePreset) => void;
 }
 
 export function getHue(hex: string): number {
@@ -73,8 +86,25 @@ export function getVisiblePalette(
   palette: PaletteColor[],
   regions: Region[],
   filledRegionIds: Set<number>,
-  sortOrder: PaletteSortOrder = 'NUMBER'
+  sortOrder: PaletteSortOrder = 'NUMBER',
+  isFreeColorMode: boolean = false
 ): PaletteColor[] {
+  if (isFreeColorMode) {
+    const list = [...palette];
+    switch (sortOrder) {
+      case 'NUMBER':
+        list.sort((a, b) => a.id - b.id);
+        break;
+      case 'HUE':
+        list.sort((a, b) => getHue(a.hex) - getHue(b.hex));
+        break;
+      case 'LIGHTNESS':
+        list.sort((a, b) => (a.isLight ? 1 : 0) - (b.isLight ? 1 : 0));
+        break;
+    }
+    return list;
+  }
+
   const uncompleted = palette.filter((c) =>
     regions.some((r) => r.colorId === c.id && !filledRegionIds.has(r.id))
   );
@@ -118,14 +148,21 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   regions,
   activeColorId,
   filledRegionIds,
+  paintedRegionColors,
   sortOrder,
   prioritizeOnScreen,
   visibleColorIds,
   raiseDock,
+  isFreeColorMode = false,
+  showCustomColorButton = false,
   onColorSelected,
   onColorHintRequested,
+  onOpenPaletteOptions,
+  onAddCustomColor,
+  onUpdateColor,
+  onApplyPresetPalette,
 }) => {
-  // Remaining counts per color
+  // Remaining counts per color (for standard color-by-number mode)
   const remainingCountMap = useMemo(() => {
     const map = new Map<number, number>();
     for (const r of regions) {
@@ -136,10 +173,25 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
     return map;
   }, [regions, filledRegionIds]);
 
-  // Uncompleted colors
+  // Color usage counts per color (for Free Colour Mode)
+  const colorUsageMap = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const r of regions) {
+      if (filledRegionIds.has(r.id)) {
+        const colId = paintedRegionColors?.get(r.id) ?? r.colorId;
+        map.set(colId, (map.get(colId) || 0) + 1);
+      }
+    }
+    return map;
+  }, [regions, filledRegionIds, paintedRegionColors]);
+
+  // Available palette in dock
   const uncompletedPalette = useMemo(() => {
+    if (isFreeColorMode) {
+      return palette;
+    }
     return palette.filter((c) => (remainingCountMap.get(c.id) || 0) > 0);
-  }, [palette, remainingCountMap]);
+  }, [palette, remainingCountMap, isFreeColorMode]);
 
   // Sorted base palette
   const sortedPalette = useMemo(() => {
@@ -149,10 +201,17 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
         list.sort((a, b) => a.id - b.id);
         break;
       case 'REMAINING':
-        list.sort(
-          (a, b) =>
-            (remainingCountMap.get(b.id) || 0) - (remainingCountMap.get(a.id) || 0)
-        );
+        if (isFreeColorMode) {
+          list.sort(
+            (a, b) =>
+              (colorUsageMap.get(b.id) || 0) - (colorUsageMap.get(a.id) || 0)
+          );
+        } else {
+          list.sort(
+            (a, b) =>
+              (remainingCountMap.get(b.id) || 0) - (remainingCountMap.get(a.id) || 0)
+          );
+        }
         break;
       case 'HUE':
         list.sort((a, b) => getHue(a.hex) - getHue(b.hex));
@@ -162,7 +221,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
         break;
     }
     return list;
-  }, [uncompletedPalette, sortOrder, remainingCountMap]);
+  }, [uncompletedPalette, sortOrder, remainingCountMap, colorUsageMap, isFreeColorMode]);
 
   const displayNumberMap = useMemo(() => {
     return getDisplayNumberMap(palette, regions, sortOrder);
@@ -179,7 +238,19 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   }, [sortedPalette, prioritizeOnScreen, visibleColorIds]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const footerRef = useRef<HTMLElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+  const activeSwatchRef = useRef<HTMLButtonElement | null>(null);
+
+  // Smoothly center the active color in view when activeColorId changes
+  useEffect(() => {
+    if (activeSwatchRef.current) {
+      activeSwatchRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+  }, [activeColorId]);
 
   // Enable horizontal mouse wheel scrolling across the color chooser
   useEffect(() => {
@@ -188,7 +259,6 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
     if (!footer || !container) return;
 
     const handleWheel = (e: WheelEvent) => {
-      // If user is scrolling vertically or horizontally, scroll the palette horizontally
       if (Math.abs(e.deltaY) > 0 || Math.abs(e.deltaX) > 0) {
         if (container.scrollWidth > container.clientWidth) {
           e.preventDefault();
@@ -202,7 +272,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
     return () => footer.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // Defensively sync active color if current activeColorId has 0 remaining or is not in dock
+  // Defensively sync active color if current activeColorId is not in dock
   useEffect(() => {
     if (dockPalette.length > 0 && !dockPalette.some((c) => c.id === activeColorId)) {
       onColorSelected(dockPalette[0].id);
@@ -211,13 +281,8 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
 
   if (dockPalette.length === 0) return null;
 
-  // Active item
-  const activeColor = dockPalette.find((c) => c.id === activeColorId) || dockPalette[0];
-  const scrollableColors = dockPalette.filter((c) => c.id !== activeColor?.id);
-
   const handleSwatchClick = (c: PaletteColor) => {
     if (c.id === activeColorId) {
-      // Tap already-selected swatch to trigger hint!
       onColorHintRequested(c.id);
     } else {
       onColorSelected(c.id);
@@ -225,88 +290,86 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   };
 
   return (
-    <footer
+    <div
       ref={footerRef}
-      className={`fixed bottom-0 left-0 right-0 z-20 flex items-center px-3 pt-2 bg-slate-950/90 backdrop-blur-md border-t border-slate-800/80 shadow-2xl transition-all ${
-        raiseDock ? 'safe-bottom-raised' : 'safe-bottom'
-      }`}
+      className="fixed z-20 left-0 right-0 pointer-events-none transition-all flex items-center"
       style={{
-        paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
-        paddingRight: 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
+        bottom: `calc(${raiseDock ? '2rem' : '0.375rem'} + var(--sab, 0px))`,
       }}
       aria-label="Palette dock"
     >
-      <div className="flex items-center w-full max-w-7xl mx-auto gap-2.5 overflow-hidden">
-        {/* Pinned Active Color Swatch */}
-        {activeColor && (
-          <div className="flex-shrink-0 flex items-center pr-2 border-r border-slate-800/80">
+      {/* Scrollable swatches floating all the way to screen edges with no outer border and ample vertical padding for active ring */}
+      <div
+        ref={scrollContainerRef}
+        className="pointer-events-auto w-full flex items-center gap-2 overflow-x-auto no-scrollbar py-3"
+        style={{
+          paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
+          paddingRight: 'max(4.5rem, calc(var(--sar, 0px) + 4.5rem))',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+      >
+        {dockPalette.map((color) => {
+          const isActive = color.id === activeColorId;
+          const isVisibleOnScreen = visibleColorIds.has(color.id);
+          const dispNum = displayNumberMap.get(color.id);
+          const badgeVal = isFreeColorMode
+            ? colorUsageMap.get(color.id) || 0
+            : remainingCountMap.get(color.id) || 0;
+
+          return (
             <button
+              key={color.id}
+              ref={isActive ? activeSwatchRef : undefined}
               type="button"
-              onClick={() => handleSwatchClick(activeColor)}
-              title={`Color #${displayNumberMap.get(activeColor.id)} (${remainingCountMap.get(activeColor.id) || 0} remaining) - Click for hint`}
-              className="relative flex flex-col items-center justify-center w-[48px] h-[40px] rounded-lg shadow-lg ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-105 transition-transform"
-              style={{ backgroundColor: activeColor.hex }}
+              onClick={() => handleSwatchClick(color)}
+              title={`Color #${dispNum}${
+                isFreeColorMode
+                  ? ` (${badgeVal} painted)`
+                  : ` (${badgeVal} remaining)`
+              }${isVisibleOnScreen ? ' • On Screen' : ''}${isActive ? ' (Selected)' : ''}`}
+              className={`flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl transition-all active:scale-95 shadow-md ${
+                isActive
+                  ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-105 shadow-xl opacity-100 z-10'
+                  : isVisibleOnScreen && prioritizeOnScreen
+                  ? 'ring-1 ring-white/60 shadow-md opacity-95 hover:opacity-100 hover:scale-102'
+                  : 'opacity-90 hover:opacity-100 hover:scale-102'
+              }`}
+              style={{ backgroundColor: color.hex }}
             >
               <span
-                className={`text-[13px] font-extrabold leading-tight ${
-                  activeColor.isLight ? 'text-slate-950' : 'text-white'
+                className={`text-[12px] font-extrabold leading-tight ${
+                  color.isLight ? 'text-slate-950' : 'text-white'
                 }`}
               >
-                {displayNumberMap.get(activeColor.id)}
+                {dispNum}
               </span>
               <span
-                className={`text-[10px] font-bold leading-tight ${
-                  activeColor.isLight ? 'text-slate-900/90' : 'text-slate-100/90'
+                className={`text-[9.5px] font-bold leading-tight ${
+                  color.isLight ? 'text-slate-900/90' : 'text-slate-100/90'
                 }`}
               >
-                {remainingCountMap.get(activeColor.id) || 0}
+                {badgeVal}
               </span>
             </button>
-          </div>
+          );
+        })}
+
+        {/* Button to open custom colour picker & palette options at the end of the dock */}
+        {showCustomColorButton && onOpenPaletteOptions && (
+          <button
+            type="button"
+            onClick={onOpenPaletteOptions}
+            title="Custom Colour & Palette Options"
+            className="flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-md hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
+          >
+            <Palette size={18} />
+            <span className="text-[8.5px] font-bold text-slate-300 leading-none mt-0.5">
+              Custom
+            </span>
+          </button>
         )}
-
-        {/* Scrollable remaining swatches */}
-        <div
-          ref={scrollContainerRef}
-          className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1"
-        >
-          {scrollableColors.map((color) => {
-            const isVisibleOnScreen = visibleColorIds.has(color.id);
-            const dispNum = displayNumberMap.get(color.id);
-            const remaining = remainingCountMap.get(color.id) || 0;
-
-            return (
-              <button
-                key={color.id}
-                type="button"
-                onClick={() => handleSwatchClick(color)}
-                title={`Color #${dispNum} (${remaining} remaining)${isVisibleOnScreen ? ' • On Screen' : ''}`}
-                className={`flex-shrink-0 relative flex flex-col items-center justify-center w-[42px] h-[36px] rounded-md transition-all active:scale-95 hover:brightness-110 ${
-                  isVisibleOnScreen && prioritizeOnScreen
-                    ? 'ring-1 ring-white/50 shadow-md'
-                    : 'opacity-90'
-                }`}
-                style={{ backgroundColor: color.hex }}
-              >
-                <span
-                  className={`text-[12px] font-extrabold leading-tight ${
-                    color.isLight ? 'text-slate-950' : 'text-white'
-                  }`}
-                >
-                  {dispNum}
-                </span>
-                <span
-                  className={`text-[9.5px] font-bold leading-tight ${
-                    color.isLight ? 'text-slate-900/90' : 'text-slate-100/90'
-                  }`}
-                >
-                  {remaining}
-                </span>
-              </button>
-            );
-          })}
-        </div>
       </div>
-    </footer>
+    </div>
   );
 };

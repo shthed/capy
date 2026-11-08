@@ -1,4 +1,4 @@
-import { PuzzleData, SavedSnapshot, UserSettings } from '../types';
+import { PaletteColor, PuzzleData, SavedSnapshot, UserSettings } from '../types';
 import { NativeBridge } from './NativeBridge';
 
 const SETTINGS_KEY = 'capy_user_settings_v8';
@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   autoAdvance: true,
   difficulty: 'EASY',
   isPaintMode: false,
+  isFreeColorMode: false,
   raisePaletteDock: true,
   regionColorMode: 'SOLID',
   canvasBgColor: 'CHARCOAL',
@@ -31,9 +32,11 @@ export const DEFAULT_SETTINGS: UserSettings = {
   hintIntensity: 0.65,
   labelScale: 1.0,
   showZoomButtons: false,
+  showResetViewButton: false,
   paletteSort: 'NUMBER',
   prioritizeOnScreen: true,
   hapticsEnabled: true,
+  enableCustomColorForAllPuzzles: false,
   generatorConfig: {
     algorithm: 'AUTO',
     lineHandling: 'ABSORB_LINES',
@@ -141,7 +144,10 @@ export class StorageService {
     zoomScale?: number,
     panOffsetX?: number,
     panOffsetY?: number,
-    previewDataUrl?: string
+    previewDataUrl?: string,
+    paintedRegionColors?: Record<number, number>,
+    customPalette?: PaletteColor[],
+    isFreeColor?: boolean
   ): SavedSnapshot[] {
     const list = this.loadSnapshots();
     const updated = list.map((item) => {
@@ -152,6 +158,9 @@ export class StorageService {
           filledCount,
           totalCount,
           filledRegionIds,
+          ...(paintedRegionColors !== undefined ? { paintedRegionColors } : {}),
+          ...(customPalette !== undefined ? { customPalette } : {}),
+          ...(isFreeColor !== undefined ? { isFreeColor } : {}),
           ...(zoomScale !== undefined ? { zoomScale } : {}),
           ...(panOffsetX !== undefined ? { panOffsetX } : {}),
           ...(panOffsetY !== undefined ? { panOffsetY } : {}),
@@ -252,6 +261,8 @@ export class StorageService {
     activeSnapshotId: string | null;
     activeColorId: number;
     filledRegionIds: number[];
+    paintedRegionColors?: Record<number, number>;
+    isFreeColorMode?: boolean;
     zoomScale: number;
     panOffsetX: number;
     panOffsetY: number;
@@ -269,6 +280,8 @@ export class StorageService {
     activeSnapshotId: string | null;
     activeColorId: number;
     filledRegionIds: number[];
+    paintedRegionColors?: Record<number, number>;
+    isFreeColorMode?: boolean;
     zoomScale: number;
     panOffsetX: number;
     panOffsetY: number;

@@ -1,12 +1,12 @@
 import React from 'react';
-import { Lightbulb, Paintbrush, Plus, Minus, Maximize2 } from 'lucide-react';
+import { Maximize2, Minus, Paintbrush, Plus } from 'lucide-react';
 
 interface FloatingActionsProps {
   isPaintMode: boolean;
   showZoomButtons: boolean;
+  showResetViewButton?: boolean;
   raiseDock: boolean;
   isZoomedOrPanned?: boolean;
-  onTriggerHint: () => void;
   onTogglePaintMode: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -16,9 +16,9 @@ interface FloatingActionsProps {
 export const FloatingActions: React.FC<FloatingActionsProps> = ({
   isPaintMode,
   showZoomButtons,
+  showResetViewButton = false,
   raiseDock,
   isZoomedOrPanned = false,
-  onTriggerHint,
   onTogglePaintMode,
   onZoomIn,
   onZoomOut,
@@ -28,12 +28,12 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
     <div
       className="fixed z-20 flex flex-col items-end gap-2.5 transition-all"
       style={{
-        bottom: `calc(${raiseDock ? '6.25rem' : '5rem'} + var(--sab, 0px))`,
+        bottom: `calc(${raiseDock ? '6.25rem' : '4.625rem'} + var(--sab, 0px))`,
         right: 'calc(1rem + var(--sar, 0px))',
       }}
     >
-      {/* Fit to Screen (Reset View) Button - visible whenever camera is zoomed or panned */}
-      {isZoomedOrPanned && onResetView && (
+      {/* Fit to Screen (Reset View / Extent) Button - disabled by default */}
+      {showResetViewButton && isZoomedOrPanned && onResetView && (
         <button
           type="button"
           onClick={onResetView}
@@ -44,6 +44,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
         </button>
       )}
 
+      {/* Zoom In & Out Buttons */}
       {showZoomButtons && (
         <>
           <button
@@ -64,16 +65,6 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
           </button>
         </>
       )}
-
-      {/* Hint Button */}
-      <button
-        type="button"
-        onClick={onTriggerHint}
-        title="Find & Highlight Next Region (Hint)"
-        className="p-3 rounded-full bg-slate-900/90 text-amber-400 border border-amber-500/40 shadow-xl backdrop-blur-md hover:bg-slate-800/90 hover:scale-105 transition-all active:scale-95 ring-1 ring-amber-400/30"
-      >
-        <Lightbulb size={20} />
-      </button>
 
       {/* Paint Mode (Drag-to-Color) Toggle */}
       <button
