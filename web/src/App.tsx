@@ -1652,6 +1652,8 @@ export const App: React.FC = () => {
         showPreviewLabels={settings.showPreviewLabels}
         showPreviewBorders={settings.showPreviewBorders}
         labelScale={settings.labelScale}
+        minLabelSize={settings.minLabelSize}
+        maxLabelSize={settings.maxLabelSize}
         highlightMatching={isReplaying ? false : settings.highlightMatching}
         highlightStyle={settings.highlightStyle}
         hintColorArgb={settings.hintColorArgb}
