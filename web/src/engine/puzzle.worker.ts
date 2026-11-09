@@ -1,19 +1,19 @@
 import { GeneratorConfig } from '../types';
 import { AutoPuzzleGenerator } from './PuzzleGenerator';
 
-let currentDetailedProgress = true;
+let currentDetailedProgress = false;
 
 self.onmessage = (e: MessageEvent) => {
   const { type, id, width, height, rgbaBuffer, config, detailedProgress } = e.data;
 
   if (type === 'SET_DETAILED_PROGRESS') {
-    currentDetailedProgress = e.data.detailed !== false;
+    currentDetailedProgress = Boolean(e.data.detailed);
     return;
   }
 
   if (type === 'GENERATE') {
     try {
-      currentDetailedProgress = detailedProgress !== false;
+      currentDetailedProgress = Boolean(detailedProgress);
       const rgbaData = new Uint8ClampedArray(rgbaBuffer);
       const generator = new AutoPuzzleGenerator();
 

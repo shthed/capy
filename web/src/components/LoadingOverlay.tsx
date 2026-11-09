@@ -32,7 +32,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
   status,
   progress,
   payload,
-  detailedProgress = true,
+  detailedProgress = false,
   onToggleDetailedProgress,
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
