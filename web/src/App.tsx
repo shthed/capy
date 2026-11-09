@@ -559,6 +559,9 @@ export const App: React.FC = () => {
   // Free colour mode indicator
   const isFreeColorMode = Boolean(settings.isFreeColorMode);
 
+  // Redo capability: enabled during free colour puzzles or when explicitly enabled in settings
+  const isRedoEnabled = Boolean(settings.enableRedo || isFreeColorMode || puzzle?.isFreeColor);
+
   const handleToggleFreeColorMode = useCallback(() => {
     const nextMode = !settings.isFreeColorMode;
     handleUpdateSettings({ ...settings, isFreeColorMode: nextMode });
@@ -632,13 +635,14 @@ export const App: React.FC = () => {
     paintedRegionColors,
     settings.hapticsEnabled,
     isFreeColorMode,
+    isRedoEnabled,
     activeSnapshotId,
     activeColorId,
   ]);
 
   // Redo last undone region action
   const handleRedo = useCallback(() => {
-    if (!puzzle || isReplaying || redoStack.length === 0) return;
+    if (!puzzle || isReplaying || redoStack.length === 0 || !isRedoEnabled) return;
 
     const lastRedo = redoStack[redoStack.length - 1];
     setRedoStack((prev) => prev.slice(0, -1));
@@ -702,6 +706,7 @@ export const App: React.FC = () => {
     paintedRegionColors,
     settings.hapticsEnabled,
     isFreeColorMode,
+    isRedoEnabled,
     activeSnapshotId,
     activeColorId,
   ]);
@@ -824,8 +829,9 @@ export const App: React.FC = () => {
         e.preventDefault();
         handleUndo();
       } else if (
-        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')
+        isRedoEnabled &&
+        (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z'))
       ) {
         e.preventDefault();
         handleRedo();
@@ -833,7 +839,7 @@ export const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSettings, isReplaying, isLoading, handleUndo, handleRedo]);
+  }, [showSettings, isReplaying, isLoading, handleUndo, handleRedo, isRedoEnabled]);
 
   // Handle single region coloring
   const attemptFillRegion = useCallback(
@@ -1687,7 +1693,7 @@ export const App: React.FC = () => {
           raiseDock={settings.raisePaletteDock}
           isZoomedOrPanned={isCanvasTransformed}
           canUndo={undoStack.length > 0 || filledRegionIds.size > 0}
-          canRedo={redoStack.length > 0}
+          canRedo={isRedoEnabled && redoStack.length > 0}
           isCompleted={isCompleted}
           isReplaying={isReplaying}
           onUndo={handleUndo}

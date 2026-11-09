@@ -59,17 +59,41 @@ async function testUndoTimelineAndRedo() {
       throw new Error('Regions should have been filled!');
     }
 
-    // Step 3: Test Single Tap Undo & Redo
-    console.log('3️⃣ Testing Single Tap Undo & Redo buttons...');
+    // Step 3: Test Single Tap Undo & Redo with Setting Toggle and Above-Undo Layout
+    console.log('3️⃣ Testing Single Tap Undo & Redo buttons and layout...');
     const undoBtn = await page.waitForSelector('[data-testid="undo-btn"]');
-    const redoBtn = await page.waitForSelector('[data-testid="redo-btn"]');
 
-    // Redo should initially be disabled before any undo
-    const initialRedoDisabled = await redoBtn.getAttribute('disabled');
-    if (initialRedoDisabled === null) {
-      throw new Error('Redo should be disabled before any undo!');
+    // Redo should initially be completely hidden before any undo
+    const initialRedoBtn = await page.$('[data-testid="redo-btn"]');
+    if (initialRedoBtn !== null) {
+      throw new Error('Redo button should be hidden before any undo!');
     }
-    console.log('   ✅ Redo is disabled before any undo.');
+    console.log('   ✅ Redo button is hidden before any undo.');
+
+    // Enable Redo Action setting via Settings modal
+    const settingsBtn = await page.waitForSelector('button[title*="Settings"]');
+    await settingsBtn.click();
+    await page.waitForTimeout(300);
+
+    const gameTabBtn = await page.waitForSelector('button:has-text("Game")');
+    await gameTabBtn.click();
+    await page.waitForTimeout(200);
+
+    const enableRedoRow = await page.waitForSelector('text=Enable Redo Action');
+    const toggleBtn = await enableRedoRow.locator('xpath=..').locator('button');
+    await toggleBtn.click();
+    await page.waitForTimeout(200);
+
+    const closeBtn = await page.waitForSelector('button[title="Close"]');
+    await closeBtn.click();
+    await page.waitForTimeout(300);
+
+    // Redo should STILL be hidden because user has not pressed undo yet!
+    const redoStillHidden = await page.$('[data-testid="redo-btn"]');
+    if (redoStillHidden !== null) {
+      throw new Error('Redo button should remain hidden until undo is pressed!');
+    }
+    console.log('   ✅ Redo button remains hidden with setting enabled until undo is pressed.');
 
     // Tap Undo
     await undoBtn.click();
@@ -85,12 +109,14 @@ async function testUndoTimelineAndRedo() {
       throw new Error(`Undo did not decrement filledCount correctly: ${progressAfterUndo}`);
     }
 
-    // Redo should now be enabled
-    const redoDisabledAfterUndo = await redoBtn.getAttribute('disabled');
-    if (redoDisabledAfterUndo !== null) {
-      throw new Error('Redo should be enabled after undo!');
+    // Redo should now be visible in DOM and positioned above Undo
+    const redoBtn = await page.waitForSelector('[data-testid="redo-btn"]', { timeout: 3000 });
+    const redoBox = await redoBtn.boundingBox();
+    const undoBox = await undoBtn.boundingBox();
+    if (redoBox.y >= undoBox.y) {
+      throw new Error(`Redo button (y=${redoBox.y}) is not above Undo button (y=${undoBox.y})!`);
     }
-    console.log('   ✅ Redo is now enabled after Undo.');
+    console.log('   ✅ Redo button is now visible and placed above Undo button.');
 
     // Click Redo
     await redoBtn.click();
@@ -105,6 +131,13 @@ async function testUndoTimelineAndRedo() {
     if (progressAfterRedo !== initialProgress) {
       throw new Error(`Redo did not restore filledCount: ${progressAfterRedo}`);
     }
+
+    // Redo button should now be hidden again since redo stack is exhausted
+    const redoHiddenAfterRedo = await page.$('[data-testid="redo-btn"]');
+    if (redoHiddenAfterRedo !== null) {
+      throw new Error('Redo button should be hidden after redo stack is emptied!');
+    }
+    console.log('   ✅ Redo button hid after redo stack was emptied.');
     console.log('   ✅ Single-step Undo & Redo verified.');
 
     // Step 4: Test Long-Press on Undo button to launch Replay Scrubber
@@ -153,9 +186,10 @@ async function testUndoTimelineAndRedo() {
     // Step 6: Verify Redo Stack holds the 8 rewound actions
     console.log('6️⃣ Verifying Redo stack can sequentially step forward...');
     const redoBtn2 = await page.waitForSelector('[data-testid="redo-btn"]');
-    const isRedoReady = (await redoBtn2.getAttribute('disabled')) === null;
-    if (!isRedoReady) {
-      throw new Error('Redo button should be enabled for rewound regions!');
+    const redoBox2 = await redoBtn2.boundingBox();
+    const undoBox2 = await undoBtn.boundingBox();
+    if (redoBox2.y >= undoBox2.y) {
+      throw new Error(`Redo button (y=${redoBox2.y}) is not above Undo button (y=${undoBox2.y}) after resume!`);
     }
 
     // Tap Redo 3 times

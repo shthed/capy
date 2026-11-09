@@ -38,6 +38,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   hapticsEnabled: true,
   panMomentum: true,
   enableCustomColorForAllPuzzles: false,
+  enableRedo: false,
   replaySpeed: 1,
   autoReplayOnLoad: true,
   reverseDoubleTapZoom: false,

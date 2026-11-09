@@ -131,9 +131,22 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
         </button>
       )}
 
-      {/* Undo & Redo History Action Buttons */}
+      {/* Undo & Redo History Action Buttons (Redo stacked above Undo, hidden when disabled) */}
       {!isReplaying && (
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-col items-center gap-2">
+          {canRedo && onRedo && (
+            <button
+              type="button"
+              onClick={onRedo}
+              aria-label="Redo Action"
+              title="Redo Action (Ctrl+Y / Ctrl+Shift+Z)"
+              data-testid="redo-btn"
+              className="p-2.5 rounded-full shadow-xl backdrop-blur-md border border-slate-700/60 bg-slate-900/90 text-slate-200 hover:bg-slate-800 active:scale-95 transition-all select-none cursor-pointer animate-in fade-in zoom-in-90 duration-150"
+            >
+              <Redo2 size={18} />
+            </button>
+          )}
+
           {onUndo && (
             <button
               type="button"
@@ -157,28 +170,6 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
               }`}
             >
               <Undo2 size={18} />
-            </button>
-          )}
-
-          {onRedo && (
-            <button
-              type="button"
-              onClick={onRedo}
-              disabled={!canRedo}
-              aria-label="Redo Action"
-              title={
-                canRedo
-                  ? 'Redo Action (Ctrl+Y / Ctrl+Shift+Z)'
-                  : 'Nothing to Redo'
-              }
-              data-testid="redo-btn"
-              className={`p-2.5 rounded-full shadow-xl backdrop-blur-md border transition-all ${
-                canRedo
-                  ? 'bg-slate-900/90 text-slate-200 border-slate-700/60 hover:bg-slate-800 active:scale-95 cursor-pointer'
-                  : 'bg-slate-900/40 text-slate-600 border-slate-800/40 cursor-not-allowed'
-              }`}
-            >
-              <Redo2 size={18} />
             </button>
           )}
         </div>
