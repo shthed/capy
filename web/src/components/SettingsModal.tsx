@@ -669,23 +669,86 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Label Scale Slider */}
-              <div className="space-y-1.5 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80">
+              {/* Label Sizing & Constraints */}
+              <div className="space-y-3 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80">
                 <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
-                  <span className="text-slate-200">Label Text Size</span>
-                  <span className="text-amber-400 font-mono font-bold">
-                    {Math.round(settings.labelScale * 100)}%
-                  </span>
+                  <span className="text-slate-200">Label Sizing & Bounds</span>
                 </div>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="2.0"
-                  step="0.05"
-                  value={settings.labelScale}
-                  onChange={(e) => updateSetting('labelScale', parseFloat(e.target.value))}
-                  className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                />
+
+                {/* Min Size */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-300">Minimum Label Size</span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {settings.minLabelSize ?? 8} px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="6"
+                    max="16"
+                    step="1"
+                    value={settings.minLabelSize ?? 8}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      updateSetting('minLabelSize', val);
+                      if (val > (settings.maxLabelSize ?? 18)) {
+                        updateSetting('maxLabelSize', val);
+                      }
+                    }}
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  />
+                  <div className="text-[10px] text-slate-400">
+                    Hides labels smaller than this in unzoomed regions until zoomed in
+                  </div>
+                </div>
+
+                {/* Max Size */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-300">Maximum Label Size</span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {settings.maxLabelSize ?? 18} px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="36"
+                    step="1"
+                    value={settings.maxLabelSize ?? 18}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      updateSetting('maxLabelSize', val);
+                      if (val < (settings.minLabelSize ?? 8)) {
+                        updateSetting('minLabelSize', val);
+                      }
+                    }}
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  />
+                  <div className="text-[10px] text-slate-400">
+                    Prevents numbers in large open regions from becoming oversized
+                  </div>
+                </div>
+
+                {/* Label Scale Slider */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-300">Overall Scale</span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {Math.round(settings.labelScale * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.05"
+                    value={settings.labelScale}
+                    onChange={(e) => updateSetting('labelScale', parseFloat(e.target.value))}
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  />
+                </div>
               </div>
 
               {/* Replay Speed & Auto-Replay on Load */}
@@ -820,7 +883,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {(
                     [
                       { key: 'CENTROID_GLOW', label: 'Centroid Glow', desc: 'Pulsing circle at center' },
-                      { key: 'NUMBER_ONLY', label: 'Number Badge', desc: 'Glowing pill behind number' },
+                      { key: 'NUMBER_ONLY', label: 'Number Color', desc: 'Highlights matching label text colour' },
                       { key: 'FULL_REGION', label: 'Entire Region Fill', desc: 'Fills matching pixels' },
                       { key: 'BOUNDARY_ONLY', label: 'Boundary Outline', desc: 'Glowing perimeter outline' },
                     ] as const
