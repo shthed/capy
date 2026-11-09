@@ -79,7 +79,18 @@ From the repository root:
 - **Finish active task before switching**: Finish working on the current task instead of switching when the user sends an update with a new task, unless the comment directly relates to what is currently being worked on.
 - **Plan before executing major changes**: When starting work on a big task, write out a clear plan of what you are going to do and how you are going to implement it before jumping into code edits.
 - **No unsolicited Android device deployment**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
-- **Documentation hygiene**: Always remember to update documentation after making changes to UI elements, settings, functions, design, or architecture. Keep [`TODO.md`](./TODO.md), [`WEB.md`](./WEB.md), [`PUZZLE.md`](./PUZZLE.md), [`APP.md`](./APP.md), [`app1/APP1.md`](./app1/APP1.md), and [`web1/WEB1.md`](./web1/WEB1.md) in sync with architectural or runtime changes. Always remember to update [`WEB.md`](./WEB.md) with details of all functions, settings, UI elements, gestures, and engine features.
+- **User-Friendly Pull Request Naming & Labels**:
+  - **PR Titles**: Write clean, concise, human-readable titles focusing on user value (e.g. `Visual Screenshot Showcase Gallery & Automated Capture Pipeline`, `Google Maps-Style Zoom, Pan Momentum & Corner Navigation`, `Resume Panning After Pinch & Persistent Active Color`). Do **not** use raw git commit syntax or parenthesized prefixes (like `docs(readme): ...` or `feat(web): ...`) in PR titles.
+  - **PR Labels**: Always attach appropriate GitHub label tags when opening or editing PRs:
+    - `feature`: New gameplay features, controls, or user capabilities.
+    - `fix`: Bug fixes, gesture corrections, or rendering fixes.
+    - `docs`: User guides, README additions, architectural updates.
+    - `ui`: Styling, themes, modal redesigns, visual gallery.
+    - `testing`: E2E suites, Playwright test scripts, test harness.
+
+- **Documentation hygiene**: Always remember to update documentation after making changes to UI elements, settings, functions, design, or architecture. Keep [`TODO.md`](./TODO.md), [`WEB.md`](./WEB.md), [`PUZZLE.md`](./PUZZLE.md), [`APP.md`](./APP.md), [`app1/APP1.md`](./app1/APP1.md), and [`web1/WEB1.md`](./web1/WEB1.md) in sync with architectural or runtime changes. Always remember to update [`WEB.md`](./WEB.md) with details of all functions, settings, UI elements, gestures, and engine features. Never use emojis in documentation files.
+
+
 
 ---
 
