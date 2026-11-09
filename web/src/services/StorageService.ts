@@ -31,7 +31,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   showNextRegionHint: true,
   hintIntensity: 0.65,
   labelScale: 1.0,
-  minLabelSize: 8,
+  minLabelSize: 6,
   maxLabelSize: 18,
   showZoomButtons: false,
   showResetViewButton: false,

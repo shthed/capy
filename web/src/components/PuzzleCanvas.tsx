@@ -135,7 +135,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   showPreviewLabels,
   showPreviewBorders,
   labelScale,
-  minLabelSize = 8,
+  minLabelSize = 6,
   maxLabelSize = 18,
   highlightMatching,
   highlightStyle,
@@ -1843,7 +1843,7 @@ function renderLabels(
     let targetTextSize: number;
     if (isActive || isHinted) {
       const fitSize = Math.min(effMaxArtwork, maxFittingArtworkSize);
-      targetTextSize = Math.max(Math.min(effMinArtwork, 5 / effScale), fitSize);
+      targetTextSize = Math.max(Math.min(effMinArtwork, 2 / effScale), fitSize);
     } else {
       targetTextSize = Math.min(effMaxArtwork, maxFittingArtworkSize);
     }
@@ -1861,7 +1861,8 @@ function renderLabels(
       ? activeTextColor
       : normalTextColor;
 
-    // Stroke outline for contrast against lines, then fill text
+    // Stroke outline scaled proportionally for tiny fonts so glyphs remain crisp on high-DPI screens
+    ctx.lineWidth = Math.max(0.5, Math.min(1.5 / effScale, targetTextSize * 0.22));
     ctx.strokeText(labelText, region.centroidX, region.centroidY);
     ctx.fillText(labelText, region.centroidX, region.centroidY);
   }

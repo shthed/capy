@@ -206,8 +206,8 @@ When regions are filled or unfilled (via gameplay, Undo, or Replay scrubbing), `
 Labels are drawn at each region's **Pole of Inaccessibility** (deepest interior point computed via BFS distance transform in the engine), avoiding thin concave edges:
 - **Spatial Culling**: Labels outside the visible viewport bounding box are discarded before font measurement.
 - **Inscribed Circle Geometry Fitting**: Label font sizes are calculated from the region's inscribed circle radius (`maxRadius`) divided by a character-count corner factor `sqrt((0.3 * charCount)^2 + 0.1444)` with a 10% safety cushion. This guarantees that 1-digit, 2-digit, and 3-digit label bounding boxes always fit inside the region.
-- **Minimum and Maximum Size Constraints**: Labels are constrained between `minLabelSize` (default 8px) and `maxLabelSize` (default 18px). Regions that cannot fit `minLabelSize` at the current zoom level suppress labels until the user zooms in, while `maxLabelSize` prevents numbers in large open regions from becoming oversized.
-- **Clean Stroke Contrast**: Label text is rendered with a subtle `2px / effScale` semi-transparent white stroke outline (`strokeText`) providing high contrast against dark artwork lines without drawing background circle badges.
+- **Minimum and Maximum Size Constraints**: Labels are constrained between `minLabelSize` (range 2–14px, default 6px) and `maxLabelSize` (range 10–36px, default 18px). Lowering `minLabelSize` allows very tiny, crisp numbers to remain visible on high-resolution displays before zooming in, while `maxLabelSize` prevents numbers in large open regions from becoming oversized.
+- **Clean Stroke Contrast**: Label text is rendered with a proportional semi-transparent white stroke outline (`strokeText`) scaled down for tiny fonts, providing high contrast against dark artwork lines without drawing background circle badges.
 
 ### Viewport Pan & Zoom Clamping (`clampCanvasOffset`)
 [`clampCanvasOffset`](file:///home/antigravity/shthed/capy/web/src/components/PuzzleCanvas.tsx) keeps the artwork bounded while providing full viewport navigation:
@@ -353,7 +353,7 @@ Capy uses a hybrid storage model to manage performance and browser storage quota
 | `animateHint` | `boolean` | `true` | Enables pulsing / breathing animation for hinted region. |
 | `showNextRegionHint` | `boolean` | `true` | Highlights the next closest matching region when requesting hints. |
 | `hintIntensity` | `number` (0.0 – 1.0) | `0.65` | Opacity of hint overlays and glow animations. |
-| `minLabelSize` | `number` (6 – 16 px) | `8` | Minimum label font size on screen; regions where labels cannot fit at this size are suppressed until zoomed in. Configured in Settings under Label Sizing & Bounds. |
+| `minLabelSize` | `number` (2 – 14 px) | `6` | Minimum label font size on screen; regions where labels cannot fit at this size are suppressed until zoomed in. Lower values reveal tiny labels on high-DPI displays. Configured in Settings under Label Sizing & Bounds. |
 | `maxLabelSize` | `number` (10 – 36 px) | `18` | Maximum label font size on screen; prevents numbers in large open regions from becoming oversized. Configured in Settings under Label Sizing & Bounds. |
 | `labelScale` | `number` (0.5 – 2.0) | `1.0` | Global scaling multiplier for number label font size. Configured in Settings under Label Sizing & Bounds. |
 | `showZoomButtons` | `boolean` | `false` | Displays onscreen `+` / `-` floating zoom buttons. |

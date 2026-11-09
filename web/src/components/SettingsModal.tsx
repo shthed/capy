@@ -680,15 +680,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-slate-300">Minimum Label Size</span>
                     <span className="text-amber-400 font-mono font-bold">
-                      {settings.minLabelSize ?? 8} px
+                      {settings.minLabelSize ?? 6} px
                     </span>
                   </div>
                   <input
                     type="range"
-                    min="6"
-                    max="16"
+                    min="2"
+                    max="14"
                     step="1"
-                    value={settings.minLabelSize ?? 8}
+                    value={settings.minLabelSize ?? 6}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
                       updateSetting('minLabelSize', val);
@@ -699,7 +699,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
                   <div className="text-[10px] text-slate-400">
-                    Hides labels smaller than this in unzoomed regions until zoomed in
+                    Lower values reveal tiny labels on high-resolution displays before zooming
                   </div>
                 </div>
 
@@ -720,7 +720,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
                       updateSetting('maxLabelSize', val);
-                      if (val < (settings.minLabelSize ?? 8)) {
+                      if (val < (settings.minLabelSize ?? 6)) {
                         updateSetting('minLabelSize', val);
                       }
                     }}
