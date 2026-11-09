@@ -72,6 +72,8 @@ From the repository root:
     - `docs`: User guides, README additions, architectural updates.
     - `ui`: Styling, themes, modal redesigns, visual gallery.
     - `testing`: E2E suites, Playwright test scripts, test harness.
+    - `ci`: GitHub Actions workflows, CI/CD pipelines, and deployment automation.
+    - `deps`: Dependency upgrades, version catalogs, and package manager updates.
 
 - **Documentation hygiene**: Always remember to update documentation after making changes to UI elements, settings, functions, design, or architecture. Keep [`TODO.md`](./TODO.md), [`WEB.md`](./WEB.md), [`PUZZLE.md`](./PUZZLE.md), and [`APP.md`](./APP.md) in sync with architectural or runtime changes. Always remember to update [`WEB.md`](./WEB.md) with details of all functions, settings, UI elements, gestures, and engine features. Never use emojis in documentation files.
 - **Export chat log and development summary to PR before merge**: When finalising a pull request ready for merge, compile a comprehensive summary of the entire conversation and development process (all user requests, architectural decisions, implementations, debugging notes, test execution results, and visual showcases) and post it as a comment on the pull request. This preserves a complete historical record of the development workflow and context directly on GitHub.
