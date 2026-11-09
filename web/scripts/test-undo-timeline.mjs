@@ -75,13 +75,13 @@ async function testUndoTimelineAndRedo() {
     await settingsBtn.click();
     await page.waitForTimeout(300);
 
-    const gameTabBtn = await page.waitForSelector('button:has-text("Game")');
-    await gameTabBtn.click();
-    await page.waitForTimeout(200);
-
-    const enableRedoRow = await page.waitForSelector('text=Enable Redo Action');
-    const toggleBtn = await enableRedoRow.locator('xpath=..').locator('button');
-    await toggleBtn.click();
+    // Toggle Enable Redo Action setting in Settings tab (tab 0 is active by default)
+    const enableRedoLabel = await page.waitForSelector('text=Enable Redo Action');
+    await enableRedoLabel.evaluate((el) => {
+      const container = el.closest('.flex');
+      const toggle = container?.querySelector('button');
+      if (toggle) toggle.click();
+    });
     await page.waitForTimeout(200);
 
     const closeBtn = await page.waitForSelector('button[title="Close"]');
@@ -142,9 +142,9 @@ async function testUndoTimelineAndRedo() {
 
     // Step 4: Test Long-Press on Undo button to launch Replay Scrubber
     console.log('4️⃣ Testing Long-Press on Undo to open Replay Scrubber...');
-    const undoBox = await undoBtn.boundingBox();
-    const ux = undoBox.x + undoBox.width / 2;
-    const uy = undoBox.y + undoBox.height / 2;
+    const longPressUndoBox = await undoBtn.boundingBox();
+    const ux = longPressUndoBox.x + longPressUndoBox.width / 2;
+    const uy = longPressUndoBox.y + longPressUndoBox.height / 2;
 
     // Dispatch pointerdown, hold for 550ms, then pointerup
     await page.mouse.move(ux, uy);
@@ -186,9 +186,10 @@ async function testUndoTimelineAndRedo() {
     // Step 6: Verify Redo Stack holds the 8 rewound actions
     console.log('6️⃣ Verifying Redo stack can sequentially step forward...');
     const redoBtn2 = await page.waitForSelector('[data-testid="redo-btn"]');
+    const activeUndoBtn = await page.waitForSelector('[data-testid="undo-btn"]');
     const redoBox2 = await redoBtn2.boundingBox();
-    const undoBox2 = await undoBtn.boundingBox();
-    if (redoBox2.y >= undoBox2.y) {
+    const undoBox2 = await activeUndoBtn.boundingBox();
+    if (redoBox2 && undoBox2 && redoBox2.y >= undoBox2.y) {
       throw new Error(`Redo button (y=${redoBox2.y}) is not above Undo button (y=${undoBox2.y}) after resume!`);
     }
 
@@ -232,8 +233,8 @@ async function testUndoTimelineAndRedo() {
 
     // Step 8: Test Save Export / Import and Platform Links
     console.log('8️⃣ Testing Save Export, Import & Platform Cross-Links...');
-    const settingsBtn = await page.waitForSelector('button[title*="Settings"]');
-    await settingsBtn.click();
+    const savesSettingsBtn = await page.waitForSelector('button[title*="Settings"]');
+    await savesSettingsBtn.click();
     await page.waitForTimeout(300);
 
     // Verify Platform Links in Settings Tab
