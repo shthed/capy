@@ -10,6 +10,7 @@
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "test:game": "node scripts/test-game.mjs",
     "test:gameplay": "node scripts/test-full-gameplay.mjs",
+    "test:undo": "node scripts/test-undo-timeline.mjs",
     "gallery:capture": "node scripts/capture-gallery.mjs"
   },
 

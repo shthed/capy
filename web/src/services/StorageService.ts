@@ -38,6 +38,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   hapticsEnabled: true,
   panMomentum: true,
   enableCustomColorForAllPuzzles: false,
+  enableRedo: false,
   replaySpeed: 1,
   autoReplayOnLoad: true,
   reverseDoubleTapZoom: false,
@@ -312,4 +313,189 @@ export class StorageService {
       return null;
     }
   }
+
+  static async exportSnapshot(id: string): Promise<string> {
+    const snapshots = this.loadSnapshots();
+    const snapshot = snapshots.find((s) => s.id === id);
+    if (!snapshot) throw new Error('Snapshot not found');
+    const puzzle = await this.loadPuzzleData(id);
+    const bundle = {
+      version: 1,
+      format: 'capy-single-save',
+      exportDate: Date.now(),
+      snapshot,
+      puzzle: puzzle ? serializePuzzle(puzzle) : null,
+    };
+    return JSON.stringify(bundle, null, 2);
+  }
+
+  static async exportAllSnapshots(): Promise<string> {
+    const snapshots = this.loadSnapshots();
+    const puzzles: Record<string, SerializedPuzzleData> = {};
+    for (const snap of snapshots) {
+      const p = await this.loadPuzzleData(snap.id);
+      if (p) {
+        puzzles[snap.id] = serializePuzzle(p);
+      }
+    }
+    const bundle = {
+      version: 1,
+      format: 'capy-archive-save',
+      exportDate: Date.now(),
+      snapshots,
+      puzzles,
+    };
+    return JSON.stringify(bundle, null, 2);
+  }
+
+  static async importSnapshotBundle(
+    jsonString: string
+  ): Promise<{ importedCount: number; error?: string }> {
+    try {
+      const data = JSON.parse(jsonString);
+      if (!data) return { importedCount: 0, error: 'Empty or invalid JSON' };
+
+      let importedCount = 0;
+
+      // Single snapshot format
+      if (data.format === 'capy-single-save' && data.snapshot) {
+        const snap = data.snapshot as SavedSnapshot;
+        if (!snap.id || !snap.title) {
+          return { importedCount: 0, error: 'Invalid snapshot data structure' };
+        }
+        this.addSnapshot(snap);
+        importedCount++;
+        if (data.puzzle) {
+          const puzzle = deserializePuzzle(data.puzzle);
+          await this.savePuzzleData(snap.id, puzzle);
+        }
+        return { importedCount };
+      }
+
+      // Archive format
+      if (data.format === 'capy-archive-save' && Array.isArray(data.snapshots)) {
+        for (const snap of data.snapshots as SavedSnapshot[]) {
+          if (!snap.id || !snap.title) continue;
+          this.addSnapshot(snap);
+          importedCount++;
+          if (data.puzzles && data.puzzles[snap.id]) {
+            const puzzle = deserializePuzzle(data.puzzles[snap.id]);
+            await this.savePuzzleData(snap.id, puzzle);
+          }
+        }
+        return { importedCount };
+      }
+
+      // Fallback: array of snapshots
+      if (Array.isArray(data)) {
+        for (const snap of data as SavedSnapshot[]) {
+          if (snap.id && snap.title) {
+            this.addSnapshot(snap);
+            importedCount++;
+          }
+        }
+        return { importedCount };
+      }
+
+      return { importedCount: 0, error: 'Unrecognized Capy save format' };
+    } catch (err: any) {
+      return { importedCount: 0, error: err?.message || 'Failed to parse JSON save' };
+    }
+  }
+}
+
+interface SerializedPuzzleData {
+  width: number;
+  height: number;
+  palette: PaletteColor[];
+  regionMapB64: string;
+  borderMapB64: string;
+  isFreeColor?: boolean;
+  regions: Array<{
+    id: number;
+    colorId: number;
+    centroidX: number;
+    centroidY: number;
+    area: number;
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    maxRadius: number;
+    pixelsB64: string;
+  }>;
+}
+
+function bufferToBase64(buffer: ArrayBufferView): string {
+  const bytes = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  let binary = '';
+  const len = bytes.byteLength;
+  const chunkSize = 0x8000;
+  for (let i = 0; i < len; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunkSize, len)) as any);
+  }
+  return btoa(binary);
+}
+
+function base64ToUint8Array(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function base64ToInt32Array(b64: string): Int32Array {
+  const bytes = base64ToUint8Array(b64);
+  return new Int32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
+}
+
+function serializePuzzle(p: PuzzleData): SerializedPuzzleData {
+  return {
+    width: p.width,
+    height: p.height,
+    palette: p.palette,
+    regionMapB64: bufferToBase64(p.regionMap),
+    borderMapB64: bufferToBase64(p.borderMap),
+    isFreeColor: p.isFreeColor,
+    regions: p.regions.map((r) => ({
+      id: r.id,
+      colorId: r.colorId,
+      centroidX: r.centroidX,
+      centroidY: r.centroidY,
+      area: r.area,
+      minX: r.minX,
+      maxX: r.maxX,
+      minY: r.minY,
+      maxY: r.maxY,
+      maxRadius: r.maxRadius,
+      pixelsB64: bufferToBase64(r.pixels),
+    })),
+  };
+}
+
+function deserializePuzzle(s: SerializedPuzzleData): PuzzleData {
+  return {
+    width: s.width,
+    height: s.height,
+    palette: s.palette,
+    regionMap: base64ToInt32Array(s.regionMapB64),
+    borderMap: base64ToUint8Array(s.borderMapB64),
+    isFreeColor: s.isFreeColor,
+    regions: s.regions.map((r) => ({
+      id: r.id,
+      colorId: r.colorId,
+      centroidX: r.centroidX,
+      centroidY: r.centroidY,
+      area: r.area,
+      minX: r.minX,
+      maxX: r.maxX,
+      minY: r.minY,
+      maxY: r.maxY,
+      maxRadius: r.maxRadius,
+      pixels: base64ToInt32Array(r.pixelsB64),
+    })),
+  };
 }

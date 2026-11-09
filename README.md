@@ -62,6 +62,9 @@
 | **Double-Tap and Drag Up / Down** | Google Maps-style one-finger zoom: drag up to zoom in, drag down to zoom out. |
 | **Pinch / Mouse Wheel** | Multi-touch focal zoom in / zoom out up to 12x. |
 | **Paint Brush Button** | Toggles continuous drag-to-paint mode. |
+| **Undo Button (`Ctrl+Z`)** | Undoes the last painted region. |
+| **Long-Press Undo Button** | Opens the interactive Replay timeline scrubber to inspect history and resume play from any point. |
+| **Redo Button (`Ctrl+Y` / `Ctrl+Shift+Z`)** | Steps forward to re-apply previously undone regions. |
 | **Preview Eye Button** | Toggles unmasked preview of the original source artwork. |
 | **Lightbulb / Swatch Double-Tap** | Targets and animates the next unpainted region for the active color. |
 

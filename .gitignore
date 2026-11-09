@@ -2,10 +2,6 @@
 node_modules/
 web/node_modules/
 web/dist/
-web1/node_modules/
-web1/artifacts/
-web1/test-results/
-web1/playwright-report/
 project/node_modules/
 project/artifacts/
 project/test-results/

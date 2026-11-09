@@ -1,6 +1,6 @@
 # Testing Architecture & Verification Guide: Capy Monorepo
 
-This document outlines the testing strategy, tooling rationale, end-to-end gesture verification, and platform test suites for the Capy monorepo across **Web** (`web/`), **Legacy Web v1** (`web1/`), and **Android** (`app/`, `app1/`).
+This document outlines the testing strategy, tooling rationale, end-to-end gesture verification, and platform test suites for the Capy monorepo across **Web** (`web/`) and **Android** (`app/`).
 
 ---
 
@@ -25,8 +25,8 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers and
 2. **Worker-Driven Pipeline Testing**:
    - Image segmentation, line extraction, and color clustering execute inside a Web Worker (`puzzle.worker.ts`).
    - Playwright runs true browser threads, allowing tests to wait for asynchronous worker progress messages (`GENERATE` $\rightarrow$ `PROGRESS` $\rightarrow$ `SUCCESS`) without artificial mocking.
-3. **Repository Consistency**:
-   - Capy's legacy web engine (`web1/`) already uses `@playwright/test` for its automated smoke suite (`web1/tests/`). Using Playwright across both `web/` and `web1/` establishes a unified end-to-end testing standard.
+3. **Comprehensive Headless Browser Automation**:
+   - Playwright executes tests against real Chromium, Firefox, and WebKit rendering engines, ensuring canvas operations, IndexedDB persistence, and gesture handlers behave identically across all major browser targets.
 
 ---
 
@@ -36,18 +36,16 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers and
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                               Capy Monorepo                                 │
 ├───────────────────────────────┬─────────────────────────────────────────────┤
-│ Web Frontends                 │ Native Android Wrappers                     │
-│  ├─ web/                      │  ├─ app/                                    │
-│  │   ├─ TypeScript Type Check │  │   └─ JUnit4 Unit Tests (Native Bridge)   │
-│  │   ├─ Vite Production Build │  │                                          │
-│  │   └─ Playwright E2E Suite  │  └─ app1/                                   │
-│  │                            │      └─ JUnit4 Unit Tests (Compose Legacy)  │
-│  └─ web1/                     │                                             │
-│      └─ Playwright Smoke Suite│                                             │
+│ Web Application               │ Native Android Launcher                     │
+│  ├─ web/                      │  └─ app/                                    │
+│  │   ├─ TypeScript Type Check │      ├─ JUnit4 Unit Tests (Native Bridge)   │
+│  │   ├─ Vite Production Build │      ├─ Web Bundle Sync (:buildWeb)         │
+│  │   ├─ Playwright E2E Suite  │      └─ Debug APK Assembly (:assembleDebug) │
+│  │   └─ Timeline Replay Tests │                                             │
 └───────────────────────────────┴─────────────────────────────────────────────┘
 ```
 
-### A. Modern Web Application (`web/`)
+### A. Web Application (`web/`)
 
 | Test Level | Command | Scope |
 | :--- | :--- | :--- |
@@ -55,17 +53,11 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers and
 | **Production Build** | `npm run build` | Compiles TypeScript and produces minified, optimized production bundles via Vite (`tsc && vite build`). Verifies chunk splitting and asset paths. |
 | **Dev Server Verification** | `npm run dev` | Spins up Vite dev server on `http://localhost:3000` with hot module replacement (HMR). |
 | **Preview Server Verification**| `npm run preview`| Serves the compiled `web/dist/` bundle on `http://localhost:3000` for realistic end-to-end verification. |
-| **End-to-End Suite** | `npx playwright test` | Tests canvas rendering, palette interactions, settings persistence, and touch gestures. |
+| **Undo & Timeline Suite** | `npm run test:undo` | Tests long-press undo timeline scrubber, resume play from step, redo stack, and save portability. |
+| **Gameplay Smoke Suite** | `npm run test:gameplay` | Tests core tap region coloring, canvas rendering, and progress tracking. |
+| **Browser E2E Suite** | `npm run test:game` | Comprehensive Playwright browser suite verifying zoom, pan, settings, and modal flows. |
 
-### B. Legacy Web Application v1 (`web1/`)
-
-| Test Level | Command | Scope |
-| :--- | :--- | :--- |
-| **Setup Dependencies** | `npm run setup:playwright` | Installs pinned Chromium browser binaries with system dependencies. |
-| **Smoke Suite** | `npm test --silent` | Runs Playwright smoke suite via `./scripts/run-tests.js` against the zero-build runtime (`web1/index.html`). |
-| **Interactive Dev** | `npm run dev` | Serves `web1/` on `http://localhost:8000` using `http-server`. |
-
-### C. Native Android Applications (`app/` & `app1/`)
+### B. Native Android Application (`app/`)
 
 From the repository root:
 
@@ -73,10 +65,7 @@ From the repository root:
 # 1. Run unit tests for unified native Android wrapper (:app)
 ./gradlew app:testDebugUnitTest
 
-# 2. Run unit tests for preserved legacy Jetpack Compose app (:app1)
-./gradlew app1:testDebugUnitTest
-
-# 3. Compile Web bundle and assemble Android debug APK
+# 2. Compile Web bundle and assemble Android debug APK
 ./gradlew app:buildWeb
 ./gradlew app:assembleDebug
 ```
