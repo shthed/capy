@@ -38,6 +38,9 @@ export const DEFAULT_SETTINGS: UserSettings = {
   hapticsEnabled: true,
   panMomentum: true,
   enableCustomColorForAllPuzzles: false,
+  replaySpeed: 1,
+  autoReplayOnLoad: true,
+  reverseDoubleTapZoom: false,
   generatorConfig: {
     algorithm: 'AUTO',
     lineHandling: 'ABSORB_LINES',
@@ -137,6 +140,18 @@ export class StorageService {
     return updated;
   }
 
+  static estimatePuzzleSaveBytes(puzzle: PuzzleData, previewDataUrl?: string): number {
+    let bytes = puzzle.regionMap.byteLength + puzzle.borderMap.byteLength;
+    for (const r of puzzle.regions) {
+      bytes += r.pixels.byteLength + 64;
+    }
+    bytes += puzzle.palette.length * 48;
+    if (previewDataUrl) {
+      bytes += previewDataUrl.length;
+    }
+    return bytes;
+  }
+
   static updateSnapshotProgress(
     id: string,
     filledCount: number,
@@ -148,7 +163,8 @@ export class StorageService {
     previewDataUrl?: string,
     paintedRegionColors?: Record<number, number>,
     customPalette?: PaletteColor[],
-    isFreeColor?: boolean
+    isFreeColor?: boolean,
+    fileSizeBytes?: number
   ): SavedSnapshot[] {
     const list = this.loadSnapshots();
     const updated = list.map((item) => {
@@ -166,6 +182,7 @@ export class StorageService {
           ...(panOffsetX !== undefined ? { panOffsetX } : {}),
           ...(panOffsetY !== undefined ? { panOffsetY } : {}),
           ...(previewDataUrl ? { previewDataUrl } : {}),
+          ...(fileSizeBytes !== undefined ? { fileSizeBytes } : {}),
         };
       }
       return item;

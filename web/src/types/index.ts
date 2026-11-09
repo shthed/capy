@@ -88,8 +88,87 @@ export interface UserSettings {
   hapticsEnabled: boolean;
   panMomentum: boolean;
   enableCustomColorForAllPuzzles: boolean;
+  replaySpeed: number;
+  autoReplayOnLoad: boolean;
+  reverseDoubleTapZoom: boolean;
   generatorConfig: GeneratorConfig;
 }
+
+export interface GenerationStepInfo {
+  id: number;
+  name: string;
+  description: string;
+  status: 'pending' | 'in_progress' | 'completed';
+}
+
+export interface GenerationInspectionDetails {
+  sourceWidth?: number;
+  sourceHeight?: number;
+  targetWidth?: number;
+  targetHeight?: number;
+  detectedType?: string;
+  isLineArt?: boolean;
+  isBlackAndWhite?: boolean;
+  edgeRatio?: number;
+  localVariance?: number;
+  globalVariance?: number;
+  colorClusterCount?: number;
+  chosenStrategy?: string;
+  strategyRationale?: string;
+  paletteDetail?: string;
+  colorCount?: number;
+  minRegionArea?: number;
+  maxRegions?: number;
+  finalRegionCount?: number;
+  minActualArea?: number;
+  maxActualArea?: number;
+  resolution?: number;
+  estimatedSaveSizeKb?: number;
+}
+
+export interface GenerationProgressPayload {
+  progress: number;
+  status: string;
+  stepIndex: number;
+  totalSteps: number;
+  stepName: string;
+  stepDescription: string;
+  steps: GenerationStepInfo[];
+  inspection: GenerationInspectionDetails;
+}
+
+export const GENERATION_PIPELINE_STEPS: Array<{ id: number; name: string; description: string }> = [
+  {
+    id: 1,
+    name: 'Artwork Analysis & Style Detection',
+    description: 'Scans luminance distribution, Sobel edge density, and 32k-bucket color histograms to detect whether the image is a photo, illustration, or black-and-white line drawing.',
+  },
+  {
+    id: 2,
+    name: 'Strategy Selection & Auto-Calibration',
+    description: 'Selects the optimal puzzle engine strategy (Line Art, Painterly, Posterized, or Mosaic Cel) and automatically tunes target resolution, color count, and region size limits.',
+  },
+  {
+    id: 3,
+    name: 'Pre-Filtering & Edge Preparation',
+    description: 'Applies edge-preserving bilateral filtering, morphological ink stroke extraction, or median denoising to prepare clean region boundaries.',
+  },
+  {
+    id: 4,
+    name: 'Perceptual Color Palette Clustering',
+    description: 'Runs K-Means++ clustering in perceptual Redmean color space to extract dominant, visually distinct palette swatches.',
+  },
+  {
+    id: 5,
+    name: 'Connected Region Segmentation & Merging',
+    description: 'Traces 4-connected pixel islands, merges micro-speckles below minimum area thresholds, and balances total region counts.',
+  },
+  {
+    id: 6,
+    name: 'Boundary Alignment & Label Placement',
+    description: 'Expands regions to artwork line centers and computes pole-of-inaccessibility distance transforms to place number labels with maximum clearance.',
+  },
+];
 
 export interface SavedSnapshot {
   id: string;
@@ -98,6 +177,7 @@ export interface SavedSnapshot {
   lastOpened: number;
   filledCount: number;
   totalCount: number;
+  /** Region IDs in exact chronological order of completion */
   filledRegionIds: number[];
   paintedRegionColors?: Record<number, number>;
   customPalette?: PaletteColor[];

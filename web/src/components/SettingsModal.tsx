@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Image as ImageIcon,
   Pipette,
+  Play,
 } from 'lucide-react';
 import {
   CANVAS_BG_MAP,
@@ -34,6 +35,7 @@ import {
   SaveSortOrder,
   UserSettings,
 } from '../types';
+import { REPLAY_SPEED_OPTIONS } from './ReplayControls';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -47,6 +49,7 @@ interface SettingsModalProps {
   onUpdateSettings: (newSettings: UserSettings) => void;
   onToggleFullscreen?: () => void;
   onLoadSnapshot: (snapshot: SavedSnapshot) => void;
+  onReplaySnapshot?: (snapshot: SavedSnapshot) => void;
   onRenameSnapshot: (id: string, newTitle: string) => void;
   onDeleteSnapshot: (id: string) => void;
   onClearAllSnapshots: () => void;
@@ -70,6 +73,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUpdateSettings,
   onToggleFullscreen,
   onLoadSnapshot,
+  onReplaySnapshot,
   onRenameSnapshot,
   onDeleteSnapshot,
   onClearAllSnapshots,
@@ -540,6 +544,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       desc: 'Flicking the canvas glides smoothly with momentum, like Google Maps',
                     },
                     {
+                      key: 'reverseDoubleTapZoom' as const,
+                      label: 'Invert Double-Tap Zoom Direction',
+                      desc: 'By default, dragging down zooms in and dragging up zooms out. Turn on to drag up to zoom in',
+                    },
+                    {
                       key: 'hapticsEnabled' as const,
                       label: 'Haptic Vibration Feedback',
                       desc: 'Tactile vibration ticks when painting and completing colours',
@@ -588,6 +597,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onChange={(e) => updateSetting('labelScale', parseFloat(e.target.value))}
                   className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                 />
+              </div>
+
+              {/* Replay Speed & Auto-Replay on Load */}
+              <div className="space-y-2.5 pt-2 border-t border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Puzzle Replay Speed
+                  </label>
+                  <span className="text-[11px] font-bold text-amber-400">
+                    {settings.replaySpeed || 1}x
+                  </span>
+                </div>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {REPLAY_SPEED_OPTIONS.map((spd) => (
+                    <button
+                      key={spd}
+                      type="button"
+                      onClick={() => updateSetting('replaySpeed', spd)}
+                      className={`py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                        (settings.replaySpeed || 1) === spd
+                          ? 'bg-amber-400 text-slate-950 border-amber-300 shadow'
+                          : 'bg-slate-950/60 text-slate-300 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      {spd}x
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/80">
+                  <div className="pr-3">
+                    <div className="text-xs sm:text-sm font-bold text-slate-200">
+                      Auto-Replay on Save Load
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Automatically play region completion animation when opening a saved game
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={settings.autoReplayOnLoad !== false}
+                    onClick={() =>
+                      updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
+                    }
+                    className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                      settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
+                        settings.autoReplayOnLoad !== false ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1336,6 +1401,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <span>
                             {snap.filledCount}/{snap.totalCount} regions
                           </span>
+                          {snap.fileSizeBytes && snap.fileSizeBytes > 0 ? (
+                            <>
+                              <span>•</span>
+                              <span>{Math.max(1, Math.round(snap.fileSizeBytes / 1024))} KB</span>
+                            </>
+                          ) : null}
                         </div>
                       </div>
 
@@ -1344,6 +1415,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         className="flex items-center gap-1.5 flex-shrink-0"
                         onDoubleClick={(e) => e.stopPropagation()}
                       >
+                        {snap.filledCount > 0 && onReplaySnapshot && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onReplaySnapshot(snap);
+                              onClose();
+                            }}
+                            title="Watch Animated Replay"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/40 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
+                          >
+                            <Play size={12} />
+                            <span>Replay</span>
+                          </button>
+                        )}
+
                         {!isActive && (
                           <button
                             type="button"
@@ -1351,7 +1437,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               onLoadSnapshot(snap);
                               onClose();
                             }}
-                            className="px-2.5 py-1 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow active:scale-95"
+                            className="px-2.5 py-1 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow active:scale-95 cursor-pointer"
                           >
                             Load
                           </button>
@@ -1382,7 +1468,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             type="button"
                             onClick={() => setConfirmDeleteId(snap.id)}
                             title="Delete Save"
-                            className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                            className="p-1 text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
                           >
                             <Trash2 size={15} />
                           </button>

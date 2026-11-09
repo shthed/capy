@@ -264,7 +264,7 @@ export class ColorQuantizer {
     const totalPixels = width * height;
     const actualK = Math.min(200, Math.max(2, Math.min(totalPixels, k)));
 
-    onProgress?.(0.1, 'Analyzing dominant color palette...');
+    onProgress?.(0.32, 'Analyzing dominant color palette...');
 
     const rArr = new Uint8Array(totalPixels);
     const gArr = new Uint8Array(totalPixels);
@@ -409,8 +409,8 @@ export class ColorQuantizer {
 
     // K-Means clustering loop
     for (let iter = 0; iter < maxIterations; iter++) {
-      const iterPct = 0.15 + ((iter + 1) / maxIterations) * 0.45;
-      onProgress?.(iterPct, 'Clustering palette colors...');
+      const iterPct = 0.34 + ((iter + 1) / maxIterations) * 0.24;
+      onProgress?.(iterPct, `Clustering perceptual palette colors (pass ${iter + 1}/${maxIterations})...`);
 
       let changed = false;
 
@@ -493,7 +493,7 @@ export class ColorQuantizer {
 
     // Multi-pass morphological circular smoothing with Hue Protection
     if (applySmoothing) {
-      onProgress?.(0.65, 'Shaping smooth organic regions...');
+      onProgress?.(0.60, 'Shaping smooth organic regions...');
       const centroidRefs = { r: centroidR, g: centroidG, b: centroidB };
       assignments = this.applyCircularMajoritySmoothing(assignments, width, height, effectiveK, 1, centroidRefs);
 
