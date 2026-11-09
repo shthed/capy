@@ -238,16 +238,16 @@ async function testUndoTimelineAndRedo() {
     if (pY !== 5) throw new Error(`Ctrl+Y did not redo: ${pY}`);
     console.log('   ✅ Keyboard shortcuts Ctrl+Z & Ctrl+Y verified.');
 
-    // Step 8: Auto-Resume Play When Loading a Puzzle After Replay Has Finished
-    console.log('8️⃣ Testing Auto-Resume Play when loading puzzle after auto-replay finishes...');
+    // Step 8: Auto-Replay Setting Toggle & Auto-Resume Play When Loading Saved Puzzle
+    console.log('8️⃣ Testing Auto-Replay setting (default enabled) & auto-resume play...');
     // We currently have 5 regions filled. autoReplayOnLoad is true by default.
     // Reload page to trigger active save restoration and auto-replay.
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForSelector('canvas', { timeout: 10000 });
 
-    // Verify Replay HUD appears because autoReplayOnLoad triggered
+    // Verify Replay HUD appears because autoReplayOnLoad is enabled by default
     await page.waitForSelector('[data-testid="replay-scrubber"]', { timeout: 10000 });
-    console.log('   ✅ Replay started automatically on load.');
+    console.log('   ✅ Replay started automatically on load (default enabled).');
 
     // Wait for the replay sequence (5 regions) to complete playback and auto-resume active play
     // When finished, Replay HUD automatically closes and PaletteDock reappears
@@ -260,6 +260,57 @@ async function testUndoTimelineAndRedo() {
       throw new Error('Replay scrubber should have automatically closed after replay finished!');
     }
     console.log('   ✅ Active gameplay resumed seamlessly without requiring manual exit.');
+
+    // Now test disabling autoReplayOnLoad via the Saves tab toggle
+    console.log('   Testing disabling Auto-Replay When Opening Saved Puzzle...');
+    const savesModalBtn = await page.waitForSelector('button[title*="Settings"]');
+    await savesModalBtn.click();
+    await page.waitForTimeout(300);
+
+    // Switch to Saves tab
+    const savesTabButton = await page.waitForSelector('button:has-text("Saves")');
+    await savesTabButton.click();
+    await page.waitForTimeout(300);
+
+    // Toggle Auto-Replay off in Saves tab
+    const autoReplaySavesToggle = await page.waitForSelector('[data-testid="toggle-auto-replay-saves-btn"]');
+    await autoReplaySavesToggle.click();
+    await page.waitForTimeout(200);
+
+    const closeBtnAfterSavesToggle = await page.waitForSelector('button[title="Close"]');
+    await closeBtnAfterSavesToggle.click();
+    await page.waitForTimeout(300);
+
+    // Reload page with autoReplayOnLoad disabled
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForSelector('canvas', { timeout: 10000 });
+    await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 15000 });
+
+    // Assert Replay HUD did NOT appear because autoReplayOnLoad is disabled!
+    const scrubberWhenDisabled = await page.$('[data-testid="replay-scrubber"]');
+    if (scrubberWhenDisabled !== null) {
+      throw new Error('Replay should NOT have started when autoReplayOnLoad is disabled!');
+    }
+    console.log('   ✅ Auto-replay correctly skipped when setting is disabled; active gameplay loaded immediately.');
+
+    // Re-enable autoReplayOnLoad in Settings tab for subsequent tests
+    const settingsBtnReenable = await page.waitForSelector('button[title*="Settings"]');
+    await settingsBtnReenable.click();
+    await page.waitForTimeout(300);
+
+    // Click Settings tab to switch from remembered Saves tab
+    const settingsTabBtn = await page.waitForSelector('button:has-text("Settings")');
+    await settingsTabBtn.click();
+    await page.waitForTimeout(200);
+
+    const autoReplayToggleTab0 = await page.waitForSelector('[data-testid="toggle-auto-replay-btn"]');
+    await autoReplayToggleTab0.click();
+    await page.waitForTimeout(200);
+
+    const closeBtnReenabled = await page.waitForSelector('button[title="Close"]');
+    await closeBtnReenabled.click();
+    await page.waitForTimeout(300);
+    console.log('   ✅ Auto-replay re-enabled via Settings tab toggle.');
 
     // Step 9: Free Colour Puzzle Auto-Enablement of Undo
     console.log('9️⃣ Testing Free Colour Mode auto-enabling Undo even when enableUndo is false...');

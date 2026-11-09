@@ -645,15 +645,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/80">
                   <div className="pr-3">
                     <div className="text-xs sm:text-sm font-bold text-slate-200">
-                      Auto-Replay on Save Load
+                      Auto-Replay When Opening Saved Puzzle
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      Automatically play region completion animation when opening a saved game
+                      Automatically show region completion replay animation when opening a saved puzzle, then resume play
                     </div>
                   </div>
                   <button
                     type="button"
                     role="switch"
+                    data-testid="toggle-auto-replay-btn"
                     aria-checked={settings.autoReplayOnLoad !== false}
                     onClick={() =>
                       updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
@@ -1362,6 +1363,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span>Reset</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Auto-Replay When Opening Saved Puzzle Option in Saves Tab */}
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/80">
+                <div className="pr-3">
+                  <div className="text-xs font-bold text-slate-200">
+                    Auto-Replay When Opening Saved Puzzle
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Show region completion replay animation automatically when opening a saved puzzle
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  data-testid="toggle-auto-replay-saves-btn"
+                  aria-checked={settings.autoReplayOnLoad !== false}
+                  onClick={() =>
+                    updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
+                  }
+                  className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                    settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
+                      settings.autoReplayOnLoad !== false ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
 
               {/* Snapshots List */}
