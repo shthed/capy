@@ -91,7 +91,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
                     type="button"
                     onClick={() => onToggleDetailedProgress(true)}
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors flex-shrink-0 cursor-pointer"
-                    title="Switch to Detailed Progress with step breakdowns and canvas scanline"
+                    title="Switch to Detailed Progress with step breakdowns and live canvas preview"
                   >
                     <Sparkles size={11} className="text-amber-400" />
                     <span>Detailed</span>

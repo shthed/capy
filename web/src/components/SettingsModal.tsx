@@ -635,7 +635,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {
                       key: 'detailedLoadingProgress' as const,
                       label: 'Detailed Generation Progress',
-                      desc: 'Show real-time pipeline stages, inspection metrics, and canvas scanline while loading. Turn off for faster, simple progress',
+                      desc: 'Show real-time pipeline stages, inspection metrics, and live canvas preview while loading. Turn off for faster, simple progress',
                     },
                     {
                       key: 'hapticsEnabled' as const,
