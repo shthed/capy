@@ -1,5 +1,5 @@
 import { GeneratorConfig } from '../types';
-import { PuzzleGeneratorFactory } from './PuzzleGenerator';
+import { AutoPuzzleGenerator } from './PuzzleGenerator';
 
 self.onmessage = (e: MessageEvent) => {
   const { type, id, width, height, rgbaBuffer, config } = e.data;
@@ -7,19 +7,20 @@ self.onmessage = (e: MessageEvent) => {
   if (type === 'GENERATE') {
     try {
       const rgbaData = new Uint8ClampedArray(rgbaBuffer);
-      const generator = PuzzleGeneratorFactory.createByAlgorithm(config?.algorithm || 'AUTO');
+      const generator = new AutoPuzzleGenerator();
 
       const puzzleData = generator.generateFromRgba(
         rgbaData,
         width,
         height,
         config as GeneratorConfig,
-        (progress, status) => {
+        (progress, status, payload) => {
           self.postMessage({
             type: 'PROGRESS',
             id,
             progress,
             status,
+            payload,
           });
         }
       );

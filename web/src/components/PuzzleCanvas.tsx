@@ -44,6 +44,9 @@ interface PuzzleCanvasProps {
   initialZoomScale?: number;
   initialPanOffsetX?: number;
   initialPanOffsetY?: number;
+  isGenerating?: boolean;
+  generationProgress?: number;
+  generationStepIndex?: number;
   onViewExtentChanged?: (zoom: number, panX: number, panY: number) => void;
   onRegionClicked: (regionId: number) => void;
   onBatchRegionsClicked: (regionIds: Set<number>) => void;
@@ -143,6 +146,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   initialZoomScale = 1.0,
   initialPanOffsetX = 0,
   initialPanOffsetY = 0,
+  isGenerating = false,
+  generationProgress = 0,
+  generationStepIndex = 1,
   onViewExtentChanged,
   onRegionClicked,
   onBatchRegionsClicked,
@@ -288,11 +294,41 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
   useEffect(() => {
     if (resetViewTrigger <= 0) return;
-    scaleRef.current = 1.0;
-    offsetRef.current = { x: 0, y: 0 };
-    setScale(1.0);
-    setOffset({ x: 0, y: 0 });
-  }, [resetViewTrigger]);
+    stopMomentum();
+    const startScale = scaleRef.current;
+    const startOffset = { ...offsetRef.current };
+    if (Math.abs(startScale - 1.0) < 0.01 && Math.hypot(startOffset.x, startOffset.y) < 1) {
+      scaleRef.current = 1.0;
+      offsetRef.current = { x: 0, y: 0 };
+      setScale(1.0);
+      setOffset({ x: 0, y: 0 });
+      return;
+    }
+
+    let animId: number;
+    const duration = 280;
+    const startTime = performance.now();
+
+    const stepZoomOut = (now: number) => {
+      const t = Math.min(1, (now - startTime) / duration);
+      const ease = 1 - Math.pow(1 - t, 3); // Cubic ease-out
+      const nextScale = startScale + (1.0 - startScale) * ease;
+      const nextOffset = {
+        x: startOffset.x * (1 - ease),
+        y: startOffset.y * (1 - ease),
+      };
+      scaleRef.current = nextScale;
+      offsetRef.current = nextOffset;
+      setScale(nextScale);
+      setOffset(nextOffset);
+      if (t < 1) {
+        animId = requestAnimationFrame(stepZoomOut);
+      }
+    };
+
+    animId = requestAnimationFrame(stepZoomOut);
+    return () => cancelAnimationFrame(animId);
+  }, [resetViewTrigger, stopMomentum]);
 
   // Ensure offset is strictly clamped whenever scale or container size changes
   useEffect(() => {
@@ -306,7 +342,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     });
   }, [scale, puzzle]);
 
-  // Pulse animation frame (only runs when animateHint is active)
+  // Pulse animation frame (runs when animateHint or isGenerating is active)
   useEffect(() => {
     let animId: number;
     const startTime = performance.now();
@@ -318,14 +354,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       animId = requestAnimationFrame(loop);
     };
 
-    if (animateHint) {
+    if (animateHint || isGenerating) {
       animId = requestAnimationFrame(loop);
     } else {
       setPulseAlpha(0.7);
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [animateHint]);
+  }, [animateHint, isGenerating]);
 
   // Tap dot decay
   useEffect(() => {
@@ -920,6 +956,125 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     ctx.fillRect(0, 0, w, h);
 
     if (!puzzle) {
+      if (
+        sourceImage &&
+        sourceImage.complete &&
+        (sourceImage.naturalWidth > 0 || sourceImage.width > 0)
+      ) {
+        const imgW = sourceImage.naturalWidth || sourceImage.width;
+        const imgH = sourceImage.naturalHeight || sourceImage.height;
+        const baseScale = Math.min(w / imgW, h / imgH) * 0.92;
+        const baseOffsetX = (w - imgW * baseScale) / 2;
+        const baseOffsetY = (h - imgH * baseScale) / 2;
+        const artW = imgW * baseScale;
+        const artH = imgH * baseScale;
+
+        // Draw artwork drop shadow framing on stage
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+        ctx.shadowBlur = 24;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 6;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(baseOffsetX, baseOffsetY, artW, artH);
+        ctx.restore();
+
+        // Draw source image immediately
+        ctx.save();
+        ctx.translate(baseOffsetX, baseOffsetY);
+        ctx.drawImage(sourceImage, 0, 0, artW, artH);
+
+        // Draw live puzzle generation visualization over the image
+        if (isGenerating) {
+          const prog = Math.min(1, Math.max(0.02, generationProgress));
+          const scanY = prog * artH;
+
+          // 1. Progressive region blueprint overlay above the scanline
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
+          ctx.fillRect(0, 0, artW, scanY);
+
+          // 2. Animated cellular Voronoi/hexagonal region mesh in processed zone
+          const cellSize = Math.max(22, Math.min(44, Math.min(artW, artH) / 11));
+          const cols = Math.ceil(artW / cellSize);
+          const rows = Math.ceil(scanY / cellSize);
+
+          ctx.strokeStyle = 'rgba(30, 41, 59, 0.45)';
+          ctx.lineWidth = 1.25;
+          ctx.beginPath();
+
+          for (let r = 0; r < rows; r++) {
+            const cy = r * cellSize;
+            const rowShift = (r % 2) * (cellSize * 0.5);
+            for (let c = 0; c < cols; c++) {
+              const cx = c * cellSize + rowShift;
+              // Deterministic pseudo-random organic offset per cell
+              const seed = (r * 73 + c * 37) % 100;
+              const jx = ((seed % 11) - 5) * 1.4;
+              const jy = (((seed * 7) % 11) - 5) * 1.4;
+              const px = Math.min(artW, Math.max(0, cx + jx));
+              const py = Math.min(scanY, Math.max(0, cy + jy));
+
+              if (c < cols - 1) {
+                const nx = Math.min(artW, cx + cellSize + jx * 0.5);
+                ctx.moveTo(px, py);
+                ctx.lineTo(nx, py);
+              }
+              if (r < rows - 1) {
+                const ny = Math.min(scanY, cy + cellSize + jy * 0.5);
+                ctx.moveTo(px, py);
+                ctx.lineTo(px, ny);
+              }
+            }
+          }
+          ctx.stroke();
+
+          // 3. Draw sample region numbers / centroids in the newly segmented band
+          ctx.font = 'bold 9px Inter, system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          for (let r = 0; r < rows; r++) {
+            const cy = (r + 0.5) * cellSize;
+            if (cy > scanY - 6) continue;
+            const distToScan = scanY - cy;
+            const isNearScan = distToScan < cellSize * 2.2;
+            const rowShift = (r % 2) * (cellSize * 0.5);
+            for (let c = 0; c < cols; c++) {
+              const cx = (c + 0.5) * cellSize + rowShift;
+              if (cx > artW - 8) continue;
+              const num = ((r * 13 + c * 7) % 16) + 1;
+              if (isNearScan) {
+                ctx.fillStyle = `rgba(251, 191, 36, ${0.45 + pulseAlpha * 0.45})`;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 3.2, 0, Math.PI * 2);
+                ctx.fill();
+              } else if ((r + c) % 2 === 0) {
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+                ctx.fillText(String(num), cx, cy);
+              }
+            }
+          }
+
+          // 4. Glowing horizontal laser scanline with trailing gradient
+          const gradH = Math.min(48, scanY);
+          const scanGrad = ctx.createLinearGradient(0, scanY - gradH, 0, scanY);
+          scanGrad.addColorStop(0, 'rgba(251, 191, 36, 0)');
+          scanGrad.addColorStop(1, `rgba(251, 191, 36, ${0.22 + pulseAlpha * 0.18})`);
+          ctx.fillStyle = scanGrad;
+          ctx.fillRect(0, scanY - gradH, artW, gradH);
+
+          ctx.strokeStyle = '#fbbf24';
+          ctx.lineWidth = 2.5;
+          ctx.shadowColor = 'rgba(251, 191, 36, 0.9)';
+          ctx.shadowBlur = 12;
+          ctx.beginPath();
+          ctx.moveTo(0, scanY);
+          ctx.lineTo(artW, scanY);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+
+        ctx.restore();
+      }
       ctx.restore();
       return;
     }
@@ -1068,6 +1223,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     displayNumberMap,
     pulseAlpha,
     tapDot,
+    isGenerating,
+    generationProgress,
+    generationStepIndex,
   ]);
 
   // Pointer event handlers for touch/mouse

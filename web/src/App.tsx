@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import {
+  GenerationProgressPayload,
   GeneratorConfig,
   PaletteColor,
   PalettePreset,
-  PaletteSortOrder,
   PuzzleData,
   SAMPLE_GALLERY,
   SampleArtwork,
@@ -21,8 +21,14 @@ import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
 import { SettingsModal } from './components/SettingsModal';
 import { LoadingOverlay } from './components/LoadingOverlay';
-import { VictoryModal } from './components/VictoryModal';
+import { ReplayControls } from './components/ReplayControls';
 import { ColorPickerPopover } from './components/ColorPickerPopover';
+
+interface UndoHistoryEntry {
+  regionId: number;
+  wasPreviouslyFilled: boolean;
+  previousPaintedColorId?: number;
+}
 
 export const App: React.FC = () => {
   // Persistence & Settings
@@ -36,23 +42,29 @@ export const App: React.FC = () => {
   const [activeColorId, setActiveColorId] = useState<number>(1);
   const [filledRegionIds, setFilledRegionIds] = useState<Set<number>>(new Set());
   const [paintedRegionColors, setPaintedRegionColors] = useState<Map<number, number>>(new Map());
+  const [undoStack, setUndoStack] = useState<UndoHistoryEntry[]>([]);
   const [hintRegionId, setHintRegionId] = useState<number | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
   const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState<number>(0);
   const [resetViewTrigger, setResetViewTrigger] = useState<number>(0);
   const [isCanvasTransformed, setIsCanvasTransformed] = useState<boolean>(false);
-  const [showVictory, setShowVictory] = useState<boolean>(false);
-  const victoryShownRef = useRef<Set<string>>(new Set());
+
+  // Replay State
+  const [isReplaying, setIsReplaying] = useState<boolean>(false);
+  const [isReplayPlaying, setIsReplayPlaying] = useState<boolean>(false);
+  const [replayStep, setReplayStep] = useState<number>(0);
+  const [replaySequence, setReplaySequence] = useState<number[]>([]);
 
   // Spatial Viewport
   const [visibleColorIds, setVisibleColorIds] = useState<Set<number>>(new Set());
   const [visibleRegionIds, setVisibleRegionIds] = useState<Set<number>>(new Set());
 
-  // Loading
+  // Loading & Generation Pipeline Details
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [loadingProgress, setLoadingProgress] = useState<number>(0.05);
+  const [loadingProgress, setLoadingProgress] = useState<number>(0.02);
   const [loadingStatus, setLoadingStatus] = useState<string>('Loading Capy...');
+  const [loadingPayload, setLoadingPayload] = useState<GenerationProgressPayload | null>(null);
 
   // Modal Sheet
   const [showSettings, setShowSettings] = useState<boolean>(false);
@@ -209,6 +221,58 @@ export const App: React.FC = () => {
     []
   );
 
+  // Start animated region-by-region replay
+  const startReplay = useCallback((sequence: number[]) => {
+    if (!sequence || sequence.length === 0) return;
+    setResetViewTrigger((prev) => prev + 1);
+    setHintRegionId(null);
+    setReplaySequence(sequence);
+    setReplayStep(0);
+    setIsReplaying(true);
+    setIsReplayPlaying(true);
+  }, []);
+
+  // Animated Replay Loop (60 FPS smooth accumulator scaled by replaySpeed)
+  useEffect(() => {
+    if (!isReplaying || !isReplayPlaying) return;
+    if (replayStep >= replaySequence.length) {
+      setIsReplayPlaying(false);
+      return;
+    }
+
+    let animId: number;
+    let lastTime = performance.now();
+    let accRegions = 0;
+
+    // Base speed: complete puzzle replay in ~5.5s at 1x, clamped between 12 and 65 regions/sec
+    const baseRate = Math.max(12, Math.min(65, replaySequence.length / 5.5));
+    const speedMultiplier = settings.replaySpeed || 1;
+    const regionsPerMs = (baseRate * speedMultiplier) / 1000;
+
+    const tick = (now: number) => {
+      const dt = Math.min(64, Math.max(0, now - lastTime));
+      lastTime = now;
+      accRegions += dt * regionsPerMs;
+
+      if (accRegions >= 1) {
+        const stepDelta = Math.floor(accRegions);
+        accRegions -= stepDelta;
+        setReplayStep((prev) => {
+          const next = Math.min(replaySequence.length, prev + stepDelta);
+          if (next >= replaySequence.length) {
+            setIsReplayPlaying(false);
+          }
+          return next;
+        });
+      }
+
+      animId = requestAnimationFrame(tick);
+    };
+
+    animId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animId);
+  }, [isReplaying, isReplayPlaying, replayStep, replaySequence.length, settings.replaySpeed]);
+
   // Generation sequence tracking to ignore cancelled/superseded requests
   const generationSeqRef = useRef<number>(0);
 
@@ -221,18 +285,22 @@ export const App: React.FC = () => {
       initialFilledRegionIds: Set<number> = new Set(),
       initialActiveColorId?: number,
       existingSnapshotId?: string,
-      sampleAssetPath?: string | null
+      sampleAssetPath?: string | null,
+      shouldAutoReplay: boolean = false
     ) => {
       const currentSeq = ++generationSeqRef.current;
+      setIsReplaying(false);
+      setIsReplayPlaying(false);
       setIsLoading(true);
-      setLoadingProgress(0.05);
-      setLoadingStatus('Initializing artwork canvas...');
+      setLoadingProgress(0.02);
+      setLoadingStatus('Analyzing artwork style and line composition...');
+      setLoadingPayload(null);
 
-      // Clear old puzzle when generating a new artwork so title and canvas do not desync
-      if (!existingSnapshotId || existingSnapshotId !== activeSnapshotId) {
-        setPuzzle(null);
-        setHintRegionId(null);
-      }
+      // Immediately display source image on canvas and clear previous puzzle regions
+      // so the live generation scan/segmentation visualization renders over the new image
+      setSourceImage(img);
+      setPuzzle(null);
+      setHintRegionId(null);
 
       // Prepare canvas from image
       const canvas = document.createElement('canvas');
@@ -265,19 +333,33 @@ export const App: React.FC = () => {
       setTimeout(async () => {
         if (currentSeq !== generationSeqRef.current) return;
         try {
-          const puzzleData = await PuzzleWorkerService.generate(canvas, config, (prog, stat) => {
-            if (currentSeq === generationSeqRef.current) {
-              setLoadingProgress(prog);
-              setLoadingStatus(stat);
+          const puzzleData = await PuzzleWorkerService.generate(
+            canvas,
+            config,
+            (prog, stat, payload) => {
+              if (currentSeq === generationSeqRef.current) {
+                setLoadingProgress((prev) => Math.max(prev, prog));
+                setLoadingStatus(stat);
+                if (payload) {
+                  setLoadingPayload(payload);
+                }
+              }
             }
-          });
+          );
 
           if (currentSeq !== generationSeqRef.current) return;
 
+          const initialOrder = Array.from(initialFilledRegionIds);
           setSourceImage(img);
           setPuzzle(puzzleData);
-          setFilledRegionIds(initialFilledRegionIds);
+          setFilledRegionIds(new Set(initialOrder));
           setPaintedRegionColors(new Map());
+          setUndoStack(
+            initialOrder.map((rId) => ({
+              regionId: rId,
+              wasPreviouslyFilled: false,
+            }))
+          );
 
           const isFree = Boolean(puzzleData.isFreeColor);
           handleUpdateSettings({ ...settings, isFreeColorMode: isFree });
@@ -297,20 +379,22 @@ export const App: React.FC = () => {
           setHintRegionId(null);
 
           const previewUrl = generatePreviewDataUrl(puzzleData, img, initialFilledRegionIds);
+          const estSaveBytes = StorageService.estimatePuzzleSaveBytes(puzzleData, previewUrl);
 
-          // Update snapshot with final region counts
+          // Update snapshot with final region counts and storage size
           const finalizedSnapshots = StorageService.updateSnapshotProgress(
             snapId,
             initialFilledRegionIds.size,
             puzzleData.regions.length,
-            Array.from(initialFilledRegionIds),
+            initialOrder,
             1.0,
             0,
             0,
             previewUrl,
             undefined,
             puzzleData.palette,
-            puzzleData.isFreeColor
+            puzzleData.isFreeColor,
+            estSaveBytes
           );
           setSnapshots(finalizedSnapshots);
 
@@ -321,7 +405,7 @@ export const App: React.FC = () => {
           StorageService.saveActiveState({
             activeSnapshotId: snapId,
             activeColorId: targetColor,
-            filledRegionIds: Array.from(initialFilledRegionIds),
+            filledRegionIds: initialOrder,
             paintedRegionColors: {},
             isFreeColorMode: Boolean(puzzleData.isFreeColor),
             zoomScale: 1.0,
@@ -330,6 +414,10 @@ export const App: React.FC = () => {
           });
 
           setIsLoading(false);
+
+          if (shouldAutoReplay && initialOrder.length > 0) {
+            startReplay(initialOrder);
+          }
         } catch (err) {
           // If cancelled by a newer request or superseded, quietly ignore
           if (
@@ -346,7 +434,7 @@ export const App: React.FC = () => {
         }
       }, 50);
     },
-    [settings.generatorConfig, generatePreviewDataUrl]
+    [settings, generatePreviewDataUrl, startReplay]
   );
 
   // Restore session on app launch
@@ -367,7 +455,8 @@ export const App: React.FC = () => {
             img.crossOrigin = 'anonymous';
             img.onload = () => {
               if (!isMounted) return;
-              const filledSet = new Set(snap.filledRegionIds || []);
+              const orderedIds = snap.filledRegionIds || [];
+              const filledSet = new Set(orderedIds);
               const availableColors = getVisiblePalette(
                 cachedPuzzle.palette,
                 cachedPuzzle.regions,
@@ -381,11 +470,17 @@ export const App: React.FC = () => {
               if (snap.customPalette && snap.customPalette.length > 0) {
                 cachedPuzzle.palette = snap.customPalette;
               }
+              let restoredPaintedMap = new Map<number, number>();
               if (snap.paintedRegionColors) {
-                setPaintedRegionColors(new Map(Object.entries(snap.paintedRegionColors).map(([k, v]) => [Number(k), v])));
+                restoredPaintedMap = new Map(
+                  Object.entries(snap.paintedRegionColors).map(([k, v]) => [Number(k), v])
+                );
               } else if (activeState.paintedRegionColors) {
-                setPaintedRegionColors(new Map(Object.entries(activeState.paintedRegionColors).map(([k, v]) => [Number(k), v])));
+                restoredPaintedMap = new Map(
+                  Object.entries(activeState.paintedRegionColors).map(([k, v]) => [Number(k), v])
+                );
               }
+              setPaintedRegionColors(restoredPaintedMap);
               const isFree = Boolean(
                 activeState.isFreeColorMode !== undefined
                   ? activeState.isFreeColorMode
@@ -397,7 +492,16 @@ export const App: React.FC = () => {
               setActiveSnapshotId(snap.id);
               setActiveColorId(restoredColor);
               setFilledRegionIds(filledSet);
+              setUndoStack(
+                orderedIds.map((rId) => ({
+                  regionId: rId,
+                  wasPreviouslyFilled: false,
+                }))
+              );
               setIsLoading(false);
+              if (settings.autoReplayOnLoad !== false && orderedIds.length > 0) {
+                startReplay(orderedIds);
+              }
             };
             img.src = snap.sampleAssetPath || snap.previewDataUrl || 'assets/capybara.webp';
             return;
@@ -459,10 +563,93 @@ export const App: React.FC = () => {
     NativeBridge.haptic('tick', settings.hapticsEnabled);
   }, [settings]);
 
+  // Undo last region completion
+  const handleUndo = useCallback(() => {
+    if (!puzzle || isReplaying || undoStack.length === 0) return;
+
+    const lastAction = undoStack[undoStack.length - 1];
+    setUndoStack((prev) => prev.slice(0, -1));
+
+    const nextFilled = new Set(filledRegionIds);
+    const nextPainted = new Map(paintedRegionColors);
+
+    if (lastAction.wasPreviouslyFilled) {
+      if (lastAction.previousPaintedColorId !== undefined) {
+        nextPainted.set(lastAction.regionId, lastAction.previousPaintedColorId);
+      } else {
+        nextPainted.delete(lastAction.regionId);
+      }
+    } else {
+      nextFilled.delete(lastAction.regionId);
+      nextPainted.delete(lastAction.regionId);
+    }
+
+    setFilledRegionIds(nextFilled);
+    setPaintedRegionColors(nextPainted);
+    setHintRegionId(null);
+    NativeBridge.haptic('tick', settings.hapticsEnabled);
+
+    const undoneRegion = puzzle.regions.find((r) => r.id === lastAction.regionId);
+    if (undoneRegion && !isFreeColorMode) {
+      setActiveColorId(undoneRegion.colorId);
+    }
+
+    if (activeSnapshotId) {
+      const paintedObj = Object.fromEntries(nextPainted);
+      const updated = StorageService.updateSnapshotProgress(
+        activeSnapshotId,
+        nextFilled.size,
+        puzzle.regions.length,
+        Array.from(nextFilled),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        paintedObj,
+        puzzle.palette,
+        puzzle.isFreeColor
+      );
+      setSnapshots(updated);
+      StorageService.saveActiveState({
+        activeSnapshotId,
+        activeColorId: undoneRegion && !isFreeColorMode ? undoneRegion.colorId : activeColorId,
+        filledRegionIds: Array.from(nextFilled),
+        paintedRegionColors: paintedObj,
+        isFreeColorMode,
+        zoomScale: 1.0,
+        panOffsetX: 0,
+        panOffsetY: 0,
+      });
+    }
+  }, [
+    puzzle,
+    isReplaying,
+    undoStack,
+    filledRegionIds,
+    paintedRegionColors,
+    settings.hapticsEnabled,
+    isFreeColorMode,
+    activeSnapshotId,
+    activeColorId,
+  ]);
+
+  // Keyboard shortcut Ctrl+Z / Cmd+Z for Undo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (showSettings || isReplaying || isLoading) return;
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSettings, isReplaying, isLoading, handleUndo]);
+
   // Handle single region coloring
   const attemptFillRegion = useCallback(
     (regionId: number) => {
-      if (!puzzle) return;
+      if (!puzzle || isReplaying) return;
       const region = puzzle.regions.find((r) => r.id === regionId);
       if (!region) return;
 
@@ -470,17 +657,29 @@ export const App: React.FC = () => {
         const currentPaintedColor = paintedRegionColors.get(regionId);
         if (currentPaintedColor === activeColorId) return;
 
+        const wasFilled = filledRegionIds.has(regionId);
+        setUndoStack((prev) => [
+          ...prev,
+          {
+            regionId,
+            wasPreviouslyFilled: wasFilled,
+            previousPaintedColorId: currentPaintedColor,
+          },
+        ]);
+
         const nextPainted = new Map(paintedRegionColors);
         nextPainted.set(regionId, activeColorId);
         setPaintedRegionColors(nextPainted);
 
         const nextFilled = new Set(filledRegionIds);
+        if (wasFilled) {
+          nextFilled.delete(regionId);
+        }
         nextFilled.add(regionId);
         setFilledRegionIds(nextFilled);
         setHintRegionId(null);
 
-        NativeBridge.haptic('tick', settings.hapticsEnabled);
-
+        const orderedList = Array.from(nextFilled);
         const isComplete = nextFilled.size >= puzzle.regions.length;
         if (isComplete) {
           NativeBridge.haptic('success', settings.hapticsEnabled);
@@ -489,19 +688,18 @@ export const App: React.FC = () => {
             spread: 80,
             origin: { y: 0.6 },
           });
-          if (activeSnapshotId && !victoryShownRef.current.has(activeSnapshotId)) {
-            victoryShownRef.current.add(activeSnapshotId);
-            setTimeout(() => setShowVictory(true), 350);
-          }
+          startReplay(orderedList);
+        } else {
+          NativeBridge.haptic('tick', settings.hapticsEnabled);
         }
 
         if (activeSnapshotId) {
           const paintedObj = Object.fromEntries(nextPainted);
-          StorageService.updateSnapshotProgress(
+          const updated = StorageService.updateSnapshotProgress(
             activeSnapshotId,
             nextFilled.size,
             puzzle.regions.length,
-            Array.from(nextFilled),
+            orderedList,
             undefined,
             undefined,
             undefined,
@@ -510,10 +708,11 @@ export const App: React.FC = () => {
             puzzle.palette,
             puzzle.isFreeColor
           );
+          setSnapshots(updated);
           StorageService.saveActiveState({
             activeSnapshotId,
             activeColorId,
-            filledRegionIds: Array.from(nextFilled),
+            filledRegionIds: orderedList,
             paintedRegionColors: paintedObj,
             isFreeColorMode: true,
             zoomScale: 1.0,
@@ -535,10 +734,20 @@ export const App: React.FC = () => {
         setActiveColorId(region.colorId);
       }
 
+      setUndoStack((prev) => [
+        ...prev,
+        {
+          regionId,
+          wasPreviouslyFilled: false,
+        },
+      ]);
+
       const nextFilled = new Set(filledRegionIds);
       nextFilled.add(regionId);
       setFilledRegionIds(nextFilled);
       setHintRegionId(null);
+
+      const orderedList = Array.from(nextFilled);
 
       // Check completion
       const isComplete = nextFilled.size >= puzzle.regions.length;
@@ -558,24 +767,22 @@ export const App: React.FC = () => {
           spread: 80,
           origin: { y: 0.6 },
         });
-        if (activeSnapshotId && !victoryShownRef.current.has(activeSnapshotId)) {
-          victoryShownRef.current.add(activeSnapshotId);
-          setTimeout(() => setShowVictory(true), 350);
-        }
+        startReplay(orderedList);
       }
 
-      // Debounced persistence
+      // Persistence
       if (activeSnapshotId) {
-        StorageService.updateSnapshotProgress(
+        const updated = StorageService.updateSnapshotProgress(
           activeSnapshotId,
           nextFilled.size,
           puzzle.regions.length,
-          Array.from(nextFilled)
+          orderedList
         );
+        setSnapshots(updated);
         StorageService.saveActiveState({
           activeSnapshotId,
           activeColorId: region.colorId,
-          filledRegionIds: Array.from(nextFilled),
+          filledRegionIds: orderedList,
           zoomScale: 1.0,
           panOffsetX: 0,
           panOffsetY: 0,
@@ -606,35 +813,58 @@ export const App: React.FC = () => {
         }
       }
     },
-    [puzzle, filledRegionIds, paintedRegionColors, isFreeColorMode, settings, activeColorId, activeSnapshotId, visibleColorIds]
+    [
+      puzzle,
+      isReplaying,
+      filledRegionIds,
+      paintedRegionColors,
+      isFreeColorMode,
+      settings,
+      activeColorId,
+      activeSnapshotId,
+      visibleColorIds,
+      startReplay,
+    ]
   );
 
   // Handle batch fill (for Paint Mode drag-to-color)
   const attemptBatchFillRegions = useCallback(
     (regionIds: Set<number>) => {
-      if (!puzzle || regionIds.size === 0) return;
+      if (!puzzle || isReplaying || regionIds.size === 0) return;
 
       if (isFreeColorMode) {
         let changed = false;
         const nextPainted = new Map(paintedRegionColors);
         const nextFilled = new Set(filledRegionIds);
+        const newUndoEntries: UndoHistoryEntry[] = [];
 
         for (const rId of regionIds) {
           const region = puzzle.regions.find((r) => r.id === rId);
           if (!region) continue;
-          if (nextPainted.get(rId) !== activeColorId) {
+          const prevCol = nextPainted.get(rId);
+          if (prevCol !== activeColorId) {
+            const wasFilled = nextFilled.has(rId);
+            newUndoEntries.push({
+              regionId: rId,
+              wasPreviouslyFilled: wasFilled,
+              previousPaintedColorId: prevCol,
+            });
             nextPainted.set(rId, activeColorId);
+            if (wasFilled) {
+              nextFilled.delete(rId);
+            }
             nextFilled.add(rId);
             changed = true;
           }
         }
 
         if (changed) {
+          setUndoStack((prev) => [...prev, ...newUndoEntries]);
           setPaintedRegionColors(nextPainted);
           setFilledRegionIds(nextFilled);
           setHintRegionId(null);
-          NativeBridge.haptic('tick', settings.hapticsEnabled);
 
+          const orderedList = Array.from(nextFilled);
           const isComplete = nextFilled.size >= puzzle.regions.length;
           if (isComplete) {
             NativeBridge.haptic('success', settings.hapticsEnabled);
@@ -643,19 +873,18 @@ export const App: React.FC = () => {
               spread: 80,
               origin: { y: 0.6 },
             });
-            if (activeSnapshotId && !victoryShownRef.current.has(activeSnapshotId)) {
-              victoryShownRef.current.add(activeSnapshotId);
-              setTimeout(() => setShowVictory(true), 350);
-            }
+            startReplay(orderedList);
+          } else {
+            NativeBridge.haptic('tick', settings.hapticsEnabled);
           }
 
           if (activeSnapshotId) {
             const paintedObj = Object.fromEntries(nextPainted);
-            StorageService.updateSnapshotProgress(
+            const updated = StorageService.updateSnapshotProgress(
               activeSnapshotId,
               nextFilled.size,
               puzzle.regions.length,
-              Array.from(nextFilled),
+              orderedList,
               undefined,
               undefined,
               undefined,
@@ -664,6 +893,7 @@ export const App: React.FC = () => {
               puzzle.palette,
               puzzle.isFreeColor
             );
+            setSnapshots(updated);
           }
         }
         return;
@@ -673,6 +903,7 @@ export const App: React.FC = () => {
       const isPaintMode = settings.isPaintMode;
       let filledAny = false;
       const nextFilled = new Set(filledRegionIds);
+      const newUndoEntries: UndoHistoryEntry[] = [];
 
       for (const rId of regionIds) {
         if (nextFilled.has(rId)) continue;
@@ -685,14 +916,20 @@ export const App: React.FC = () => {
             setActiveColorId(region.colorId);
           }
           nextFilled.add(rId);
+          newUndoEntries.push({
+            regionId: rId,
+            wasPreviouslyFilled: false,
+          });
           filledAny = true;
         }
       }
 
       if (filledAny) {
+        setUndoStack((prev) => [...prev, ...newUndoEntries]);
         setFilledRegionIds(nextFilled);
         setHintRegionId(null);
 
+        const orderedList = Array.from(nextFilled);
         const isComplete = nextFilled.size >= puzzle.regions.length;
         if (isComplete) {
           NativeBridge.haptic('success', settings.hapticsEnabled);
@@ -701,21 +938,19 @@ export const App: React.FC = () => {
             spread: 80,
             origin: { y: 0.6 },
           });
-          if (activeSnapshotId && !victoryShownRef.current.has(activeSnapshotId)) {
-            victoryShownRef.current.add(activeSnapshotId);
-            setTimeout(() => setShowVictory(true), 350);
-          }
+          startReplay(orderedList);
         } else {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
         }
 
         if (activeSnapshotId) {
-          StorageService.updateSnapshotProgress(
+          const updated = StorageService.updateSnapshotProgress(
             activeSnapshotId,
             nextFilled.size,
             puzzle.regions.length,
-            Array.from(nextFilled)
+            orderedList
           );
+          setSnapshots(updated);
         }
 
         if (settings.autoAdvance && !isComplete) {
@@ -742,7 +977,18 @@ export const App: React.FC = () => {
         }
       }
     },
-    [puzzle, isFreeColorMode, paintedRegionColors, settings, activeColorId, filledRegionIds, activeSnapshotId, visibleColorIds]
+    [
+      puzzle,
+      isReplaying,
+      isFreeColorMode,
+      paintedRegionColors,
+      settings,
+      activeColorId,
+      filledRegionIds,
+      activeSnapshotId,
+      visibleColorIds,
+      startReplay,
+    ]
   );
 
   // Custom Palette & Color Handlers for Free Colour Mode
@@ -931,11 +1177,22 @@ export const App: React.FC = () => {
     e.target.value = '';
   };
 
-  // Load a saved snapshot
-  const handleLoadSnapshot = async (snapshot: SavedSnapshot) => {
+  // Load a saved snapshot (and optionally auto-replay its region completion sequence)
+  const handleLoadSnapshot = async (snapshot: SavedSnapshot, forceReplay: boolean = false) => {
+    if (snapshot.id === activeSnapshotId && puzzle) {
+      const currentOrdered = Array.from(filledRegionIds);
+      if ((forceReplay || settings.autoReplayOnLoad !== false) && currentOrdered.length > 0) {
+        startReplay(currentOrdered);
+      }
+      return;
+    }
+
+    setIsReplaying(false);
+    setIsReplayPlaying(false);
     setIsLoading(true);
     setLoadingProgress(0.15);
     setLoadingStatus(`Loading ${snapshot.title}...`);
+    setLoadingPayload(null);
 
     setActiveSnapshotId(snapshot.id);
 
@@ -945,12 +1202,15 @@ export const App: React.FC = () => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
-        const filledSet = new Set(snapshot.filledRegionIds || []);
+        const orderedIds = snapshot.filledRegionIds || [];
+        const filledSet = new Set(orderedIds);
         if (snapshot.customPalette && snapshot.customPalette.length > 0) {
           cachedPuzzle.palette = snapshot.customPalette;
         }
         if (snapshot.paintedRegionColors) {
-          setPaintedRegionColors(new Map(Object.entries(snapshot.paintedRegionColors).map(([k, v]) => [Number(k), v])));
+          setPaintedRegionColors(
+            new Map(Object.entries(snapshot.paintedRegionColors).map(([k, v]) => [Number(k), v]))
+          );
         } else {
           setPaintedRegionColors(new Map());
         }
@@ -967,7 +1227,17 @@ export const App: React.FC = () => {
         setPuzzle(cachedPuzzle);
         setActiveColorId(restoredColor);
         setFilledRegionIds(filledSet);
+        setUndoStack(
+          orderedIds.map((rId) => ({
+            regionId: rId,
+            wasPreviouslyFilled: false,
+          }))
+        );
         setIsLoading(false);
+
+        if ((forceReplay || settings.autoReplayOnLoad !== false) && orderedIds.length > 0) {
+          startReplay(orderedIds);
+        }
       };
       img.src = snapshot.sampleAssetPath || snapshot.previewDataUrl || 'assets/capybara.webp';
       return;
@@ -984,19 +1254,26 @@ export const App: React.FC = () => {
         new Set(snapshot.filledRegionIds || []),
         undefined,
         snapshot.id,
-        snapshot.sampleAssetPath
+        snapshot.sampleAssetPath,
+        forceReplay || settings.autoReplayOnLoad !== false
       );
     };
     img.src = snapshot.sampleAssetPath || snapshot.previewDataUrl || 'assets/capybara.webp';
   };
 
-  // Active Save Title
+  // Active Save Title & Progress
   const activeSave = snapshots.find((s) => s.id === activeSnapshotId);
   const activeTitle = activeSave?.title || 'Capy';
   const totalCount = puzzle?.regions.length || 0;
   const filledCount = filledRegionIds.size;
   const progressPercentage = totalCount > 0 ? Math.round((filledCount * 100) / totalCount) : 0;
   const isCompleted = totalCount > 0 && filledCount >= totalCount;
+
+  // Displayed regions on canvas (animated slice during Replay mode, or full filled set)
+  const displayedFilledRegionIds = useMemo(() => {
+    if (!isReplaying) return filledRegionIds;
+    return new Set(replaySequence.slice(0, replayStep));
+  }, [isReplaying, replaySequence, replayStep, filledRegionIds]);
 
   // Export full-resolution colored artwork as PNG
   const handleExportArtwork = useCallback(() => {
@@ -1106,7 +1383,7 @@ export const App: React.FC = () => {
         puzzle={puzzle}
         sourceImage={sourceImage}
         activeColorId={activeColorId}
-        filledRegionIds={filledRegionIds}
+        filledRegionIds={displayedFilledRegionIds}
         paintedRegionColors={paintedRegionColors}
         hintRegionId={hintRegionId}
         isPreviewMode={isPreviewMode}
@@ -1116,22 +1393,25 @@ export const App: React.FC = () => {
         canvasBgArgb={settings.canvasBgArgb}
         sortOrder={settings.paletteSort}
         regionColorMode={settings.regionColorMode}
-        showRegionLabels={settings.showRegionLabels}
+        showRegionLabels={isReplaying ? false : settings.showRegionLabels}
         showPreviewLabels={settings.showPreviewLabels}
         showPreviewBorders={settings.showPreviewBorders}
         labelScale={settings.labelScale}
-        highlightMatching={settings.highlightMatching}
+        highlightMatching={isReplaying ? false : settings.highlightMatching}
         highlightStyle={settings.highlightStyle}
         hintColorArgb={settings.hintColorArgb}
         hintFillStyle={settings.hintFillStyle}
         animateHint={settings.animateHint}
-        showNextRegionHint={settings.showNextRegionHint}
+        showNextRegionHint={isReplaying ? false : settings.showNextRegionHint}
         hintIntensity={settings.hintIntensity}
         panMomentum={settings.panMomentum}
         displayNumberMap={displayNumberMap}
         zoomInTrigger={zoomInTrigger}
         zoomOutTrigger={zoomOutTrigger}
         resetViewTrigger={resetViewTrigger}
+        isGenerating={isLoading}
+        generationProgress={loadingProgress}
+        generationStepIndex={loadingPayload?.stepIndex || 1}
         onViewExtentChanged={(zoom, panX, panY) => {
           setIsCanvasTransformed(zoom > 1.05 || Math.abs(panX) > 6 || Math.abs(panY) > 6);
         }}
@@ -1142,7 +1422,7 @@ export const App: React.FC = () => {
         onTogglePreview={() => setIsPreviewMode((prev) => !prev)}
       />
 
-      {/* Floating Action Controls */}
+      {/* Floating Action Controls (Undo, Replay, Zoom, Paint Mode) */}
       {puzzle && !isLoading && (
         <FloatingActions
           isPaintMode={settings.isPaintMode}
@@ -1150,6 +1430,11 @@ export const App: React.FC = () => {
           showResetViewButton={settings.showResetViewButton}
           raiseDock={settings.raisePaletteDock}
           isZoomedOrPanned={isCanvasTransformed}
+          canUndo={undoStack.length > 0}
+          isCompleted={isCompleted}
+          isReplaying={isReplaying}
+          onUndo={handleUndo}
+          onStartReplay={() => startReplay(Array.from(filledRegionIds))}
           onTogglePaintMode={() => {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             handleUpdateSettings({ ...settings, isPaintMode: !settings.isPaintMode });
@@ -1160,8 +1445,48 @@ export const App: React.FC = () => {
         />
       )}
 
+      {/* Animated Replay HUD Controls */}
+      {puzzle && !isLoading && (
+        <ReplayControls
+          isOpen={isReplaying}
+          isPlaying={isReplayPlaying}
+          currentStep={replayStep}
+          totalSteps={replaySequence.length}
+          replaySpeed={settings.replaySpeed || 1}
+          raiseDock={settings.raisePaletteDock}
+          onTogglePlay={() => setIsReplayPlaying((prev) => !prev)}
+          onRestart={() => {
+            setResetViewTrigger((prev) => prev + 1);
+            setReplayStep(0);
+            setIsReplayPlaying(true);
+          }}
+          onSkipToEnd={() => {
+            setReplayStep(replaySequence.length);
+            setIsReplayPlaying(false);
+          }}
+          onSeek={(step) => {
+            setReplayStep(step);
+            setIsReplayPlaying(false);
+          }}
+          onChangeSpeed={(spd) => {
+            handleUpdateSettings({ ...settings, replaySpeed: spd });
+          }}
+          onExitReplay={() => {
+            setIsReplaying(false);
+            setIsReplayPlaying(false);
+          }}
+          onExportImage={handleExportArtwork}
+          onOpenCreate={() => {
+            setIsReplaying(false);
+            setIsReplayPlaying(false);
+            setSettingsInitialTab(2);
+            setShowSettings(true);
+          }}
+        />
+      )}
+
       {/* Palette Dock floating above canvas */}
-      {puzzle && (
+      {puzzle && !isLoading && (
         <PaletteDock
           palette={puzzle.palette}
           regions={puzzle.regions}
@@ -1201,11 +1526,12 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* Loading Overlay */}
+      {/* Loading & Generation Pipeline Details Overlay */}
       <LoadingOverlay
         isLoading={isLoading}
         status={loadingStatus}
         progress={loadingProgress}
+        payload={loadingPayload}
       />
 
       {/* Settings Modal Sheet */}
@@ -1220,7 +1546,8 @@ export const App: React.FC = () => {
         onClose={() => setShowSettings(false)}
         onUpdateSettings={handleUpdateSettings}
         onToggleFullscreen={handleToggleFullscreen}
-        onLoadSnapshot={handleLoadSnapshot}
+        onLoadSnapshot={(snap) => handleLoadSnapshot(snap, false)}
+        onReplaySnapshot={(snap) => handleLoadSnapshot(snap, true)}
         onRenameSnapshot={(id, newTitle) => {
           const updated = StorageService.renameSnapshot(id, newTitle);
           setSnapshots(updated);
@@ -1230,7 +1557,7 @@ export const App: React.FC = () => {
           setSnapshots(updated);
           if (id === activeSnapshotId) {
             if (updated.length > 0) {
-              handleLoadSnapshot(updated[0]);
+              handleLoadSnapshot(updated[0], false);
             } else {
               const defaultSample = SAMPLE_GALLERY[0];
               const img = new Image();
@@ -1254,11 +1581,15 @@ export const App: React.FC = () => {
           img.src = defaultSample.assetPath;
         }}
         onResetProgress={() => {
+          setIsReplaying(false);
+          setIsReplayPlaying(false);
           setFilledRegionIds(new Set());
           setPaintedRegionColors(new Map());
+          setUndoStack([]);
           setHintRegionId(null);
           if (activeSnapshotId && puzzle) {
-            StorageService.updateSnapshotProgress(activeSnapshotId, 0, puzzle.regions.length, [], undefined, undefined, undefined, undefined, {});
+            const updated = StorageService.updateSnapshotProgress(activeSnapshotId, 0, puzzle.regions.length, [], undefined, undefined, undefined, undefined, {});
+            setSnapshots(updated);
           }
           setShowSettings(false);
         }}
@@ -1276,25 +1607,6 @@ export const App: React.FC = () => {
           img.src = sample.assetPath;
         }}
         onUploadImage={() => fileInputRef.current?.click()}
-      />
-
-      {/* Victory Celebration Modal */}
-      <VictoryModal
-        isOpen={showVictory}
-        title={activeTitle}
-        regionCount={totalCount}
-        previewDataUrl={
-          puzzle && sourceImage
-            ? generatePreviewDataUrl(puzzle, sourceImage, filledRegionIds, paintedRegionColors)
-            : undefined
-        }
-        onClose={() => setShowVictory(false)}
-        onExportImage={handleExportArtwork}
-        onOpenCreate={() => {
-          setShowVictory(false);
-          setSettingsInitialTab(2);
-          setShowSettings(true);
-        }}
       />
     </div>
   );

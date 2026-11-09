@@ -27,9 +27,6 @@ For target-specific deep dives, see also:
 - [ ] **Zero-Copy Image Storage for URL and Local File Puzzles**:
   - Support generating puzzles directly from remote URLs or local file handles (`FileSystemFileHandle` on Web or persistent URI on Android) without copying the entire raw image bitmap into IndexedDB `STORE_IMAGES`.
   - Store lightweight source references (e.g. `sourceUrl` or file path) alongside the serialized region segmentation map, drastically reducing local save storage usage.
-- [ ] **Save File Size Calculation and Visual Readout**:
-  - Calculate the exact storage footprint (`fileSizeBytes`) for each saved puzzle (metadata, region map, and thumbnail data URL).
-  - Display human-readable file sizes (e.g., "142 KB") on each save card in the Saves tab, along with a total storage footprint meter.
 - [ ] **Save Export and Import**:
   - Provide a one-click export button to download individual or all saved puzzle snapshots as portable `.capy` / `.json` files.
   - Provide an import file picker to restore or transfer saves across browsers and devices.

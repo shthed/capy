@@ -1,14 +1,70 @@
-import { GeneratorAlgorithm, GeneratorConfig, ImageType, PaletteColor, PuzzleData } from '../types';
+import {
+  GENERATION_PIPELINE_STEPS,
+  GenerationInspectionDetails,
+  GenerationProgressPayload,
+  GenerationStepInfo,
+  GeneratorAlgorithm,
+  GeneratorConfig,
+  ImageType,
+  PaletteColor,
+  PuzzleData,
+} from '../types';
 import { ColorQuantizer } from './ColorQuantizer';
 import { ImageAnalyzer } from './ImageAnalyzer';
 import { LineArtExtractor } from './LineArtExtractor';
 import { RegionSegmenter } from './RegionSegmenter';
 
+export type ProgressCallback = (
+  progress: number,
+  status: string,
+  payload?: GenerationProgressPayload
+) => void;
+
+export function buildProgressPayload(
+  progress: number,
+  status: string,
+  inspection: GenerationInspectionDetails = {}
+): GenerationProgressPayload {
+  const clamped = Math.min(1, Math.max(0, progress));
+  let activeStepId = 1;
+  if (clamped >= 0.85) activeStepId = 6;
+  else if (clamped >= 0.64) activeStepId = 5;
+  else if (clamped >= 0.31) activeStepId = 4;
+  else if (clamped >= 0.22) activeStepId = 3;
+  else if (clamped >= 0.14) activeStepId = 2;
+  else activeStepId = 1;
+
+  const steps: GenerationStepInfo[] = GENERATION_PIPELINE_STEPS.map((s) => ({
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    status:
+      s.id < activeStepId
+        ? 'completed'
+        : s.id === activeStepId
+          ? 'in_progress'
+          : 'pending',
+  }));
+
+  const currentStep = GENERATION_PIPELINE_STEPS[activeStepId - 1] || GENERATION_PIPELINE_STEPS[0];
+
+  return {
+    progress: clamped,
+    status,
+    stepIndex: activeStepId,
+    totalSteps: GENERATION_PIPELINE_STEPS.length,
+    stepName: currentStep.name,
+    stepDescription: currentStep.description,
+    steps,
+    inspection: { ...inspection },
+  };
+}
+
 export interface PuzzleGenerator {
   generate(
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData;
 
   generateFromRgba(
@@ -16,7 +72,7 @@ export interface PuzzleGenerator {
     width: number,
     height: number,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData;
 }
 
@@ -78,7 +134,7 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
   generate(
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData {
     const ctx = sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
@@ -90,16 +146,16 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
     srcWidth: number,
     srcHeight: number,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData {
-    onProgress?.(0.05, 'Preparing line art canvas...');
+    onProgress?.(0.18, 'Preparing line art canvas...');
 
     const scaled = scaleRgba(rgbaData, srcWidth, srcHeight, config.resolution || 1024);
     const { data: rawRgba, width, height } = scaled;
     const total = width * height;
 
     // 1. Extract thin drawn ink outlines
-    onProgress?.(0.12, 'Detecting and tracing artwork line borders...');
+    onProgress?.(0.24, 'Detecting and tracing artwork line borders...');
     const { lineMask } = LineArtExtractor.extract(rawRgba, width, height);
 
     // Check if black and white line art / coloring page
@@ -111,7 +167,7 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
     let effectiveAssignments: Int32Array;
 
     if (isBwColoring) {
-      onProgress?.(0.3, 'Configuring coloring book palette...');
+      onProgress?.(0.45, 'Configuring coloring book palette...');
       const coloringPaletteDef = [
         { hex: '#EF4444', isLight: false, r: 239, g: 68, b: 68 },
         { hex: '#F97316', isLight: false, r: 249, g: 115, b: 22 },
@@ -176,11 +232,11 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
       }
     } else {
       // 2. Denoise with 3x3 median
-      onProgress?.(0.2, 'Denoising cel fill areas...');
+      onProgress?.(0.28, 'Denoising cel fill areas...');
       const denoised = ColorQuantizer.applyMedianFilter(rawRgba, width, height);
 
       // 3. Quantize palette colors
-      onProgress?.(0.3, 'Quantizing cel palette colors...');
+      onProgress?.(0.31, 'Quantizing cel palette colors...');
       const quantized = ColorQuantizer.quantize(
         denoised,
         width,
@@ -322,7 +378,7 @@ export class PainterlyPuzzleGenerator implements PuzzleGenerator {
   generate(
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData {
     const ctx = sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
@@ -334,15 +390,15 @@ export class PainterlyPuzzleGenerator implements PuzzleGenerator {
     srcWidth: number,
     srcHeight: number,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData {
-    onProgress?.(0.05, 'Preparing photo canvas...');
+    onProgress?.(0.18, 'Preparing photo canvas...');
 
     const scaled = scaleRgba(rgbaData, srcWidth, srcHeight, config.resolution || 960);
     const { data: rawRgba, width, height } = scaled;
 
     // 1. Edge-preserving Kuwahara painterly smoothing
-    onProgress?.(0.15, 'Applying painterly cel filter...');
+    onProgress?.(0.25, 'Applying painterly cel filter...');
     const painterlyRgba = ColorQuantizer.applyKuwaharaFilter(rawRgba, width, height, 2);
 
     // 2. Quantize colors
@@ -397,7 +453,7 @@ export class PosterizedPuzzleGenerator implements PuzzleGenerator {
   generate(
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData {
     const ctx = sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
@@ -409,15 +465,15 @@ export class PosterizedPuzzleGenerator implements PuzzleGenerator {
     srcWidth: number,
     srcHeight: number,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData {
-    onProgress?.(0.05, 'Preparing posterized canvas...');
+    onProgress?.(0.18, 'Preparing posterized canvas...');
 
     const scaled = scaleRgba(rgbaData, srcWidth, srcHeight, config.resolution || 1024);
     const { data: rawRgba, width, height } = scaled;
 
     // 1. Median filter for crisp angular edges
-    onProgress?.(0.15, 'Sharpening color boundaries...');
+    onProgress?.(0.25, 'Sharpening color boundaries...');
     const denoised = ColorQuantizer.applyMedianFilter(rawRgba, width, height);
 
     // 2. Quantize with exact centroid convergence
@@ -472,7 +528,7 @@ export class MosaicCelPuzzleGenerator implements PuzzleGenerator {
   generate(
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData {
     const ctx = sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
@@ -484,16 +540,16 @@ export class MosaicCelPuzzleGenerator implements PuzzleGenerator {
     srcWidth: number,
     srcHeight: number,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData {
-    onProgress?.(0.05, 'Preparing mosaic canvas...');
+    onProgress?.(0.18, 'Preparing mosaic canvas...');
 
     const scaled = scaleRgba(rgbaData, srcWidth, srcHeight, config.resolution || 800);
     const { data: rawRgba, width, height } = scaled;
     const total = width * height;
 
     // 1. Quantize palette first
-    onProgress?.(0.2, 'Creating mosaic palette...');
+    onProgress?.(0.25, 'Creating mosaic palette...');
     const { palette, assignments } = ColorQuantizer.quantize(
       rawRgba,
       width,
@@ -506,7 +562,7 @@ export class MosaicCelPuzzleGenerator implements PuzzleGenerator {
     );
 
     // 2. Seed cellular superpixels
-    onProgress?.(0.5, 'Tessellating mosaic cells...');
+    onProgress?.(0.63, 'Tessellating mosaic cells...');
     const targetCellArea = Math.max(64, (config.minRegionArea || 48) * 2.2);
     const numSeeds = Math.max(20, Math.floor(total / targetCellArea));
     const step = Math.sqrt(total / numSeeds);
@@ -586,13 +642,13 @@ export class MosaicCelPuzzleGenerator implements PuzzleGenerator {
  * 5. AutoPuzzleGenerator
  *
  * Intelligently analyzes artwork composition, ink stroke presence, and color variance
- * to automatically route to the optimal strategy.
+ * to automatically route to the optimal strategy and report structured inspection metadata.
  */
 export class AutoPuzzleGenerator implements PuzzleGenerator {
   generate(
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData {
     const ctx = sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
@@ -604,9 +660,25 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
     width: number,
     height: number,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: ProgressCallback
   ): PuzzleData {
-    onProgress?.(0.02, 'Analyzing artwork style and line composition...');
+    let highestProgress = 0.02;
+    const inspection: GenerationInspectionDetails = {
+      sourceWidth: width,
+      sourceHeight: height,
+      resolution: config.resolution || 1024,
+      paletteDetail: config.paletteDetail || 'AUTO',
+    };
+
+    const emitProgress = (rawProgress: number, status: string) => {
+      if (rawProgress > highestProgress) {
+        highestProgress = rawProgress;
+      }
+      const payload = buildProgressPayload(highestProgress, status, inspection);
+      onProgress?.(highestProgress, status, payload);
+    };
+
+    emitProgress(0.04, 'Analyzing artwork style and line composition...');
 
     // Check for thin dark ink lines
     const lineAnalysis = LineArtExtractor.extract(rgbaData, width, height);
@@ -614,27 +686,72 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
     // Compute basic image metrics directly from typed array
     const fakeImgData = { width, height, data: rgbaData } as ImageData;
     const imageAnalysis = ImageAnalyzer.analyze(fakeImgData);
-
-    // If explicit algorithm chosen, route directly
-    if (config.algorithm && config.algorithm !== 'AUTO') {
-      const delegate = PuzzleGeneratorFactory.createByAlgorithm(config.algorithm);
-      return delegate.generateFromRgba(rgbaData, width, height, config, onProgress);
-    }
-
-    // Auto routing:
-    let delegate: PuzzleGenerator;
-    let resolvedType: ImageType;
     const isBw = imageAnalysis.isBlackAndWhite || Boolean(config.isFreeColor);
 
-    if (isBw || lineAnalysis.isLineArt || config.imageType === 'DRAWING') {
+    inspection.isLineArt = lineAnalysis.isLineArt;
+    inspection.isBlackAndWhite = isBw;
+    inspection.edgeRatio = Math.round(imageAnalysis.edgeRatio * 1000) / 10;
+    inspection.localVariance = Math.round(imageAnalysis.localVariance);
+    inspection.globalVariance = Math.round(imageAnalysis.globalVariance);
+    inspection.colorClusterCount = imageAnalysis.colorClusterCount;
+    inspection.detectedType = isBw
+      ? 'B&W Line Coloring'
+      : lineAnalysis.isLineArt
+        ? 'Line Art / Illustration'
+        : imageAnalysis.detectedType === 'PHOTO'
+          ? 'Photograph / Realism'
+          : 'Flat Vector / Graphic';
+
+    // Determine target strategy and rationale
+    let delegate: PuzzleGenerator;
+    let resolvedType: ImageType;
+    let chosenStrategy: string;
+    let strategyRationale: string;
+
+    if (config.algorithm && config.algorithm !== 'AUTO') {
+      chosenStrategy = config.algorithm;
+      strategyRationale = `Manually selected ${config.algorithm.replace('_', ' ')} engine.`;
+      switch (config.algorithm) {
+        case 'LINE_ART':
+          delegate = new LineArtPuzzleGenerator();
+          resolvedType = 'DRAWING';
+          break;
+        case 'PAINTERLY':
+          delegate = new PainterlyPuzzleGenerator();
+          resolvedType = 'PHOTO';
+          break;
+        case 'POSTERIZED':
+          delegate = new PosterizedPuzzleGenerator();
+          resolvedType = 'DRAWING';
+          break;
+        case 'MOSAIC_CEL':
+          delegate = new MosaicCelPuzzleGenerator();
+          resolvedType = 'PHOTO';
+          break;
+        default:
+          delegate = new LineArtPuzzleGenerator();
+          resolvedType = 'DRAWING';
+      }
+    } else if (isBw) {
       delegate = new LineArtPuzzleGenerator();
       resolvedType = 'DRAWING';
+      chosenStrategy = 'LINE_ART (Coloring Book)';
+      strategyRationale = 'Detected monochrome ink outlines (<8% color saturation). Enabled free-color mode with 20-color artist palette.';
+    } else if (lineAnalysis.isLineArt || config.imageType === 'DRAWING') {
+      delegate = new LineArtPuzzleGenerator();
+      resolvedType = 'DRAWING';
+      chosenStrategy = 'LINE_ART';
+      strategyRationale = `Detected continuous ink outlines (${(lineAnalysis.lineRatio * 100).toFixed(1)}% stroke coverage). Using centerline border absorption for crisp cartoon contours.`;
     } else if (imageAnalysis.detectedType === 'PHOTO' || config.imageType === 'PHOTO') {
       delegate = new PainterlyPuzzleGenerator();
       resolvedType = 'PHOTO';
+      chosenStrategy = 'PAINTERLY';
+      strategyRationale = `Detected continuous photographic gradients (${imageAnalysis.colorClusterCount} color clusters). Applying Kuwahara painterly smoothing for organic regions.`;
     } else {
       delegate = new PosterizedPuzzleGenerator();
       resolvedType = 'DRAWING';
+      chosenStrategy = 'POSTERIZED';
+      strategyRationale = `Detected flat graphic color fields (${imageAnalysis.colorClusterCount} clusters, low local variance). Using median-sharpened posterization.`;
     }
 
     const resolvedColors = imageAnalysis.resolveColorCount(config.paletteDetail, config.colorCount);
@@ -659,6 +776,25 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
       }
     }
 
+    const targetRes = config.resolution || 1024;
+    const maxSrc = Math.max(width, height);
+    const scale = maxSrc > targetRes ? targetRes / maxSrc : 1.0;
+    const targetW = Math.max(1, Math.floor(width * scale));
+    const targetH = Math.max(1, Math.floor(height * scale));
+
+    inspection.targetWidth = targetW;
+    inspection.targetHeight = targetH;
+    inspection.chosenStrategy = chosenStrategy;
+    inspection.strategyRationale = strategyRationale;
+    inspection.colorCount = isBw ? 20 : resolvedColors;
+    inspection.minRegionArea = calibratedMinArea;
+    inspection.maxRegions = calibratedMaxRegions;
+    // Initial estimate: regionMap (4B/px) + borderMap (1B/px) + pixel lists (4B/px) + thumbnail (~25KB)
+    const estimatedBytes = targetW * targetH * 9 + calibratedMaxRegions * 64 + 25600;
+    inspection.estimatedSaveSizeKb = Math.max(12, Math.round(estimatedBytes / 1024));
+
+    emitProgress(0.15, `Selected ${chosenStrategy} strategy (${inspection.colorCount} colors, max ${calibratedMaxRegions} regions)...`);
+
     const effectiveConfig: GeneratorConfig = {
       ...config,
       imageType: resolvedType,
@@ -669,7 +805,33 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
       isFreeColor: isBw,
     };
 
-    return delegate.generateFromRgba(rgbaData, width, height, effectiveConfig, onProgress);
+    const result = delegate.generateFromRgba(rgbaData, width, height, effectiveConfig, (prog, stat) => {
+      emitProgress(prog, stat);
+    });
+
+    // Update final inspection stats with actual generated values
+    inspection.finalRegionCount = result.regions.length;
+    inspection.colorCount = result.palette.length;
+    if (result.regions.length > 0) {
+      let minA = Number.MAX_SAFE_INTEGER;
+      let maxA = 0;
+      for (const r of result.regions) {
+        if (r.area < minA) minA = r.area;
+        if (r.area > maxA) maxA = r.area;
+      }
+      inspection.minActualArea = minA;
+      inspection.maxActualArea = maxA;
+    }
+    const actualBytes =
+      result.regionMap.byteLength +
+      result.borderMap.byteLength +
+      result.regions.reduce((acc, r) => acc + r.pixels.byteLength + 64, 0) +
+      24576;
+    inspection.estimatedSaveSizeKb = Math.max(10, Math.round(actualBytes / 1024));
+
+    emitProgress(1.0, `Generated ${result.regions.length} regions across ${result.palette.length} colors!`);
+
+    return result;
   }
 }
 

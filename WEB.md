@@ -19,8 +19,8 @@ Capy Web is a high-performance, client-side, color-by-number generator and inter
 │  ├─ FloatingActions            │  ├─ StorageService (IndexedDB + LS)        │
 │  ├─ PaletteDock                │  └─ NativeBridge (Android / WebKit / Web)  │
 │  ├─ ColorPickerPopover         │                                            │
-│  ├─ SettingsModal (5 Tabs)     │                                            │
-│  ├─ VictoryModal               │                                            │
+│  ├─ SettingsModal (4 Tabs)     │                                            │
+│  ├─ ReplayControls             │                                            │
 │  └─ LoadingOverlay             │                                            │
 └────────────────────────────────┴────────────────────────────────────────────┘
 ```
@@ -49,21 +49,21 @@ web/
     ├── types/
     │   └── index.ts           # Central TypeScript interfaces, enums, defaults, sample gallery
     ├── components/
-    │   ├── PuzzleCanvas.tsx   # Offscreen cached 2D canvas, pan/zoom gestures, hit testing
+    │   ├── PuzzleCanvas.tsx   # Offscreen cached 2D canvas, pan/zoom gestures, hit testing, live generation FX
     │   ├── GameTopBar.tsx     # Progress indicator, title, preview toggle, settings button
     │   ├── PaletteDock.tsx    # Scrollable color palette, remaining count, sort modes
-    │   ├── FloatingActions.tsx# Drag-to-color Paint Mode toggle, zoom +/-, view reset
-    │   ├── SettingsModal.tsx  # 5-tab configuration sheet (Game, Appearance, Engine, Saves, Gallery)
-    │   ├── VictoryModal.tsx   # Completion modal with canvas confetti and artwork export
+    │   ├── FloatingActions.tsx# Undo, Replay, drag-to-color Paint Mode toggle, zoom +/-, view reset
+    │   ├── SettingsModal.tsx  # 4-tab configuration sheet (Settings, Hints, Create, Saves)
+    │   ├── ReplayControls.tsx # Floating playback HUD for chronological region completion replays
     │   ├── ColorPickerPopover.tsx # Custom color picker & palette presets for Free Colour mode
-    │   └── LoadingOverlay.tsx # Deterministic progress bar with live stage status
+    │   └── LoadingOverlay.tsx # Bottom-anchored progress HUD with expandable 6-stage pipeline inspector
     ├── services/
     │   ├── NativeBridge.ts    # Android `@JavascriptInterface` & WebKit bridge (haptics, back button)
     │   ├── PuzzleWorkerService.ts # Worker lifecycle, job cancellation, promise dispatch
     │   └── StorageService.ts  # IndexedDB (large blobs) + LocalStorage (settings/snapshots)
     └── engine/
         ├── puzzle.worker.ts   # Web Worker message handler
-        ├── PuzzleGenerator.ts # Multi-strategy coordinator
+        ├── PuzzleGenerator.ts # Multi-strategy coordinator & monotonic progress emitter
         ├── ImageAnalyzer.ts   # Heuristic classifier (variance ratio, line art presence)
         ├── LineArtExtractor.ts# Luminance & Sobel gradient ink outline extractor
         ├── ColorQuantizer.ts  # Perceptual Red-Mean K-Means++ color clustering
@@ -87,69 +87,77 @@ The UI uses a fixed, layered viewport stack where pointer events pass through em
 │                                                                        │
 │                                                                        │
 │                                                [Z-20] FloatingActions  │
+│                                                       [ Replay ]       │
 │                                                       [ Fit to Screen ]│
 │                                                       [ Zoom In (+) ]  │
 │                                                       [ Zoom Out (-) ] │
+│                                                       [ Undo ]         │
 │                                                       [ Paint Brush ]  │
 ├────────────────────────────────────────────────────────────────────────┤
-│ [Z-20] PaletteDock: [ 🎨 ] (1)  (2)  (3)  (4)  (5) ... [Hint]          │
+│ [Z-20] PaletteDock: [Color] (1)  (2)  (3)  (4)  (5) ... [Hint]         │
 └────────────────────────────────────────────────────────────────────────┘
-  [Z-40] LoadingOverlay (Centered modal dialog when processing)
-  [Z-50] SettingsModal / VictoryModal / ColorPickerPopover
+  [Z-30] ReplayControls (Floating bottom HUD during chronological replay)
+  [Z-40] LoadingOverlay (Bottom-anchored HUD with expandable pipeline drawer)
+  [Z-50] SettingsModal / ColorPickerPopover
 ```
 
 ### Component Breakdown
 
 | Component | Responsibility | Key Interactions |
 | :--- | :--- | :--- |
-| [**`PuzzleCanvas`**](file:///home/antigravity/shthed/capy/web/src/components/PuzzleCanvas.tsx) | Renders the puzzle with 3-tier offscreen caching, handles gestures, hit-tests pixel taps. | Single-finger drag (pan), pinch (zoom), Google Maps-style one-finger double-tap-and-drag zoom, smooth pan momentum gliding, tap (color region), drag (continuous paint mode). |
+| [**`PuzzleCanvas`**](file:///home/antigravity/shthed/capy/web/src/components/PuzzleCanvas.tsx) | Renders the puzzle with 3-tier offscreen caching, handles gestures, hit-tests pixel taps, and renders live background generation visualization. | Single-finger drag (pan), pinch (zoom), Google Maps-style one-finger double-tap-and-drag zoom, smooth pan momentum gliding, tap (color region), drag (continuous paint mode), animated fit-to-screen zoom-out, and 60 FPS cellular/scanline generation overlay. |
 | [**`GameTopBar`**](file:///home/antigravity/shthed/capy/web/src/components/GameTopBar.tsx) | Displays puzzle title, overall completion percentage, quick actions. | Tap title to open Saves tab; toggle preview mode; enter/exit fullscreen; import image; open settings. |
 | [**`PaletteDock`**](file:///home/antigravity/shthed/capy/web/src/components/PaletteDock.tsx) | Horizontal scrolling list of numbered color swatches with completion badges. | Tap swatch to select active color; tap active swatch again to trigger hint; tap custom color button to open picker. Guarantees persistent active color selection even when 0 matching regions remain on-screen. Supports dynamic sorting (Number, Remaining, Hue, Lightness) and viewport culling. |
-| [**`FloatingActions`**](file:///home/antigravity/shthed/capy/web/src/components/FloatingActions.tsx) | Secondary floating action buttons positioned above the palette dock. | Toggle continuous Paint Mode; zoom in/out; reset view to fit screen. |
-| [**`SettingsModal`**](file:///home/antigravity/shthed/capy/web/src/components/SettingsModal.tsx) | Full modal sheet with 4 tabbed sections and automatic active tab persistence. | Automatically restores the last active tab index from `localStorage` (`capy_last_settings_tab`).<br>**Settings**: Preferences, difficulty, auto-advance, pan momentum toggle, canvas background (preset circular swatches + `<Pipette>` custom hex/color picker), dock elevation, label scale.<br>**Hints**: Hint styles, hint highlight colour (circular swatches + `<Pipette>`), hint intensity, animated hint pulse.<br>**Create**: Algorithm selection, color counts, min region area, line handling, sample artwork picker, device photo upload.<br>**Saves**: Rename, delete, restore snapshots, view thumbnails. |
-
-| [**`VictoryModal`**](file:///home/antigravity/shthed/capy/web/src/components/VictoryModal.tsx) | Celebration overlay shown upon reaching 100% completion. | Fires confetti bursts (`canvas-confetti`); exports high-resolution painted artwork; offers quick navigation to new puzzle. |
+| [**`FloatingActions`**](file:///home/antigravity/shthed/capy/web/src/components/FloatingActions.tsx) | Secondary floating action buttons positioned above the palette dock. | Undo last completed region (`Ctrl+Z` / `Cmd+Z`); trigger Replay when completed; toggle continuous Paint Mode; zoom in/out; reset view to fit screen. |
+| [**`SettingsModal`**](file:///home/antigravity/shthed/capy/web/src/components/SettingsModal.tsx) | Full modal sheet with 4 tabbed sections and automatic active tab persistence. | Automatically restores the last active tab index from `localStorage` (`capy_last_settings_tab`).<br>**Settings**: Preferences, difficulty, auto-advance, replay speed (`0.5x`–`10x`), auto-replay on save load, pan momentum toggle, canvas background (preset circular swatches + `<Pipette>` custom hex/color picker), dock elevation, label scale.<br>**Hints**: Hint styles, hint highlight colour (circular swatches + `<Pipette>`), hint intensity, animated hint pulse.<br>**Create**: Algorithm selection, color counts, min region area, line handling, sample artwork picker, device photo upload.<br>**Saves**: Rename, delete, restore snapshots, watch chronological replays, view thumbnails and storage size (`KB`). |
+| [**`ReplayControls`**](file:///home/antigravity/shthed/capy/web/src/components/ReplayControls.tsx) | Non-blocking bottom HUD shown during chronological puzzle replays and upon 100% completion. | Play/Pause/Replay toggle; interactive timeline range scrubber; speed selector (`0.5x`, `1x`, `2x`, `5x`, `10x`); Restart and Skip-to-End controls; post-completion `Save PNG` and `Next` puzzle quick actions. |
 | [**`ColorPickerPopover`**](file:///home/antigravity/shthed/capy/web/src/components/ColorPickerPopover.tsx) | Palette customization panel for Free Colour / Coloring Page mode. | Select from 5 preset palettes (Vibrant, Mushroom, Pastels, Earthy, Neon); pick custom HSL/Hex swatches; update palette colors in real time. |
-| [**`LoadingOverlay`**](file:///home/antigravity/shthed/capy/web/src/components/LoadingOverlay.tsx) | Full-screen translucent backdrop with animated spinner and progress bar. | Displays step-by-step engine status (`"Extracting line art..."`, `"Quantizing colors..."`, `"Segmenting regions..."`). |
+| [**`LoadingOverlay`**](file:///home/antigravity/shthed/capy/web/src/components/LoadingOverlay.tsx) | Non-blocking bottom-anchored HUD card keeping the background canvas visible during puzzle creation. | Displays strictly monotonic progress (`0%` to `100%`), `Step X/6` badge, user-friendly stage title and description, and an expandable **Generation Details** drawer listing all 6 stages alongside auto-detected style, chosen strategy rationale, color count, region targets, working resolution, and estimated save file size (`KB`). |
 
 
 ---
 
 ## 4. State Management & Lifecycle (`App.tsx`)
 
-`App.tsx` serves as the centralized state orchestrator. State is divided into four main domains:
+`App.tsx` serves as the centralized state orchestrator. State is divided into five main domains:
 
-### 1. Active Session State
+### 1. Active Session & Undo State
 - `puzzle: PuzzleData | null`: The current puzzle model containing dimensions, palette, region array, region map, and border map.
-- `sourceImage: HTMLImageElement | null`: Cached HTML image element of the original artwork (used for preview rendering and detail sampling).
+- `sourceImage: HTMLImageElement | null`: Cached HTML image element of the original artwork, set immediately before worker execution begins so the background canvas displays the artwork during generation.
 - `activeColorId: number`: The ID of the currently selected palette color.
-- `filledRegionIds: Set<number>`: Set of region IDs that have been correctly colored.
+- `filledRegionIds: Set<number>`: Set of region IDs that have been colored, preserving exact chronological insertion order across saves and reloads.
 - `paintedRegionColors: Map<number, number>`: Region ID $\rightarrow$ Color ID mapping for Free Colour Mode.
+- `undoStack: UndoEntry[]`: History stack recording each region completion (`regionId`, `prevColorId`, `wasAlreadyFilled`) so players can undo completions one by one via the Undo button or `Ctrl+Z` / `Cmd+Z`.
 - `hintRegionId: number | null`: Region ID currently targeted by hint guidance.
 - `isPreviewMode: boolean`: Toggles display between the interactive puzzle and the unmasked original artwork.
 
-### 2. Viewport & Spatial Culling
+### 2. Chronological Replay State
+- `isReplaying: boolean`, `isReplayPlaying: boolean`, `replayStep: number`, `replaySequence: number[]`: Controls chronological playback of `filledRegionIds`.
+- During replay, `PuzzleCanvas` receives `displayedFilledRegionIds = new Set(replaySequence.slice(0, replayStep))`, leveraging incremental dirty-rect updates on `baseCanvasRef` to animate both forward filling and backward scrubbing at 60 FPS.
+
+### 3. Viewport & Spatial Culling
 - `visibleColorIds: Set<number>` / `visibleRegionIds: Set<number>`: Calculated by `PuzzleCanvas` on each pan/zoom change. Allows `PaletteDock` to dynamically prioritize swatches currently on-screen (`prioritizeOnScreen`).
 
-### 3. Generation Sequence Tracking (`generationSeqRef`)
+### 4. Generation Sequence Tracking (`generationSeqRef`)
 To prevent asynchronous race conditions when switching sample artwork or uploading files while a generator worker is running:
 - Every generation request increments a sequence counter (`generationSeqRef.current`).
 - If a newer request begins, any earlier in-flight worker execution is terminated via `PuzzleWorkerService.cancelActive()`.
 - Responses from stale sequence IDs are discarded automatically.
 
-### 4. Auto-Advance & Victory Flow
+### 5. Auto-Advance, Completion Zoom-Out & Auto-Replay Flow
 - When `filledRegionIds` completes all regions for `activeColorId`, and `settings.autoAdvance` is enabled, the game automatically advances to the next incomplete color (with a light haptic tick).
-- When `filledRegionIds.size === puzzle.regions.length`, victory is triggered:
-  - Victory haptic sequence fired.
-  - Confetti burst dispatched via `canvas-confetti`.
-  - Preview thumbnail rendered and snapshot updated in `StorageService`.
-  - `VictoryModal` presented.
+- When `filledRegionIds.size === puzzle.regions.length`, completion is triggered without any blocking modal popup:
+  - Victory haptic sequence fired and confetti burst dispatched via `canvas-confetti`.
+  - Preview thumbnail and save file size (`fileSizeBytes`) calculated and persisted in `StorageService`.
+  - Canvas smoothly animates a 280ms cubic ease-out zoom-out to fit the entire puzzle (`resetViewTrigger`).
+  - Chronological puzzle replay starts automatically via `ReplayControls`, painting every region in the exact order the player completed it.
+- When loading a previously saved puzzle with completed regions (`filledRegionIds.length > 0`) and `settings.autoReplayOnLoad` enabled, the canvas fits to screen and automatically replays the saved progress from `0` to `filledRegionIds.length`.
 
 ---
 
 ## 5. Rendering Pipeline & Gesture Engine (`PuzzleCanvas.tsx`)
 
-Rendering thousands of intricate vector regions at 60 FPS during continuous touch-drag requires avoiding full canvas redraws. `PuzzleCanvas` employs a **three-tier offscreen caching strategy**:
+Rendering thousands of intricate vector regions at 60 FPS during continuous touch-drag or high-speed replay requires avoiding full canvas redraws. `PuzzleCanvas` employs a **three-tier offscreen caching strategy**:
 
 ```
 Offscreen Buffer 1: Base Canvas (baseCanvasRef)
@@ -169,14 +177,22 @@ Composite Render to Onscreen Canvas (canvasRef)
   ├── 2. Draw borderCanvas (if enabled / not preview mode)
   ├── 3. Draw highlightCanvas (centroid glow, boundary, full fill)
   ├── 4. Render Region Centroid Labels (culled to visible viewport)
-  └── 5. Render interactive feedback (tap ripple dot, pulse animation)
+  └── 5. Render interactive feedback (tap ripple dot, pulse animation, or live generation FX)
 ```
 
-### Incremental Base Layer Painting
-When a region is filled, `baseCanvas` does not repaint the entire canvas. Instead:
-- It retrieves the region's `pixels: Int32Array` containing the exact 1D pixel coordinates.
-- Directly updates the target pixels in `baseImageDataRef`.
-- Calls `baseCtx.putImageData(..., region.minX, region.minY, ...)` restricted strictly to the region's bounding box.
+### Live Background Generation Visualization
+When `isGenerating` is `true` and `sourceImage` is loaded:
+- `PuzzleCanvas` immediately centers and draws the `sourceImage` onto the background canvas so the user never stares at a blank screen.
+- An animated 60 FPS procedural generation overlay renders on top of the source image synchronized with `generationProgress` (`0.0` to `1.0`):
+  - **Progressive Blueprint Desaturation & Contrast**: Sweeps across the image behind the active scanline.
+  - **Animated Cellular Region Mesh**: Renders a dynamic hexagonal/Voronoi-style grid that progressively locks into crisp boundaries as quantization and segmentation advance (`0.15` to `0.95`).
+  - **Pole-of-Inaccessibility Centroid Pulses**: Illuminates interior cell centers during the final numbering pass (`>= 0.85`).
+  - **Scanning Laser Beam**: Sweeps across the artwork with a subtle amber glow.
+
+### Incremental Base Layer Painting (Fill, Undo & Replay Scrubbing)
+When regions are filled or unfilled (via gameplay, Undo, or Replay scrubbing), `baseCanvas` does not repaint the entire canvas. Instead:
+- It compares the new `filledRegionIds` set against `paintedCacheRef.current`.
+- For both newly filled and newly unfilled regions, it retrieves the region's `pixels: Int32Array` containing exact 1D pixel coordinates, updates `baseImageDataRef`, and calls `baseCtx.putImageData(..., minX, minY, ...)` restricted strictly to the combined dirty bounding box.
 
 ### Dynamic Active Colour & Highlight Overlays
 `PuzzleCanvas` dynamically renders visual cues for active and hinted regions without redrawing base layers:
@@ -193,6 +209,7 @@ Labels are drawn at each region's **Pole of Inaccessibility** (deepest interior 
 ### Viewport Pan & Zoom Clamping (`clampCanvasOffset`)
 [`clampCanvasOffset`](file:///home/antigravity/shthed/capy/web/src/components/PuzzleCanvas.tsx) keeps the artwork bounded while providing full viewport navigation:
 - **Zoom Range**: Smooth clamping between **0.5×** and **12.0×**.
+- **Animated Fit-to-Screen Reset**: When `resetViewTrigger` increments (via the Fit-to-Screen button or upon puzzle completion), `PuzzleCanvas` smoothly interpolates `scale` to `1` and `offset` to `{x: 0, y: 0}` over 280ms using a cubic ease-out curve.
 - **Dynamic Corner Panning Margins**: When zoomed in (`effScale >= fitScale`), margin caps scale dynamically with viewport size (`containerWidth * 0.72` horizontally and `containerHeight * 0.72` vertically) rather than fixed pixel offsets. This ensures players can pan all four corners of the puzzle comfortably past the center of the viewport, well clear of the bottom `PaletteDock` (~120px) and top `GameTopBar` (~60px).
 - **Centering Elasticity**: When the artwork is smaller than the container, it smoothly snaps to center.
 
@@ -254,8 +271,9 @@ interface WorkerGenerateRequest {
 interface WorkerProgressMessage {
   type: 'PROGRESS';
   id: string;
-  progress: number; // 0.0 to 1.0
-  status: string;   // e.g. "Segmenting regions..."
+  progress: number; // Strictly monotonic 0.0 to 1.0
+  status: string;   // e.g. "Clustering perceptual color palette (2/4)..."
+  payload: GenerationProgressPayload; // 6-stage step index, description & inspection telemetry
 }
 
 // Worker -> Main (Completion)
@@ -293,8 +311,8 @@ Capy uses a hybrid storage model to manage performance and browser storage quota
    - `STORE_PUZZLES`: Serialized heavy `PuzzleData` (region maps, border maps, typed arrays).
    - `STORE_IMAGES`: Full-resolution source image blobs.
 2. **LocalStorage (`capy_snapshots_v8`) + Native Disk**:
-   - Stores lightweight snapshot metadata (`SavedSnapshot`): completion counts, active color, zoom/pan coordinates, and a compressed **240×240 JPEG preview data URL**.
-   - Enables instant rendering of the Saves gallery tab without reading megabytes of raw image data from IndexedDB.
+   - Stores lightweight snapshot metadata (`SavedSnapshot`): ordered `filledRegionIds` array (preserving chronological completion sequence), active color, zoom/pan coordinates, estimated storage footprint (`fileSizeBytes`), and a compressed **240×240 JPEG preview data URL**.
+   - Enables instant rendering of the Saves gallery tab (including human-readable `KB` file size badges and one-click `Replay` actions) without reading megabytes of raw image data from IndexedDB.
 3. **Settings Persistence (`capy_user_settings_v8`) & Tab Memory**:
    - User preferences survive app updates and browser restarts.
    - Reopening `SettingsModal` remembers the last active tab index via `localStorage.getItem('capy_last_settings_tab')` (integer index `'0'` [Settings], `'1'` [Hints], `'2'` [Create], or `'3'` [Saves]).
@@ -331,6 +349,8 @@ Capy uses a hybrid storage model to manage performance and browser storage quota
 | `hapticsEnabled` | `boolean` | `true` | Enables native Android vibration / web vibration feedback on taps and victory. |
 | `panMomentum` | `boolean` | `true` | Enables Google Maps-style inertial gliding with friction decay on canvas pan flicks. |
 | `enableCustomColorForAllPuzzles` | `boolean` | `false` | Unlocks the palette color editor across all standard puzzle modes. |
+| `replaySpeed` | `number` (`0.5`, `1`, `2`, `5`, `10`) | `1` | Playback speed multiplier for chronological puzzle completion replays (`1x` $\approx$ 3.5s baseline duration). |
+| `autoReplayOnLoad` | `boolean` | `true` | Automatically zooms out and replays completed regions chronologically when loading a saved puzzle. |
 | `generatorConfig` | `GeneratorConfig` | *(See PUZZLE.md)* | Engine tuning: algorithm, color count, min region area, max regions, resolution. |
 
 ---
