@@ -1,5 +1,5 @@
-import React from 'react';
-import { Maximize2, Minus, Paintbrush, Play, Plus, Undo2 } from 'lucide-react';
+import React, { useRef } from 'react';
+import { Maximize2, Minus, Paintbrush, Play, Plus, Redo2, Undo2 } from 'lucide-react';
 
 interface FloatingActionsProps {
   isPaintMode: boolean;
@@ -8,9 +8,12 @@ interface FloatingActionsProps {
   raiseDock: boolean;
   isZoomedOrPanned?: boolean;
   canUndo?: boolean;
+  canRedo?: boolean;
   isCompleted?: boolean;
   isReplaying?: boolean;
   onUndo?: () => void;
+  onRedo?: () => void;
+  onLongPressUndo?: () => void;
   onStartReplay?: () => void;
   onTogglePaintMode: () => void;
   onZoomIn: () => void;
@@ -25,15 +28,49 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
   raiseDock,
   isZoomedOrPanned = false,
   canUndo = false,
+  canRedo = false,
   isCompleted = false,
   isReplaying = false,
   onUndo,
+  onRedo,
+  onLongPressUndo,
   onStartReplay,
   onTogglePaintMode,
   onZoomIn,
   onZoomOut,
   onResetView,
 }) => {
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPressActiveRef = useRef<boolean>(false);
+
+  const handleUndoPointerDown = () => {
+    if (!canUndo) return;
+    isLongPressActiveRef.current = false;
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressActiveRef.current = true;
+      onLongPressUndo?.();
+    }, 450);
+  };
+
+  const handleUndoPointerUp = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (!isLongPressActiveRef.current && canUndo) {
+      onUndo?.();
+    }
+  };
+
+  const handleUndoPointerCancel = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
   return (
     <div
       className="fixed z-20 flex flex-col items-end gap-2.5 transition-all"
@@ -94,21 +131,57 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
         </button>
       )}
 
-      {/* Undo Last Region Completion Button */}
-      {onUndo && !isReplaying && (
-        <button
-          type="button"
-          onClick={onUndo}
-          disabled={!canUndo}
-          title={canUndo ? 'Undo Last Region (Ctrl+Z)' : 'Nothing to Undo'}
-          className={`p-2.5 rounded-full shadow-xl backdrop-blur-md border transition-all ${
-            canUndo
-              ? 'bg-slate-900/90 text-slate-200 border-slate-700/60 hover:bg-slate-800 active:scale-95 cursor-pointer'
-              : 'bg-slate-900/40 text-slate-600 border-slate-800/40 cursor-not-allowed'
-          }`}
-        >
-          <Undo2 size={18} />
-        </button>
+      {/* Undo & Redo History Action Buttons */}
+      {!isReplaying && (
+        <div className="flex items-center gap-1.5">
+          {onUndo && (
+            <button
+              type="button"
+              onPointerDown={handleUndoPointerDown}
+              onPointerUp={handleUndoPointerUp}
+              onPointerLeave={handleUndoPointerCancel}
+              onPointerCancel={handleUndoPointerCancel}
+              onContextMenu={(e) => e.preventDefault()}
+              disabled={!canUndo}
+              aria-label="Undo Region"
+              title={
+                canUndo
+                  ? 'Undo (Ctrl+Z) • Long press to open Replay Scrubber'
+                  : 'Nothing to Undo'
+              }
+              data-testid="undo-btn"
+              className={`p-2.5 rounded-full shadow-xl backdrop-blur-md border transition-all select-none ${
+                canUndo
+                  ? 'bg-slate-900/90 text-slate-200 border-slate-700/60 hover:bg-slate-800 active:scale-95 cursor-pointer'
+                  : 'bg-slate-900/40 text-slate-600 border-slate-800/40 cursor-not-allowed'
+              }`}
+            >
+              <Undo2 size={18} />
+            </button>
+          )}
+
+          {onRedo && (
+            <button
+              type="button"
+              onClick={onRedo}
+              disabled={!canRedo}
+              aria-label="Redo Action"
+              title={
+                canRedo
+                  ? 'Redo Action (Ctrl+Y / Ctrl+Shift+Z)'
+                  : 'Nothing to Redo'
+              }
+              data-testid="redo-btn"
+              className={`p-2.5 rounded-full shadow-xl backdrop-blur-md border transition-all ${
+                canRedo
+                  ? 'bg-slate-900/90 text-slate-200 border-slate-700/60 hover:bg-slate-800 active:scale-95 cursor-pointer'
+                  : 'bg-slate-900/40 text-slate-600 border-slate-800/40 cursor-not-allowed'
+              }`}
+            >
+              <Redo2 size={18} />
+            </button>
+          )}
+        </div>
       )}
 
       {/* Paint Mode (Drag-to-Color) Toggle */}

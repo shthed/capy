@@ -67,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          node ./web1/scripts/cleanup-gh-pages-previews.mjs \
+          node ./.github/scripts/cleanup-gh-pages-previews.mjs \
             --pages-dir ./gh-pages \
             --target-pr "${TARGET_PR}" \
             --ignore-recency
