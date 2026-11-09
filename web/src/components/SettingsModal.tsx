@@ -635,7 +635,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {
                       key: 'detailedLoadingProgress' as const,
                       label: 'Detailed Generation Progress',
-                      desc: 'Show real-time pipeline stages, inspection metrics, and live palette swatches while loading. Turn off for faster, simple progress',
+                      desc: 'Show real-time pipeline stages, inspection metrics, and live palette swatches while generating. Off by default for maximum generation speed (Fast Mode)',
                     },
                     {
                       key: 'hapticsEnabled' as const,

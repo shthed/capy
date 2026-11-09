@@ -150,7 +150,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   initialPanOffsetX = 0,
   initialPanOffsetY = 0,
   isGenerating = false,
-  detailedProgress = true,
+  detailedProgress = false,
   generationProgress = 0,
   generationStepIndex = 1,
   onViewExtentChanged,

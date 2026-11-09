@@ -652,7 +652,7 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
     onProgress?: ProgressCallback,
-    detailedProgress: boolean = true
+    detailedProgress: boolean = false
   ): PuzzleData {
     const ctx = sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
@@ -672,7 +672,7 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
     height: number,
     config: GeneratorConfig,
     onProgress?: ProgressCallback,
-    detailedProgress: boolean = true
+    detailedProgress: boolean = false
   ): PuzzleData {
     let highestProgress = 0.02;
     const inspection: GenerationInspectionDetails = {
