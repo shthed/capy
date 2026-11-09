@@ -116,121 +116,6 @@ export function clampCanvasOffset(
   };
 }
 
-interface SalientPoint {
-  x: number;
-  y: number;
-  num: number;
-}
-
-interface GenerationVisualData {
-  edgeCanvas: HTMLCanvasElement;
-  salientPoints: SalientPoint[];
-}
-
-/**
- * Fast, non-blocking Sobel edge and salient feature extractor.
- * Operates on a downscaled offscreen buffer (~2ms) once per image to provide
- * authentic artwork contours and region anchors during puzzle generation.
- */
-export function extractArtworkEdgesAndSalientPoints(
-  sourceImage: HTMLImageElement
-): GenerationVisualData | null {
-  try {
-    const rawW = sourceImage.naturalWidth || sourceImage.width;
-    const rawH = sourceImage.naturalHeight || sourceImage.height;
-    if (rawW <= 0 || rawH <= 0) return null;
-
-    const maxDim = 384;
-    const scale = Math.min(1, maxDim / Math.max(rawW, rawH));
-    const dw = Math.max(16, Math.round(rawW * scale));
-    const dh = Math.max(16, Math.round(rawH * scale));
-
-    const offCanvas = document.createElement('canvas');
-    offCanvas.width = dw;
-    offCanvas.height = dh;
-    const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
-    if (!offCtx) return null;
-
-    offCtx.drawImage(sourceImage, 0, 0, dw, dh);
-    const imgData = offCtx.getImageData(0, 0, dw, dh);
-    const data = imgData.data;
-
-    // Luminance array
-    const lum = new Uint8Array(dw * dh);
-    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-      lum[p] = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
-    }
-
-    // Sobel edge extraction
-    const edgeImgData = offCtx.createImageData(dw, dh);
-    const out = edgeImgData.data;
-    const edgeThreshold = 36;
-
-    const sectorCols = 5;
-    const sectorRows = 4;
-    const sectorBest: Array<{ x: number; y: number; mag: number }> = [];
-    for (let s = 0; s < sectorCols * sectorRows; s++) {
-      sectorBest.push({ x: 0, y: 0, mag: 0 });
-    }
-
-    for (let y = 1; y < dh - 1; y++) {
-      const rowAbove = (y - 1) * dw;
-      const rowCenter = y * dw;
-      const rowBelow = (y + 1) * dw;
-      const sectorRow = Math.min(sectorRows - 1, Math.floor((y / dh) * sectorRows));
-
-      for (let x = 1; x < dw - 1; x++) {
-        const gx =
-          lum[rowAbove + x + 1] + 2 * lum[rowCenter + x + 1] + lum[rowBelow + x + 1] -
-          (lum[rowAbove + x - 1] + 2 * lum[rowCenter + x - 1] + lum[rowBelow + x - 1]);
-        const gy =
-          lum[rowBelow + x - 1] + 2 * lum[rowBelow + x] + lum[rowBelow + x + 1] -
-          (lum[rowAbove + x - 1] + 2 * lum[rowAbove + x] + lum[rowAbove + x + 1]);
-        const mag = Math.abs(gx) + Math.abs(gy);
-
-        if (mag > edgeThreshold) {
-          const p = (rowCenter + x) * 4;
-          const alpha = Math.min(235, Math.max(45, (mag - edgeThreshold) * 1.6));
-          out[p] = 30;     // R
-          out[p + 1] = 41; // G
-          out[p + 2] = 59; // B
-          out[p + 3] = alpha;
-
-          const sectorCol = Math.min(sectorCols - 1, Math.floor((x / dw) * sectorCols));
-          const sIdx = sectorRow * sectorCols + sectorCol;
-          if (mag > sectorBest[sIdx].mag) {
-            sectorBest[sIdx].x = x;
-            sectorBest[sIdx].y = y;
-            sectorBest[sIdx].mag = mag;
-          }
-        }
-      }
-    }
-
-    offCtx.putImageData(edgeImgData, 0, 0);
-
-    const salientPoints: SalientPoint[] = [];
-    let numCounter = 1;
-    for (let s = 0; s < sectorBest.length; s++) {
-      const b = sectorBest[s];
-      if (b.mag >= 60) {
-        salientPoints.push({
-          x: b.x / dw,
-          y: b.y / dh,
-          num: numCounter++,
-        });
-      }
-    }
-
-    return {
-      edgeCanvas: offCanvas,
-      salientPoints,
-    };
-  } catch {
-    return null;
-  }
-}
-
 export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   puzzle,
   sourceImage,
@@ -295,8 +180,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const hasHighlightPixelsRef = useRef<boolean>(false);
   const borderCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastBorderPuzzleRef = useRef<PuzzleData | null>(null);
-  const generationVisualDataRef = useRef<GenerationVisualData | null>(null);
-  const lastGenSourceImageRef = useRef<HTMLImageElement | null>(null);
 
   // Transform state
   const [scale, setScale] = useState(initialZoomScale);
@@ -465,7 +348,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     });
   }, [scale, puzzle]);
 
-  // Pulse animation frame (runs when animateHint or (isGenerating && detailedProgress) is active)
+  // Pulse animation frame (runs when animateHint is active)
   useEffect(() => {
     let animId: number;
     const startTime = performance.now();
@@ -477,14 +360,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       animId = requestAnimationFrame(loop);
     };
 
-    if (animateHint || (isGenerating && detailedProgress)) {
+    if (animateHint) {
       animId = requestAnimationFrame(loop);
     } else {
       setPulseAlpha(0.7);
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [animateHint, isGenerating, detailedProgress]);
+  }, [animateHint]);
 
   // Tap dot decay
   useEffect(() => {
@@ -1102,128 +985,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         ctx.fillRect(baseOffsetX, baseOffsetY, artW, artH);
         ctx.restore();
 
-        // Draw source image immediately
+        // Draw source image cleanly
         ctx.save();
         ctx.translate(baseOffsetX, baseOffsetY);
         ctx.drawImage(sourceImage, 0, 0, artW, artH);
-
-        // Draw live puzzle generation visualization over the image
-        if (isGenerating && detailedProgress) {
-          if (sourceImage !== lastGenSourceImageRef.current) {
-            lastGenSourceImageRef.current = sourceImage;
-            generationVisualDataRef.current = extractArtworkEdgesAndSalientPoints(sourceImage);
-          }
-
-          const prog = Math.min(1, Math.max(0.04, generationProgress));
-          const stepIdx = generationStepIndex || 1;
-          const centerX = artW * 0.5;
-          const centerY = artH * 0.5;
-          const maxRadius = Math.hypot(centerX, centerY) * 1.08;
-          const waveRadius = Math.max(16, prog * maxRadius);
-
-          // 1. Organic radial discovery wash (soft diffusion expanding outward from artwork center)
-          ctx.save();
-          const radialGrad = ctx.createRadialGradient(
-            centerX,
-            centerY,
-            Math.max(0, waveRadius - 60),
-            centerX,
-            centerY,
-            waveRadius
-          );
-          radialGrad.addColorStop(0, 'rgba(255, 255, 255, 0.28)');
-          radialGrad.addColorStop(0.82, 'rgba(255, 255, 255, 0.18)');
-          radialGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-
-          ctx.fillStyle = radialGrad;
-          ctx.beginPath();
-          ctx.arc(centerX, centerY, waveRadius, 0, Math.PI * 2);
-          ctx.fill();
-
-          // 2. Draw authentic detected artwork edge contours within the expanding wave field
-          const genData = generationVisualDataRef.current;
-          if (genData) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, waveRadius, 0, Math.PI * 2);
-            ctx.clip();
-
-            if (stepIdx <= 4) {
-              // Early to mid stages (Analysis, Filtering & Palette Clustering):
-              // Bioluminescent golden edge glow revealing the artwork contours
-              ctx.globalAlpha = 0.65 + pulseAlpha * 0.35;
-              ctx.shadowColor = 'rgba(251, 191, 36, 0.9)';
-              ctx.shadowBlur = 8;
-              ctx.drawImage(genData.edgeCanvas, 0, 0, artW, artH);
-              ctx.shadowBlur = 0;
-            } else {
-              // Late stages (Region Segmentation & Boundary Alignment):
-              // Authentic dark puzzle boundaries solidifying into clean regions
-              ctx.globalAlpha = 0.82;
-              ctx.drawImage(genData.edgeCanvas, 0, 0, artW, artH);
-            }
-            ctx.restore();
-
-            // 3. Authentic Salient Feature Reticles and Region Number Anchors
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            const pts = genData.salientPoints;
-            for (let i = 0; i < pts.length; i++) {
-              const pt = pts[i];
-              const px = pt.x * artW;
-              const py = pt.y * artH;
-              const distFromCenter = Math.hypot(px - centerX, py - centerY);
-              if (distFromCenter > waveRadius) continue;
-
-              const isNearWave = Math.abs(distFromCenter - waveRadius) < 45;
-              if (isNearWave || stepIdx <= 4) {
-                // Pulsating golden reticle marker at salient image feature
-                ctx.fillStyle = `rgba(251, 191, 36, ${0.5 + pulseAlpha * 0.45})`;
-                ctx.beginPath();
-                ctx.arc(px, py, 3.5, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.strokeStyle = `rgba(251, 191, 36, ${0.35 + pulseAlpha * 0.35})`;
-                ctx.lineWidth = 1.25;
-                ctx.beginPath();
-                ctx.arc(px, py, 7.5, 0, Math.PI * 2);
-                ctx.stroke();
-              } else {
-                // Numbered region badge as segmentation crystallizes
-                ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
-                ctx.beginPath();
-                ctx.arc(px, py, 7.5, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.fillStyle = '#f8fafc';
-                ctx.font = 'bold 8px Inter, system-ui, sans-serif';
-                ctx.fillText(String(pt.num), px, py + 0.5);
-              }
-            }
-          }
-
-          // 4. Glowing circular wavefront perimeter ring with trailing resonance
-          ctx.strokeStyle = `rgba(251, 191, 36, ${0.65 + pulseAlpha * 0.35})`;
-          ctx.lineWidth = 2.5;
-          ctx.shadowColor = 'rgba(251, 191, 36, 0.9)';
-          ctx.shadowBlur = 14;
-          ctx.beginPath();
-          ctx.arc(centerX, centerY, waveRadius, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-
-          // Subtle secondary ripple
-          if (waveRadius > 40) {
-            ctx.strokeStyle = `rgba(251, 191, 36, ${(0.28 + pulseAlpha * 0.2) * (1 - prog * 0.25)})`;
-            ctx.lineWidth = 1.25;
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, Math.max(10, waveRadius - 26), 0, Math.PI * 2);
-            ctx.stroke();
-          }
-
-          ctx.restore();
-        }
-
         ctx.restore();
       }
       ctx.restore();

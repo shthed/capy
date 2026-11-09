@@ -1,4 +1,4 @@
-import { PaletteColor } from '../types';
+import { GenerationProgressPayload, PaletteColor } from '../types';
 
 export class ColorQuantizer {
   /**
@@ -259,7 +259,12 @@ export class ColorQuantizer {
     maxIterations: number = 14,
     applySmoothing: boolean = true,
     usePerceptualDistance: boolean = true,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: (
+      progress: number,
+      status: string,
+      payload?: GenerationProgressPayload,
+      paletteColors?: Array<{ r: number; g: number; b: number }>
+    ) => void
   ): { palette: PaletteColor[]; assignments: Int32Array } {
     const totalPixels = width * height;
     const actualK = Math.min(200, Math.max(2, Math.min(totalPixels, k)));
@@ -410,7 +415,16 @@ export class ColorQuantizer {
     // K-Means clustering loop
     for (let iter = 0; iter < maxIterations; iter++) {
       const iterPct = 0.34 + ((iter + 1) / maxIterations) * 0.24;
-      onProgress?.(iterPct, `Clustering perceptual palette colors (pass ${iter + 1}/${maxIterations})...`);
+      const paletteColors: Array<{ r: number; g: number; b: number }> = [];
+      for (let c = 0; c < effectiveK; c++) {
+        paletteColors.push({ r: centroidR[c], g: centroidG[c], b: centroidB[c] });
+      }
+      onProgress?.(
+        iterPct,
+        `Clustering perceptual palette colors (pass ${iter + 1}/${maxIterations})...`,
+        undefined,
+        paletteColors
+      );
 
       let changed = false;
 
