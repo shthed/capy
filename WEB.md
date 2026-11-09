@@ -392,6 +392,15 @@ npm run lint
 # Compile production bundle into web/dist/
 npm run build
 
+# Run Playwright interaction test suite
+npm run test:game
+
+# Run comprehensive end-to-end full gameplay test suite
+npm run test:gameplay
+
+# Capture showcase screenshots for gallery
+npm run gallery:capture
+
 # Launch Vite development server on http://localhost:3000
 npm run dev
 ```

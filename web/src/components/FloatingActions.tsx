@@ -116,7 +116,8 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
         <button
           type="button"
           onClick={onTogglePaintMode}
-          title={isPaintMode ? 'Paint Mode Active (Drag to Color)' : 'Tap Mode Active'}
+          aria-label="Toggle Paint Mode"
+          title={isPaintMode ? 'Paint Mode Active (Click to Switch to Tap Mode)' : 'Tap Mode Active (Click to Enable Paint Mode)'}
           className={`p-3 rounded-full shadow-xl backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
             isPaintMode
               ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 scale-105'

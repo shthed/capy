@@ -80,7 +80,9 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
           <button
             type="button"
             onClick={onExitReplay}
+            aria-label="Exit Replay"
             title="Exit Replay"
+            data-testid="replay-exit-btn"
             className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X size={16} />
@@ -94,6 +96,8 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
             min={0}
             max={totalSteps}
             value={currentStep}
+            aria-label="Replay Timeline Scrubber"
+            data-testid="replay-scrubber"
             onChange={(e) => onSeek(Number(e.target.value))}
             className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
           />
@@ -106,7 +110,9 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
             <button
               type="button"
               onClick={isFinished ? onRestart : onTogglePlay}
+              aria-label={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
               title={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
+              data-testid="replay-play-pause-btn"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 shadow transition-all active:scale-95 cursor-pointer"
             >
               {isFinished ? (
@@ -132,7 +138,9 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
               <button
                 type="button"
                 onClick={onRestart}
+                aria-label="Restart Replay from Beginning"
                 title="Restart Replay from Beginning"
+                data-testid="replay-restart-btn"
                 className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
               >
                 <RotateCcw size={14} />
@@ -144,7 +152,9 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
               <button
                 type="button"
                 onClick={onSkipToEnd}
+                aria-label="Skip to Completed Artwork"
                 title="Skip to Completed Artwork"
+                data-testid="replay-skip-btn"
                 className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
               >
                 <SkipForward size={14} />
@@ -155,7 +165,9 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
             <button
               type="button"
               onClick={handleCycleSpeed}
+              aria-label="Change Replay Speed"
               title="Change Replay Speed"
+              data-testid="replay-speed-btn"
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-extrabold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors tabular-nums cursor-pointer"
             >
               <FastForward size={13} />
