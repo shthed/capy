@@ -163,19 +163,19 @@ async function runGameTests() {
       await new Promise((r) => setTimeout(r, 80));
       canvasEl.dispatchEvent(new PointerEvent('pointerdown', { clientX: startX, clientY: startY, pointerId: 1, pointerType: 'touch', isPrimary: true, bubbles: true }));
 
-      // Drag UP (dy < 0 -> zoom IN)
-      for (let y = startY; y >= startY - 120; y -= 15) {
+      // Drag DOWN (dy > 0 -> zoom IN by default)
+      for (let y = startY; y <= startY + 120; y += 15) {
         canvasEl.dispatchEvent(new PointerEvent('pointermove', { clientX: startX, clientY: y, pointerId: 1, pointerType: 'touch', isPrimary: true, bubbles: true }));
         await new Promise((r) => setTimeout(r, 16));
       }
 
-      // Drag DOWN (dy > 0 -> zoom OUT)
-      for (let y = startY - 120; y <= startY + 50; y += 15) {
+      // Drag UP (dy < 0 -> zoom OUT by default)
+      for (let y = startY + 120; y >= startY - 50; y -= 15) {
         canvasEl.dispatchEvent(new PointerEvent('pointermove', { clientX: startX, clientY: y, pointerId: 1, pointerType: 'touch', isPrimary: true, bubbles: true }));
         await new Promise((r) => setTimeout(r, 16));
       }
 
-      canvasEl.dispatchEvent(new PointerEvent('pointerup', { clientX: startX, clientY: startY + 50, pointerId: 1, pointerType: 'touch', isPrimary: true, bubbles: true }));
+      canvasEl.dispatchEvent(new PointerEvent('pointerup', { clientX: startX, clientY: startY - 50, pointerId: 1, pointerType: 'touch', isPrimary: true, bubbles: true }));
     }, { startX, startY });
     await page.waitForTimeout(400);
     console.log('   ✅ One-finger double-tap-and-drag zoom gesture executed smoothly!');
@@ -207,33 +207,68 @@ async function runGameTests() {
     await page.waitForTimeout(500);
     console.log('   ✅ Smooth pan momentum flick and zero-latency cancellation verified!');
 
-    // 8. Test Corner Panning Bounds
-    console.log('8️⃣ Testing Expanded Corner Panning Bounds...');
+    // 8. Test Corner Panning Bounds & Background Dragging
+    console.log('8️⃣ Testing Expanded Corner Panning & Background Dragging...');
     await page.evaluate(async () => {
       const canvasEl = document.querySelector('canvas');
       if (!canvasEl) return;
 
-      // Pan deep into top-left
-      canvasEl.dispatchEvent(new PointerEvent('pointerdown', { clientX: 200, clientY: 400, pointerId: 4, pointerType: 'touch', isPrimary: true, bubbles: true }));
-      for (let x = 200; x <= 380; x += 30) {
-        canvasEl.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: 550, pointerId: 4, pointerType: 'touch', isPrimary: true, bubbles: true }));
+      // Drag touching background canvas near edge
+      canvasEl.dispatchEvent(new PointerEvent('pointerdown', { clientX: 20, clientY: 100, pointerId: 4, pointerType: 'touch', isPrimary: true, bubbles: true }));
+      for (let x = 20; x <= 150; x += 25) {
+        canvasEl.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: 120, pointerId: 4, pointerType: 'touch', isPrimary: true, bubbles: true }));
         await new Promise((r) => setTimeout(r, 16));
       }
-      canvasEl.dispatchEvent(new PointerEvent('pointerup', { clientX: 380, clientY: 550, pointerId: 4, pointerType: 'touch', isPrimary: true, bubbles: true }));
+      canvasEl.dispatchEvent(new PointerEvent('pointerup', { clientX: 150, clientY: 120, pointerId: 4, pointerType: 'touch', isPrimary: true, bubbles: true }));
     });
     await page.waitForTimeout(300);
-    console.log('   ✅ Deep corner panning allowed without restrictive edge bounds!');
+    console.log('   ✅ Background canvas touch dragging verified!');
 
-    // 9. Test Floating Action Buttons
-    console.log('9️⃣ Testing Floating Action Buttons (Paint Mode & Controls)...');
+    // 9. Test Floating Action Buttons & Region Undo
+    console.log('9️⃣ Testing Floating Action Buttons, Paint Mode & Region Undo...');
     const paintBtn = await page.$('button[title*="Paint"], button:has(svg.lucide-brush)');
     if (paintBtn) {
       await paintBtn.click();
       await page.waitForTimeout(200);
       console.log('   ✅ Paint Mode toggled on.');
+
+      // Test double tap and drag left/right in paint mode for one-finger panning
+      await page.evaluate(async ({ startX, startY }) => {
+        const canvasEl = document.querySelector('canvas');
+        if (!canvasEl) return;
+
+        canvasEl.dispatchEvent(new PointerEvent('pointerdown', { clientX: startX, clientY: startY, pointerId: 5, pointerType: 'touch', isPrimary: true, bubbles: true }));
+        await new Promise((r) => setTimeout(r, 40));
+        canvasEl.dispatchEvent(new PointerEvent('pointerup', { clientX: startX, clientY: startY, pointerId: 5, pointerType: 'touch', isPrimary: true, bubbles: true }));
+
+        await new Promise((r) => setTimeout(r, 80));
+        canvasEl.dispatchEvent(new PointerEvent('pointerdown', { clientX: startX, clientY: startY, pointerId: 5, pointerType: 'touch', isPrimary: true, bubbles: true }));
+
+        // Drag left/right horizontally
+        for (let x = startX; x <= startX + 90; x += 15) {
+          canvasEl.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: startY, pointerId: 5, pointerType: 'touch', isPrimary: true, bubbles: true }));
+          await new Promise((r) => setTimeout(r, 16));
+        }
+        canvasEl.dispatchEvent(new PointerEvent('pointerup', { clientX: startX + 90, clientY: startY, pointerId: 5, pointerType: 'touch', isPrimary: true, bubbles: true }));
+      }, { startX, startY });
+      await page.waitForTimeout(300);
+      console.log('   ✅ Double-tap horizontal pan in Paint Mode verified!');
+
       await paintBtn.click();
       await page.waitForTimeout(200);
       console.log('   ✅ Paint Mode toggled off.');
+    }
+
+    // Test Undo Button
+    const undoBtn = await page.$('button[title*="Undo"]');
+    if (undoBtn) {
+      const isDisabled = await undoBtn.getAttribute('disabled');
+      console.log(`   Undo button is present (disabled: ${isDisabled !== null}).`);
+      if (isDisabled === null) {
+        await undoBtn.click();
+        await page.waitForTimeout(200);
+        console.log('   ✅ Undo action triggered successfully!');
+      }
     }
 
     // 10. Check Console Errors

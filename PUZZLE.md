@@ -172,15 +172,38 @@ When opening black and white line art or coloring book pages (such as coloring s
 
 ---
 
-## 5. Web Worker Background Thread Execution
+## 5. Web Worker Background Thread Execution & 6-Stage Pipeline Telemetry
 
 Puzzle generation involves computationally intensive computer-vision operations (Kuwahara filtering, K-Means++ clustering, BFS flood fills, and distance transform watershed expansions).
 
 To guarantee **zero UI frame drops, smooth animations, and no browser freezes**:
 * Puzzle generation executes entirely inside a dedicated **Web Worker thread** (`puzzle.worker.ts`).
 * Pixel arrays and region buffers are transferred between the main thread and the worker using **zero-copy `Transferable` `ArrayBuffer` objects**.
-* Progress updates are streamed continuously back to the UI thread (`onProgress(pct, status)`).
+* Progress updates are streamed continuously back to the UI thread via `onProgress(pct, status, payload)` with a **strictly monotonic high-water mark** (`0.00` $\rightarrow$ `1.00`) so the progress bar never jumps backward across sub-routines.
 * If Web Workers are unavailable or restricted by browser security policies, the engine automatically falls back to synchronous main-thread execution.
+
+### 5.1 User-Friendly 6-Stage Pipeline (`GENERATION_PIPELINE_STEPS`)
+
+Every progress emission maps to one of 6 deterministic stages exposed in [`LoadingOverlay.tsx`](./web/src/components/LoadingOverlay.tsx):
+
+| Step | Progress Range | Stage Name | Description |
+| :--- | :--- | :--- | :--- |
+| `1/6` | `0%` – `12%` | **Image Analysis & Strategy Selection** | Inspecting luminance variance, edge density, and color diversity to classify the artwork style (`Line Art / Drawing`, `Photographic / Painterly`, `Flat / Posterized`, or `B&W Coloring Book`) and select the optimal segmentation strategy. |
+| `2/6` | `12%` – `30%` | **Contour & Edge Filtering** | Extracting continuous ink outlines via Otsu/Sobel analysis or applying edge-preserving Kuwahara/Median smoothing to flatten micro-texture noise while keeping borders sharp. |
+| `3/6` | `30%` – `62%` | **Perceptual Palette Quantization** | Clustering pixels in Red-Mean perceptual color space using K-Means++ (`0.32` $\rightarrow$ `0.58`) and spatial majority smoothing (`0.60`) to build a balanced palette of distinct colors. |
+| `4/6` | `62%` – `84%` | **Region Segmentation & Small-Cell Merging** | Tracing 4-connected regions, absorbing tiny sliver islands into harmonious neighbors, and enforcing minimum/maximum region size bounds. |
+| `5/6` | `84%` – `95%` | **Line Art & Boundary Alignment** | Expanding adjacent regions symmetrically to the centerline of drawn ink strokes (`ABSORB_LINES`) or uniting continuous black outlines (`UNIFIED_BLACK_REGION`) with zero gaps. |
+| `6/6` | `95%` – `100%` | **Interior Number Placement & Finalizing** | Computing the Pole of Inaccessibility via multi-source BFS for every region to place number labels cleanly inside concave shapes and estimating the compressed save footprint. |
+
+### 5.2 Live Auto-Detection Telemetry (`GenerationInspectionDetails`)
+
+During Step 1 and Step 6, `AutoPuzzleGenerator` populates structured inspection telemetry returned in `GenerationProgressPayload.details`:
+* `detectedStyle`: Classified visual style (`Line Art / Drawing`, `Photographic / Painterly`, `Flat / Posterized`, or `B&W Coloring Book`).
+* `chosenStrategy` & `strategyReason`: Selected algorithm and human-readable explanation of the variance/line-coverage heuristics that triggered it.
+* `detailLevel` & `targetColors`: Effective palette detail mode and auto-calibrated color count ($4 \dots 64$).
+* `targetMaxRegions`, `minRegionArea` & `maxRegionArea`: Target region bounds and final segmented min/max region areas in $\text{px}^2$.
+* `workingResolution`: Active canvas dimensions (`width x height`).
+* `estimatedSaveKb`: Estimated storage footprint in kilobytes (`KB`) combining region metadata, pixel maps, and preview thumbnail.
 
 ---
 

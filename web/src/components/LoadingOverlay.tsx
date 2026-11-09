@@ -1,37 +1,259 @@
-import React from 'react';
+import React, { useState } from 'react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Circle,
+  Cpu,
+  HardDrive,
+  Image as ImageIcon,
+  Layers,
+  Loader2,
+  Palette,
+  Sparkles,
+} from 'lucide-react';
+import {
+  GENERATION_PIPELINE_STEPS,
+  GenerationProgressPayload,
+} from '../types';
 
 interface LoadingOverlayProps {
   isLoading: boolean;
   status: string;
   progress: number;
+  payload?: GenerationProgressPayload | null;
 }
 
 export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
   isLoading,
   status,
   progress,
+  payload,
 }) => {
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
+
+  if (!isLoading && !isExpanded) return null;
   if (!isLoading) return null;
 
+  const pct = Math.min(100, Math.max(0, Math.round(progress * 100)));
+  const stepIndex = payload?.stepIndex || 1;
+  const totalSteps = payload?.totalSteps || GENERATION_PIPELINE_STEPS.length;
+  const stepName =
+    payload?.stepName ||
+    GENERATION_PIPELINE_STEPS[stepIndex - 1]?.name ||
+    'Artwork Analysis & Style Detection';
+  const stepDescription =
+    payload?.stepDescription ||
+    GENERATION_PIPELINE_STEPS[stepIndex - 1]?.description ||
+    'Analyzing artwork composition and preparing puzzle regions...';
+  const steps =
+    payload?.steps ||
+    GENERATION_PIPELINE_STEPS.map((s) => ({
+      ...s,
+      status:
+        s.id < stepIndex
+          ? ('completed' as const)
+          : s.id === stepIndex
+            ? ('in_progress' as const)
+            : ('pending' as const),
+    }));
+  const inspection = payload?.inspection || {};
+
   return (
-    <div className="fixed inset-0 z-40 pointer-events-none flex items-center justify-center p-4">
-      <div className="pointer-events-auto bg-slate-900/95 border border-slate-700/80 rounded-2xl shadow-2xl p-5 max-w-sm w-full backdrop-blur-lg flex flex-col items-center gap-3 animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
-          <h3 className="text-sm font-semibold text-slate-100">{status}</h3>
+    <div
+      className="fixed inset-x-0 bottom-0 z-40 pointer-events-none flex flex-col items-center justify-end p-3 sm:p-5"
+      style={{
+        paddingBottom: 'max(1rem, calc(var(--sab, 0px) + 0.75rem))',
+      }}
+    >
+      <div className="pointer-events-auto w-full max-w-lg bg-slate-900/92 border border-slate-700/80 rounded-2xl shadow-2xl backdrop-blur-xl text-slate-100 overflow-hidden transition-all duration-200 animate-in fade-in slide-in-from-bottom-4">
+        {/* Main Compact Header & Progress */}
+        <div className="p-4 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30 flex-shrink-0">
+                <Sparkles size={10} />
+                Step {stepIndex}/{totalSteps}
+              </span>
+              <h3 className="text-xs sm:text-sm font-bold text-white truncate">
+                {stepName}
+              </h3>
+            </div>
+            <span className="text-xs font-extrabold text-amber-400 tabular-nums flex-shrink-0">
+              {pct}%
+            </span>
+          </div>
+
+          {/* Monotonic Progress Bar */}
+          <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
+            <div
+              className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 rounded-full transition-all duration-150 ease-out"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+
+          {/* Active Sub-Status & Toggle Details Button */}
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-300 min-w-0">
+              <Loader2 size={13} className="text-amber-400 animate-spin flex-shrink-0" />
+              <span className="truncate">{status}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsExpanded((prev) => !prev)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800/90 hover:bg-slate-700/90 text-amber-300 border border-slate-700 transition-colors flex-shrink-0 cursor-pointer"
+            >
+              <span>{isExpanded ? 'Hide Details' : 'Generation Details'}</span>
+              {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+          </div>
+
+          {/* Brief description of current step */}
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            {stepDescription}
+          </p>
         </div>
 
-        {/* Progress bar */}
-        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-amber-400 rounded-full transition-all duration-150 ease-out"
-            style={{ width: `${Math.min(100, Math.max(0, Math.round(progress * 100)))}%` }}
-          />
-        </div>
+        {/* Expandable Puzzle Generation Details Panel */}
+        {isExpanded && (
+          <div className="border-t border-slate-800 bg-slate-950/80 px-4 py-3.5 space-y-3.5 max-h-[55vh] overflow-y-auto text-xs">
+            {/* Auto-Detected Artwork & Strategy Metrics */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-400">
+                <Cpu size={13} />
+                <span>Auto-Detected Artwork & Engine Parameters</span>
+              </div>
 
-        <span className="text-xs text-slate-400">
-          {Math.min(100, Math.max(0, Math.round(progress * 100)))}%
-        </span>
+              {inspection.strategyRationale && (
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-400/25 text-[11px] text-slate-200 leading-relaxed">
+                  <span className="font-bold text-amber-300">Strategy Decision: </span>
+                  {inspection.strategyRationale}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="p-2 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                    <ImageIcon size={11} />
+                    <span>Detected Style</span>
+                  </div>
+                  <div className="font-bold text-slate-100 mt-0.5 truncate">
+                    {inspection.detectedType || 'Analyzing...'}
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                    <Sparkles size={11} />
+                    <span>Active Strategy</span>
+                  </div>
+                  <div className="font-bold text-amber-300 mt-0.5 truncate">
+                    {inspection.chosenStrategy || 'Auto-Detect'}
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                    <Palette size={11} />
+                    <span>Colors & Detail</span>
+                  </div>
+                  <div className="font-bold text-slate-100 mt-0.5">
+                    {inspection.colorCount ?? '--'} colors ({inspection.paletteDetail || 'AUTO'})
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                    <Layers size={11} />
+                    <span>Region Target & Area</span>
+                  </div>
+                  <div className="font-bold text-slate-100 mt-0.5">
+                    {inspection.finalRegionCount
+                      ? `${inspection.finalRegionCount} regions`
+                      : `Max ${inspection.maxRegions ?? 200}`}{' '}
+                    <span className="text-[10px] font-normal text-slate-400">
+                      (min {inspection.minRegionArea ?? 48}px²)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                    <ImageIcon size={11} />
+                    <span>Working Resolution</span>
+                  </div>
+                  <div className="font-bold text-slate-100 mt-0.5">
+                    {inspection.targetWidth && inspection.targetHeight
+                      ? `${inspection.targetWidth}×${inspection.targetHeight}`
+                      : `${inspection.resolution ?? 1024}p`}
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                    <HardDrive size={11} />
+                    <span>Est. Save Size</span>
+                  </div>
+                  <div className="font-bold text-slate-100 mt-0.5">
+                    {inspection.estimatedSaveSizeKb
+                      ? `~${inspection.estimatedSaveSizeKb} KB`
+                      : 'Calculating...'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Step-by-Step Pipeline Breakdown */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Generation Pipeline Stages
+              </div>
+              <div className="space-y-1.5">
+                {steps.map((step) => {
+                  const isDone = step.status === 'completed';
+                  const isActive = step.status === 'in_progress';
+                  return (
+                    <div
+                      key={step.id}
+                      className={`p-2.5 rounded-xl border transition-colors ${
+                        isActive
+                          ? 'bg-amber-500/10 border-amber-400/40'
+                          : isDone
+                            ? 'bg-slate-900/60 border-slate-800/80'
+                            : 'bg-slate-900/30 border-slate-800/40 opacity-65'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {isDone ? (
+                          <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
+                        ) : isActive ? (
+                          <Loader2 size={14} className="text-amber-400 animate-spin flex-shrink-0" />
+                        ) : (
+                          <Circle size={14} className="text-slate-600 flex-shrink-0" />
+                        )}
+                        <span
+                          className={`text-xs font-bold ${
+                            isActive
+                              ? 'text-amber-300'
+                              : isDone
+                                ? 'text-slate-200'
+                                : 'text-slate-400'
+                          }`}
+                        >
+                          {step.id}. {step.name}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1 pl-5 leading-relaxed">
+                        {step.description}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

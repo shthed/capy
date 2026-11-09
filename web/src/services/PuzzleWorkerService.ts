@@ -1,4 +1,4 @@
-import { GeneratorConfig, PuzzleData } from '../types';
+import { GenerationProgressPayload, GeneratorConfig, PuzzleData } from '../types';
 import { AutoPuzzleGenerator } from '../engine/PuzzleGenerator';
 
 export class GenerationCancelledError extends Error {
@@ -43,7 +43,7 @@ export class PuzzleWorkerService {
   static generate(
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: (progress: number, status: string, payload?: GenerationProgressPayload) => void
   ): Promise<PuzzleData> {
     return new Promise((resolve, reject) => {
       // If Web Worker is not supported, fallback to main-thread execution
@@ -77,7 +77,7 @@ export class PuzzleWorkerService {
           if (!data || data.id !== requestId) return;
 
           if (data.type === 'PROGRESS') {
-            onProgress?.(data.progress, data.status);
+            onProgress?.(data.progress, data.status, data.payload);
           } else if (data.type === 'SUCCESS') {
             worker.removeEventListener('message', handleMessage);
             worker.removeEventListener('error', handleError);
