@@ -145,9 +145,11 @@ export const App: React.FC = () => {
       filledSet: Set<number>,
       customColors?: Map<number, number>
     ): string => {
+      const maxDim = 320;
+      const scale = Math.min(1, maxDim / Math.max(puzzleData.width, puzzleData.height));
       const canvas = document.createElement('canvas');
-      canvas.width = Math.min(240, puzzleData.width);
-      canvas.height = Math.min(240, puzzleData.height);
+      canvas.width = Math.max(1, Math.round(puzzleData.width * scale));
+      canvas.height = Math.max(1, Math.round(puzzleData.height * scale));
       const ctx = canvas.getContext('2d');
       if (!ctx) return '';
 
@@ -190,32 +192,8 @@ export const App: React.FC = () => {
           ctx.drawImage(fullCanvas, 0, 0, canvas.width, canvas.height);
         }
       } else {
-        // Standard photo rendering
+        // Standard photo rendering: clean, sharp aspect-ratio scaled image without white veil
         ctx.drawImage(sourceImg, 0, 0, canvas.width, canvas.height);
-
-        // Mask unfilled regions with translucent white if not completely filled
-        if (filledSet.size < puzzleData.regions.length) {
-          const maskCanvas = document.createElement('canvas');
-          maskCanvas.width = puzzleData.width;
-          maskCanvas.height = puzzleData.height;
-          const mCtx = maskCanvas.getContext('2d');
-          if (mCtx) {
-            const imgData = mCtx.createImageData(puzzleData.width, puzzleData.height);
-            const data = imgData.data;
-            for (let i = 0; i < puzzleData.width * puzzleData.height; i++) {
-              const rId = puzzleData.regionMap[i];
-              if (!filledSet.has(rId)) {
-                const idx = i * 4;
-                data[idx] = 248;
-                data[idx + 1] = 250;
-                data[idx + 2] = 252;
-                data[idx + 3] = 230;
-              }
-            }
-            mCtx.putImageData(imgData, 0, 0);
-            ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
-          }
-        }
       }
 
       return canvas.toDataURL('image/jpeg', 0.85);
@@ -1838,6 +1816,10 @@ export const App: React.FC = () => {
         onReplaySnapshot={(snap) => handleLoadSnapshot(snap, true)}
         onRenameSnapshot={(id, newTitle) => {
           const updated = StorageService.renameSnapshot(id, newTitle);
+          setSnapshots(updated);
+        }}
+        onTogglePinSnapshot={(id) => {
+          const updated = StorageService.togglePinSnapshot(id);
           setSnapshots(updated);
         }}
         onDeleteSnapshot={async (id) => {

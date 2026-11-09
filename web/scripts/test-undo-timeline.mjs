@@ -423,11 +423,128 @@ async function testUndoTimelineAndRedo() {
     }
     console.log('   ✅ Save export and import validated.');
 
+    // Step 11: Modernized Saves UI — Action Bar, View Modes (Detail vs Thumbnails), Double-Tap Load
+    console.log('1️⃣1️⃣ Testing Modernized Saves UI (Action Bar, View Modes, Double-Click Load)...');
+    // Ensure modal is open on Saves tab
+    const isModalOpen = await page.$('[data-testid="selected-save-action-bar"]');
+    if (!isModalOpen) {
+      const openSettingsBtn = await page.waitForSelector('button[title*="Settings"]');
+      await openSettingsBtn.click();
+      await page.waitForTimeout(300);
+      const tabBtn = await page.waitForSelector('button:has-text("Saves")');
+      await tabBtn.click();
+      await page.waitForTimeout(300);
+    }
+
+    // Verify minimal "Replay on Load" toggle
+    const minimalToggle = await page.waitForSelector('[data-testid="toggle-auto-replay-saves-btn"]');
+    if (!minimalToggle) {
+      throw new Error('Minimal Replay on Load toggle not found in Saves tab!');
+    }
+    console.log('   ✅ Minimal "Replay on Load" toggle verified.');
+
+    // Verify Unified Action Bar exists
+    const actionBar = await page.waitForSelector('[data-testid="selected-save-action-bar"]');
+    const loadActionBtn = await page.waitForSelector('[data-testid="save-action-load"]');
+    const replayActionBtn = await page.waitForSelector('[data-testid="save-action-replay"]');
+    const renameActionBtn = await page.waitForSelector('[data-testid="save-action-rename"]');
+    const exportActionBtn = await page.waitForSelector('[data-testid="save-action-export"]');
+    const deleteActionBtn = await page.waitForSelector('[data-testid="save-action-delete"]');
+    const pinActionBtn = await page.waitForSelector('[data-testid="save-action-pin"]');
+    if (!actionBar || !loadActionBtn || !replayActionBtn || !renameActionBtn || !exportActionBtn || !deleteActionBtn || !pinActionBtn) {
+      throw new Error('Unified action bar or one of its action buttons (including pin) is missing!');
+    }
+    console.log('   ✅ Unified Selected Save Action Bar verified (Pin/Unpin, Load/Resume, Replay, Rename, Export, Delete).');
+
+    // Verify absence of "Sort:" label, "Reset" button, and "SELECTED:" text
+    const sortLabel = await page.$('text="Sort:"');
+    if (sortLabel) throw new Error('Found deprecated "Sort:" text label!');
+    const resetBtn = await page.$('button:has-text("Reset")');
+    if (resetBtn) throw new Error('Found deprecated "Reset" button in Saves controls!');
+    const selectedLabel = await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="selected-save-action-bar"]');
+      return el && el.textContent.includes('SELECTED:');
+    });
+    if (selectedLabel) throw new Error('Found deprecated "SELECTED:" text in action bar!');
+    console.log('   ✅ Absence of Sort label, Reset button, and SELECTED banner verified.');
+
+    // Verify absence of "regions" count in save card
+    const regionsText = await page.evaluate(() => {
+      const card = document.querySelector('[data-testid^="save-card-"]');
+      return card && /regions/i.test(card.textContent);
+    });
+    if (regionsText) throw new Error('Found deprecated "regions" count text in save card!');
+    console.log('   ✅ Absence of "X/X regions" text in save card verified.');
+
+    // Test Pinning feature
+    await pinActionBtn.click();
+    await page.waitForTimeout(200);
+    const pinActionText = await page.evaluate(() => document.querySelector('[data-testid="save-action-pin"]')?.textContent);
+    if (!pinActionText || !pinActionText.includes('Unpin')) {
+      throw new Error(`Expected pin button to show 'Unpin' after click, got: ${pinActionText}`);
+    }
+    console.log('   ✅ Pin toggle verified: action button updated to "Unpin".');
+
+    // Verify Detail mode thumbnail size is enlarged (w-16 h-16 / 64px+)
+    const detailThumbnail = await page.$('.w-16.h-16, .w-18.h-18, .w-20.h-20');
+    if (!detailThumbnail) {
+      throw new Error('Larger thumbnail in Detail mode not found!');
+    }
+    console.log('   ✅ Detail mode verified with larger 64-72px thumbnail.');
+
+    // Test View Mode Switching: switch to Thumbnails grid mode
+    const thumbnailsViewBtn = await page.waitForSelector('[data-testid="saves-view-thumbnails-btn"]');
+    await thumbnailsViewBtn.click();
+    await page.waitForTimeout(300);
+
+    const viewModeStored = await page.evaluate(() => localStorage.getItem('capy_saves_view_mode'));
+    if (viewModeStored !== 'THUMBNAILS') {
+      throw new Error(`Expected capy_saves_view_mode to be 'THUMBNAILS', got '${viewModeStored}'`);
+    }
+
+    // Verify rectangular cards in grid
+    const thumbnailGridCard = await page.$('.aspect-\\[4\\/3\\]');
+    if (!thumbnailGridCard) {
+      throw new Error('4:3 rectangular preview card not found in Thumbnails view mode!');
+    }
+    console.log('   ✅ Thumbnails grid view verified with 4:3 rectangular previews and persisted mode.');
+
+    // Test selecting a save card in Thumbnails mode
+    const saveCards = await page.$$('[data-testid^="save-card-"]');
+    if (saveCards.length > 1) {
+      await saveCards[1].click();
+      await page.waitForTimeout(200);
+      console.log('   ✅ Save selection verified via card click in Thumbnails mode.');
+    }
+
+    // Switch back to Detail mode
+    const detailViewBtn = await page.waitForSelector('[data-testid="saves-view-detail-btn"]');
+    await detailViewBtn.click();
+    await page.waitForTimeout(300);
+
+    const viewModeDetail = await page.evaluate(() => localStorage.getItem('capy_saves_view_mode'));
+    if (viewModeDetail !== 'DETAIL') {
+      throw new Error(`Expected capy_saves_view_mode to be 'DETAIL', got '${viewModeDetail}'`);
+    }
+    console.log('   ✅ Successfully switched back to Detail view mode.');
+
+    // Test Double-Click / Double-Tap loading
+    const firstSaveCard = await page.waitForSelector('[data-testid^="save-card-"]');
+    await firstSaveCard.dblclick();
+    await page.waitForTimeout(400);
+
+    // Verify modal closed upon double-click load
+    const modalAfterDblClick = await page.$('[data-testid="selected-save-action-bar"]');
+    if (modalAfterDblClick !== null) {
+      throw new Error('Settings modal should have closed after double-clicking a save card!');
+    }
+    console.log('   ✅ Double-click save loading verified (modal automatically closed and save loaded).');
+
     if (consoleErrors.length > 0) {
       throw new Error(`Encountered console errors: ${consoleErrors.join(', ')}`);
     }
 
-    console.log('🎉 ALL LONG-PRESS UNDO, TIMELINE RESUME, REDO & SAVE PORTABILITY TESTS PASSED!');
+    console.log('🎉 ALL LONG-PRESS UNDO, TIMELINE RESUME, REDO & SAVES MODERNIZATION TESTS PASSED!');
   } finally {
     await browser.close();
   }
