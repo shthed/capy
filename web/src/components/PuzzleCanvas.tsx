@@ -29,6 +29,8 @@ interface PuzzleCanvasProps {
   showPreviewLabels: boolean;
   showPreviewBorders: boolean;
   labelScale: number;
+  minLabelSize?: number;
+  maxLabelSize?: number;
   highlightMatching: boolean;
   highlightStyle: RegionHighlightStyle;
   hintColorArgb: number;
@@ -133,6 +135,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   showPreviewLabels,
   showPreviewBorders,
   labelScale,
+  minLabelSize = 6,
+  maxLabelSize = 18,
   highlightMatching,
   highlightStyle,
   hintColorArgb,
@@ -1095,6 +1099,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         animateHint,
         effScale,
         labelScale,
+        minLabelSize,
+        maxLabelSize,
         visLeft,
         visTop,
         visRight,
@@ -1130,6 +1136,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     showPreviewLabels,
     showPreviewBorders,
     labelScale,
+    minLabelSize,
+    maxLabelSize,
     highlightMatching,
     highlightStyle,
     hintColorArgb,
@@ -1730,6 +1738,8 @@ function renderLabels(
   animateHint: boolean,
   effScale: number,
   labelScale: number,
+  minLabelSize: number,
+  maxLabelSize: number,
   visLeft: number,
   visTop: number,
   visRight: number,
@@ -1737,7 +1747,6 @@ function renderLabels(
   isEffectivePreview: boolean
 ) {
   const drawGlowCircle = highlightStyle === 'CENTROID_GLOW';
-  const isNumberOnly = highlightStyle === 'NUMBER_ONLY';
 
   const hr = (hintColorArgb >> 16) & 0xff;
   const hg = (hintColorArgb >> 8) & 0xff;
@@ -1748,8 +1757,21 @@ function renderLabels(
   const ag = activePal ? activePal.g : 191;
   const ab = activePal ? activePal.b : 36;
 
+  // Pre-calculate effective min/max bounds in artwork coordinates
+  const effMinArtwork = (minLabelSize * labelScale) / effScale;
+  const effMaxArtwork = (maxLabelSize * labelScale) / effScale;
+
+  // Pre-calculate text colors (zero per-frame allocations)
+  const normalTextColor = isEffectivePreview ? '#0f172a' : '#334155';
+  const activeTextColor = '#d97706';
+  const hintAlpha = animateHint ? Math.min(1, Math.max(0.4, pulseAlpha * 1.1)) : 1.0;
+  const hintTextColor = `rgba(${hr}, ${hg}, ${hb}, ${hintAlpha})`;
+
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(1, 2 / effScale);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.lineJoin = 'round';
 
   for (const region of puzzle.regions) {
     if (filledRegionIds.has(region.id)) continue;
@@ -1773,7 +1795,7 @@ function renderLabels(
     const regH = region.maxY - region.minY + 1;
     const minDim = Math.min(regW, regH);
 
-    // Glowing matching circle (only in puzzle mode)
+    // Glowing matching circle (only in CENTROID_GLOW mode)
     if (!isEffectivePreview && isActive && highlightMatching && drawGlowCircle) {
       const alpha = animateHint ? pulseAlpha * hintIntensity * 0.8 : hintIntensity * 0.7;
       ctx.beginPath();
@@ -1783,8 +1805,8 @@ function renderLabels(
       ctx.fill();
     }
 
-    // Glowing hinted region circle (only in puzzle mode)
-    if (!isEffectivePreview && isHinted && (drawGlowCircle || isNumberOnly)) {
+    // Glowing hinted region circle (only in CENTROID_GLOW mode)
+    if (!isEffectivePreview && isHinted && drawGlowCircle) {
       const alpha = animateHint ? pulseAlpha * hintIntensity * 0.95 : hintIntensity * 0.9;
       ctx.beginPath();
       const radius = Math.max(8 / effScale, minDim * 0.45);
@@ -1795,58 +1817,53 @@ function renderLabels(
 
     if (!drawLabelsNow) continue;
 
-    // Tiny regions skip when unzoomed (unless active or hinted)
-    if (
-      !isActive &&
-      !isHinted &&
-      (minDim * effScale < 14 || (region.maxRadius > 0 && region.maxRadius * effScale < 7))
-    ) {
+    const labelText = displayNumberMap.get(region.colorId) || region.colorId.toString();
+    const charCount = labelText.length;
+    const cornerFactor =
+      charCount === 1
+        ? 0.4841
+        : charCount === 2
+        ? 0.7099
+        : charCount === 3
+        ? 0.9767
+        : Math.sqrt(0.09 * charCount * charCount + 0.1444);
+
+    const safetyMargin = 0.9;
+    const maxFittingArtworkSize =
+      region.maxRadius > 0
+        ? (region.maxRadius * safetyMargin) / cornerFactor
+        : (minDim * 0.4 * safetyMargin) / cornerFactor;
+
+    // If region cannot fit minimum legible label size at current zoom level, skip normal regions
+    if (!isActive && !isHinted && maxFittingArtworkSize < effMinArtwork) {
       continue;
     }
 
-    const baseFontSize = isActive || isHinted ? 18 : 15;
-    const defaultTextSize = (baseFontSize * labelScale) / effScale;
-    const regionMaxTextSize =
-      region.maxRadius > 0 ? region.maxRadius * 1.35 * labelScale : defaultTextSize;
-
-    const targetTextSize = Math.max(
-      (6 * labelScale) / effScale,
-      Math.min(defaultTextSize, regionMaxTextSize, (24 * labelScale) / effScale)
-    );
-
-    // Badge circle background
-    if (!isEffectivePreview) {
-      const bgRadius = targetTextSize * 0.62;
-      ctx.beginPath();
-      ctx.arc(region.centroidX, region.centroidY, bgRadius, 0, Math.PI * 2);
-
-      if (isNumberOnly && (isActive || isHinted)) {
-        const pulseCol = isHinted
-          ? `rgba(${hr}, ${hg}, ${hb}, ${pulseAlpha * 0.9})`
-          : `rgba(${ar}, ${ag}, ${ab}, ${pulseAlpha * 0.85})`;
-        ctx.fillStyle = pulseCol;
-      } else if (isHinted) {
-        ctx.fillStyle = `rgba(${hr}, ${hg}, ${hb}, 0.35)`;
-      } else if (isActive) {
-        ctx.fillStyle = 'rgba(254, 243, 199, 0.92)';
-      } else {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.82)';
-      }
-      ctx.fill();
+    // Determine target font size in artwork coordinates guaranteeing fit within the region
+    let targetTextSize: number;
+    if (isActive || isHinted) {
+      const fitSize = Math.min(effMaxArtwork, maxFittingArtworkSize);
+      targetTextSize = Math.max(Math.min(effMinArtwork, 2 / effScale), fitSize);
+    } else {
+      targetTextSize = Math.min(effMaxArtwork, maxFittingArtworkSize);
     }
 
-    // Label number text
-    ctx.font = `600 ${targetTextSize}px "Inter", -apple-system, sans-serif`;
-    const hintTextCol = `rgb(${Math.floor(hr * 0.6)}, ${Math.floor(hg * 0.6)}, ${Math.floor(hb * 0.6)})`;
-    ctx.fillStyle = isHinted
-      ? hintTextCol
-      : isActive
-      ? '#d97706'
-      : isEffectivePreview
-      ? '#0f172a'
-      : '#334155';
+    // Label font
+    ctx.font = isHinted
+      ? `700 ${targetTextSize}px "Inter", -apple-system, sans-serif`
+      : `600 ${targetTextSize}px "Inter", -apple-system, sans-serif`;
 
-    const labelText = displayNumberMap.get(region.colorId) || region.colorId.toString();
+    // Redo label hint effect: changes text colour, does NOT draw a circle around it
+    const isMatch = isActive && highlightMatching;
+    ctx.fillStyle = isHinted
+      ? hintTextColor
+      : isMatch
+      ? activeTextColor
+      : normalTextColor;
+
+    // Stroke outline scaled proportionally for tiny fonts so glyphs remain crisp on high-DPI screens
+    ctx.lineWidth = Math.max(0.5, Math.min(1.5 / effScale, targetTextSize * 0.22));
+    ctx.strokeText(labelText, region.centroidX, region.centroidY);
     ctx.fillText(labelText, region.centroidX, region.centroidY);
   }
 }

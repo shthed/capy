@@ -81,6 +81,8 @@ export interface UserSettings {
   showNextRegionHint: boolean;
   hintIntensity: number;
   labelScale: number;
+  minLabelSize: number;
+  maxLabelSize: number;
   showZoomButtons: boolean;
   showResetViewButton: boolean;
   paletteSort: PaletteSortOrder;
