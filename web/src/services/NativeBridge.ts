@@ -61,6 +61,10 @@ class NativeBridgeService {
     return this.platform !== 'web';
   }
 
+  get isAndroid(): boolean {
+    return this.platform === 'android';
+  }
+
   getSafeAreaInsets(): { top: number; bottom: number; left: number; right: number } {
     try {
       if (typeof window !== 'undefined' && window.CapyAndroid?.getSafeAreaInsets) {

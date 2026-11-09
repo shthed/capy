@@ -14,14 +14,6 @@ For target-specific deep dives, see also:
 
 ---
 
-## Post-Merge Repository Maintenance
-
-- [ ] **Archive or Delete Redundant Secondary Repositories**:
-  - Archive or delete `shthed/capy-g`, `shthed/capy-g2`, `shthed/capy-web`, and `shthed/capyg` on GitHub now that all active code and history are unified in `shthed/capy`.
-  - Detach the retired repositories from workspace resources so all future development targets `shthed/capy` exclusively.
-
----
-
 ## Milestone 1: Replay Animation Export & Advanced Gestures
 
 - [ ] **Replay Animation Video and GIF Export**:

@@ -59,6 +59,7 @@ web/
     │   └── LoadingOverlay.tsx # Bottom-anchored progress HUD with expandable 6-stage pipeline inspector
     ├── services/
     │   ├── NativeBridge.ts    # Android `@JavascriptInterface` & WebKit bridge (haptics, back button)
+    │   ├── PwaService.ts      # PWA install prompt, standalone detection & service worker lifecycle
     │   ├── PuzzleWorkerService.ts # Worker lifecycle, job cancellation, promise dispatch
     │   └── StorageService.ts  # IndexedDB (large blobs) + LocalStorage (settings/snapshots)
     └── engine/
@@ -387,7 +388,42 @@ Capy Web uses **Tailwind CSS 4** with CSS custom properties for hardware insets:
 
 ---
 
-## 10. Development & Build Verification
+## 10. Progressive Web App (PWA) & Offline Caching Architecture
+
+Capy is an installable, 100% offline-first Progressive Web App. It operates without an internet connection after the initial visit, delivering native-like standalone desktop and mobile experiences.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Capy PWA Architecture                           │
+├──────────────────────────┬─────────────────────────────────────────────┤
+│ Install & Manifest Layer │ Offline Service Worker (`sw.js`)            │
+│  ├─ manifest.webmanifest │  ├─ Pre-cache: HTML, manifest, sample assets│
+│  ├─ PwaService.ts        │  ├─ Auto-discovery: Vite JS/CSS bundles     │
+│  ├─ Standalone detection │  ├─ Cache-First: Scripts, styles, workers   │
+│  └─ In-app install card  │  └─ Network-First / Cache Fallback: Document │
+└──────────────────────────┴─────────────────────────────────────────────┘
+```
+
+1. **Web App Manifest (`manifest.webmanifest`)**:
+   - Configures standalone display mode (`display: "standalone"`, `display_override: ["standalone", "minimal-ui"]`) and zero-margin immersion with `#000000` theme and background colors.
+   - Provides responsive application icons (192x192, 512x512, and 512x512 maskable for adaptive Android icons) and Apple touch icons.
+   - Uses relative scoping (`start_url: "./"`, `scope: "./"`) to preserve host independence across GitHub Pages root (`/capy/`), PR branch previews (`/capy/pull/<number>/`), and local environments.
+
+2. **Offline Service Worker (`web/public/sw.js`)**:
+   - Pre-caches core application shell (`./`, `./index.html`, `./manifest.webmanifest`), sample puzzle images (`capybara.webp`, `mushrooms.webp`, `capy_forest.webp`, `snail_guitar.webp`), and application icons.
+   - Dynamically parses `index.html` during the `install` phase to discover and pre-cache hashed Vite script and CSS bundles (`assets/index-*.js`, `assets/index-*.css`) and Web Worker scripts (`assets/puzzle.worker-*.js`).
+   - Implements cache-first strategy for static assets and network-first with offline cache fallback for document navigation.
+   - Uses URL-string matching in addition to `Request` object matching to prevent CORS mode discrepancies when fetching module scripts.
+   - Skips waiting and claims active clients immediately upon installation to ensure immediate offline readiness.
+
+3. **Application Lifecycle Bridge (`PwaService.ts`)**:
+   - Detects standalone execution via `display-mode: standalone` media query and `navigator.standalone`.
+   - Captures `beforeinstallprompt` events and surfaces a direct "Install Web App" action card in the Settings modal under Platforms & Applications.
+   - Bypasses service worker registration when running inside the native Android launcher wrapper (`NativeBridge.isAndroid`), allowing AndroidX `WebViewAssetLoader` to manage APK assets directly.
+
+---
+
+## 11. Development & Build Verification
 
 From the `web/` directory:
 

@@ -19,7 +19,9 @@ import {
   List,
   LayoutGrid,
   Pin,
+  AppWindow,
 } from 'lucide-react';
+import { PwaService } from '../services/PwaService';
 import {
   CANVAS_BG_MAP,
   CanvasBgColor,
@@ -127,6 +129,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   });
   const lastTapRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
+
+  const [isInstallable, setIsInstallable] = useState(PwaService.isInstallable);
+  const [isStandalone, setIsStandalone] = useState(PwaService.isStandalone);
+
+  useEffect(() => {
+    const unsubscribe = PwaService.subscribe(() => {
+      setIsInstallable(PwaService.isInstallable);
+      setIsStandalone(PwaService.isStandalone);
+    });
+    return unsubscribe;
+  }, []);
 
   const handleSetViewMode = (mode: 'DETAIL' | 'THUMBNAILS') => {
     setSavesViewMode(mode);
@@ -736,7 +749,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   Platforms & Applications
                 </div>
-                <div className="grid grid-cols-1 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {isStandalone ? (
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-emerald-500/30 text-slate-200 text-xs font-semibold">
+                      <Check size={16} className="text-emerald-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-emerald-400">Installed Web App</div>
+                        <div className="text-[10px] text-slate-400 truncate">Running offline as standalone PWA</div>
+                      </div>
+                    </div>
+                  ) : isInstallable ? (
+                    <button
+                      type="button"
+                      onClick={() => PwaService.promptInstall()}
+                      data-testid="pwa-install-btn"
+                      className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer text-left"
+                    >
+                      <AppWindow size={16} className="text-amber-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-amber-300">Install Web App</div>
+                        <div className="text-[10px] text-slate-400 truncate">Install on home screen or desktop</div>
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-slate-200 text-xs font-semibold">
+                      <AppWindow size={16} className="text-slate-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-slate-200">Progressive Web App</div>
+                        <div className="text-[10px] text-slate-400 truncate">Install via browser menu for offline play</div>
+                      </div>
+                    </div>
+                  )}
+
                   <a
                     href="capy.apk"
                     download="capy.apk"
