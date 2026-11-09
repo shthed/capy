@@ -4,9 +4,9 @@ Capy is a multi-platform color-by-number suite living in https://github.com/shth
 
 ---
 
-## 1. The Golden Invariants (Non-Negotiable Guardrails)
+## 1. Agent Rules
 
-All contributors and AI agents must strictly observe these absolute prohibitions:
+All contributors and AI agents must strictly observe these core rules:
 
 1. **Never merge without explicit approval**: Never merge a pull request or push directly to `main` without explicit confirmation and approval from the user. Create the pull request, verify that CI tests pass, share the PR link, and wait for confirmation.
 2. **Never deploy to Android devices without request**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
