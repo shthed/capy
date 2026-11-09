@@ -126,6 +126,7 @@ export interface GenerationInspectionDetails {
   maxActualArea?: number;
   resolution?: number;
   estimatedSaveSizeKb?: number;
+  paletteColors?: Array<{ r: number; g: number; b: number }>;
 }
 
 export interface GenerationProgressPayload {

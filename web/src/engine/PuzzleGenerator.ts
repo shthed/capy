@@ -17,7 +17,8 @@ import { RegionSegmenter } from './RegionSegmenter';
 export type ProgressCallback = (
   progress: number,
   status: string,
-  payload?: GenerationProgressPayload
+  payload?: GenerationProgressPayload,
+  paletteColors?: Array<{ r: number; g: number; b: number }>
 ) => void;
 
 export function buildProgressPayload(
@@ -681,14 +682,21 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
       paletteDetail: config.paletteDetail || 'AUTO',
     };
 
-    const emitProgress = (rawProgress: number, status: string) => {
+    const emitProgress = (
+      rawProgress: number,
+      status: string,
+      paletteColors?: Array<{ r: number; g: number; b: number }>
+    ) => {
       if (rawProgress > highestProgress) {
         highestProgress = rawProgress;
+      }
+      if (paletteColors && paletteColors.length > 0) {
+        inspection.paletteColors = paletteColors;
       }
       const payload = detailedProgress
         ? buildProgressPayload(highestProgress, status, inspection)
         : undefined;
-      onProgress?.(highestProgress, status, payload);
+      onProgress?.(highestProgress, status, payload, paletteColors);
     };
 
     emitProgress(0.04, 'Analyzing artwork style and line composition...');
@@ -818,13 +826,20 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
       isFreeColor: isBw,
     };
 
-    const result = delegate.generateFromRgba(rgbaData, width, height, effectiveConfig, (prog, stat) => {
-      emitProgress(prog, stat);
-    });
+    const result = delegate.generateFromRgba(
+      rgbaData,
+      width,
+      height,
+      effectiveConfig,
+      (prog, stat, _payload, palCols) => {
+        emitProgress(prog, stat, palCols);
+      }
+    );
 
     // Update final inspection stats with actual generated values
     inspection.finalRegionCount = result.regions.length;
     inspection.colorCount = result.palette.length;
+    inspection.paletteColors = result.palette.map((p) => ({ r: p.r, g: p.g, b: p.b }));
     if (result.regions.length > 0) {
       let minA = Number.MAX_SAFE_INTEGER;
       let maxA = 0;

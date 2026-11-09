@@ -91,7 +91,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
                     type="button"
                     onClick={() => onToggleDetailedProgress(true)}
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors flex-shrink-0 cursor-pointer"
-                    title="Switch to Detailed Progress with step breakdowns and canvas scanline"
+                    title="Switch to Detailed Progress with real-time pipeline metrics and live palette swatches"
                   >
                     <Sparkles size={11} className="text-amber-400" />
                     <span>Detailed</span>
@@ -177,6 +177,58 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
                 {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </button>
             </div>
+
+            {/* Real Pipeline Parameter Badges */}
+            {(inspection.detectedType || inspection.chosenStrategy || inspection.colorCount || inspection.maxRegions) && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[10px]">
+                {inspection.detectedType && (
+                  <span className="px-2 py-0.5 rounded-md bg-slate-800/90 text-slate-200 border border-slate-700/80 font-medium">
+                    <span className="text-slate-400">Style: </span>
+                    <span className="text-white font-semibold">{inspection.detectedType}</span>
+                  </span>
+                )}
+                {inspection.chosenStrategy && (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-200 border border-amber-400/30 font-medium">
+                    <span className="text-amber-400">Strategy: </span>
+                    <span className="text-amber-300 font-semibold">{inspection.chosenStrategy}</span>
+                  </span>
+                )}
+                {inspection.colorCount && (
+                  <span className="px-2 py-0.5 rounded-md bg-slate-800/90 text-slate-200 border border-slate-700/80 font-medium">
+                    <span className="text-slate-400">Colors: </span>
+                    <span className="text-white font-semibold">{inspection.colorCount}</span>
+                  </span>
+                )}
+                {inspection.maxRegions && (
+                  <span className="px-2 py-0.5 rounded-md bg-slate-800/90 text-slate-200 border border-slate-700/80 font-medium">
+                    <span className="text-slate-400">Target: </span>
+                    <span className="text-white font-semibold">Max {inspection.maxRegions}</span>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Real Clustered Palette Swatches from K-Means */}
+            {inspection.paletteColors && inspection.paletteColors.length > 0 && (
+              <div className="space-y-1 pt-1.5 border-t border-slate-800/70">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold text-amber-300">
+                    Extracted Palette Swatches ({inspection.paletteColors.length})
+                  </span>
+                  <span className="text-[9px] text-slate-500">Live K-Means Centroids</span>
+                </div>
+                <div className="flex flex-wrap gap-1 max-h-12 overflow-hidden py-0.5">
+                  {inspection.paletteColors.slice(0, 36).map((col, idx) => (
+                    <span
+                      key={idx}
+                      className="w-3.5 h-3.5 rounded-full border border-slate-600/70 shadow-xs inline-block flex-shrink-0"
+                      style={{ backgroundColor: `rgb(${col.r}, ${col.g}, ${col.b})` }}
+                      title={`rgb(${col.r}, ${col.g}, ${col.b})`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Brief description of current step */}
             <p className="text-[11px] text-slate-400 leading-relaxed">
