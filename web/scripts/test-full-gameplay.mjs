@@ -319,6 +319,13 @@ async function runFullGameplayTest() {
 
     // Wait for bottom-anchored LoadingOverlay
     console.log('   Waiting for generation pipeline HUD...');
+    // In Fast Mode (default), toggle to Detailed mode if "Detailed" button is present
+    const detailedModeBtn = await page.waitForSelector('button:has-text("Detailed")', { timeout: 8000 }).catch(() => null);
+    if (detailedModeBtn) {
+      await detailedModeBtn.click();
+      await page.waitForTimeout(200);
+      console.log('   ✅ Toggled from Fast Mode (default) to Detailed Progress.');
+    }
     const detailsToggleBtn = await page.waitForSelector('button:has-text("Generation Details")', { timeout: 8000 }).catch(() => null);
     if (detailsToggleBtn) {
       await detailsToggleBtn.click();

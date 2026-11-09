@@ -44,7 +44,7 @@ export class PuzzleWorkerService {
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
     onProgress?: (progress: number, status: string, payload?: GenerationProgressPayload) => void,
-    detailedProgress: boolean = true
+    detailedProgress: boolean = false
   ): Promise<PuzzleData> {
     return new Promise((resolve, reject) => {
       // If Web Worker is not supported, fallback to main-thread execution

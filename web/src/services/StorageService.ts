@@ -42,7 +42,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   replaySpeed: 1,
   autoReplayOnLoad: true,
   reverseDoubleTapZoom: false,
-  detailedLoadingProgress: true,
+  detailedLoadingProgress: false,
   generatorConfig: {
     algorithm: 'AUTO',
     lineHandling: 'ABSORB_LINES',
