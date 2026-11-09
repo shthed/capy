@@ -9,7 +9,7 @@ Capy is a multi-platform color-by-number suite living in https://github.com/shth
 1. **`web/` — Updated Web Application & Single Source of Truth (Deployed to `/`)**
    - Built with **React 19**, **TypeScript**, **Vite 6**, **Tailwind CSS 4**, offscreen cached 2D canvas rendering (`PuzzleCanvas.tsx`), and a 5-strategy Web Worker puzzle engine (`web/src/engine/`).
    - Shared across both the Web deployment and the Android (`app/`) wrapper via `web/src/services/NativeBridge.ts`.
-   - Technical reference for the puzzle engine: [`PUZZLE.md`](./PUZZLE.md); architecture and UI reference: [`WEB.md`](./WEB.md).
+   - Technical reference for the puzzle engine: [`PUZZLE.md`](./PUZZLE.md); architecture and UI reference: [`WEB.md`](./WEB.md); testing guide: [`TESTING.md`](./TESTING.md).
    - Keep asset references relative (`assets/...` and `base: './'` in `web/vite.config.ts`) so deployments work at the GitHub Pages root (`/`), PR preview paths (`/pull/<number>/`), and Android `WebViewAssetLoader` (`https://appassets.androidplatform.net/assets/www/`).
 
 2. **`app/` — Unified Native Android Application (`com.capypaint.capy`, Deployed to `/capy.apk`)**
@@ -25,12 +25,13 @@ Capy is a multi-platform color-by-number suite living in https://github.com/shth
 ```bash
 cd web
 npm ci
-npm run lint    # tsc --noEmit
-npm run build   # tsc && vite build -> web/dist/
-npm run dev     # Vite dev server on http://localhost:3000
-npm run test:undo     # Tests undo timeline, long-press replay scrubber, and redo stack
-npm run test:gameplay # Tests core tap region coloring and canvas state
-npm run test:game     # Comprehensive Playwright browser suite
+npm run lint            # tsc --noEmit
+npm run build           # tsc && vite build -> web/dist/
+npm run dev             # Vite dev server on http://localhost:3000
+npm run test:undo       # Tests undo timeline, long-press replay scrubber, and redo stack
+npm run test:gameplay   # Tests core tap region coloring and canvas state
+npm run test:game       # Comprehensive Playwright browser suite
+npm run gallery:capture # Captures automated UI showcase gallery screenshots
 ```
 
 ### Android Application (`app/`)
@@ -60,7 +61,11 @@ From the repository root:
 - **PR preview lifecycle & cleanup ([`.github/workflows/cleanup-closed-pr.yml`](./.github/workflows/cleanup-closed-pr.yml))**:
   - While a PR is open, its preview is served at `https://shthed.github.io/capy/pull/<number>/`.
   - When a PR is closed or merged, `cleanup-closed-pr.yml` automatically deletes the `/pull/<number>/` preview directory from `gh-pages` and redeploys. Once merged, the changes are live on the root site `https://shthed.github.io/capy/`.
-- **Show working thoughts & communication style**: Use telegraphic, participle-driven log style with zero filler. State actions directly using present participles (e.g. "Updating...", "Inspecting...", "Verifying...") rather than past-tense announcements or conversational filler ("I have updated...", "Now, ...", "First, ...", "Next, ..."). Explain what is being inspected, why, and what actions are occurring without robotic step headings.
+- **Display working thoughts & communication style**:
+  - Always display thoughts while working to explain what is being done and why. The user reads working thoughts to follow along, learn what the agent is doing, and understand its reasoning.
+  - Clearly state what file, component, or system is being inspected and explain the exact reason for the inspection.
+  - State actions directly using present participles (e.g. "Updating...", "Inspecting...", "Verifying...", "Executing...") rather than past-tense announcements or conversational filler ("I have updated...", "Now, ...", "First, ...", "Next, ...").
+  - Avoid robotic numbered step headings; use natural, telegraphic participle-driven logging.
 - **Finish active task before switching**: Finish working on the current task instead of switching when the user sends an update with a new task, unless the comment directly relates to what is currently being worked on.
 - **Plan before executing major changes**: When starting work on a big task, write out a clear plan of what you are going to do and how you are going to implement it before jumping into code edits.
 - **No unsolicited Android device deployment**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
@@ -75,12 +80,44 @@ From the repository root:
     - `ci`: GitHub Actions workflows, CI/CD pipelines, and deployment automation.
     - `deps`: Dependency upgrades, version catalogs, and package manager updates.
 
-- **Documentation hygiene**: Always remember to update documentation after making changes to UI elements, settings, functions, design, or architecture. Keep [`TODO.md`](./TODO.md), [`WEB.md`](./WEB.md), [`PUZZLE.md`](./PUZZLE.md), and [`APP.md`](./APP.md) in sync with architectural or runtime changes. Always remember to update [`WEB.md`](./WEB.md) with details of all functions, settings, UI elements, gestures, and engine features. Never use emojis in documentation files.
+- **Documentation hygiene**:
+  - Keep [`TODO.md`](./TODO.md), [`WEB.md`](./WEB.md), [`PUZZLE.md`](./PUZZLE.md), [`APP.md`](./APP.md), [`TESTING.md`](./TESTING.md), and [`README.md`](./README.md) in sync with architectural or runtime changes.
+  - Always update [`WEB.md`](./WEB.md) with details of all functions, settings, UI elements, gestures, and engine features.
+  - Task hygiene in [`TODO.md`](./TODO.md): Remove completed items from [`TODO.md`](./TODO.md) immediately upon completion rather than checking them off. Keep [`TODO.md`](./TODO.md) strictly focused on active, pending roadmap tasks.
+  - Never use emojis in documentation files.
 - **Export chat log and development summary to PR before merge**: When finalising a pull request ready for merge, compile a comprehensive summary of the entire conversation and development process (all user requests, architectural decisions, implementations, debugging notes, test execution results, and visual showcases) and post it as a comment on the pull request. This preserves a complete historical record of the development workflow and context directly on GitHub.
 
 ---
 
-## 4. Android Coding Style & Warning Prevention (`app/`)
+## 4. Web & Puzzle Engine Coding Conventions (`web/`)
+
+1. **Coordinate Geometry & Invariant Transformations**:
+   - Maintain explicit distinctions between Screen coordinates (pointer DOM events), Container coordinates (CSS client bounds), Artwork coordinates (canvas image pixel grid), and Segmentation map coordinates (`regions[id]`).
+   - All pointer coordinate conversions must use `screenToCanvas` (and inverse `canvasToScreen`) in [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
+   - Zoom and pan operations must maintain focal point invariance under pinch-to-zoom and Google Maps-style one-finger double-tap-and-drag gestures.
+
+2. **Zero-Allocation Canvas Render Loop**:
+   - Forbid object and array allocations inside high-frequency animation loops (`requestAnimationFrame`, pan momentum gliding, and canvas repainting).
+   - Reuse typed array buffers (`Uint8Array`, `Uint32Array`), pre-allocated bounding box structs, and scratch vectors to eliminate garbage collection micro-stutter during active gameplay.
+
+3. **React State vs Direct Canvas Refs**:
+   - High-frequency 60-120fps interactions (pointer dragging, momentum flick gliding, pinch zoom) must directly mutate canvas refs and trigger repaints via `requestAnimationFrame` without triggering React virtual DOM reconciliation.
+   - React state is reserved for discrete lifecycle transitions: active color selection, region completed, modal visibility, and completion stats.
+
+4. **Web Worker Concurrency & Transferable Buffers**:
+   - All CPU-heavy image processing (color quantization, K-Means clustering, Otsu thresholding, contour line tracing, region segmentation) must execute exclusively in [`web/src/engine/puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts).
+   - Message payloads between main thread and worker must utilize transferable `ArrayBuffer` objects where possible to eliminate serialization overhead.
+   - Generation tasks must support clean cancellation and worker termination when a new puzzle is initiated.
+
+5. **Defensive NativeBridge Fallback Pattern**:
+   - Every bridge invocation (`NativeBridge.hapticFeedback`, `NativeBridge.openPhotoPicker`, `NativeBridge.saveJsonBackup`) must feature-detect host capabilities and fall back safely to Web APIs (`navigator.vibrate`, `<input type="file">`, IndexedDB) without throwing uncaught exceptions.
+
+6. **Relative Asset Path Invariance**:
+   - Never use root-relative `/assets/...` URLs in code or CSS. Always use relative `./assets/...` and maintain `base: './'` in [`web/vite.config.ts`](./web/vite.config.ts) to guarantee seamless asset resolution across GitHub Pages root (`/`), PR previews (`/pull/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`).
+
+---
+
+## 5. Android Coding Style & Warning Prevention (`app/`)
 
 1. **Trailing Commas**: Include trailing commas in multiline parameter lists, Composable call arguments, and data class declarations.
 2. **Clarifying Parentheses**: Wrap sub-expressions in explicit parentheses for complex logical or range operations.
@@ -91,7 +128,7 @@ From the repository root:
 
 ---
 
-## 5. Maintaining & Updating Dependencies
+## 6. Maintaining & Updating Dependencies
 
 To keep all target environments (Web `web/` and Android `:app`) up to date with security patches and new library releases, follow these workflows:
 
@@ -125,3 +162,28 @@ To keep all target environments (Web `web/` and Android `:app`) up to date with 
    ./gradlew app:testDebugUnitTest
    ./gradlew app:assembleDebug
    ```
+
+---
+
+## 7. Pre-PR Verification Checklist
+
+Before opening or merging any pull request, execute the following verification checklist sequentially:
+
+```bash
+# 1. Type check and compile web application
+cd web
+npm run lint                  # tsc --noEmit
+npm run build                 # tsc && vite build -> web/dist/
+
+# 2. Run automated gameplay and regression test suites
+npm run test:undo             # Undo timeline, scrubber, and redo stack
+npm run test:gameplay         # Core tap region coloring and canvas state
+
+# 3. Optional visual gallery capture (for UI / styling modifications)
+npm run gallery:capture       # Generates automated UI showcase screenshots
+
+# 4. Run native Android unit tests and verify APK assembly
+cd ..
+./gradlew app:testDebugUnitTest # Native bridge JUnit4 unit tests
+./gradlew app:assembleDebug   # Syncs web/dist and builds debug APK
+```
