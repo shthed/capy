@@ -46,6 +46,7 @@ interface PuzzleCanvasProps {
   initialPanOffsetX?: number;
   initialPanOffsetY?: number;
   isGenerating?: boolean;
+  detailedProgress?: boolean;
   generationProgress?: number;
   generationStepIndex?: number;
   onViewExtentChanged?: (zoom: number, panX: number, panY: number) => void;
@@ -149,6 +150,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   initialPanOffsetX = 0,
   initialPanOffsetY = 0,
   isGenerating = false,
+  detailedProgress = true,
   generationProgress = 0,
   generationStepIndex = 1,
   onViewExtentChanged,
@@ -346,7 +348,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     });
   }, [scale, puzzle]);
 
-  // Pulse animation frame (runs when animateHint or isGenerating is active)
+  // Pulse animation frame (runs when animateHint or (isGenerating && detailedProgress) is active)
   useEffect(() => {
     let animId: number;
     const startTime = performance.now();
@@ -358,14 +360,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       animId = requestAnimationFrame(loop);
     };
 
-    if (animateHint || isGenerating) {
+    if (animateHint || (isGenerating && detailedProgress)) {
       animId = requestAnimationFrame(loop);
     } else {
       setPulseAlpha(0.7);
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [animateHint, isGenerating]);
+  }, [animateHint, isGenerating, detailedProgress]);
 
   // Tap dot decay
   useEffect(() => {
@@ -989,7 +991,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         ctx.drawImage(sourceImage, 0, 0, artW, artH);
 
         // Draw live puzzle generation visualization over the image
-        if (isGenerating) {
+        if (isGenerating && detailedProgress) {
           const prog = Math.min(1, Math.max(0.02, generationProgress));
           const scanY = prog * artH;
 
@@ -1228,6 +1230,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     pulseAlpha,
     tapDot,
     isGenerating,
+    detailedProgress,
     generationProgress,
     generationStepIndex,
   ]);

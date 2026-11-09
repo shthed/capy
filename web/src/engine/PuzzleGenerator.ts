@@ -64,7 +64,8 @@ export interface PuzzleGenerator {
   generate(
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    detailedProgress?: boolean
   ): PuzzleData;
 
   generateFromRgba(
@@ -72,7 +73,8 @@ export interface PuzzleGenerator {
     width: number,
     height: number,
     config: GeneratorConfig,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    detailedProgress?: boolean
   ): PuzzleData;
 }
 
@@ -648,11 +650,19 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
   generate(
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    detailedProgress: boolean = true
   ): PuzzleData {
     const ctx = sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
-    return this.generateFromRgba(imgData.data, sourceCanvas.width, sourceCanvas.height, config, onProgress);
+    return this.generateFromRgba(
+      imgData.data,
+      sourceCanvas.width,
+      sourceCanvas.height,
+      config,
+      onProgress,
+      detailedProgress
+    );
   }
 
   generateFromRgba(
@@ -660,7 +670,8 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
     width: number,
     height: number,
     config: GeneratorConfig,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    detailedProgress: boolean = true
   ): PuzzleData {
     let highestProgress = 0.02;
     const inspection: GenerationInspectionDetails = {
@@ -674,7 +685,9 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
       if (rawProgress > highestProgress) {
         highestProgress = rawProgress;
       }
-      const payload = buildProgressPayload(highestProgress, status, inspection);
+      const payload = detailedProgress
+        ? buildProgressPayload(highestProgress, status, inspection)
+        : undefined;
       onProgress?.(highestProgress, status, payload);
     };
 
