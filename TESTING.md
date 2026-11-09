@@ -12,10 +12,10 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers and
 
 | Capability | Playwright | Puppeteer | Cypress | Jest / Testing Library |
 | :--- | :--- | :--- | :--- | :--- |
-| **Multi-Touch & Pointer Gestures** | **Native** (`hasTouch`, `touchIdentifier`, pointer stream) | Raw CDP touch events only | Limited / plugin-dependent | ❌ No real touch/canvas simulation |
-| **Canvas Pixel & Hit-Test Inspection** | **Full** (evaluate canvas contexts, `getImageData`, pixel sampling) | Full (evaluate in page) | Partial (iframe constraints) | ❌ Mocked / stubbed canvas only |
-| **Web Worker Lifecycle & Cancellation** | **Automatic** tracking and message interception | Manual worker target attachment | ❌ Poor worker isolation in iframe | ❌ No worker thread execution |
-| **Mobile Viewport & Safe-Area Emulation** | **Native** (DPR, safe-area insets, mobile touch events) | Viewport resize only | Emulated viewports only | ❌ Headless DOM only |
+| **Multi-Touch & Pointer Gestures** | **Native** (`hasTouch`, `touchIdentifier`, pointer stream) | Raw CDP touch events only | Limited / plugin-dependent | No real touch/canvas simulation |
+| **Canvas Pixel & Hit-Test Inspection** | **Full** (evaluate canvas contexts, `getImageData`, pixel sampling) | Full (evaluate in page) | Partial (iframe constraints) | Mocked / stubbed canvas only |
+| **Web Worker Lifecycle & Cancellation** | **Automatic** tracking and message interception | Manual worker target attachment | Poor worker isolation in iframe | No worker thread execution |
+| **Mobile Viewport & Safe-Area Emulation** | **Native** (DPR, safe-area insets, mobile touch events) | Viewport resize only | Emulated viewports only | Headless DOM only |
 | **Execution Speed & Reliability** | **High** (direct CDP multiplexing, isolated contexts) | High | Medium (in-browser iframe overhead) | Very High (but no browser rendering) |
 
 ### Key Reasons Playwright Excels for Capy:
@@ -32,18 +32,10 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers and
 
 ## 2. Test Suites Across Targets
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                               Capy Monorepo                                 │
-├───────────────────────────────┬─────────────────────────────────────────────┤
-│ Web Application               │ Native Android Launcher                     │
-│  ├─ web/                      │  └─ app/                                    │
-│  │   ├─ TypeScript Type Check │      ├─ JUnit4 Unit Tests (Native Bridge)   │
-│  │   ├─ Vite Production Build │      ├─ Web Bundle Sync (:buildWeb)         │
-│  │   ├─ Playwright E2E Suite  │      └─ Debug APK Assembly (:assembleDebug) │
-│  │   └─ Timeline Replay Tests │                                             │
-└───────────────────────────────┴─────────────────────────────────────────────┘
-```
+| Target | Test Scope | Verification Steps |
+| :--- | :--- | :--- |
+| **Web Application (`web/`)** | TypeScript type check, production build, Playwright E2E suites | `npm run lint`, `npm run build`, `npm run test:undo`, `npm run test:gameplay` |
+| **Native Android Launcher (`app/`)** | JUnit4 native bridge unit tests, web asset bundle sync, debug APK assembly | `./gradlew app:testDebugUnitTest`, `./gradlew app:assembleDebug` |
 
 ### A. Web Application (`web/`)
 
@@ -121,7 +113,7 @@ When writing or executing Playwright tests for `PuzzleCanvas.tsx`, adhere to the
 Capy uses a bifurcated GitHub Actions workflow ensuring high velocity and security:
 
 1. **Build & Test Job** (`contents: read`):
-   - Compiles `web/` (`npm run lint && npm run build`).
+   - Compiles `web/` (`npm ci && npm run build`, which includes `tsc`).
    - Executes Android unit tests (`./gradlew app:testDebugUnitTest`).
    - Assembles native Android debug APK (`./gradlew app:assembleDebug`).
    - Runs in parallel across PR branches without concurrency locks.
