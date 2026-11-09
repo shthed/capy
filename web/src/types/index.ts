@@ -176,6 +176,7 @@ export interface SavedSnapshot {
   title: string;
   timestamp: number;
   lastOpened: number;
+  isPinned?: boolean;
   filledCount: number;
   totalCount: number;
   /** Region IDs in exact chronological order of completion */

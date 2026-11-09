@@ -199,6 +199,13 @@ export class StorageService {
     return updated;
   }
 
+  static togglePinSnapshot(id: string): SavedSnapshot[] {
+    const list = this.loadSnapshots();
+    const updated = list.map((s) => (s.id === id ? { ...s, isPinned: !s.isPinned } : s));
+    this.saveSnapshots(updated);
+    return updated;
+  }
+
   static async deleteSnapshot(id: string): Promise<SavedSnapshot[]> {
     const list = this.loadSnapshots();
     const updated = list.filter((s) => s.id !== id);
