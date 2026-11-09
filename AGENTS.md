@@ -108,7 +108,7 @@ From the repository root:
 - **Scope Discipline & Minimal Diffs**: Only modify files directly required to fulfill the active task. Avoid speculative refactorings, reformatting unrelated files, or introducing architectural complexity beyond what was requested.
 - **Credential & Secret Hygiene**: Never commit secrets, personal access tokens, API credentials, or internal environment details to Git or pull request comments.
 - **User-Friendly Pull Request Naming & Labels**:
-  - **PR Titles**: Write clean, concise, human-readable titles focusing on user value (e.g. `Visual Screenshot Showcase Gallery & Automated Capture Pipeline`, `Google Maps-Style Zoom, Pan Momentum & Corner Navigation`). Do not use raw git commit syntax or parenthesized prefixes in PR titles.
+  - **PR Titles**: Write clean, concise, direct action-oriented titles focusing on what changed (e.g. `Update AGENTS.md: Improve rules`, `Add PWA offline support`, `Fix zoom pan gestures`). Avoid overly verbose, buzzword-heavy titles or raw git commit syntax and parenthesized prefixes.
   - **PR Labels**: Always attach appropriate GitHub label tags when opening or editing PRs:
     - `feature`: New gameplay features, controls, or user capabilities.
     - `fix`: Bug fixes, gesture corrections, or rendering fixes.
