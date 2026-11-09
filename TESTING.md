@@ -48,6 +48,7 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers and
 | **Undo & Timeline Suite** | `npm run test:undo` | Tests long-press undo timeline scrubber, resume play from step, redo stack, and save portability. |
 | **Gameplay Smoke Suite** | `npm run test:gameplay` | Tests core tap region coloring, canvas rendering, and progress tracking. |
 | **Browser E2E Suite** | `npm run test:game` | Comprehensive Playwright browser suite verifying zoom, pan, settings, and modal flows. |
+| **PWA & Offline Suite** | `npm run test:pwa` | Validates web app manifest, Service Worker registration, Cache Storage population, network disconnect emulation, and 100% offline gameplay. |
 
 ### B. Native Android Application (`app/`)
 

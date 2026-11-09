@@ -11,6 +11,7 @@
     "test:game": "node scripts/test-game.mjs",
     "test:gameplay": "node scripts/test-full-gameplay.mjs",
     "test:undo": "node scripts/test-undo-timeline.mjs",
+    "test:pwa": "node scripts/test-pwa-offline.mjs",
     "gallery:capture": "node scripts/capture-gallery.mjs"
   },
 
