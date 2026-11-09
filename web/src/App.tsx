@@ -1818,6 +1818,10 @@ export const App: React.FC = () => {
           const updated = StorageService.renameSnapshot(id, newTitle);
           setSnapshots(updated);
         }}
+        onTogglePinSnapshot={(id) => {
+          const updated = StorageService.togglePinSnapshot(id);
+          setSnapshots(updated);
+        }}
         onDeleteSnapshot={async (id) => {
           const updated = await StorageService.deleteSnapshot(id);
           setSnapshots(updated);

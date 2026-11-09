@@ -450,10 +450,40 @@ async function testUndoTimelineAndRedo() {
     const renameActionBtn = await page.waitForSelector('[data-testid="save-action-rename"]');
     const exportActionBtn = await page.waitForSelector('[data-testid="save-action-export"]');
     const deleteActionBtn = await page.waitForSelector('[data-testid="save-action-delete"]');
-    if (!actionBar || !loadActionBtn || !replayActionBtn || !renameActionBtn || !exportActionBtn || !deleteActionBtn) {
-      throw new Error('Unified action bar or one of its action buttons is missing!');
+    const pinActionBtn = await page.waitForSelector('[data-testid="save-action-pin"]');
+    if (!actionBar || !loadActionBtn || !replayActionBtn || !renameActionBtn || !exportActionBtn || !deleteActionBtn || !pinActionBtn) {
+      throw new Error('Unified action bar or one of its action buttons (including pin) is missing!');
     }
-    console.log('   ✅ Unified Selected Save Action Bar verified (Load/Resume, Replay, Rename, Export, Delete).');
+    console.log('   ✅ Unified Selected Save Action Bar verified (Pin/Unpin, Load/Resume, Replay, Rename, Export, Delete).');
+
+    // Verify absence of "Sort:" label, "Reset" button, and "SELECTED:" text
+    const sortLabel = await page.$('text="Sort:"');
+    if (sortLabel) throw new Error('Found deprecated "Sort:" text label!');
+    const resetBtn = await page.$('button:has-text("Reset")');
+    if (resetBtn) throw new Error('Found deprecated "Reset" button in Saves controls!');
+    const selectedLabel = await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="selected-save-action-bar"]');
+      return el && el.textContent.includes('SELECTED:');
+    });
+    if (selectedLabel) throw new Error('Found deprecated "SELECTED:" text in action bar!');
+    console.log('   ✅ Absence of Sort label, Reset button, and SELECTED banner verified.');
+
+    // Verify absence of "regions" count in save card
+    const regionsText = await page.evaluate(() => {
+      const card = document.querySelector('[data-testid^="save-card-"]');
+      return card && /regions/i.test(card.textContent);
+    });
+    if (regionsText) throw new Error('Found deprecated "regions" count text in save card!');
+    console.log('   ✅ Absence of "X/X regions" text in save card verified.');
+
+    // Test Pinning feature
+    await pinActionBtn.click();
+    await page.waitForTimeout(200);
+    const pinActionText = await page.evaluate(() => document.querySelector('[data-testid="save-action-pin"]')?.textContent);
+    if (!pinActionText || !pinActionText.includes('Unpin')) {
+      throw new Error(`Expected pin button to show 'Unpin' after click, got: ${pinActionText}`);
+    }
+    console.log('   ✅ Pin toggle verified: action button updated to "Unpin".');
 
     // Verify Detail mode thumbnail size is enlarged (w-16 h-16 / 64px+)
     const detailThumbnail = await page.$('.w-16.h-16, .w-18.h-18, .w-20.h-20');

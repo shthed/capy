@@ -18,6 +18,7 @@ import {
   Smartphone,
   List,
   LayoutGrid,
+  Pin,
 } from 'lucide-react';
 import {
   CANVAS_BG_MAP,
@@ -57,9 +58,10 @@ interface SettingsModalProps {
   onLoadSnapshot: (snapshot: SavedSnapshot) => void;
   onReplaySnapshot?: (snapshot: SavedSnapshot) => void;
   onRenameSnapshot: (id: string, newTitle: string) => void;
+  onTogglePinSnapshot?: (id: string) => void;
   onDeleteSnapshot: (id: string) => void;
   onClearAllSnapshots: () => void;
-  onResetProgress: () => void;
+  onResetProgress?: () => void;
   onRegenerate: (config: GeneratorConfig) => void;
   onSelectSample: (sample: SampleArtwork) => void;
   onUploadImage: () => void;
@@ -84,6 +86,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onLoadSnapshot,
   onReplaySnapshot,
   onRenameSnapshot,
+  onTogglePinSnapshot,
   onDeleteSnapshot,
   onClearAllSnapshots,
   onResetProgress,
@@ -225,9 +228,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: 3, label: 'Saves', icon: Save },
   ];
 
-  // Sort snapshots
+  // Sort snapshots: Pinned saves always stay at the top
   const sortedSnapshots = [...snapshots].sort((a, b) => {
-    // Active save pinned first
+    const aPinned = Boolean(a.isPinned);
+    const bPinned = Boolean(b.isPinned);
+    if (aPinned !== bPinned) return aPinned ? -1 : 1;
+
+    // Active save pinned next if neither/both are pinned
     if (a.id === activeSnapshotId) return -1;
     if (b.id === activeSnapshotId) return 1;
 
@@ -1342,98 +1349,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* TAB 3: SAVES / SNAPSHOTS */}
           {activeTab === 3 && (
             <div className="space-y-3.5">
-              {/* Top Controls */}
+              {/* Top Controls: Sort, Replay on Load, and View Mode Switch */}
               <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 font-semibold">Sort:</span>
+                <div className="flex items-center gap-2.5">
                   <select
                     value={settings.saveSortOrder}
                     onChange={(e) =>
                       updateSetting('saveSortOrder', e.target.value as SaveSortOrder)
                     }
-                    className="bg-slate-800 text-slate-200 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none"
+                    className="bg-slate-800 text-slate-200 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none cursor-pointer"
                   >
                     <option value="LAST_ACTIVE">Last Active</option>
                     <option value="DATE">Date Created</option>
                     <option value="PERCENT_COMPLETE">Completion</option>
                   </select>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  {/* Hidden file input for Import */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".capy,.json,application/json"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file && onImportSnapshots) {
-                        onImportSnapshots(file);
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-slate-300">Replay on Load</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      data-testid="toggle-auto-replay-saves-btn"
+                      aria-checked={settings.autoReplayOnLoad !== false}
+                      onClick={() =>
+                        updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
                       }
-                      if (e.target) e.target.value = '';
-                    }}
-                  />
-
-                  {onImportSnapshots && (
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      title="Import Save (.capy / .json)"
-                      data-testid="import-save-btn"
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
-                    >
-                      <Upload size={13} className="text-amber-400" />
-                      <span>Import</span>
-                    </button>
-                  )}
-
-                  {onExportAllSnapshots && snapshots.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={onExportAllSnapshots}
-                      title="Export All Saves to Backup File"
-                      data-testid="export-all-saves-btn"
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
-                    >
-                      <Download size={13} className="text-amber-400" />
-                      <span>Export All</span>
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={onResetProgress}
-                    className="flex items-center gap-1 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
-                  >
-                    <RotateCcw size={13} />
-                    <span>Reset</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Minimal Replay on Load & View Mode Switch */}
-              <div className="flex items-center justify-between py-1 px-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-300">Replay on Load</span>
-                  <button
-                    type="button"
-                    role="switch"
-                    data-testid="toggle-auto-replay-saves-btn"
-                    aria-checked={settings.autoReplayOnLoad !== false}
-                    onClick={() =>
-                      updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
-                    }
-                    className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
-                      settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-slate-950 transition-transform ${
-                        settings.autoReplayOnLoad !== false ? 'translate-x-4' : 'translate-x-0'
+                      className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                        settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
                       }`}
-                    />
-                  </button>
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-slate-950 transition-transform ${
+                          settings.autoReplayOnLoad !== false ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Detail vs Thumbnails View Mode Toggle */}
@@ -1473,177 +1424,184 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {selectedSave && (
                 <div
                   data-testid="selected-save-action-bar"
-                  className="p-2.5 rounded-xl bg-slate-950/80 border border-amber-400/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm"
+                  className="p-2.5 rounded-xl bg-slate-950/80 border border-amber-400/40 shadow-sm"
                 >
-                  {/* Selected Save Name & Rename Input */}
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex-shrink-0">
-                      Selected:
-                    </span>
-                    {renamingId === selectedSave.id ? (
-                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                        <input
-                          type="text"
-                          value={renameText}
-                          onChange={(e) => setRenameText(e.target.value)}
-                          className="px-2 py-0.5 text-xs bg-slate-800 border border-amber-400 rounded text-white focus:outline-none w-full"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              if (renameText.trim()) onRenameSnapshot(selectedSave.id, renameText.trim());
-                              setRenamingId(null);
-                            } else if (e.key === 'Escape') {
-                              setRenamingId(null);
-                            }
-                          }}
-                        />
-                        <button
-                          type="button"
-                          data-testid="confirm-rename-btn"
-                          onClick={() => {
+                  {renamingId === selectedSave.id ? (
+                    /* Inline Rename Form */
+                    <div className="flex items-center gap-1.5 w-full">
+                      <input
+                        type="text"
+                        value={renameText}
+                        onChange={(e) => setRenameText(e.target.value)}
+                        className="px-2.5 py-1.5 text-xs bg-slate-800 border border-amber-400 rounded-lg text-white focus:outline-none flex-1 min-w-0"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
                             if (renameText.trim()) onRenameSnapshot(selectedSave.id, renameText.trim());
                             setRenamingId(null);
-                          }}
-                          className="p-1 text-amber-400 hover:text-white cursor-pointer"
-                          title="Confirm Rename"
-                        >
-                          <Check size={14} />
-                        </button>
+                          } else if (e.key === 'Escape') {
+                            setRenamingId(null);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        data-testid="confirm-rename-btn"
+                        onClick={() => {
+                          if (renameText.trim()) onRenameSnapshot(selectedSave.id, renameText.trim());
+                          setRenamingId(null);
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow active:scale-95 cursor-pointer"
+                        title="Save Name"
+                      >
+                        <Check size={13} />
+                        <span>Save</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRenamingId(null)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
+                        title="Cancel Rename"
+                      >
+                        <X size={13} />
+                        <span>Cancel</span>
+                      </button>
+                    </div>
+                  ) : (
+                    /* Action Buttons with Names (No "SELECTED: name" label) */
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {/* Pin / Unpin */}
+                      {onTogglePinSnapshot && (
                         <button
                           type="button"
-                          onClick={() => setRenamingId(null)}
-                          className="p-1 text-slate-400 hover:text-white cursor-pointer"
-                          title="Cancel Rename"
+                          data-testid="save-action-pin"
+                          onClick={() => onTogglePinSnapshot(selectedSave.id)}
+                          title={selectedSave.isPinned ? 'Unpin Save from Top' : 'Pin Save to Top'}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors shadow active:scale-95 cursor-pointer ${
+                            selectedSave.isPinned
+                              ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                          }`}
                         >
-                          <X size={14} />
+                          <Pin size={12} className={selectedSave.isPinned ? 'fill-current rotate-45' : ''} />
+                          <span>{selectedSave.isPinned ? 'Unpin' : 'Pin'}</span>
                         </button>
-                      </div>
-                    ) : (
-                      <span
-                        className="text-xs sm:text-sm font-bold text-slate-200 truncate cursor-pointer hover:text-amber-300"
-                        title={selectedSave.title}
+                      )}
+
+                      {/* Load / Resume */}
+                      <button
+                        type="button"
+                        data-testid="save-action-load"
+                        onClick={() => {
+                          if (selectedSave.id !== activeSnapshotId) {
+                            onLoadSnapshot(selectedSave);
+                          }
+                          onClose();
+                        }}
+                        title={
+                          selectedSave.id === activeSnapshotId
+                            ? 'Resume Current Game'
+                            : 'Load Selected Save'
+                        }
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow active:scale-95 cursor-pointer"
+                      >
+                        <Play size={12} fill="currentColor" />
+                        <span>{selectedSave.id === activeSnapshotId ? 'Resume' : 'Load'}</span>
+                      </button>
+
+                      {/* Replay */}
+                      {onReplaySnapshot && (
+                        <button
+                          type="button"
+                          data-testid="save-action-replay"
+                          disabled={selectedSave.filledCount === 0}
+                          onClick={() => {
+                            if (selectedSave.filledCount > 0) {
+                              onReplaySnapshot(selectedSave);
+                              onClose();
+                            }
+                          }}
+                          title={
+                            selectedSave.filledCount === 0
+                              ? 'No regions filled to replay'
+                              : 'Watch Animated Replay'
+                          }
+                          className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-lg border transition-colors shadow active:scale-95 ${
+                            selectedSave.filledCount === 0
+                              ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed opacity-50'
+                              : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-400/40 cursor-pointer'
+                          }`}
+                        >
+                          <Play size={12} />
+                          <span>Replay</span>
+                        </button>
+                      )}
+
+                      {/* Rename */}
+                      <button
+                        type="button"
+                        data-testid="save-action-rename"
                         onClick={() => {
                           setRenamingId(selectedSave.id);
                           setRenameText(selectedSave.title);
                         }}
+                        title="Rename Save"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
                       >
-                        {selectedSave.title}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Actions for Selected Save */}
-                  <div className="flex items-center justify-end gap-1.5 flex-shrink-0 w-full sm:w-auto">
-                    {/* Load / Resume */}
-                    <button
-                      type="button"
-                      data-testid="save-action-load"
-                      onClick={() => {
-                        if (selectedSave.id !== activeSnapshotId) {
-                          onLoadSnapshot(selectedSave);
-                        }
-                        onClose();
-                      }}
-                      title={
-                        selectedSave.id === activeSnapshotId
-                          ? 'Resume Current Game'
-                          : 'Load Selected Save'
-                      }
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow active:scale-95 cursor-pointer"
-                    >
-                      <Play size={12} fill="currentColor" />
-                      <span>{selectedSave.id === activeSnapshotId ? 'Resume' : 'Load'}</span>
-                    </button>
-
-                    {/* Replay */}
-                    {onReplaySnapshot && (
-                      <button
-                        type="button"
-                        data-testid="save-action-replay"
-                        disabled={selectedSave.filledCount === 0}
-                        onClick={() => {
-                          if (selectedSave.filledCount > 0) {
-                            onReplaySnapshot(selectedSave);
-                            onClose();
-                          }
-                        }}
-                        title={
-                          selectedSave.filledCount === 0
-                            ? 'No regions filled to replay'
-                            : 'Watch Animated Replay'
-                        }
-                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-lg border transition-colors shadow active:scale-95 ${
-                          selectedSave.filledCount === 0
-                            ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed opacity-50'
-                            : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-400/40 cursor-pointer'
-                        }`}
-                      >
-                        <Play size={12} />
-                        <span>Replay</span>
+                        <Edit2 size={12} />
+                        <span>Rename</span>
                       </button>
-                    )}
 
-                    {/* Rename */}
-                    <button
-                      type="button"
-                      data-testid="save-action-rename"
-                      onClick={() => {
-                        setRenamingId(selectedSave.id);
-                        setRenameText(selectedSave.title);
-                      }}
-                      title="Rename Save"
-                      className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <Edit2 size={13} />
-                    </button>
-
-                    {/* Export */}
-                    {onExportSnapshot && (
-                      <button
-                        type="button"
-                        data-testid="save-action-export"
-                        onClick={() => onExportSnapshot(selectedSave.id, selectedSave.title)}
-                        title="Export Save File (.capy)"
-                        className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <Download size={13} />
-                      </button>
-                    )}
-
-                    {/* Delete */}
-                    {confirmDeleteId === selectedSave.id ? (
-                      <div className="flex items-center gap-1">
+                      {/* Export */}
+                      {onExportSnapshot && (
                         <button
                           type="button"
-                          data-testid="save-action-confirm-delete"
-                          onClick={() => {
-                            onDeleteSnapshot(selectedSave.id);
-                            setConfirmDeleteId(null);
-                          }}
-                          className="px-2 py-1 text-[11px] font-bold bg-red-600 text-white rounded hover:bg-red-500 cursor-pointer"
+                          data-testid="save-action-export"
+                          onClick={() => onExportSnapshot(selectedSave.id, selectedSave.title)}
+                          title="Export Save File (.capy)"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
                         >
-                          Confirm
+                          <Download size={12} />
+                          <span>Export</span>
                         </button>
+                      )}
+
+                      {/* Delete */}
+                      {confirmDeleteId === selectedSave.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            data-testid="save-action-confirm-delete"
+                            onClick={() => {
+                              onDeleteSnapshot(selectedSave.id);
+                              setConfirmDeleteId(null);
+                            }}
+                            className="px-2.5 py-1.5 text-[11px] font-bold bg-red-600 text-white rounded-lg hover:bg-red-500 cursor-pointer"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="px-2.5 py-1.5 text-[11px] bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
                         <button
                           type="button"
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="px-2 py-1 text-[11px] bg-slate-800 text-slate-300 rounded hover:bg-slate-700 cursor-pointer"
+                          data-testid="save-action-delete"
+                          onClick={() => setConfirmDeleteId(selectedSave.id)}
+                          title="Delete Save"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-red-950/40 text-slate-300 hover:text-red-400 border border-slate-700 hover:border-red-500/40 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
                         >
-                          Cancel
+                          <Trash2 size={12} />
+                          <span>Delete</span>
                         </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        data-testid="save-action-delete"
-                        onClick={() => setConfirmDeleteId(selectedSave.id)}
-                        title="Delete Save"
-                        className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1697,16 +1655,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                         {/* Info & Title */}
                         <div className="flex-1 min-w-0">
-                          <h4 className="text-xs sm:text-sm font-bold text-slate-200 truncate">
-                            {snap.title}
-                          </h4>
+                          <div className="flex items-center gap-1.5">
+                            <h4 className="text-xs sm:text-sm font-bold text-slate-200 truncate">
+                              {snap.title}
+                            </h4>
+                            {snap.isPinned && (
+                              <Pin size={11} className="text-amber-400 fill-amber-400 flex-shrink-0" />
+                            )}
+                          </div>
 
                           <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400 font-medium">
                             <span className="text-amber-400 font-bold">{progressPct}%</span>
-                            <span>•</span>
-                            <span>
-                              {snap.filledCount}/{snap.totalCount} regions
-                            </span>
                             {snap.fileSizeBytes && snap.fileSizeBytes > 0 ? (
                               <>
                                 <span>•</span>
@@ -1773,6 +1732,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <ImageIcon size={28} className="text-slate-600" />
                           )}
 
+                          {/* Pin Badge if Pinned */}
+                          {snap.isPinned && (
+                            <div className="absolute top-1.5 left-1.5 bg-slate-950/85 backdrop-blur-xs text-amber-400 p-1 rounded-md border border-slate-700/60 shadow-sm">
+                              <Pin size={10} className="fill-current" />
+                            </div>
+                          )}
+
                           {/* Floating Percentage Badge */}
                           <div className="absolute top-1.5 right-1.5 bg-slate-950/85 backdrop-blur-xs text-amber-400 text-[11px] font-black px-1.5 py-0.5 rounded-md border border-slate-700/60 shadow-sm">
                             {progressPct}%
@@ -1788,12 +1754,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
 
                         {/* Title Footer */}
-                        <div className="p-2 flex flex-col gap-0.5">
+                        <div className="p-2 flex items-center justify-between gap-1">
                           <span className="text-xs font-bold text-slate-200 truncate" title={snap.title}>
                             {snap.title}
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            {snap.filledCount}/{snap.totalCount} regions
                           </span>
                         </div>
                       </div>
@@ -1808,43 +1771,88 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
 
-              {/* Bottom Actions */}
-              {snapshots.length > 0 && (
-                <div className="pt-3 border-t border-slate-800/80 flex justify-between items-center">
-                  {confirmClearAll ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-red-400 font-semibold">
-                        Delete all saved games?
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onClearAllSnapshots();
-                          setConfirmClearAll(false);
-                        }}
-                        className="px-2.5 py-1 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-500"
-                      >
-                        Yes, Delete All
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmClearAll(false)}
-                        className="px-2.5 py-1 text-xs bg-slate-800 text-slate-300 rounded hover:bg-slate-700"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
+              {/* Bottom Actions: Import, Export All, Delete All Saves */}
+              <div className="pt-3 border-t border-slate-800/80 flex flex-wrap justify-between items-center gap-2">
+                <div className="flex items-center gap-2">
+                  {/* Hidden file input for Import */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".capy,.json,application/json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file && onImportSnapshots) {
+                        onImportSnapshots(file);
+                      }
+                      if (e.target) e.target.value = '';
+                    }}
+                  />
+
+                  {onImportSnapshots && (
                     <button
                       type="button"
-                      onClick={() => setConfirmClearAll(true)}
-                      className="text-xs font-bold text-red-400 hover:text-red-300 transition-colors"
+                      onClick={() => fileInputRef.current?.click()}
+                      title="Import Save (.capy / .json)"
+                      data-testid="import-save-btn"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
                     >
-                      Delete All Saves
+                      <Upload size={13} className="text-amber-400" />
+                      <span>Import</span>
+                    </button>
+                  )}
+
+                  {onExportAllSnapshots && snapshots.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={onExportAllSnapshots}
+                      title="Export All Saves to Backup File"
+                      data-testid="export-all-saves-btn"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
+                    >
+                      <Download size={13} className="text-amber-400" />
+                      <span>Export All</span>
                     </button>
                   )}
                 </div>
-              )}
+
+                {snapshots.length > 0 && (
+                  <div>
+                    {confirmClearAll ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-red-400 font-semibold">
+                          Delete all saved games?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClearAllSnapshots();
+                            setConfirmClearAll(false);
+                          }}
+                          className="px-2.5 py-1 text-xs font-bold bg-red-600 text-white rounded-lg hover:bg-red-500 cursor-pointer"
+                        >
+                          Yes, Delete All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmClearAll(false)}
+                          className="px-2.5 py-1 text-xs bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmClearAll(true)}
+                        className="text-xs font-bold text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+                      >
+                        Delete All Saves
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
