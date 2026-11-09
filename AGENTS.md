@@ -89,6 +89,7 @@ From the repository root:
     - `testing`: E2E suites, Playwright test scripts, test harness.
 
 - **Documentation hygiene**: Always remember to update documentation after making changes to UI elements, settings, functions, design, or architecture. Keep [`TODO.md`](./TODO.md), [`WEB.md`](./WEB.md), [`PUZZLE.md`](./PUZZLE.md), [`APP.md`](./APP.md), [`app1/APP1.md`](./app1/APP1.md), and [`web1/WEB1.md`](./web1/WEB1.md) in sync with architectural or runtime changes. Always remember to update [`WEB.md`](./WEB.md) with details of all functions, settings, UI elements, gestures, and engine features. Never use emojis in documentation files.
+- **Export chat log and development summary to PR before merge**: When finalising a pull request ready for merge, compile a comprehensive summary of the entire conversation and development process (all user requests, architectural decisions, implementations, debugging notes, test execution results, and visual showcases) and post it as a comment on the pull request. This preserves a complete historical record of the development workflow and context directly on GitHub.
 
 
 
