@@ -28,6 +28,7 @@ interface UndoHistoryEntry {
   regionId: number;
   wasPreviouslyFilled: boolean;
   previousPaintedColorId?: number;
+  paintedColorId?: number;
 }
 
 export const App: React.FC = () => {
@@ -43,6 +44,7 @@ export const App: React.FC = () => {
   const [filledRegionIds, setFilledRegionIds] = useState<Set<number>>(new Set());
   const [paintedRegionColors, setPaintedRegionColors] = useState<Map<number, number>>(new Map());
   const [undoStack, setUndoStack] = useState<UndoHistoryEntry[]>([]);
+  const [redoStack, setRedoStack] = useState<UndoHistoryEntry[]>([]);
   const [hintRegionId, setHintRegionId] = useState<number | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
   const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
@@ -557,6 +559,9 @@ export const App: React.FC = () => {
   // Free colour mode indicator
   const isFreeColorMode = Boolean(settings.isFreeColorMode);
 
+  // Redo capability: enabled during free colour puzzles or when explicitly enabled in settings
+  const isRedoEnabled = Boolean(settings.enableRedo || isFreeColorMode || puzzle?.isFreeColor);
+
   const handleToggleFreeColorMode = useCallback(() => {
     const nextMode = !settings.isFreeColorMode;
     handleUpdateSettings({ ...settings, isFreeColorMode: nextMode });
@@ -569,6 +574,7 @@ export const App: React.FC = () => {
 
     const lastAction = undoStack[undoStack.length - 1];
     setUndoStack((prev) => prev.slice(0, -1));
+    setRedoStack((prev) => [...prev, lastAction]);
 
     const nextFilled = new Set(filledRegionIds);
     const nextPainted = new Map(paintedRegionColors);
@@ -629,22 +635,211 @@ export const App: React.FC = () => {
     paintedRegionColors,
     settings.hapticsEnabled,
     isFreeColorMode,
+    isRedoEnabled,
     activeSnapshotId,
     activeColorId,
   ]);
 
-  // Keyboard shortcut Ctrl+Z / Cmd+Z for Undo
+  // Redo last undone region action
+  const handleRedo = useCallback(() => {
+    if (!puzzle || isReplaying || redoStack.length === 0 || !isRedoEnabled) return;
+
+    const lastRedo = redoStack[redoStack.length - 1];
+    setRedoStack((prev) => prev.slice(0, -1));
+    setUndoStack((prev) => [...prev, lastRedo]);
+
+    const nextFilled = new Set(filledRegionIds);
+    const nextPainted = new Map(paintedRegionColors);
+
+    nextFilled.add(lastRedo.regionId);
+    if (lastRedo.paintedColorId !== undefined) {
+      nextPainted.set(lastRedo.regionId, lastRedo.paintedColorId);
+    } else {
+      const region = puzzle.regions.find((r) => r.id === lastRedo.regionId);
+      if (region && isFreeColorMode) {
+        nextPainted.set(lastRedo.regionId, activeColorId);
+      }
+    }
+
+    setFilledRegionIds(nextFilled);
+    setPaintedRegionColors(nextPainted);
+    setHintRegionId(null);
+    NativeBridge.haptic('tick', settings.hapticsEnabled);
+
+    const redoneRegion = puzzle.regions.find((r) => r.id === lastRedo.regionId);
+    if (redoneRegion && !isFreeColorMode) {
+      setActiveColorId(redoneRegion.colorId);
+    }
+
+    if (activeSnapshotId) {
+      const paintedObj = Object.fromEntries(nextPainted);
+      const updated = StorageService.updateSnapshotProgress(
+        activeSnapshotId,
+        nextFilled.size,
+        puzzle.regions.length,
+        Array.from(nextFilled),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        paintedObj,
+        puzzle.palette,
+        puzzle.isFreeColor
+      );
+      setSnapshots(updated);
+      StorageService.saveActiveState({
+        activeSnapshotId,
+        activeColorId: redoneRegion && !isFreeColorMode ? redoneRegion.colorId : activeColorId,
+        filledRegionIds: Array.from(nextFilled),
+        paintedRegionColors: paintedObj,
+        isFreeColorMode,
+        zoomScale: 1.0,
+        panOffsetX: 0,
+        panOffsetY: 0,
+      });
+    }
+  }, [
+    puzzle,
+    isReplaying,
+    redoStack,
+    filledRegionIds,
+    paintedRegionColors,
+    settings.hapticsEnabled,
+    isFreeColorMode,
+    isRedoEnabled,
+    activeSnapshotId,
+    activeColorId,
+  ]);
+
+  // Open replay timeline scrubber from long-press Undo or floating controls
+  const handleOpenTimelineReplay = useCallback(() => {
+    if (!puzzle || (filledRegionIds.size === 0 && undoStack.length === 0)) return;
+
+    // Build unique ordered list of filled regions matching gameplay chronology
+    const orderedList =
+      undoStack.length > 0
+        ? Array.from(
+            new Set(
+              undoStack
+                .map((u) => u.regionId)
+                .filter((id) => filledRegionIds.has(id))
+            )
+          )
+        : Array.from(filledRegionIds);
+
+    if (orderedList.length === 0) return;
+
+    NativeBridge.haptic('tick', settings.hapticsEnabled);
+    setResetViewTrigger((prev) => prev + 1);
+    setHintRegionId(null);
+    setReplaySequence(orderedList);
+    setReplayStep(orderedList.length);
+    setIsReplaying(true);
+    setIsReplayPlaying(false);
+  }, [puzzle, filledRegionIds, undoStack, settings.hapticsEnabled]);
+
+  // Resume active gameplay from scrubbed replay step
+  const handleResumeFromReplayStep = useCallback(
+    (step: number) => {
+      if (!puzzle) return;
+      const clampedStep = Math.max(0, Math.min(step, replaySequence.length));
+      const keptRegionIds = replaySequence.slice(0, clampedStep);
+      const undoneRegionIds = replaySequence.slice(clampedStep);
+
+      const nextFilled = new Set(keptRegionIds);
+      const nextPainted = new Map(paintedRegionColors);
+
+      for (const rId of undoneRegionIds) {
+        nextPainted.delete(rId);
+      }
+
+      const newUndoStack: UndoHistoryEntry[] = keptRegionIds.map((rId) => {
+        const existing = undoStack.find((u) => u.regionId === rId);
+        return existing || { regionId: rId, wasPreviouslyFilled: false };
+      });
+
+      const newRedoStack: UndoHistoryEntry[] = undoneRegionIds
+        .map((rId) => {
+          const existing = undoStack.find((u) => u.regionId === rId);
+          return existing || { regionId: rId, wasPreviouslyFilled: false };
+        })
+        .reverse();
+
+      setFilledRegionIds(nextFilled);
+      setPaintedRegionColors(nextPainted);
+      setUndoStack(newUndoStack);
+      setRedoStack(newRedoStack);
+      setIsReplaying(false);
+      setIsReplayPlaying(false);
+      setHintRegionId(null);
+      NativeBridge.haptic('success', settings.hapticsEnabled);
+
+      if (!isFreeColorMode && undoneRegionIds.length > 0) {
+        const nextRegion = puzzle.regions.find((r) => r.id === undoneRegionIds[0]);
+        if (nextRegion) {
+          setActiveColorId(nextRegion.colorId);
+        }
+      }
+
+      if (activeSnapshotId) {
+        const paintedObj = Object.fromEntries(nextPainted);
+        const updated = StorageService.updateSnapshotProgress(
+          activeSnapshotId,
+          nextFilled.size,
+          puzzle.regions.length,
+          keptRegionIds,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          paintedObj,
+          puzzle.palette,
+          puzzle.isFreeColor
+        );
+        setSnapshots(updated);
+        StorageService.saveActiveState({
+          activeSnapshotId,
+          activeColorId,
+          filledRegionIds: keptRegionIds,
+          paintedRegionColors: paintedObj,
+          isFreeColorMode,
+          zoomScale: 1.0,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        });
+      }
+    },
+    [
+      puzzle,
+      replaySequence,
+      paintedRegionColors,
+      undoStack,
+      settings.hapticsEnabled,
+      isFreeColorMode,
+      activeSnapshotId,
+      activeColorId,
+    ]
+  );
+
+  // Keyboard shortcut Ctrl+Z / Cmd+Z for Undo, Ctrl+Y / Cmd+Y / Ctrl+Shift+Z for Redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (showSettings || isReplaying || isLoading) return;
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         handleUndo();
+      } else if (
+        isRedoEnabled &&
+        (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z'))
+      ) {
+        e.preventDefault();
+        handleRedo();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSettings, isReplaying, isLoading, handleUndo]);
+  }, [showSettings, isReplaying, isLoading, handleUndo, handleRedo, isRedoEnabled]);
 
   // Handle single region coloring
   const attemptFillRegion = useCallback(
@@ -664,8 +859,10 @@ export const App: React.FC = () => {
             regionId,
             wasPreviouslyFilled: wasFilled,
             previousPaintedColorId: currentPaintedColor,
+            paintedColorId: activeColorId,
           },
         ]);
+        setRedoStack([]);
 
         const nextPainted = new Map(paintedRegionColors);
         nextPainted.set(regionId, activeColorId);
@@ -739,8 +936,10 @@ export const App: React.FC = () => {
         {
           regionId,
           wasPreviouslyFilled: false,
+          paintedColorId: region.colorId,
         },
       ]);
+      setRedoStack([]);
 
       const nextFilled = new Set(filledRegionIds);
       nextFilled.add(regionId);
@@ -848,6 +1047,7 @@ export const App: React.FC = () => {
               regionId: rId,
               wasPreviouslyFilled: wasFilled,
               previousPaintedColorId: prevCol,
+              paintedColorId: activeColorId,
             });
             nextPainted.set(rId, activeColorId);
             if (wasFilled) {
@@ -860,6 +1060,7 @@ export const App: React.FC = () => {
 
         if (changed) {
           setUndoStack((prev) => [...prev, ...newUndoEntries]);
+          setRedoStack([]);
           setPaintedRegionColors(nextPainted);
           setFilledRegionIds(nextFilled);
           setHintRegionId(null);
@@ -919,6 +1120,7 @@ export const App: React.FC = () => {
           newUndoEntries.push({
             regionId: rId,
             wasPreviouslyFilled: false,
+            paintedColorId: region.colorId,
           });
           filledAny = true;
         }
@@ -926,6 +1128,7 @@ export const App: React.FC = () => {
 
       if (filledAny) {
         setUndoStack((prev) => [...prev, ...newUndoEntries]);
+        setRedoStack([]);
         setFilledRegionIds(nextFilled);
         setHintRegionId(null);
 
@@ -1347,6 +1550,64 @@ export const App: React.FC = () => {
     link.click();
   }, [puzzle, sourceImage, filledRegionIds, paintedRegionColors, activeTitle]);
 
+  // Export single snapshot to .capy file
+  const handleExportSnapshot = useCallback(
+    async (id: string, title: string) => {
+      try {
+        const json = await StorageService.exportSnapshot(id);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const cleanTitle = title.replace(/[^a-zA-Z0-9_-]/g, '_');
+        a.download = `${cleanTitle}.capy`;
+        a.click();
+        URL.revokeObjectURL(url);
+        NativeBridge.haptic('tick', settings.hapticsEnabled);
+      } catch (e) {
+        console.error('Failed to export snapshot', e);
+      }
+    },
+    [settings.hapticsEnabled]
+  );
+
+  // Export all saved puzzles to backup archive
+  const handleExportAllSnapshots = useCallback(async () => {
+    try {
+      const json = await StorageService.exportAllSnapshots();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'capy_saves_backup.capy';
+      a.click();
+      URL.revokeObjectURL(url);
+      NativeBridge.haptic('tick', settings.hapticsEnabled);
+    } catch (e) {
+      console.error('Failed to export all snapshots', e);
+    }
+  }, [settings.hapticsEnabled]);
+
+  // Import saves from .capy or .json file
+  const handleImportSnapshots = useCallback(
+    async (file: File) => {
+      try {
+        const text = await file.text();
+        const result = await StorageService.importSnapshotBundle(text);
+        if (result.importedCount > 0) {
+          const refreshed = StorageService.loadSnapshots();
+          setSnapshots(refreshed);
+          NativeBridge.haptic('success', settings.hapticsEnabled);
+        } else if (result.error) {
+          alert(`Failed to import saves: ${result.error}`);
+        }
+      } catch (e) {
+        console.error('Failed to import file', e);
+      }
+    },
+    [settings.hapticsEnabled]
+  );
+
   return (
     <div className="relative w-full h-full overflow-hidden bg-black select-none">
       {/* Hidden File Picker */}
@@ -1423,7 +1684,7 @@ export const App: React.FC = () => {
         onTogglePreview={() => setIsPreviewMode((prev) => !prev)}
       />
 
-      {/* Floating Action Controls (Undo, Replay, Zoom, Paint Mode) */}
+      {/* Floating Action Controls (Undo, Redo, Replay, Zoom, Paint Mode) */}
       {puzzle && !isLoading && (
         <FloatingActions
           isPaintMode={settings.isPaintMode}
@@ -1431,10 +1692,13 @@ export const App: React.FC = () => {
           showResetViewButton={settings.showResetViewButton}
           raiseDock={settings.raisePaletteDock}
           isZoomedOrPanned={isCanvasTransformed}
-          canUndo={undoStack.length > 0}
+          canUndo={undoStack.length > 0 || filledRegionIds.size > 0}
+          canRedo={isRedoEnabled && redoStack.length > 0}
           isCompleted={isCompleted}
           isReplaying={isReplaying}
           onUndo={handleUndo}
+          onRedo={handleRedo}
+          onLongPressUndo={handleOpenTimelineReplay}
           onStartReplay={() => startReplay(Array.from(filledRegionIds))}
           onTogglePaintMode={() => {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
@@ -1483,6 +1747,7 @@ export const App: React.FC = () => {
             setSettingsInitialTab(2);
             setShowSettings(true);
           }}
+          onResumeFromStep={handleResumeFromReplayStep}
         />
       )}
 
@@ -1608,6 +1873,9 @@ export const App: React.FC = () => {
           img.src = sample.assetPath;
         }}
         onUploadImage={() => fileInputRef.current?.click()}
+        onExportSnapshot={handleExportSnapshot}
+        onExportAllSnapshots={handleExportAllSnapshots}
+        onImportSnapshots={handleImportSnapshots}
       />
     </div>
   );

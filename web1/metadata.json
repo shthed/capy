@@ -1,6 +1,0 @@
-{
-  "name": "Capy Color by Number",
-  "description": "Image to Color-by-Number generator and player with vector rendering, palette clustering, and pan/zoom canvas.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

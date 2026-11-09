@@ -28,6 +28,7 @@ interface ReplayControlsProps {
   onExitReplay: () => void;
   onExportImage: () => void;
   onOpenCreate: () => void;
+  onResumeFromStep?: (step: number) => void;
 }
 
 export const ReplayControls: React.FC<ReplayControlsProps> = ({
@@ -45,6 +46,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
   onExitReplay,
   onExportImage,
   onOpenCreate,
+  onResumeFromStep,
 }) => {
   if (!isOpen || totalSteps <= 0) return null;
 
@@ -65,28 +67,44 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
       }}
     >
       <div className="pointer-events-auto w-full max-w-md bg-slate-900/92 border border-amber-400/40 rounded-2xl shadow-2xl backdrop-blur-xl p-3 text-slate-100 space-y-2.5 animate-in fade-in slide-in-from-bottom-3 duration-200">
-        {/* Top Row: Replay Badge, Region Counter & Close */}
+        {/* Top Row: Replay Badge, Region Counter, Resume Play Action & Close */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950 flex-shrink-0">
               <Sparkles size={10} />
               {isFinished ? 'Completed' : 'Replay'}
             </span>
-            <span className="text-xs font-bold text-slate-200 tabular-nums">
+            <span className="text-xs font-bold text-slate-200 tabular-nums truncate">
               {currentStep} / {totalSteps} regions ({pct}%)
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={onExitReplay}
-            aria-label="Exit Replay"
-            title="Exit Replay"
-            data-testid="replay-exit-btn"
-            className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {onResumeFromStep && (
+              <button
+                type="button"
+                onClick={() => onResumeFromStep(currentStep)}
+                aria-label="Resume Play From Here"
+                title={`Resume active gameplay from region step ${currentStep}`}
+                data-testid="replay-resume-btn"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                <Play size={12} className="fill-slate-950" />
+                <span>Resume Here</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onExitReplay}
+              aria-label="Exit Replay"
+              title="Exit Replay"
+              data-testid="replay-exit-btn"
+              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Interactive Scrubber */}

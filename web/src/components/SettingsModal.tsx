@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Sliders,
@@ -12,6 +12,10 @@ import {
   Image as ImageIcon,
   Pipette,
   Play,
+  Download,
+  Upload,
+  ExternalLink,
+  Smartphone,
 } from 'lucide-react';
 import {
   CANVAS_BG_MAP,
@@ -57,6 +61,9 @@ interface SettingsModalProps {
   onRegenerate: (config: GeneratorConfig) => void;
   onSelectSample: (sample: SampleArtwork) => void;
   onUploadImage: () => void;
+  onExportSnapshot?: (id: string, title: string) => void;
+  onExportAllSnapshots?: () => void;
+  onImportSnapshots?: (file: File) => void;
 }
 
 const LAST_SETTINGS_TAB_KEY = 'capy_last_settings_tab';
@@ -81,7 +88,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onRegenerate,
   onSelectSample,
   onUploadImage,
+  onExportSnapshot,
+  onExportAllSnapshots,
+  onImportSnapshots,
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<number>(() => {
     if (initialTab !== undefined) return initialTab;
     try {
@@ -539,6 +550,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       desc: 'Show the custom colour chooser button for all puzzles, not just black and white coloring pages',
                     },
                     {
+                      key: 'enableRedo' as const,
+                      label: 'Enable Redo Action',
+                      desc: 'Show Redo button above Undo after undoing steps (Ctrl+Y). Disabled by default, enabled automatically for free colour puzzles',
+                    },
+                    {
                       key: 'panMomentum' as const,
                       label: 'Smooth Pan Momentum',
                       desc: 'Flicking the canvas glides smoothly with momentum, like Google Maps',
@@ -652,6 +668,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }`}
                     />
                   </button>
+                </div>
+              </div>
+
+              {/* Platform & External Application Links */}
+              <div className="pt-3 border-t border-slate-800/80 space-y-2">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Platforms & Applications
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  <a
+                    href="capy.apk"
+                    download="capy.apk"
+                    className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer"
+                  >
+                    <Smartphone size={16} className="text-amber-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="truncate font-bold text-slate-200">Android APK</div>
+                      <div className="text-[10px] text-slate-400 truncate">Download standalone Android application</div>
+                    </div>
+                  </a>
                 </div>
               </div>
             </div>
@@ -1259,9 +1295,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {activeTab === 3 && (
             <div className="space-y-3.5">
               {/* Top Controls */}
-              <div className="flex items-center justify-between gap-2 pb-1">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 font-semibold">Sort by:</span>
+                  <span className="text-xs text-slate-400 font-semibold">Sort:</span>
                   <select
                     value={settings.saveSortOrder}
                     onChange={(e) =>
@@ -1275,14 +1311,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </select>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={onResetProgress}
-                  className="flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors"
-                >
-                  <RotateCcw size={14} />
-                  <span>Reset Progress</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Hidden file input for Import */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".capy,.json,application/json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file && onImportSnapshots) {
+                        onImportSnapshots(file);
+                      }
+                      if (e.target) e.target.value = '';
+                    }}
+                  />
+
+                  {onImportSnapshots && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      title="Import Save (.capy / .json)"
+                      data-testid="import-save-btn"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
+                    >
+                      <Upload size={13} className="text-amber-400" />
+                      <span>Import</span>
+                    </button>
+                  )}
+
+                  {onExportAllSnapshots && snapshots.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={onExportAllSnapshots}
+                      title="Export All Saves to Backup File"
+                      data-testid="export-all-saves-btn"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
+                    >
+                      <Download size={13} className="text-amber-400" />
+                      <span>Export All</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={onResetProgress}
+                    className="flex items-center gap-1 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw size={13} />
+                    <span>Reset</span>
+                  </button>
+                </div>
               </div>
 
               {/* Snapshots List */}
@@ -1427,6 +1506,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           >
                             <Play size={12} />
                             <span>Replay</span>
+                          </button>
+                        )}
+
+                        {onExportSnapshot && (
+                          <button
+                            type="button"
+                            onClick={() => onExportSnapshot(snap.id, snap.title)}
+                            title="Export Save File (.capy)"
+                            data-testid={`export-save-${snap.id}`}
+                            className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Download size={14} />
                           </button>
                         )}
 
