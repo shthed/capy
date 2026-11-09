@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Capy - Color by Number",
-  "short_name": "Capy",
+  "name": "Capy Paint",
+  "short_name": "Capy Paint",
   "description": "Vector color-by-number application with adaptive multi-strategy quantization, interior centroid labeling, and pinch/pan canvas.",
   "start_url": "./",
   "scope": "./",

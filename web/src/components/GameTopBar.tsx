@@ -49,7 +49,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
           {activeTitle ? (
             <span className="truncate max-w-[120px] sm:max-w-[200px]">{activeTitle}</span>
           ) : (
-            <span>Capy</span>
+            <span>Capy Paint</span>
           )}
           <span>•</span>
           <span>{progressPercentage}%</span>

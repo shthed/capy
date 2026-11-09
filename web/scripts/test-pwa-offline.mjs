@@ -55,8 +55,8 @@ async function runPwaOfflineTest() {
     console.log(`   Start URL: "${manifestJson.start_url}"`);
     console.log(`   Icons defined: ${manifestJson.icons?.length}`);
 
-    if (manifestJson.name !== 'Capy - Color by Number') {
-      throw new Error(`Unexpected manifest name: ${manifestJson.name}`);
+    if (manifestJson.name !== 'Capy Paint' || manifestJson.short_name !== 'Capy Paint') {
+      throw new Error(`Unexpected manifest name/short_name: ${manifestJson.name} / ${manifestJson.short_name}`);
     }
     if (manifestJson.display !== 'standalone') {
       throw new Error(`Unexpected manifest display: ${manifestJson.display}`);
