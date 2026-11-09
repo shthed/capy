@@ -88,7 +88,7 @@ export interface UserSettings {
   hapticsEnabled: boolean;
   panMomentum: boolean;
   enableCustomColorForAllPuzzles: boolean;
-  enableRedo: boolean;
+  enableUndo: boolean;
   replaySpeed: number;
   autoReplayOnLoad: boolean;
   reverseDoubleTapZoom: boolean;

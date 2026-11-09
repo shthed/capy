@@ -9,6 +9,7 @@ interface FloatingActionsProps {
   isZoomedOrPanned?: boolean;
   canUndo?: boolean;
   canRedo?: boolean;
+  showUndo?: boolean;
   isCompleted?: boolean;
   isReplaying?: boolean;
   onUndo?: () => void;
@@ -29,6 +30,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
   isZoomedOrPanned = false,
   canUndo = false,
   canRedo = false,
+  showUndo = true,
   isCompleted = false,
   isReplaying = false,
   onUndo,
@@ -131,8 +133,8 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
         </button>
       )}
 
-      {/* Undo & Redo History Action Buttons (Redo stacked above Undo, hidden when disabled) */}
-      {!isReplaying && (
+      {/* Undo & Redo History Action Buttons (Redo stacked above Undo, hidden when disabled or hidden via setting) */}
+      {!isReplaying && showUndo && (
         <div className="flex flex-col items-center gap-2">
           {canRedo && onRedo && (
             <button
