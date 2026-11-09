@@ -11,6 +11,7 @@ import {
   Loader2,
   Palette,
   Sparkles,
+  Zap,
 } from 'lucide-react';
 import {
   GENERATION_PIPELINE_STEPS,
@@ -22,6 +23,8 @@ interface LoadingOverlayProps {
   status: string;
   progress: number;
   payload?: GenerationProgressPayload | null;
+  detailedProgress?: boolean;
+  onToggleDetailedProgress?: (enabled: boolean) => void;
 }
 
 export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
@@ -29,6 +32,8 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
   status,
   progress,
   payload,
+  detailedProgress = true,
+  onToggleDetailedProgress,
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
@@ -67,53 +72,118 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
       }}
     >
       <div className="pointer-events-auto w-full max-w-lg bg-slate-900/92 border border-slate-700/80 rounded-2xl shadow-2xl backdrop-blur-xl text-slate-100 overflow-hidden transition-all duration-200 animate-in fade-in slide-in-from-bottom-4">
-        {/* Main Compact Header & Progress */}
-        <div className="p-4 space-y-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30 flex-shrink-0">
-                <Sparkles size={10} />
-                Step {stepIndex}/{totalSteps}
+        {/* Simple Progress Mode: Sleek, lightweight, low-overhead HUD */}
+        {!detailedProgress ? (
+          <div className="p-3.5 sm:p-4 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 flex-shrink-0">
+                  <Zap size={10} />
+                  Fast
+                </span>
+                <h3 className="text-xs sm:text-sm font-bold text-white truncate">
+                  Generating Puzzle...
+                </h3>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {onToggleDetailedProgress && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleDetailedProgress(true)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors flex-shrink-0 cursor-pointer"
+                    title="Switch to Detailed Progress with step breakdowns and canvas scanline"
+                  >
+                    <Sparkles size={11} className="text-amber-400" />
+                    <span>Detailed</span>
+                  </button>
+                )}
+                <span className="text-xs font-extrabold text-amber-400 tabular-nums flex-shrink-0">
+                  {pct}%
+                </span>
+              </div>
+            </div>
+
+            {/* Monotonic Progress Bar */}
+            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
+              <div
+                className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 rounded-full transition-all duration-150 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+
+            {/* Active Sub-Status */}
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 min-w-0">
+                <Loader2 size={13} className="text-amber-400 animate-spin flex-shrink-0" />
+                <span className="truncate">{status || 'Generating puzzle regions...'}</span>
+              </div>
+              <span className="text-[10px] text-slate-500 hidden sm:inline flex-shrink-0">
+                Optimized for speed
               </span>
-              <h3 className="text-xs sm:text-sm font-bold text-white truncate">
-                {stepName}
-              </h3>
             </div>
-            <span className="text-xs font-extrabold text-amber-400 tabular-nums flex-shrink-0">
-              {pct}%
-            </span>
           </div>
-
-          {/* Monotonic Progress Bar */}
-          <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
-            <div
-              className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 rounded-full transition-all duration-150 ease-out"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-
-          {/* Active Sub-Status & Toggle Details Button */}
-          <div className="flex items-center justify-between gap-2 pt-0.5">
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-300 min-w-0">
-              <Loader2 size={13} className="text-amber-400 animate-spin flex-shrink-0" />
-              <span className="truncate">{status}</span>
+        ) : (
+          /* Detailed Progress Mode: Full pipeline stages, inspection metrics, and step details */
+          <div className="p-4 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30 flex-shrink-0">
+                  <Sparkles size={10} />
+                  Step {stepIndex}/{totalSteps}
+                </span>
+                <h3 className="text-xs sm:text-sm font-bold text-white truncate">
+                  {stepName}
+                </h3>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {onToggleDetailedProgress && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleDetailedProgress(false)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors flex-shrink-0 cursor-pointer"
+                    title="Switch to Simple Progress (Faster, minimal rendering)"
+                  >
+                    <Zap size={11} className="text-amber-400" />
+                    <span>Fast Mode</span>
+                  </button>
+                )}
+                <span className="text-xs font-extrabold text-amber-400 tabular-nums flex-shrink-0">
+                  {pct}%
+                </span>
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsExpanded((prev) => !prev)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800/90 hover:bg-slate-700/90 text-amber-300 border border-slate-700 transition-colors flex-shrink-0 cursor-pointer"
-            >
-              <span>{isExpanded ? 'Hide Details' : 'Generation Details'}</span>
-              {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
-          </div>
+            {/* Monotonic Progress Bar */}
+            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
+              <div
+                className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 rounded-full transition-all duration-150 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
 
-          {/* Brief description of current step */}
-          <p className="text-[11px] text-slate-400 leading-relaxed">
-            {stepDescription}
-          </p>
-        </div>
+            {/* Active Sub-Status & Toggle Details Button */}
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-300 min-w-0">
+                <Loader2 size={13} className="text-amber-400 animate-spin flex-shrink-0" />
+                <span className="truncate">{status}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsExpanded((prev) => !prev)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800/90 hover:bg-slate-700/90 text-amber-300 border border-slate-700 transition-colors flex-shrink-0 cursor-pointer"
+              >
+                <span>{isExpanded ? 'Hide Details' : 'Generation Details'}</span>
+                {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+            </div>
+
+            {/* Brief description of current step */}
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              {stepDescription}
+            </p>
+          </div>
+        )}
 
         {/* Expandable Puzzle Generation Details Panel */}
         {isExpanded && (

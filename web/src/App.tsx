@@ -328,6 +328,7 @@ export const App: React.FC = () => {
       setTimeout(async () => {
         if (currentSeq !== generationSeqRef.current) return;
         try {
+          const isDetailed = settings.detailedLoadingProgress !== false;
           const puzzleData = await PuzzleWorkerService.generate(
             canvas,
             config,
@@ -339,7 +340,8 @@ export const App: React.FC = () => {
                   setLoadingPayload(payload);
                 }
               }
-            }
+            },
+            isDetailed
           );
 
           if (currentSeq !== generationSeqRef.current) return;
@@ -1664,6 +1666,7 @@ export const App: React.FC = () => {
         zoomOutTrigger={zoomOutTrigger}
         resetViewTrigger={resetViewTrigger}
         isGenerating={isLoading}
+        detailedProgress={settings.detailedLoadingProgress !== false}
         generationProgress={loadingProgress}
         generationStepIndex={loadingPayload?.stepIndex || 1}
         onViewExtentChanged={(zoom, panX, panY) => {
@@ -1798,6 +1801,14 @@ export const App: React.FC = () => {
         status={loadingStatus}
         progress={loadingProgress}
         payload={loadingPayload}
+        detailedProgress={settings.detailedLoadingProgress !== false}
+        onToggleDetailedProgress={(enabled) => {
+          handleUpdateSettings({
+            ...settings,
+            detailedLoadingProgress: enabled,
+          });
+          PuzzleWorkerService.setDetailedProgress(enabled);
+        }}
       />
 
       {/* Settings Modal Sheet */}

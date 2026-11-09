@@ -1,13 +1,24 @@
 import { GeneratorConfig } from '../types';
 import { AutoPuzzleGenerator } from './PuzzleGenerator';
 
+let currentDetailedProgress = true;
+
 self.onmessage = (e: MessageEvent) => {
-  const { type, id, width, height, rgbaBuffer, config } = e.data;
+  const { type, id, width, height, rgbaBuffer, config, detailedProgress } = e.data;
+
+  if (type === 'SET_DETAILED_PROGRESS') {
+    currentDetailedProgress = e.data.detailed !== false;
+    return;
+  }
 
   if (type === 'GENERATE') {
     try {
+      currentDetailedProgress = detailedProgress !== false;
       const rgbaData = new Uint8ClampedArray(rgbaBuffer);
       const generator = new AutoPuzzleGenerator();
+
+      let lastProgressTime = 0;
+      let lastProgressValue = 0;
 
       const puzzleData = generator.generateFromRgba(
         rgbaData,
@@ -15,14 +26,28 @@ self.onmessage = (e: MessageEvent) => {
         height,
         config as GeneratorConfig,
         (progress, status, payload) => {
+          const now = performance.now();
+          if (!currentDetailedProgress) {
+            const timeDiff = now - lastProgressTime;
+            const progDiff = progress - lastProgressValue;
+            // In fast simple mode: throttle progress messages to avoid IPC serialization overhead
+            // and eliminate main-thread re-render thrashing
+            if (timeDiff < 150 && progDiff < 0.1 && progress < 0.99) {
+              return;
+            }
+          }
+          lastProgressTime = now;
+          lastProgressValue = progress;
+
           self.postMessage({
             type: 'PROGRESS',
             id,
             progress,
-            status,
-            payload,
+            status: currentDetailedProgress ? status : 'Generating puzzle...',
+            payload: currentDetailedProgress ? payload : undefined,
           });
-        }
+        },
+        currentDetailedProgress
       );
 
       // Serialize region pixels buffers for zero-copy Transferable transfer
