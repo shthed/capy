@@ -11,7 +11,7 @@ All contributors and AI agents must strictly observe these absolute core invaria
 1. **Never merge without explicit approval**: Never merge a pull request or push directly to `main` without explicit confirmation and approval from the user. Create the pull request, verify that CI tests pass, share the PR link, and wait for confirmation.
 2. **Never deploy to Android devices without request**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
 3. **Never use root-relative asset URLs**: Never use `/assets/...` URLs in code or CSS. Always use relative `./assets/...` and maintain `base: './'` in `web/vite.config.ts` so bundles resolve across GitHub Pages root (`/`), PR previews (`/pull/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`).
-4. **Never use emojis in documentation**: Never include emojis in markdown documentation files (`.md`).
+4. **Strict documentation maintenance & zero emojis**: Never include emojis in markdown documentation files (`.md`). Always maintain and synchronize documentation across `WEB.md`, `PUZZLE.md`, `APP.md`, `TESTING.md`, `TODO.md`, and `README.md` following the detailed guidelines in Section 5.
 5. **Never execute heavy CPU segmentation on the main thread**: All color clustering (K-Means), contour tracing (Marching Squares), and region segmentation must execute exclusively in `web/src/engine/puzzle.worker.ts` using transferable `ArrayBuffer` objects.
 6. **Never allocate objects inside render loops**: Never instantiate objects or arrays inside `requestAnimationFrame` loops, canvas rendering callbacks, or high-frequency touch gesture paths. Reuse typed arrays and scratch structs.
 7. **Never leave completed items in `TODO.md`**: When a task or milestone is completed, remove it from `TODO.md` immediately rather than checking it off. Keep `TODO.md` strictly focused on pending, active roadmap tasks.
@@ -121,10 +121,26 @@ From the repository root:
     - `testing`: E2E suites, Playwright test scripts, test harness.
     - `ci`: GitHub Actions workflows, CI/CD pipelines, and deployment automation.
     - `deps`: Dependency upgrades, version catalogs, and package manager updates.
-- **Documentation hygiene**:
-  - Keep [`TODO.md`](./TODO.md), [`WEB.md`](./WEB.md), [`PUZZLE.md`](./PUZZLE.md), [`APP.md`](./APP.md), [`TESTING.md`](./TESTING.md), and [`README.md`](./README.md) in sync with architectural or runtime changes.
-  - Always update [`WEB.md`](./WEB.md) with details of all functions, settings, UI elements, gestures, and engine features.
-  - Task hygiene in [`TODO.md`](./TODO.md): Remove completed items from [`TODO.md`](./TODO.md) immediately upon completion rather than checking them off.
+- **Documentation Maintenance & Synchronization Guidelines**:
+  - **Zero Emojis & Professional Technical Style**:
+    - Never include unicode emojis in markdown documentation files (`.md`).
+    - Use GitHub Flavored Markdown alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`) or plain ASCII diagrams for structural callouts and visual emphasis.
+  - **Subsystem Synchronization Matrix**:
+    - When modifying **UI controls, settings, appearance, or gestures**: Update [`WEB.md`](./WEB.md) with complete setting keys, default states, UI placement, and user interaction mechanics.
+    - When modifying **segmentation algorithms, color clustering, line extraction, or web worker protocols**: Update [`PUZZLE.md`](./PUZZLE.md) with algorithmic details, buffer structures, and performance budgets.
+    - When modifying **Android launcher, bridge APIs, haptic patterns, or native storage**: Update [`APP.md`](./APP.md) with `@JavascriptInterface` signatures and native lifecycle contracts.
+    - When adding, updating, or fixing **test suites, Playwright scripts, or verification procedures**: Update [`TESTING.md`](./TESTING.md) with command options and assertion requirements.
+    - When adding, starting, or completing **roadmap items**: Update [`TODO.md`](./TODO.md).
+    - When changing **high-level project capabilities, build steps, or deployment architecture**: Update [`README.md`](./README.md) and [`AGENTS.md`](./AGENTS.md).
+  - **Active Task Hygiene (`TODO.md`)**:
+    - Never check off completed items with `[x]`. When a task or milestone is finished, remove it from `TODO.md` immediately rather than checking it off.
+    - Keep `TODO.md` strictly focused on pending, active roadmap tasks. Git commit history and pull request descriptions preserve historical completion records.
+  - **Settings & Property Documentation Standards**:
+    - Every newly added `SettingsContext` property or `localStorage` key must be documented with its TypeScript type, default value, persistence key, and UI location.
+  - **Relative Link Validation**:
+    - All intra-repository links must use relative paths (e.g. `[`WEB.md`](./WEB.md)`) so documentation navigates seamlessly across branches, forks, and local clones.
+  - **Pruning Obsolete & Retired References**:
+    - When refactoring or deleting an API, UI element, or setting, perform a global search across all `.md` files to prune dead references and prevent documentation rot.
 - **Export chat log and development summary to PR before merge**: When finalising a pull request ready for merge, compile a comprehensive summary of the entire conversation and development process (user requests, architectural decisions, implementations, debugging notes, test execution results, and visual showcases) and post it as a comment on the pull request. This preserves a complete historical record directly on GitHub.
 
 ---
