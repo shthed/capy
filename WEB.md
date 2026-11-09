@@ -224,14 +224,17 @@ Labels are drawn at each region's **Pole of Inaccessibility** (deepest interior 
    - If mismatch: triggers subtle error haptic and tap ripple feedback dot.
    - In **Easy Mode**: automatically selects the tapped region's color and fills it immediately.
 
-2. **Google Maps-Style One-Finger Double-Tap-and-Drag Zoom**:
-   - Quick tap followed by a second tap-and-hold within 300ms (`DOUBLE_TAP_TIMEOUT = 300ms`, `DOUBLE_TAP_DIST = 40px`).
-   - Dragging **UP** (`dy < 0`) zooms **IN**; dragging **DOWN** (`dy > 0`) zooms **OUT**.
-   - Continuous exponential scale tracking: `zoomFactor = Math.pow(Math.E, -dy / 220)`.
-   - Centers zoom smoothly on the double-tap anchor point on the canvas.
-   - Eliminates jarring instant step-jumps, giving players precise one-handed zoom control on mobile devices.
+2. **Google Maps-Style One-Finger Double-Tap-and-Drag Zoom & Pan**:
+   - Quick tap followed by a second tap-and-hold within 350ms (`timeSinceTapUp < 350ms`, `distFromLastTap < 40px`).
+   - **Zooming (Vertical Drag)**: By default, dragging **DOWN** (`dy > 0`) zooms **IN**; dragging **UP** (`dy < 0`) zooms **OUT**. Reversible via `settings.reverseDoubleTapZoom` (`Invert Double-Tap Zoom Direction`).
+   - Continuous exponential scale tracking: `zoomFactor = Math.pow(Math.E, (directionMultiplier * dy) / 220)`.
+   - Centers zoom smoothly on the double-tap anchor point on the canvas without step-jumps.
+   - **One-Finger Panning in Paint Mode (Horizontal Drag)**: Dragging left or right (`Math.abs(dx) >= Math.abs(dy)`) while in continuous Paint Mode seamlessly pans the canvas without painting any strokes or requiring two-finger pinches.
 
-3. **Smooth Pan Momentum (Inertial Gliding)**:
+3. **Background Touch Drag Panning**:
+   - Touching the canvas background outside the artwork bounds (`x < 0`, `y < 0`, `x >= width`, or `y >= height`) always pans the canvas, even when continuous Paint Mode is toggled on, allowing effortless viewport repositioning from anywhere on the screen.
+
+4. **Smooth Pan Momentum (Inertial Gliding)**:
    - Tracks pointer movement history over a sliding 100ms window (`pointerHistoryRef`).
    - On pointer release, calculates the flick velocity vector $(v_x, v_y)$ in pixels per millisecond.
    - If velocity magnitude $\ge 0.18\text{ px/ms}$, kicks off an inertial animation loop via `requestAnimationFrame`.
@@ -241,11 +244,12 @@ Labels are drawn at each region's **Pole of Inaccessibility** (deepest interior 
    - **Zero-Latency Touch Cancellation**: Any subsequent pointer touch immediately cancels active momentum gliding with zero lag, ensuring instant tactile control.
    - Toggleable via `settings.panMomentum` (enabled by default).
 
-4. **Multi-Touch Pinch-to-Zoom**:
+5. **Multi-Touch Pinch-to-Zoom**:
    - Two-finger touch tracking with real-time midpoint focal tracking and scale clamping between $0.5\times$ and $12.0\times$.
 
-5. **Drag-to-Color (Continuous Paint Mode)**:
-   - When `isPaintMode` is active, pointer drag samples points along the interpolated stroke path and batch-fills intersecting matching regions via `onBatchRegionsClicked`.
+6. **Drag-to-Color (Continuous Paint Mode)**:
+   - When `isPaintMode` is active and touch begins inside the image, pointer drag samples points along the interpolated stroke path and batch-fills intersecting matching regions via `onBatchRegionsClicked`.
+   - Automatically disabled while watching chronological replays.
 
 
 ---
@@ -351,6 +355,7 @@ Capy uses a hybrid storage model to manage performance and browser storage quota
 | `enableCustomColorForAllPuzzles` | `boolean` | `false` | Unlocks the palette color editor across all standard puzzle modes. |
 | `replaySpeed` | `number` (`0.5`, `1`, `2`, `5`, `10`) | `1` | Playback speed multiplier for chronological puzzle completion replays (`1x` $\approx$ 3.5s baseline duration). |
 | `autoReplayOnLoad` | `boolean` | `true` | Automatically zooms out and replays completed regions chronologically when loading a saved puzzle. |
+| `reverseDoubleTapZoom` | `boolean` | `false` | Inverts one-finger double-tap zoom direction. By default (`false`), dragging down zooms in and dragging up zooms out. When `true`, dragging up zooms in and dragging down zooms out. |
 | `generatorConfig` | `GeneratorConfig` | *(See PUZZLE.md)* | Engine tuning: algorithm, color count, min region area, max regions, resolution. |
 
 ---

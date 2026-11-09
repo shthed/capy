@@ -22,6 +22,17 @@ For target-specific deep dives, see also:
 
 ---
 
+## Milestone 1: Replay Animation Export, Redo Stack & Advanced Gestures
+
+- [ ] **Replay Animation Video and GIF Export**:
+  - Allow players to export their chronological puzzle completion replay directly as an animated GIF or lightweight WebM/MP4 video to save or share.
+- [ ] **Redo Stack Support for Undone Regions**:
+  - Pair the single-step Undo button with a complementary Redo action (and `Ctrl+Y` / `Ctrl+Shift+Z` keyboard shortcuts) so players can step forward and backward through their completion history freely.
+- [ ] **Custom Pinch-to-Zoom Sensitivity and Anchor Snapping**:
+  - Add configurable pinch sensitivity multiplier and optional auto-snapping to whole scale factors (1x, 2x, 4x, 8x).
+
+---
+
 ## Milestone 2: Storage Optimization, Save Management, and Save Export/Import
 
 - [ ] **Zero-Copy Image Storage for URL and Local File Puzzles**:

@@ -544,6 +544,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       desc: 'Flicking the canvas glides smoothly with momentum, like Google Maps',
                     },
                     {
+                      key: 'reverseDoubleTapZoom' as const,
+                      label: 'Invert Double-Tap Zoom Direction',
+                      desc: 'By default, dragging down zooms in and dragging up zooms out. Turn on to drag up to zoom in',
+                    },
+                    {
                       key: 'hapticsEnabled' as const,
                       label: 'Haptic Vibration Feedback',
                       desc: 'Tactile vibration ticks when painting and completing colours',

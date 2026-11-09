@@ -37,6 +37,7 @@ interface PuzzleCanvasProps {
   showNextRegionHint: boolean;
   hintIntensity: number;
   panMomentum?: boolean;
+  reverseDoubleTapZoom?: boolean;
   displayNumberMap: Map<number, string>;
   zoomInTrigger?: number;
   zoomOutTrigger?: number;
@@ -139,6 +140,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   showNextRegionHint,
   hintIntensity,
   panMomentum = true,
+  reverseDoubleTapZoom = false,
   displayNumberMap,
   zoomInTrigger = 0,
   zoomOutTrigger = 0,
@@ -211,10 +213,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const lastTapUpPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const isDoubleTapCandidateRef = useRef(false);
   const isOneFingerZoomingRef = useRef(false);
+  const isDoubleTapPanningRef = useRef(false);
   const doubleTapFocalRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragZoomStartYRef = useRef(0);
   const initialDragZoomScaleRef = useRef(1);
   const initialDragZoomOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const isTouchingOutsideImageRef = useRef(false);
 
   // Smooth Pan Momentum tracking (Google Maps style inertial gliding)
   const pointerHistoryRef = useRef<Array<{ x: number; y: number; time: number }>>([]);
@@ -1261,7 +1265,19 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     lastPointerPosRef.current = { x: e.clientX, y: e.clientY };
     totalDragDistanceRef.current = 0;
 
-    // Check if this pointer down is a candidate for one-finger double-tap vertical drag zoom (Google Maps style)
+    // Detect if pointer touched inside image bounds or on the canvas background
+    const coords = screenToCanvasCoords(e.clientX, e.clientY);
+    const isInsideImage = Boolean(
+      coords &&
+      puzzle &&
+      coords.x >= 0 &&
+      coords.x < puzzle.width &&
+      coords.y >= 0 &&
+      coords.y < puzzle.height
+    );
+    isTouchingOutsideImageRef.current = !isInsideImage;
+
+    // Check if this pointer down is a candidate for one-finger double-tap (vertical zoom or horizontal pan)
     const now = Date.now();
     const timeSinceTapUp = now - lastTapUpTimeRef.current;
     const distFromLastTap = Math.hypot(
@@ -1272,6 +1288,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     if (timeSinceTapUp < 350 && distFromLastTap < 40 && !isRightClick) {
       isDoubleTapCandidateRef.current = true;
       isOneFingerZoomingRef.current = false;
+      isDoubleTapPanningRef.current = false;
       doubleTapFocalRef.current = { x: e.clientX, y: e.clientY };
       dragZoomStartYRef.current = e.clientY;
       initialDragZoomScaleRef.current = scaleRef.current;
@@ -1281,12 +1298,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     } else {
       isDoubleTapCandidateRef.current = false;
       isOneFingerZoomingRef.current = false;
+      isDoubleTapPanningRef.current = false;
     }
 
-    const coords = screenToCanvasCoords(e.clientX, e.clientY);
     if (!coords || !puzzle) return;
 
-    if (!isRightClick && isPaintMode && !isPreviewMode) {
+    // Only start continuous paint if touching inside the image region
+    if (!isRightClick && isPaintMode && !isPreviewMode && isInsideImage) {
       hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y);
       setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
     }
@@ -1299,17 +1317,51 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
     if (!isDraggingRef.current || touchStartDistRef.current !== null || touchPointerCountRef.current > 1) return;
 
-    // One-finger double-tap vertical drag zoom (Google Maps style)
+    // One-finger double-tap drag:
+    // Left/Right: horizontal pan (especially in paint mode)
+    // Up/Down: zoom in/out
     if (isDoubleTapCandidateRef.current) {
+      const dx = e.clientX - doubleTapFocalRef.current.x;
       const dy = e.clientY - dragZoomStartYRef.current;
-      if (!isOneFingerZoomingRef.current && Math.abs(dy) >= 8) {
-        isOneFingerZoomingRef.current = true;
+
+      if (!isOneFingerZoomingRef.current && !isDoubleTapPanningRef.current) {
+        if (Math.abs(dx) >= 8 || Math.abs(dy) >= 8) {
+          if (isPaintMode && Math.abs(dx) >= Math.abs(dy)) {
+            // Horizontal drag in paint mode enables one-finger panning!
+            isDoubleTapPanningRef.current = true;
+          } else if (Math.abs(dx) > Math.abs(dy) * 1.25) {
+            // Predominantly horizontal drag triggers panning
+            isDoubleTapPanningRef.current = true;
+          } else {
+            // Predominantly vertical drag triggers zoom
+            isOneFingerZoomingRef.current = true;
+          }
+        }
+      }
+
+      if (isDoubleTapPanningRef.current && containerRef.current && puzzle) {
+        const moveDx = e.clientX - lastPointerPosRef.current.x;
+        const moveDy = e.clientY - lastPointerPosRef.current.y;
+        lastPointerPosRef.current = { x: e.clientX, y: e.clientY };
+
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        const targetOffset = {
+          x: offsetRef.current.x + moveDx,
+          y: offsetRef.current.y + moveDy,
+        };
+        const clamped = clampCanvasOffset(targetOffset, scaleRef.current, puzzle.width, puzzle.height, w, h);
+        offsetRef.current = clamped;
+        setOffset(clamped);
+        return;
       }
 
       if (isOneFingerZoomingRef.current && containerRef.current && canvasRef.current && puzzle) {
-        // Drag up (dy < 0): zoom in. Drag down (dy > 0): zoom out.
+        // By default: Drag up (dy < 0) zooms out, drag down (dy > 0) zooms in.
+        // If reverseDoubleTapZoom is true: inverted (drag up zooms in, drag down zooms out).
         const sensitivity = 220;
-        const zoomFactor = Math.pow(Math.E, -dy / sensitivity);
+        const directionMultiplier = reverseDoubleTapZoom ? -1 : 1;
+        const zoomFactor = Math.pow(Math.E, (directionMultiplier * dy) / sensitivity);
         const newScale = Math.min(12.0, Math.max(0.5, initialDragZoomScaleRef.current * zoomFactor));
         const actualZoom = newScale / initialDragZoomScaleRef.current;
 
@@ -1342,7 +1394,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       }
 
       // If evaluating candidate and movement is small (< 8px), hold without painting
-      if (!isOneFingerZoomingRef.current && Math.abs(dy) < 8) {
+      if (!isOneFingerZoomingRef.current && !isDoubleTapPanningRef.current && Math.abs(dy) < 8 && Math.abs(dx) < 8) {
         return;
       }
     }
@@ -1361,8 +1413,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     lastPointerPosRef.current = { x: e.clientX, y: e.clientY };
 
     const isRightClick = isRightClickRef.current || (e.buttons & 2) !== 0;
+    const isTouchingOutsideImage = isTouchingOutsideImageRef.current;
 
-    if (!isPinchPanningRef.current && !isRightClick && isPaintMode && !isPreviewMode && prevCoords && currCoords) {
+    // If touching outside the image region on the background canvas, drag always pans!
+    if (!isPinchPanningRef.current && !isRightClick && !isTouchingOutsideImage && isPaintMode && !isPreviewMode && prevCoords && currCoords) {
       hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y);
       setTapDot({ x: currCoords.x, y: currCoords.y, alpha: 1 });
     } else {
@@ -1416,9 +1470,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       }
     }
 
-    // If one-finger double-tap vertical drag zoom was active, finish cleanly without clicks
-    if (isOneFingerZoomingRef.current) {
+    // If one-finger double-tap zoom or pan was active, finish cleanly without clicks
+    if (isOneFingerZoomingRef.current || isDoubleTapPanningRef.current) {
       isOneFingerZoomingRef.current = false;
+      isDoubleTapPanningRef.current = false;
       isDoubleTapCandidateRef.current = false;
       isDraggingRef.current = false;
       isRightClickRef.current = false;
@@ -1427,6 +1482,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
 
     isDoubleTapCandidateRef.current = false;
+    isDoubleTapPanningRef.current = false;
 
     if (!isDraggingRef.current) {
       if (touchPointerCountRef.current === 0) {

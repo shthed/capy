@@ -190,13 +190,17 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
     return map;
   }, [regions, filledRegionIds, paintedRegionColors]);
 
-  // Available palette in dock - never hide active colour even if all regions filled
+  // Available palette in dock - hide active colour when the puzzle is complete
   const uncompletedPalette = useMemo(() => {
     if (isFreeColorMode) {
       return palette;
     }
+    const isPuzzleComplete = regions.length > 0 && filledRegionIds.size >= regions.length;
+    if (isPuzzleComplete) {
+      return [];
+    }
     return palette.filter((c) => (remainingCountMap.get(c.id) || 0) > 0 || c.id === activeColorId);
-  }, [palette, remainingCountMap, isFreeColorMode, activeColorId]);
+  }, [palette, remainingCountMap, isFreeColorMode, activeColorId, regions.length, filledRegionIds.size]);
 
   // Sorted base palette
   const sortedPalette = useMemo(() => {

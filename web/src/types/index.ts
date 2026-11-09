@@ -90,6 +90,7 @@ export interface UserSettings {
   enableCustomColorForAllPuzzles: boolean;
   replaySpeed: number;
   autoReplayOnLoad: boolean;
+  reverseDoubleTapZoom: boolean;
   generatorConfig: GeneratorConfig;
 }
 

@@ -61,7 +61,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
     <div
       className="fixed inset-x-0 z-30 pointer-events-none flex justify-center px-3 transition-all"
       style={{
-        bottom: `calc(${raiseDock ? '5.75rem' : '4.25rem'} + var(--sab, 0px))`,
+        bottom: `calc(${raiseDock ? '1.5rem' : '1rem'} + var(--sab, 0px))`,
       }}
     >
       <div className="pointer-events-auto w-full max-w-md bg-slate-900/92 border border-amber-400/40 rounded-2xl shadow-2xl backdrop-blur-xl p-3 text-slate-100 space-y-2.5 animate-in fade-in slide-in-from-bottom-3 duration-200">

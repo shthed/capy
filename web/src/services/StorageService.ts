@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   enableCustomColorForAllPuzzles: false,
   replaySpeed: 1,
   autoReplayOnLoad: true,
+  reverseDoubleTapZoom: false,
   generatorConfig: {
     algorithm: 'AUTO',
     lineHandling: 'ABSORB_LINES',

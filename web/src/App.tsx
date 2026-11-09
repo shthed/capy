@@ -1382,13 +1382,13 @@ export const App: React.FC = () => {
       <PuzzleCanvas
         puzzle={puzzle}
         sourceImage={sourceImage}
-        activeColorId={activeColorId}
+        activeColorId={isCompleted || isReplaying ? 0 : activeColorId}
         filledRegionIds={displayedFilledRegionIds}
         paintedRegionColors={paintedRegionColors}
-        hintRegionId={hintRegionId}
+        hintRegionId={isCompleted || isReplaying ? null : hintRegionId}
         isPreviewMode={isPreviewMode}
         isFreeColorMode={isFreeColorMode}
-        isPaintMode={settings.isPaintMode}
+        isPaintMode={isReplaying ? false : settings.isPaintMode}
         canvasBgColor={settings.canvasBgColor}
         canvasBgArgb={settings.canvasBgArgb}
         sortOrder={settings.paletteSort}
@@ -1405,6 +1405,7 @@ export const App: React.FC = () => {
         showNextRegionHint={isReplaying ? false : settings.showNextRegionHint}
         hintIntensity={settings.hintIntensity}
         panMomentum={settings.panMomentum}
+        reverseDoubleTapZoom={settings.reverseDoubleTapZoom}
         displayNumberMap={displayNumberMap}
         zoomInTrigger={zoomInTrigger}
         zoomOutTrigger={zoomOutTrigger}
@@ -1486,7 +1487,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Palette Dock floating above canvas */}
-      {puzzle && !isLoading && (
+      {puzzle && !isLoading && !isCompleted && !isReplaying && (
         <PaletteDock
           palette={puzzle.palette}
           regions={puzzle.regions}
