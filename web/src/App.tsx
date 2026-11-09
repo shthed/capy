@@ -223,9 +223,12 @@ export const App: React.FC = () => {
     []
   );
 
+  const autoResumeReplayRef = useRef<boolean>(false);
+
   // Start animated region-by-region replay
-  const startReplay = useCallback((sequence: number[]) => {
+  const startReplay = useCallback((sequence: number[], autoResumeOnFinish: boolean = false) => {
     if (!sequence || sequence.length === 0) return;
+    autoResumeReplayRef.current = autoResumeOnFinish;
     setResetViewTrigger((prev) => prev + 1);
     setHintRegionId(null);
     setReplaySequence(sequence);
@@ -239,6 +242,12 @@ export const App: React.FC = () => {
     if (!isReplaying || !isReplayPlaying) return;
     if (replayStep >= replaySequence.length) {
       setIsReplayPlaying(false);
+      if (autoResumeReplayRef.current) {
+        autoResumeReplayRef.current = false;
+        setTimeout(() => {
+          setIsReplaying(false);
+        }, 250);
+      }
       return;
     }
 
@@ -263,6 +272,12 @@ export const App: React.FC = () => {
           const next = Math.min(replaySequence.length, prev + stepDelta);
           if (next >= replaySequence.length) {
             setIsReplayPlaying(false);
+            if (autoResumeReplayRef.current) {
+              autoResumeReplayRef.current = false;
+              setTimeout(() => {
+                setIsReplaying(false);
+              }, 250);
+            }
           }
           return next;
         });
@@ -418,7 +433,7 @@ export const App: React.FC = () => {
           setIsLoading(false);
 
           if (shouldAutoReplay && initialOrder.length > 0) {
-            startReplay(initialOrder);
+            startReplay(initialOrder, true);
           }
         } catch (err) {
           // If cancelled by a newer request or superseded, quietly ignore
@@ -502,7 +517,7 @@ export const App: React.FC = () => {
               );
               setIsLoading(false);
               if (settings.autoReplayOnLoad !== false && orderedIds.length > 0) {
-                startReplay(orderedIds);
+                startReplay(orderedIds, true);
               }
             };
             img.src = snap.sampleAssetPath || snap.previewDataUrl || 'assets/capybara.webp';
@@ -559,8 +574,8 @@ export const App: React.FC = () => {
   // Free colour mode indicator
   const isFreeColorMode = Boolean(settings.isFreeColorMode);
 
-  // Redo capability: enabled during free colour puzzles or when explicitly enabled in settings
-  const isRedoEnabled = Boolean(settings.enableRedo || isFreeColorMode || puzzle?.isFreeColor);
+  // Undo & Redo capability: disabled by default for standard puzzles, enabled automatically for free colour puzzles or when explicitly enabled in settings
+  const isUndoEnabled = Boolean(settings.enableUndo || isFreeColorMode || puzzle?.isFreeColor);
 
   const handleToggleFreeColorMode = useCallback(() => {
     const nextMode = !settings.isFreeColorMode;
@@ -570,7 +585,7 @@ export const App: React.FC = () => {
 
   // Undo last region completion
   const handleUndo = useCallback(() => {
-    if (!puzzle || isReplaying || undoStack.length === 0) return;
+    if (!puzzle || isReplaying || undoStack.length === 0 || !isUndoEnabled) return;
 
     const lastAction = undoStack[undoStack.length - 1];
     setUndoStack((prev) => prev.slice(0, -1));
@@ -635,14 +650,14 @@ export const App: React.FC = () => {
     paintedRegionColors,
     settings.hapticsEnabled,
     isFreeColorMode,
-    isRedoEnabled,
+    isUndoEnabled,
     activeSnapshotId,
     activeColorId,
   ]);
 
   // Redo last undone region action
   const handleRedo = useCallback(() => {
-    if (!puzzle || isReplaying || redoStack.length === 0 || !isRedoEnabled) return;
+    if (!puzzle || isReplaying || redoStack.length === 0 || !isUndoEnabled) return;
 
     const lastRedo = redoStack[redoStack.length - 1];
     setRedoStack((prev) => prev.slice(0, -1));
@@ -706,7 +721,7 @@ export const App: React.FC = () => {
     paintedRegionColors,
     settings.hapticsEnabled,
     isFreeColorMode,
-    isRedoEnabled,
+    isUndoEnabled,
     activeSnapshotId,
     activeColorId,
   ]);
@@ -824,14 +839,13 @@ export const App: React.FC = () => {
   // Keyboard shortcut Ctrl+Z / Cmd+Z for Undo, Ctrl+Y / Cmd+Y / Ctrl+Shift+Z for Redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showSettings || isReplaying || isLoading) return;
+      if (showSettings || isReplaying || isLoading || !isUndoEnabled) return;
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         handleUndo();
       } else if (
-        isRedoEnabled &&
-        (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z'))
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')
       ) {
         e.preventDefault();
         handleRedo();
@@ -839,7 +853,7 @@ export const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSettings, isReplaying, isLoading, handleUndo, handleRedo, isRedoEnabled]);
+  }, [showSettings, isReplaying, isLoading, handleUndo, handleRedo, isUndoEnabled]);
 
   // Handle single region coloring
   const attemptFillRegion = useCallback(
@@ -1385,7 +1399,7 @@ export const App: React.FC = () => {
     if (snapshot.id === activeSnapshotId && puzzle) {
       const currentOrdered = Array.from(filledRegionIds);
       if ((forceReplay || settings.autoReplayOnLoad !== false) && currentOrdered.length > 0) {
-        startReplay(currentOrdered);
+        startReplay(currentOrdered, !forceReplay);
       }
       return;
     }
@@ -1439,7 +1453,7 @@ export const App: React.FC = () => {
         setIsLoading(false);
 
         if ((forceReplay || settings.autoReplayOnLoad !== false) && orderedIds.length > 0) {
-          startReplay(orderedIds);
+          startReplay(orderedIds, !forceReplay);
         }
       };
       img.src = snapshot.sampleAssetPath || snapshot.previewDataUrl || 'assets/capybara.webp';
@@ -1692,8 +1706,9 @@ export const App: React.FC = () => {
           showResetViewButton={settings.showResetViewButton}
           raiseDock={settings.raisePaletteDock}
           isZoomedOrPanned={isCanvasTransformed}
-          canUndo={undoStack.length > 0 || filledRegionIds.size > 0}
-          canRedo={isRedoEnabled && redoStack.length > 0}
+          canUndo={isUndoEnabled && (undoStack.length > 0 || filledRegionIds.size > 0)}
+          canRedo={isUndoEnabled && redoStack.length > 0}
+          showUndo={isUndoEnabled}
           isCompleted={isCompleted}
           isReplaying={isReplaying}
           onUndo={handleUndo}
@@ -1719,17 +1734,23 @@ export const App: React.FC = () => {
           totalSteps={replaySequence.length}
           replaySpeed={settings.replaySpeed || 1}
           raiseDock={settings.raisePaletteDock}
-          onTogglePlay={() => setIsReplayPlaying((prev) => !prev)}
+          onTogglePlay={() => {
+            autoResumeReplayRef.current = false;
+            setIsReplayPlaying((prev) => !prev);
+          }}
           onRestart={() => {
+            autoResumeReplayRef.current = false;
             setResetViewTrigger((prev) => prev + 1);
             setReplayStep(0);
             setIsReplayPlaying(true);
           }}
           onSkipToEnd={() => {
+            autoResumeReplayRef.current = false;
             setReplayStep(replaySequence.length);
             setIsReplayPlaying(false);
           }}
           onSeek={(step) => {
+            autoResumeReplayRef.current = false;
             setReplayStep(step);
             setIsReplayPlaying(false);
           }}
@@ -1737,6 +1758,7 @@ export const App: React.FC = () => {
             handleUpdateSettings({ ...settings, replaySpeed: spd });
           }}
           onExitReplay={() => {
+            autoResumeReplayRef.current = false;
             setIsReplaying(false);
             setIsReplayPlaying(false);
           }}

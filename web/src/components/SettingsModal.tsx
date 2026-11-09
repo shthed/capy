@@ -550,9 +550,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       desc: 'Show the custom colour chooser button for all puzzles, not just black and white coloring pages',
                     },
                     {
-                      key: 'enableRedo' as const,
-                      label: 'Enable Redo Action',
-                      desc: 'Show Redo button above Undo after undoing steps (Ctrl+Y). Disabled by default, enabled automatically for free colour puzzles',
+                      key: 'enableUndo' as const,
+                      label: 'Enable Undo Action',
+                      desc: 'Show Undo button above palette dock to revert painted regions (Ctrl+Z). Disabled by default, enabled automatically for free colour puzzles',
                     },
                     {
                       key: 'panMomentum' as const,

@@ -175,6 +175,10 @@ async function runFullGameplayTest() {
       };
       localStorage.setItem('capy_active_session_v8', JSON.stringify(session));
 
+      const settings = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      settings.enableUndo = true;
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(settings));
+
       return { totalCount: active.totalCount, id: active.id };
     });
     console.log(`   Configured 100% completion snapshot (${snapshotInfo?.totalCount} regions).`);

@@ -61,23 +61,26 @@ async function testUndoTimelineAndRedo() {
 
     // Step 3: Test Single Tap Undo & Redo with Setting Toggle and Above-Undo Layout
     console.log('3️⃣ Testing Single Tap Undo & Redo buttons and layout...');
-    const undoBtn = await page.waitForSelector('[data-testid="undo-btn"]');
 
-    // Redo should initially be completely hidden before any undo
+    // Undo and Redo should initially be hidden by default for standard puzzles
+    const initialUndoBtn = await page.$('[data-testid="undo-btn"]');
+    if (initialUndoBtn !== null) {
+      throw new Error('Undo button should be hidden by default for standard puzzles!');
+    }
     const initialRedoBtn = await page.$('[data-testid="redo-btn"]');
     if (initialRedoBtn !== null) {
-      throw new Error('Redo button should be hidden before any undo!');
+      throw new Error('Redo button should be hidden by default!');
     }
-    console.log('   ✅ Redo button is hidden before any undo.');
+    console.log('   ✅ Undo and Redo buttons are hidden by default for standard puzzles.');
 
-    // Enable Redo Action setting via Settings modal
+    // Enable Undo Action setting via Settings modal
     const settingsBtn = await page.waitForSelector('button[title*="Settings"]');
     await settingsBtn.click();
     await page.waitForTimeout(300);
 
-    // Toggle Enable Redo Action setting in Settings tab (tab 0 is active by default)
-    const enableRedoLabel = await page.waitForSelector('text=Enable Redo Action');
-    await enableRedoLabel.evaluate((el) => {
+    // Toggle Enable Undo Action setting in Settings tab (tab 0 is active by default)
+    const enableUndoLabel = await page.waitForSelector('text=Enable Undo Action');
+    await enableUndoLabel.evaluate((el) => {
       const container = el.closest('.flex');
       const toggle = container?.querySelector('button');
       if (toggle) toggle.click();
@@ -87,6 +90,10 @@ async function testUndoTimelineAndRedo() {
     const closeBtn = await page.waitForSelector('button[title="Close"]');
     await closeBtn.click();
     await page.waitForTimeout(300);
+
+    // Undo button should now be visible!
+    const undoBtn = await page.waitForSelector('[data-testid="undo-btn"]');
+    console.log('   ✅ Undo button is now visible after toggling Enable Undo Action setting.');
 
     // Redo should STILL be hidden because user has not pressed undo yet!
     const redoStillHidden = await page.$('[data-testid="redo-btn"]');
@@ -231,8 +238,81 @@ async function testUndoTimelineAndRedo() {
     if (pY !== 5) throw new Error(`Ctrl+Y did not redo: ${pY}`);
     console.log('   ✅ Keyboard shortcuts Ctrl+Z & Ctrl+Y verified.');
 
-    // Step 8: Test Save Export / Import and Platform Links
-    console.log('8️⃣ Testing Save Export, Import & Platform Cross-Links...');
+    // Step 8: Auto-Resume Play When Loading a Puzzle After Replay Has Finished
+    console.log('8️⃣ Testing Auto-Resume Play when loading puzzle after auto-replay finishes...');
+    // We currently have 5 regions filled. autoReplayOnLoad is true by default.
+    // Reload page to trigger active save restoration and auto-replay.
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForSelector('canvas', { timeout: 10000 });
+
+    // Verify Replay HUD appears because autoReplayOnLoad triggered
+    await page.waitForSelector('[data-testid="replay-scrubber"]', { timeout: 10000 });
+    console.log('   ✅ Replay started automatically on load.');
+
+    // Wait for the replay sequence (5 regions) to complete playback and auto-resume active play
+    // When finished, Replay HUD automatically closes and PaletteDock reappears
+    await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 15000 });
+    console.log('   ✅ Palette dock returned automatically after replay completed.');
+
+    // Verify replay HUD is closed
+    const scrubberAfterReplay = await page.$('[data-testid="replay-scrubber"]');
+    if (scrubberAfterReplay !== null) {
+      throw new Error('Replay scrubber should have automatically closed after replay finished!');
+    }
+    console.log('   ✅ Active gameplay resumed seamlessly without requiring manual exit.');
+
+    // Step 9: Free Colour Puzzle Auto-Enablement of Undo
+    console.log('9️⃣ Testing Free Colour Mode auto-enabling Undo even when enableUndo is false...');
+    // Open Settings and disable enableUndo
+    const undoSettingsBtn = await page.waitForSelector('button[title*="Settings"]');
+    await undoSettingsBtn.click();
+    await page.waitForTimeout(300);
+
+    const toggleUndoLabel = await page.waitForSelector('text=Enable Undo Action');
+    await toggleUndoLabel.evaluate((el) => {
+      const container = el.closest('.flex');
+      const toggle = container?.querySelector('button');
+      if (toggle) toggle.click();
+    });
+    await page.waitForTimeout(200);
+
+    const closeBtn2 = await page.waitForSelector('button[title="Close"]');
+    await closeBtn2.click();
+    await page.waitForTimeout(300);
+
+    // Verify Undo button is now hidden because enableUndo is false
+    const undoHiddenNow = await page.$('[data-testid="undo-btn"]');
+    if (undoHiddenNow !== null) {
+      throw new Error('Undo button should be hidden after disabling setting!');
+    }
+    console.log('   ✅ Undo button is hidden when setting is turned off.');
+
+    // Re-open Settings and toggle "Free Colour Mode" ON
+    const settingsBtnForFreeColor = await page.waitForSelector('button[title*="Settings"]');
+    await settingsBtnForFreeColor.click();
+    await page.waitForTimeout(300);
+
+    const freeColorLabel = await page.waitForSelector('text=Free Colour Mode');
+    await freeColorLabel.evaluate((el) => {
+      const container = el.closest('.flex');
+      const toggle = container?.querySelector('button');
+      if (toggle) toggle.click();
+    });
+    await page.waitForTimeout(200);
+
+    const closeBtn3 = await page.waitForSelector('button[title="Close"]');
+    await closeBtn3.click();
+    await page.waitForTimeout(300);
+
+    // Verify Undo button is now visible because Free Colour Mode automatically enables it!
+    const freeColorUndoBtn = await page.waitForSelector('[data-testid="undo-btn"]', { timeout: 5000 });
+    if (!freeColorUndoBtn) {
+      throw new Error('Undo button should be automatically enabled during Free Colour Mode!');
+    }
+    console.log('   ✅ Undo button is automatically enabled for Free Colour puzzle mode.');
+
+    // Step 10: Test Save Export / Import and Platform Links
+    console.log('🔟 Testing Save Export, Import & Platform Cross-Links...');
     const savesSettingsBtn = await page.waitForSelector('button[title*="Settings"]');
     await savesSettingsBtn.click();
     await page.waitForTimeout(300);
