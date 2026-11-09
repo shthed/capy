@@ -43,14 +43,15 @@ export class PuzzleWorkerService {
   static generate(
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
-    onProgress?: (progress: number, status: string, payload?: GenerationProgressPayload) => void
+    onProgress?: (progress: number, status: string, payload?: GenerationProgressPayload) => void,
+    detailedProgress: boolean = true
   ): Promise<PuzzleData> {
     return new Promise((resolve, reject) => {
       // If Web Worker is not supported, fallback to main-thread execution
       if (typeof Worker === 'undefined') {
         try {
           const generator = new AutoPuzzleGenerator();
-          const result = generator.generate(sourceCanvas, config, onProgress);
+          const result = generator.generate(sourceCanvas, config, onProgress, detailedProgress);
           resolve(result);
         } catch (err) {
           reject(err);
@@ -140,7 +141,7 @@ export class PuzzleWorkerService {
           console.warn('Worker error encountered, falling back to local thread:', err);
           try {
             const generator = new AutoPuzzleGenerator();
-            const fallbackResult = generator.generate(sourceCanvas, config, onProgress);
+            const fallbackResult = generator.generate(sourceCanvas, config, onProgress, detailedProgress);
             resolve(fallbackResult);
           } catch (syncErr) {
             reject(syncErr);
@@ -159,6 +160,7 @@ export class PuzzleWorkerService {
             height,
             rgbaBuffer,
             config,
+            detailedProgress,
           },
           [rgbaBuffer]
         );
@@ -166,12 +168,24 @@ export class PuzzleWorkerService {
         console.warn('Failed to dispatch worker task, falling back to local:', err);
         try {
           const generator = new AutoPuzzleGenerator();
-          const fallbackResult = generator.generate(sourceCanvas, config, onProgress);
+          const fallbackResult = generator.generate(sourceCanvas, config, onProgress, detailedProgress);
           resolve(fallbackResult);
         } catch (syncErr) {
           reject(syncErr);
         }
       }
     });
+  }
+
+  /**
+   * Dynamically toggles detailed progress reporting on the active worker.
+   */
+  static setDetailedProgress(detailed: boolean): void {
+    if (this.worker) {
+      this.worker.postMessage({
+        type: 'SET_DETAILED_PROGRESS',
+        detailed,
+      });
+    }
   }
 }
