@@ -10,30 +10,23 @@ All contributors and AI agents must strictly observe these absolute core invaria
 
 1. **Never merge without explicit approval**: Never merge a pull request or push directly to `main` without explicit confirmation and approval from the user. Create the pull request, verify that CI tests pass, share the PR link, and wait for confirmation.
 2. **Build Android freely, but never deploy to physical devices without request**: You may build and assemble the Android app (`./gradlew app:assembleDebug`, `./gradlew app:testDebugUnitTest`, `./gradlew app:buildWeb`) whenever required to verify changes. However, never execute device installation commands (`./gradlew app:installDebug`) unless explicitly requested by the user.
-3. **Never use root-relative asset URLs**: Never use `/assets/...` URLs in code or CSS. Always use relative `./assets/...` and maintain `base: './'` in `web/vite.config.ts` so bundles resolve across GitHub Pages root (`/`), PR previews (`/pull/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`).
-4. **Strict documentation maintenance & zero emojis**: Never include emojis in markdown documentation files (`.md`). Always maintain and synchronize documentation across `WEB.md`, `PUZZLE.md`, `APP.md`, `TESTING.md`, `TODO.md`, and `README.md` following the detailed guidelines in Section 5.
-5. **Never execute heavy CPU segmentation on the main thread**: All color clustering (K-Means), contour tracing (Marching Squares), and region segmentation must execute exclusively in `web/src/engine/puzzle.worker.ts` using transferable `ArrayBuffer` objects.
-6. **Never allocate objects inside render loops**: Never instantiate objects or arrays inside `requestAnimationFrame` loops, canvas rendering callbacks, or high-frequency touch gesture paths. Reuse typed arrays and scratch structs.
+3. **Never use root-relative asset URLs**: Never use `/assets/...` URLs in code or CSS. Always use relative `./assets/...` and maintain `base: './'` in `web/vite.config.ts` so bundles resolve across GitHub Pages root (`/`), PR previews (`/pull/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`). See Section 6.6.
+4. **Strict documentation maintenance, zero emojis & no ASCII art**: Never include emojis or ASCII art / box-drawing diagrams in markdown documentation files (`.md`). Prefer tables, indented bullet hierarchies, GitHub Flavored Markdown alerts, or Mermaid diagrams. Always maintain and synchronize documentation across `WEB.md`, `PUZZLE.md`, `APP.md`, `TESTING.md`, `TODO.md`, and `README.md` following Section 5.
+5. **Never execute heavy CPU segmentation on the main thread**: All color clustering (K-Means), contour tracing, and region segmentation must execute exclusively in `web/src/engine/puzzle.worker.ts` using transferable `ArrayBuffer` objects. See Section 6.4.
+6. **Zero per-frame allocations in hot paths**: Never instantiate objects or arrays inside `requestAnimationFrame` loops, canvas rendering callbacks, or high-frequency touch gesture paths. Reuse typed arrays and scratch structs to eliminate GC micro-stutter. See Section 6.2.
 7. **Never leave completed items in `TODO.md`**: When a task or milestone is completed, remove it from `TODO.md` immediately rather than checking it off. Keep `TODO.md` strictly focused on pending, active roadmap tasks.
 8. **Always display working thoughts**: Continuously display thoughts while working to explain what is being done and why, stating what file, component, or system is being inspected and the exact reasoning for each action.
 9. **Never open a PR without verifying builds**: Always run `npm run lint` and `npm run build` cleanly before creating or updating a pull request. Never submit unverified changes to CI.
+10. **Verify code reality before documenting**: Never document speculative, non-existent function names, setting keys, file paths, or CLI flags. Verify names and signatures directly against the codebase before updating documentation.
 
 ---
 
 ## 2. Repository Architecture & Target Boundaries
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                               Capy Monorepo                                 │
-├───────────────────────────────┬─────────────────────────────────────────────┤
-│ Web Application (Core Engine) │ Native Android Launcher (Tactile Shell)     │
-│  └─ web/                      │  └─ app/                                    │
-│      ├─ React 19 UI & Modals  │      ├─ AndroidX WebViewAssetLoader         │
-│      ├─ Cached 2D Canvas Engine│     ├─ CapyAndroidBridge (@Javascript)     │
-│      ├─ Web Worker Pipeline   │      ├─ Tactile Haptic Feedback (Vibrator)  │
-│      └─ NativeBridge Abstraction│    └─ Hardware Back & Disk JSON Saves     │
-└───────────────────────────────┴─────────────────────────────────────────────┘
-```
+| Subsystem | Location | Technologies & Scope | Key Capabilities |
+| :--- | :--- | :--- | :--- |
+| **Web Application** | `web/` | React 19, TypeScript, Vite 6, Tailwind CSS 4 | Cached 2D Canvas engine (`PuzzleCanvas.tsx`), 5-strategy Web Worker pipeline (`puzzle.worker.ts`), `NativeBridge` interface |
+| **Native Android Launcher** | `app/` | Kotlin, AndroidX WebViewAssetLoader | Host shell (`MainActivity.kt`), `@JavascriptInterface` bridge (`CapyAndroidBridge.kt`), tactile haptics, back navigation, disk backups |
 
 1. **`web/` — Web Application & Single Source of Truth (Deployed to `/`)**:
    - Built with **React 19**, **TypeScript**, **Vite 6**, **Tailwind CSS 4**, offscreen cached 2D canvas rendering (`PuzzleCanvas.tsx`), and a 5-strategy Web Worker puzzle engine (`web/src/engine/`).
@@ -49,16 +42,16 @@ All contributors and AI agents must strictly observe these absolute core invaria
 
 ## 3. Task-Based Execution Decision Matrix
 
-Match incoming user tasks to the matrix below to determine target files, mandatory tests, and required documentation updates:
+Match incoming user tasks to the matrix below to determine target files, mandatory tests, and required documentation updates. `npm run lint` and `npm run build` are the mandatory baseline for every code pull request.
 
 | Task Domain | Target Files & Directories | Mandatory Verification Commands | Documentation to Sync |
 | :--- | :--- | :--- | :--- |
-| **Gameplay UI & Controls** | `web/src/components/*`, `web/src/styles/*` | `npm run lint`<br>`npm run build`<br>`npm run test:undo`<br>`npm run gallery:capture` (if styling changed) | [`WEB.md`](./WEB.md)<br>[`TODO.md`](./TODO.md) |
+| **Gameplay UI & Controls** | `web/src/components/*`, `web/src/index.css` | `npm run lint`<br>`npm run build`<br>`npm run test:undo`<br>`npm run gallery:capture` (if styling changed) | [`WEB.md`](./WEB.md)<br>[`TODO.md`](./TODO.md) |
 | **Puzzle Engine & Workers** | `web/src/engine/*`, `web/src/engine/puzzle.worker.ts` | `npm run lint`<br>`npm run build`<br>`npm run test:gameplay` | [`PUZZLE.md`](./PUZZLE.md)<br>[`TODO.md`](./TODO.md) |
-| **Native Android Wrapper** | `app/src/main/*`, `web/src/services/NativeBridge.ts` | `npm run build`<br>`./gradlew app:testDebugUnitTest`<br>`./gradlew app:assembleDebug` | [`APP.md`](./APP.md)<br>[`TODO.md`](./TODO.md) |
-| **Testing & Automation** | `web/scripts/*`, Playwright test specs | `npm run test:undo`<br>`npm run test:gameplay`<br>`npm run test:game` | [`TESTING.md`](./TESTING.md)<br>[`TODO.md`](./TODO.md) |
+| **Native Android Wrapper** | `app/src/main/*`, `web/src/services/NativeBridge.ts` | `npm run lint`<br>`npm run build`<br>`./gradlew app:testDebugUnitTest`<br>`./gradlew app:assembleDebug` | [`APP.md`](./APP.md)<br>[`TODO.md`](./TODO.md) |
+| **Testing & Automation** | `web/scripts/*`, Playwright test specs | `npm run lint`<br>`npm run build`<br>`npm run test:undo`<br>`npm run test:gameplay` | [`TESTING.md`](./TESTING.md)<br>[`TODO.md`](./TODO.md) |
 | **CI/CD & Deployment** | `.github/workflows/*` | Validate YAML workflow syntax; verify dual-job pipeline permissions | [`AGENTS.md`](./AGENTS.md) |
-| **Documentation & Roadmap** | `*.md`, `docs/*` | Verify markdown links and heading consistency; zero emojis | [`TODO.md`](./TODO.md) |
+| **Documentation & Roadmap** | `*.md`, `docs/*` | Verify links and headings; zero emojis & no ASCII art | [`TODO.md`](./TODO.md) |
 
 ---
 
@@ -101,7 +94,7 @@ From the repository root:
 - **Linear History & Rebase Hygiene**: Keep branch history linear by rebasing onto `origin/main` (`git pull --rebase origin main`) rather than introducing merge commits into feature branches.
 - **Unified CI & Branch Deployments ([`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml))**:
   - Two-job pipeline separating unprivileged code execution from privileged deployment:
-    - `build` job runs under read-only permissions (`contents: read`), compiling Web (`web/`), running Android unit tests, and assembling debug APK (`app/`). Builds across PRs execute concurrently in parallel without locking.
+    - `build` job runs under read-only permissions (`contents: read`), compiling Web (`npm ci && npm run build`), running Android unit tests (`./gradlew app:testDebugUnitTest`), and assembling debug APK (`./gradlew app:assembleDebug`). Builds across PRs execute concurrently in parallel without locking.
     - `deploy` job runs under privileged deployment permissions (`contents: write`, `pages: write`, `id-token: write`, `pull-requests: write`) and acquires the `deploy-pages` concurrency lock to serialize artifact publishing and PR comments.
   - Automatically skips CI builds and deployments when commits exclusively modify documentation (`paths-ignore: ['**.md', 'docs/**', 'notes/**', '.gitignore', 'LICENSE']`), consuming zero runner minutes.
   - `main` deploys `web/dist/` to `/` (`https://shthed.github.io/capy/`) and the Android APK to `/capy.apk` (`https://shthed.github.io/capy/capy.apk`).
@@ -112,6 +105,8 @@ From the repository root:
   - When a PR is closed or merged, `cleanup-closed-pr.yml` automatically deletes the `/pull/<number>/` preview directory from `gh-pages` and redeploys. Once merged, the changes are live on the root site `https://shthed.github.io/capy/`.
 - **Finish active task before switching**: Finish working on the current task instead of switching when the user sends an update with a new task, unless the comment directly relates to what is currently being worked on.
 - **Plan before executing major changes**: When starting work on a big task, write out a clear plan of what you are going to do and how you are going to implement it before jumping into code edits.
+- **Scope Discipline & Minimal Diffs**: Only modify files directly required to fulfill the active task. Avoid speculative refactorings, reformatting unrelated files, or introducing architectural complexity beyond what was requested.
+- **Credential & Secret Hygiene**: Never commit secrets, personal access tokens, API credentials, or internal environment details to Git or pull request comments.
 - **User-Friendly Pull Request Naming & Labels**:
   - **PR Titles**: Write clean, concise, human-readable titles focusing on user value (e.g. `Visual Screenshot Showcase Gallery & Automated Capture Pipeline`, `Google Maps-Style Zoom, Pan Momentum & Corner Navigation`). Do not use raw git commit syntax or parenthesized prefixes in PR titles.
   - **PR Labels**: Always attach appropriate GitHub label tags when opening or editing PRs:
@@ -123,9 +118,9 @@ From the repository root:
     - `ci`: GitHub Actions workflows, CI/CD pipelines, and deployment automation.
     - `deps`: Dependency upgrades, version catalogs, and package manager updates.
 - **Documentation Maintenance & Synchronization Guidelines**:
-  - **Zero Emojis & Professional Technical Style**:
-    - Never include unicode emojis in markdown documentation files (`.md`).
-    - Use GitHub Flavored Markdown alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`) or plain ASCII diagrams for structural callouts and visual emphasis.
+  - **Zero Emojis & No ASCII Art**:
+    - Never include unicode emojis or ASCII art / box-drawing diagrams in markdown documentation files (`.md`).
+    - Use GitHub Flavored Markdown alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`), tables, indented bullet hierarchies, or Mermaid diagrams for structural callouts and visual emphasis.
   - **Subsystem Synchronization Matrix**:
     - When modifying **UI controls, settings, appearance, or gestures**: Update [`WEB.md`](./WEB.md) with complete setting keys, default states, UI placement, and user interaction mechanics.
     - When modifying **segmentation algorithms, color clustering, line extraction, or web worker protocols**: Update [`PUZZLE.md`](./PUZZLE.md) with algorithmic details, buffer structures, and performance budgets.
@@ -137,12 +132,12 @@ From the repository root:
     - Never check off completed items with `[x]`. When a task or milestone is finished, remove it from `TODO.md` immediately rather than checking it off.
     - Keep `TODO.md` strictly focused on pending, active roadmap tasks. Git commit history and pull request descriptions preserve historical completion records.
   - **Settings & Property Documentation Standards**:
-    - Every newly added `SettingsContext` property or `localStorage` key must be documented with its TypeScript type, default value, persistence key, and UI location.
+    - Every newly added setting must be documented with its TypeScript type, default value, persistence storage (`StorageService` key `capy_user_settings_v8` or direct `localStorage` keys like `capy_saves_view_mode`, `capy_last_settings_tab`), and UI location.
   - **Relative Link Validation**:
     - All intra-repository links must use relative paths (e.g. `[`WEB.md`](./WEB.md)`) so documentation navigates seamlessly across branches, forks, and local clones.
   - **Pruning Obsolete & Retired References**:
     - When refactoring or deleting an API, UI element, or setting, perform a global search across all `.md` files to prune dead references and prevent documentation rot.
-- **Export chat log and development summary to PR before merge**: When finalising a pull request ready for merge, compile a comprehensive summary of the entire conversation and development process (user requests, architectural decisions, implementations, debugging notes, test execution results, and visual showcases) and post it as a comment on the pull request. This preserves a complete historical record directly on GitHub.
+- **Development Summary to PR Before Merge**: When finalising a pull request ready for merge, compile a comprehensive summary of the development process (user requests, architectural decisions, implementations, debugging notes, test execution results, and visual showcases) and post it as a comment on the pull request. Never dump raw conversation transcripts, internal credentials, tokens, or environment details. This preserves a clean historical record directly on GitHub.
 
 ---
 
@@ -150,12 +145,12 @@ From the repository root:
 
 1. **Coordinate Geometry & Invariant Transformations**:
    - Maintain explicit distinctions between Screen coordinates (pointer DOM events), Container coordinates (CSS client bounds), Artwork coordinates (canvas image pixel grid), and Segmentation map coordinates (`regions[id]`).
-   - All pointer coordinate conversions must use `screenToCanvas` (and inverse `canvasToScreen`) in [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
+   - All pointer coordinate conversions must use `screenToCanvas` and coordinate clamping (`clampCanvasOffset`) in [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
    - Zoom and pan operations must maintain focal point invariance under pinch-to-zoom and Google Maps-style one-finger double-tap-and-drag gestures.
 
-2. **Zero-Allocation Canvas Render Loop**:
-   - Forbid object and array allocations inside high-frequency animation loops (`requestAnimationFrame`, pan momentum gliding, and canvas repainting).
-   - Reuse typed array buffers (`Uint8Array`, `Uint32Array`), pre-allocated bounding box structs, and scratch vectors to eliminate garbage collection micro-stutter during active gameplay.
+2. **Zero-Allocation Hot Paths**:
+   - Forbid per-frame object and array allocations inside high-frequency animation loops (`requestAnimationFrame`, pan momentum gliding, and canvas repainting).
+   - Reuse typed array buffers (`Uint8Array`, `Uint32Array`), pre-allocated bounding box structs, and scratch vectors to eliminate garbage collection micro-stutter during active gameplay. If an allocation is unavoidable, document and justify the exception.
 
 3. **React State vs Direct Canvas Refs**:
    - High-frequency 60-120fps interactions (pointer dragging, momentum flick gliding, pinch zoom) must directly mutate canvas refs and trigger repaints via `requestAnimationFrame` without triggering React virtual DOM reconciliation.
@@ -167,58 +162,62 @@ From the repository root:
    - Generation tasks must support clean cancellation and worker termination when a new puzzle is initiated.
 
 5. **Defensive NativeBridge Fallback Pattern**:
-   - Every bridge invocation (`NativeBridge.hapticFeedback`, `NativeBridge.openPhotoPicker`, `NativeBridge.saveJsonBackup`) must feature-detect host capabilities and fall back safely to Web APIs (`navigator.vibrate`, `<input type="file">`, IndexedDB) without throwing uncaught exceptions.
+   - Every bridge invocation (`NativeBridge.haptic`, `NativeBridge.saveBackup`, `NativeBridge.loadBackup`, `NativeBridge.setBackModalOpen`, `NativeBridge.onSharedImage`, `NativeBridge.shareImage`) must feature-detect host capabilities and fall back safely to Web APIs (`navigator.vibrate`, IndexedDB, Web Share API) without throwing uncaught exceptions.
 
 6. **Relative Asset Path Invariance**:
    - Never use root-relative `/assets/...` URLs in code or CSS. Always use relative `./assets/...` and maintain `base: './'` in [`web/vite.config.ts`](./web/vite.config.ts) to guarantee seamless asset resolution across GitHub Pages root (`/`), PR previews (`/pull/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`).
 
 7. **Storage Durability & IndexedDB Quota Safety**:
    - Never store raw binary image Blobs or heavy base64 strings in synchronous `localStorage` (which is capped at 5MB and blocks the main thread).
-   - Use asynchronous IndexedDB stores (`STORE_IMAGES`, `STORE_SAVES`) for image bitmaps and serialized region states on Web, coupled with `filesDir/capy_saves` disk backups on Android.
+   - Use asynchronous IndexedDB stores (`STORE_PUZZLES`, `STORE_IMAGES` in [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts)) for image bitmaps and serialized region states on Web, coupled with `filesDir/capy_saves` disk backups on Android.
    - Always ensure puzzle save serialization supports backward-compatible migrations when introducing new schema fields.
 
 8. **Mobile Gesture State Transitions & Touch Invariance**:
-   - Maintain `touch-action: none` on the interactive canvas container to prevent browser scroll conflicts.
+   - Maintain `touch-action: none` (defined in [`web/src/index.css`](./web/src/index.css)) on the interactive canvas container to prevent browser scroll conflicts.
    - When transitioning out of a multi-touch pinch-to-zoom gesture where one finger remains in contact, re-anchor pan coordinates dynamically to prevent canvas jumping or viewport teleportation.
 
-9. **Modal Stack & Hardware Back Navigation Contract**:
-   - Every modal dialog, drawer, or overlay must register with the centralized modal stack.
-   - Ensure the Android hardware back gesture (`CapyBackPress` event dispatched by `CapyAndroidBridge`) and desktop `Escape` key close the topmost modal rather than closing the app or navigating away.
+9. **Hardware Back Navigation & Modal Registration Contract**:
+   - Modals must coordinate with the native Android back gesture. When a modal opens, it registers its close callback via `NativeBridge.setBackModalOpen(true, onClose)`. On back press, `MainActivity.kt` triggers `window.__capyCloseModal()`, which invokes the registered callback.
+   - Desktop `Escape` key listeners should trigger the same modal close callback.
 
 ---
 
 ## 7. Android Coding Style & Warning Prevention (`app/`)
 
-1. **Trailing Commas**: Include trailing commas in multiline parameter lists, Composable call arguments, and data class declarations.
+1. **Trailing Commas**: Include trailing commas in multiline parameter lists and data class declarations.
 2. **Clarifying Parentheses**: Wrap sub-expressions in explicit parentheses for complex logical or range operations.
 3. **Android KTX Extensions**: Prefer `androidx.core.graphics.createBitmap(...)`, `bitmap.scale(width, height)`, and `sharedPreferences.edit { ... }`.
-4. **Compose Modifiers**: Keep `modifier: Modifier = Modifier` as the first optional parameter in Composable signatures.
-5. **Data Classes with Array Properties**: Explicitly override `equals()` and `hashCode()` using `contentEquals()` and `contentHashCode()` on any `data class` holding `IntArray` or `BooleanArray`.
-6. **Zero-Allocation Engine Loops**: Use primitive array buffers over object allocations in high-frequency quantization, segmentation, and rendering loops.
+4. **Data Classes with Array Properties**: Explicitly override `equals()` and `hashCode()` using `contentEquals()` and `contentHashCode()` on any `data class` holding `IntArray` or `BooleanArray`.
+5. **Zero-Allocation Engine Loops**: Use primitive array buffers over object allocations in high-frequency quantization, segmentation, and rendering loops.
 
 ---
 
 ## 8. Pre-PR Verification Checklist
 
-Before opening or merging any pull request, execute the following verification checklist sequentially:
+Before opening or updating any pull request, execute verification according to scope:
 
+### A. Baseline Verification (Mandatory for All Code PRs)
 ```bash
-# 1. Type check and compile web application
 cd web
-npm run lint                  # tsc --noEmit
-npm run build                 # tsc && vite build -> web/dist/
+npm run lint                  # Type check with tsc --noEmit
+npm run build                 # Compile production bundle (tsc && vite build -> web/dist/)
+```
 
-# 2. Run automated gameplay and regression test suites
+### B. Domain-Specific Verification
+```bash
+# 1. Gameplay UI, Canvas & State Changes
 npm run test:undo             # Undo timeline, scrubber, and redo stack (requires preview server)
 npm run test:gameplay         # Core tap region coloring and canvas state
+npm run gallery:capture       # Generates automated UI showcase screenshots (if styling changed)
 
-# 3. Optional visual gallery capture (for UI / styling modifications)
-npm run gallery:capture       # Generates automated UI showcase screenshots
-
-# 4. Run native Android unit tests and verify APK assembly
+# 2. Native Android Launcher (:app)
 cd ..
 ./gradlew app:testDebugUnitTest # Native bridge JUnit4 unit tests
 ./gradlew app:assembleDebug   # Syncs web/dist and builds debug APK
+
+# 3. Documentation PRs (*.md)
+# Verify intra-repo relative links, zero emojis, and no ASCII art / box-drawing diagrams.
+# Documentation-only PRs automatically skip CI builds via paths-ignore.
 ```
 
 ---
@@ -233,11 +232,7 @@ Common environment scenarios and their direct remediation steps:
 
 2. **Playwright test connection refused (`ERR_CONNECTION_REFUSED http://localhost:3000/`)**:
    - Cause: Browser test scripts connect to a live web server on port 3000.
-   - Remedy: Start the preview server in the background as a daemon process:
-     ```bash
-     cd web && npm run preview &
-     ```
-     Once testing completes, terminate the background preview process.
+   - Remedy: Start the preview server in the background as a persistent daemon process (`npm run preview`), execute the test suite, and terminate the background preview process immediately when tests finish.
 
 3. **Playwright browser missing (`Executable doesn't exist at .../chromium`)**:
    - Cause: Playwright browser binaries not yet installed in container cache.
@@ -245,6 +240,10 @@ Common environment scenarios and their direct remediation steps:
 
 4. **Skipped CI builds on documentation commits**:
    - Notice: Pull requests modifying only markdown files (`**.md`), `docs/`, or `.gitignore` intentionally skip GitHub Actions builds via `paths-ignore`. This is expected behavior and consumes zero runner minutes.
+
+5. **Local Android Gradle SSL certificate error (`SSLException: trustAnchors parameter must be non-empty`)**:
+   - Cause: The local container environment may lack a populated CA certificate keystore (`/etc/ssl/certs/java/cacerts`) for the Java runtime.
+   - Remedy: Do not attempt to bypass TLS or tamper with system trust roots. Ensure `npm run lint` and `npm run build` pass cleanly, push changes to your feature branch, and rely on GitHub Actions CI (`deploy-branch.yml`), which executes `./gradlew app:testDebugUnitTest` and `./gradlew app:assembleDebug` in a fully provisioned Temurin JDK 17 runner.
 
 ---
 
