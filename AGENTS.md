@@ -4,9 +4,9 @@ Capy is a multi-platform color-by-number suite living in https://github.com/shth
 
 ---
 
-## 1. Agent Rules
+## 1. The Golden Invariants (Non-Negotiable Guardrails)
 
-All contributors and AI agents must strictly observe these core rules:
+All contributors and AI agents must strictly observe these absolute core invariants:
 
 1. **Never merge without explicit approval**: Never merge a pull request or push directly to `main` without explicit confirmation and approval from the user. Create the pull request, verify that CI tests pass, share the PR link, and wait for confirmation.
 2. **Never deploy to Android devices without request**: Never run `./gradlew app:installDebug` unless explicitly requested by the user.
@@ -15,6 +15,8 @@ All contributors and AI agents must strictly observe these core rules:
 5. **Never execute heavy CPU segmentation on the main thread**: All color clustering (K-Means), contour tracing (Marching Squares), and region segmentation must execute exclusively in `web/src/engine/puzzle.worker.ts` using transferable `ArrayBuffer` objects.
 6. **Never allocate objects inside render loops**: Never instantiate objects or arrays inside `requestAnimationFrame` loops, canvas rendering callbacks, or high-frequency touch gesture paths. Reuse typed arrays and scratch structs.
 7. **Never leave completed items in `TODO.md`**: When a task or milestone is completed, remove it from `TODO.md` immediately rather than checking it off. Keep `TODO.md` strictly focused on pending, active roadmap tasks.
+8. **Always display working thoughts**: Continuously display thoughts while working to explain what is being done and why, stating what file, component, or system is being inspected and the exact reasoning for each action.
+9. **Never open a PR without verifying builds**: Always run `npm run lint` and `npm run build` cleanly before creating or updating a pull request. Never submit unverified changes to CI.
 
 ---
 
