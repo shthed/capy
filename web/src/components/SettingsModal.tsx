@@ -22,6 +22,7 @@ import {
   AppWindow,
 } from 'lucide-react';
 import { PwaService } from '../services/PwaService';
+import { NativeBridge } from '../services/NativeBridge';
 import {
   CANVAS_BG_MAP,
   CanvasBgColor,
@@ -750,7 +751,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   Platforms & Applications
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {isStandalone ? (
+                  {NativeBridge.isNative ? (
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-emerald-500/30 text-slate-200 text-xs font-semibold">
+                      <Check size={16} className="text-emerald-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-emerald-400">Native Application</div>
+                        <div className="text-[10px] text-slate-400 truncate">
+                          Running as installed {NativeBridge.platform === 'android' ? 'Android' : 'iOS'} launcher
+                        </div>
+                      </div>
+                    </div>
+                  ) : isStandalone ? (
                     <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-emerald-500/30 text-slate-200 text-xs font-semibold">
                       <Check size={16} className="text-emerald-400 flex-shrink-0" />
                       <div className="min-w-0">

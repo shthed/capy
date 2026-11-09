@@ -39,10 +39,11 @@ self.addEventListener('install', (event) => {
               // If this is index.html, discover and precache hashed Vite script & style bundles
               if (url.endsWith('/index.html') || url === new URL('./index.html', self.location).href) {
                 const htmlText = await response.text();
-                const bundleMatches = [...htmlText.matchAll(/(?:src|href)="(\.\/assets\/[^"]+)"/g)];
+                const bundleMatches = [...htmlText.matchAll(/(?:src|href)=["']?((?:\.\/)?assets\/[^"'\s>]+)["']?/g)];
 
                 for (const match of bundleMatches) {
-                  const bundleUrl = new URL(match[1], self.location).href;
+                  const relPath = match[1].startsWith('./') ? match[1] : './' + match[1];
+                  const bundleUrl = new URL(relPath, self.location).href;
                   try {
                     const bundleResp = await fetch(bundleUrl, { cache: 'no-cache' });
                     if (bundleResp.ok) {
@@ -111,8 +112,12 @@ self.addEventListener('fetch', (event) => {
         try {
           const networkResponse = await fetch(request);
           if (networkResponse && networkResponse.status === 200) {
-            const cache = await caches.open(CACHE_NAME);
-            cache.put(request, networkResponse.clone());
+            try {
+              const cache = await caches.open(CACHE_NAME);
+              await cache.put(request, networkResponse.clone());
+            } catch (cacheErr) {
+              console.warn('[ServiceWorker] Failed to cache navigation response:', cacheErr);
+            }
           }
           return networkResponse;
         } catch (networkError) {
@@ -146,7 +151,11 @@ self.addEventListener('fetch', (event) => {
         const response = await fetch(request);
         // Cache valid responses within our origin or opaque no-cors responses
         if (response && (response.status === 200 || response.type === 'opaque')) {
-          cache.put(request, response.clone());
+          try {
+            await cache.put(request, response.clone());
+          } catch (cacheErr) {
+            console.warn('[ServiceWorker] Failed to cache asset response:', request.url, cacheErr);
+          }
         }
         return response;
       } catch (err) {

@@ -41,9 +41,13 @@ class PwaServiceClass {
 
     // 3. Register Service Worker (web environment only, bypassing native Android wrapper)
     if ('serviceWorker' in navigator && !NativeBridge.isAndroid) {
-      window.addEventListener('load', () => {
+      if (document.readyState === 'complete') {
         this.registerServiceWorker();
-      });
+      } else {
+        window.addEventListener('load', () => {
+          this.registerServiceWorker();
+        });
+      }
     }
   }
 
