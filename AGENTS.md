@@ -98,6 +98,7 @@ From the repository root:
   - Avoid robotic numbered step headings; use natural, telegraphic participle-driven logging.
 - **Session kick-off**: Run `git fetch --all --prune` and rebase onto `origin/main` before starting work.
 - **Branch naming**: Use short-lived feature branches (`automation/<change>` or `feature/<change>`) and open PRs so CI and preview deployments run automatically.
+- **Linear History & Rebase Hygiene**: Keep branch history linear by rebasing onto `origin/main` (`git pull --rebase origin main`) rather than introducing merge commits into feature branches.
 - **Unified CI & Branch Deployments ([`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml))**:
   - Two-job pipeline separating unprivileged code execution from privileged deployment:
     - `build` job runs under read-only permissions (`contents: read`), compiling Web (`web/`), running Android unit tests, and assembling debug APK (`app/`). Builds across PRs execute concurrently in parallel without locking.
@@ -170,6 +171,19 @@ From the repository root:
 
 6. **Relative Asset Path Invariance**:
    - Never use root-relative `/assets/...` URLs in code or CSS. Always use relative `./assets/...` and maintain `base: './'` in [`web/vite.config.ts`](./web/vite.config.ts) to guarantee seamless asset resolution across GitHub Pages root (`/`), PR previews (`/pull/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`).
+
+7. **Storage Durability & IndexedDB Quota Safety**:
+   - Never store raw binary image Blobs or heavy base64 strings in synchronous `localStorage` (which is capped at 5MB and blocks the main thread).
+   - Use asynchronous IndexedDB stores (`STORE_IMAGES`, `STORE_SAVES`) for image bitmaps and serialized region states on Web, coupled with `filesDir/capy_saves` disk backups on Android.
+   - Always ensure puzzle save serialization supports backward-compatible migrations when introducing new schema fields.
+
+8. **Mobile Gesture State Transitions & Touch Invariance**:
+   - Maintain `touch-action: none` on the interactive canvas container to prevent browser scroll conflicts.
+   - When transitioning out of a multi-touch pinch-to-zoom gesture where one finger remains in contact, re-anchor pan coordinates dynamically to prevent canvas jumping or viewport teleportation.
+
+9. **Modal Stack & Hardware Back Navigation Contract**:
+   - Every modal dialog, drawer, or overlay must register with the centralized modal stack.
+   - Ensure the Android hardware back gesture (`CapyBackPress` event dispatched by `CapyAndroidBridge`) and desktop `Escape` key close the topmost modal rather than closing the app or navigating away.
 
 ---
 
