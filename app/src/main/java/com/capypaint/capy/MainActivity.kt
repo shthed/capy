@@ -143,6 +143,7 @@ class MainActivity : ComponentActivity() {
                     Log.d(TAG, "WebView page finished loading: $url")
                     applySafeAreaInsetsToWebView()
                     deliverPendingSharedImageIfNeeded()
+                    deliverPendingDeepLinkIfNeeded()
                 }
 
                 override fun onReceivedError(
@@ -263,7 +264,23 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIncomingIntent(intent: Intent?) {
-        if ((intent == null) || (intent.action != Intent.ACTION_SEND)) return
+        if (intent == null) return
+
+        if (intent.action == Intent.ACTION_VIEW) {
+            val dataUri = intent.data?.toString()
+            if (CapyAndroidBridge.isAllowedCapyDeepLink(dataUri) && (dataUri != null)) {
+                Log.i(TAG, "Received verified Capy deep link: $dataUri")
+                bridge.pendingDeepLinkUrl = dataUri
+                if (isPageLoaded) {
+                    deliverPendingDeepLinkIfNeeded()
+                }
+            } else if (!dataUri.isNullOrBlank()) {
+                Log.w(TAG, "Ignored untrusted deep link URI: $dataUri")
+            }
+            return
+        }
+
+        if (intent.action != Intent.ACTION_SEND) return
         val type = intent.type ?: return
         if (!type.startsWith("image/")) return
 
@@ -301,6 +318,27 @@ class MainActivity : ComponentActivity() {
                         var payload = $pendingJson;
                         if (window.__capyReceiveSharedImage && payload && payload.dataUrl) {
                             window.__capyReceiveSharedImage(payload.title || "Shared Photo", payload.dataUrl);
+                        }
+                    } catch (e) {}
+                })();
+                """.trimIndent(),
+                null,
+            )
+        }
+    }
+
+    private fun deliverPendingDeepLinkIfNeeded() {
+        val pendingUrl = bridge.consumePendingDeepLink() ?: return
+        if (!CapyAndroidBridge.isAllowedCapyDeepLink(pendingUrl)) return
+        val wv = webView ?: return
+        val escapedUrl = CapyAndroidBridge.escapeJsString(pendingUrl)
+        wv.post {
+            wv.evaluateJavascript(
+                """
+                (function() {
+                    try {
+                        if (window.__capyReceiveDeepLink) {
+                            window.__capyReceiveDeepLink("$escapedUrl");
                         }
                     } catch (e) {}
                 })();

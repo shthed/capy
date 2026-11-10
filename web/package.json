@@ -10,6 +10,7 @@
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "test:codec": "node scripts/test-codec.mjs",
     "test:regressions": "node scripts/test-regressions.mjs",
+    "test:coop": "node scripts/test-coop-and-links.mjs",
     "test:game": "node scripts/test-game.mjs",
     "test:gameplay": "node scripts/test-full-gameplay.mjs",
     "test:undo": "node scripts/test-undo-timeline.mjs",
