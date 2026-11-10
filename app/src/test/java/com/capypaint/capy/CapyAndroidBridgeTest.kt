@@ -126,6 +126,18 @@ class CapyAndroidBridgeTest {
     }
 
     @Test
+    fun `isPlayGamesAppIdConfigured detects real numeric Play Console Project IDs vs default placeholder`() {
+        assertTrue(CapyAndroidBridge.isPlayGamesAppIdConfigured("123456789012"))
+        assertTrue(CapyAndroidBridge.isPlayGamesAppIdConfigured(" 987654321098 "))
+
+        assertFalse(CapyAndroidBridge.isPlayGamesAppIdConfigured(null))
+        assertFalse(CapyAndroidBridge.isPlayGamesAppIdConfigured(""))
+        assertFalse(CapyAndroidBridge.isPlayGamesAppIdConfigured("000000000000"))
+        assertFalse(CapyAndroidBridge.isPlayGamesAppIdConfigured("000000"))
+        assertFalse(CapyAndroidBridge.isPlayGamesAppIdConfigured("abc123456789"))
+    }
+
+    @Test
     fun `cloud snapshot directory round-trips CRDT progress envelopes independently from local saves`() {
         val cloudDir = tempFolder.newFolder(CapyAndroidBridge.CLOUD_FOLDER_NAME)
         val payload = """{"version":1,"slotKey":"sample_capybara","updatedAt":1700000000000,"token":"abc"}"""

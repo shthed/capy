@@ -2730,70 +2730,148 @@ export const App: React.FC = () => {
   const handleSyncCloudProgress = useCallback(async (): Promise<{
     addedFromCloud: number;
     syncedAt: number;
+    uploadedCount?: number;
+    downloadedCount?: number;
+    backend?: string;
   } | null> => {
-    if (!puzzle || !activeSnapshotId) return null;
-    const slotKey = activeSampleUri
-      ? `sample_${activeSampleUri.replace(/[^a-zA-Z0-9_-]/g, '_')}`
-      : `save_${activeSnapshotId}`;
     const paintedObj =
       paintedRegionColors.size > 0 ? Object.fromEntries(paintedRegionColors) : undefined;
-    const res = await ProviderRegistry.cloudSave.syncProgress(
-      slotKey,
-      activeTitle,
-      {
-        version: 2,
-        ...(activeSampleUri ? { sourceRef: { kind: 'sample', uri: activeSampleUri } } : {}),
-        filledRegionIds: Array.from(filledRegionIds),
-        ...(paintedObj ? { paintedRegionColors: paintedObj } : {}),
-        ...(isFreeColorMode ? { isFreeColor: true } : {}),
-        updatedAt: Date.now(),
-      },
-      puzzle.regions.length
-    );
 
-    if (res.addedFromCloud > 0 || res.mergedDelta.paintedRegionColors) {
-      const validIds = new Set(puzzle.regions.map((r) => r.id));
-      const nextFilled = new Set(res.mergedDelta.filledRegionIds.filter((id) => validIds.has(id)));
-      const nextPainted = res.mergedDelta.paintedRegionColors
-        ? new Map(
-            Object.entries(res.mergedDelta.paintedRegionColors)
-              .map(([k, v]) => [Number(k), v] as [number, number])
-              .filter(([k]) => validIds.has(k))
-          )
-        : new Map(paintedRegionColors);
-      const orderedList = Array.from(nextFilled);
-      const mergedPaintedObj = Object.fromEntries(nextPainted);
-      setFilledRegionIds(nextFilled);
-      setPaintedRegionColors(nextPainted);
-
+    // 1. Flush active canvas state into local StorageService before full-library cloud sync
+    if (puzzle && activeSnapshotId) {
       const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-      const updated = StorageService.updateSnapshotProgress(
+      StorageService.updateSnapshotProgress(
         activeSnapshotId,
-        nextFilled.size,
+        filledRegionIds.size,
         puzzle.regions.length,
-        orderedList,
+        Array.from(filledRegionIds),
         zoomScale,
         panOffsetX,
         panOffsetY,
         undefined,
-        mergedPaintedObj,
+        paintedObj,
         puzzle.palette,
         puzzle.isFreeColor
       );
-      setSnapshots(updated);
-      StorageService.saveActiveState({
-        activeSnapshotId,
-        activeColorId,
-        filledRegionIds: orderedList,
-        paintedRegionColors: mergedPaintedObj,
-        isFreeColorMode,
-        zoomScale,
-        panOffsetX,
-        panOffsetY,
-      });
     }
+
+    // 2. Sync the entire Save Library (all sample puzzles + custom photo saves) with the active CloudProviderDriver
+    const currentSnapshots = StorageService.loadSnapshots();
+    const libSummary = await ProviderRegistry.cloudSave.syncFullLibrary(currentSnapshots);
+
+    // 3. Also sync the active slot envelope and merge any newly added regions into the live canvas
+    let slotAdded = 0;
+    let slotMergedDelta: {
+      filledRegionIds: number[];
+      paintedRegionColors?: Record<number, number>;
+    } | null = null;
+
+    if (puzzle && activeSnapshotId) {
+      const slotKey = activeSampleUri
+        ? `sample_${activeSampleUri.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+        : `save_${activeSnapshotId}`;
+      const res = await ProviderRegistry.cloudSave.syncProgress(
+        slotKey,
+        activeTitle,
+        {
+          version: 2,
+          ...(activeSampleUri ? { sourceRef: { kind: 'sample', uri: activeSampleUri } } : {}),
+          filledRegionIds: Array.from(filledRegionIds),
+          ...(paintedObj ? { paintedRegionColors: paintedObj } : {}),
+          ...(isFreeColorMode ? { isFreeColor: true } : {}),
+          updatedAt: Date.now(),
+        },
+        puzzle.regions.length
+      );
+      slotAdded = res.addedFromCloud;
+      slotMergedDelta = res.mergedDelta;
+    }
+
+    const refreshedSnapshots = StorageService.loadSnapshots();
+    setSnapshots(refreshedSnapshots);
+
+    // Check if the active puzzle gained regions from either full-library sync or slot sync
+    if (puzzle && activeSnapshotId) {
+      const normalizedActiveSample = activeSampleUri ? activeSampleUri.replace(/^\.\//, '') : null;
+      const matchingSave = refreshedSnapshots.find(
+        (s) =>
+          s.id === activeSnapshotId ||
+          (normalizedActiveSample &&
+            (s.sourceRef?.uri?.replace(/^\.\//, '') === normalizedActiveSample ||
+              s.sampleAssetPath?.replace(/^\.\//, '') === normalizedActiveSample))
+      );
+
+      const validIds = new Set(puzzle.regions.map((r) => r.id));
+      const combinedFilled = new Set<number>(filledRegionIds);
+      if (slotMergedDelta) {
+        for (const rId of slotMergedDelta.filledRegionIds) {
+          if (validIds.has(rId)) combinedFilled.add(rId);
+        }
+      }
+      if (matchingSave?.filledRegionIds) {
+        for (const rId of matchingSave.filledRegionIds) {
+          if (validIds.has(rId)) combinedFilled.add(rId);
+        }
+      }
+
+      const nextPainted = new Map(paintedRegionColors);
+      if (matchingSave?.paintedRegionColors) {
+        for (const [k, v] of Object.entries(matchingSave.paintedRegionColors)) {
+          const rId = Number(k);
+          if (validIds.has(rId)) nextPainted.set(rId, v);
+        }
+      }
+      if (slotMergedDelta?.paintedRegionColors) {
+        for (const [k, v] of Object.entries(slotMergedDelta.paintedRegionColors)) {
+          const rId = Number(k);
+          if (validIds.has(rId)) nextPainted.set(rId, v);
+        }
+      }
+
+      const gainedOnActive = Math.max(0, combinedFilled.size - filledRegionIds.size);
+      if (gainedOnActive > 0 || nextPainted.size !== paintedRegionColors.size) {
+        const orderedList = Array.from(combinedFilled);
+        const mergedPaintedObj = Object.fromEntries(nextPainted);
+        setFilledRegionIds(combinedFilled);
+        setPaintedRegionColors(nextPainted);
+
+        const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+        const updated = StorageService.updateSnapshotProgress(
+          activeSnapshotId,
+          combinedFilled.size,
+          puzzle.regions.length,
+          orderedList,
+          zoomScale,
+          panOffsetX,
+          panOffsetY,
+          undefined,
+          mergedPaintedObj,
+          puzzle.palette,
+          puzzle.isFreeColor
+        );
+        setSnapshots(updated);
+        StorageService.saveActiveState({
+          activeSnapshotId,
+          activeColorId,
+          filledRegionIds: orderedList,
+          paintedRegionColors: mergedPaintedObj,
+          isFreeColorMode,
+          zoomScale,
+          panOffsetX,
+          panOffsetY,
+        });
+      }
+    }
+
+    const totalAdded = Math.max(libSummary.mergedRegionsFromCloud, slotAdded);
     NativeBridge.haptic('success', settings.hapticsEnabled);
-    return { addedFromCloud: res.addedFromCloud, syncedAt: res.syncedAt };
+    return {
+      addedFromCloud: totalAdded,
+      syncedAt: libSummary.syncedAt,
+      uploadedCount: libSummary.totalSavesSynced,
+      downloadedCount: libSummary.importedSavesFromCloud,
+      backend: libSummary.cloudBackend,
+    };
   }, [
     puzzle,
     activeSnapshotId,
@@ -2805,6 +2883,61 @@ export const App: React.FC = () => {
     activeColorId,
     settings.hapticsEnabled,
   ]);
+
+  // Automatically sync when Android Play Games SnapshotsClient delivers a remote cloud snapshot
+  useEffect(() => {
+    return NativeBridge.onCloudSnapshot(() => {
+      void handleSyncCloudProgress();
+    });
+  }, [handleSyncCloudProgress]);
+
+  // Automatically attempt Google / Play Games sign-in on startup and sync saves once puzzle is ready
+  const hasAttemptedStartupSignInRef = useRef(false);
+  const lastAutoSyncedPlayerIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isLoading || !puzzle || !activeSnapshotId) return;
+    let cancelled = false;
+
+    const runAutoLoginAndSync = async () => {
+      if (!hasAttemptedStartupSignInRef.current) {
+        hasAttemptedStartupSignInRef.current = true;
+        await ProviderRegistry.auth.attemptAutoSignIn();
+      }
+      if (cancelled) return;
+      const currentId = ProviderRegistry.auth.getCurrentIdentity();
+      if (
+        currentId.isAuthenticated &&
+        ProviderRegistry.auth.hasActiveCloudToken() &&
+        lastAutoSyncedPlayerIdRef.current !== currentId.playerId
+      ) {
+        lastAutoSyncedPlayerIdRef.current = currentId.playerId;
+        await handleSyncCloudProgress();
+      }
+    };
+
+    void runAutoLoginAndSync();
+
+    const unsubAuth = ProviderRegistry.auth.subscribe((id) => {
+      if (!id.isAuthenticated) {
+        lastAutoSyncedPlayerIdRef.current = null;
+        return;
+      }
+      if (
+        !cancelled &&
+        ProviderRegistry.auth.hasActiveCloudToken() &&
+        lastAutoSyncedPlayerIdRef.current !== id.playerId
+      ) {
+        lastAutoSyncedPlayerIdRef.current = id.playerId;
+        void handleSyncCloudProgress();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubAuth();
+    };
+  }, [isLoading, puzzle, activeSnapshotId, handleSyncCloudProgress]);
 
   // Multi-resolution Infinite Zoom: extract 2x high-detail center sub-tile with seam-preserving palette continuity
   const handleZoomIntoDetailTile = useCallback(() => {

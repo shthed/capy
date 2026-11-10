@@ -24,6 +24,10 @@ declare global {
     __capyCloseModal?: () => boolean;
     __capyReceiveSharedImage?: (title: string, dataUrl: string) => void;
     __capyReceiveDeepLink?: (url: string) => void;
+    __capyReceivePlayGamesProfile?: (
+      profile: { playerId?: string; displayName?: string } | string
+    ) => void;
+    __capyReceiveCloudSnapshot?: (slotKey: string, payloadJson: string) => void;
     webkit?: {
       messageHandlers?: {
         CapyIOS?: {
@@ -54,6 +58,10 @@ class NativeBridgeService {
   private overlayBackStack: Array<() => void> = [];
   private sharedImageHandler: ((title: string, dataUrl: string) => void) | null = null;
   private deepLinkHandler: ((url: string) => void) | null = null;
+  private playGamesProfileHandler:
+    | ((profile: { playerId: string; displayName: string }) => void)
+    | null = null;
+  private cloudSnapshotHandler: ((slotKey: string, payloadJson: string) => void) | null = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -81,6 +89,34 @@ class NativeBridgeService {
       window.__capyReceiveDeepLink = (url: string) => {
         if (this.deepLinkHandler && url) {
           this.deepLinkHandler(url);
+        }
+      };
+
+      window.__capyReceivePlayGamesProfile = (raw) => {
+        try {
+          const parsed =
+            typeof raw === 'string'
+              ? (JSON.parse(raw) as { playerId?: string; displayName?: string })
+              : raw;
+          if (
+            parsed &&
+            parsed.playerId &&
+            parsed.displayName &&
+            this.playGamesProfileHandler
+          ) {
+            this.playGamesProfileHandler({
+              playerId: parsed.playerId.trim(),
+              displayName: parsed.displayName.trim(),
+            });
+          }
+        } catch {
+          // Ignore malformed payload
+        }
+      };
+
+      window.__capyReceiveCloudSnapshot = (slotKey: string, payloadJson: string) => {
+        if (slotKey && payloadJson && this.cloudSnapshotHandler) {
+          this.cloudSnapshotHandler(slotKey, payloadJson);
         }
       };
     }
@@ -337,6 +373,26 @@ class NativeBridgeService {
     return () => {
       if (this.deepLinkHandler === handler) {
         this.deepLinkHandler = null;
+      }
+    };
+  }
+
+  onPlayGamesProfile(
+    handler: (profile: { playerId: string; displayName: string }) => void
+  ): () => void {
+    this.playGamesProfileHandler = handler;
+    return () => {
+      if (this.playGamesProfileHandler === handler) {
+        this.playGamesProfileHandler = null;
+      }
+    };
+  }
+
+  onCloudSnapshot(handler: (slotKey: string, payloadJson: string) => void): () => void {
+    this.cloudSnapshotHandler = handler;
+    return () => {
+      if (this.cloudSnapshotHandler === handler) {
+        this.cloudSnapshotHandler = null;
       }
     };
   }

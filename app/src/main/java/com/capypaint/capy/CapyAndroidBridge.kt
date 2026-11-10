@@ -12,6 +12,7 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.webkit.JavascriptInterface
 import androidx.core.content.FileProvider
+import androidx.core.content.edit
 import java.io.File
 import java.net.URI
 
@@ -19,6 +20,8 @@ class CapyAndroidBridge(
     private val context: Context,
     private val rootViewProvider: () -> View?,
     private val onModalStateChanged: (Boolean) -> Unit,
+    private val onRequestPlayGamesSignIn: (() -> Unit)? = null,
+    private val onSaveCloudSnapshot: ((String, String) -> Unit)? = null,
 ) {
     @Volatile
     var isModalOpen: Boolean = false
@@ -85,9 +88,15 @@ class CapyAndroidBridge(
         return loadBackupFromDir(backupDir, key)
     }
 
+    fun saveLocalCloudSnapshotOnly(slotKey: String, payloadJson: String): Boolean {
+        return saveBackupToDir(cloudDir, slotKey, payloadJson)
+    }
+
     @JavascriptInterface
     fun saveCloudSnapshot(slotKey: String, payloadJson: String): Boolean {
-        return saveBackupToDir(cloudDir, slotKey, payloadJson)
+        val savedLocal = saveBackupToDir(cloudDir, slotKey, payloadJson)
+        onSaveCloudSnapshot?.invoke(slotKey, payloadJson)
+        return savedLocal
     }
 
     @JavascriptInterface
@@ -95,10 +104,42 @@ class CapyAndroidBridge(
         return loadBackupFromDir(cloudDir, slotKey)
     }
 
+    fun cachePlayGamesProfile(playerId: String, displayName: String) {
+        val cleanId = playerId.trim()
+        val cleanName = displayName.trim()
+        if ((cleanId.isEmpty()) || (cleanName.isEmpty())) return
+        try {
+            val prefs = context.getSharedPreferences(PLAY_GAMES_PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit {
+                putString(KEY_PLAY_GAMES_PLAYER_ID, cleanId)
+                putString(KEY_PLAY_GAMES_DISPLAY_NAME, cleanName)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist Play Games profile in SharedPreferences", e)
+        }
+    }
+
+    fun loadCachedPlayGamesProfileJson(): String? {
+        return try {
+            val prefs = context.getSharedPreferences(PLAY_GAMES_PREFS_NAME, Context.MODE_PRIVATE)
+            val playerId = prefs.getString(KEY_PLAY_GAMES_PLAYER_ID, null)?.trim()
+            val displayName = prefs.getString(KEY_PLAY_GAMES_DISPLAY_NAME, null)?.trim()
+            if ((!playerId.isNullOrEmpty()) && (!displayName.isNullOrEmpty())) {
+                formatPlayGamesIdentityJson(playerId, displayName)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read cached Play Games profile", e)
+            null
+        }
+    }
+
     @JavascriptInterface
     fun signInPlayGames(): String? {
-        Log.d(TAG, "Play Games v2 sign-in requested; falling back to local profile until Play Games App ID is configured")
-        return null
+        Log.d(TAG, "Play Games v2 sign-in requested")
+        onRequestPlayGamesSignIn?.invoke()
+        return loadCachedPlayGamesProfileJson()
     }
 
     @JavascriptInterface
@@ -191,7 +232,22 @@ class CapyAndroidBridge(
         const val TAG = "CapyBridge"
         const val BACKUP_FOLDER_NAME = "capy_saves"
         const val CLOUD_FOLDER_NAME = "capy_cloud"
+        const val PLAY_GAMES_PREFS_NAME = "capy_play_games_prefs"
+        const val KEY_PLAY_GAMES_PLAYER_ID = "player_id"
+        const val KEY_PLAY_GAMES_DISPLAY_NAME = "display_name"
         const val ALLOWED_DEEP_LINK_HOST = "shthed.github.io"
+
+        /**
+         * Returns true when the Google Play Console Game Services Project ID is configured
+         * with a real numeric ID rather than the default placeholder ("000000000000").
+         */
+        fun isPlayGamesAppIdConfigured(appId: String?): Boolean {
+            if (appId.isNullOrBlank()) return false
+            val trimmed = appId.trim()
+            return (trimmed.length >= 6) &&
+                trimmed.all { it.isDigit() } &&
+                trimmed.any { it != '0' }
+        }
 
         fun sanitizeKey(key: String): String {
             val cleaned = key.replace(Regex("[^a-zA-Z0-9._-]"), "_")

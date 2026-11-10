@@ -1,11 +1,51 @@
-import { GeneratorConfig, PuzzleSourceRef, SampleArtwork } from '../../types';
+import { GeneratorConfig, PuzzleSourceRef, SampleArtwork, SavedSnapshot } from '../../types';
 import { ProgressDeltaV2 } from '../CapyCodec';
 
-export type AuthProviderKind = 'guest' | 'play_games_v2' | 'oidc';
+export type CloudProviderId =
+  | 'google'
+  | 'play_games_v2'
+  | 'steam'
+  | 'microsoft'
+  | 'apple';
+
+export type AuthProviderKind = 'guest' | CloudProviderId | 'oidc';
+
+export interface CloudProviderDescriptor {
+  id: CloudProviderId;
+  displayName: string;
+  storageName: string;
+  isSupported: boolean;
+  isConfigured: boolean;
+  comingSoon?: boolean;
+}
+
+/**
+ * Modular, provider-agnostic Cloud Identity & Storage Driver contract.
+ * Each platform (Google Drive appDataFolder, Android Play Games SnapshotsClient,
+ * Steam RemoteStorage, Microsoft OneDrive approot / Xbox, Apple CloudKit / Game Center)
+ * implements this interface so the CRDT sync engine remains 100% platform-independent.
+ */
+export interface CloudProviderDriver {
+  readonly id: CloudProviderId;
+  getDescriptor(): CloudProviderDescriptor;
+  hasActiveSession(): boolean;
+  restoreSession(): Partial<PlayerIdentity> | null;
+  attemptAutoSignIn(): Promise<Partial<PlayerIdentity> | null>;
+  signIn(options?: { clientId?: string }): Promise<Partial<PlayerIdentity>>;
+  signOut(): Promise<void>;
+  readManifest(): Promise<CloudLibraryManifestV2 | null>;
+  writeManifest(manifest: CloudLibraryManifestV2): Promise<boolean>;
+  readSlotEnvelope(slotKey: string): Promise<CloudSaveEnvelope | null>;
+  writeSlotEnvelope(envelope: CloudSaveEnvelope): Promise<boolean>;
+  readBinaryBlob(blobRef: string): Promise<Uint8Array | null>;
+  writeBinaryBlob(slotKey: string, fileName: string, bytes: Uint8Array): Promise<string | null>;
+}
 
 export interface PlayerIdentity {
   playerId: string;
   displayName: string;
+  email?: string;
+  avatarUrl?: string;
   avatarColorHex: string;
   provider: AuthProviderKind;
   isAuthenticated: boolean;
@@ -15,6 +55,18 @@ export interface PlayerIdentity {
 export interface AuthProvider {
   getCurrentIdentity(): PlayerIdentity;
   updateGuestProfile(displayName: string, avatarColorHex?: string): PlayerIdentity;
+  getAvailableCloudProviders(): CloudProviderDescriptor[];
+  getCloudDriver(providerId: CloudProviderId): CloudProviderDriver | undefined;
+  getActiveCloudDriver(): CloudProviderDriver | null;
+  getGoogleClientId(): string;
+  setGoogleClientId(clientId: string): void;
+  hasActiveCloudToken(): boolean;
+  attemptAutoSignIn(): Promise<PlayerIdentity | null>;
+  signInWithProvider(
+    providerId: CloudProviderId,
+    options?: { clientId?: string }
+  ): Promise<PlayerIdentity>;
+  signInWithGoogle(customClientId?: string): Promise<PlayerIdentity>;
   signInWithPlayGames(): Promise<PlayerIdentity>;
   signOut(): Promise<PlayerIdentity>;
   subscribe(listener: (identity: PlayerIdentity) => void): () => void;
@@ -30,12 +82,59 @@ export interface CloudSaveEnvelope {
   devicePlayerId: string;
 }
 
+export interface CloudSaveEntryV2 {
+  snapshotId: string;
+  slotKey: string;
+  title: string;
+  createdAt: number;
+  lastOpened: number;
+  isPinned?: boolean;
+  filledCount: number;
+  totalCount: number;
+  deltaToken: string;
+  sourceRef?: PuzzleSourceRef;
+  sampleAssetPath?: string | null;
+  /** Provider-specific remote binary blob ID/URI (e.g. Google Drive appDataFolder fileId, Steam UGCHandle, OneDrive itemId, CloudKit assetId) */
+  cloudBinaryRef?: string;
+  /** Legacy alias for Google Drive fileId */
+  driveBinaryFileId?: string;
+  inlineBinaryB64?: string;
+}
+
+export interface CloudLibraryManifestV2 {
+  version: 2;
+  updatedAt: number;
+  devicePlayerId: string;
+  providerId?: CloudProviderId;
+  entries: Record<string, CloudSaveEntryV2>;
+}
+
+export type CloudBackendKind =
+  | 'google_drive_appdata'
+  | 'play_games_snapshots'
+  | 'steam_remote_storage'
+  | 'microsoft_onedrive_approot'
+  | 'apple_cloudkit'
+  | 'local_cache';
+
 export interface CloudSyncResult {
   slotKey: string;
   mergedDelta: ProgressDeltaV2;
   addedFromCloud: number;
   pushedToCloud: boolean;
   syncedAt: number;
+  totalSavesSynced?: number;
+  importedSavesFromCloud?: number;
+  cloudBackend?: CloudBackendKind;
+}
+
+export interface CloudLibrarySyncSummary {
+  syncedAt: number;
+  totalSavesSynced: number;
+  importedSavesFromCloud: number;
+  mergedRegionsFromCloud: number;
+  pushedToCloud: boolean;
+  cloudBackend: CloudBackendKind;
 }
 
 export interface CloudSaveProvider {
@@ -48,6 +147,7 @@ export interface CloudSaveProvider {
     localDelta: ProgressDeltaV2,
     totalCount: number
   ): Promise<CloudSyncResult>;
+  syncFullLibrary(localSnapshots: SavedSnapshot[]): Promise<CloudLibrarySyncSummary>;
 }
 
 export interface CoopParticipant {

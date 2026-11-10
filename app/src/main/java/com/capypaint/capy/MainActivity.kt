@@ -27,6 +27,10 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
+import com.google.android.gms.games.PlayGames
+import com.google.android.gms.games.PlayGamesSdk
+import com.google.android.gms.games.SnapshotsClient
+import com.google.android.gms.games.snapshot.SnapshotMetadataChange
 
 class MainActivity : ComponentActivity() {
 
@@ -95,7 +99,19 @@ class MainActivity : ComponentActivity() {
                     backPressedCallback.isEnabled = isOpen
                 }
             },
+            onRequestPlayGamesSignIn = {
+                runOnUiThread {
+                    requestPlayGamesSignIn()
+                }
+            },
+            onSaveCloudSnapshot = { slotKey, payloadJson ->
+                runOnUiThread {
+                    pushSnapshotToPlayGames(slotKey, payloadJson)
+                }
+            },
         )
+
+        initializePlayGamesIfConfigured()
 
         val assetLoader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
@@ -144,6 +160,7 @@ class MainActivity : ComponentActivity() {
                     applySafeAreaInsetsToWebView()
                     deliverPendingSharedImageIfNeeded()
                     deliverPendingDeepLinkIfNeeded()
+                    deliverCachedPlayGamesProfileIfNeeded()
                 }
 
                 override fun onReceivedError(
@@ -348,6 +365,171 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun initializePlayGamesIfConfigured() {
+        val appId = getString(R.string.game_services_project_id)
+        if (!CapyAndroidBridge.isPlayGamesAppIdConfigured(appId)) {
+            Log.d(TAG, "Google Play Games App ID not configured ($appId); skipping PlayGamesSdk init")
+            return
+        }
+        try {
+            PlayGamesSdk.initialize(this)
+            PlayGames.getGamesSignInClient(this).isAuthenticated.addOnCompleteListener { task ->
+                val isAuthenticated = (task.isSuccessful) && (task.result?.isAuthenticated == true)
+                if (isAuthenticated) {
+                    fetchAndDeliverPlayGamesPlayerProfile()
+                    pullSnapshotFromPlayGames(CLOUD_MANIFEST_SLOT_KEY)
+                } else {
+                    requestPlayGamesSignIn()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "PlayGamesSdk initialization skipped or unavailable", e)
+        }
+    }
+
+    private fun requestPlayGamesSignIn() {
+        val appId = getString(R.string.game_services_project_id)
+        if (!CapyAndroidBridge.isPlayGamesAppIdConfigured(appId)) {
+            Log.d(TAG, "Play Games sign-in requested without configured Project ID; using cached or local profile")
+            deliverCachedPlayGamesProfileIfNeeded()
+            return
+        }
+        try {
+            PlayGames.getGamesSignInClient(this).signIn().addOnCompleteListener { task ->
+                val isAuthenticated = (task.isSuccessful) && (task.result?.isAuthenticated == true)
+                if (isAuthenticated) {
+                    fetchAndDeliverPlayGamesPlayerProfile()
+                    pullSnapshotFromPlayGames(CLOUD_MANIFEST_SLOT_KEY)
+                } else {
+                    Log.w(TAG, "Play Games interactive sign-in did not authenticate", task.exception)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to invoke Play Games interactive signIn()", e)
+        }
+    }
+
+    private fun fetchAndDeliverPlayGamesPlayerProfile() {
+        try {
+            PlayGames.getPlayersClient(this).currentPlayer.addOnSuccessListener { player ->
+                val playerId = player.playerId
+                val displayName = player.displayName
+                Log.i(TAG, "Resolved Google Play Games profile: '$displayName' ($playerId)")
+                bridge.cachePlayGamesProfile(playerId, displayName)
+                if (isPageLoaded) {
+                    deliverCachedPlayGamesProfileIfNeeded()
+                }
+            }.addOnFailureListener { err ->
+                Log.w(TAG, "Failed to load Google Play Games currentPlayer profile", err)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error querying PlayGames PlayersClient", e)
+        }
+    }
+
+    private fun deliverCachedPlayGamesProfileIfNeeded() {
+        val profileJson = bridge.loadCachedPlayGamesProfileJson() ?: return
+        val wv = webView ?: return
+        wv.post {
+            wv.evaluateJavascript(
+                """
+                (function() {
+                    try {
+                        if (window.__capyReceivePlayGamesProfile) {
+                            window.__capyReceivePlayGamesProfile($profileJson);
+                        }
+                    } catch (e) {}
+                })();
+                """.trimIndent(),
+                null,
+            )
+        }
+    }
+
+    private fun pushSnapshotToPlayGames(slotKey: String, payloadJson: String) {
+        val appId = getString(R.string.game_services_project_id)
+        if (!CapyAndroidBridge.isPlayGamesAppIdConfigured(appId)) return
+        val safeSlot = CapyAndroidBridge.sanitizeKey(slotKey)
+        try {
+            val snapshotsClient = PlayGames.getSnapshotsClient(this)
+            snapshotsClient.open(
+                safeSlot,
+                true,
+                SnapshotsClient.RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED,
+            ).addOnSuccessListener { dataOrConflict ->
+                val snapshot = dataOrConflict.data
+                if (snapshot != null) {
+                    snapshot.snapshotContents.writeBytes(payloadJson.toByteArray(Charsets.UTF_8))
+                    val metadataChange = SnapshotMetadataChange.Builder()
+                        .setDescription("Capy Paint Cloud Save ($safeSlot)")
+                        .build()
+                    snapshotsClient.commitAndClose(snapshot, metadataChange)
+                        .addOnFailureListener { err ->
+                            Log.w(TAG, "Failed to commit Play Games snapshot '$safeSlot'", err)
+                        }
+                }
+            }.addOnFailureListener { err ->
+                Log.w(TAG, "Failed to open Play Games snapshot '$safeSlot' for writing", err)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error pushing Play Games snapshot '$safeSlot'", e)
+        }
+    }
+
+    private fun pullSnapshotFromPlayGames(slotKey: String) {
+        val appId = getString(R.string.game_services_project_id)
+        if (!CapyAndroidBridge.isPlayGamesAppIdConfigured(appId)) return
+        val safeSlot = CapyAndroidBridge.sanitizeKey(slotKey)
+        try {
+            val snapshotsClient = PlayGames.getSnapshotsClient(this)
+            snapshotsClient.open(
+                safeSlot,
+                false,
+                SnapshotsClient.RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED,
+            ).addOnSuccessListener { dataOrConflict ->
+                val snapshot = dataOrConflict.data
+                if (snapshot != null) {
+                    try {
+                        val bytes = snapshot.snapshotContents.readFully()
+                        snapshotsClient.discardAndClose(snapshot)
+                        if (bytes.isNotEmpty()) {
+                            val payloadJson = String(bytes, Charsets.UTF_8)
+                            bridge.saveLocalCloudSnapshotOnly(slotKey, payloadJson)
+                            deliverCloudSnapshotToWebView(slotKey, payloadJson)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed reading Play Games snapshot '$safeSlot'", e)
+                    }
+                }
+            }.addOnFailureListener { err ->
+                Log.d(TAG, "No existing Play Games snapshot found for '$safeSlot'", err)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error pulling Play Games snapshot '$safeSlot'", e)
+        }
+    }
+
+    private fun deliverCloudSnapshotToWebView(slotKey: String, payloadJson: String) {
+        if (!isPageLoaded) return
+        val wv = webView ?: return
+        val safeSlot = CapyAndroidBridge.escapeJsString(slotKey)
+        val safePayload = CapyAndroidBridge.escapeJsString(payloadJson)
+        wv.post {
+            wv.evaluateJavascript(
+                """
+                (function() {
+                    try {
+                        if (window.__capyReceiveCloudSnapshot) {
+                            window.__capyReceiveCloudSnapshot("$safeSlot", "$safePayload");
+                        }
+                    } catch (e) {}
+                })();
+                """.trimIndent(),
+                null,
+            )
+        }
+    }
+
     override fun onDestroy() {
         webView?.destroy()
         webView = null
@@ -357,5 +539,6 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val TAG = "CapyApp"
         const val START_URL = "https://appassets.androidplatform.net/assets/www/index.html"
+        const val CLOUD_MANIFEST_SLOT_KEY = "capy_cloud_manifest_v2"
     }
 }
