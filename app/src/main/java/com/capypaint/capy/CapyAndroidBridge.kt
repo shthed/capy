@@ -148,7 +148,7 @@ class CapyAndroidBridge(
 
         /**
          * Returns true when a WebView `<input type="file">` exclusively requests image media
-         * (e.g. `accept="image/*"`), and false when `.capy`, `.json`, or generic documents are requested.
+         * (for example image MIME wildcards or extensions), and false when `.capy`, `.json`, or generic documents are requested.
          */
         fun shouldUsePhotoPicker(acceptTypes: Array<String>?): Boolean {
             if (acceptTypes == null) return false
