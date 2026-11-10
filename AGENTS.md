@@ -138,11 +138,12 @@ From the repository root:
     - Keep `TODO.md` strictly focused on pending, active roadmap tasks. Git commit history and pull request descriptions preserve historical completion records.
   - **Settings & Property Documentation Standards**:
     - Every newly added setting must be documented with its TypeScript type, default value, persistence storage (`StorageService` key `capy_user_settings_v8` or direct `localStorage` keys like `capy_saves_view_mode`, `capy_last_settings_tab`), and UI location.
-  - **Relative Link Validation**:
-    - All intra-repository links must use relative paths (e.g. `[`WEB.md`](./WEB.md)`) so documentation navigates seamlessly across branches, forks, and local clones.
+  - **Relative & Permanent Line-Anchored Link Validation**:
+    - All intra-repository links in `.md` files must use relative paths with `#L<start>-L<end>` line anchors where applicable (e.g. `[`ReplayControls.tsx#L136-L214`](./web/src/components/ReplayControls.tsx#L136-L214)`) so documentation navigates seamlessly across branches, forks, and local clones.
+    - All file, symbol, and line number references in GitHub PR descriptions and PR comments must be clickable `https://github.com/shthed/capy/blob/main/<path>#L<start>-L<end>` links (never pointing to ephemeral feature branch URLs) so they continue to work after the PR is merged and the branch is deleted.
   - **Pruning Obsolete & Retired References**:
     - When refactoring or deleting an API, UI element, or setting, perform a global search across all `.md` files to prune dead references and prevent documentation rot.
-- **Development Summary to PR Before Merge**: When finalising a pull request ready for merge, compile a comprehensive summary of the development process (user requests, architectural decisions, implementations, debugging notes, test execution results, and visual showcases) and post it as a comment on the pull request. Never dump raw conversation transcripts, internal credentials, tokens, or environment details. This preserves a clean historical record directly on GitHub.
+- **Development Summary to PR Before Merge**: When finalising a pull request ready for merge, compile a comprehensive summary of the development process (user requests, architectural decisions, implementations, debugging notes, test execution results, and visual showcases) with clickable `https://github.com/shthed/capy/blob/main/<path>#L<start>-L<end>` links for every mentioned file and line range, and post it as a comment on the pull request. Never dump raw conversation transcripts, internal credentials, tokens, or environment details. This preserves a clean historical record directly on GitHub.
 - **PR Readiness & Perfection Confidence Score (`0-100%`)**:
   - Whenever finishing a pull request and preparing it for merge, evaluate the PR against the **5-Pillar Readiness & Perfection Rubric** (`20` points per pillar = `100` total):
     | Pillar | Weight | Verification Criteria |
@@ -150,7 +151,7 @@ From the repository root:
     | **1. Functionality & Edge Cases** | `20` | All user requirements and edge cases (touch/mouse gestures, state persistence, modal back-stack, viewport clamping, fallback paths) are resolved and verified. |
     | **2. Automated Tests** | `20` | New and existing unit/codec/engine checks and Playwright E2E browser assertions in [`web/scripts/test.mjs`](./web/scripts/test.mjs) (`npm test`) and Android JUnit4 tests pass deterministically. |
     | **3. Performance & Golden Invariants** | `20` | Zero per-frame heap allocations in `requestAnimationFrame` loops, worker-isolated CPU segmentation, relative `./assets/...` paths, and defensive `NativeBridge` fallbacks. |
-    | **4. Docs & Changelog Sync** | `20` | [`web/package.json`](./web/package.json) version bumped, [`CHANGELOG.md`](./CHANGELOG.md) updated with clickable GitHub PR/file links, completed tasks removed from [`TODO.md`](./TODO.md), and subsystem `.md` files synchronized with zero emojis/ASCII art. |
+    | **4. Docs & Changelog Sync** | `20` | [`web/package.json`](./web/package.json) version bumped, [`CHANGELOG.md`](./CHANGELOG.md) updated with clickable GitHub PR and file/line links, completed tasks removed from [`TODO.md`](./TODO.md), and subsystem `.md` files synchronized with zero emojis/ASCII art. |
     | **5. CI & Preview Verification** | `20` | `npm run lint`, `npm run build`, and GitHub Actions (`Build & Test` + `Deploy to GitHub Pages`) pass on the latest commit, and the live preview URL (`https://shthed.github.io/capy/pull/<number>/`) is placed at the top of the PR description. |
   - **Threshold & Self-Correction Policy**:
     - **Require `>= 95%` confidence** before asking the user for merge approval.
