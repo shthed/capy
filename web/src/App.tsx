@@ -386,9 +386,6 @@ export const App: React.FC = () => {
     (regionId: number): boolean => {
       if (!puzzle) return true;
       const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-      if (zoomScale <= 1.02 && Math.abs(panOffsetX) <= 4 && Math.abs(panOffsetY) <= 4) {
-        return true;
-      }
       const reg = regionByIdRef.current.get(regionId);
       if (!reg) return true;
       const w = canvasContainerSizeRef.current.width || window.innerWidth || 1024;
@@ -523,7 +520,7 @@ export const App: React.FC = () => {
       if (settings.replayFollow) {
         // Wait for the camera to smoothly pan until the next region is onscreen; never skip offscreen steps
         if (!isViewportCaughtUpToRegion(replaySequence[prev])) {
-          accRegions = Math.min(accRegions, 1);
+          accRegions = Math.min(1, accRegions + dt * regionsPerMs);
           animId = requestAnimationFrame(tick);
           return;
         }
@@ -531,17 +528,19 @@ export const App: React.FC = () => {
 
       accRegions += dt * regionsPerMs;
       const stepDelta = accRegions >= 1 ? Math.floor(accRegions) : 0;
-      if (stepDelta > 0) {
-        accRegions -= stepDelta;
-      }
 
       let cursor = prev;
       if (settings.replayFollow) {
         if (stepDelta > 0) {
           // Advance 1 step at a time so each subsequent region is followed and verified onscreen before painting
+          accRegions = Math.min(1, accRegions - 1);
           cursor = prev + 1;
         }
-      } else {
+      } else if (stepDelta > 0) {
+        accRegions -= stepDelta;
+      }
+
+      if (!settings.replayFollow) {
         // Immediately fast-forward past consecutive offscreen regions
         while (
           cursor < replaySequence.length &&
