@@ -18,7 +18,7 @@ All contributors and AI agents must strictly observe these absolute core invaria
 8. **Always display working thoughts**: Continuously display thoughts while working to explain what is being done and why, stating what file, component, or system is being inspected and the exact reasoning for each action.
 9. **Never open a PR without verifying builds**: Always run `npm run lint` and `npm run build` cleanly before creating or updating a pull request. Never submit unverified changes to CI.
 10. **Verify code reality before documenting**: Never document speculative, non-existent function names, setting keys, file paths, or CLI flags. Verify names and signatures directly against the codebase before updating documentation.
-11. **Evaluate & report PR Readiness & Perfection Confidence Score before requesting merge**: Whenever finishing a PR and preparing it for merge, compute a weighted `0-100%` (`5` pillars x `20` points) **PR Readiness & Perfection Confidence Score** (Functionality & Edge Cases, Automated Tests, Performance & Golden Invariants, Docs & Changelog Sync, CI & Preview Verification). Require `>= 95%` confidence before requesting merge approval (automatically fixing any technical/test/doc gaps first and asking clarifying questions via `/grill-me` if design ambiguity remains), and display the score and 5-pillar rubric table in chat, near the top of the PR description (immediately below the live preview link), and in the PR Development Summary comment (explicitly stating the exact delta if `< 100%`).
+11. **Evaluate & report PR Readiness & Perfection Confidence Score before requesting merge**: Whenever finishing a PR and preparing it for merge, compute a weighted `0-100%` (`5` pillars x `20` points) **PR Readiness & Perfection Confidence Score** (Functionality & Edge Cases, Automated Tests, Performance & Golden Invariants, Docs & Changelog Sync, CI & Preview Verification). Require `>= 95%` confidence before requesting merge approval (automatically fixing any technical/test/doc gaps first and asking clarifying questions via `/grill-me` if design ambiguity remains), and display the score as a concise bullet-point list near the top of the PR description (immediately below the live preview link) with full details in the PR Development Summary comment and chat response (explicitly stating the exact delta if `< 100%`).
 
 ---
 
@@ -138,11 +138,12 @@ From the repository root:
     - Keep `TODO.md` strictly focused on pending, active roadmap tasks. Git commit history and pull request descriptions preserve historical completion records.
   - **Settings & Property Documentation Standards**:
     - Every newly added setting must be documented with its TypeScript type, default value, persistence storage (`StorageService` key `capy_user_settings_v8` or direct `localStorage` keys like `capy_saves_view_mode`, `capy_last_settings_tab`), and UI location.
-  - **Relative Link Validation**:
-    - All intra-repository links must use relative paths (e.g. `[`WEB.md`](./WEB.md)`) so documentation navigates seamlessly across branches, forks, and local clones.
+  - **Relative & Commit-Pinned Line-Anchored Link Validation**:
+    - Whole-file intra-repository links in `.md` files should use relative paths (e.g. `[`WEB.md`](./WEB.md)`).
+    - Whenever linking to specific line numbers or changes from a commit/PR (in [`CHANGELOG.md`](./CHANGELOG.md), PR descriptions, PR comments, and chat summaries), never link to mutable branch heads like `blob/main/<path>#L<start>-L<end>` (which will drift as `main` changes in the future) or ephemeral feature branch names (which `404` after branch deletion). Always pin line-anchored links to the exact commit SHA that made the change (`https://github.com/shthed/capy/blob/<commit-sha>/<path>#L<start>-L<end>`) or the pull request diff anchor (`https://github.com/shthed/capy/pull/<number>/files#diff-<sha256(path)>R<start>-R<end>` / `https://github.com/shthed/capy/pull/<number>/commits/<commit-sha>`) so the links remain permanently accurate in the future.
   - **Pruning Obsolete & Retired References**:
     - When refactoring or deleting an API, UI element, or setting, perform a global search across all `.md` files to prune dead references and prevent documentation rot.
-- **Development Summary to PR Before Merge**: When finalising a pull request ready for merge, compile a comprehensive summary of the development process (user requests, architectural decisions, implementations, debugging notes, test execution results, and visual showcases) and post it as a comment on the pull request. Never dump raw conversation transcripts, internal credentials, tokens, or environment details. This preserves a clean historical record directly on GitHub.
+- **Development Summary to PR Before Merge**: When finalising a pull request ready for merge, compile a comprehensive summary of the development process (user requests, architectural decisions, implementations, debugging notes, test execution results, and visual showcases) with commit-pinned `https://github.com/shthed/capy/blob/<commit-sha>/<path>#L<start>-L<end>` and PR diff links for every mentioned file and line range, and post it as a comment on the pull request. Never dump raw conversation transcripts, internal credentials, tokens, or environment details. This preserves a clean historical record directly on GitHub.
 - **PR Readiness & Perfection Confidence Score (`0-100%`)**:
   - Whenever finishing a pull request and preparing it for merge, evaluate the PR against the **5-Pillar Readiness & Perfection Rubric** (`20` points per pillar = `100` total):
     | Pillar | Weight | Verification Criteria |
@@ -150,13 +151,13 @@ From the repository root:
     | **1. Functionality & Edge Cases** | `20` | All user requirements and edge cases (touch/mouse gestures, state persistence, modal back-stack, viewport clamping, fallback paths) are resolved and verified. |
     | **2. Automated Tests** | `20` | New and existing unit/codec/engine checks and Playwright E2E browser assertions in [`web/scripts/test.mjs`](./web/scripts/test.mjs) (`npm test`) and Android JUnit4 tests pass deterministically. |
     | **3. Performance & Golden Invariants** | `20` | Zero per-frame heap allocations in `requestAnimationFrame` loops, worker-isolated CPU segmentation, relative `./assets/...` paths, and defensive `NativeBridge` fallbacks. |
-    | **4. Docs & Changelog Sync** | `20` | [`web/package.json`](./web/package.json) version bumped, [`CHANGELOG.md`](./CHANGELOG.md) updated with clickable GitHub PR/file links, completed tasks removed from [`TODO.md`](./TODO.md), and subsystem `.md` files synchronized with zero emojis/ASCII art. |
+    | **4. Docs & Changelog Sync** | `20` | [`web/package.json`](./web/package.json) version bumped, [`CHANGELOG.md`](./CHANGELOG.md) updated with clickable GitHub PR and file/line links, completed tasks removed from [`TODO.md`](./TODO.md), and subsystem `.md` files synchronized with zero emojis/ASCII art. |
     | **5. CI & Preview Verification** | `20` | `npm run lint`, `npm run build`, and GitHub Actions (`Build & Test` + `Deploy to GitHub Pages`) pass on the latest commit, and the live preview URL (`https://shthed.github.io/capy/pull/<number>/`) is placed at the top of the PR description. |
   - **Threshold & Self-Correction Policy**:
     - **Require `>= 95%` confidence** before asking the user for merge approval.
     - If any technical, test, lint, or documentation gap lowers the score below `95%`, fix the gap automatically before presenting the PR.
     - If design ambiguity lowers the score below `95%`, proactively ask clarifying questions (`/grill-me` style) to resolve the ambiguity with the user.
-    - Report the score and 5-pillar table in **three places**: (1) the chat response requesting merge approval, (2) near the top of the PR description right below the live preview callout, and (3) inside the PR Development Summary comment. Whenever the score is `< 100%`, explicitly state the exact `-N` point delta explaining what accounts for the remaining points.
+    - Report the score in **three places**: (1) near the top of the PR description right below the live preview callout as a **concise bullet-point list** (avoiding excessive detail that belongs in the progress report comments), (2) inside the PR Development Summary comment, and (3) in the chat response requesting merge approval. Whenever the score is `< 100%`, explicitly state the exact `-N` point delta explaining what accounts for the remaining points.
 
 ---
 
@@ -166,6 +167,7 @@ From the repository root:
    - Maintain explicit distinctions between Screen coordinates (pointer DOM events), Container coordinates (CSS client bounds), Artwork coordinates (canvas image pixel grid), and Segmentation map coordinates (`regions[id]`).
    - All pointer coordinate conversions must use `screenToCanvas` and coordinate clamping (`clampCanvasOffset`) in [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
    - Zoom and pan operations must maintain focal point invariance under pinch-to-zoom and Google Maps-style one-finger double-tap-and-drag gestures.
+   - Never move, reset, or zoom the viewport automatically upon puzzle completion or when starting/finishing a replay (`startReplay`, `finishAutoResume`, `handleLoadSnapshot` on the already-active snapshot); only move the viewport when explicitly actioned by the user (manual pan/zoom gestures, Zoom In/Out buttons, Fit-to-Screen button, switching to a different saved puzzle, or explicit opt-in camera tracking).
 
 2. **Zero-Allocation Hot Paths**:
    - Forbid per-frame object and array allocations inside high-frequency animation loops (`requestAnimationFrame`, pan momentum gliding, and canvas repainting).
@@ -241,7 +243,7 @@ cd ..
 ### C. Final Merge Readiness & Confidence Score Audit (`>= 95%`)
 1. Verify that the live preview link (`https://shthed.github.io/capy/pull/<number>/`) is at the very top of the PR description.
 2. Compute the **5-Pillar PR Readiness & Perfection Confidence Score (`0-100%`)** (Section 5) and ensure it is `>= 95%` (fixing any technical/test/doc gaps or resolving design ambiguities first).
-3. Include the Confidence Score and 5-pillar rubric table near the top of the PR description, in the PR Development Summary comment, and in the chat response requesting merge approval.
+3. Include the Confidence Score near the top of the PR description as a concise bullet-point list (keeping detailed breakdowns in the PR Development Summary comment) and in the chat response requesting merge approval.
 
 ---
 
