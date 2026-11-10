@@ -84,7 +84,7 @@ async function generateSampleSaves() {
 
     // 3. Export archive via StorageService and normalize snapshot IDs, ordering, and float precision
     console.log('Serializing compact .capy archive bundle...');
-    const { archiveJson, summary } = await page.evaluate(async (sampleDefs) => {
+    const { binaryArray, jsonSizeBytes, summary } = await page.evaluate(async (sampleDefs) => {
       const rawExport = await window.capyStorage.exportAllSnapshots();
       const parsed = JSON.parse(rawExport);
 
@@ -126,6 +126,7 @@ async function generateSampleSaves() {
           isFreeColor: Boolean(snap.isFreeColor || puzzle.isFreeColor),
           isAutoSample: true,
           sampleAssetPath: def.assetPath,
+          sourceRef: { kind: 'sample', uri: def.assetPath },
           zoomScale: 1,
           panOffsetX: 0,
           panOffsetY: 0,
@@ -157,17 +158,26 @@ async function generateSampleSaves() {
         puzzles: orderedPuzzles,
       };
 
+      await window.capyStorage.clearAllSnapshots();
+      await window.capyStorage.importSnapshotBundle(JSON.stringify(finalBundle));
+      const binaryBytes = await window.capyStorage.exportAllSnapshotsBinary();
+
       return {
-        archiveJson: JSON.stringify(finalBundle),
+        binaryArray: Array.from(binaryBytes),
+        jsonSizeBytes: JSON.stringify(finalBundle).length,
         summary: stats,
       };
     }, SAMPLES);
 
+    const outBuffer = Buffer.from(binaryArray);
     fs.mkdirSync(path.dirname(OUTPUT_PATH), { recursive: true });
-    fs.writeFileSync(OUTPUT_PATH, archiveJson, 'utf8');
+    fs.writeFileSync(OUTPUT_PATH, outBuffer);
 
-    const totalSizeKb = (Buffer.byteLength(archiveJson, 'utf8') / 1024).toFixed(1);
-    console.log(`\nSuccessfully generated ${OUTPUT_PATH} (${totalSizeKb} KB):`);
+    const totalSizeKb = (outBuffer.byteLength / 1024).toFixed(1);
+    const jsonSizeKb = (jsonSizeBytes / 1024).toFixed(1);
+    console.log(
+      `\nSuccessfully generated compact v2 binary ${OUTPUT_PATH} (${totalSizeKb} KB vs ${jsonSizeKb} KB JSON v2):`
+    );
     for (const item of summary) {
       console.log(
         `  - ${item.title} (${item.id}): ${item.dimensions}, ${item.colors} colors, ${item.regions} regions, freeColor=${item.isFreeColor}, RLE=${item.rleKb} KB`
