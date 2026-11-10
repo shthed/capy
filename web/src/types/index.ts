@@ -175,6 +175,15 @@ export const GENERATION_PIPELINE_STEPS: Array<{ id: number; name: string; descri
   },
 ];
 
+export type PuzzleSourceKind = 'sample' | 'catalog' | 'url' | 'blob';
+
+export interface PuzzleSourceRef {
+  kind: PuzzleSourceKind;
+  /** Asset path for 'sample', catalog item ID for 'catalog', remote URL for 'url', or snapshot ID for 'blob' */
+  uri: string;
+  contentHash?: string;
+}
+
 export interface SavedSnapshot {
   id: string;
   title: string;
@@ -190,6 +199,7 @@ export interface SavedSnapshot {
   isFreeColor?: boolean;
   isAutoSample?: boolean;
   sampleAssetPath?: string | null;
+  sourceRef?: PuzzleSourceRef;
   zoomScale: number;
   panOffsetX: number;
   panOffsetY: number;
@@ -202,6 +212,7 @@ export interface SampleArtwork {
   title: string;
   assetPath: string;
   category: string;
+  tags?: string[];
   isFreeColor?: boolean;
 }
 
@@ -240,10 +251,10 @@ export const COLORING_PALETTE_PRESETS: PalettePreset[] = [
 ];
 
 export const SAMPLE_GALLERY: SampleArtwork[] = [
-  { id: 'capybara_sample', title: 'Capybara', assetPath: 'assets/capybara.webp', category: 'Animals' },
-  { id: 'mushrooms', title: 'Mushroom Forest', assetPath: 'assets/mushrooms.webp', category: 'Coloring', isFreeColor: true },
-  { id: 'capy_forest', title: 'Capy Forest', assetPath: 'assets/capy_forest.webp', category: 'Nature' },
-  { id: 'snail_guitar', title: 'Snail Guitar', assetPath: 'assets/snail_guitar.webp', category: 'Music' },
+  { id: 'capybara_sample', title: 'Capybara', assetPath: 'assets/capybara.webp', category: 'Animals', tags: ['Animals', 'Cute', 'Illustration'] },
+  { id: 'mushrooms', title: 'Mushroom Forest', assetPath: 'assets/mushrooms.webp', category: 'Coloring', tags: ['Coloring', 'Line Art', 'Nature', 'Fantasy'], isFreeColor: true },
+  { id: 'capy_forest', title: 'Capy Forest', assetPath: 'assets/capy_forest.webp', category: 'Nature', tags: ['Animals', 'Nature', 'Detailed'] },
+  { id: 'snail_guitar', title: 'Snail Guitar', assetPath: 'assets/snail_guitar.webp', category: 'Music', tags: ['Music', 'Animals', 'Whimsical'] },
 ];
 
 export const CANVAS_BG_MAP: Record<PresetCanvasBgColor, { label: string; hex: string; argb: number }> = {

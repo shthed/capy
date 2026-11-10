@@ -47,6 +47,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val openDocumentLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        val callback = fileUploadCallback
+        fileUploadCallback = null
+        if (uri != null) {
+            callback?.onReceiveValue(arrayOf(uri))
+        } else {
+            callback?.onReceiveValue(null)
+        }
+    }
+
     private val backPressedCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
             val wv = webView
@@ -165,12 +177,16 @@ class MainActivity : ComponentActivity() {
                     fileUploadCallback?.onReceiveValue(null)
                     fileUploadCallback = filePathCallback
                     return try {
-                        pickMediaLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                        )
+                        if (CapyAndroidBridge.shouldUsePhotoPicker(fileChooserParams?.acceptTypes)) {
+                            pickMediaLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        } else {
+                            openDocumentLauncher.launch(arrayOf("*/*"))
+                        }
                         true
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to launch visual media picker", e)
+                        Log.e(TAG, "Failed to launch file picker", e)
                         fileUploadCallback = null
                         false
                     }
