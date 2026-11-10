@@ -7,6 +7,7 @@ const PRECACHE_RELATIVE_URLS = [
   './',
   './index.html',
   './manifest.webmanifest',
+  './assets/sample_saves.capy',
   './assets/capybara.webp',
   './assets/capy_forest.webp',
   './assets/mushrooms.webp',

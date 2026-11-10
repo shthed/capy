@@ -323,11 +323,14 @@ Capy uses a hybrid storage model to manage performance and browser storage quota
 3. **Settings Persistence (`capy_user_settings_v8`) & Tab Memory**:
    - User preferences survive app updates and browser restarts.
    - Reopening `SettingsModal` remembers the last active tab index via `localStorage.getItem('capy_last_settings_tab')` (integer index `'0'` [Settings], `'1'` [Hints], `'2'` [Create], or `'3'` [Saves]).
-4. **Save Export, Import & TypedArray Serialization**:
-   - `StorageService.exportSnapshot(id)`: Downloads a single save snapshot along with its serialized puzzle model as `<snapshot_name>.capy` (formatted JSON).
-   - `StorageService.exportAllSnapshots()`: Bundles all user saves, puzzle data, and metadata into a portable backup `capy_all_saves_<timestamp>.capy`.
-   - `StorageService.importSnapshotBundle(jsonString)`: Validates bundle schema (`version: 8`, `type: 'CAPY_SAVE_BUNDLE'`), checks integrity, restores snapshots into `localStorage`, deserializes TypedArrays, and stores puzzles into IndexedDB.
-   - **TypedArray Base64 Buffer Encoding**: Large `Int32Array` (`regionMap`, `Region.pixels`) and `Uint8Array` (`borderMap`) are serialized to compact base64 byte chunks (`bufferToBase64` / `base64ToUint8Array` / `base64ToInt32Array`) to prevent precision loss and maintain compact export file sizes.
+4. **Save Export, Import & Compact RLE Serialization**:
+   - `StorageService.exportSnapshot(id)`: Downloads a single save snapshot along with its serialized puzzle model as `<cleanTitle>.capy` (`version: 2`, `format: 'capy-single-save'`).
+   - `StorageService.exportAllSnapshots()`: Bundles all user saves, puzzle data, and metadata into a portable backup `capy_saves_backup.capy` (`version: 2`, `format: 'capy-archive-save'`).
+   - `StorageService.importSnapshotBundle(jsonString, options)`: Validates single-save (`capy-single-save`), archive (`capy-archive-save`), and legacy snapshot-array bundles, preserves snapshot list order, batch-writes deserialized `PuzzleData` into `IndexedDB` (`STORE_PUZZLES`), and optionally refreshes timestamps (`refreshTimestamps: true`).
+   - **Compact v2 Run-Length Encoding (`regionMapRleB64`) & v1 Compatibility**: `serializePuzzle` encodes `regionMap` into endian-independent 4-byte RLE pairs (little-endian `uint16` `regionId` + `uint16` `runLength`) encoded as Base64 (`regionMapRleB64`), omitting deterministic `borderMap` and per-region `pixels` arrays to shrink `.capy` exports by ~98%. `deserializePuzzle` reconstructs `regionMap`, `borderMap`, and `Region.pixels` in `O(W * H)` with zero dynamic array allocations while maintaining full backward compatibility with `version: 1` (`regionMapB64`, `borderMapB64`, `pixelsB64`).
+5. **Instant First-Launch Sample Bootstrap (`./assets/sample_saves.capy`)**:
+   - Pre-generated archive of all 4 built-in `SAMPLE_GALLERY` artworks (`Capybara`, `Mushroom Forest`, `Capy Forest`, `Snail Guitar`), generated via `npm run generate:samples` (`web/scripts/generate-sample-saves.mjs`) and precached in `web/public/sw.js`.
+   - When the game is opened for the first time (`existingSnapshots.length === 0`), `App.tsx` (`restoreSession`) fetches `./assets/sample_saves.capy` concurrently with `assets/capybara.webp`, imports all 4 sample saves into `localStorage` and `IndexedDB`, and mounts `Capybara` immediately without waiting for Web Worker K-Means clustering or segmentation (falling back cleanly to live worker generation if the bundle is unavailable or `?skipSampleBootstrap=1` is present).
 
 ### 8.1 Comprehensive User Settings Reference (`UserSettings`)
 

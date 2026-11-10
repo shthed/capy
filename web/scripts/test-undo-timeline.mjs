@@ -30,10 +30,41 @@ async function testUndoTimelineAndRedo() {
 
   try {
     console.log('1️⃣ Navigating to http://localhost:3000/ ...');
-    await page.goto('http://localhost:3000/', { waitUntil: 'networkidle' });
-    await page.waitForSelector('canvas', { timeout: 10000 });
-    await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 25000 });
-    console.log('   ✅ Initial puzzle loaded.');
+    let workerRequestedOnBoot = false;
+    const bootRequestListener = (req) => {
+      if (req.url().includes('puzzle.worker')) {
+        workerRequestedOnBoot = true;
+      }
+    };
+    page.on('request', bootRequestListener);
+
+    const bootStartMs = Date.now();
+    await page.goto('http://localhost:3000/', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('canvas', { timeout: 5000 });
+    await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 5000 });
+    const bootElapsedMs = Date.now() - bootStartMs;
+    page.off('request', bootRequestListener);
+
+    const bootstrapState = await page.evaluate(() => {
+      const raw = localStorage.getItem('capy_snapshots_v8');
+      const list = raw ? JSON.parse(raw) : [];
+      return {
+        count: list.length,
+        ids: list.map((s) => s.id),
+        titles: list.map((s) => s.title),
+      };
+    });
+    if (bootstrapState.count !== 4 || bootstrapState.ids[0] !== 'sample-capybara') {
+      throw new Error(
+        `Expected 4 pre-generated sample saves starting with sample-capybara, got: ${JSON.stringify(bootstrapState)}`
+      );
+    }
+    if (workerRequestedOnBoot) {
+      throw new Error('Puzzle Web Worker should NOT be spawned on first launch when sample_saves.capy is preloaded!');
+    }
+    console.log(
+      `   ✅ Instant first-launch verified in ${bootElapsedMs}ms (${bootstrapState.titles.join(', ')}) with zero worker wait.`
+    );
 
     // Step 2: Fill multiple regions interactively
     console.log('2️⃣ Tapping regions to fill progress...');
@@ -399,23 +430,34 @@ async function testUndoTimelineAndRedo() {
       // Export snapshot
       const exportedJson = await window.capyStorage.exportSnapshot(snap.id);
       const parsed = JSON.parse(exportedJson);
-      if (parsed.format !== 'capy-single-save' || !parsed.snapshot || !parsed.puzzle) {
-        return { success: false, reason: 'invalid export bundle format' };
+      if (
+        parsed.format !== 'capy-single-save' ||
+        parsed.version !== 2 ||
+        !parsed.snapshot ||
+        !parsed.puzzle ||
+        !parsed.puzzle.regionMapRleB64
+      ) {
+        return { success: false, reason: 'invalid v2 RLE export bundle format' };
       }
 
       // Modify id and title to test importing as cloned save
       parsed.snapshot.id = 'imported-test-snapshot';
       parsed.snapshot.title = 'Imported Capy Test';
       const importRes = await window.capyStorage.importSnapshotBundle(JSON.stringify(parsed));
+      const restoredPuzzle = await window.capyStorage.loadPuzzleData('imported-test-snapshot');
+      if (
+        !restoredPuzzle ||
+        restoredPuzzle.regions.length !== parsed.snapshot.totalCount ||
+        restoredPuzzle.regions[0].pixels.length === 0
+      ) {
+        return { success: false, reason: 'restored puzzle missing reconstructed pixels' };
+      }
 
       return {
         success: importRes.importedCount === 1,
         importedCount: importRes.importedCount,
         title: parsed.snapshot.title,
       };
-    }).catch(async () => {
-      // If window.capyStorage not exposed on window, verify via export button click
-      return { success: true };
     });
 
     if (!importResult.success) {
