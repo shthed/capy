@@ -3,8 +3,7 @@ import path from 'path';
 import fs from 'fs';
 
 const OUT_DIRS = [
-  path.resolve('/home/antigravity/shthed/capy/docs/gallery'),
-  path.resolve('/home/antigravity/shthed/capy/web/public/gallery'),
+  path.resolve(import.meta.dirname, '../../docs/gallery'),
 ];
 
 OUT_DIRS.forEach((d) => fs.mkdirSync(d, { recursive: true }));

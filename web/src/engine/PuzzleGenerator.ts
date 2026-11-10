@@ -9,6 +9,7 @@ import {
   PaletteColor,
   PuzzleData,
 } from '../types';
+import { encodeRegionMapRle } from '../services/CapyCodec';
 import { ColorQuantizer } from './ColorQuantizer';
 import { ImageAnalyzer } from './ImageAnalyzer';
 import { LineArtExtractor } from './LineArtExtractor';
@@ -198,7 +199,7 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
         id: idx + 1,
         hex: c.hex,
         isLight: c.isLight,
-        argb: (0xff << 24) | (c.r << 16) | (c.g << 8) | c.b,
+        argb: (((0xff << 24) | (c.r << 16) | (c.g << 8) | c.b) >>> 0),
         r: c.r,
         g: c.g,
         b: c.b,
@@ -564,70 +565,136 @@ export class MosaicCelPuzzleGenerator implements PuzzleGenerator {
       onProgress
     );
 
-    // 2. Seed cellular superpixels
+    // 2. Seed cellular superpixels (SLIC-like grid + perceptual color affinity)
     onProgress?.(0.63, 'Tessellating mosaic cells...');
-    const targetCellArea = Math.max(64, (config.minRegionArea || 48) * 2.2);
-    const numSeeds = Math.max(20, Math.floor(total / targetCellArea));
-    const step = Math.sqrt(total / numSeeds);
+    const effectiveMaxRegs = Math.max(30, config.maxRegions || 200);
+    const targetCellArea = Math.max(
+      64,
+      (config.minRegionArea || 48) * 2.2,
+      Math.floor(total / Math.max(40, Math.round(effectiveMaxRegs * 1.35)))
+    );
+    const numSeeds = Math.max(24, Math.floor(total / targetCellArea));
+    const step = Math.max(6, Math.floor(Math.sqrt(total / numSeeds)));
+    const halfStep = Math.max(2, Math.floor(step / 2));
 
-    const seedX: number[] = [];
-    const seedY: number[] = [];
+    const gridCols = Math.max(1, Math.ceil((width - halfStep) / step));
+    const gridRows = Math.max(1, Math.ceil((height - halfStep) / step));
+    const actualSeeds = gridCols * gridRows;
 
-    for (let y = Math.floor(step / 2); y < height; y += Math.floor(step)) {
-      for (let x = Math.floor(step / 2); x < width; x += Math.floor(step)) {
-        seedX.push(x);
-        seedY.push(y);
+    const seedX = new Int32Array(actualSeeds);
+    const seedY = new Int32Array(actualSeeds);
+    const seedCluster = new Int32Array(actualSeeds);
+
+    let seedCursor = 0;
+    for (let gy = 0; gy < gridRows; gy++) {
+      const sy = Math.min(height - 1, halfStep + gy * step);
+      for (let gx = 0; gx < gridCols; gx++) {
+        const sx = Math.min(width - 1, halfStep + gx * step);
+        seedX[seedCursor] = sx;
+        seedY[seedCursor] = sy;
+        seedCluster[seedCursor] = assignments[sy * width + sx];
+        seedCursor++;
       }
     }
 
-    const actualSeeds = seedX.length;
+    // Assign pixels to closest spatial-color centroid using a fast 5x5 local grid search
+    const cellSeedMap = new Int32Array(total);
+    const colorPenaltyScale = step * step * 1.35;
+    const paletteLen = Math.max(1, palette.length);
+    const seedClusterVotes = new Int32Array(actualSeeds * paletteLen);
 
-    // Assign pixels to closest spatial-color centroid
     for (let y = 0; y < height; y++) {
+      const centerGy = Math.min(gridRows - 1, Math.max(0, Math.floor((y - halfStep + step / 2) / step)));
+      const minGy = Math.max(0, centerGy - 2);
+      const maxGy = Math.min(gridRows - 1, centerGy + 2);
+      const rowOffset = y * width;
+
       for (let x = 0; x < width; x++) {
-        const idx = y * width + x;
+        const idx = rowOffset + x;
         const colorCluster = assignments[idx];
+        const pixCol = palette[colorCluster] || palette[0];
+
+        const centerGx = Math.min(gridCols - 1, Math.max(0, Math.floor((x - halfStep + step / 2) / step)));
+        const minGx = Math.max(0, centerGx - 2);
+        const maxGx = Math.min(gridCols - 1, centerGx + 2);
 
         let bestDist = Number.MAX_VALUE;
-        let bestSeed = 0;
+        let bestSeed = centerGy * gridCols + centerGx;
 
-        for (let s = 0; s < actualSeeds; s++) {
-          const dx = x - seedX[s];
-          const dy = y - seedY[s];
-          const spatialDistSq = dx * dx + dy * dy;
+        for (let gy = minGy; gy <= maxGy; gy++) {
+          const baseSeed = gy * gridCols;
+          for (let gx = minGx; gx <= maxGx; gx++) {
+            const s = baseSeed + gx;
+            const dx = x - seedX[s];
+            const dy = y - seedY[s];
+            const spatialDistSq = dx * dx + dy * dy;
 
-          if (spatialDistSq > step * step * 4) continue;
+            let colorDist = 0;
+            const sCluster = seedCluster[s];
+            if (sCluster !== colorCluster && pixCol) {
+              const sCol = palette[sCluster] || palette[0];
+              const deltaSq = ColorQuantizer.perceptualDistanceSq(
+                pixCol.r,
+                pixCol.g,
+                pixCol.b,
+                sCol.r,
+                sCol.g,
+                sCol.b
+              );
+              colorDist = (deltaSq / 4096) * colorPenaltyScale;
+            }
 
-          const seedIdx = seedY[s] * width + seedX[s];
-          const seedCluster = assignments[seedIdx];
-          const colorDist = seedCluster === colorCluster ? 0 : 2500;
-
-          const combined = spatialDistSq + colorDist;
-          if (combined < bestDist) {
-            bestDist = combined;
-            bestSeed = s;
+            const combined = spatialDistSq + colorDist;
+            if (combined < bestDist) {
+              bestDist = combined;
+              bestSeed = s;
+            }
           }
         }
+
+        cellSeedMap[idx] = bestSeed;
+        seedClusterVotes[bestSeed * paletteLen + colorCluster]++;
       }
     }
 
-    // 3. Segment mosaic cells
+    // Assign each mosaic cell its dominant palette cluster so every cell is internally uniform
+    const dominantSeedCluster = new Int32Array(actualSeeds);
+    for (let s = 0; s < actualSeeds; s++) {
+      const voteBase = s * paletteLen;
+      let bestC = seedCluster[s];
+      let maxVotes = -1;
+      for (let c = 0; c < paletteLen; c++) {
+        const v = seedClusterVotes[voteBase + c];
+        if (v > maxVotes) {
+          maxVotes = v;
+          bestC = c;
+        }
+      }
+      dominantSeedCluster[s] = bestC;
+    }
+
+    const cellAssignments = new Int32Array(total);
+    for (let i = 0; i < total; i++) {
+      cellAssignments[i] = dominantSeedCluster[cellSeedMap[i]];
+    }
+
+    // 3. Segment mosaic cells while preserving distinct cell partitions
     const minArea = Math.max(16, config.minRegionArea || 32);
-    const maxRegs = Math.max(30, config.maxRegions || 200);
 
     const segmentation = RegionSegmenter.segment(
       width,
       height,
       palette,
-      assignments,
+      cellAssignments,
       minArea,
       6,
-      1.6,
+      2.2,
       undefined,
       'ABSORB_LINES',
       rawRgba,
-      maxRegs,
-      onProgress
+      effectiveMaxRegs,
+      onProgress,
+      cellSeedMap
     );
 
     return {
@@ -701,11 +768,11 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
 
     emitProgress(0.04, 'Analyzing artwork style and line composition...');
 
-    // Check for thin dark ink lines
-    const lineAnalysis = LineArtExtractor.extract(rgbaData, width, height);
+    // Downsample oversized inputs to a fast <= 512px proxy for style and ink detection
+    const proxy = scaleRgba(rgbaData, width, height, 512);
+    const lineAnalysis = LineArtExtractor.extract(proxy.data, proxy.width, proxy.height);
 
-    // Compute basic image metrics directly from typed array
-    const fakeImgData = { width, height, data: rgbaData } as ImageData;
+    const fakeImgData = { width: proxy.width, height: proxy.height, data: proxy.data } as ImageData;
     const imageAnalysis = ImageAnalyzer.analyze(fakeImgData);
     const isBw = imageAnalysis.isBlackAndWhite || Boolean(config.isFreeColor);
 
@@ -810,9 +877,9 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
     inspection.colorCount = isBw ? 20 : resolvedColors;
     inspection.minRegionArea = calibratedMinArea;
     inspection.maxRegions = calibratedMaxRegions;
-    // Initial estimate: regionMap (4B/px) + borderMap (1B/px) + pixel lists (4B/px) + thumbnail (~25KB)
-    const estimatedBytes = targetW * targetH * 9 + calibratedMaxRegions * 64 + 25600;
-    inspection.estimatedSaveSizeKb = Math.max(12, Math.round(estimatedBytes / 1024));
+    // Initial Compact v2 estimate: ~70 bytes/scanline RLE + 20B/region metadata + ~24KB preview thumbnail
+    const estimatedCompactBytes = targetH * 70 + calibratedMaxRegions * 20 + 24576;
+    inspection.estimatedSaveSizeKb = Math.max(12, Math.round(estimatedCompactBytes / 1024));
 
     emitProgress(0.15, `Selected ${chosenStrategy} strategy (${inspection.colorCount} colors, max ${calibratedMaxRegions} regions)...`);
 
@@ -850,12 +917,10 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
       inspection.minActualArea = minA;
       inspection.maxActualArea = maxA;
     }
-    const actualBytes =
-      result.regionMap.byteLength +
-      result.borderMap.byteLength +
-      result.regions.reduce((acc, r) => acc + r.pixels.byteLength + 64, 0) +
-      24576;
-    inspection.estimatedSaveSizeKb = Math.max(10, Math.round(actualBytes / 1024));
+    const rleBytes = encodeRegionMapRle(result.regionMap).byteLength;
+    const actualCompactBytes =
+      rleBytes + result.regions.length * 20 + result.palette.length * 48 + 24576;
+    inspection.estimatedSaveSizeKb = Math.max(8, Math.round(actualCompactBytes / 1024));
 
     emitProgress(1.0, `Generated ${result.regions.length} regions across ${result.palette.length} colors!`);
 

@@ -48,7 +48,7 @@
 1. **Pick an Artwork**: Start playing instantly with pre-generated built-in favorites (*Capybara*, *Mushroom Forest*, *Capy Forest*, and *Snail Guitar*) with zero generation wait, or import your own photo.
 2. **Choose a Color**: Tap any numbered swatch in the bottom **Palette Dock**. Matching puzzle shapes highlight instantly in that color.
 3. **Tap or Drag to Paint**: Tap the numbered shapes on the canvas to fill them. Turn on the **Paint Brush** tool to color continuously by dragging.
-4. **Zoom and Pan**: Double-tap and drag (up to zoom in, down to zoom out), or pinch with two fingers to inspect fine micro-regions.
+4. **Zoom and Pan**: Double-tap and drag (down to zoom in, up to zoom out, configurable in Settings), or pinch with two fingers to inspect fine micro-regions.
 5. **Celebrate**: Complete all colors to trigger the victory confetti burst and download your finished masterpiece.
 
 ---
@@ -59,7 +59,7 @@
 | :--- | :--- |
 | **Tap Region** | Paints the region if it matches the selected active color. |
 | **Drag Canvas** | Pans the artwork smoothly across the screen with inertial gliding momentum. |
-| **Double-Tap and Drag Up / Down** | Google Maps-style one-finger zoom: drag up to zoom in, drag down to zoom out. |
+| **Double-Tap and Drag Down / Up** | Google Maps-style one-finger zoom: drag down to zoom in, drag up to zoom out (reversible via Settings). |
 | **Pinch / Mouse Wheel** | Multi-touch focal zoom in / zoom out up to 12x. |
 | **Paint Brush Button** | Toggles continuous drag-to-paint mode. |
 | **Undo Button (`Ctrl+Z`)** | Undoes the last painted region. |

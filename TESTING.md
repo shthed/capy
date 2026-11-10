@@ -34,7 +34,7 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers and
 
 | Target | Test Scope | Verification Steps |
 | :--- | :--- | :--- |
-| **Web Application (`web/`)** | TypeScript type check, production build, Playwright E2E suites | `npm run lint`, `npm run build`, `npm run test:undo`, `npm run test:gameplay` |
+| **Web Application (`web/`)** | TypeScript type check, production build, binary codec parity, Playwright E2E suites | `npm run lint`, `npm run build`, `npm run test:codec`, `npm run test:undo`, `npm run test:gameplay` |
 | **Native Android Launcher (`app/`)** | JUnit4 native bridge unit tests, web asset bundle sync, debug APK assembly | `./gradlew app:testDebugUnitTest`, `./gradlew app:assembleDebug` |
 
 ### A. Web Application (`web/`)
@@ -43,6 +43,7 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers and
 | :--- | :--- | :--- |
 | **Type Checking** | `npm run lint` | Runs `tsc --noEmit` in strict mode to ensure zero type errors across all React components, services, and worker modules. |
 | **Production Build** | `npm run build` | Compiles TypeScript and produces minified, optimized production bundles via Vite (`tsc && vite build`). Verifies chunk splitting and asset paths. |
+| **Compact Codec Suite** | `npm run test:codec` | Verifies `CapyCodec` scanline RLE + LEB128 varints, zero-loss `PuzzleData` geometry reconstruction, `.capy` v2 Gzip binary framing, and CRDT progress delta merges. |
 | **Dev Server Verification** | `npm run dev` | Spins up Vite dev server on `http://localhost:3000` with hot module replacement (HMR). |
 | **Preview Server Verification**| `npm run preview`| Serves the compiled `web/dist/` bundle on `http://localhost:3000` for realistic end-to-end verification. |
 | **Undo & Timeline Suite** | `npm run test:undo` | Tests long-press undo timeline scrubber, resume play from step, redo stack, and save portability. |
@@ -77,10 +78,10 @@ When writing or executing Playwright tests for `PuzzleCanvas.tsx`, adhere to the
 - **Gesture Sequence**:
   1. Dispatch `pointerdown` at $(x, y)$.
   2. Wait 40ms, dispatch `pointerup` (first tap recorded).
-  3. Within 200ms (below `DOUBLE_TAP_TIMEOUT = 300ms`), dispatch second `pointerdown` at $(x, y)$.
-  4. Dispatch `pointermove` to $(x, y - 100)$ (dragging **up**).
+  3. Within 200ms (below `DOUBLE_TAP_TIMEOUT = 350ms`), dispatch second `pointerdown` at $(x, y)$.
+  4. Dispatch `pointermove` to $(x, y + 100)$ (dragging **down** when `reverseDoubleTapZoom` is `false`).
   5. Verify canvas scale increases: $\text{scale}_{new} > \text{scale}_{initial}$.
-  6. Dispatch `pointermove` to $(x, y + 100)$ (dragging **down**).
+  6. Dispatch `pointermove` to $(x, y - 100)$ (dragging **up** when `reverseDoubleTapZoom` is `false`).
   7. Verify canvas scale decreases: $\text{scale}_{new} < \text{scale}_{initial}$.
   8. Dispatch `pointerup`.
 

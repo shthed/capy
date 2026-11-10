@@ -366,6 +366,22 @@ export class ColorQuantizer {
     const minDistances = new Float64Array(totalPixels);
     minDistances.fill(Number.MAX_VALUE);
 
+    // Deterministic FNV-1a + Mulberry32 PRNG seeded from artwork pixels so identical source images
+    // always produce identical K-Means++ palettes and region IDs across browsers and devices.
+    let rngSeed = (2166136261 ^ totalPixels ^ actualK) >>> 0;
+    const sampleStep = Math.max(1, Math.floor(totalPixels / 256));
+    for (let s = 0; s < totalPixels; s += sampleStep) {
+      rngSeed = Math.imul(rngSeed ^ rArr[s], 16777619) >>> 0;
+      rngSeed = Math.imul(rngSeed ^ gArr[s], 16777619) >>> 0;
+      rngSeed = Math.imul(rngSeed ^ bArr[s], 16777619) >>> 0;
+    }
+    const nextDeterministicUnit = (): number => {
+      rngSeed = (rngSeed + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(rngSeed ^ (rngSeed >>> 15), 1 | rngSeed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+
     // K-Means++ initialization for remaining centroids
     while (effectiveK < actualK && effectiveK < totalPixels) {
       const lastR = centroidR[effectiveK - 1];
@@ -390,7 +406,7 @@ export class ColorQuantizer {
 
       if (sumDistances <= 0) break;
 
-      let target = Math.random() * sumDistances;
+      let target = nextDeterministicUnit() * sumDistances;
       let chosenIdx = 0;
       for (let i = 0; i < totalPixels; i++) {
         target -= minDistances[i];
@@ -543,7 +559,7 @@ export class ColorQuantizer {
       const b = centroidB[idx];
       const lum = 0.299 * r + 0.587 * g + 0.114 * b;
       const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
-      const argb = (0xff << 24) | (r << 16) | (g << 8) | b;
+      const argb = ((0xff << 24) | (r << 16) | (g << 8) | b) >>> 0;
 
       palette.push({
         id: idx + 1,
