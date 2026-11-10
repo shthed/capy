@@ -434,98 +434,206 @@ export const App: React.FC = () => {
     [settings, generatePreviewDataUrl, startReplay]
   );
 
-  // Restore session on app launch
+  // Restore session on app launch (or bootstrap pre-generated sample saves on first open)
   useEffect(() => {
     let isMounted = true;
+
+    const loadHtmlImage = (src: string, fallbackSrc?: string): Promise<HTMLImageElement | null> =>
+      new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => {
+          if (fallbackSrc && fallbackSrc !== src) {
+            const fb = new Image();
+            fb.crossOrigin = 'anonymous';
+            fb.onload = () => resolve(fb);
+            fb.onerror = () => resolve(null);
+            fb.src = fallbackSrc;
+          } else {
+            resolve(null);
+          }
+        };
+        img.src = src;
+      });
+
     const restoreSession = async () => {
       const activeState = StorageService.loadActiveState();
       const existingSnapshots = StorageService.loadSnapshots();
 
-      if (activeState?.activeSnapshotId) {
-        const snap = existingSnapshots.find((s) => s.id === activeState.activeSnapshotId);
-        if (snap) {
-          // Attempt to load from IndexedDB
-          const cachedPuzzle = await StorageService.loadPuzzleData(snap.id);
-          if (cachedPuzzle && isMounted) {
-            // Restore cached puzzle
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-              if (!isMounted) return;
-              const orderedIds = snap.filledRegionIds || [];
-              const filledSet = new Set(orderedIds);
-              const availableColors = getVisiblePalette(
-                cachedPuzzle.palette,
-                cachedPuzzle.regions,
-                filledSet,
-                settings.paletteSort
-              );
-              const restoredColor =
-                activeState.activeColorId && availableColors.some((c) => c.id === activeState.activeColorId)
-                  ? activeState.activeColorId
-                  : availableColors[0]?.id || cachedPuzzle.palette[0]?.id || 1;
-              if (snap.customPalette && snap.customPalette.length > 0) {
-                cachedPuzzle.palette = snap.customPalette;
-              }
-              let restoredPaintedMap = new Map<number, number>();
-              if (snap.paintedRegionColors) {
-                restoredPaintedMap = new Map(
-                  Object.entries(snap.paintedRegionColors).map(([k, v]) => [Number(k), v])
-                );
-              } else if (activeState.paintedRegionColors) {
-                restoredPaintedMap = new Map(
-                  Object.entries(activeState.paintedRegionColors).map(([k, v]) => [Number(k), v])
-                );
-              }
-              setPaintedRegionColors(restoredPaintedMap);
-              const isFree = Boolean(
-                activeState.isFreeColorMode !== undefined
-                  ? activeState.isFreeColorMode
-                  : snap.isFreeColor || cachedPuzzle.isFreeColor
-              );
-              setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
-              setSourceImage(img);
-              setPuzzle(cachedPuzzle);
-              setActiveSnapshotId(snap.id);
-              setActiveColorId(restoredColor);
-              setFilledRegionIds(filledSet);
-              setUndoStack(
-                orderedIds.map((rId) => ({
-                  regionId: rId,
-                  wasPreviouslyFilled: false,
-                }))
-              );
-              setIsLoading(false);
-              if (settings.autoReplayOnLoad !== false && orderedIds.length > 0) {
-                startReplay(orderedIds, true);
-              }
-            };
-            img.src = snap.sampleAssetPath || snap.previewDataUrl || 'assets/capybara.webp';
+      const candidateSnap =
+        (activeState?.activeSnapshotId
+          ? existingSnapshots.find((s) => s.id === activeState.activeSnapshotId)
+          : undefined) || existingSnapshots[0];
+
+      if (candidateSnap) {
+        const cachedPuzzle = await StorageService.loadPuzzleData(candidateSnap.id);
+        if (cachedPuzzle && isMounted) {
+          const imgSrc =
+            candidateSnap.sampleAssetPath || candidateSnap.previewDataUrl || './assets/capybara.webp';
+          const img = await loadHtmlImage(imgSrc, './assets/capybara.webp');
+          if (!isMounted || !img) {
+            if (isMounted) setIsLoading(false);
             return;
           }
+
+          const orderedIds = candidateSnap.filledRegionIds || [];
+          const filledSet = new Set(orderedIds);
+          if (candidateSnap.customPalette && candidateSnap.customPalette.length > 0) {
+            cachedPuzzle.palette = candidateSnap.customPalette;
+          }
+          const availableColors = getVisiblePalette(
+            cachedPuzzle.palette,
+            cachedPuzzle.regions,
+            filledSet,
+            settings.paletteSort
+          );
+          const restoredColor =
+            activeState?.activeSnapshotId === candidateSnap.id &&
+            activeState.activeColorId &&
+            availableColors.some((c) => c.id === activeState.activeColorId)
+              ? activeState.activeColorId
+              : availableColors[0]?.id || cachedPuzzle.palette[0]?.id || 1;
+
+          let restoredPaintedMap = new Map<number, number>();
+          if (candidateSnap.paintedRegionColors) {
+            restoredPaintedMap = new Map(
+              Object.entries(candidateSnap.paintedRegionColors).map(([k, v]) => [Number(k), v])
+            );
+          } else if (
+            activeState?.activeSnapshotId === candidateSnap.id &&
+            activeState.paintedRegionColors
+          ) {
+            restoredPaintedMap = new Map(
+              Object.entries(activeState.paintedRegionColors).map(([k, v]) => [Number(k), v])
+            );
+          }
+
+          const isFree = Boolean(
+            activeState?.activeSnapshotId === candidateSnap.id &&
+              activeState.isFreeColorMode !== undefined
+              ? activeState.isFreeColorMode
+              : candidateSnap.isFreeColor || cachedPuzzle.isFreeColor
+          );
+
+          setPaintedRegionColors(restoredPaintedMap);
+          setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
+          setSourceImage(img);
+          setPuzzle(cachedPuzzle);
+          setActiveSnapshotId(candidateSnap.id);
+          setActiveColorId(restoredColor);
+          setFilledRegionIds(filledSet);
+          setUndoStack(
+            orderedIds.map((rId) => ({
+              regionId: rId,
+              wasPreviouslyFilled: false,
+            }))
+          );
+          setIsLoading(false);
+          if (settings.autoReplayOnLoad !== false && orderedIds.length > 0) {
+            startReplay(orderedIds, true);
+          }
+          return;
         }
       }
 
-      // Default: Load Capybara built-in sample
       const defaultSample = SAMPLE_GALLERY[0];
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        if (!isMounted) return;
-        loadArtworkFromImage(
-          img,
-          defaultSample.title,
-          settings.generatorConfig,
-          new Set(),
-          undefined,
-          undefined,
-          defaultSample.assetPath
-        );
-      };
-      img.onerror = () => {
-        if (isMounted) setIsLoading(false);
-      };
-      img.src = defaultSample.assetPath;
+      const skipBootstrap =
+        typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).has('skipSampleBootstrap');
+
+      // First-time open: load pre-generated sample saves export for instant zero-wait gameplay
+      if (existingSnapshots.length === 0 && !skipBootstrap) {
+        try {
+          const [bundleResp, sampleImg] = await Promise.all([
+            fetch('./assets/sample_saves.capy').catch(() => null),
+            loadHtmlImage(defaultSample.assetPath),
+          ]);
+
+          if (bundleResp && bundleResp.ok && sampleImg && isMounted) {
+            const bundleJson = await bundleResp.text();
+            const imported = await StorageService.importSnapshotBundle(bundleJson, {
+              refreshTimestamps: true,
+            });
+
+            if (
+              imported.importedCount > 0 &&
+              imported.firstSnapshot &&
+              imported.firstPuzzle &&
+              isMounted
+            ) {
+              const firstSnap = imported.firstSnapshot;
+              const firstPuzzle = imported.firstPuzzle;
+              const firstImg =
+                firstSnap.sampleAssetPath && firstSnap.sampleAssetPath !== defaultSample.assetPath
+                  ? (await loadHtmlImage(firstSnap.sampleAssetPath, defaultSample.assetPath)) || sampleImg
+                  : sampleImg;
+
+              if (!isMounted) return;
+
+              const refreshedList = StorageService.loadSnapshots();
+              const orderedIds = firstSnap.filledRegionIds || [];
+              const filledSet = new Set(orderedIds);
+              if (firstSnap.customPalette && firstSnap.customPalette.length > 0) {
+                firstPuzzle.palette = firstSnap.customPalette;
+              }
+              const availableColors = getVisiblePalette(
+                firstPuzzle.palette,
+                firstPuzzle.regions,
+                filledSet,
+                settings.paletteSort
+              );
+              const initialColor = availableColors[0]?.id || firstPuzzle.palette[0]?.id || 1;
+              const isFree = Boolean(firstSnap.isFreeColor || firstPuzzle.isFreeColor);
+
+              setSnapshots(refreshedList);
+              setPaintedRegionColors(new Map());
+              setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
+              setSourceImage(firstImg);
+              setPuzzle(firstPuzzle);
+              setActiveSnapshotId(firstSnap.id);
+              setActiveColorId(initialColor);
+              setFilledRegionIds(filledSet);
+              setUndoStack([]);
+              setRedoStack([]);
+              setHintRegionId(null);
+
+              StorageService.saveActiveState({
+                activeSnapshotId: firstSnap.id,
+                activeColorId: initialColor,
+                filledRegionIds: orderedIds,
+                paintedRegionColors: {},
+                isFreeColorMode: isFree,
+                zoomScale: 1.0,
+                panOffsetX: 0,
+                panOffsetY: 0,
+              });
+
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn('Sample save bundle bootstrap unavailable, falling back to live generator:', err);
+        }
+      }
+
+      // Fallback: dynamically generate Capybara built-in sample
+      const img = await loadHtmlImage(defaultSample.assetPath);
+      if (!isMounted) return;
+      if (!img) {
+        setIsLoading(false);
+        return;
+      }
+      loadArtworkFromImage(
+        img,
+        defaultSample.title,
+        settings.generatorConfig,
+        new Set(),
+        undefined,
+        undefined,
+        defaultSample.assetPath
+      );
     };
 
     restoreSession();

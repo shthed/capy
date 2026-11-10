@@ -45,7 +45,7 @@
 
 ## How to Play
 
-1. **Pick an Artwork**: Start with built-in favorites like *Capybara*, *Capy Forest*, or *Mushroom Forest*, or import your own photo.
+1. **Pick an Artwork**: Start playing instantly with pre-generated built-in favorites (*Capybara*, *Mushroom Forest*, *Capy Forest*, and *Snail Guitar*) with zero generation wait, or import your own photo.
 2. **Choose a Color**: Tap any numbered swatch in the bottom **Palette Dock**. Matching puzzle shapes highlight instantly in that color.
 3. **Tap or Drag to Paint**: Tap the numbered shapes on the canvas to fill them. Turn on the **Paint Brush** tool to color continuously by dragging.
 4. **Zoom and Pan**: Double-tap and drag (up to zoom in, down to zoom out), or pinch with two fingers to inspect fine micro-regions.

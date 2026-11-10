@@ -49,6 +49,7 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers and
 | **Gameplay Smoke Suite** | `npm run test:gameplay` | Tests core tap region coloring, canvas rendering, and progress tracking. |
 | **Browser E2E Suite** | `npm run test:game` | Comprehensive Playwright browser suite verifying zoom, pan, settings, and modal flows. |
 | **PWA & Offline Suite** | `npm run test:pwa` | Validates web app manifest, Service Worker registration, Cache Storage population, network disconnect emulation, and 100% offline gameplay. |
+| **Sample Archive Generation** | `npm run generate:samples` | Generates all 4 built-in `SAMPLE_GALLERY` puzzles via headless Chromium and exports `web/public/assets/sample_saves.capy` for instant first-launch loading. |
 
 ### B. Native Android Application (`app/`)
 
