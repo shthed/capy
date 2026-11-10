@@ -36,11 +36,15 @@ declare global {
 
 function uint8ToBase64(bytes: Uint8Array): string {
   let binary = '';
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.byteLength; i += chunkSize) {
-    binary += String.fromCharCode(
-      ...Array.from(bytes.subarray(i, Math.min(i + chunkSize, bytes.byteLength)))
-    );
+  const len = bytes.byteLength;
+  const chunkSize = 0x2000;
+  for (let i = 0; i < len; i += chunkSize) {
+    const end = Math.min(i + chunkSize, len);
+    let chunk = '';
+    for (let j = i; j < end; j++) {
+      chunk += String.fromCharCode(bytes[j]);
+    }
+    binary += chunk;
   }
   return btoa(binary);
 }

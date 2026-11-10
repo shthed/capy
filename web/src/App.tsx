@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import {
   GenerationProgressPayload,
@@ -11,7 +11,7 @@ import {
   SavedSnapshot,
   UserSettings,
 } from './types';
-import { StorageService } from './services/StorageService';
+import { DEFAULT_SETTINGS, StorageService } from './services/StorageService';
 import { NativeBridge } from './services/NativeBridge';
 import { GenerationCancelledError, PuzzleWorkerService } from './services/PuzzleWorkerService';
 import {
@@ -33,10 +33,30 @@ import { PuzzleCanvas } from './components/PuzzleCanvas';
 import { GameTopBar } from './components/GameTopBar';
 import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
-import { SettingsModal } from './components/SettingsModal';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { ReplayControls } from './components/ReplayControls';
-import { ColorPickerPopover } from './components/ColorPickerPopover';
+
+const SettingsModal = React.lazy(() =>
+  import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal }))
+);
+const ColorPickerPopover = React.lazy(() =>
+  import('./components/ColorPickerPopover').then((m) => ({ default: m.ColorPickerPopover }))
+);
+
+function isDefaultGeneratorConfig(cfg: GeneratorConfig): boolean {
+  const def = DEFAULT_SETTINGS.generatorConfig;
+  return (
+    (cfg.algorithm || 'AUTO') === (def.algorithm || 'AUTO') &&
+    (cfg.lineHandling || 'ABSORB_LINES') === (def.lineHandling || 'ABSORB_LINES') &&
+    cfg.paletteDetail === def.paletteDetail &&
+    cfg.imageType === def.imageType &&
+    cfg.colorCount === def.colorCount &&
+    cfg.minRegionArea === def.minRegionArea &&
+    cfg.maxRegions === def.maxRegions &&
+    cfg.resolution === def.resolution &&
+    cfg.smoothingPasses === def.smoothingPasses
+  );
+}
 
 interface UndoHistoryEntry {
   regionId: number;
@@ -213,7 +233,12 @@ export const App: React.FC = () => {
       return nextUrl;
     }
 
-    return snap.previewDataUrl || 'assets/capybara.webp';
+    return snap.previewDataUrl || './assets/capybara.webp';
+  }, []);
+
+  useEffect(() => {
+    void import('./components/SettingsModal');
+    void import('./components/ColorPickerPopover');
   }, []);
 
   // Generate thumbnail data URL
@@ -498,7 +523,12 @@ export const App: React.FC = () => {
           setActiveColorId(targetColor);
           setHintRegionId(null);
 
-          const previewUrl = generatePreviewDataUrl(puzzleData, img, initialFilledRegionIds);
+          const previewUrl = generatePreviewDataUrl(
+            puzzleData,
+            img,
+            initialFilledRegionIds,
+            restoredPaintedMap
+          );
           const estSaveBytes = StorageService.estimatePuzzleSaveBytes(puzzleData, previewUrl);
 
           // Update snapshot with final region counts and storage size
@@ -1766,6 +1796,9 @@ export const App: React.FC = () => {
 
       if (activeSnapshotId) {
         StorageService.savePuzzleData(activeSnapshotId, updatedPuzzle);
+        const previewUrl = sourceImage
+          ? generatePreviewDataUrl(updatedPuzzle, sourceImage, filledRegionIds, paintedRegionColors)
+          : undefined;
         const updated = StorageService.updateSnapshotProgress(
           activeSnapshotId,
           filledRegionIds.size,
@@ -1774,7 +1807,7 @@ export const App: React.FC = () => {
           undefined,
           undefined,
           undefined,
-          undefined,
+          previewUrl,
           Object.fromEntries(paintedRegionColors),
           updatedPalette,
           puzzle.isFreeColor
@@ -1782,7 +1815,15 @@ export const App: React.FC = () => {
         setSnapshots(updated);
       }
     },
-    [puzzle, settings.hapticsEnabled, activeSnapshotId, filledRegionIds, paintedRegionColors]
+    [
+      puzzle,
+      sourceImage,
+      settings.hapticsEnabled,
+      activeSnapshotId,
+      filledRegionIds,
+      paintedRegionColors,
+      generatePreviewDataUrl,
+    ]
   );
 
   const handleApplyPresetPalette = useCallback(
@@ -1813,6 +1854,9 @@ export const App: React.FC = () => {
 
       if (activeSnapshotId) {
         StorageService.savePuzzleData(activeSnapshotId, updatedPuzzle);
+        const previewUrl = sourceImage
+          ? generatePreviewDataUrl(updatedPuzzle, sourceImage, filledRegionIds, paintedRegionColors)
+          : undefined;
         const updated = StorageService.updateSnapshotProgress(
           activeSnapshotId,
           filledRegionIds.size,
@@ -1821,7 +1865,7 @@ export const App: React.FC = () => {
           undefined,
           undefined,
           undefined,
-          undefined,
+          previewUrl,
           Object.fromEntries(paintedRegionColors),
           updatedPalette,
           puzzle.isFreeColor
@@ -1829,7 +1873,15 @@ export const App: React.FC = () => {
         setSnapshots(updated);
       }
     },
-    [puzzle, settings.hapticsEnabled, activeSnapshotId, filledRegionIds, paintedRegionColors]
+    [
+      puzzle,
+      sourceImage,
+      settings.hapticsEnabled,
+      activeSnapshotId,
+      filledRegionIds,
+      paintedRegionColors,
+      generatePreviewDataUrl,
+    ]
   );
 
   // Trigger hint (highlight and center uncompleted region)
@@ -2179,6 +2231,162 @@ export const App: React.FC = () => {
     settings,
   };
 
+  const loadSampleFromPrebakedOrGenerate = useCallback(
+    async (
+      sample: SampleArtwork,
+      deltaFilledIds?: number[],
+      deltaPaintedColors?: Record<number, number>,
+      deltaIsFreeColor?: boolean,
+      forceGeneratorConfig?: GeneratorConfig
+    ) => {
+      const skipBootstrap =
+        typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('skipSampleBootstrap') === '1';
+      const cleanSamplePath = sample.assetPath.replace(/^\.\//, '');
+      const usePrebaked =
+        !skipBootstrap && (!forceGeneratorConfig || isDefaultGeneratorConfig(forceGeneratorConfig));
+
+      if (usePrebaked) {
+        let snaps = StorageService.loadSnapshots();
+        let prebakedSnap = snaps.find(
+          (s) => s.sampleAssetPath?.replace(/^\.\//, '') === cleanSamplePath
+        );
+        if (!prebakedSnap) {
+          try {
+            const bundleResp = await fetch('./assets/sample_saves.capy').catch(() => null);
+            if (bundleResp && bundleResp.ok) {
+              await StorageService.importSnapshotData(await bundleResp.arrayBuffer(), {
+                refreshTimestamps: true,
+              });
+              snaps = StorageService.loadSnapshots();
+              prebakedSnap = snaps.find(
+                (s) => s.sampleAssetPath?.replace(/^\.\//, '') === cleanSamplePath
+              );
+            }
+          } catch {
+            // Fall back to worker generation if archive unavailable
+          }
+        }
+
+        if (prebakedSnap) {
+          const cachedPuzzle = await StorageService.loadPuzzleData(prebakedSnap.id);
+          if (cachedPuzzle) {
+            const img = await new Promise<HTMLImageElement | null>((resolve) => {
+              const el = new Image();
+              el.crossOrigin = 'anonymous';
+              el.onload = () => resolve(el);
+              el.onerror = () => resolve(null);
+              el.src = sample.assetPath;
+            });
+            if (img) {
+              const validIds = new Set(cachedPuzzle.regions.map((r) => r.id));
+              const rawOrdered =
+                deltaFilledIds !== undefined ? deltaFilledIds : prebakedSnap.filledRegionIds || [];
+              const orderedIds = rawOrdered.filter((id) => validIds.has(id));
+              const filledSet = new Set(orderedIds);
+              const rawPainted =
+                deltaPaintedColors !== undefined
+                  ? deltaPaintedColors
+                  : prebakedSnap.paintedRegionColors || {};
+              const restoredPaintedMap = new Map(
+                Object.entries(rawPainted)
+                  .map(([k, v]) => [Number(k), v] as [number, number])
+                  .filter(([k]) => validIds.has(k))
+              );
+              if (prebakedSnap.customPalette && prebakedSnap.customPalette.length > 0) {
+                cachedPuzzle.palette = prebakedSnap.customPalette;
+              }
+              const isFree = Boolean(
+                deltaIsFreeColor ||
+                  sample.isFreeColor ||
+                  prebakedSnap.isFreeColor ||
+                  cachedPuzzle.isFreeColor ||
+                  restoredPaintedMap.size > 0
+              );
+              const availableColors = getVisiblePalette(
+                cachedPuzzle.palette,
+                cachedPuzzle.regions,
+                filledSet,
+                liveCoopRef.current.settings.paletteSort
+              );
+              const initialColor = availableColors[0]?.id || cachedPuzzle.palette[0]?.id || 1;
+              const previewUrl =
+                deltaFilledIds !== undefined
+                  ? generatePreviewDataUrl(cachedPuzzle, img, filledSet, restoredPaintedMap)
+                  : prebakedSnap.previewDataUrl;
+              const updatedList = StorageService.updateSnapshotProgress(
+                prebakedSnap.id,
+                filledSet.size,
+                cachedPuzzle.regions.length,
+                orderedIds,
+                1.0,
+                0,
+                0,
+                previewUrl,
+                Object.fromEntries(restoredPaintedMap),
+                cachedPuzzle.palette,
+                isFree
+              );
+              setIsReplaying(false);
+              setIsReplayPlaying(false);
+              setShowSettings(false);
+              setSnapshots(updatedList);
+              setPaintedRegionColors(restoredPaintedMap);
+              handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
+              setSourceImage(img);
+              setPuzzle(cachedPuzzle);
+              setActiveSnapshotId(prebakedSnap.id);
+              setActiveColorId(initialColor);
+              setFilledRegionIds(filledSet);
+              setUndoStack(
+                orderedIds.map((rId) => ({
+                  regionId: rId,
+                  wasPreviouslyFilled: false,
+                }))
+              );
+              setRedoStack([]);
+              setHintRegionId(null);
+              StorageService.saveActiveState({
+                activeSnapshotId: prebakedSnap.id,
+                activeColorId: initialColor,
+                filledRegionIds: orderedIds,
+                paintedRegionColors: Object.fromEntries(restoredPaintedMap),
+                isFreeColorMode: isFree,
+                zoomScale: 1.0,
+                panOffsetX: 0,
+                panOffsetY: 0,
+              });
+              setIsLoading(false);
+              return;
+            }
+          }
+        }
+      }
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        loadArtworkFromImage(
+          img,
+          sample.title,
+          forceGeneratorConfig || {
+            ...DEFAULT_SETTINGS.generatorConfig,
+            isFreeColor: Boolean(sample.isFreeColor),
+          },
+          new Set(deltaFilledIds || []),
+          undefined,
+          undefined,
+          sample.assetPath,
+          false,
+          null,
+          deltaPaintedColors
+        );
+      };
+      img.src = sample.assetPath;
+    },
+    [generatePreviewDataUrl, handleUpdateSettings, loadArtworkFromImage]
+  );
+
   // Subscribe to Realtime Co-op Room events (Collaborator Paints, Welcome Convergence, Presence)
   useEffect(() => {
     const unsubParticipants = ProviderRegistry.realtimeRoom.onParticipantsChanged((peers) => {
@@ -2269,23 +2477,12 @@ export const App: React.FC = () => {
           targetSample &&
           currentSamplePath?.replace(/^\.\//, '') !== targetSample.assetPath.replace(/^\.\//, '')
         ) {
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = () => {
-            loadArtworkFromImage(
-              img,
-              targetSample.title,
-              cur.settings.generatorConfig,
-              new Set(delta.filledRegionIds),
-              undefined,
-              undefined,
-              targetSample.assetPath,
-              false,
-              null,
-              delta.paintedRegionColors
-            );
-          };
-          img.src = targetSample.assetPath;
+          await loadSampleFromPrebakedOrGenerate(
+            targetSample,
+            delta.filledRegionIds,
+            delta.paintedRegionColors,
+            delta.isFreeColor
+          );
           return;
         }
 
@@ -2342,7 +2539,7 @@ export const App: React.FC = () => {
       unsubPaint();
       unsubWelcome();
     };
-  }, [loadArtworkFromImage]);
+  }, [loadSampleFromPrebakedOrGenerate]);
 
   const prevCoopSnapRef = useRef<string | null>(null);
 
@@ -2402,24 +2599,12 @@ export const App: React.FC = () => {
       }
       if (parsed.matchedSample && parsed.delta) {
         clearShareHashFromWindowUrl(parsed.roomCode);
-        const sample = parsed.matchedSample;
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          loadArtworkFromImage(
-            img,
-            sample.title,
-            liveCoopRef.current.settings.generatorConfig,
-            new Set(parsed.delta!.filledRegionIds),
-            undefined,
-            undefined,
-            sample.assetPath,
-            false,
-            null,
-            parsed.delta!.paintedRegionColors
-          );
-        };
-        img.src = sample.assetPath;
+        await loadSampleFromPrebakedOrGenerate(
+          parsed.matchedSample,
+          parsed.delta.filledRegionIds,
+          parsed.delta.paintedRegionColors,
+          parsed.delta.isFreeColor
+        );
       }
     };
 
@@ -2436,7 +2621,7 @@ export const App: React.FC = () => {
       unsubDeepLink();
       window.removeEventListener('hashchange', onHashChange);
     };
-  }, [loadArtworkFromImage]);
+  }, [loadSampleFromPrebakedOrGenerate]);
 
   const activeSampleUri =
     activeSave?.sampleAssetPath ||
@@ -2759,24 +2944,21 @@ export const App: React.FC = () => {
             }
             viewportSaveTimerRef.current = window.setTimeout(() => {
               viewportSaveTimerRef.current = null;
-              const orderedList = Array.from(filledRegionIds);
-              const paintedObj = Object.fromEntries(paintedRegionColors);
-              const updated = StorageService.updateSnapshotProgress(
-                activeSnapshotId,
-                filledRegionIds.size,
-                puzzle.regions.length,
-                orderedList,
+              const cur = liveCoopRef.current;
+              if (!cur.activeSnapshotId) return;
+              const updated = StorageService.updateSnapshotViewport(
+                cur.activeSnapshotId,
                 zoom,
                 panX,
                 panY
               );
               setSnapshots(updated);
               StorageService.saveActiveState({
-                activeSnapshotId,
-                activeColorId,
-                filledRegionIds: orderedList,
-                paintedRegionColors: paintedObj,
-                isFreeColorMode,
+                activeSnapshotId: cur.activeSnapshotId,
+                activeColorId: cur.activeColorId,
+                filledRegionIds: Array.from(cur.filledRegionIds),
+                paintedRegionColors: Object.fromEntries(cur.paintedRegionColors),
+                isFreeColorMode: cur.isFreeColorMode,
                 zoomScale: zoom,
                 panOffsetX: panX,
                 panOffsetY: panY,
@@ -2897,14 +3079,16 @@ export const App: React.FC = () => {
 
       {/* Custom Color Picker & Palette Options Popover */}
       {puzzle && (
-        <ColorPickerPopover
-          isOpen={showPaletteOptions}
-          activeColor={puzzle.palette.find((c) => c.id === activeColorId) || null}
-          onClose={() => setShowPaletteOptions(false)}
-          onAddCustomColor={handleAddCustomColor}
-          onUpdateColor={handleUpdateColor}
-          onApplyPresetPalette={handleApplyPresetPalette}
-        />
+        <Suspense fallback={null}>
+          <ColorPickerPopover
+            isOpen={showPaletteOptions}
+            activeColor={puzzle.palette.find((c) => c.id === activeColorId) || null}
+            onClose={() => setShowPaletteOptions(false)}
+            onAddCustomColor={handleAddCustomColor}
+            onUpdateColor={handleUpdateColor}
+            onApplyPresetPalette={handleApplyPresetPalette}
+          />
+        </Suspense>
       )}
 
       {/* Loading & Generation Pipeline Details Overlay */}
@@ -2924,145 +3108,148 @@ export const App: React.FC = () => {
       />
 
       {/* Settings Modal Sheet */}
-      <SettingsModal
-        isOpen={showSettings}
-        initialTab={settingsInitialTab}
-        settings={settings}
-        snapshots={snapshots}
-        activeSnapshotId={activeSnapshotId}
-        sourceImage={sourceImage}
-        isFullscreen={isFullscreen}
-        coopRoomCode={coopRoomCode}
-        coopParticipants={coopParticipants}
-        canShareActiveLink={canShareActiveLink}
-        onClose={() => setShowSettings(false)}
-        onUpdateSettings={handleUpdateSettings}
-        onToggleFullscreen={handleToggleFullscreen}
-        onLoadSnapshot={(snap) => handleLoadSnapshot(snap, false)}
-        onReplaySnapshot={(snap) => handleLoadSnapshot(snap, true)}
-        onRenameSnapshot={(id, newTitle) => {
-          const updated = StorageService.renameSnapshot(id, newTitle);
-          setSnapshots(updated);
-        }}
-        onTogglePinSnapshot={(id) => {
-          const updated = StorageService.togglePinSnapshot(id);
-          setSnapshots(updated);
-        }}
-        onDeleteSnapshot={async (id) => {
-          if (viewportSaveTimerRef.current !== null) {
-            window.clearTimeout(viewportSaveTimerRef.current);
-            viewportSaveTimerRef.current = null;
-          }
-          const updated = await StorageService.deleteSnapshot(id);
-          setSnapshots(updated);
-          if (id === activeSnapshotId) {
-            if (updated.length > 0) {
-              handleLoadSnapshot(updated[0], false);
-            } else {
-              const defaultSample = SAMPLE_GALLERY[0];
-              const img = new Image();
-              img.crossOrigin = 'anonymous';
-              img.onload = () => {
-                loadArtworkFromImage(img, defaultSample.title, settings.generatorConfig, new Set(), undefined, undefined, defaultSample.assetPath);
-              };
-              img.src = defaultSample.assetPath;
-            }
-          }
-        }}
-        onClearAllSnapshots={async () => {
-          if (viewportSaveTimerRef.current !== null) {
-            window.clearTimeout(viewportSaveTimerRef.current);
-            viewportSaveTimerRef.current = null;
-          }
-          await StorageService.clearAllSnapshots();
-          setSnapshots([]);
-          const defaultSample = SAMPLE_GALLERY[0];
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = () => {
-            loadArtworkFromImage(img, defaultSample.title, settings.generatorConfig, new Set(), undefined, undefined, defaultSample.assetPath);
-          };
-          img.src = defaultSample.assetPath;
-        }}
-        onResetProgress={() => {
-          setIsReplaying(false);
-          setIsReplayPlaying(false);
-          setFilledRegionIds(new Set());
-          setPaintedRegionColors(new Map());
-          setUndoStack([]);
-          setRedoStack([]);
-          setHintRegionId(null);
-          if (activeSnapshotId && puzzle) {
-            const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-            const updated = StorageService.updateSnapshotProgress(
-              activeSnapshotId,
-              0,
-              puzzle.regions.length,
-              [],
-              zoomScale,
-              panOffsetX,
-              panOffsetY,
-              undefined,
-              {}
-            );
+      <Suspense fallback={null}>
+        <SettingsModal
+          isOpen={showSettings}
+          initialTab={settingsInitialTab}
+          settings={settings}
+          snapshots={snapshots}
+          activeSnapshotId={activeSnapshotId}
+          sourceImage={sourceImage}
+          isFullscreen={isFullscreen}
+          coopRoomCode={coopRoomCode}
+          coopParticipants={coopParticipants}
+          canShareActiveLink={canShareActiveLink}
+          onClose={() => setShowSettings(false)}
+          onUpdateSettings={handleUpdateSettings}
+          onToggleFullscreen={handleToggleFullscreen}
+          onLoadSnapshot={(snap) => handleLoadSnapshot(snap, false)}
+          onReplaySnapshot={(snap) => handleLoadSnapshot(snap, true)}
+          onRenameSnapshot={(id, newTitle) => {
+            const updated = StorageService.renameSnapshot(id, newTitle);
             setSnapshots(updated);
-            StorageService.saveActiveState({
-              activeSnapshotId,
-              activeColorId: puzzle.palette[0]?.id || 1,
-              filledRegionIds: [],
-              paintedRegionColors: {},
-              isFreeColorMode,
-              zoomScale,
-              panOffsetX,
-              panOffsetY,
-            });
-          }
-          setShowSettings(false);
-        }}
-        onRegenerate={async (cfg) => {
-          if (sourceImage) {
-            const samplePath = activeSave?.sourceRef?.kind === 'sample'
-              ? activeSave.sourceRef.uri
-              : activeSave?.sampleAssetPath;
-            const existingBlob =
-              !samplePath && activeSave
-                ? await StorageService.loadImageBlob(
-                    activeSave.sourceRef?.kind === 'blob' ? activeSave.sourceRef.uri : activeSave.id
-                  )
-                : null;
-            loadArtworkFromImage(
-              sourceImage,
-              activeTitle,
-              cfg,
-              new Set(),
+          }}
+          onTogglePinSnapshot={(id) => {
+            const updated = StorageService.togglePinSnapshot(id);
+            setSnapshots(updated);
+          }}
+          onDeleteSnapshot={async (id) => {
+            if (viewportSaveTimerRef.current !== null) {
+              window.clearTimeout(viewportSaveTimerRef.current);
+              viewportSaveTimerRef.current = null;
+            }
+            const updated = await StorageService.deleteSnapshot(id);
+            setSnapshots(updated);
+            if (id === activeSnapshotId) {
+              if (updated.length > 0) {
+                handleLoadSnapshot(updated[0], false);
+              } else {
+                const defaultSample = SAMPLE_GALLERY[0];
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                  loadArtworkFromImage(img, defaultSample.title, settings.generatorConfig, new Set(), undefined, undefined, defaultSample.assetPath);
+                };
+                img.src = defaultSample.assetPath;
+              }
+            }
+          }}
+          onClearAllSnapshots={async () => {
+            if (viewportSaveTimerRef.current !== null) {
+              window.clearTimeout(viewportSaveTimerRef.current);
+              viewportSaveTimerRef.current = null;
+            }
+            await StorageService.clearAllSnapshots();
+            setSnapshots([]);
+            const defaultSample = SAMPLE_GALLERY[0];
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              loadArtworkFromImage(img, defaultSample.title, settings.generatorConfig, new Set(), undefined, undefined, defaultSample.assetPath);
+            };
+            img.src = defaultSample.assetPath;
+          }}
+          onResetProgress={() => {
+            setIsReplaying(false);
+            setIsReplayPlaying(false);
+            setFilledRegionIds(new Set());
+            setPaintedRegionColors(new Map());
+            setUndoStack([]);
+            setRedoStack([]);
+            setHintRegionId(null);
+            if (activeSnapshotId && puzzle) {
+              const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+              const updated = StorageService.updateSnapshotProgress(
+                activeSnapshotId,
+                0,
+                puzzle.regions.length,
+                [],
+                zoomScale,
+                panOffsetX,
+                panOffsetY,
+                undefined,
+                {}
+              );
+              setSnapshots(updated);
+              StorageService.saveActiveState({
+                activeSnapshotId,
+                activeColorId: puzzle.palette[0]?.id || 1,
+                filledRegionIds: [],
+                paintedRegionColors: {},
+                isFreeColorMode,
+                zoomScale,
+                panOffsetX,
+                panOffsetY,
+              });
+            }
+            setShowSettings(false);
+          }}
+          onRegenerate={async (cfg) => {
+            if (sourceImage) {
+              const samplePath = activeSave?.sourceRef?.kind === 'sample'
+                ? activeSave.sourceRef.uri
+                : activeSave?.sampleAssetPath;
+              const existingBlob =
+                !samplePath && activeSave
+                  ? await StorageService.loadImageBlob(
+                      activeSave.sourceRef?.kind === 'blob' ? activeSave.sourceRef.uri : activeSave.id
+                    )
+                  : null;
+              loadArtworkFromImage(
+                sourceImage,
+                activeTitle,
+                cfg,
+                new Set(),
+                undefined,
+                undefined,
+                samplePath,
+                false,
+                existingBlob
+              );
+            }
+          }}
+          onSelectSample={(sample: SampleArtwork, cfg?: GeneratorConfig) => {
+            void loadSampleFromPrebakedOrGenerate(
+              sample,
               undefined,
               undefined,
-              samplePath,
-              false,
-              existingBlob
+              sample.isFreeColor,
+              cfg || settings.generatorConfig
             );
-          }
-        }}
-        onSelectSample={(sample: SampleArtwork) => {
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = () => {
-            loadArtworkFromImage(img, sample.title, settings.generatorConfig, new Set(), undefined, undefined, sample.assetPath);
-          };
-          img.src = sample.assetPath;
-        }}
-        onUploadImage={() => fileInputRef.current?.click()}
-        onExportSnapshot={handleExportSnapshot}
-        onExportAllSnapshots={handleExportAllSnapshots}
-        onImportSnapshots={handleImportSnapshots}
-        onHostCoopRoom={handleHostCoopRoom}
-        onJoinCoopRoom={handleJoinCoopRoom}
-        onLeaveCoopRoom={handleLeaveCoopRoom}
-        onShareProgressLink={handleShareProgressLink}
-        onCopyCoopInviteLink={handleCopyCoopInviteLink}
-        onSyncCloudProgress={handleSyncCloudProgress}
-        onZoomIntoDetailTile={handleZoomIntoDetailTile}
-      />
+          }}
+          onUploadImage={() => fileInputRef.current?.click()}
+          onExportSnapshot={handleExportSnapshot}
+          onExportAllSnapshots={handleExportAllSnapshots}
+          onImportSnapshots={handleImportSnapshots}
+          onHostCoopRoom={handleHostCoopRoom}
+          onJoinCoopRoom={handleJoinCoopRoom}
+          onLeaveCoopRoom={handleLeaveCoopRoom}
+          onShareProgressLink={handleShareProgressLink}
+          onCopyCoopInviteLink={handleCopyCoopInviteLink}
+          onSyncCloudProgress={handleSyncCloudProgress}
+          onZoomIntoDetailTile={handleZoomIntoDetailTile}
+        />
+      </Suspense>
     </div>
   );
 };
