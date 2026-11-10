@@ -99,8 +99,9 @@ From the repository root:
   - `main` deploys `web/dist/` to `/` (`https://shthed.github.io/capy/`) and the Android APK to `/capy.apk` (`https://shthed.github.io/capy/capy.apk`).
   - Open PR branches deploy previews to `/pull/<number>/` and `/pull/<number>/capy.apk`.
   - `gh-pages` commits are squashed to a single orphan commit on every push so binary `.apk` files never accumulate in Git history.
-- **PR preview lifecycle & cleanup ([`.github/workflows/cleanup-closed-pr.yml`](./.github/workflows/cleanup-closed-pr.yml))**:
-  - While a PR is open, its preview is served at `https://shthed.github.io/capy/pull/<number>/`.
+- **PR preview lifecycle, top-of-PR test link & cleanup ([`.github/workflows/cleanup-closed-pr.yml`](./.github/workflows/cleanup-closed-pr.yml))**:
+  - While a PR is open, its preview is served at `https://shthed.github.io/capy/pull/<number>/` (and Android APK at `https://shthed.github.io/capy/pull/<number>/capy.apk`).
+  - **Always update the PR description after successful deployment to include a link to test the game at the very top** (`https://shthed.github.io/capy/pull/<number>/`) whenever the game is ready to be tested.
   - When a PR is closed or merged, `cleanup-closed-pr.yml` automatically deletes the `/pull/<number>/` preview directory from `gh-pages` and redeploys. Once merged, the changes are live on the root site `https://shthed.github.io/capy/`.
 - **Finish active task before switching**: Finish working on the current task instead of switching when the user sends an update with a new task, unless the comment directly relates to what is currently being worked on.
 - **Plan before executing major changes**: When starting work on a big task, write out a clear plan of what you are going to do and how you are going to implement it before jumping into code edits.
