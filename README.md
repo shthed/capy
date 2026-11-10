@@ -34,12 +34,13 @@
 ## Why You'll Love Capy
 
 - **Two Ways to Play**: Classic **Color by Number** guided coloring or relaxed **Free Colour** creative mode.
-- **Turn Any Photo into a Puzzle**: Tap the photo upload button to convert your favorite pictures, pets, landscapes, or drawings into instant playable puzzles.
+- **Turn Any Photo into a Puzzle**: Tap the photo upload button to convert your favorite pictures, pets, landscapes, or drawings into instant playable puzzles, or zoom in with **Infinite Zoom 2x Detail Tiles**.
+- **Shareable Links and Simultaneous Co-op**: Share a compact `< 2 KB` progress URL (`#s=<token>`) with friends, or host a 6-character **Co-op Room** to paint the same puzzle simultaneously with live collaborator ripples.
+- **Compact `.capy` v2 Saves and CRDT Cloud Sync**: Ultra-compact RLE binary saves (`~140x` smaller footprint) and conflict-free Set-Union Cloud Sync ensure zero progress is ever lost across devices.
+- **Searchable Gallery and Community Ideas**: Filter artwork by category tags (`Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), submit family-friendly puzzle ideas, and vote on upcoming community gallery packs.
 - **Smooth Navigation**: One-finger double-tap-and-drag zoom, fluid pinch-to-zoom up to 12x, and inertial gliding pan momentum just like Google Maps.
 - **Continuous Paint Mode**: Drag your finger across the screen to quickly fill connected matching regions without tapping each one individually.
-- **Smart Hints and Assistance**: Tap a color swatch again to highlight elusive tiny regions with an animated glow ring.
-- **Custom Themes and Haptics**: Choose from Deep Black, Charcoal, Slate, or custom background colors, and enjoy satisfying tactile vibration on mobile.
-- **100% Offline and Private**: All image processing and coloring run entirely inside your browser. No accounts, no data tracking, and no servers required.
+- **100% Offline-First and Private**: All image processing and coloring run locally inside a sandboxed Web Worker. Play completely offline with zero forced accounts or ads.
 
 ---
 

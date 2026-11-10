@@ -44,6 +44,8 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers and
 | **Type Checking** | `npm run lint` | Runs `tsc --noEmit` in strict mode to ensure zero type errors across all React components, services, and worker modules. |
 | **Production Build** | `npm run build` | Compiles TypeScript and produces minified, optimized production bundles via Vite (`tsc && vite build`). Verifies chunk splitting and asset paths. |
 | **Compact Codec Suite** | `npm run test:codec` | Verifies `CapyCodec` scanline RLE + LEB128 varints, zero-loss `PuzzleData` geometry reconstruction, `.capy` v2 Gzip binary framing, and CRDT progress delta merges. |
+| **Phase 1 & 2 Regressions** | `npm run test:regressions` | Verifies custom photo full-resolution `STORE_IMAGES` persistence across reloads, preset background swatch resets, post-`autoReplayOnLoad` zoom restoration, and binary `.capy` v2 export/import round-trips. |
+| **Co-op, Links & Cloud Suite** | `npm run test:coop` | Verifies gallery search and category chips, community puzzle idea moderation and voting, `< 2 KB` `#s=<token>` shareable progress links across isolated browsers, live 2-peer simultaneous Co-op room sync, CRDT Set-Union Cloud Sync, Infinite Zoom 2x sub-tile generation, and `/privacy-policy.html`. |
 | **Dev Server Verification** | `npm run dev` | Spins up Vite dev server on `http://localhost:3000` with hot module replacement (HMR). |
 | **Preview Server Verification**| `npm run preview`| Serves the compiled `web/dist/` bundle on `http://localhost:3000` for realistic end-to-end verification. |
 | **Undo & Timeline Suite** | `npm run test:undo` | Tests long-press undo timeline scrubber, resume play from step, redo stack, and save portability. |

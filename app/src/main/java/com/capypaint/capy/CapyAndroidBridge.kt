@@ -13,6 +13,7 @@ import android.view.View
 import android.webkit.JavascriptInterface
 import androidx.core.content.FileProvider
 import java.io.File
+import java.net.URI
 
 class CapyAndroidBridge(
     private val context: Context,
@@ -25,6 +26,9 @@ class CapyAndroidBridge(
 
     @Volatile
     var pendingSharedImageJson: String? = null
+
+    @Volatile
+    var pendingDeepLinkUrl: String? = null
 
     @Volatile
     var safeAreaTopCss: Int = 0
@@ -53,6 +57,9 @@ class CapyAndroidBridge(
     private val backupDir: File
         get() = File(context.filesDir, BACKUP_FOLDER_NAME)
 
+    private val cloudDir: File
+        get() = File(context.filesDir, CLOUD_FOLDER_NAME)
+
     @JavascriptInterface
     fun haptic(type: String) {
         val view = rootViewProvider()
@@ -79,6 +86,28 @@ class CapyAndroidBridge(
     }
 
     @JavascriptInterface
+    fun saveCloudSnapshot(slotKey: String, payloadJson: String): Boolean {
+        return saveBackupToDir(cloudDir, slotKey, payloadJson)
+    }
+
+    @JavascriptInterface
+    fun loadCloudSnapshot(slotKey: String): String? {
+        return loadBackupFromDir(cloudDir, slotKey)
+    }
+
+    @JavascriptInterface
+    fun signInPlayGames(): String? {
+        Log.d(TAG, "Play Games v2 sign-in requested; falling back to local profile until Play Games App ID is configured")
+        return null
+    }
+
+    @JavascriptInterface
+    fun showRewardedAd(): Boolean {
+        Log.d(TAG, "Opt-in rewarded ad requested; no ad SDK bundled, returning false")
+        return false
+    }
+
+    @JavascriptInterface
     fun consumePendingSharedImage(): String? {
         val pending = pendingSharedImageJson
         pendingSharedImageJson = null
@@ -86,9 +115,35 @@ class CapyAndroidBridge(
     }
 
     @JavascriptInterface
+    fun consumePendingDeepLink(): String? {
+        val pending = pendingDeepLinkUrl
+        pendingDeepLinkUrl = null
+        return pending
+    }
+
+    @JavascriptInterface
     @Suppress("unused")
     fun getAppVersion(): String {
         return BuildConfig.VERSION_NAME
+    }
+
+    @JavascriptInterface
+    fun shareTextLink(title: String, url: String) {
+        try {
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, title)
+                putExtra(Intent.EXTRA_TITLE, title)
+                putExtra(Intent.EXTRA_TEXT, url)
+            }
+            val chooser = Intent.createChooser(shareIntent, title).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+            Log.i(TAG, "Dispatched text link share chooser for '$title'")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to share text link '$title'", e)
+        }
     }
 
     @JavascriptInterface
@@ -135,6 +190,8 @@ class CapyAndroidBridge(
     companion object {
         const val TAG = "CapyBridge"
         const val BACKUP_FOLDER_NAME = "capy_saves"
+        const val CLOUD_FOLDER_NAME = "capy_cloud"
+        const val ALLOWED_DEEP_LINK_HOST = "shthed.github.io"
 
         fun sanitizeKey(key: String): String {
             val cleaned = key.replace(Regex("[^a-zA-Z0-9._-]"), "_")
@@ -210,6 +267,44 @@ class CapyAndroidBridge(
                 .replace("\\", "\\\\")
                 .replace("\"", "\\\"")
             return """{"title":"$escapedTitle","dataUrl":"$escapedUrl"}"""
+        }
+
+        fun escapeJsString(value: String): String {
+            return value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("'", "\\'")
+                .replace("\n", " ")
+                .replace("\r", " ")
+                .replace("<", "\\u003c")
+                .replace(">", "\\u003e")
+        }
+
+        /**
+         * Validates incoming Android App Link URIs so only HTTPS URLs under shthed.github.io/capy
+         * are forwarded into the WebView deep-link handler.
+         */
+        fun isAllowedCapyDeepLink(rawUrl: String?): Boolean {
+            if (rawUrl.isNullOrBlank()) return false
+            val trimmed = rawUrl.trim()
+            if (trimmed.any { it.isWhitespace() || it.isISOControl() }) return false
+            return try {
+                val uri = URI(trimmed)
+                val scheme = uri.scheme?.lowercase()
+                val host = uri.host?.lowercase()
+                val path = uri.path ?: ""
+                (scheme == "https") &&
+                    (host == ALLOWED_DEEP_LINK_HOST) &&
+                    ((path == "/capy") || path.startsWith("/capy/"))
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        fun formatPlayGamesIdentityJson(playerId: String, displayName: String): String {
+            val safeId = escapeJsString(playerId.trim())
+            val safeName = escapeJsString(displayName.trim())
+            return """{"playerId":"$safeId","displayName":"$safeName"}"""
         }
 
         fun formatSafeAreaInsetsJson(top: Int, bottom: Int, left: Int, right: Int): String {
