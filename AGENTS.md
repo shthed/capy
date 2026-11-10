@@ -11,7 +11,7 @@ All contributors and AI agents must strictly observe these absolute core invaria
 1. **Never merge without explicit approval**: Never merge a pull request or push directly to `main` without explicit confirmation and approval from the user. Create the pull request, verify that CI tests pass, share the PR link, and wait for confirmation.
 2. **Build Android freely, but never deploy to physical devices without request**: You may build and assemble the Android app (`./gradlew app:assembleDebug`, `./gradlew app:testDebugUnitTest`, `./gradlew app:buildWeb`) whenever required to verify changes. However, never execute device installation commands (`./gradlew app:installDebug`) unless explicitly requested by the user.
 3. **Never use root-relative asset URLs**: Never use `/assets/...` URLs in code or CSS. Always use relative `./assets/...` and maintain `base: './'` in `web/vite.config.ts` so bundles resolve across GitHub Pages root (`/`), PR previews (`/pull/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`). See Section 6.6.
-4. **Strict documentation maintenance, zero emojis & no ASCII art**: Never include emojis or ASCII art / box-drawing diagrams in markdown documentation files (`.md`). Prefer tables, indented bullet hierarchies, GitHub Flavored Markdown alerts, or Mermaid diagrams. Always maintain and synchronize documentation across `WEB.md`, `PUZZLE.md`, `APP.md`, `CLOUD.md`, `TESTING.md`, `TODO.md`, and `README.md` following Section 5.
+4. **Strict documentation & changelog maintenance, zero emojis & no ASCII art**: Never include emojis or ASCII art / box-drawing diagrams in markdown documentation files (`.md`). Prefer tables, indented bullet hierarchies, GitHub Flavored Markdown alerts, or Mermaid diagrams. Always maintain and synchronize documentation across `WEB.md`, `PUZZLE.md`, `APP.md`, `CLOUD.md`, `TESTING.md`, `TODO.md`, `CHANGELOG.md`, and `README.md` following Section 5.
 5. **Never execute heavy CPU segmentation on the main thread**: All color clustering (K-Means), contour tracing, and region segmentation must execute exclusively in `web/src/engine/puzzle.worker.ts` using transferable `ArrayBuffer` objects. See Section 6.4.
 6. **Zero per-frame allocations in hot paths**: Never instantiate objects or arrays inside `requestAnimationFrame` loops, canvas rendering callbacks, or high-frequency touch gesture paths. Reuse typed arrays and scratch structs to eliminate GC micro-stutter. See Section 6.2.
 7. **Never leave completed items in `TODO.md`**: When a task or milestone is completed, remove it from `TODO.md` immediately rather than checking it off. Keep `TODO.md` strictly focused on pending, active roadmap tasks.
@@ -31,7 +31,7 @@ All contributors and AI agents must strictly observe these absolute core invaria
 1. **`web/` — Web Application & Single Source of Truth (Deployed to `/`)**:
    - Built with **React 19**, **TypeScript**, **Vite 6**, **Tailwind CSS 4**, offscreen cached 2D canvas rendering (`PuzzleCanvas.tsx`), and a 5-strategy Web Worker puzzle engine (`web/src/engine/`).
    - Shared across both the Web deployment and the Android (`app/`) wrapper via `web/src/services/NativeBridge.ts`.
-   - Subsystem references: UI & architecture in [`WEB.md`](./WEB.md); cloud sync, Play Games login & multiplayer in [`CLOUD.md`](./CLOUD.md); puzzle engine in [`PUZZLE.md`](./PUZZLE.md); testing guide in [`TESTING.md`](./TESTING.md); roadmap in [`TODO.md`](./TODO.md).
+   - Subsystem references: UI & architecture in [`WEB.md`](./WEB.md); cloud sync, Play Games login & multiplayer in [`CLOUD.md`](./CLOUD.md); puzzle engine in [`PUZZLE.md`](./PUZZLE.md); testing guide in [`TESTING.md`](./TESTING.md); release history in [`CHANGELOG.md`](./CHANGELOG.md); roadmap in [`TODO.md`](./TODO.md).
 
 2. **`app/` — Unified Native Android Application (`com.capypaint.capy`, Deployed to `/capy.apk`)**:
    - Lightweight native Android launcher wrapping `web/dist/` via AndroidX `WebViewAssetLoader` (`MainActivity.kt`) and `CapyAndroidBridge.kt` (`@JavascriptInterface`).
@@ -46,12 +46,12 @@ Match incoming user tasks to the matrix below to determine target files, mandato
 
 | Task Domain | Target Files & Directories | Mandatory Verification Commands | Documentation to Sync |
 | :--- | :--- | :--- | :--- |
-| **Gameplay UI & Controls** | `web/src/components/*`, `web/src/index.css` | `npm run lint`<br>`npm run build`<br>`npm test`<br>`npm run gallery:capture` (if styling changed) | [`WEB.md`](./WEB.md)<br>[`TODO.md`](./TODO.md) |
-| **Puzzle Engine & Workers** | `web/src/engine/*`, `web/src/engine/puzzle.worker.ts` | `npm run lint`<br>`npm run build`<br>`npm test` | [`PUZZLE.md`](./PUZZLE.md)<br>[`TODO.md`](./TODO.md) |
-| **Native Android Wrapper** | `app/src/main/*`, `web/src/services/NativeBridge.ts` | `npm run lint`<br>`npm run build`<br>`./gradlew app:testDebugUnitTest`<br>`./gradlew app:assembleDebug` | [`APP.md`](./APP.md)<br>[`TODO.md`](./TODO.md) |
-| **Testing & Automation** | `web/scripts/*`, Playwright test specs | `npm run lint`<br>`npm run build`<br>`npm test` | [`TESTING.md`](./TESTING.md)<br>[`TODO.md`](./TODO.md) |
-| **CI/CD & Deployment** | `.github/workflows/*` | Validate YAML workflow syntax; verify dual-job pipeline permissions | [`AGENTS.md`](./AGENTS.md) |
-| **Documentation & Roadmap** | `*.md`, `docs/*` | Verify links and headings; zero emojis & no ASCII art | [`TODO.md`](./TODO.md) |
+| **Gameplay UI & Controls** | `web/src/components/*`, `web/src/index.css` | `npm run lint`<br>`npm run build`<br>`npm test`<br>`npm run gallery:capture` (if styling changed) | [`WEB.md`](./WEB.md)<br>[`CHANGELOG.md`](./CHANGELOG.md)<br>[`TODO.md`](./TODO.md) |
+| **Puzzle Engine & Workers** | `web/src/engine/*`, `web/src/engine/puzzle.worker.ts` | `npm run lint`<br>`npm run build`<br>`npm test` | [`PUZZLE.md`](./PUZZLE.md)<br>[`CHANGELOG.md`](./CHANGELOG.md)<br>[`TODO.md`](./TODO.md) |
+| **Native Android Wrapper** | `app/src/main/*`, `web/src/services/NativeBridge.ts` | `npm run lint`<br>`npm run build`<br>`./gradlew app:testDebugUnitTest`<br>`./gradlew app:assembleDebug` | [`APP.md`](./APP.md)<br>[`CHANGELOG.md`](./CHANGELOG.md)<br>[`TODO.md`](./TODO.md) |
+| **Testing & Automation** | `web/scripts/*`, Playwright test specs | `npm run lint`<br>`npm run build`<br>`npm test` | [`TESTING.md`](./TESTING.md)<br>[`CHANGELOG.md`](./CHANGELOG.md)<br>[`TODO.md`](./TODO.md) |
+| **CI/CD & Deployment** | `.github/workflows/*` | Validate YAML workflow syntax; verify dual-job pipeline permissions | [`AGENTS.md`](./AGENTS.md)<br>[`CHANGELOG.md`](./CHANGELOG.md) |
+| **Documentation & Roadmap** | `*.md`, `docs/*` | Verify links and headings; zero emojis & no ASCII art | [`TODO.md`](./TODO.md)<br>[`CHANGELOG.md`](./CHANGELOG.md) |
 
 ---
 
@@ -117,6 +117,10 @@ From the repository root:
     - `testing`: E2E suites, Playwright test scripts, test harness.
     - `ci`: GitHub Actions workflows, CI/CD pipelines, and deployment automation.
     - `deps`: Dependency upgrades, version catalogs, and package manager updates.
+- **Versioning Scheme & `CHANGELOG.md` Maintenance**:
+  - **Single Source of Truth (`MAJOR.MINOR.PATCH`)**: [`web/package.json`](./web/package.json) `"version"` is the canonical Semantic Version for the entire monorepo (`0 <= MINOR <= 99`, `0 <= PATCH <= 99`).
+  - **Cross-Target Synchronization**: [`web/src/version.ts`](./web/src/version.ts) exports `APP_VERSION` and `APP_VERSION_CODE` (`(MAJOR * 10000) + (MINOR * 100) + PATCH`), and [`app/build.gradle.kts`](./app/build.gradle.kts) automatically reads `../web/package.json` at Gradle configuration time to set `versionName` and `versionCode`.
+  - **Mandatory Version Bump & Changelog Entry**: Whenever a pull request introduces new features (`MINOR`), bugfixes (`PATCH`), or breaking storage/architectural changes (`MAJOR`), bump `"version"` in `web/package.json` and add a corresponding `## [MAJOR.MINOR.PATCH] - YYYY-MM-DD (Android versionCode: XXXXX)` section in [`CHANGELOG.md`](./CHANGELOG.md). `npm test` automatically verifies that `CHANGELOG.md` contains an entry matching `web/package.json`.
 - **Documentation Maintenance & Synchronization Guidelines**:
   - **Zero Emojis & No ASCII Art**:
     - Never include unicode emojis or ASCII art / box-drawing diagrams in markdown documentation files (`.md`).
@@ -126,7 +130,7 @@ From the repository root:
     - When modifying **segmentation algorithms, color clustering, line extraction, or web worker protocols**: Update [`PUZZLE.md`](./PUZZLE.md) with algorithmic details, buffer structures, and performance budgets.
     - When modifying **Android launcher, bridge APIs, haptic patterns, or native storage**: Update [`APP.md`](./APP.md) with `@JavascriptInterface` signatures and native lifecycle contracts.
     - When adding, updating, or fixing **test suites, Playwright scripts, or verification procedures**: Update [`TESTING.md`](./TESTING.md) with command options and assertion requirements.
-    - When adding, starting, or completing **roadmap items**: Update [`TODO.md`](./TODO.md).
+    - When adding, starting, or completing **roadmap items**: Update [`TODO.md`](./TODO.md) and [`CHANGELOG.md`](./CHANGELOG.md).
     - When changing **high-level project capabilities, build steps, or deployment architecture**: Update [`README.md`](./README.md) and [`AGENTS.md`](./AGENTS.md).
   - **Active Task Hygiene (`TODO.md`)**:
     - Never check off completed items with `[x]`. When a task or milestone is finished, remove it from `TODO.md` immediately rather than checking it off.

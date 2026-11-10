@@ -11,6 +11,7 @@ For subsystem references, see:
 - **Unified Android Launcher Architecture and Native Bridge**: [`APP.md`](./APP.md)
 - **Cloud Sync, Google Play Games & Multiplayer Architecture**: [`CLOUD.md`](./CLOUD.md)
 - **Testing Architecture and Verification Guide**: [`TESTING.md`](./TESTING.md)
+- **Versioning Scheme and Release History**: [`CHANGELOG.md`](./CHANGELOG.md)
 - **Contributor and Agent Playbook**: [`AGENTS.md`](./AGENTS.md)
 
 ---

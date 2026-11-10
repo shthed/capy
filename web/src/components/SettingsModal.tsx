@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
+import { APP_VERSION } from '../version';
 import {
   COLLABORATOR_AVATAR_COLORS,
   ProviderRegistry,
@@ -953,8 +954,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Platform & External Application Links */}
               <div className="pt-3 border-t border-slate-800/80 space-y-2">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Platforms & Applications
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Platforms & Applications
+                  </div>
+                  <span
+                    data-testid="app-version-badge"
+                    className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-[10px] font-mono font-bold text-slate-400"
+                  >
+                    v{APP_VERSION}
+                  </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {NativeBridge.isNative ? (

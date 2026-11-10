@@ -203,7 +203,24 @@ async function runCodecAndEngineTests() {
     assert.deepEqual(merged.filledRegionIds, [1, 4, 9, 2, 8]);
     assert.equal(merged.paintedRegionColors?.[4], 0xff3b82f6, 'Newer timestamp wins Free Colour conflict');
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, and CRDT deltas verified.');
+    // 5. Semantic Versioning & CHANGELOG.md Synchronization
+    const versionMod = await vite.ssrLoadModule('/src/version.ts');
+    const semverParts = versionMod.parseSemVer(versionMod.APP_VERSION);
+    assert.equal(
+      versionMod.APP_VERSION_CODE,
+      semverParts.major * 10000 + semverParts.minor * 100 + semverParts.patch,
+      'APP_VERSION_CODE must equal MAJOR * 10000 + MINOR * 100 + PATCH'
+    );
+    const changelogPath = path.resolve(projectRoot, '..', 'CHANGELOG.md');
+    assert.equal(fs.existsSync(changelogPath), true, 'CHANGELOG.md must exist at repository root');
+    const changelogText = fs.readFileSync(changelogPath, 'utf8');
+    assert.equal(
+      changelogText.includes(`## [${versionMod.APP_VERSION}]`),
+      true,
+      `CHANGELOG.md must contain a release heading for current version [${versionMod.APP_VERSION}]`
+    );
+
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
@@ -357,10 +374,14 @@ async function runBrowserBasicsSuite() {
     console.log('3. Verifying Undo, Redo, long-press Replay scrubber, Resume Here & Free Colour auto-undo...');
     assert.equal(await page.$('[data-testid="undo-btn"]'), null, 'Undo hidden by default for standard puzzles');
 
-    // Open Settings -> enable Undo, test Charcoal background reset, and verify tab memory
+    // Open Settings -> verify version badge, enable Undo, test Charcoal background reset, and verify tab memory
     const settingsBtn = page.locator('button[title="Settings and Menu"]');
     await settingsBtn.click();
     await page.waitForTimeout(200);
+
+    const pkgVersion = JSON.parse(fs.readFileSync(path.resolve(projectRoot, 'package.json'), 'utf8')).version;
+    const versionBadgeText = await page.locator('[data-testid="app-version-badge"]').textContent();
+    assert.equal(versionBadgeText?.trim(), `v${pkgVersion}`, `Expected app-version-badge to equal v${pkgVersion}`);
 
     await page.locator('button[title="Charcoal"]').first().click();
     for (const labelText of [
