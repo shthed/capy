@@ -11,7 +11,7 @@ All contributors and AI agents must strictly observe these absolute core invaria
 1. **Never merge without explicit approval**: Never merge a pull request or push directly to `main` without explicit confirmation and approval from the user. Create the pull request, verify that CI tests pass, share the PR link, and wait for confirmation.
 2. **Build Android freely, but never deploy to physical devices without request**: You may build and assemble the Android app (`./gradlew app:assembleDebug`, `./gradlew app:testDebugUnitTest`, `./gradlew app:buildWeb`) whenever required to verify changes. However, never execute device installation commands (`./gradlew app:installDebug`) unless explicitly requested by the user.
 3. **Never use root-relative asset URLs**: Never use `/assets/...` URLs in code or CSS. Always use relative `./assets/...` and maintain `base: './'` in `web/vite.config.ts` so bundles resolve across GitHub Pages root (`/`), PR previews (`/pull/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`). See Section 6.6.
-4. **Strict documentation maintenance, zero emojis & no ASCII art**: Never include emojis or ASCII art / box-drawing diagrams in markdown documentation files (`.md`). Prefer tables, indented bullet hierarchies, GitHub Flavored Markdown alerts, or Mermaid diagrams. Always maintain and synchronize documentation across `WEB.md`, `PUZZLE.md`, `APP.md`, `TESTING.md`, `TODO.md`, and `README.md` following Section 5.
+4. **Strict documentation maintenance, zero emojis & no ASCII art**: Never include emojis or ASCII art / box-drawing diagrams in markdown documentation files (`.md`). Prefer tables, indented bullet hierarchies, GitHub Flavored Markdown alerts, or Mermaid diagrams. Always maintain and synchronize documentation across `WEB.md`, `PUZZLE.md`, `APP.md`, `CLOUD.md`, `TESTING.md`, `TODO.md`, and `README.md` following Section 5.
 5. **Never execute heavy CPU segmentation on the main thread**: All color clustering (K-Means), contour tracing, and region segmentation must execute exclusively in `web/src/engine/puzzle.worker.ts` using transferable `ArrayBuffer` objects. See Section 6.4.
 6. **Zero per-frame allocations in hot paths**: Never instantiate objects or arrays inside `requestAnimationFrame` loops, canvas rendering callbacks, or high-frequency touch gesture paths. Reuse typed arrays and scratch structs to eliminate GC micro-stutter. See Section 6.2.
 7. **Never leave completed items in `TODO.md`**: When a task or milestone is completed, remove it from `TODO.md` immediately rather than checking it off. Keep `TODO.md` strictly focused on pending, active roadmap tasks.
@@ -26,12 +26,12 @@ All contributors and AI agents must strictly observe these absolute core invaria
 | Subsystem | Location | Technologies & Scope | Key Capabilities |
 | :--- | :--- | :--- | :--- |
 | **Web Application** | `web/` | React 19, TypeScript, Vite 6, Tailwind CSS 4 | Cached 2D Canvas engine (`PuzzleCanvas.tsx`), 5-strategy Web Worker pipeline (`puzzle.worker.ts`), `NativeBridge` interface |
-| **Native Android Launcher** | `app/` | Kotlin, AndroidX WebViewAssetLoader | Host shell (`MainActivity.kt`), `@JavascriptInterface` bridge (`CapyAndroidBridge.kt`), tactile haptics, back navigation, disk backups |
+| **Native Android Launcher** | `app/` | Kotlin, AndroidX WebViewAssetLoader, Play Games Services v2 | Host shell (`MainActivity.kt`), `@JavascriptInterface` bridge (`CapyAndroidBridge.kt`), Play Games profile login, tactile haptics, back navigation, disk backups |
 
 1. **`web/` — Web Application & Single Source of Truth (Deployed to `/`)**:
    - Built with **React 19**, **TypeScript**, **Vite 6**, **Tailwind CSS 4**, offscreen cached 2D canvas rendering (`PuzzleCanvas.tsx`), and a 5-strategy Web Worker puzzle engine (`web/src/engine/`).
    - Shared across both the Web deployment and the Android (`app/`) wrapper via `web/src/services/NativeBridge.ts`.
-   - Subsystem references: UI & architecture in [`WEB.md`](./WEB.md); puzzle engine in [`PUZZLE.md`](./PUZZLE.md); testing guide in [`TESTING.md`](./TESTING.md); roadmap in [`TODO.md`](./TODO.md).
+   - Subsystem references: UI & architecture in [`WEB.md`](./WEB.md); cloud sync, Play Games login & multiplayer in [`CLOUD.md`](./CLOUD.md); puzzle engine in [`PUZZLE.md`](./PUZZLE.md); testing guide in [`TESTING.md`](./TESTING.md); roadmap in [`TODO.md`](./TODO.md).
 
 2. **`app/` — Unified Native Android Application (`com.capypaint.capy`, Deployed to `/capy.apk`)**:
    - Lightweight native Android launcher wrapping `web/dist/` via AndroidX `WebViewAssetLoader` (`MainActivity.kt`) and `CapyAndroidBridge.kt` (`@JavascriptInterface`).

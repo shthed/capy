@@ -77,6 +77,26 @@ class GuestAndPlayGamesAuthAdapter implements AuthProvider {
 
   constructor() {
     this.identity = this.loadOrCreateIdentity();
+    NativeBridge.onPlayGamesProfile((profile) => {
+      this.applyPlayGamesProfile(profile.playerId, profile.displayName);
+    });
+  }
+
+  private applyPlayGamesProfile(playerId: string, displayName: string): PlayerIdentity {
+    const cleanId = playerId.trim();
+    const cleanName = displayName.trim().slice(0, 32);
+    if (!cleanId || !cleanName) return this.identity;
+    this.identity = {
+      ...this.identity,
+      playerId: cleanId,
+      displayName: cleanName,
+      provider: 'play_games_v2',
+      isAuthenticated: true,
+      lastSyncedAt: Date.now(),
+    };
+    this.persistBaseIdentity(this.identity);
+    this.emit();
+    return this.identity;
   }
 
   private loadOrCreateIdentity(): PlayerIdentity {

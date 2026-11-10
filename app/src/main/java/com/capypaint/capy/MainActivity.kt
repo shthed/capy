@@ -27,6 +27,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
+import com.google.android.gms.games.PlayGames
+import com.google.android.gms.games.PlayGamesSdk
 
 class MainActivity : ComponentActivity() {
 
@@ -95,7 +97,14 @@ class MainActivity : ComponentActivity() {
                     backPressedCallback.isEnabled = isOpen
                 }
             },
+            onRequestPlayGamesSignIn = {
+                runOnUiThread {
+                    requestPlayGamesSignIn()
+                }
+            },
         )
+
+        initializePlayGamesIfConfigured()
 
         val assetLoader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
@@ -144,6 +153,7 @@ class MainActivity : ComponentActivity() {
                     applySafeAreaInsetsToWebView()
                     deliverPendingSharedImageIfNeeded()
                     deliverPendingDeepLinkIfNeeded()
+                    deliverCachedPlayGamesProfileIfNeeded()
                 }
 
                 override fun onReceivedError(
@@ -339,6 +349,83 @@ class MainActivity : ComponentActivity() {
                     try {
                         if (window.__capyReceiveDeepLink) {
                             window.__capyReceiveDeepLink("$escapedUrl");
+                        }
+                    } catch (e) {}
+                })();
+                """.trimIndent(),
+                null,
+            )
+        }
+    }
+
+    private fun initializePlayGamesIfConfigured() {
+        val appId = getString(R.string.game_services_project_id)
+        if (!CapyAndroidBridge.isPlayGamesAppIdConfigured(appId)) {
+            Log.d(TAG, "Google Play Games App ID not configured ($appId); skipping PlayGamesSdk init")
+            return
+        }
+        try {
+            PlayGamesSdk.initialize(this)
+            PlayGames.getGamesSignInClient(this).isAuthenticated.addOnCompleteListener { task ->
+                val isAuthenticated = (task.isSuccessful) && (task.result?.isAuthenticated == true)
+                if (isAuthenticated) {
+                    fetchAndDeliverPlayGamesPlayerProfile()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "PlayGamesSdk initialization skipped or unavailable", e)
+        }
+    }
+
+    private fun requestPlayGamesSignIn() {
+        val appId = getString(R.string.game_services_project_id)
+        if (!CapyAndroidBridge.isPlayGamesAppIdConfigured(appId)) {
+            Log.d(TAG, "Play Games sign-in requested without configured Project ID; using cached or local profile")
+            deliverCachedPlayGamesProfileIfNeeded()
+            return
+        }
+        try {
+            PlayGames.getGamesSignInClient(this).signIn().addOnCompleteListener { task ->
+                val isAuthenticated = (task.isSuccessful) && (task.result?.isAuthenticated == true)
+                if (isAuthenticated) {
+                    fetchAndDeliverPlayGamesPlayerProfile()
+                } else {
+                    Log.w(TAG, "Play Games interactive sign-in did not authenticate", task.exception)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to invoke Play Games interactive signIn()", e)
+        }
+    }
+
+    private fun fetchAndDeliverPlayGamesPlayerProfile() {
+        try {
+            PlayGames.getPlayersClient(this).currentPlayer.addOnSuccessListener { player ->
+                val playerId = player.playerId
+                val displayName = player.displayName
+                Log.i(TAG, "Resolved Google Play Games profile: '$displayName' ($playerId)")
+                bridge.cachePlayGamesProfile(playerId, displayName)
+                if (isPageLoaded) {
+                    deliverCachedPlayGamesProfileIfNeeded()
+                }
+            }.addOnFailureListener { err ->
+                Log.w(TAG, "Failed to load Google Play Games currentPlayer profile", err)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error querying PlayGames PlayersClient", e)
+        }
+    }
+
+    private fun deliverCachedPlayGamesProfileIfNeeded() {
+        val profileJson = bridge.loadCachedPlayGamesProfileJson() ?: return
+        val wv = webView ?: return
+        wv.post {
+            wv.evaluateJavascript(
+                """
+                (function() {
+                    try {
+                        if (window.__capyReceivePlayGamesProfile) {
+                            window.__capyReceivePlayGamesProfile($profileJson);
                         }
                     } catch (e) {}
                 })();

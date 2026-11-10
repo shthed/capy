@@ -276,11 +276,26 @@ async function run() {
       return active.filledRegionIds || [];
     });
 
-    // Trigger Play Games Login + Cloud Sync on Device 2
+    // Trigger Play Games Login + verify real Google Play Games profile name delivery + Cloud Sync on Device 2
     await pageDevice2.getByTestId('topbar-coop-btn').click();
     await pageDevice2.waitForTimeout(200);
     await pageDevice2.getByTestId('play-games-signin-btn').click();
     await pageDevice2.waitForTimeout(150);
+    await pageDevice2.evaluate(() => {
+      if (window.__capyReceivePlayGamesProfile) {
+        window.__capyReceivePlayGamesProfile({
+          playerId: 'pgs_gamer_777',
+          displayName: 'CapybaraLegend99',
+        });
+      }
+    });
+    await pageDevice2.waitForTimeout(150);
+    const hubProfileText = await pageDevice2.getByTestId('cloud-coop-hub').innerText();
+    assert.equal(
+      hubProfileText.includes('CapybaraLegend99'),
+      true,
+      `Expected Play Games profile display name 'CapybaraLegend99' in Cloud & Co-op hub, got: ${hubProfileText}`
+    );
     await pageDevice2.getByTestId('cloud-sync-btn').click();
     await pageDevice2.waitForTimeout(400);
 

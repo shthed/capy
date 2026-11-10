@@ -1898,7 +1898,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                         <div className="text-[10px] text-slate-400">
                           {playerIdentity.isAuthenticated
-                            ? 'Google Play Games Connected'
+                            ? `Google Play Games • ${playerIdentity.displayName}`
                             : 'Local Profile • Ready for Co-op & Cloud'}
                         </div>
                       </div>
@@ -1923,8 +1923,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         type="button"
                         data-testid="play-games-signin-btn"
                         onClick={async () => {
-                          await ProviderRegistry.auth.signInWithPlayGames();
-                          setHubNotice('Connected to Play Games profile!');
+                          const signedIn = await ProviderRegistry.auth.signInWithPlayGames();
+                          setHubNotice(
+                            `Connected to Google Play Games as ${signedIn.displayName}!`
+                          );
                         }}
                         className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-bold border border-emerald-500/40 cursor-pointer"
                       >
