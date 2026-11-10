@@ -177,8 +177,36 @@ async function run() {
       true,
       `Expected zoomScale preserved across reload (${savedZoomBeforeReload} vs ${afterReloadState.zoomScale})`
     );
+
+    // Also test that when autoReplayOnLoad === true (the default) with filled regions,
+    // overview replay runs at 1.0x and then automatically restores the saved zoom (> 1.15x)!
+    await page.evaluate(() => {
+      const rawSettings = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      rawSettings.autoReplayOnLoad = true;
+      rawSettings.replaySpeed = 4;
+      rawSettings.showResetViewButton = true;
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(rawSettings));
+
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      active.filledRegionIds = [1, 2, 3];
+      active.zoomScale = 2.25;
+      localStorage.setItem('capy_active_session_v8', JSON.stringify(active));
+    });
+    await page.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(page);
+    // Wait for fast 3-region auto-replay + 250ms auto-resume + 400ms settle
+    await page.waitForTimeout(1500);
+    const resetBtnVisibleAfterAutoReplay = await page
+      .locator('button[title*="Reset View"]')
+      .first()
+      .isVisible();
+    assert.equal(
+      resetBtnVisibleAfterAutoReplay,
+      true,
+      'Expected canvas to restore zoomed viewport (> 1.05x, showing Reset View button) after auto-replay finishes'
+    );
     console.log(
-      `   PASS: Custom photo stored in STORE_IMAGES, CompactPuzzleRecordV2 (${uploadedMetaBefore.fileSizeBytes} B), and zoom (${savedZoomBeforeReload.toFixed(2)}x) preserved across reload.`
+      `   PASS: Custom photo stored in STORE_IMAGES, CompactPuzzleRecordV2 (${uploadedMetaBefore.fileSizeBytes} B), and zoom restored both directly and after autoReplayOnLoad.`
     );
 
     console.log('3. Testing .capy v2 binary export and re-import round-trip (Phase 2 + Bug #8)...');
