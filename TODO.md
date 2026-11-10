@@ -19,12 +19,30 @@ For subsystem references, see:
 
 | Priority Tier | Focus Domain | Core Production Goal | Target Subsystems |
 | :--- | :--- | :--- | :--- |
+| **Bugfixes -- Audit Findings** | State Consistency, Viewport Resize, Cloud Concurrency & Memory Safety | Resolve edge-case bugs identified during full-repo audit across Free Colour Co-op undo, container resize clamping, Drive slot locking, B&W hybrid coloring, and Android `ACTION_SEND` streaming | `web/src/App.tsx`, `web/src/components/PuzzleCanvas.tsx`, `web/src/services/providers/CloudProviderDrivers.ts`, `web/src/engine/PuzzleGenerator.ts`, `app/src/main/java/com/capypaint/capy/MainActivity.kt` |
 | **P0 -- Critical Polish** | Sensory Audio, Tactile Juice & Precision Controls | Deliver immediate AAA game feel: procedural Web Audio ASMR feedback, zero-allocation fill animations, precision loupe magnifier, and custom zoom physics | `web/src/services/`, `web/src/components/PuzzleCanvas.tsx`, `web/src/components/SettingsModal.tsx` |
 | **P1 -- Retention & Accessibility** | Achievements, Daily Content, Accessibility & Video Export | Drive long-term player retention and inclusivity: achievements + stats, daily challenge puzzles, colorblind pattern overlays, and `.webm`/`.mp4` replay timelapse export | `web/src/services/`, `web/src/components/`, `app/src/main/` |
 | **P2 -- Engine & Infinite Zoom** | Focal-Point Infinite Zoom Pyramid & Vector Export | Allow arbitrary viewport-focused 2x sub-tile diving with parent breadcrumb navigation, seam-locked AI inpainting, and printable vector SVG/PDF sheets | `web/src/App.tsx`, `web/src/engine/`, `web/src/services/providers/` |
 | **P3 -- Real-Time Multiplayer** | Internet Co-op Relay, WebRTC P2P & Undo/Ping Sync | Connect players across networks via hibernating WebSocket + WebRTC DataChannels, synchronize collaborator undos, and add interactive canvas ping beacons | `web/src/services/providers/`, `web/src/components/PuzzleCanvas.tsx` |
 | **P4 -- Cloud, Storefront & AI** | Play Console Credentials, AdMob UMP & Live AI Catalog | Provision production Play Games / OAuth credentials, verified `assetlinks.json`, opt-in rewarded ads for AI credits, and live AI prompt-to-puzzle generation | `app/`, `web/public/.well-known/`, `web/src/services/providers/` |
 | **P5 -- Multi-Platform Expansion** | Steam Desktop (`Tauri`), iOS (`WKWebView`) & Microsoft Store | Ship native desktop and iOS wrappers wired to Steamworks (`ISteamRemoteStorage`), Apple GameKit/CloudKit, and Microsoft OneDrive/Xbox Connected Storage | `desktop/`, `ios/`, `web/src/services/providers/CloudProviderDrivers.ts` |
+
+---
+
+## Priority Bugfixes (Codebase Audit Findings)
+
+- [ ] **Free Colour Undo Co-op Desync & Chronological Order Shift ([`web/src/App.tsx`](./web/src/App.tsx))**:
+  - Repainting an already-filled region in Free Colour mode currently deletes and re-inserts the region ID at the tail of `filledRegionIds`, altering its original fill chronology, and undoing a Free Colour repaint when `previousPaintedColorId !== undefined` omits broadcasting a color-restoration `CoopPaintEvent` to connected Co-op collaborators.
+- [ ] **Canvas Container Resize & Orientation Change Stale Offset Clamping ([`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx))**:
+  - `clampCanvasOffset` executes inside an effect watching `[scale, puzzle]` rather than observing container dimension changes via `ResizeObserver`, leaving pan offsets unclamped after mobile screen rotation or browser window resizing until the next zoom gesture.
+- [ ] **Google Drive `appDataFolder` Duplicate Slot File Accumulation on Concurrent Writes ([`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts))**:
+  - `writeSlotEnvelope` and `writeBinaryBlob` query `findFileByName` before uploading without an in-memory per-slot mutex or file-ID cache (unlike `cachedManifestFileId`), allowing rapid back-to-back syncs to create duplicate slot files in Drive `appDataFolder`.
+- [ ] **B&W Coloring Book Graph-Coloring Overwrites Source Fill Hints ([`web/src/engine/PuzzleGenerator.ts`](./web/src/engine/PuzzleGenerator.ts))**:
+  - In `LineArtPuzzleGenerator`, the greedy graph-coloring pass unconditionally overwrites `reg.colorId` for all regions when `isColoringBook` is true, discarding explicit non-white source accent fills in hybrid B&W illustrations.
+- [ ] **Android `ACTION_SEND` Large Image OOM & UI Thread Blocking Risk ([`app/src/main/java/com/capypaint/capy/MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt))**:
+  - `handleIncomingIntent` reads the entire shared `InputStream` into a `ByteArray` and Base64-encodes it synchronously on the UI thread without downsampling or size-capping ultra-high-resolution camera photos, risking `OutOfMemoryError` or ANR on low-RAM devices.
+- [ ] **IndexedDB Cache Eviction Fallback Drops Custom Palette Modifications ([`web/src/App.tsx`](./web/src/App.tsx))**:
+  - When `StorageService.loadPuzzleData(snapshot.id)` returns `null` in `handleLoadSnapshot` and falls back to regenerating the puzzle via `loadArtworkFromImage`, user-edited `snapshot.customPalette` swatches are overwritten by the newly quantized palette.
 
 ---
 

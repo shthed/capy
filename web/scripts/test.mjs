@@ -363,8 +363,14 @@ async function runBrowserBasicsSuite() {
     await page.waitForTimeout(200);
 
     await page.locator('button[title="Charcoal"]').first().click();
-    const enableUndoLabel = await page.waitForSelector('text=Enable Undo Action');
-    await enableUndoLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    for (const labelText of [
+      'Show Zoom (+ / -) Buttons',
+      'Show Reset View (Extent) Button',
+      'Enable Undo Action',
+    ]) {
+      const labelEl = await page.waitForSelector(`text=${labelText}`);
+      await labelEl.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    }
 
     // Switch to Hints tab and close -> reopen to verify capy_last_settings_tab persistence
     await page.getByRole('button', { name: 'Hints', exact: true }).click();
@@ -393,12 +399,26 @@ async function runBrowserBasicsSuite() {
     await redoBtn.click();
     await page.waitForTimeout(200);
 
-    // Long-press Undo (>=450ms) -> Replay Scrubber -> Scrub to step 2 -> Resume Here
+    // Long-press Undo (>=450ms) -> Replay Scrubber (minimised by default) -> Expand -> Scrub to step 2 -> Resume Here
     await page.mouse.move(undoBox.x + undoBox.width / 2, undoBox.y + undoBox.height / 2);
     await page.mouse.down();
     await page.waitForTimeout(520);
     await page.mouse.up();
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(250);
+
+    const replayWin = await page.waitForSelector('[data-testid="replay-controls-window"]');
+    assert.equal(
+      await replayWin.getAttribute('data-minimized'),
+      'true',
+      'ReplayControls window must be minimised by default'
+    );
+    await page.locator('[data-testid="replay-toggle-minimize-btn"]').click();
+    await page.waitForTimeout(150);
+    assert.equal(
+      await page.locator('[data-testid="replay-controls-window"]').getAttribute('data-minimized'),
+      'false',
+      'ReplayControls window must expand when toggle button is clicked'
+    );
 
     const scrubber = await page.waitForSelector('[data-testid="replay-scrubber"]');
     await scrubber.fill('2');
@@ -420,7 +440,83 @@ async function runBrowserBasicsSuite() {
       return list[0]?.filledCount || 0;
     });
     assert.equal(progressAfterCtrlY, 3, 'Expected Ctrl+Y to redo step 3');
-    console.log('   PASS: Undo/Redo, keyboard shortcuts, long-press Replay scrubber, and Resume Here verified.');
+
+    // Verify save-load zoom restoration before replay, offscreen step fast-forward, and pan/zoom during playback
+    const zoomInBtn = await page.waitForSelector('[data-testid="zoom-in-btn"]');
+    await zoomInBtn.click();
+    await zoomInBtn.click();
+    await zoomInBtn.click();
+    await zoomInBtn.click();
+    await page.waitForTimeout(450);
+
+    const savedZoomBeforeLoad = await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      s.autoReplayOnLoad = true;
+      s.replaySpeed = 0.5;
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      // Pan to far top-left corner so painted center regions are offscreen when save loads
+      active.panOffsetX = 420;
+      active.panOffsetY = 320;
+      localStorage.setItem('capy_active_session_v8', JSON.stringify(active));
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      if (snaps[0]) {
+        snaps[0].zoomScale = active.zoomScale;
+        snaps[0].panOffsetX = 420;
+        snaps[0].panOffsetY = 320;
+        localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
+      }
+      return active.zoomScale || 1;
+    });
+    assert.equal(savedZoomBeforeLoad > 1.8, true, `Expected zoomed-in viewport > 1.8, got ${savedZoomBeforeLoad}`);
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForSelector('canvas', { timeout: 25000 });
+    // Immediately check that Fit-to-Screen button is visible (meaning previous zoom extent was restored BEFORE replay)
+    await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
+    // Because the painted center regions are offscreen at the restored top-left zoom extent, offscreen steps fast-forward automatically
+    await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 4000 });
+
+    // Trigger replay via long-press Undo, start playback from 0, and verify live zoom/pan during playback
+    const undoBtnAfterLoad = await page.waitForSelector('[data-testid="undo-btn"]');
+    const uBox2 = await undoBtnAfterLoad.boundingBox();
+    await page.mouse.move(uBox2.x + uBox2.width / 2, uBox2.y + uBox2.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(520);
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+
+    // Minimised by default: click play/replay button to restart playback, then zoom in and pan during playback
+    await page.locator('[data-testid="replay-play-pause-btn"]').click();
+    await page.waitForSelector('[data-testid="zoom-in-btn"]');
+    await page.locator('[data-testid="zoom-in-btn"]').click();
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX - 60, startY - 40, { steps: 4 });
+    await page.mouse.up();
+    if (await page.$('[data-testid="replay-exit-btn"]')) {
+      await page.locator('[data-testid="replay-exit-btn"]').click();
+      await page.waitForTimeout(150);
+    }
+
+    const zoomAfterPlaybackPan = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      s.autoReplayOnLoad = false;
+      s.replaySpeed = 1;
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
+      return active.zoomScale || 1;
+    });
+    assert.equal(
+      zoomAfterPlaybackPan > savedZoomBeforeLoad,
+      true,
+      `Expected live zoom during playback (${zoomAfterPlaybackPan}) > initial saved zoom (${savedZoomBeforeLoad})`
+    );
+    if (await page.$('[data-testid="reset-view-btn"]')) {
+      await page.locator('[data-testid="reset-view-btn"]').click();
+      await page.waitForTimeout(350);
+    }
+    console.log('   PASS: Undo/Redo, default-minimised ReplayControls, zoom restoration before replay, offscreen fast-forward, and live pan/zoom during playback verified.');
 
     // -------------------------------------------------------------------------
     // 4. Gallery Filters, Community Ideas & Infinite Zoom 2x Detail Sub-Tile

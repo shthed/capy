@@ -6,6 +6,7 @@ import {
   PaletteColor,
   PalettePreset,
   PuzzleData,
+  Region,
   SAMPLE_GALLERY,
   SampleArtwork,
   SavedSnapshot,
@@ -96,11 +97,11 @@ export const App: React.FC = () => {
     panOffsetX: 0,
     panOffsetY: 0,
   });
-  const preReplayViewportRef = useRef<{
-    zoomScale: number;
-    panOffsetX: number;
-    panOffsetY: number;
-  } | null>(null);
+  const canvasContainerSizeRef = useRef<{ width: number; height: number }>({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1024,
+    height: typeof window !== 'undefined' ? window.innerHeight : 768,
+  });
+  const regionByIdRef = useRef<Map<number, Region>>(new Map());
   const viewportSaveTimerRef = useRef<number | null>(null);
   const activeBlobUrlRef = useRef<string | null>(null);
 
@@ -129,6 +130,18 @@ export const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<number | undefined>(undefined);
   const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
+
+  // Maintain O(1) region lookup map for offscreen replay frustum checks
+  useEffect(() => {
+    const map = new Map<number, Region>();
+    if (puzzle) {
+      for (let i = 0; i < puzzle.regions.length; i++) {
+        const r = puzzle.regions[i];
+        map.set(r.id, r);
+      }
+    }
+    regionByIdRef.current = map;
+  }, [puzzle]);
 
   // Fullscreen State
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => {
@@ -195,11 +208,24 @@ export const App: React.FC = () => {
   // Hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync modal state with native LIFO hardware back button stack
+  // Sync modal & overlay states with native LIFO hardware back button stack
   useEffect(() => {
     if (!showSettings) return;
     return NativeBridge.pushBackHandler(() => setShowSettings(false));
   }, [showSettings]);
+
+  useEffect(() => {
+    if (!showPaletteOptions) return;
+    return NativeBridge.pushBackHandler(() => setShowPaletteOptions(false));
+  }, [showPaletteOptions]);
+
+  useEffect(() => {
+    if (!isReplaying) return;
+    return NativeBridge.pushBackHandler(() => {
+      setIsReplaying(false);
+      setIsReplayPlaying(false);
+    });
+  }, [isReplaying]);
 
   // Sync settings updates to storage without stale closure overwrites
   const handleUpdateSettings = useCallback(
@@ -307,41 +333,71 @@ export const App: React.FC = () => {
 
   const autoResumeReplayRef = useRef<boolean>(false);
 
-  // Start animated region-by-region replay
-  const startReplay = useCallback((sequence: number[], autoResumeOnFinish: boolean = false) => {
-    if (!sequence || sequence.length === 0) return;
-    autoResumeReplayRef.current = autoResumeOnFinish;
-    if (autoResumeOnFinish) {
-      preReplayViewportRef.current = { ...viewportRef.current };
-    } else {
-      preReplayViewportRef.current = null;
-    }
-    setResetViewTrigger((prev) => prev + 1);
-    setHintRegionId(null);
-    setReplaySequence(sequence);
-    setReplayStep(0);
-    setIsReplaying(true);
-    setIsReplayPlaying(true);
-  }, []);
+  // Zero-allocation bounding-box frustum check against the current canvas viewport
+  const isRegionVisibleInViewport = useCallback(
+    (regionId: number): boolean => {
+      if (!puzzle) return true;
+      const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+      if (zoomScale <= 1.02 && Math.abs(panOffsetX) <= 4 && Math.abs(panOffsetY) <= 4) {
+        return true;
+      }
+      const reg = regionByIdRef.current.get(regionId);
+      if (!reg) return true;
+      const w = canvasContainerSizeRef.current.width || window.innerWidth || 1024;
+      const h = canvasContainerSizeRef.current.height || window.innerHeight || 768;
+      const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
+      const baseOffsetX = (w - puzzle.width * baseScale) / 2;
+      const baseOffsetY = (h - puzzle.height * baseScale) / 2;
+      const effScale = zoomScale * baseScale;
+      if (effScale <= 0) return true;
 
-  // Animated Replay Loop (60 FPS smooth accumulator scaled by replaySpeed)
+      const visLeft = (-panOffsetX - baseOffsetX) / effScale;
+      const visTop = (-panOffsetY - baseOffsetY) / effScale;
+      const visRight = visLeft + w / effScale;
+      const visBottom = visTop + h / effScale;
+
+      return (
+        reg.maxX >= visLeft &&
+        reg.minX <= visRight &&
+        reg.maxY >= visTop &&
+        reg.minY <= visBottom
+      );
+    },
+    [puzzle]
+  );
+
+  // Start animated region-by-region replay (preserving restored zoom extent unless resetView is requested)
+  const startReplay = useCallback(
+    (
+      sequence: number[],
+      autoResumeOnFinish: boolean = false,
+      options?: { resetView?: boolean }
+    ) => {
+      if (!sequence || sequence.length === 0) return;
+      autoResumeReplayRef.current = autoResumeOnFinish;
+      if (options?.resetView) {
+        setResetViewTrigger((prev) => prev + 1);
+      }
+      setHintRegionId(null);
+      setReplaySequence(sequence);
+      setReplayStep(0);
+      setIsReplaying(true);
+      setIsReplayPlaying(true);
+    },
+    []
+  );
+
+  // Animated Replay Loop (60 FPS smooth accumulator scaled by replaySpeed with automatic offscreen fast-forward)
   useEffect(() => {
     const finishAutoResume = () => {
       autoResumeReplayRef.current = false;
       setTimeout(() => {
         setIsReplaying(false);
-        if (preReplayViewportRef.current) {
-          const savedView = preReplayViewportRef.current;
-          preReplayViewportRef.current = null;
-          viewportRef.current = savedView;
-          setInitialViewport({ ...savedView });
-          setRestoreViewTrigger((prev) => prev + 1);
-        }
       }, 250);
     };
 
     if (!isReplaying || !isReplayPlaying) return;
-    if (replayStep >= replaySequence.length) {
+    if (replaySequence.length === 0) {
       setIsReplayPlaying(false);
       if (autoResumeReplayRef.current) {
         finishAutoResume();
@@ -363,27 +419,65 @@ export const App: React.FC = () => {
       lastTime = now;
       accRegions += dt * regionsPerMs;
 
-      if (accRegions >= 1) {
-        const stepDelta = Math.floor(accRegions);
+      const stepDelta = accRegions >= 1 ? Math.floor(accRegions) : 0;
+      if (stepDelta > 0) {
         accRegions -= stepDelta;
-        setReplayStep((prev) => {
-          const next = Math.min(replaySequence.length, prev + stepDelta);
-          if (next >= replaySequence.length) {
-            setIsReplayPlaying(false);
-            if (autoResumeReplayRef.current) {
-              finishAutoResume();
-            }
-          }
-          return next;
-        });
       }
+
+      setReplayStep((prev) => {
+        if (prev >= replaySequence.length) {
+          setIsReplayPlaying(false);
+          if (autoResumeReplayRef.current) {
+            finishAutoResume();
+          }
+          return prev;
+        }
+
+        let cursor = prev;
+        // Immediately fast-forward past consecutive offscreen regions
+        while (
+          cursor < replaySequence.length &&
+          !isRegionVisibleInViewport(replaySequence[cursor])
+        ) {
+          cursor++;
+        }
+
+        // Advance stepDelta on-screen steps and fast-forward any consecutive offscreen steps following each
+        for (let s = 0; s < stepDelta && cursor < replaySequence.length; s++) {
+          cursor++;
+          while (
+            cursor < replaySequence.length &&
+            !isRegionVisibleInViewport(replaySequence[cursor])
+          ) {
+            cursor++;
+          }
+        }
+
+        const next = Math.min(replaySequence.length, cursor);
+        if (next === prev) {
+          return prev;
+        }
+        if (next >= replaySequence.length) {
+          setIsReplayPlaying(false);
+          if (autoResumeReplayRef.current) {
+            finishAutoResume();
+          }
+        }
+        return next;
+      });
 
       animId = requestAnimationFrame(tick);
     };
 
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
-  }, [isReplaying, isReplayPlaying, replayStep, replaySequence.length, settings.replaySpeed]);
+  }, [
+    isReplaying,
+    isReplayPlaying,
+    replaySequence,
+    settings.replaySpeed,
+    isRegionVisibleInViewport,
+  ]);
 
   // Generation sequence tracking to ignore cancelled/superseded requests
   const generationSeqRef = useRef<number>(0);
@@ -400,7 +494,8 @@ export const App: React.FC = () => {
       sampleAssetPath?: string | null,
       shouldAutoReplay: boolean = false,
       sourceBlob?: Blob | null,
-      initialPaintedColors?: Record<number, number>
+      initialPaintedColors?: Record<number, number>,
+      initialViewportOverride?: { zoomScale: number; panOffsetX: number; panOffsetY: number }
     ) => {
       const currentSeq = ++generationSeqRef.current;
       setIsReplaying(false);
@@ -416,8 +511,14 @@ export const App: React.FC = () => {
       setPuzzle(null);
       setHintRegionId(null);
       setRedoStack([]);
-      viewportRef.current = { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 };
-      setInitialViewport({ zoomScale: 1, panOffsetX: 0, panOffsetY: 0 });
+      const targetView = initialViewportOverride || {
+        zoomScale: 1.0,
+        panOffsetX: 0,
+        panOffsetY: 0,
+      };
+      viewportRef.current = targetView;
+      setInitialViewport(targetView);
+      setRestoreViewTrigger((prev) => prev + 1);
 
       // Prepare canvas from image
       const canvas = document.createElement('canvas');
@@ -441,9 +542,9 @@ export const App: React.FC = () => {
         totalCount: 100,
         filledRegionIds: Array.from(initialFilledRegionIds),
         ...(initialPaintedColors ? { paintedRegionColors: initialPaintedColors } : {}),
-        zoomScale: 1.0,
-        panOffsetX: 0,
-        panOffsetY: 0,
+        zoomScale: targetView.zoomScale,
+        panOffsetX: targetView.panOffsetX,
+        panOffsetY: targetView.panOffsetY,
         sampleAssetPath,
         sourceRef,
       };
@@ -537,9 +638,9 @@ export const App: React.FC = () => {
             initialFilledRegionIds.size,
             puzzleData.regions.length,
             initialOrder,
-            1.0,
-            0,
-            0,
+            targetView.zoomScale,
+            targetView.panOffsetX,
+            targetView.panOffsetY,
             previewUrl,
             initialPaintedColors,
             puzzleData.palette,
@@ -558,9 +659,9 @@ export const App: React.FC = () => {
             filledRegionIds: initialOrder,
             paintedRegionColors: initialPaintedColors || {},
             isFreeColorMode: isFree,
-            zoomScale: 1.0,
-            panOffsetX: 0,
-            panOffsetY: 0,
+            zoomScale: targetView.zoomScale,
+            panOffsetX: targetView.panOffsetX,
+            panOffsetY: targetView.panOffsetY,
           });
 
           setIsLoading(false);
@@ -829,6 +930,7 @@ export const App: React.FC = () => {
           };
           viewportRef.current = restoredView;
           setInitialViewport(restoredView);
+          setRestoreViewTrigger((prev) => prev + 1);
 
           setPaintedRegionColors(restoredPaintedMap);
           setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
@@ -1202,7 +1304,6 @@ export const App: React.FC = () => {
     if (orderedList.length === 0) return;
 
     NativeBridge.haptic('tick', settings.hapticsEnabled);
-    setResetViewTrigger((prev) => prev + 1);
     setHintRegionId(null);
     setReplaySequence(orderedList);
     setReplayStep(orderedList.length);
@@ -1443,7 +1544,7 @@ export const App: React.FC = () => {
           spread: 80,
           origin: { y: 0.6 },
         });
-        startReplay(orderedList);
+        startReplay(orderedList, false, { resetView: true });
       }
 
       // Auto-advance check
@@ -1475,6 +1576,8 @@ export const App: React.FC = () => {
       // Persistence
       if (activeSnapshotId) {
         const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+        const paintedObj =
+          paintedRegionColors.size > 0 ? Object.fromEntries(paintedRegionColors) : undefined;
         const updated = StorageService.updateSnapshotProgress(
           activeSnapshotId,
           nextFilled.size,
@@ -1482,13 +1585,17 @@ export const App: React.FC = () => {
           orderedList,
           zoomScale,
           panOffsetX,
-          panOffsetY
+          panOffsetY,
+          undefined,
+          paintedObj
         );
         setSnapshots(updated);
         StorageService.saveActiveState({
           activeSnapshotId,
           activeColorId: nextActiveColId,
           filledRegionIds: orderedList,
+          paintedRegionColors: paintedObj,
+          isFreeColorMode,
           zoomScale,
           panOffsetX,
           panOffsetY,
@@ -1565,7 +1672,7 @@ export const App: React.FC = () => {
               spread: 80,
               origin: { y: 0.6 },
             });
-            startReplay(orderedList);
+            startReplay(orderedList, false, { resetView: true });
           } else {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
           }
@@ -1647,7 +1754,7 @@ export const App: React.FC = () => {
             spread: 80,
             origin: { y: 0.6 },
           });
-          startReplay(orderedList);
+          startReplay(orderedList, false, { resetView: true });
         } else {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
         }
@@ -1679,6 +1786,8 @@ export const App: React.FC = () => {
 
         if (activeSnapshotId) {
           const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+          const paintedObj =
+            paintedRegionColors.size > 0 ? Object.fromEntries(paintedRegionColors) : undefined;
           const updated = StorageService.updateSnapshotProgress(
             activeSnapshotId,
             nextFilled.size,
@@ -1686,13 +1795,17 @@ export const App: React.FC = () => {
             orderedList,
             zoomScale,
             panOffsetX,
-            panOffsetY
+            panOffsetY,
+            undefined,
+            paintedObj
           );
           setSnapshots(updated);
           StorageService.saveActiveState({
             activeSnapshotId,
             activeColorId: nextActiveColId,
             filledRegionIds: orderedList,
+            paintedRegionColors: paintedObj,
+            isFreeColorMode,
             zoomScale,
             panOffsetX,
             panOffsetY,
@@ -1939,11 +2052,36 @@ export const App: React.FC = () => {
   // Load a saved snapshot (and optionally auto-replay its region completion sequence)
   const handleLoadSnapshot = async (snapshot: SavedSnapshot, forceReplay: boolean = false) => {
     if (snapshot.id === activeSnapshotId && puzzle) {
-      const currentOrdered = Array.from(filledRegionIds);
+      const restoredView = {
+        zoomScale: snapshot.zoomScale ?? viewportRef.current.zoomScale ?? 1.0,
+        panOffsetX: snapshot.panOffsetX ?? viewportRef.current.panOffsetX ?? 0,
+        panOffsetY: snapshot.panOffsetY ?? viewportRef.current.panOffsetY ?? 0,
+      };
+      viewportRef.current = restoredView;
+      setInitialViewport(restoredView);
+      setRestoreViewTrigger((prev) => prev + 1);
+      const currentOrdered =
+        filledRegionIds.size > 0
+          ? Array.from(filledRegionIds)
+          : snapshot.filledRegionIds || [];
       if ((forceReplay || settings.autoReplayOnLoad !== false) && currentOrdered.length > 0) {
         startReplay(currentOrdered, !forceReplay);
       }
       return;
+    }
+
+    if (viewportSaveTimerRef.current !== null) {
+      window.clearTimeout(viewportSaveTimerRef.current);
+      viewportSaveTimerRef.current = null;
+    }
+    if (activeSnapshotId && puzzle) {
+      const updated = StorageService.updateSnapshotViewport(
+        activeSnapshotId,
+        viewportRef.current.zoomScale,
+        viewportRef.current.panOffsetX,
+        viewportRef.current.panOffsetY
+      );
+      setSnapshots(updated);
     }
 
     setIsReplaying(false);
@@ -1993,6 +2131,7 @@ export const App: React.FC = () => {
         };
         viewportRef.current = restoredView;
         setInitialViewport(restoredView);
+        setRestoreViewTrigger((prev) => prev + 1);
         setSourceImage(img);
         setPuzzle(cachedPuzzle);
         setActiveColorId(restoredColor);
@@ -2049,7 +2188,13 @@ export const App: React.FC = () => {
         snapshot.id,
         snapshot.sampleAssetPath,
         forceReplay || settings.autoReplayOnLoad !== false,
-        storedBlob
+        storedBlob,
+        snapshot.paintedRegionColors,
+        {
+          zoomScale: snapshot.zoomScale ?? 1.0,
+          panOffsetX: snapshot.panOffsetX ?? 0,
+          panOffsetY: snapshot.panOffsetY ?? 0,
+        }
       );
     };
     img.onerror = () => {
@@ -2230,6 +2375,47 @@ export const App: React.FC = () => {
     activeColorId,
     settings,
   };
+
+  const flushPendingViewportSave = useCallback(() => {
+    if (viewportSaveTimerRef.current !== null) {
+      window.clearTimeout(viewportSaveTimerRef.current);
+      viewportSaveTimerRef.current = null;
+    }
+    const cur = liveCoopRef.current;
+    if (!cur.activeSnapshotId || !cur.puzzle) return;
+    const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+    const updated = StorageService.updateSnapshotViewport(
+      cur.activeSnapshotId,
+      zoomScale,
+      panOffsetX,
+      panOffsetY
+    );
+    setSnapshots(updated);
+    StorageService.saveActiveState({
+      activeSnapshotId: cur.activeSnapshotId,
+      activeColorId: cur.activeColorId,
+      filledRegionIds: Array.from(cur.filledRegionIds),
+      paintedRegionColors: Object.fromEntries(cur.paintedRegionColors),
+      isFreeColorMode: cur.isFreeColorMode,
+      zoomScale,
+      panOffsetX,
+      panOffsetY,
+    });
+  }, []);
+
+  useEffect(() => {
+    const handlePageFlush = () => {
+      if (viewportSaveTimerRef.current !== null) {
+        flushPendingViewportSave();
+      }
+    };
+    window.addEventListener('beforeunload', handlePageFlush);
+    window.addEventListener('pagehide', handlePageFlush);
+    return () => {
+      window.removeEventListener('beforeunload', handlePageFlush);
+      window.removeEventListener('pagehide', handlePageFlush);
+    };
+  }, [flushPendingViewportSave]);
 
   const loadSampleFromPrebakedOrGenerate = useCallback(
     async (
@@ -3068,9 +3254,12 @@ export const App: React.FC = () => {
         generationProgress={loadingProgress}
         generationStepIndex={loadingPayload?.stepIndex || 1}
         coopRippleBuffer={coopRippleBufferRef.current}
-        onViewExtentChanged={(zoom, panX, panY) => {
+        onViewExtentChanged={(zoom, panX, panY, containerW, containerH) => {
+          if (containerW && containerH && containerW > 0 && containerH > 0) {
+            canvasContainerSizeRef.current = { width: containerW, height: containerH };
+          }
           setIsCanvasTransformed(zoom > 1.05 || Math.abs(panX) > 6 || Math.abs(panY) > 6);
-          if (!isReplaying && !isLoading && puzzle && activeSnapshotId) {
+          if (!isLoading && puzzle && activeSnapshotId) {
             viewportRef.current = { zoomScale: zoom, panOffsetX: panX, panOffsetY: panY };
             if (viewportSaveTimerRef.current !== null) {
               window.clearTimeout(viewportSaveTimerRef.current);
@@ -3148,7 +3337,6 @@ export const App: React.FC = () => {
           }}
           onRestart={() => {
             autoResumeReplayRef.current = false;
-            setResetViewTrigger((prev) => prev + 1);
             setReplayStep(0);
             setIsReplayPlaying(true);
           }}
@@ -3166,12 +3354,14 @@ export const App: React.FC = () => {
             handleUpdateSettings((prev) => ({ ...prev, replaySpeed: spd }));
           }}
           onExitReplay={() => {
+            flushPendingViewportSave();
             autoResumeReplayRef.current = false;
             setIsReplaying(false);
             setIsReplayPlaying(false);
           }}
           onExportImage={handleExportArtwork}
           onOpenCreate={() => {
+            flushPendingViewportSave();
             setIsReplaying(false);
             setIsReplayPlaying(false);
             setSettingsInitialTab(2);

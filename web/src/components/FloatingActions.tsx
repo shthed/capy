@@ -93,6 +93,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
           type="button"
           onClick={onResetView}
           title="Fit to Screen (Reset View)"
+          data-testid="reset-view-btn"
           className="p-2.5 rounded-full bg-slate-900/90 text-amber-400 border border-amber-400/50 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 animate-in fade-in zoom-in-90 duration-200 cursor-pointer"
         >
           <Maximize2 size={18} />
@@ -106,6 +107,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
             type="button"
             onClick={onZoomIn}
             title="Zoom In"
+            data-testid="zoom-in-btn"
             className="p-2.5 rounded-full bg-slate-900/85 text-slate-200 border border-slate-700/60 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
           >
             <Plus size={18} />
@@ -114,6 +116,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
             type="button"
             onClick={onZoomOut}
             title="Zoom Out"
+            data-testid="zoom-out-btn"
             className="p-2.5 rounded-full bg-slate-900/85 text-slate-200 border border-slate-700/60 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
           >
             <Minus size={18} />

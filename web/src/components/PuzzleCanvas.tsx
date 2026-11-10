@@ -58,7 +58,13 @@ interface PuzzleCanvasProps {
   generationProgress?: number;
   generationStepIndex?: number;
   coopRippleBuffer?: CoopRippleBuffer;
-  onViewExtentChanged?: (zoom: number, panX: number, panY: number) => void;
+  onViewExtentChanged?: (
+    zoom: number,
+    panX: number,
+    panY: number,
+    containerWidth?: number,
+    containerHeight?: number
+  ) => void;
   onRegionClicked: (regionId: number) => void;
   onBatchRegionsClicked: (regionIds: Set<number>) => void;
   onVisibleColorsChanged: (colorIds: Set<number>) => void;
@@ -252,13 +258,29 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     };
   }, [stopMomentum]);
 
-  // Reset or restore zoom/offset when a brand-new puzzle geometry is loaded or post-replay restoration triggers
+  // Reset or restore zoom/offset when a brand-new puzzle geometry is loaded or viewport restoration triggers
   useEffect(() => {
     stopMomentum();
+    let targetOffset = { x: initialPanOffsetX, y: initialPanOffsetY };
+    if (
+      containerRef.current &&
+      puzzle &&
+      containerRef.current.clientWidth > 0 &&
+      containerRef.current.clientHeight > 0
+    ) {
+      targetOffset = clampCanvasOffset(
+        targetOffset,
+        initialZoomScale,
+        puzzle.width,
+        puzzle.height,
+        containerRef.current.clientWidth,
+        containerRef.current.clientHeight
+      );
+    }
     scaleRef.current = initialZoomScale;
-    offsetRef.current = { x: initialPanOffsetX, y: initialPanOffsetY };
+    offsetRef.current = targetOffset;
     setScale(initialZoomScale);
-    setOffset({ x: initialPanOffsetX, y: initialPanOffsetY });
+    setOffset(targetOffset);
   }, [puzzle?.regionMap, initialZoomScale, initialPanOffsetX, initialPanOffsetY, restoreViewTrigger, stopMomentum]);
 
   // Handle FloatingActions zoom in/out button triggers
@@ -814,7 +836,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const onViewExtentChangedRef = useRef(onViewExtentChanged);
   onViewExtentChangedRef.current = onViewExtentChanged;
   useEffect(() => {
-    onViewExtentChangedRef.current?.(scale, offset.x, offset.y);
+    const w = containerRef.current?.clientWidth || window.innerWidth;
+    const h = containerRef.current?.clientHeight || window.innerHeight;
+    onViewExtentChangedRef.current?.(scale, offset.x, offset.y, w, h);
   }, [scale, offset]);
 
   // Coordinate conversion helper

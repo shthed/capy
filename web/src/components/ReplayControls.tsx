@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
+  ChevronDown,
+  ChevronUp,
   Download,
   FastForward,
   ImagePlus,
@@ -48,6 +50,14 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
   onOpenCreate,
   onResumeFromStep,
 }) => {
+  const [isMinimized, setIsMinimized] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsMinimized(true);
+    }
+  }, [isOpen]);
+
   if (!isOpen || totalSteps <= 0) return null;
 
   const isFinished = currentStep >= totalSteps;
@@ -59,6 +69,105 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
     onChangeSpeed(REPLAY_SPEED_OPTIONS[nextIdx]);
   };
 
+  if (isMinimized) {
+    return (
+      <div
+        className="fixed inset-x-0 z-30 pointer-events-none flex justify-center px-3 transition-all"
+        style={{
+          bottom: `calc(${raiseDock ? '1.5rem' : '1rem'} + var(--sab, 0px))`,
+        }}
+      >
+        <div
+          data-testid="replay-controls-window"
+          data-minimized="true"
+          className="pointer-events-auto inline-flex items-center gap-2 bg-slate-900/92 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-xl px-2.5 py-1.5 text-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-200"
+        >
+          {/* Play / Pause / Replay */}
+          <button
+            type="button"
+            onClick={isFinished ? onRestart : onTogglePlay}
+            aria-label={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
+            title={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
+            data-testid="replay-play-pause-btn"
+            className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 shadow transition-all active:scale-95 cursor-pointer flex-shrink-0"
+          >
+            {isFinished ? (
+              <RotateCcw size={13} />
+            ) : isPlaying ? (
+              <Pause size={13} />
+            ) : (
+              <Play size={13} className="ml-0.5" />
+            )}
+          </button>
+
+          {/* Compact Progress Bar & Step Counter */}
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-16 sm:w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden flex-shrink-0">
+              <div
+                className="h-full bg-amber-400 transition-all duration-75"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <span className="text-[11px] font-bold text-slate-200 tabular-nums whitespace-nowrap">
+              {currentStep}/{totalSteps} ({pct}%)
+            </span>
+          </div>
+
+          {/* Speed Selector */}
+          <button
+            type="button"
+            onClick={handleCycleSpeed}
+            aria-label="Change Replay Speed"
+            title="Change Replay Speed"
+            data-testid="replay-speed-btn"
+            className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full text-[11px] font-extrabold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors tabular-nums cursor-pointer flex-shrink-0"
+          >
+            <FastForward size={11} />
+            <span>{replaySpeed}x</span>
+          </button>
+
+          {/* Skip to End */}
+          {!isFinished && (
+            <button
+              type="button"
+              onClick={onSkipToEnd}
+              aria-label="Skip to Completed Artwork"
+              title="Skip to Completed Artwork"
+              data-testid="replay-skip-btn"
+              className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer flex-shrink-0"
+            >
+              <SkipForward size={12} />
+            </button>
+          )}
+
+          {/* Expand Controls Button */}
+          <button
+            type="button"
+            onClick={() => setIsMinimized(false)}
+            aria-label="Expand Replay Controls"
+            title="Expand Replay Controls"
+            data-testid="replay-toggle-minimize-btn"
+            className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer flex-shrink-0"
+          >
+            <ChevronUp size={13} />
+          </button>
+
+          {/* Exit Replay */}
+          <button
+            type="button"
+            onClick={onExitReplay}
+            aria-label="Exit Replay"
+            title="Exit Replay"
+            data-testid="replay-exit-btn"
+            className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex-shrink-0"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="fixed inset-x-0 z-30 pointer-events-none flex justify-center px-3 transition-all"
@@ -66,8 +175,12 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
         bottom: `calc(${raiseDock ? '1.5rem' : '1rem'} + var(--sab, 0px))`,
       }}
     >
-      <div className="pointer-events-auto w-full max-w-md bg-slate-900/92 border border-amber-400/40 rounded-2xl shadow-2xl backdrop-blur-xl p-3 text-slate-100 space-y-2.5 animate-in fade-in slide-in-from-bottom-3 duration-200">
-        {/* Top Row: Replay Badge, Region Counter, Resume Play Action & Close */}
+      <div
+        data-testid="replay-controls-window"
+        data-minimized="false"
+        className="pointer-events-auto w-full max-w-md bg-slate-900/92 border border-amber-400/40 rounded-2xl shadow-2xl backdrop-blur-xl p-3 text-slate-100 space-y-2.5 animate-in fade-in slide-in-from-bottom-3 duration-200"
+      >
+        {/* Top Row: Replay Badge, Region Counter, Resume Play Action, Minimise & Close */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950 flex-shrink-0">
@@ -93,6 +206,17 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
                 <span>Resume Here</span>
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => setIsMinimized(true)}
+              aria-label="Minimise Replay Controls"
+              title="Minimise Replay Controls"
+              data-testid="replay-toggle-minimize-btn"
+              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <ChevronDown size={16} />
+            </button>
 
             <button
               type="button"
