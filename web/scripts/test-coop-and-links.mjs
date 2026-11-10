@@ -252,54 +252,254 @@ async function run() {
     console.log(`   PASS: Live Co-op Room ${roomCode} synchronized real-time strokes across 2 online peers (${extractPct(headerPctB)}%).`);
 
     // =========================================================================
-    // 4. Conflict-Free CRDT Cloud Sync (Set-Union Merge Across Devices)
+    // 4. Modular Cloud Providers + Google OAuth 2.0 & Google Drive appDataFolder Cross-Device Sync
     // =========================================================================
-    console.log('4. Testing Conflict-Free CRDT Cloud Sync Set-Union merge...');
+    console.log('4. Testing Modular Cloud Providers, Google OAuth 2.0 Login & Google Drive appDataFolder Cross-Device Sync...');
+
+    // Shared in-memory Google Drive appDataFolder store across isolated browser contexts (simulating Google's cloud servers)
+    const googleDriveAppDataFiles = new Map(); // fileId -> { id, name, contentBuffer, mimeType, modifiedTime }
+    let nextDriveId = 1;
+
+    const attachGoogleCloudRoutes = async (context) => {
+      await context.route('https://www.googleapis.com/oauth2/v3/userinfo', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            sub: 'google_user_998877',
+            name: 'CapybaraLegend99',
+            email: 'capy@example.com',
+            picture: 'https://lh3.googleusercontent.com/a/default-user=s96-c',
+          }),
+        });
+      });
+
+      await context.route('https://www.googleapis.com/drive/v3/files**', async (route) => {
+        const reqUrl = new URL(route.request().url());
+        const alt = reqUrl.searchParams.get('alt');
+        const pathParts = reqUrl.pathname.split('/');
+        const lastSegment = pathParts[pathParts.length - 1];
+
+        if (alt === 'media' && lastSegment && lastSegment !== 'files') {
+          const entry = googleDriveAppDataFiles.get(lastSegment);
+          if (!entry) {
+            await route.fulfill({ status: 404, body: 'Not Found' });
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: entry.mimeType || 'application/octet-stream',
+            body: entry.contentBuffer,
+          });
+          return;
+        }
+
+        // List files query: q=name = '...' and trashed = false
+        const q = reqUrl.searchParams.get('q') || '';
+        const nameMatch = q.match(/name\s*=\s*'([^']+)'/);
+        const targetName = nameMatch ? nameMatch[1] : null;
+        const files = [];
+        for (const entry of googleDriveAppDataFiles.values()) {
+          if (!targetName || entry.name === targetName) {
+            files.push({
+              id: entry.id,
+              name: entry.name,
+              modifiedTime: entry.modifiedTime,
+              size: String(entry.contentBuffer.length),
+            });
+          }
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ files }),
+        });
+      });
+
+      await context.route('https://www.googleapis.com/upload/drive/v3/files**', async (route) => {
+        const reqUrl = new URL(route.request().url());
+        const method = route.request().method();
+        const postBuffer = route.request().postDataBuffer() || Buffer.alloc(0);
+
+        if (method === 'PATCH') {
+          const pathParts = reqUrl.pathname.split('/');
+          const fileId = pathParts[pathParts.length - 1];
+          const existing = googleDriveAppDataFiles.get(fileId);
+          if (!existing) {
+            await route.fulfill({ status: 404, body: 'Not Found' });
+            return;
+          }
+          existing.contentBuffer = postBuffer;
+          existing.modifiedTime = new Date().toISOString();
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ id: existing.id, name: existing.name }),
+          });
+          return;
+        }
+
+        // Multipart POST upload: extract metadata JSON part and media payload part
+        const contentType = route.request().headers()['content-type'] || '';
+        const boundaryMatch = contentType.match(/boundary=([^\s;]+)/);
+        const boundary = boundaryMatch ? boundaryMatch[1] : '';
+        const rawStr = postBuffer.toString('latin1');
+        let fileName = `cloud_file_${nextDriveId}`;
+        let mimeType = 'application/json';
+        let mediaBuffer = postBuffer;
+
+        if (boundary) {
+          const parts = rawStr.split(`--${boundary}`);
+          // Part 1 is metadata JSON, Part 2 is media content
+          if (parts.length >= 3) {
+            const metaPart = parts[1];
+            const metaBodyIdx = metaPart.indexOf('\r\n\r\n');
+            if (metaBodyIdx >= 0) {
+              try {
+                const metaJson = JSON.parse(metaPart.slice(metaBodyIdx + 4).trim());
+                if (metaJson.name) fileName = metaJson.name;
+                if (metaJson.mimeType) mimeType = metaJson.mimeType;
+              } catch {
+                // Ignore
+              }
+            }
+            const mediaPart = parts[2];
+            const mediaBodyIdx = mediaPart.indexOf('\r\n\r\n');
+            if (mediaBodyIdx >= 0) {
+              const bodyLatin1 = mediaPart.slice(mediaBodyIdx + 4).replace(/\r\n$/, '');
+              mediaBuffer = Buffer.from(bodyLatin1, 'latin1');
+            }
+          }
+        }
+
+        const id = `gdrive_file_${nextDriveId++}`;
+        googleDriveAppDataFiles.set(id, {
+          id,
+          name: fileName,
+          mimeType,
+          contentBuffer: mediaBuffer,
+          modifiedTime: new Date().toISOString(),
+        });
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ id, name: fileName }),
+        });
+      });
+    };
+
+    await attachGoogleCloudRoutes(ctx1);
+
+    // Leave Co-op room on Page A before testing cross-device Cloud Sync
+    await pageA.getByTestId('topbar-coop-btn').click();
+    await pageA.waitForTimeout(200);
+    await pageA.getByTestId('leave-coop-room-btn').click();
+    await pageA.waitForTimeout(150);
+
+    // Verify modular Cloud Provider badges (Google, Steam, Microsoft, Apple) and NO OAuth Client ID prompt
+    await pageA.getByTestId('cloud-provider-badge-google').waitFor({ state: 'visible' });
+    await pageA.getByTestId('cloud-provider-badge-steam').waitFor({ state: 'visible' });
+    await pageA.getByTestId('cloud-provider-badge-microsoft').waitFor({ state: 'visible' });
+    await pageA.getByTestId('cloud-provider-badge-apple').waitFor({ state: 'visible' });
+    assert.equal(
+      await pageA.getByTestId('google-client-id-drawer').count(),
+      0,
+      'Expected no in-app Google OAuth Client ID prompt drawer'
+    );
+    assert.equal(
+      await pageA.getByTestId('google-oauth-setup-toggle-btn').count(),
+      0,
+      'Expected no OAuth Setup button in player UI'
+    );
+
+    // Inject mock Google OAuth token on Device 1 (Page A) and click Google Login -> signs in & pushes saves to Google Drive appDataFolder!
+    await pageA.evaluate(() => {
+      localStorage.setItem(
+        'capy_google_oauth_client_id_v1',
+        '1234567890-capytest.apps.googleusercontent.com'
+      );
+      window.__capyMockGoogleOAuthToken = 'mock_google_access_token_device_1';
+    });
+    await pageA.getByTestId('play-games-signin-btn').click();
+    await pageA.waitForTimeout(500);
+
+    const device1FilledIds = await pageA.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return active.filledRegionIds || [];
+    });
+    assert.equal(
+      googleDriveAppDataFiles.size >= 1,
+      true,
+      'Expected Device 1 Google Login to upload capy_cloud_manifest_v2.json to Google Drive appDataFolder'
+    );
+    await pageA.keyboard.press('Escape');
+    await pageA.waitForTimeout(150);
+
+    // Boot Device 2 in a completely isolated BrowserContext (NO shared localStorage!)
     const ctxCloudDevice2 = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+    await attachGoogleCloudRoutes(ctxCloudDevice2);
     const pageDevice2 = await ctxCloudDevice2.newPage();
     attachErrorListeners(pageDevice2, 'pageDevice2');
 
     await pageDevice2.goto(BASE_URL, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(pageDevice2);
     await disableAutoReplay(pageDevice2);
-    // Seed cloud vault from Device 1 (Page A) while Device 2 paints a different corner offline!
-    await pageDevice2.evaluate((vaultRaw) => {
-      localStorage.setItem('capy_cloud_vault_v1', vaultRaw);
-    }, cloudVaultRawFromA);
     await pageDevice2.reload({ waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(pageDevice2);
 
-    // Paint bottom-right corner on Device 2
+    // Paint bottom-right corner on Device 2 while offline/logged-out
     await tapCanvasGrid(pageDevice2, 0.62, 12);
     const localIdsBeforeSync = await pageDevice2.evaluate(() => {
       const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
       return active.filledRegionIds || [];
     });
 
-    // Trigger Play Games Login + Cloud Sync on Device 2
+    // Configure Google session on Device 2 and reload -> verify AUTOMATIC startup Google login & automatic cloud sync without clicking any login button!
+    await ctxCloudDevice2.addInitScript(() => {
+      localStorage.setItem(
+        'capy_google_oauth_client_id_v1',
+        '1234567890-capytest.apps.googleusercontent.com'
+      );
+      window.__capyMockGoogleOAuthToken = 'mock_google_access_token_device_2';
+    });
+    await pageDevice2.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(pageDevice2);
+    await pageDevice2.waitForTimeout(700);
+
+    // Open Cloud & Co-op hub to verify Device 2 is already automatically signed in as CapybaraLegend99
     await pageDevice2.getByTestId('topbar-coop-btn').click();
     await pageDevice2.waitForTimeout(200);
-    await pageDevice2.getByTestId('play-games-signin-btn').click();
-    await pageDevice2.waitForTimeout(150);
-    await pageDevice2.getByTestId('cloud-sync-btn').click();
-    await pageDevice2.waitForTimeout(400);
+
+    const hubProfileText = await pageDevice2.getByTestId('cloud-coop-hub').innerText();
+    assert.equal(
+      hubProfileText.includes('CapybaraLegend99'),
+      true,
+      `Expected automatic Google Account display name 'CapybaraLegend99' in Cloud & Co-op hub, got: ${hubProfileText}`
+    );
+    assert.equal(
+      hubProfileText.includes('capy@example.com'),
+      true,
+      `Expected automatic Google Account email 'capy@example.com' in Cloud & Co-op hub, got: ${hubProfileText}`
+    );
 
     const mergedIdsAfterSync = await pageDevice2.evaluate(() => {
       const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
       return active.filledRegionIds || [];
     });
 
-    const expectedUnion = new Set([...localIdsBeforeSync, ...paintedIdsOnA]);
+    const expectedUnion = new Set([...localIdsBeforeSync, ...device1FilledIds]);
     assert.equal(
       mergedIdsAfterSync.length,
       expectedUnion.size,
-      `Expected CRDT Set-Union size ${expectedUnion.size}, got ${mergedIdsAfterSync.length}`
+      `Expected automatic CRDT Set-Union size ${expectedUnion.size} across Google Drive appDataFolder on startup, got ${mergedIdsAfterSync.length}`
     );
     for (const id of expectedUnion) {
       assert.equal(mergedIdsAfterSync.includes(id), true, `Missing region ${id} from CRDT Set-Union`);
     }
     await ctxCloudDevice2.close();
-    console.log(`   PASS: CRDT Cloud Sync merged Device 1 (${paintedIdsOnA.length}) + Device 2 (${localIdsBeforeSync.length}) -> ${mergedIdsAfterSync.length} union regions with zero data loss.`);
+    console.log(
+      `   PASS: Automatic startup Google Sign-In + Google Drive appDataFolder synced & CRDT-merged Device 1 (${device1FilledIds.length}) + Device 2 (${localIdsBeforeSync.length}) -> ${mergedIdsAfterSync.length} union regions across isolated devices!`
+    );
 
     // =========================================================================
     // 5. Multi-Resolution Infinite Zoom 2x Detail Sub-Tile + Privacy Policy Page

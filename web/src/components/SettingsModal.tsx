@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   Sliders,
@@ -92,7 +92,13 @@ interface SettingsModalProps {
   onLeaveCoopRoom?: () => void;
   onShareProgressLink?: () => Promise<string | null>;
   onCopyCoopInviteLink?: () => Promise<string | null>;
-  onSyncCloudProgress?: () => Promise<{ addedFromCloud: number; syncedAt: number } | null>;
+  onSyncCloudProgress?: () => Promise<{
+    addedFromCloud: number;
+    syncedAt: number;
+    uploadedCount?: number;
+    downloadedCount?: number;
+    backend?: string;
+  } | null>;
   onZoomIntoDetailTile?: () => void;
 }
 
@@ -189,6 +195,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [hubNotice, setHubNotice] = useState<string | null>(null);
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const cloudProviders = useMemo(
+    () => ProviderRegistry.auth.getAvailableCloudProviders(),
+    [playerIdentity]
+  );
 
   useEffect(() => {
     return ProviderRegistry.auth.subscribe((id) => {
@@ -1839,28 +1849,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 data-testid="cloud-coop-hub"
                 className="p-3 rounded-xl bg-slate-950/75 border border-slate-800 space-y-3"
               >
-                {/* Row A: Player Identity, Play Games Sign-In & CRDT Cloud Sync */}
+                {/* Row A: Player Identity, Modular Cloud Providers (Google / Steam / Microsoft / Apple) & CRDT Cloud Sync */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
                   <div className="flex items-center gap-2 min-w-0">
-                    <button
-                      type="button"
-                      title="Cycle Avatar Color"
-                      onClick={() => {
-                        const idx = COLLABORATOR_AVATAR_COLORS.indexOf(
-                          playerIdentity.avatarColorHex
-                        );
-                        const nextColor =
-                          COLLABORATOR_AVATAR_COLORS[
-                            (idx + 1) % COLLABORATOR_AVATAR_COLORS.length
-                          ];
-                        ProviderRegistry.auth.updateGuestProfile(
-                          playerIdentity.displayName,
-                          nextColor
-                        );
-                      }}
-                      className="w-6 h-6 rounded-full ring-2 ring-slate-700 flex-shrink-0 cursor-pointer"
-                      style={{ backgroundColor: playerIdentity.avatarColorHex }}
-                    />
+                    {playerIdentity.avatarUrl ? (
+                      <img
+                        src={playerIdentity.avatarUrl}
+                        alt={playerIdentity.displayName}
+                        className="w-7 h-7 rounded-full ring-2 ring-emerald-500/60 flex-shrink-0 object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        title="Cycle Avatar Color"
+                        onClick={() => {
+                          const idx = COLLABORATOR_AVATAR_COLORS.indexOf(
+                            playerIdentity.avatarColorHex
+                          );
+                          const nextColor =
+                            COLLABORATOR_AVATAR_COLORS[
+                              (idx + 1) % COLLABORATOR_AVATAR_COLORS.length
+                            ];
+                          ProviderRegistry.auth.updateGuestProfile(
+                            playerIdentity.displayName,
+                            nextColor
+                          );
+                        }}
+                        className="w-6 h-6 rounded-full ring-2 ring-slate-700 flex-shrink-0 cursor-pointer"
+                        style={{ backgroundColor: playerIdentity.avatarColorHex }}
+                      />
+                    )}
                     {editingProfileName ? (
                       <div className="flex items-center gap-1">
                         <input
@@ -1896,10 +1915,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <Edit2 size={11} />
                           </button>
                         </div>
-                        <div className="text-[10px] text-slate-400">
+                        <div className="text-[10px] text-slate-400 truncate">
                           {playerIdentity.isAuthenticated
-                            ? 'Google Play Games Connected'
-                            : 'Local Profile • Ready for Co-op & Cloud'}
+                            ? `${
+                                playerIdentity.provider === 'play_games_v2'
+                                  ? 'Google Play Games'
+                                  : 'Google Account'
+                              } • ${playerIdentity.email || playerIdentity.displayName}`
+                            : 'Local Profile • Sign in to sync saves across devices'}
                         </div>
                       </div>
                     )}
@@ -1912,7 +1935,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         data-testid="play-games-signout-btn"
                         onClick={async () => {
                           await ProviderRegistry.auth.signOut();
-                          setHubNotice('Signed out of Play Games profile.');
+                          setHubNotice('Signed out of cloud profile.');
                         }}
                         className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold border border-slate-700 cursor-pointer"
                       >
@@ -1922,13 +1945,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <button
                         type="button"
                         data-testid="play-games-signin-btn"
+                        disabled={isSyncingCloud}
                         onClick={async () => {
-                          await ProviderRegistry.auth.signInWithPlayGames();
-                          setHubNotice('Connected to Play Games profile!');
+                          try {
+                            setIsSyncingCloud(true);
+                            const signedIn = await ProviderRegistry.auth.signInWithPlayGames();
+                            const syncRes = onSyncCloudProgress
+                              ? await onSyncCloudProgress()
+                              : null;
+                            const syncDetail =
+                              syncRes &&
+                              ((syncRes.downloadedCount || 0) > 0 ||
+                                (syncRes.uploadedCount || 0) > 0 ||
+                                syncRes.addedFromCloud > 0)
+                                ? ` (${syncRes.downloadedCount || 0} pulled, ${syncRes.uploadedCount || 0} pushed)`
+                                : '';
+                            setHubNotice(
+                              `Signed in with ${
+                                signedIn.provider === 'play_games_v2' ? 'Play Games' : 'Google'
+                              } as ${signedIn.displayName}${
+                                signedIn.email ? ` (${signedIn.email})` : ''
+                              }! Cloud saves synced${syncDetail}.`
+                            );
+                          } catch (err) {
+                            const msg = err instanceof Error ? err.message : String(err);
+                            if (
+                              msg === 'GOOGLE_CLIENT_ID_REQUIRED' ||
+                              msg === 'PLAY_GAMES_UNCONFIGURED'
+                            ) {
+                              setHubNotice(
+                                'Google Cloud Sign-In requires VITE_GOOGLE_CLIENT_ID (Web) or CAPY_PLAY_GAMES_APP_ID (Android) configured in repository build variables — see CLOUD.md.'
+                              );
+                            } else {
+                              setHubNotice(`Google Sign-In failed: ${msg}`);
+                            }
+                          } finally {
+                            setIsSyncingCloud(false);
+                          }
                         }}
                         className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-bold border border-emerald-500/40 cursor-pointer"
                       >
-                        Play Games Login
+                        {NativeBridge.isAndroid ? 'Play Games Login' : 'Google Login'}
                       </button>
                     )}
 
@@ -1942,10 +1999,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           try {
                             const res = await onSyncCloudProgress();
                             if (res) {
+                              const parts: string[] = [];
+                              if (res.addedFromCloud > 0) {
+                                parts.push(`+${res.addedFromCloud} regions merged`);
+                              }
+                              if ((res.downloadedCount || 0) > 0) {
+                                parts.push(`${res.downloadedCount} saves pulled`);
+                              }
+                              if ((res.uploadedCount || 0) > 0) {
+                                parts.push(`${res.uploadedCount} saves pushed`);
+                              }
                               setHubNotice(
-                                res.addedFromCloud > 0
-                                  ? `Cloud Sync complete (+${res.addedFromCloud} regions merged)!`
-                                  : 'Cloud Sync up to date!'
+                                parts.length > 0
+                                  ? `Cloud Sync complete (${parts.join(', ')})!`
+                                  : `Cloud Sync up to date (${ProviderRegistry.cloudSave.providerName})!`
                               );
                             }
                           } finally {
@@ -1958,6 +2025,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span>{isSyncingCloud ? 'Syncing...' : 'Cloud Sync'}</span>
                       </button>
                     )}
+                  </div>
+                </div>
+
+                {/* Modular Multi-Platform Cloud Provider Status Row (Google Active + Steam / Microsoft / Apple) */}
+                <div
+                  data-testid="cloud-providers-bar"
+                  className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-slate-400 pb-2 border-b border-slate-800/60"
+                >
+                  <span className="font-semibold text-slate-300">
+                    Cloud Backend: {ProviderRegistry.cloudSave.providerName}
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {cloudProviders
+                      .filter((p) => p.id !== 'play_games_v2' || NativeBridge.isAndroid)
+                      .map((prov) => {
+                        const isCurrent =
+                          playerIdentity.isAuthenticated && playerIdentity.provider === prov.id;
+                        return (
+                          <span
+                            key={prov.id}
+                            data-testid={`cloud-provider-badge-${prov.id}`}
+                            title={prov.storageName}
+                            className={`px-1.5 py-0.5 rounded border text-[9px] font-bold ${
+                              isCurrent
+                                ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                                : prov.isSupported
+                                  ? 'bg-slate-900 border-slate-700 text-slate-200'
+                                  : 'bg-slate-900/50 border-slate-800/80 text-slate-500'
+                            }`}
+                          >
+                            {prov.displayName}
+                            {isCurrent ? ' • Connected' : prov.comingSoon ? ' • Soon' : ''}
+                          </span>
+                        );
+                      })}
                   </div>
                 </div>
 

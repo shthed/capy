@@ -14,6 +14,11 @@ android {
         versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val playGamesAppId = System.getenv("CAPY_PLAY_GAMES_APP_ID")?.trim()
+        if (!playGamesAppId.isNullOrEmpty()) {
+            resValue("string", "game_services_project_id", playGamesAppId)
+        }
     }
 
     val releaseKeystorePath = System.getenv("CAPY_KEYSTORE_PATH")
@@ -105,6 +110,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.webkit)
+    implementation(libs.play.services.games.v2)
 
     testImplementation(libs.junit)
 }

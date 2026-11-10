@@ -287,7 +287,8 @@ When running inside the Android wrapper (`app/`), `NativeBridge` connects the we
 | `applySafeAreaInsets()` | CSS `env(safe-area-inset-*)` | Queries `WindowInsetsCompat` and injects exact pixel values into `--safe-area-top`, `--safe-area-bottom`, etc. |
 | `consumePendingSharedImage()` | File `<input>` upload | Consumes incoming images sent to Capy via Android's `Intent.ACTION_SEND` (Share menu). |
 | `onDeepLink(handler)` | URL hash / `hashchange` listener | Consumes verified Android HTTPS App Links (`https://shthed.github.io/capy/...`) via `CapyAndroid.consumePendingDeepLink` and `window.__capyReceiveDeepLink`. |
-| `signInPlayGames()` | Local profile fallback | Invokes Google Play Games Services v2 sign-in hook (`CapyAndroid.signInPlayGames`), returning `{ playerId, displayName }` or `null` when unconfigured. |
+| `signInPlayGames()` | Local profile fallback | Invokes Google Play Games Services v2 sign-in (`CapyAndroid.signInPlayGames`), returning cached `{ playerId, displayName }` and triggering `PlayGames.getPlayersClient(activity).currentPlayer` resolution. |
+| `onPlayGamesProfile(handler)` | No-op on web | Receives async `window.__capyReceivePlayGamesProfile({ playerId, displayName })` callbacks when Android resolves the user's real Google Play Games profile name (`player.displayName`). |
 | `saveCloudSnapshot(slotKey, json)` | `localStorage` (`capy_cloud_vault_v1`) | Persists CRDT `CloudSaveEnvelope` payloads to `filesDir/capy_cloud/<slotKey>.json`. |
 | `loadCloudSnapshot(slotKey)` | `localStorage` (`capy_cloud_vault_v1`) | Loads CRDT `CloudSaveEnvelope` payloads from `filesDir/capy_cloud/<slotKey>.json`. |
 | `showRewardedAd()` | Returns `false` (100% ad-free) | Triggers strictly opt-in rewarded AI credit video hook on Play Store builds when configured. |
@@ -318,8 +319,8 @@ Capy uses a compact hybrid storage model engineered for instant gallery renderin
    - Pre-generated archive of all 4 built-in `SAMPLE_GALLERY` artworks (`Capybara`, `Mushroom Forest`, `Capy Forest`, `Snail Guitar`), generated via `npm run generate:samples` (`web/scripts/generate-sample-saves.mjs`) as a `225 KB` `CAPY\x02` compact binary archive and precached in `web/public/sw.js`.
    - When the game is opened for the first time (`existingSnapshots.length === 0`), `App.tsx` (`restoreSession`) fetches `./assets/sample_saves.capy` concurrently with sample artwork, imports all 4 sample saves into `localStorage` and `IndexedDB`, and mounts gameplay immediately without spawning the Web Worker.
    - At runtime (`loadSampleFromPrebakedOrGenerate`), incoming `#s=<token>` share links, Co-op `WELCOME_STATE` puzzle switches, and Create tab sample selections under default generator settings (`isDefaultGeneratorConfig`) resolve directly against the pre-baked `IndexedDB` puzzle records so region IDs match 100% and samples mount instantaneously without creating duplicate saves. Passive viewport pan/zoom updates use `StorageService.updateSnapshotViewport` so `lastOpened` sort order is preserved.
-6. **Hexagonal Provider Persistence Keys (`ProviderRegistry.ts`)**:
-   - `capy_player_identity_v1` (`localStorage`): Stores `PlayerIdentity` (`playerId`, `displayName`, `avatarColorHex`, `provider: 'guest' | 'play_games_v2'`).
+6. **Hexagonal Provider Persistence Keys (`ProviderRegistry.ts`, see [`CLOUD.md`](./CLOUD.md))**:
+   - `capy_player_identity_v1` (`localStorage`): Stores `PlayerIdentity` (`playerId`, `displayName`, `avatarColorHex`, `provider`), automatically updated with the user's Google Account or Google Play Games profile name (`window.__capyReceivePlayGamesProfile`).
    - `capy_tab_peer_suffix_v1` (`sessionStorage`): Per-tab peer suffix so multi-tab local `BroadcastChannel` Co-op rooms distinguish simultaneous tabs cleanly.
    - `capy_cloud_vault_v1` (`localStorage` / `filesDir/capy_cloud`): Stores CRDT `CloudSaveEnvelope` records keyed by puzzle slot.
    - `capy_community_ideas_v1` (`localStorage`): Stores moderated `CommunityPuzzleIdea` submissions and per-player vote toggles.

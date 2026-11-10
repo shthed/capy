@@ -94,7 +94,8 @@ npm run test:game
 All detailed architectural guides, computer vision algorithms, and native bridge specifications live in dedicated documentation files:
 
 - **Web Architecture and UI Reference**: [`WEB.md`](./WEB.md) -- Comprehensive guide to React 19, Vite, 3-tier offscreen canvas rendering, gesture engine, and settings dictionary.
-- **Android Native Launcher**: [`APP.md`](./APP.md) -- Kotlin launcher, AndroidX `WebViewAssetLoader`, native haptics bridge, and backup specifications.
+- **Android Native Launcher**: [`APP.md`](./APP.md) -- Kotlin launcher, AndroidX `WebViewAssetLoader`, Google Play Games Services v2 bridge, native haptics, and backup specifications.
+- **Cloud Sync, Google Play Games and Multiplayer Data Sharing**: [`CLOUD.md`](./CLOUD.md) -- Plain-English and technical guide to Play Games profile login, CRDT Cloud Sync, `< 2 KB` shareable URL links, and simultaneous Co-op rooms.
 - **Puzzle Generation Engine**: [`PUZZLE.md`](./PUZZLE.md) -- Web Worker segmentation, Sobel line extraction, Red-Mean K-Means clustering, and watershed absorption.
 - **Testing Architecture**: [`TESTING.md`](./TESTING.md) -- Playwright E2E testing guide, multi-touch gesture verification, and CI pipelines.
 - **Project Roadmap and Tasks**: [`TODO.md`](./TODO.md) -- Active milestones and post-merge cleanup tracking.
