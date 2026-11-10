@@ -130,6 +130,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
           type="button"
           onClick={onStartReplay}
           title="Watch Puzzle Replay"
+          data-testid="replay-btn"
           className="p-2.5 rounded-full bg-amber-400 text-slate-950 border border-amber-300 shadow-xl backdrop-blur-md hover:bg-amber-300 transition-all active:scale-95 animate-in fade-in zoom-in-90 duration-200 cursor-pointer"
         >
           <Play size={18} />

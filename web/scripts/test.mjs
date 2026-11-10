@@ -25,7 +25,7 @@ async function waitForPuzzleLoaded(page) {
     () => !document.body.innerText.includes('Analyzing artwork'),
     { timeout: 25000 }
   );
-  await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 25000 });
+  await page.waitForSelector('[aria-label="Palette dock"], [data-testid="replay-btn"]', { timeout: 25000 });
   await page.waitForTimeout(250);
 }
 
@@ -757,17 +757,68 @@ async function runBrowserBasicsSuite() {
       const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
       const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
       const snap = snaps.find((s) => s.id === active.activeSnapshotId);
-      return { kind: snap?.sourceRef?.kind, fileSizeBytes: snap?.fileSizeBytes };
+      return { id: snap?.id, kind: snap?.sourceRef?.kind, fileSizeBytes: snap?.fileSizeBytes };
     });
     assert.equal(uploadCheck.kind, 'blob');
     assert.equal(uploadCheck.fileSizeBytes < 120_000, true);
+
+    // Zoom in on the custom puzzle, mark all regions completed, and verify offline reload + post-completion Replay preserves viewport without zooming out
+    const zoomInUpload = await page.waitForSelector('[data-testid="zoom-in-btn"]');
+    await zoomInUpload.click();
+    await zoomInUpload.click();
+    await zoomInUpload.click();
+    await page.waitForTimeout(420);
+
+    const preReplayCompletedView = await page.evaluate((snapId) => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const snap = snaps.find((s) => s.id === snapId);
+      const total = snap?.totalCount || 4;
+      const allIds = Array.from({ length: total }, (_, i) => i + 1);
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      active.filledRegionIds = allIds;
+      active.panOffsetX = 110;
+      active.panOffsetY = 85;
+      localStorage.setItem('capy_active_session_v8', JSON.stringify(active));
+      if (snap) {
+        snap.filledRegionIds = allIds;
+        snap.filledCount = allIds.length;
+        snap.totalCount = allIds.length;
+        snap.zoomScale = active.zoomScale;
+        snap.panOffsetX = 110;
+        snap.panOffsetY = 85;
+        localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
+      }
+      return { zoom: active.zoomScale || 1, panX: active.panOffsetX, panY: active.panOffsetY };
+    }, uploadCheck.id);
+    assert.equal(preReplayCompletedView.zoom > 1.5, true, `Expected zoomed-in completed puzzle > 1.5, got ${preReplayCompletedView.zoom}`);
 
     // Offline reload via Service Worker
     await context.setOffline(true);
     await page.reload({ waitUntil: 'load' });
     await waitForPuzzleLoaded(page);
     await context.setOffline(false);
-    console.log('   PASS: Custom photo STORE_IMAGES persistence and 100% offline PWA reload verified.');
+
+    // Verify completed puzzle Replay button starts replay in place without zooming out or resetting viewport
+    await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
+    const completedReplayBtn = await page.waitForSelector('[data-testid="replay-btn"]', { timeout: 5000 });
+    await completedReplayBtn.click();
+    await page.waitForTimeout(380);
+    await page.waitForSelector('[data-testid="replay-controls-window"]', { timeout: 5000 });
+    assert.equal(
+      Boolean(await page.$('[data-testid="reset-view-btn"]')),
+      true,
+      'Pressing Replay on a completed puzzle must NOT zoom out or hide reset-view-btn'
+    );
+    const duringCompletedReplayView = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return { zoom: active.zoomScale || 1, panX: active.panOffsetX || 0, panY: active.panOffsetY || 0 };
+    });
+    assert.equal(
+      Math.abs(duringCompletedReplayView.zoom - preReplayCompletedView.zoom) < 0.01,
+      true,
+      `Expected post-completion Replay to preserve zoomScale (${preReplayCompletedView.zoom}), got ${duringCompletedReplayView.zoom}`
+    );
+    console.log('   PASS: Custom photo STORE_IMAGES persistence, 100% offline PWA reload, and zoomed-in post-completion Replay viewport invariance verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');

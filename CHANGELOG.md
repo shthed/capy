@@ -15,10 +15,10 @@ Capy uses a unified **Semantic Versioning (`MAJOR.MINOR.PATCH`)** scheme shared 
 
 | Component | Source / Location | Rule & Formula | Current Value |
 | :--- | :--- | :--- | :--- |
-| **Canonical SemVer** | [`web/package.json`](./web/package.json) (`"version"`) | Single source of truth formatted as `MAJOR.MINOR.PATCH` (`0 <= MINOR <= 99`, `0 <= PATCH <= 99`). | `2.5.0` |
-| **Web Runtime Constant** | [`web/src/version.ts`](./web/src/version.ts) (`APP_VERSION`, `APP_VERSION_CODE`) | Imported directly from [`web/package.json`](./web/package.json) and displayed in [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) (`data-testid="app-version-badge"`). | `v2.5.0` (`20500`) |
-| **Android `versionName`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionName`) | Automatically parsed at Gradle configuration time from [`../web/package.json`](./web/package.json). | `"2.5.0"` |
-| **Android `versionCode`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionCode`) | Deterministically computed as `(MAJOR * 10000) + (MINOR * 100) + PATCH` for strictly monotonic Google Play Console uploads. | `20500` |
+| **Canonical SemVer** | [`web/package.json`](./web/package.json) (`"version"`) | Single source of truth formatted as `MAJOR.MINOR.PATCH` (`0 <= MINOR <= 99`, `0 <= PATCH <= 99`). | `2.5.1` |
+| **Web Runtime Constant** | [`web/src/version.ts`](./web/src/version.ts) (`APP_VERSION`, `APP_VERSION_CODE`) | Imported directly from [`web/package.json`](./web/package.json) and displayed in [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) (`data-testid="app-version-badge"`). | `v2.5.1` (`20501`) |
+| **Android `versionName`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionName`) | Automatically parsed at Gradle configuration time from [`../web/package.json`](./web/package.json). | `"2.5.1"` |
+| **Android `versionCode`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionCode`) | Deterministically computed as `(MAJOR * 10000) + (MINOR * 100) + PATCH` for strictly monotonic Google Play Console uploads. | `20501` |
 
 ### When to Increment Each Version Segment
 
@@ -32,6 +32,16 @@ Capy uses a unified **Semantic Versioning (`MAJOR.MINOR.PATCH`)** scheme shared 
 ---
 
 ## Release History
+
+## [2.5.1] - 2026-11-10 ([PR #464](https://github.com/shthed/capy/pull/464), Android `versionCode`: `20501`)
+
+### Fixed
+- **Strict Viewport Invariance on Puzzle Completion & Replay Playback ([`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/FloatingActions.tsx`](./web/src/components/FloatingActions.tsx), [PR #464](https://github.com/shthed/capy/pull/464))**:
+  - Removed automatic fit-to-screen zoom-out (`resetViewTrigger`) when completing the final region of a puzzle or when pressing the **Watch Puzzle Replay** button (`data-testid="replay-btn"` in [`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx)) so replays always play directly from the player's current zoom and pan position.
+  - Updated `handleLoadSnapshot` and `finishAutoResume` in [`App.tsx`](./web/src/App.tsx) so triggering a replay on the currently active puzzle from Saves or finishing an auto-replay never resets or teleports the viewport.
+  - Removed automatic zoom scale mutation (`followAutoZoomingRef`) from `stepFollow` in [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx) so `replayFollow` never alters the player's zoom level and only pans when the player is already zoomed in (`scale > 1.05`).
+
+---
 
 ## [2.5.0] - 2026-11-10 ([PR #463](https://github.com/shthed/capy/pull/463), Android `versionCode`: `20500`)
 
@@ -159,6 +169,7 @@ Capy uses a unified **Semantic Versioning (`MAJOR.MINOR.PATCH`)** scheme shared 
 - **Initial Capy Monorepo Release ([`web/`](./web) & [`app/`](./app), [PR #441](https://github.com/shthed/capy/pull/441))**:
   - Launched the React 19 + TypeScript + Vite 6 Web Application ([`web/`](./web)) with 3-tier offscreen canvas caching ([`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)), 5-strategy Web Worker segmentation pipeline ([`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts)), Free Colour mode ([`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx)), and the unified Kotlin Android `WebViewAssetLoader` wrapper ([`app/`](./app), [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt), [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt)).
 
+[2.5.1]: https://github.com/shthed/capy/pull/464
 [2.5.0]: https://github.com/shthed/capy/pull/463
 [2.4.0]: https://github.com/shthed/capy/pull/461
 [2.3.0]: https://github.com/shthed/capy/pull/462

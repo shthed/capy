@@ -398,7 +398,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     });
   }, [scale, puzzle]);
 
-  // Smooth camera pan (and auto-zoom to ~2.5x when starting from fit-to-screen <1.8x) during Replay Follow Mode
+  // Smooth camera pan to follow the next region being painted during Replay Follow Mode (never alters zoom scale)
   const onManualPanStartRef = useRef(onManualPanStart);
   onManualPanStartRef.current = onManualPanStart;
   const hasNotifiedManualPanRef = useRef(false);
@@ -408,17 +408,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   replaySpeedRef.current = replaySpeed || 1;
   const followRawScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const followClampedScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const followAutoZoomingRef = useRef<boolean>(false);
   const isFollowingReplay = replayFollowRegionId !== null && replayFollowRegionId !== undefined;
 
   useEffect(() => {
-    if (!isFollowingReplay || !puzzle) {
-      followAutoZoomingRef.current = false;
-      return;
-    }
-    if (scaleRef.current < 1.8) {
-      followAutoZoomingRef.current = true;
-    }
+    if (!isFollowingReplay || !puzzle) return;
     let animId: number;
     let lastTime = performance.now();
 
@@ -434,43 +427,24 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         isDoubleTapPanningRef.current ||
         momentumAnimIdRef.current !== null;
 
-      if (isUserInteracting) {
-        followAutoZoomingRef.current = false;
-      } else if (scaleRef.current < 1.8) {
-        followAutoZoomingRef.current = true;
-      }
-
       if (targetRegionId !== null && !isUserInteracting && containerRef.current) {
+        const curScale = scaleRef.current;
         const reg = regionByIdRef.current.get(targetRegionId);
         const w = containerRef.current.clientWidth;
         const h = containerRef.current.clientHeight;
-        if (reg && w > 0 && h > 0) {
-          const curScale = scaleRef.current;
-          const spd = replaySpeedRef.current;
-          let nextScale = curScale;
-          if (followAutoZoomingRef.current) {
-            if (curScale < 2.48) {
-              const scaleDiff = 2.5 - curScale;
-              const scaleLerp = scaleDiff * (1 - Math.exp((-dt * Math.max(14, 10 * spd)) / 1000));
-              const minScaleStep = (Math.max(2.2, 1.8 * spd) * dt) / 1000;
-              nextScale = Math.min(2.5, curScale + Math.max(scaleLerp, minScaleStep));
-            } else {
-              nextScale = 2.5;
-              followAutoZoomingRef.current = false;
-            }
-          }
-
+        // Only pan when zoomed in (> 1.05x); never change scale or shift a fit-to-screen puzzle
+        if (reg && w > 0 && h > 0 && curScale > 1.05) {
           const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
           const baseOffsetX = (w - puzzle.width * baseScale) / 2;
           const baseOffsetY = (h - puzzle.height * baseScale) / 2;
-          const effScale = nextScale * baseScale;
+          const effScale = curScale * baseScale;
 
           const rawScratch = followRawScratchRef.current;
           rawScratch.x = w / 2 - baseOffsetX - reg.centroidX * effScale;
           rawScratch.y = h / 2 - baseOffsetY - reg.centroidY * effScale;
           const clampedTarget = clampCanvasOffset(
             rawScratch,
-            nextScale,
+            curScale,
             puzzle.width,
             puzzle.height,
             w,
@@ -482,28 +456,19 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           const dx = clampedTarget.x - curOff.x;
           const dy = clampedTarget.y - curOff.y;
           const dist = Math.hypot(dx, dy);
-          const scaleChanged = Math.abs(nextScale - curScale) > 0.0005;
 
-          if (dist > 0.5 || scaleChanged) {
-            let nextOffset = curOff;
-            if (dist > 0.5) {
-              const lerpStep = dist * (1 - Math.exp((-dt * Math.max(12, 8 * spd)) / 1000));
-              const minStep = (Math.max(520, 420 * spd) * dt) / 1000;
-              const move = Math.min(dist, Math.max(lerpStep, minStep));
-              nextOffset = {
-                x: curOff.x + (dx / dist) * move,
-                y: curOff.y + (dy / dist) * move,
-              };
-            } else if (scaleChanged) {
-              nextOffset = { x: clampedTarget.x, y: clampedTarget.y };
-            }
-            if (scaleChanged) {
-              scaleRef.current = nextScale;
-              setScale(nextScale);
-            }
+          if (dist > 0.5) {
+            const spd = replaySpeedRef.current;
+            const lerpStep = dist * (1 - Math.exp((-dt * Math.max(12, 8 * spd)) / 1000));
+            const minStep = (Math.max(520, 420 * spd) * dt) / 1000;
+            const move = Math.min(dist, Math.max(lerpStep, minStep));
+            const nextOffset = {
+              x: curOff.x + (dx / dist) * move,
+              y: curOff.y + (dy / dist) * move,
+            };
             offsetRef.current = nextOffset;
             setOffset(nextOffset);
-            onViewExtentChangedRef.current?.(nextScale, nextOffset.x, nextOffset.y, w, h);
+            onViewExtentChangedRef.current?.(curScale, nextOffset.x, nextOffset.y, w, h);
           }
         }
       }

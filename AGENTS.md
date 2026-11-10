@@ -166,6 +166,7 @@ From the repository root:
    - Maintain explicit distinctions between Screen coordinates (pointer DOM events), Container coordinates (CSS client bounds), Artwork coordinates (canvas image pixel grid), and Segmentation map coordinates (`regions[id]`).
    - All pointer coordinate conversions must use `screenToCanvas` and coordinate clamping (`clampCanvasOffset`) in [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
    - Zoom and pan operations must maintain focal point invariance under pinch-to-zoom and Google Maps-style one-finger double-tap-and-drag gestures.
+   - Never move, reset, or zoom the viewport automatically upon puzzle completion or when starting/finishing a replay (`startReplay`, `finishAutoResume`, `handleLoadSnapshot` on the already-active snapshot); only move the viewport when explicitly actioned by the user (manual pan/zoom gestures, Zoom In/Out buttons, Fit-to-Screen button, switching to a different saved puzzle, or explicit opt-in camera tracking).
 
 2. **Zero-Allocation Hot Paths**:
    - Forbid per-frame object and array allocations inside high-frequency animation loops (`requestAnimationFrame`, pan momentum gliding, and canvas repainting).

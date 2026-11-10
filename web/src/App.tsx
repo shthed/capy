@@ -380,19 +380,14 @@ export const App: React.FC = () => {
   // Pre-allocated scratch vectors for zero-allocation camera-follow frustum checks
   const followRawScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const followClampedScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const preReplayViewportRef = useRef<{ zoomScale: number; panOffsetX: number; panOffsetY: number }>({
-    zoomScale: 1,
-    panOffsetX: 0,
-    panOffsetY: 0,
-  });
 
   // Zero-allocation check for whether the viewport has panned to bring the target region onscreen during replayFollow
   const isViewportCaughtUpToRegion = useCallback(
     (regionId: number): boolean => {
       if (!puzzle) return true;
       const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-      // When Follow Painting is enabled from fit-to-screen zoom (<1.8x), wait for smooth auto-zoom toward ~2.5x
-      if (zoomScale < 1.8) return false;
+      // At fit-to-screen zoom (<= 1.05x), the entire puzzle is already visible onscreen
+      if (zoomScale <= 1.05) return true;
       const reg = regionByIdRef.current.get(regionId);
       if (!reg) return true;
       const w = canvasContainerSizeRef.current.width || window.innerWidth || 1024;
@@ -440,23 +435,15 @@ export const App: React.FC = () => {
     [puzzle]
   );
 
-  // Start animated region-by-region replay (preserving restored zoom extent unless resetView is requested)
+  // Start animated region-by-region replay from the user's current viewport without zooming out or moving the camera
   const startReplay = useCallback(
-    (
-      sequence: number[],
-      autoResumeOnFinish: boolean = false,
-      options?: { resetView?: boolean }
-    ) => {
+    (sequence: number[], autoResumeOnFinish: boolean = false) => {
       if (!sequence || sequence.length === 0) return;
       if (autoResumeTimerRef.current !== null) {
         window.clearTimeout(autoResumeTimerRef.current);
         autoResumeTimerRef.current = null;
       }
       autoResumeReplayRef.current = autoResumeOnFinish;
-      preReplayViewportRef.current = { ...viewportRef.current };
-      if (options?.resetView) {
-        setResetViewTrigger((prev) => prev + 1);
-      }
       setHintRegionId(null);
       setReplaySequence(sequence);
       replayStepRef.current = 0;
@@ -477,10 +464,6 @@ export const App: React.FC = () => {
       autoResumeTimerRef.current = window.setTimeout(() => {
         autoResumeTimerRef.current = null;
         setIsReplaying(false);
-        const savedView = preReplayViewportRef.current;
-        viewportRef.current = { ...savedView };
-        setInitialViewport({ ...savedView });
-        setRestoreViewTrigger((prev) => prev + 1);
       }, 250);
     };
 
@@ -1673,7 +1656,7 @@ export const App: React.FC = () => {
           spread: 80,
           origin: { y: 0.6 },
         });
-        startReplay(orderedList, false, { resetView: true });
+        startReplay(orderedList);
       }
 
       // Auto-advance check
@@ -1801,7 +1784,7 @@ export const App: React.FC = () => {
               spread: 80,
               origin: { y: 0.6 },
             });
-            startReplay(orderedList, false, { resetView: true });
+            startReplay(orderedList);
           } else {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
           }
@@ -1883,7 +1866,7 @@ export const App: React.FC = () => {
             spread: 80,
             origin: { y: 0.6 },
           });
-          startReplay(orderedList, false, { resetView: true });
+          startReplay(orderedList);
         } else {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
         }
@@ -2181,14 +2164,6 @@ export const App: React.FC = () => {
   // Load a saved snapshot (and optionally auto-replay its region completion sequence)
   const handleLoadSnapshot = async (snapshot: SavedSnapshot, forceReplay: boolean = false) => {
     if (snapshot.id === activeSnapshotId && puzzle) {
-      const restoredView = {
-        zoomScale: snapshot.zoomScale ?? viewportRef.current.zoomScale ?? 1.0,
-        panOffsetX: snapshot.panOffsetX ?? viewportRef.current.panOffsetX ?? 0,
-        panOffsetY: snapshot.panOffsetY ?? viewportRef.current.panOffsetY ?? 0,
-      };
-      viewportRef.current = restoredView;
-      setInitialViewport(restoredView);
-      setRestoreViewTrigger((prev) => prev + 1);
       const currentOrdered =
         filledRegionIds.size > 0
           ? Array.from(filledRegionIds)
