@@ -300,8 +300,8 @@ async function runFullGameplayTest() {
     // -------------------------------------------------------------------------
     // Step 8: Test Expandable Generation Details Drawer
     // -------------------------------------------------------------------------
-    console.log('8️⃣ Testing Expandable Generation Pipeline Details...');
-    // Open Settings -> Create Tab -> Pick Capy Forest
+    console.log('8️⃣ Testing Instant Pre-Baked Sample Selection & Generation Pipeline Details...');
+    // Open Settings -> Create Tab -> Pick Capy Forest (loads pre-baked save instantly at default settings)
     const settingsBtn = await page.waitForSelector('button[aria-label="Open Settings"], button[title*="Settings"]');
     await settingsBtn.click();
     await page.waitForTimeout(400);
@@ -316,6 +316,18 @@ async function runFullGameplayTest() {
     if (playBtn) {
       await playBtn.click();
     }
+
+    await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 3000 });
+    console.log('   ✅ Pre-baked Capy Forest sample loaded instantaneously from Create tab!');
+
+    // Open Settings -> Create Tab -> Regenerate Artwork with Settings to test live pipeline HUD
+    await settingsBtn.click();
+    await page.waitForTimeout(300);
+    const createTabBtn2 = await page.waitForSelector('button:has-text("Create")');
+    await createTabBtn2.click();
+    await page.waitForTimeout(300);
+    const regenBtn = await page.waitForSelector('button:has-text("Regenerate Artwork with Settings")');
+    await regenBtn.click();
 
     // Wait for bottom-anchored LoadingOverlay
     console.log('   Waiting for generation pipeline HUD...');

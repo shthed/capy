@@ -1,5 +1,7 @@
 import { PaletteColor, PuzzleData, SavedSnapshot, UserSettings } from '../types';
 import {
+  base64ToUint8,
+  buildBorderMapFromRegionMap,
   CompactPuzzleRecordV2,
   compressPuzzleRecord,
   decodeBinarySaveV2,
@@ -10,6 +12,7 @@ import {
   hasBinaryMagicHeader,
   isCompactPuzzleRecordV2,
   serializableToRecord,
+  uint8ToBase64,
 } from './CapyCodec';
 import { NativeBridge } from './NativeBridge';
 
@@ -212,6 +215,27 @@ export class StorageService {
       }
       return item;
     });
+    this.saveSnapshots(updated);
+    return updated;
+  }
+
+  static updateSnapshotViewport(
+    id: string,
+    zoomScale: number,
+    panOffsetX: number,
+    panOffsetY: number
+  ): SavedSnapshot[] {
+    const list = this.loadSnapshots();
+    const updated = list.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            zoomScale,
+            panOffsetX,
+            panOffsetY,
+          }
+        : item
+    );
     this.saveSnapshots(updated);
     return updated;
   }
@@ -728,28 +752,11 @@ export interface SerializedPuzzleData {
 }
 
 function bufferToBase64(buffer: ArrayBufferView): string {
-  const bytes = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-  let binary = '';
-  const len = bytes.byteLength;
-  const chunkSize = 0x8000;
-  for (let i = 0; i < len; i += chunkSize) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunkSize, len)) as any);
-  }
-  return btoa(binary);
-}
-
-function base64ToUint8Array(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
+  return uint8ToBase64(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength));
 }
 
 function base64ToInt32Array(b64: string): Int32Array {
-  const bytes = base64ToUint8Array(b64);
+  const bytes = base64ToUint8(b64);
   return new Int32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
 }
 
@@ -788,7 +795,7 @@ function encodeRegionMapRle16(regionMap: Int32Array): Uint8Array {
 }
 
 function decodeRegionMapRle16(b64: string, total: number): Int32Array {
-  const bytes = base64ToUint8Array(b64);
+  const bytes = base64ToUint8(b64);
   const regionMap = new Int32Array(total);
   let writePos = 0;
   const byteLen = bytes.length;
@@ -800,24 +807,6 @@ function decodeRegionMapRle16(b64: string, total: number): Int32Array {
     writePos = end;
   }
   return regionMap;
-}
-
-function buildBorderMapFromRegionMap(regionMap: Int32Array, width: number, height: number): Uint8Array {
-  const borderMap = new Uint8Array(width * height);
-  for (let y = 0; y < height; y++) {
-    const yRow = y * width;
-    for (let x = 0; x < width; x++) {
-      const idx = yRow + x;
-      const rid = regionMap[idx];
-      if (
-        (x < width - 1 && regionMap[idx + 1] !== rid) ||
-        (y < height - 1 && regionMap[idx + width] !== rid)
-      ) {
-        borderMap[idx] = 1;
-      }
-    }
-  }
-  return borderMap;
 }
 
 export function serializePuzzle(p: PuzzleData): SerializedPuzzleData {
@@ -886,7 +875,7 @@ export function deserializePuzzle(s: SerializedPuzzleData): PuzzleData {
       : new Int32Array(total);
 
   const borderMap = s.borderMapB64
-    ? base64ToUint8Array(s.borderMapB64)
+    ? base64ToUint8(s.borderMapB64)
     : buildBorderMapFromRegionMap(regionMap, s.width, s.height);
 
   const hasLegacyPixels = s.regions.length > 0 && s.regions.every((r) => typeof r.pixelsB64 === 'string');

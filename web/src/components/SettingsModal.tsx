@@ -82,7 +82,7 @@ interface SettingsModalProps {
   onClearAllSnapshots: () => void;
   onResetProgress?: () => void;
   onRegenerate: (config: GeneratorConfig) => void;
-  onSelectSample: (sample: SampleArtwork) => void;
+  onSelectSample: (sample: SampleArtwork, config?: GeneratorConfig) => void;
   onUploadImage: () => void;
   onExportSnapshot?: (id: string, title: string) => void;
   onExportAllSnapshots?: () => void;
@@ -1277,7 +1277,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <button
                               type="button"
                               onClick={() => {
-                                onSelectSample(sample);
+                                updateSetting('generatorConfig', localConfig);
+                                onSelectSample(sample, localConfig);
                                 onClose();
                               }}
                               className="w-full sm:w-auto px-2 py-1 text-[11px] sm:text-xs font-bold bg-amber-400 text-slate-950 rounded-md sm:rounded-lg hover:bg-amber-300 transition-colors shadow text-center cursor-pointer"
