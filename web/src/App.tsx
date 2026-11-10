@@ -411,7 +411,7 @@ export const App: React.FC = () => {
         h,
         followClampedScratchRef.current
       );
-      if (Math.hypot(clampedTarget.x - panOffsetX, clampedTarget.y - panOffsetY) <= 12) {
+      if (Math.hypot(clampedTarget.x - panOffsetX, clampedTarget.y - panOffsetY) <= 24) {
         return true;
       }
 
@@ -422,9 +422,9 @@ export const App: React.FC = () => {
       const visRight = visLeft + visW;
       const visBottom = visTop + visH;
 
-      // Require the region's centroid to be comfortably inside the visible viewport (inner 76% bounds)
-      const padX = visW * 0.12;
-      const padY = visH * 0.12;
+      // Allow continuous painting as long as the region is inside the visible safe bounds (inner 84%)
+      const padX = visW * 0.08;
+      const padY = visH * 0.08;
       return (
         reg.centroidX >= visLeft + padX &&
         reg.centroidX <= visRight - padX &&
@@ -3366,6 +3366,10 @@ export const App: React.FC = () => {
             ? replaySequence[replayStep]
             : null
         }
+        replayFollowSequence={
+          isReplaying && isReplayPlaying && settings.replayFollow ? replaySequence : null
+        }
+        replayFollowStep={replayStep}
         replaySpeed={settings.replaySpeed || 1}
         isGenerating={isLoading}
         detailedProgress={Boolean(settings.detailedLoadingProgress)}
