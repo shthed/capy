@@ -165,7 +165,7 @@ async function run() {
       zoomScale: 2.75,
       panOffsetX: -120.5,
       panOffsetY: 48.25,
-      sourceRef: { kind: 'custom_blob', imageId: 'snap-test-1' },
+      sourceRef: { kind: 'blob', uri: 'snap-test-1' },
     };
     const fakeImageBytes = new Uint8Array(262_144);
     let rng = 0x12345678;
@@ -197,7 +197,7 @@ async function run() {
       id: 'snap-test-2',
       title: 'Built-in Capybara',
       sampleAssetPath: 'assets/capybara.webp',
-      sourceRef: { kind: 'sample', assetPath: 'assets/capybara.webp' },
+      sourceRef: { kind: 'sample', uri: 'assets/capybara.webp' },
     };
     const archiveBinary = await codec.encodeArchiveSaveBinaryV2(
       [sampleSnapshot, secondSnapshot],
@@ -216,7 +216,7 @@ async function run() {
     console.log('4. Verifying <2 KB ProgressDeltaV2 token & CRDT union merge...');
     const deltaA = {
       version: 2,
-      sourceRef: { kind: 'catalog', catalogId: 'capy_forest_01' },
+      sourceRef: { kind: 'catalog', uri: 'capy_forest_01' },
       filledRegionIds: [1, 4, 9, 16, 25],
       paintedRegionColors: { 1: 0xffef4444, 4: 0xff22c55e },
       isFreeColor: true,
@@ -224,7 +224,7 @@ async function run() {
     };
     const deltaB = {
       version: 2,
-      sourceRef: { kind: 'catalog', catalogId: 'capy_forest_01' },
+      sourceRef: { kind: 'catalog', uri: 'capy_forest_01' },
       filledRegionIds: [4, 2, 8, 25, 30],
       paintedRegionColors: { 4: 0xff3b82f6, 8: 0xffeab308 },
       isFreeColor: true,

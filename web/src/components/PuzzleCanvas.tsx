@@ -44,6 +44,7 @@ interface PuzzleCanvasProps {
   zoomInTrigger?: number;
   zoomOutTrigger?: number;
   resetViewTrigger?: number;
+  restoreViewTrigger?: number;
   initialZoomScale?: number;
   initialPanOffsetX?: number;
   initialPanOffsetY?: number;
@@ -150,6 +151,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   zoomInTrigger = 0,
   zoomOutTrigger = 0,
   resetViewTrigger = 0,
+  restoreViewTrigger = 0,
   initialZoomScale = 1.0,
   initialPanOffsetX = 0,
   initialPanOffsetY = 0,
@@ -243,13 +245,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     };
   }, [stopMomentum]);
 
-  // Reset zoom/offset when a brand-new puzzle geometry is loaded
+  // Reset or restore zoom/offset when a brand-new puzzle geometry is loaded or post-replay restoration triggers
   useEffect(() => {
+    stopMomentum();
     scaleRef.current = initialZoomScale;
     offsetRef.current = { x: initialPanOffsetX, y: initialPanOffsetY };
     setScale(initialZoomScale);
     setOffset({ x: initialPanOffsetX, y: initialPanOffsetY });
-  }, [puzzle?.regionMap, initialZoomScale, initialPanOffsetX, initialPanOffsetY]);
+  }, [puzzle?.regionMap, initialZoomScale, initialPanOffsetX, initialPanOffsetY, restoreViewTrigger, stopMomentum]);
 
   // Handle FloatingActions zoom in/out button triggers
   useEffect(() => {

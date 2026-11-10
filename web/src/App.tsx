@@ -50,6 +50,7 @@ export const App: React.FC = () => {
   const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState<number>(0);
   const [resetViewTrigger, setResetViewTrigger] = useState<number>(0);
+  const [restoreViewTrigger, setRestoreViewTrigger] = useState<number>(0);
   const [isCanvasTransformed, setIsCanvasTransformed] = useState<boolean>(false);
   const [initialViewport, setInitialViewport] = useState<{
     zoomScale: number;
@@ -290,6 +291,7 @@ export const App: React.FC = () => {
           preReplayViewportRef.current = null;
           viewportRef.current = savedView;
           setInitialViewport({ ...savedView });
+          setRestoreViewTrigger((prev) => prev + 1);
         }
       }, 250);
     };
@@ -1497,7 +1499,7 @@ export const App: React.FC = () => {
 
       if (activeSnapshotId) {
         StorageService.savePuzzleData(activeSnapshotId, updatedPuzzle);
-        StorageService.updateSnapshotProgress(
+        const updated = StorageService.updateSnapshotProgress(
           activeSnapshotId,
           filledRegionIds.size,
           puzzle.regions.length,
@@ -1510,6 +1512,7 @@ export const App: React.FC = () => {
           updatedPalette,
           puzzle.isFreeColor
         );
+        setSnapshots(updated);
       }
     },
     [puzzle, settings.hapticsEnabled, activeSnapshotId, filledRegionIds, paintedRegionColors]
@@ -1546,7 +1549,7 @@ export const App: React.FC = () => {
 
       if (activeSnapshotId) {
         StorageService.savePuzzleData(activeSnapshotId, updatedPuzzle);
-        StorageService.updateSnapshotProgress(
+        const updated = StorageService.updateSnapshotProgress(
           activeSnapshotId,
           filledRegionIds.size,
           puzzle.regions.length,
@@ -1559,6 +1562,7 @@ export const App: React.FC = () => {
           updatedPalette,
           puzzle.isFreeColor
         );
+        setSnapshots(updated);
       }
     },
     [puzzle, settings.hapticsEnabled, activeSnapshotId, filledRegionIds, paintedRegionColors]
@@ -1592,7 +1596,7 @@ export const App: React.FC = () => {
 
       if (activeSnapshotId) {
         StorageService.savePuzzleData(activeSnapshotId, updatedPuzzle);
-        StorageService.updateSnapshotProgress(
+        const updated = StorageService.updateSnapshotProgress(
           activeSnapshotId,
           filledRegionIds.size,
           puzzle.regions.length,
@@ -1605,6 +1609,7 @@ export const App: React.FC = () => {
           updatedPalette,
           puzzle.isFreeColor
         );
+        setSnapshots(updated);
       }
     },
     [puzzle, settings.hapticsEnabled, activeSnapshotId, filledRegionIds, paintedRegionColors]
@@ -2001,6 +2006,7 @@ export const App: React.FC = () => {
         zoomInTrigger={zoomInTrigger}
         zoomOutTrigger={zoomOutTrigger}
         resetViewTrigger={resetViewTrigger}
+        restoreViewTrigger={restoreViewTrigger}
         isGenerating={isLoading}
         detailedProgress={Boolean(settings.detailedLoadingProgress)}
         generationProgress={loadingProgress}
@@ -2201,6 +2207,10 @@ export const App: React.FC = () => {
           setSnapshots(updated);
         }}
         onDeleteSnapshot={async (id) => {
+          if (viewportSaveTimerRef.current !== null) {
+            window.clearTimeout(viewportSaveTimerRef.current);
+            viewportSaveTimerRef.current = null;
+          }
           const updated = await StorageService.deleteSnapshot(id);
           setSnapshots(updated);
           if (id === activeSnapshotId) {
@@ -2218,6 +2228,10 @@ export const App: React.FC = () => {
           }
         }}
         onClearAllSnapshots={async () => {
+          if (viewportSaveTimerRef.current !== null) {
+            window.clearTimeout(viewportSaveTimerRef.current);
+            viewportSaveTimerRef.current = null;
+          }
           await StorageService.clearAllSnapshots();
           setSnapshots([]);
           const defaultSample = SAMPLE_GALLERY[0];
