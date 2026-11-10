@@ -5,9 +5,15 @@ interface CapyAndroidInterface {
   setModalOpen?: (isOpen: boolean) => void;
   saveBackup?: (key: string, data: string) => boolean;
   loadBackup?: (key: string) => string | null;
+  saveCloudSnapshot?: (slotKey: string, payloadJson: string) => boolean;
+  loadCloudSnapshot?: (slotKey: string) => string | null;
+  signInPlayGames?: () => string | null;
+  showRewardedAd?: () => boolean;
   shareImage?: (title: string, dataUrl: string) => void;
+  shareTextLink?: (title: string, url: string) => void;
   shareFile?: (title: string, fileName: string, mimeType: string, base64Data: string) => void;
   consumePendingSharedImage?: () => string | null;
+  consumePendingDeepLink?: () => string | null;
   getAppVersion?: () => string;
   getSafeAreaInsets?: () => string;
 }
@@ -17,6 +23,7 @@ declare global {
     CapyAndroid?: CapyAndroidInterface;
     __capyCloseModal?: () => boolean;
     __capyReceiveSharedImage?: (title: string, dataUrl: string) => void;
+    __capyReceiveDeepLink?: (url: string) => void;
     webkit?: {
       messageHandlers?: {
         CapyIOS?: {
@@ -42,6 +49,7 @@ class NativeBridgeService {
   private primaryModalCloseHandler: (() => void) | null = null;
   private overlayBackStack: Array<() => void> = [];
   private sharedImageHandler: ((title: string, dataUrl: string) => void) | null = null;
+  private deepLinkHandler: ((url: string) => void) | null = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -63,6 +71,12 @@ class NativeBridgeService {
       window.__capyReceiveSharedImage = (title: string, dataUrl: string) => {
         if (this.sharedImageHandler && dataUrl) {
           this.sharedImageHandler(title || 'Shared Photo', dataUrl);
+        }
+      };
+
+      window.__capyReceiveDeepLink = (url: string) => {
+        if (this.deepLinkHandler && url) {
+          this.deepLinkHandler(url);
         }
       };
     }
@@ -302,6 +316,95 @@ class NativeBridgeService {
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1500);
     }
+  }
+
+  onDeepLink(handler: (url: string) => void): () => void {
+    this.deepLinkHandler = handler;
+    try {
+      if (window.CapyAndroid?.consumePendingDeepLink) {
+        const pendingUrl = window.CapyAndroid.consumePendingDeepLink();
+        if (pendingUrl && pendingUrl.length > 0) {
+          handler(pendingUrl);
+        }
+      }
+    } catch {
+      // Ignore
+    }
+    return () => {
+      if (this.deepLinkHandler === handler) {
+        this.deepLinkHandler = null;
+      }
+    };
+  }
+
+  signInPlayGames(): { playerId: string; displayName: string } | null {
+    try {
+      if (window.CapyAndroid?.signInPlayGames) {
+        const raw = window.CapyAndroid.signInPlayGames();
+        if (raw) {
+          const parsed = JSON.parse(raw) as { playerId?: string; displayName?: string };
+          if (parsed.playerId && parsed.displayName) {
+            return { playerId: parsed.playerId, displayName: parsed.displayName };
+          }
+        }
+      }
+    } catch {
+      // Safe fallback when Play Games v2 SDK is unconfigured or offline
+    }
+    return null;
+  }
+
+  saveCloudSnapshot(slotKey: string, payloadJson: string): boolean {
+    try {
+      if (window.CapyAndroid?.saveCloudSnapshot) {
+        return window.CapyAndroid.saveCloudSnapshot(slotKey, payloadJson);
+      }
+    } catch {
+      // Fallback handled by CrdtCloudSaveAdapter
+    }
+    return false;
+  }
+
+  loadCloudSnapshot(slotKey: string): string | null {
+    try {
+      if (window.CapyAndroid?.loadCloudSnapshot) {
+        const res = window.CapyAndroid.loadCloudSnapshot(slotKey);
+        return res && res.length > 0 ? res : null;
+      }
+    } catch {
+      // Fallback handled by CrdtCloudSaveAdapter
+    }
+    return null;
+  }
+
+  showRewardedAd(): boolean {
+    try {
+      if (window.CapyAndroid?.showRewardedAd) {
+        return window.CapyAndroid.showRewardedAd();
+      }
+    } catch {
+      // Ad-free or unconfigured host
+    }
+    return false;
+  }
+
+  async shareTextLink(title: string, url: string): Promise<'shared' | 'copied'> {
+    try {
+      if (window.CapyAndroid?.shareTextLink) {
+        window.CapyAndroid.shareTextLink(title, url);
+        return 'shared';
+      }
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ title, url });
+        return 'shared';
+      }
+    } catch {
+      // Fall through to clipboard copy if user dismissed or Web Share unavailable
+    }
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+    }
+    return 'copied';
   }
 }
 

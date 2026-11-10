@@ -28,7 +28,9 @@ Extends `androidx.activity.ComponentActivity` with edge-to-edge window decor (`W
 - **`OnApplyWindowInsetsListener`**: Intercepts `WindowInsetsCompat.Type.systemBars() or displayCutout()`. Computes CSS pixel equivalents (`px / density`) and injects `--safe-area-top`, `--safe-area-bottom`, `--safe-area-left`, and `--safe-area-right` into `document.documentElement.style`. Also queries fallback dimension resources (`status_bar_height`, `navigation_bar_height`) on `onCreate` to prevent frame-0 layout shifts.
 - **`OnBackPressedCallback`**: Cooperates with `bridge.isModalOpen` (backed by a LIFO overlay stack in `NativeBridge.ts`). When the player opens Settings or nested popovers, the callback is enabled; pressing system back evaluates `window.__capyCloseModal && window.__capyCloseModal()` in the WebView rather than terminating the app.
 - **Dual File Chooser Routing (`PickVisualMedia` & `OpenDocument`)**: Intercepts `WebChromeClient.onShowFileChooser` and inspects `fileChooserParams.acceptTypes` via `CapyAndroidBridge.shouldUsePhotoPicker(acceptTypes)`. Image uploads (`image/*`) open Android's modern `PickVisualMedia` photo picker, whereas save imports (`.capy`, `.json`, `application/octet-stream`) open Android Storage Access Framework `ActivityResultContracts.OpenDocument`.
-- **Share Intent Receiver**: Extracts `Intent.EXTRA_STREAM` from incoming `Intent.ACTION_SEND` (`image/*`) intents in `onCreate` and `onNewIntent`, converting images to data URLs delivered to `window.__capyReceiveSharedImage`.
+- **Share & Verified App Link Intent Receiver**:
+  - `Intent.ACTION_SEND` (`image/*`): Extracts `Intent.EXTRA_STREAM` in `onCreate` and `onNewIntent`, converting images to data URLs delivered to `window.__capyReceiveSharedImage`.
+  - `Intent.ACTION_VIEW` (`https://shthed.github.io/capy...` with `android:autoVerify="true"` in [`AndroidManifest.xml`](./app/src/main/AndroidManifest.xml)): Validates incoming HTTPS App Links via `CapyAndroidBridge.isAllowedCapyDeepLink` and forwards verified `#s=<token>` and `?room=<ROOM6>` deep links to `window.__capyReceiveDeepLink`.
 
 ### [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt)
 Class registered via `webView.addJavascriptInterface(bridge, "CapyAndroid")`.
@@ -41,8 +43,14 @@ Class registered via `webView.addJavascriptInterface(bridge, "CapyAndroid")`.
 - `@JavascriptInterface fun setModalOpen(isOpen: Boolean)`: Updates `isModalOpen` and toggles `backPressedCallback.isEnabled`.
 - `@JavascriptInterface fun saveBackup(key: String, data: String): Boolean`: Writes UTF-8 JSON data atomically to `filesDir/capy_saves/<sanitized_key>.json`.
 - `@JavascriptInterface fun loadBackup(key: String): String?`: Reads backup data from `filesDir/capy_saves/<sanitized_key>.json`.
+- `@JavascriptInterface fun saveCloudSnapshot(slotKey: String, payloadJson: String): Boolean`: Persists CRDT `CloudSaveEnvelope` JSON payloads to `filesDir/capy_cloud/<sanitized_slotKey>.json` (ready for Google Play Games `SnapshotsClient` backing).
+- `@JavascriptInterface fun loadCloudSnapshot(slotKey: String): String?`: Reads CRDT `CloudSaveEnvelope` JSON payloads from `filesDir/capy_cloud/<sanitized_slotKey>.json`.
+- `@JavascriptInterface fun signInPlayGames(): String?`: Hook for Google Play Games Services v2 sign-in; returns `null` until a Play Console Game App ID is configured so [`ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts) falls back cleanly to local profiles.
+- `@JavascriptInterface fun showRewardedAd(): Boolean`: Hook for strictly opt-in rewarded AI credit ads; returns `false` when no ad SDK is bundled (100% ad-free gameplay).
+- `@JavascriptInterface fun consumePendingDeepLink(): String?`: Atomically retrieves and clears any pending verified App Link URL captured during cold start.
+- `@JavascriptInterface fun shareTextLink(title: String, url: String)`: Launches Android's `Intent.ACTION_SEND` (`text/plain`) chooser for sharing `< 2 KB` puzzle progress links and Co-op room invites.
 - `@JavascriptInterface fun shareImage(title: String, dataUrl: String)`: Decodes base64 data, caches `capy_shared_artwork.png` in `context.cacheDir`, and fires `Intent.createChooser` via AndroidX `FileProvider`.
-- `@JavascriptInterface fun shareFile(title: String, fileName: String, mimeType: String, base64Data: String)`: Decodes arbitrary binary or text exports (such as `.capy` v2 save files and PNG exports), writes them to `cacheDir/exports/<sanitized_fileName>`, and launches Android's Share / Save chooser via `FileProvider`.
+- `@JavascriptInterface fun shareFile(title: String, fileName: String, mimeType: String, base64Data: String)`: Decodes arbitrary binary or text exports (such as `.capy` v2 save files and PNG exports), writes them to `cacheDir/<sanitized_fileName>`, and launches Android's Share / Save chooser via `FileProvider`.
 
 ---
 
@@ -100,7 +108,7 @@ On modern edge-to-edge Android devices (e.g. Pixel 7, Galaxy S23, cutouts/punch-
   }
   ```
   Whenever `:app` is compiled or tested, `web/dist/` is validated and synced into `src/main/assets/www/`.
-- **R8 / ProGuard (`app/proguard-rules.pro`)**:
+- **R8 / ProGuard (`app/proguard-rules.pro`) & Release Signing (`app/build.gradle.kts`)**:
   ```proguard
   -keepclassmembers class * {
       @android.webkit.JavascriptInterface <methods>;
@@ -108,7 +116,9 @@ On modern edge-to-edge Android devices (e.g. Pixel 7, Galaxy S23, cutouts/punch-
   -keepattributes JavascriptInterface
   -keep class com.capypaint.capy.CapyAndroidBridge { *; }
   ```
-  Ensures bridge methods and parameter signatures are preserved under R8 optimization.
+  - Release builds enable R8 minification and resource shrinking (`isMinifyEnabled = true`, `isShrinkResources = true`).
+  - When `CAPY_KEYSTORE_PATH`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, and `CAPY_KEY_PASSWORD` environment variables are set, `:app` automatically configures a `release` signing config for Google Play Store Android App Bundle (`:app:bundleRelease`) builds.
+  - Play Store Data Safety and Privacy Policy declarations are published at `https://shthed.github.io/capy/privacy-policy.html` ([`web/public/privacy-policy.html`](./web/public/privacy-policy.html)).
 
 ---
 
@@ -125,6 +135,9 @@ cd web && npm ci && npm run build
 
 # Build Debug APK (outputs to app/build/outputs/apk/debug/app-debug.apk)
 ./gradlew app:assembleDebug
+
+# Build signed Play Store Release AAB (when CAPY_KEYSTORE_* env vars are set)
+./gradlew app:bundleRelease
 
 # Deploy to connected USB/Wi-Fi Android device (ONLY run when explicitly asked by user)
 ./gradlew app:installDebug
