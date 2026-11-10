@@ -6,6 +6,7 @@ interface CapyAndroidInterface {
   saveBackup?: (key: string, data: string) => boolean;
   loadBackup?: (key: string) => string | null;
   shareImage?: (title: string, dataUrl: string) => void;
+  shareFile?: (title: string, fileName: string, mimeType: string, base64Data: string) => void;
   consumePendingSharedImage?: () => string | null;
   getAppVersion?: () => string;
   getSafeAreaInsets?: () => string;
@@ -26,8 +27,20 @@ declare global {
   }
 }
 
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.byteLength; i += chunkSize) {
+    binary += String.fromCharCode(
+      ...Array.from(bytes.subarray(i, Math.min(i + chunkSize, bytes.byteLength)))
+    );
+  }
+  return btoa(binary);
+}
+
 class NativeBridgeService {
-  private modalCloseHandler: (() => void) | null = null;
+  private primaryModalCloseHandler: (() => void) | null = null;
+  private overlayBackStack: Array<() => void> = [];
   private sharedImageHandler: ((title: string, dataUrl: string) => void) | null = null;
 
   constructor() {
@@ -35,8 +48,13 @@ class NativeBridgeService {
       this.applySafeAreaInsets();
 
       window.__capyCloseModal = () => {
-        if (this.modalCloseHandler) {
-          this.modalCloseHandler();
+        if (this.overlayBackStack.length > 0) {
+          const topHandler = this.overlayBackStack[this.overlayBackStack.length - 1];
+          topHandler();
+          return true;
+        }
+        if (this.primaryModalCloseHandler) {
+          this.primaryModalCloseHandler();
           return true;
         }
         return false;
@@ -127,17 +145,38 @@ class NativeBridgeService {
     }
   }
 
-  setBackModalOpen(isOpen: boolean, onClose?: () => void): void {
-    this.modalCloseHandler = isOpen && onClose ? onClose : null;
+  private syncNativeModalFlag(): void {
+    const anyOpen = this.overlayBackStack.length > 0 || this.primaryModalCloseHandler !== null;
     try {
       if (window.CapyAndroid?.setModalOpen) {
-        window.CapyAndroid.setModalOpen(isOpen);
+        window.CapyAndroid.setModalOpen(anyOpen);
       } else if (window.webkit?.messageHandlers?.CapyIOS) {
-        window.webkit.messageHandlers.CapyIOS.postMessage({ action: 'setModalOpen', isOpen });
+        window.webkit.messageHandlers.CapyIOS.postMessage({ action: 'setModalOpen', isOpen: anyOpen });
       }
     } catch {
       // Ignore bridge errors
     }
+  }
+
+  setBackModalOpen(isOpen: boolean, onClose?: () => void): void {
+    this.primaryModalCloseHandler = isOpen && onClose ? onClose : null;
+    this.syncNativeModalFlag();
+  }
+
+  /**
+   * Pushes a transient popover/overlay back handler onto a LIFO stack so dismissing
+   * a child popover via Android Back never unregisters a parent modal's back listener.
+   */
+  pushBackHandler(onClose: () => void): () => void {
+    this.overlayBackStack.push(onClose);
+    this.syncNativeModalFlag();
+    return () => {
+      const idx = this.overlayBackStack.lastIndexOf(onClose);
+      if (idx >= 0) {
+        this.overlayBackStack.splice(idx, 1);
+        this.syncNativeModalFlag();
+      }
+    };
   }
 
   saveBackup(key: string, data: string): boolean {
@@ -205,9 +244,63 @@ class NativeBridgeService {
           title,
           files: [file],
         });
+        return;
       }
+      // Fallback on desktop web without Web Share API: trigger download
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      await this.exportOrShareFile({
+        title,
+        fileName: `${title.replace(/\s+/g, '_').toLowerCase()}.png`,
+        mimeType: 'image/png',
+        data: blob,
+      });
     } catch {
       // Ignore user cancellation
+    }
+  }
+
+  /**
+   * Exports or shares a binary/text file reliably across Android WebView and desktop/mobile browsers.
+   */
+  async exportOrShareFile(options: {
+    title: string;
+    fileName: string;
+    mimeType: string;
+    data: Uint8Array | Blob | string;
+  }): Promise<void> {
+    const { title, fileName, mimeType, data } = options;
+
+    let blob: Blob;
+    if (data instanceof Blob) {
+      blob = data;
+    } else if (data instanceof Uint8Array) {
+      blob = new Blob([new Uint8Array(data)], { type: mimeType });
+    } else {
+      blob = new Blob([data], { type: mimeType });
+    }
+
+    if (typeof window !== 'undefined' && window.CapyAndroid?.shareFile) {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      window.CapyAndroid.shareFile(title, fileName, mimeType, uint8ToBase64(bytes));
+      return;
+    }
+
+    if (typeof window !== 'undefined' && window.CapyAndroid?.shareImage && mimeType === 'image/png') {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      window.CapyAndroid.shareImage(title, `data:image/png;base64,${uint8ToBase64(bytes)}`);
+      return;
+    }
+
+    if (typeof document !== 'undefined') {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
     }
   }
 }

@@ -15,22 +15,18 @@ Traditional paint-by-numbers algorithms rely on naive color quantization (such a
 
 Capy solves these challenges using a **strategy-pattern pipeline** with dedicated computer-vision extractors:
 
-```
-Source Canvas (HTML5 / Android Bitmap)
-   │
-   ├──▶ LineArtExtractor (Luminance & Sobel Gradient Analysis)
-   │      └── Produces Binary Ink Line Mask M_line(x, y)
-   │
-   ├──▶ Strategy Dispatcher (Auto / Line Art / Painterly / Posterized / Mosaic)
-   │      │
-   │      ├── [1] Pre-Filtering (Kuwahara / Median / Cel-Smoothing)
-   │      ├── [2] Perceptual Red-Mean K-Means++ Color Quantization
-   │      └── [3] Line-Aware Region Segmentation (Zero-Gap Guarantee)
-   │
-   ├──▶ Line Art Handling (Absorb to Centerline vs. Unified Black Region)
-   │
-   └──▶ Interior Centroid Placement (Pole of Inaccessibility BFS)
-          └── Emits PuzzleData (Palette, Regions, RegionMap, BorderMap)
+```mermaid
+flowchart TD
+  Source["Source Canvas (HTML5 / Android Bitmap)"] --> LineExt["LineArtExtractor (Luminance & Sobel Gradient Analysis)"]
+  LineExt --> LineMask["Binary Ink Line Mask M_line(x, y)"]
+  Source --> Dispatcher["Strategy Dispatcher (Auto / Line Art / Painterly / Posterized / Mosaic)"]
+  Dispatcher --> PreFilter["1. Pre-Filtering (Kuwahara / Median / Cel-Smoothing)"]
+  PreFilter --> Quantizer["2. Perceptual Red-Mean K-Means++ Color Quantization"]
+  Quantizer --> Segmenter["3. Line-Aware & Cell-Partitioned Region Segmentation"]
+  LineMask --> Segmenter
+  Segmenter --> LineHandling["Line Art Handling (Absorb to Centerline vs. Unified Black Region)"]
+  LineHandling --> Centroid["Interior Centroid Placement (Pole of Inaccessibility BFS)"]
+  Centroid --> Output["Emits PuzzleData (Palette, Regions, RegionMap, BorderMap)"]
 ```
 
 ---
@@ -42,7 +38,7 @@ Capy provides 5 distinct segmentation algorithms tailored for different visual s
 ### 1. `AUTO` — Adaptive Multi-Strategy Classifier
 * **Best for**: General use, automated pipelines, mixed artwork galleries.
 * **How it works**:
-  1. Samples a downscaled proxy of the source artwork.
+  1. Samples a downscaled proxy (`<= 512px` longest edge) of the source artwork so classification executes in milliseconds even on 4K photos.
   2. Analyzes continuous ink line presence via `LineArtExtractor`.
   3. Evaluates global vs. local variance ratio ($\text{Var}_{\text{local}} / \text{Var}_{\text{global}}$) and color cluster diversity.
   4. Automatically delegates to `LINE_ART` for drawings/cartoons, `PAINTERLY` for photos, or `POSTERIZED` for flat vector graphics.
@@ -80,10 +76,9 @@ Capy provides 5 distinct segmentation algorithms tailored for different visual s
 ### 5. `MOSAIC_CEL` — Cellular Superpixel Tessellation
 * **Best for**: Stained-glass artwork, geometric mosaics, and relaxing casual puzzles.
 * **Key Innovation**:
-  * Seeds a grid of spatial anchors across the canvas with hexagonal jitter.
-  * Computes a combined spatial-color distance metric (similar to SLIC superpixels):
-    $$D(p, S_i) = \|x_p - x_{S_i}\|^2 + \|y_p - y_{S_i}\|^2 + \Delta E_{\text{color}}(p, S_i)$$
-  * Generates uniform, convex, stained-glass tiles that are satisfying and easy to tap.
+  * Seeds a jittered spatial grid across the canvas and evaluates each pixel against its local $5\times 5$ seed neighborhood using a combined spatial-perceptual distance metric (SLIC-style superpixels):
+    $$D(p, S_i) = \|x_p - x_{S_i}\|^2 + \|y_p - y_{S_i}\|^2 + w_c \Delta E_{\text{color}}(p, S_i)$$
+  * Assigns each superpixel cell its dominant perceptual palette cluster and passes the resulting `cellPartitionMap` into `RegionSegmenter` so adjacent stained-glass tiles of the same palette color remain distinct, convex regions rather than coalescing into flat blobs.
 
 ---
 
@@ -129,7 +124,7 @@ Where $P$ is the 4-connected boundary perimeter and $A$ is pixel area.
 * A circle scores $\approx 12.6$.
 * A square scores $16$.
 * A smooth convex patch scores $15 \dots 35$.
-* Spindly tentacles score $> 65$. Regions scoring $> 65$ or with $P / A \ge 2.0$ are flagged and merged into the most harmonious neighboring region.
+* Spindly tentacles score $> 65$. Regions scoring above `maxCompactness` (default $65$) or exceeding `maxPerimeterToAreaRatio` ($P / A \ge 2.0$ default, $2.5$ for `MOSAIC_CEL`) are flagged and merged into their most harmonious neighboring region in $O(\text{area})$ time via union-find root component tracking.
 
 ### 4.3 Interior Centroid Placement (Pole of Inaccessibility)
 Number labels are never placed at bounding box centers (which often fall outside crescent or concave shapes).

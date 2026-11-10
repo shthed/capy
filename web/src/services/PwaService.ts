@@ -60,7 +60,7 @@ class PwaServiceClass {
       // Cache currently active DOM scripts and stylesheets for immediate offline readiness
       if ('caches' in window) {
         try {
-          const cache = await caches.open('capy-cache-v1');
+          const cache = await caches.open('capy-cache-v2');
           const urls: string[] = [];
           document.querySelectorAll('script[src], link[rel="stylesheet"]').forEach((el) => {
             const src = 'src' in el ? (el as HTMLScriptElement).src : (el as HTMLLinkElement).href;
@@ -129,8 +129,15 @@ class PwaServiceClass {
 
   public applyUpdate() {
     if (this.registration && this.registration.waiting) {
+      let reloaded = false;
+      const doReload = () => {
+        if (reloaded) return;
+        reloaded = true;
+        window.location.reload();
+      };
+      navigator.serviceWorker.addEventListener('controllerchange', doReload, { once: true });
       this.registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-      window.location.reload();
+      setTimeout(doReload, 1500);
     }
   }
 

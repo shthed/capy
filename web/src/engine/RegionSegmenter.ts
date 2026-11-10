@@ -33,7 +33,8 @@ export class RegionSegmenter {
     lineHandling: LineHandlingMode = 'ABSORB_LINES',
     sourceRgba?: Uint8ClampedArray | Uint8Array,
     maxRegions: number = 200,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: (progress: number, status: string) => void,
+    cellPartitionMap?: Int32Array
   ): SegmentationResult {
     const total = width * height;
     const initialClusters = new Int32Array(pixelClusters);
@@ -56,6 +57,7 @@ export class RegionSegmenter {
         if (regionMap[startIdx] !== -1) continue;
 
         const targetCluster = initialClusters[startIdx];
+        const targetCell = cellPartitionMap ? cellPartitionMap[startIdx] : 0;
         const currentRegionId = regionCounter++;
         regionClusterList.push(targetCluster);
 
@@ -74,28 +76,44 @@ export class RegionSegmenter {
 
           if (cx > 0) {
             const n = curr - 1;
-            if (regionMap[n] === -1 && initialClusters[n] === targetCluster) {
+            if (
+              regionMap[n] === -1 &&
+              initialClusters[n] === targetCluster &&
+              (!cellPartitionMap || cellPartitionMap[n] === targetCell)
+            ) {
               regionMap[n] = currentRegionId;
               queueBuffer[tail++] = n;
             }
           }
           if (cx < width - 1) {
             const n = curr + 1;
-            if (regionMap[n] === -1 && initialClusters[n] === targetCluster) {
+            if (
+              regionMap[n] === -1 &&
+              initialClusters[n] === targetCluster &&
+              (!cellPartitionMap || cellPartitionMap[n] === targetCell)
+            ) {
               regionMap[n] = currentRegionId;
               queueBuffer[tail++] = n;
             }
           }
           if (cy > 0) {
             const n = curr - width;
-            if (regionMap[n] === -1 && initialClusters[n] === targetCluster) {
+            if (
+              regionMap[n] === -1 &&
+              initialClusters[n] === targetCluster &&
+              (!cellPartitionMap || cellPartitionMap[n] === targetCell)
+            ) {
               regionMap[n] = currentRegionId;
               queueBuffer[tail++] = n;
             }
           }
           if (cy < height - 1) {
             const n = curr + width;
-            if (regionMap[n] === -1 && initialClusters[n] === targetCluster) {
+            if (
+              regionMap[n] === -1 &&
+              initialClusters[n] === targetCluster &&
+              (!cellPartitionMap || cellPartitionMap[n] === targetCell)
+            ) {
               regionMap[n] = currentRegionId;
               queueBuffer[tail++] = n;
             }
@@ -106,12 +124,14 @@ export class RegionSegmenter {
       }
     }
 
-    // 2. Disjoint-Set (Union-Find) structure for fast topological merging
+    // 2. Disjoint-Set (Union-Find) + per-root component lists for O(area) adjacency lookups
     const parent = new Int32Array(regionCounter);
     const regionArea = new Int32Array(regionCounter);
+    const rootComponents: number[][] = new Array(regionCounter);
     for (let i = 0; i < regionCounter; i++) {
       parent[i] = i;
       regionArea[i] = pixelLists[i].length;
+      rootComponents[i] = [i];
     }
 
     function findRoot(i: number): number {
@@ -126,141 +146,63 @@ export class RegionSegmenter {
       return root;
     }
 
-    // Phase 1: Dissolve all regions strictly smaller than minRegionArea
-    onProgress?.(0.72, 'Enforcing minimum region area...');
-    const targetMin = Math.max(12, minRegionArea);
-
-    for (let pass = 0; pass < maxMergePasses; pass++) {
-      let mergedThisPass = 0;
-
-      for (let r = 0; r < regionCounter; r++) {
-        const root = findRoot(r);
-        if (regionArea[root] >= targetMin) continue;
-
-        // Collect all adjacent neighbor root regions and boundary touch counts
-        const neighborTouches = new Map<number, number>();
-        const pixels = pixelLists[r];
+    const collectNeighborTouches = (targetRoot: number): { touches: Map<number, number>; perimeter: number } => {
+      const touches = new Map<number, number>();
+      let perimeter = 0;
+      const comps = rootComponents[targetRoot];
+      for (let c = 0; c < comps.length; c++) {
+        const pixels = pixelLists[comps[c]];
         for (let i = 0; i < pixels.length; i++) {
           const idx = pixels[i];
           const px = idx % width;
           const py = Math.floor(idx / width);
 
-          const neighbors = [
-            px > 0 ? regionMap[idx - 1] : -1,
-            px < width - 1 ? regionMap[idx + 1] : -1,
-            py > 0 ? regionMap[idx - width] : -1,
-            py < height - 1 ? regionMap[idx + width] : -1,
-          ];
-
-          for (const n of neighbors) {
-            if (n >= 0) {
-              const nRoot = findRoot(n);
-              if (nRoot !== root) {
-                neighborTouches.set(nRoot, (neighborTouches.get(nRoot) || 0) + 1);
-              }
+          if (px > 0) {
+            const nRoot = findRoot(regionMap[idx - 1]);
+            if (nRoot !== targetRoot) {
+              touches.set(nRoot, (touches.get(nRoot) || 0) + 1);
+              perimeter++;
             }
+          } else {
+            perimeter++;
           }
-        }
 
-        if (neighborTouches.size === 0) continue;
-
-        const currColor = palette[regionClusterList[root]] || palette[0];
-        let bestNeighbor = -1;
-        let bestScore = -1;
-
-        for (const [nRoot, touch] of neighborTouches.entries()) {
-          const nColor = palette[regionClusterList[nRoot]] || palette[0];
-          let distSq = 0;
-          if (currColor && nColor) {
-            distSq = ColorQuantizer.perceptualDistanceSq(
-              currColor.r,
-              currColor.g,
-              currColor.b,
-              nColor.r,
-              nColor.g,
-              nColor.b
-            );
-          }
-          const deltaE = Math.sqrt(distSq);
-          const score = Math.pow(touch, 1.25) / (deltaE + 8);
-
-          if (score > bestScore) {
-            bestScore = score;
-            bestNeighbor = nRoot;
-          }
-        }
-
-        if (bestNeighbor >= 0) {
-          parent[root] = bestNeighbor;
-          regionArea[bestNeighbor] += regionArea[root];
-          mergedThisPass++;
-        }
-      }
-
-      if (mergedThisPass === 0) break;
-    }
-
-    // Phase 2: Enforce maxRegions cap (never allow thousands or 10,000+ regions!)
-    onProgress?.(0.82, 'Balancing puzzle region count...');
-    const effectiveMaxRegions = Math.max(20, Math.min(2000, maxRegions || 200));
-
-    // Gather active unique roots
-    const activeRoots = new Set<number>();
-    for (let i = 0; i < regionCounter; i++) {
-      activeRoots.add(findRoot(i));
-    }
-
-    // If active region count exceeds maxRegions, merge the smallest regions into their closest neighbor
-    let mergeSafetyCounter = 0;
-    while (activeRoots.size > effectiveMaxRegions && mergeSafetyCounter < 8000) {
-      mergeSafetyCounter++;
-
-      // Find the active root with the smallest area
-      let smallestRoot = -1;
-      let minAreaVal = Number.MAX_VALUE;
-      for (const root of activeRoots) {
-        if (regionArea[root] < minAreaVal) {
-          minAreaVal = regionArea[root];
-          smallestRoot = root;
-        }
-      }
-
-      if (smallestRoot === -1) break;
-
-      // Find adjacent neighbors for smallestRoot
-      const neighborTouches = new Map<number, number>();
-      for (let r = 0; r < regionCounter; r++) {
-        if (findRoot(r) !== smallestRoot) continue;
-        const pixels = pixelLists[r];
-        for (let i = 0; i < pixels.length; i++) {
-          const idx = pixels[i];
-          const px = idx % width;
-          const py = Math.floor(idx / width);
-
-          const neighbors = [
-            px > 0 ? regionMap[idx - 1] : -1,
-            px < width - 1 ? regionMap[idx + 1] : -1,
-            py > 0 ? regionMap[idx - width] : -1,
-            py < height - 1 ? regionMap[idx + width] : -1,
-          ];
-
-          for (const n of neighbors) {
-            if (n >= 0) {
-              const nRoot = findRoot(n);
-              if (nRoot !== smallestRoot) {
-                neighborTouches.set(nRoot, (neighborTouches.get(nRoot) || 0) + 1);
-              }
+          if (px < width - 1) {
+            const nRoot = findRoot(regionMap[idx + 1]);
+            if (nRoot !== targetRoot) {
+              touches.set(nRoot, (touches.get(nRoot) || 0) + 1);
+              perimeter++;
             }
+          } else {
+            perimeter++;
+          }
+
+          if (py > 0) {
+            const nRoot = findRoot(regionMap[idx - width]);
+            if (nRoot !== targetRoot) {
+              touches.set(nRoot, (touches.get(nRoot) || 0) + 1);
+              perimeter++;
+            }
+          } else {
+            perimeter++;
+          }
+
+          if (py < height - 1) {
+            const nRoot = findRoot(regionMap[idx + width]);
+            if (nRoot !== targetRoot) {
+              touches.set(nRoot, (touches.get(nRoot) || 0) + 1);
+              perimeter++;
+            }
+          } else {
+            perimeter++;
           }
         }
       }
+      return { touches, perimeter };
+    };
 
-      if (neighborTouches.size === 0) {
-        // Isolated island, cannot merge
-        break;
-      }
-
-      const currColor = palette[regionClusterList[smallestRoot]] || palette[0];
+    const pickBestMergeNeighbor = (root: number, neighborTouches: Map<number, number>): number => {
+      const currColor = palette[regionClusterList[root]] || palette[0];
       let bestNeighbor = -1;
       let bestScore = -1;
 
@@ -285,10 +227,97 @@ export class RegionSegmenter {
           bestNeighbor = nRoot;
         }
       }
+      return bestNeighbor;
+    };
 
+    const mergeRootInto = (srcRoot: number, dstRoot: number): void => {
+      parent[srcRoot] = dstRoot;
+      regionArea[dstRoot] += regionArea[srcRoot];
+      const srcComps = rootComponents[srcRoot];
+      const dstComps = rootComponents[dstRoot];
+      for (let i = 0; i < srcComps.length; i++) {
+        dstComps.push(srcComps[i]);
+      }
+      rootComponents[srcRoot] = [];
+    };
+
+    // Phase 1: Dissolve all regions strictly smaller than minRegionArea
+    onProgress?.(0.72, 'Enforcing minimum region area...');
+    const targetMin = Math.max(12, minRegionArea);
+
+    for (let pass = 0; pass < maxMergePasses; pass++) {
+      let mergedThisPass = 0;
+
+      for (let r = 0; r < regionCounter; r++) {
+        const root = findRoot(r);
+        if (root !== r || regionArea[root] >= targetMin) continue;
+
+        const { touches } = collectNeighborTouches(root);
+        if (touches.size === 0) continue;
+
+        const bestNeighbor = pickBestMergeNeighbor(root, touches);
+        if (bestNeighbor >= 0) {
+          mergeRootInto(root, bestNeighbor);
+          mergedThisPass++;
+        }
+      }
+
+      if (mergedThisPass === 0) break;
+    }
+
+    // Phase 1.5: Dissolve thin serpentine boundary slivers exceeding maxPerimeterToAreaRatio
+    if (maxPerimeterToAreaRatio > 0) {
+      const sliverAreaCeiling = Math.max(targetMin * 4, 160);
+      for (let r = 0; r < regionCounter; r++) {
+        const root = findRoot(r);
+        if (root !== r || regionArea[root] > sliverAreaCeiling) continue;
+
+        const { touches, perimeter } = collectNeighborTouches(root);
+        if (touches.size === 0) continue;
+
+        if (perimeter / regionArea[root] > maxPerimeterToAreaRatio) {
+          const bestNeighbor = pickBestMergeNeighbor(root, touches);
+          if (bestNeighbor >= 0) {
+            mergeRootInto(root, bestNeighbor);
+          }
+        }
+      }
+    }
+
+    // Phase 2: Enforce maxRegions cap (never allow thousands or 10,000+ regions!)
+    onProgress?.(0.82, 'Balancing puzzle region count...');
+    const effectiveMaxRegions = Math.max(20, Math.min(2000, maxRegions || 200));
+
+    // Gather active unique roots
+    const activeRoots = new Set<number>();
+    for (let i = 0; i < regionCounter; i++) {
+      activeRoots.add(findRoot(i));
+    }
+
+    // If active region count exceeds maxRegions, merge the smallest regions into their closest neighbor
+    let mergeSafetyCounter = 0;
+    while (activeRoots.size > effectiveMaxRegions && mergeSafetyCounter < 8000) {
+      mergeSafetyCounter++;
+
+      let smallestRoot = -1;
+      let minAreaVal = Number.MAX_VALUE;
+      for (const root of activeRoots) {
+        if (regionArea[root] < minAreaVal) {
+          minAreaVal = regionArea[root];
+          smallestRoot = root;
+        }
+      }
+
+      if (smallestRoot === -1) break;
+
+      const { touches } = collectNeighborTouches(smallestRoot);
+      if (touches.size === 0) {
+        break;
+      }
+
+      const bestNeighbor = pickBestMergeNeighbor(smallestRoot, touches);
       if (bestNeighbor >= 0) {
-        parent[smallestRoot] = bestNeighbor;
-        regionArea[bestNeighbor] += regionArea[smallestRoot];
+        mergeRootInto(smallestRoot, bestNeighbor);
         activeRoots.delete(smallestRoot);
       } else {
         break;
@@ -314,12 +343,9 @@ export class RegionSegmenter {
         });
       }
 
-      const targetRegion = finalRegionsList[finalId - 1];
       const pixels = pixelLists[r];
       for (let i = 0; i < pixels.length; i++) {
-        const idx = pixels[i];
-        finalRegionMap[idx] = finalId;
-        targetRegion.pixels.push(idx);
+        finalRegionMap[pixels[i]] = finalId;
       }
     }
 
@@ -327,17 +353,6 @@ export class RegionSegmenter {
     if (lineMask && lineHandling === 'ABSORB_LINES') {
       onProgress?.(0.88, 'Aligning puzzle boundaries with artwork lines...');
       LineArtExtractor.alignBoundariesToLines(finalRegionMap, lineMask, width, height);
-
-      // Re-populate region pixels from aligned finalRegionMap
-      for (const reg of finalRegionsList) {
-        reg.pixels = [];
-      }
-      for (let i = 0; i < total; i++) {
-        const rid = finalRegionMap[i];
-        if (rid > 0 && rid <= finalRegionsList.length) {
-          finalRegionsList[rid - 1].pixels.push(i);
-        }
-      }
     }
 
     // Zero-gap guarantee
@@ -353,7 +368,14 @@ export class RegionSegmenter {
         else if (py < height - 1 && finalRegionMap[idx + width] > 0) fallbackId = finalRegionMap[idx + width];
 
         finalRegionMap[idx] = fallbackId;
-        finalRegionsList[fallbackId - 1]?.pixels.push(idx);
+      }
+    }
+
+    // Populate region pixels strictly in ascending scanline order (0..total-1)
+    for (let idx = 0; idx < total; idx++) {
+      const rid = finalRegionMap[idx];
+      if (rid > 0 && rid <= finalRegionsList.length) {
+        finalRegionsList[rid - 1].pixels.push(idx);
       }
     }
 

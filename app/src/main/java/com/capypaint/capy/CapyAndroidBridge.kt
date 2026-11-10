@@ -93,12 +93,20 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun shareImage(title: String, dataUrl: String) {
+        val commaIndex = dataUrl.indexOf(',')
+        val base64Part = if (commaIndex >= 0) dataUrl.substring(commaIndex + 1) else dataUrl
+        shareFile(title, "capy_shared_artwork.png", "image/png", base64Part)
+    }
+
+    @JavascriptInterface
+    fun shareFile(title: String, fileName: String, mimeType: String, base64Data: String) {
         try {
-            val commaIndex = dataUrl.indexOf(',')
-            val base64Part = if (commaIndex >= 0) dataUrl.substring(commaIndex + 1) else dataUrl
+            val commaIndex = base64Data.indexOf(',')
+            val base64Part = if (commaIndex >= 0) base64Data.substring(commaIndex + 1) else base64Data
             val bytes = Base64.decode(base64Part, Base64.DEFAULT)
 
-            val shareFile = File(context.cacheDir, "capy_shared_artwork.png")
+            val safeName = sanitizeFileName(fileName)
+            val shareFile = File(context.cacheDir, safeName)
             shareFile.writeBytes(bytes)
 
             val uri = FileProvider.getUriForFile(
@@ -107,8 +115,9 @@ class CapyAndroidBridge(
                 shareFile,
             )
 
+            val resolvedMime = mimeType.ifBlank { "application/octet-stream" }
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "image/png"
+                type = resolvedMime
                 putExtra(Intent.EXTRA_STREAM, uri)
                 putExtra(Intent.EXTRA_TITLE, title)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -117,9 +126,9 @@ class CapyAndroidBridge(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(chooser)
-            Log.i(TAG, "Dispatched share chooser for '$title' (${bytes.size} bytes)")
+            Log.i(TAG, "Dispatched share chooser for '$safeName' ($resolvedMime, ${bytes.size} bytes)")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to share image '$title'", e)
+            Log.e(TAG, "Failed to share file '$fileName'", e)
         }
     }
 
@@ -130,6 +139,33 @@ class CapyAndroidBridge(
         fun sanitizeKey(key: String): String {
             val cleaned = key.replace(Regex("[^a-zA-Z0-9._-]"), "_")
             return cleaned.ifEmpty { "default_key" }
+        }
+
+        fun sanitizeFileName(fileName: String): String {
+            val cleaned = fileName.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_").trimStart('.')
+            return cleaned.ifEmpty { "capy_export.bin" }
+        }
+
+        /**
+         * Returns true when a WebView `<input type="file">` exclusively requests image media
+         * (for example image MIME wildcards or extensions), and false when `.capy`, `.json`, or generic documents are requested.
+         */
+        fun shouldUsePhotoPicker(acceptTypes: Array<String>?): Boolean {
+            if (acceptTypes == null) return false
+            val nonBlank = acceptTypes
+                .flatMap { it.split(',') }
+                .map { it.trim().lowercase() }
+                .filter { it.isNotEmpty() }
+            if (nonBlank.isEmpty()) return false
+            return nonBlank.all { token ->
+                token.startsWith("image/") ||
+                    token == ".png" ||
+                    token == ".jpg" ||
+                    token == ".jpeg" ||
+                    token == ".webp" ||
+                    token == ".gif" ||
+                    token == ".bmp"
+            }
         }
 
         fun saveBackupToDir(dir: File, key: String, data: String): Boolean {

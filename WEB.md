@@ -8,26 +8,34 @@ This document provides a comprehensive technical reference for the updated Capy 
 
 Capy Web is a high-performance, client-side, color-by-number generator and interactive canvas player built with **React 19**, **TypeScript**, **Vite 6**, and **Tailwind CSS 4**.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                             Application Shell                               │
-│                         (App.tsx — State & Layout)                          │
-├────────────────────────────────┬────────────────────────────────────────────┤
-│ Viewport & Presentation        │ Engine & Background Services               │
-│  ├─ GameTopBar                 │  ├─ PuzzleWorkerService (Web Worker)       │
-│  ├─ PuzzleCanvas (2D Canvas)   │  │    └─ 5-Strategy Segmentation Engine    │
-│  ├─ FloatingActions            │  ├─ StorageService (IndexedDB + LS)        │
-│  ├─ PaletteDock                │  └─ NativeBridge (Android / WebKit / Web)  │
-│  ├─ ColorPickerPopover         │                                            │
-│  ├─ SettingsModal (4 Tabs)     │                                            │
-│  ├─ ReplayControls             │                                            │
-│  └─ LoadingOverlay             │                                            │
-└────────────────────────────────┴────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+  subgraph Shell["Application Shell (App.tsx - State & Layout)"]
+    subgraph UI["Viewport & Presentation"]
+      TopBar["GameTopBar"]
+      Canvas["PuzzleCanvas (2D Canvas)"]
+      Actions["FloatingActions"]
+      Dock["PaletteDock"]
+      Picker["ColorPickerPopover"]
+      Settings["SettingsModal (4 Tabs)"]
+      Replay["ReplayControls"]
+      Loading["LoadingOverlay"]
+    end
+    subgraph Engine["Engine & Background Services"]
+      Worker["PuzzleWorkerService (Web Worker - 5-Strategy Engine)"]
+      Codec["CapyCodec (RLE + LEB128 + Gzip .capy v2)"]
+      Storage["StorageService (IndexedDB + LocalStorage)"]
+      Bridge["NativeBridge (Android / WebKit / Web)"]
+      Pwa["PwaService (Install & Offline Cache)"]
+    end
+  end
+  UI --> Engine
+  Storage --> Codec
 ```
 
 ### Core Tenets
 1. **Zero Server Dependency**: All image processing, quantization, vector segmentation, and progress storage run 100% on the client. Puzzles can be generated and played completely offline.
-2. **60 FPS Canvas Rendering**: Instead of rendering thousands of individual DOM or SVG elements, Capy utilizes an **offscreen-cached HTML5 2D Canvas pipeline** that selectively repaints only modified regions.
+2. **60 FPS Canvas Rendering**: Instead of rendering thousands of individual DOM or SVG elements, Capy utilizes an **offscreen-cached HTML5 2D Canvas pipeline** that selectively repaints only modified regions without 60 FPS React state churn.
 3. **Responsive Non-Blocking UI**: Compute-intensive computer-vision algorithms run inside a dedicated **Web Worker**, providing continuous progress feedback without dropping frames or freezing UI threads.
 4. **Single Source of Truth**: The code in `web/` powers both the web deployment ([`https://shthed.github.io/capy/`](https://shthed.github.io/capy/)) and the native Android app ([`app/`](./app/)) via an extensible, low-overhead native bridge.
 5. **Edge-to-Edge Responsive Layout**: Full hardware safe area inset management (`--sat`, `--sab`, `--sal`, `--sar`) ensures seamless layouts across mobile notches, tablets, foldable devices, and widescreen desktops.
@@ -36,40 +44,36 @@ Capy Web is a high-performance, client-side, color-by-number generator and inter
 
 ## 2. Directory & Module Structure
 
-```
-web/
-├── index.html                 # HTML host document with mobile viewport & safe-area meta
-├── package.json               # React 19, Vite 6, Tailwind CSS 4, Lucide icons, canvas-confetti
-├── tsconfig.json              # Strict TypeScript configuration
-├── vite.config.ts             # Vite configuration with relative asset base ('./')
-└── src/
-    ├── main.tsx               # React DOM bootstrap
-    ├── App.tsx                # Master container, state orchestration, keyboard shortcuts
-    ├── index.css              # Tailwind CSS 4 imports, safe area utilities, touch reset
-    ├── types/
-    │   └── index.ts           # Central TypeScript interfaces, enums, defaults, sample gallery
-    ├── components/
-    │   ├── PuzzleCanvas.tsx   # Offscreen cached 2D canvas, pan/zoom gestures, hit testing, live generation FX
-    │   ├── GameTopBar.tsx     # Progress indicator, title, preview toggle, settings button
-    │   ├── PaletteDock.tsx    # Scrollable color palette, remaining count, sort modes
-    │   ├── FloatingActions.tsx# Undo, Replay, drag-to-color Paint Mode toggle, zoom +/-, view reset
-    │   ├── SettingsModal.tsx  # 4-tab configuration sheet (Settings, Hints, Create, Saves)
-    │   ├── ReplayControls.tsx # Floating playback HUD for chronological region completion replays
-    │   ├── ColorPickerPopover.tsx # Custom color picker & palette presets for Free Colour mode
-    │   └── LoadingOverlay.tsx # Bottom-anchored progress HUD with expandable 6-stage pipeline inspector
-    ├── services/
-    │   ├── NativeBridge.ts    # Android `@JavascriptInterface` & WebKit bridge (haptics, back button)
-    │   ├── PwaService.ts      # PWA install prompt, standalone detection & service worker lifecycle
-    │   ├── PuzzleWorkerService.ts # Worker lifecycle, job cancellation, promise dispatch
-    │   └── StorageService.ts  # IndexedDB (large blobs) + LocalStorage (settings/snapshots)
-    └── engine/
-        ├── puzzle.worker.ts   # Web Worker message handler
-        ├── PuzzleGenerator.ts # Multi-strategy coordinator & monotonic progress emitter
-        ├── ImageAnalyzer.ts   # Heuristic classifier (variance ratio, line art presence)
-        ├── LineArtExtractor.ts# Luminance & Sobel gradient ink outline extractor
-        ├── ColorQuantizer.ts  # Perceptual Red-Mean K-Means++ color clustering
-        └── RegionSegmenter.ts # 4-connected flood fill, slender merging, watershed border absorption
-```
+| Path | Responsibility |
+| :--- | :--- |
+| `web/index.html` | HTML host document with mobile viewport and safe-area metadata |
+| `web/package.json` | React 19, Vite 6, Tailwind CSS 4, Lucide icons, `canvas-confetti`, test scripts |
+| `web/tsconfig.json` | Strict TypeScript configuration |
+| `web/vite.config.ts` | Vite configuration with relative asset base (`'./'`) |
+| `web/public/sw.js` | Same-origin offline Service Worker (`capy-cache-v2`) |
+| `web/src/main.tsx` | React DOM bootstrap |
+| `web/src/App.tsx` | Master container, state orchestration, viewport persistence, keyboard shortcuts |
+| `web/src/index.css` | Tailwind CSS 4 imports, safe area utilities, touch reset |
+| `web/src/types/index.ts` | Central TypeScript interfaces, `PuzzleSourceRef`, defaults, sample gallery |
+| `web/src/components/PuzzleCanvas.tsx` | Offscreen cached 2D canvas, pan/zoom gestures, hit testing, rAF hint pulse |
+| `web/src/components/GameTopBar.tsx` | Progress indicator, title, preview toggle, fullscreen, settings button |
+| `web/src/components/PaletteDock.tsx` | Scrollable color palette, remaining count, sort modes |
+| `web/src/components/FloatingActions.tsx` | Undo, Redo, Replay, continuous Paint Mode toggle, zoom +/-, view reset |
+| `web/src/components/SettingsModal.tsx` | 4-tab configuration sheet (Settings, Hints, Create, Saves) |
+| `web/src/components/ReplayControls.tsx` | Floating playback HUD for chronological region completion replays |
+| `web/src/components/ColorPickerPopover.tsx` | Custom color picker and palette presets for Free Colour mode |
+| `web/src/components/LoadingOverlay.tsx` | Bottom-anchored progress HUD with expandable 6-stage pipeline inspector |
+| `web/src/services/CapyCodec.ts` | Compact Binary Storage v2 (RLE + LEB128 varints, `.capy` v2 Gzip framing, CRDT deltas) |
+| `web/src/services/StorageService.ts` | IndexedDB (`CompactPuzzleRecordV2` + `STORE_IMAGES` blobs) + LocalStorage |
+| `web/src/services/NativeBridge.ts` | Android `@JavascriptInterface` & WebKit bridge (haptics, LIFO back stack, file export) |
+| `web/src/services/PwaService.ts` | PWA install prompt, standalone detection, and Service Worker update lifecycle |
+| `web/src/services/PuzzleWorkerService.ts` | Worker lifecycle, job cancellation, promise dispatch |
+| `web/src/engine/puzzle.worker.ts` | Web Worker message handler |
+| `web/src/engine/PuzzleGenerator.ts` | Multi-strategy coordinator, `<= 512px` proxy analyzer, monotonic progress emitter |
+| `web/src/engine/ImageAnalyzer.ts` | Heuristic classifier (variance ratio, line art presence, B&W coloring detection) |
+| `web/src/engine/LineArtExtractor.ts` | Luminance, adaptive Otsu, and Sobel gradient ink outline extractor |
+| `web/src/engine/ColorQuantizer.ts` | Perceptual Red-Mean K-Means++ color clustering |
+| `web/src/engine/RegionSegmenter.ts` | 4-connected flood fill, `cellPartitionMap`, sliver merging, watershed border absorption |
 
 ---
 
@@ -77,30 +81,13 @@ web/
 
 The UI uses a fixed, layered viewport stack where pointer events pass through empty spaces to the canvas below (`pointer-events-none` on overlay containers, `pointer-events-auto` on interactive controls):
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ [Z-30] GameTopBar: [ Title • Progress % ]      [ Eye ] [ + ] [ Gear ]  │
-├────────────────────────────────────────────────────────────────────────┤
-│                                                                        │
-│                                                                        │
-│                     [Z-0] PuzzleCanvas                                 │
-│                   (Interactive Pan & Zoom)                             │
-│                                                                        │
-│                                                                        │
-│                                                [Z-20] FloatingActions  │
-│                                                       [ Replay ]       │
-│                                                       [ Fit to Screen ]│
-│                                                       [ Zoom In (+) ]  │
-│                                                       [ Zoom Out (-) ] │
-│                                                       [ Undo ]         │
-│                                                       [ Paint Brush ]  │
-├────────────────────────────────────────────────────────────────────────┤
-│ [Z-20] PaletteDock: [Color] (1)  (2)  (3)  (4)  (5) ... [Hint]         │
-└────────────────────────────────────────────────────────────────────────┘
-  [Z-30] ReplayControls (Floating bottom HUD during chronological replay)
-  [Z-40] LoadingOverlay (Bottom-anchored HUD with expandable pipeline drawer)
-  [Z-50] SettingsModal / ColorPickerPopover
-```
+| Z-Index Layer | Component(s) | Viewport Placement & Behavior |
+| :--- | :--- | :--- |
+| `z-0` | `PuzzleCanvas` | Full-bleed interactive pan/zoom 2D canvas |
+| `z-20` | `FloatingActions`, `PaletteDock` | Bottom-right tool stack and bottom horizontal swatch dock |
+| `z-30` | `GameTopBar`, `ReplayControls` | Top safe-area status bar and floating bottom replay scrubber HUD |
+| `z-40` | `LoadingOverlay` | Non-blocking bottom-anchored generation HUD and expandable pipeline drawer |
+| `z-50` | `SettingsModal`, `ColorPickerPopover` | Modal configuration sheet and nested custom color popover |
 
 ### Component Breakdown
 
@@ -162,25 +149,12 @@ To prevent asynchronous race conditions when switching sample artwork or uploadi
 
 Rendering thousands of intricate vector regions at 60 FPS during continuous touch-drag or high-speed replay requires avoiding full canvas redraws. `PuzzleCanvas` employs a **three-tier offscreen caching strategy**:
 
-```
-Offscreen Buffer 1: Base Canvas (baseCanvasRef)
-  ├── Static background color
-  ├── Translucent white mask for unfilled regions
-  └── Incrementally painted solid / original color for filled regions
-          │
-Offscreen Buffer 2: Border Canvas (borderCanvasRef)
-  └── Pre-baked 1-pixel border lines (Uint8Array borderMap)
-          │
-Offscreen Buffer 3: Highlight Canvas (highlightCanvasRef)
-  └── Transient glow / pattern overlay for matching or hinted regions
-          │
-          ▼
-Composite Render to Onscreen Canvas (canvasRef)
-  ├── 1. Draw baseCanvas with current pan/zoom transformation
-  ├── 2. Draw borderCanvas (if enabled / not preview mode)
-  ├── 3. Draw highlightCanvas (centroid glow, boundary, full fill)
-  ├── 4. Render Region Centroid Labels (culled to visible viewport)
-  └── 5. Render interactive feedback (tap ripple dot, pulse animation, or live generation FX)
+```mermaid
+flowchart TD
+  Base["Offscreen Buffer 1: Base Canvas (baseCanvasRef) - background, unfilled mask, incrementally painted regions"] --> Composite["Composite Render to Onscreen Canvas (canvasRef)"]
+  Border["Offscreen Buffer 2: Border Canvas (borderCanvasRef) - pre-baked 1px border lines"] --> Composite
+  Highlight["Offscreen Buffer 3: Highlight Canvas (highlightCanvasRef) - matching & hint overlays"] --> Composite
+  Composite --> Labels["Viewport-Culled Centroid Labels & Direct rAF Pulse Feedback"]
 ```
 
 ### Live Background Artwork Display & Real Generation Metrics
@@ -301,33 +275,34 @@ When running inside the Android wrapper (`app/`), `NativeBridge` connects the we
 
 | Bridge Method | Web Fallback | Native Android Implementation |
 | :--- | :--- | :--- |
-| `haptic(type)` | `navigator.vibrate(10)` | Native `Vibrator` / `VibrationEffect` with pre-baked feedback constants (`tick`, `success`, `warning`, `error`). |
-| `setBackModalOpen(isOpen, onClose)` | Adds `popstate` history listener | Registers callback on Android's `OnBackPressedCallback`, closing modals on back swipe before exiting the app. |
+| `haptic(type)` | `navigator.vibrate(...)` | Native `Vibrator` / `VibrationEffect` with pre-baked feedback constants (`tick`, `success`, `warning`, `error`). |
+| `pushBackHandler(onClose)` | LIFO overlay stack | Maintains a LIFO stack of modal/popover close callbacks synced to Android's `OnBackPressedCallback`, closing child popovers before parent modals. |
 | `saveBackup(key, data)` | No-op (localStorage only) | Persists JSON snapshots directly to private internal disk (`context.filesDir/capy_saves`). |
 | `loadBackup(key)` | Returns `null` | Reads persisted backup from internal disk if localStorage is cleared or fresh install. |
 | `applySafeAreaInsets()` | CSS `env(safe-area-inset-*)` | Queries `WindowInsetsCompat` and injects exact pixel values into `--safe-area-top`, `--safe-area-bottom`, etc. |
 | `consumePendingSharedImage()` | File `<input>` upload | Consumes incoming images sent to Capy via Android's `Intent.ACTION_SEND` (Share menu). |
+| `exportOrShareFile(options)` | Deferred-revoke `<a download>` | Encodes binary/text exports and invokes `CapyAndroid.shareFile` via AndroidX `FileProvider` Share Sheet. |
 
 ---
 
-## 8. Persistence & Snapshot Storage (`StorageService.ts`)
+## 8. Persistence & Compact Binary Storage v2 (`StorageService.ts` & `CapyCodec.ts`)
 
-Capy uses a hybrid storage model to manage performance and browser storage quotas:
+Capy uses a compact hybrid storage model engineered for instant gallery rendering, minimal browser quota usage, and tiny cloud sync payloads:
 
-1. **IndexedDB (`capy_game_storage_v8`)**:
-   - `STORE_PUZZLES`: Serialized heavy `PuzzleData` (region maps, border maps, typed arrays).
-   - `STORE_IMAGES`: Full-resolution source image blobs.
+1. **IndexedDB (`capy_game_storage_v8`) with Transaction Completion Guarantees**:
+   - All IndexedDB mutations await `tx.oncomplete` / `tx.onerror` / `tx.onabort` (`runTransaction`) rather than optimistic `IDBRequest.onsuccess`.
+   - `STORE_PUZZLES`: Stores `CompactPuzzleRecordV2` (`CapyCodec.compressPuzzleRecord`) — scanline Run-Length Encoding (RLE) + unsigned LEB128 varints for `regionMap` (`~20-45 KB` instead of `~9.4 MB` raw `Int32Array` maps, an `~140x` reduction). On load, `CapyCodec.decompressPuzzleRecord` reconstructs `regionMap`, `borderMap`, bounding boxes, `area`, and scanline-ordered `Region.pixels` in `< 3ms` in two linear passes. Legacy v1 `PuzzleData` records in IndexedDB are transparently migrated on load.
+   - `STORE_IMAGES`: Stores full-resolution source image `Blob` records for custom uploaded or shared photos (referenced via `SavedSnapshot.sourceRef = { kind: 'blob', uri: snapId }`), while built-in samples use zero-copy `{ kind: 'sample', uri: assetPath }`.
 2. **LocalStorage (`capy_snapshots_v8`) + Native Disk**:
-   - Stores lightweight snapshot metadata (`SavedSnapshot`): ordered `filledRegionIds` array (preserving chronological completion sequence), active color, zoom/pan coordinates, estimated storage footprint (`fileSizeBytes`), and a compressed **aspect-ratio preserved JPEG preview data URL** (max 320px).
-   - Enables instant rendering of the Saves gallery tab across Detail and Thumbnails modes (including human-readable `KB` file size badges and unified Selected Save Action Bar actions) without reading megabytes of raw image data from IndexedDB. Sample artwork automatically falls back to pristine sample asset images.
+   - Stores lightweight snapshot metadata (`SavedSnapshot`): ordered `filledRegionIds` array (preserving chronological completion sequence), active color, persisted `zoomScale` / `panOffsetX` / `panOffsetY`, compact storage footprint (`fileSizeBytes`), `sourceRef`, and an aspect-ratio preserved JPEG preview data URL (max 320px).
 3. **Settings Persistence (`capy_user_settings_v8`) & Tab Memory**:
-   - User preferences survive app updates and browser restarts.
-   - Reopening `SettingsModal` remembers the last active tab index via `localStorage.getItem('capy_last_settings_tab')` (integer index `'0'` [Settings], `'1'` [Hints], `'2'` [Create], or `'3'` [Saves]).
-4. **Save Export, Import & Compact RLE Serialization**:
-   - `StorageService.exportSnapshot(id)`: Downloads a single save snapshot along with its serialized puzzle model as `<cleanTitle>.capy` (`version: 2`, `format: 'capy-single-save'`).
-   - `StorageService.exportAllSnapshots()`: Bundles all user saves, puzzle data, and metadata into a portable backup `capy_saves_backup.capy` (`version: 2`, `format: 'capy-archive-save'`).
-   - `StorageService.importSnapshotBundle(jsonString, options)`: Validates single-save (`capy-single-save`), archive (`capy-archive-save`), and legacy snapshot-array bundles, preserves snapshot list order, batch-writes deserialized `PuzzleData` into `IndexedDB` (`STORE_PUZZLES`), and optionally refreshes timestamps (`refreshTimestamps: true`).
-   - **Compact v2 Run-Length Encoding (`regionMapRleB64`) & v1 Compatibility**: `serializePuzzle` encodes `regionMap` into endian-independent 4-byte RLE pairs (little-endian `uint16` `regionId` + `uint16` `runLength`) encoded as Base64 (`regionMapRleB64`), omitting deterministic `borderMap` and per-region `pixels` arrays to shrink `.capy` exports by ~98%. `deserializePuzzle` reconstructs `regionMap`, `borderMap`, and `Region.pixels` in `O(W * H)` with zero dynamic array allocations while maintaining full backward compatibility with `version: 1` (`regionMapB64`, `borderMapB64`, `pixelsB64`).
+   - User preferences survive app updates and browser restarts via functional atomic state updates.
+   - Reopening `SettingsModal` remembers the last active tab index via `localStorage.getItem('capy_last_settings_tab')` (`'0'` [Settings], `'1'` [Hints], `'2'` [Create], or `'3'` [Saves]).
+4. **Binary `.capy` v2 Save Export, JSON RLE v2 Compatibility & CRDT Progress Deltas**:
+   - `StorageService.exportSnapshotBinary(id)` and `StorageService.exportAllSnapshotsBinary()` emit Gzip-compressed `.capy` v2 binary archives (`CAPY\x02` magic header) embedding `SavedSnapshot` metadata, `CompactPuzzleRecordV2` RLE geometry, and any custom source image `Blob`.
+   - `StorageService.exportSnapshot(id)` and `StorageService.exportAllSnapshots()` emit UTF-8 JSON `version: 2` bundles using `regionMapRleB64` (`uint16` `regionId` + `uint16` `runLength` pairs) for programmatic inspection and backward compatibility.
+   - `StorageService.importSnapshotData(input, options)` and `StorageService.importSnapshotBundle(jsonString, options)` transparently import `.capy` v2 binary archives, JSON `version: 2` RLE bundles, and legacy JSON `version: 1` saves while batch-committing `CompactPuzzleRecordV2` records in a single `IndexedDB` transaction.
+   - `CapyCodec.encodeProgressDeltaToken` / `mergeProgressDeltas` encode pure player progress (`filledRegionIds`, `paintedRegionColors`, `customPalette`) into `< 2 KB` URL-safe tokens with conflict-free union-merge semantics for cloud sync and co-op rooms.
 5. **Instant First-Launch Sample Bootstrap (`./assets/sample_saves.capy`)**:
    - Pre-generated archive of all 4 built-in `SAMPLE_GALLERY` artworks (`Capybara`, `Mushroom Forest`, `Capy Forest`, `Snail Guitar`), generated via `npm run generate:samples` (`web/scripts/generate-sample-saves.mjs`) and precached in `web/public/sw.js`.
    - When the game is opened for the first time (`existingSnapshots.length === 0`), `App.tsx` (`restoreSession`) fetches `./assets/sample_saves.capy` concurrently with `assets/capybara.webp`, imports all 4 sample saves into `localStorage` and `IndexedDB`, and mounts `Capybara` immediately without waiting for Web Worker K-Means clustering or segmentation (falling back cleanly to live worker generation if the bundle is unavailable or `?skipSampleBootstrap=1` is present).
@@ -337,26 +312,26 @@ Capy uses a hybrid storage model to manage performance and browser storage quota
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `autoAdvance` | `boolean` | `true` | Automatically switches to the next incomplete color when all regions for the active color are filled. |
-| `difficulty` | `'EASY' \| 'NORMAL' \| 'HARD'` | `'NORMAL'` | **EASY**: Auto-selects color upon clicking any region.<br>**NORMAL**: Requires matching active color.<br>**HARD**: Mismatches trigger error penalty feedback. |
+| `difficulty` | `'EASY' \| 'NORMAL'` | `'EASY'` | **EASY**: Auto-selects color upon clicking any region.<br>**NORMAL**: Requires matching active color. |
 | `isPaintMode` | `boolean` | `false` | Enables drag-to-color continuous stroke painting. |
 | `isFreeColorMode` | `boolean` | `false` | Enables Coloring Page / Free Color mode allowing arbitrary color assignment. |
 | `raisePaletteDock` | `boolean` | `true` | Lifts the floating palette dock above navigation bars and Android gestures. |
-| `regionColorMode` | `'SOLID' \| 'ORIGINAL'` | `'SOLID'` | Renders filled regions with flat quantized palette color (`SOLID`) or sampled photographic detail (`ORIGINAL`). |
+| `regionColorMode` | `'SOLID' \| 'DETAIL'` | `'SOLID'` | Renders filled regions with flat quantized palette color (`SOLID`) or sampled photographic detail (`DETAIL`). |
 | `canvasBgColor` | `'BLACK' \| 'DARK_SLATE' \| 'CHARCOAL' \| 'LIGHT_GRAY' \| 'PURE_WHITE' \| 'CUSTOM'` | `'CHARCOAL'` | Background fill color for the canvas viewport surrounding the artwork. |
 | `canvasBgArgb` | `number` (32-bit ARGB) | `0xff18181b` (`#18181B`) | Custom background color when `canvasBgColor` is set to `'CUSTOM'` (configured via `<Pipette>` picker). |
-| `saveSortOrder` | `'LAST_ACTIVE' \| 'NAME' \| 'PROGRESS'` | `'LAST_ACTIVE'` | Sorting order for saved game snapshots in the Saves tab. |
-| `showSavePreviews` | `boolean` | `true` | Displays 240×240 thumbnails in the Saves gallery tab. |
+| `saveSortOrder` | `'LAST_ACTIVE' \| 'DATE' \| 'PERCENT_COMPLETE'` | `'LAST_ACTIVE'` | Sorting order for saved game snapshots in the Saves tab. |
+| `showSavePreviews` | `boolean` | `true` | Displays preview thumbnails in the Saves gallery tab. |
 | `highlightStyle` | `'CENTROID_GLOW' \| 'NUMBER_ONLY' \| 'FULL_REGION' \| 'BOUNDARY_ONLY'` | `'FULL_REGION'` | Visual overlay style for matching active regions. `FULL_REGION` and `BOUNDARY_ONLY` fill regions in the active palette colour; `NUMBER_ONLY` highlights label text colour directly without drawing circles; `CENTROID_GLOW` draws a pulsing circle at the region centroid. |
-| `hintFillStyle` | `'SOLID' \| 'CHECKER' \| 'STRIPED'` | `'CHECKER'` | Texture pattern applied to the active hint target region. |
+| `hintFillStyle` | `'SOLID' \| 'CHECKER' \| 'STRIPES'` | `'CHECKER'` | Texture pattern applied to the active hint target region. |
 | `hintColorArgb` | `number` (32-bit ARGB) | `0xfffbbf24` (`#FBBF24`) | Custom highlight color for hint targets (configured via `<Pipette>` picker). |
 | `showRegionLabels` | `boolean` | `true` | Displays number labels at interior poles of inaccessibility. |
 | `showPreviewLabels` | `boolean` | `false` | Shows number labels even when in artwork preview mode. |
 | `showPreviewBorders` | `boolean` | `false` | Shows border lines when in artwork preview mode. |
 | `highlightMatching` | `boolean` | `true` | Toggles dynamic glow and fill overlays for matching active regions. |
-| `animateHint` | `boolean` | `true` | Enables pulsing / breathing animation for hinted region. |
+| `animateHint` | `boolean` | `true` | Enables zero-React-re-render `requestAnimationFrame` pulsing animation for hinted region. |
 | `showNextRegionHint` | `boolean` | `true` | Highlights the next closest matching region when requesting hints. |
 | `hintIntensity` | `number` (0.0 – 1.0) | `0.65` | Opacity of hint overlays and glow animations. |
-| `minLabelSize` | `number` (2 – 14 px) | `6` | Minimum label font size on screen; regions where labels cannot fit at this size are suppressed until zoomed in. Lower values reveal tiny labels on high-DPI displays. Configured in Settings under Label Sizing & Bounds. |
+| `minLabelSize` | `number` (2 – 14 px) | `6` | Minimum label font size on screen; regions where labels cannot fit at this size are suppressed until zoomed in. Configured in Settings under Label Sizing & Bounds. |
 | `maxLabelSize` | `number` (10 – 36 px) | `18` | Maximum label font size on screen; prevents numbers in large open regions from becoming oversized. Configured in Settings under Label Sizing & Bounds. |
 | `labelScale` | `number` (0.5 – 2.0) | `1.0` | Global scaling multiplier for number label font size. Configured in Settings under Label Sizing & Bounds. |
 | `showZoomButtons` | `boolean` | `false` | Displays onscreen `+` / `-` floating zoom buttons. |
@@ -367,10 +342,10 @@ Capy uses a hybrid storage model to manage performance and browser storage quota
 | `panMomentum` | `boolean` | `true` | Enables Google Maps-style inertial gliding with friction decay on canvas pan flicks. |
 | `enableCustomColorForAllPuzzles` | `boolean` | `false` | Unlocks the palette color editor across all standard puzzle modes. |
 | `enableUndo` | `boolean` | `false` | Enables the Undo action button above the palette dock and keyboard shortcuts (`Ctrl+Z`). Disabled by default for standard puzzles and enabled automatically for free colour puzzles. |
-| `replaySpeed` | `number` (`0.5`, `1`, `2`, `5`, `10`) | `1` | Playback speed multiplier for chronological puzzle completion replays (`1x` $\approx$ 3.5s baseline duration). |
-| `autoReplayOnLoad` | `boolean` | `true` | Automatically zooms out and replays completed regions chronologically when opening a saved puzzle, then resumes active play. Configurable via minimal `Replay on Load` toggle switch in Settings and the Saves tab. |
+| `replaySpeed` | `number` (`0.5`, `1`, `2`, `5`, `10`) | `1` | Playback speed multiplier for chronological puzzle completion replays (`1x` $\approx$ 5.5s baseline duration). |
+| `autoReplayOnLoad` | `boolean` | `true` | Automatically zooms out and replays completed regions chronologically when opening a saved puzzle, then resumes active play and restores the saved zoom/pan viewport. |
 | `reverseDoubleTapZoom` | `boolean` | `false` | Inverts one-finger double-tap zoom direction. By default (`false`), dragging down zooms in and dragging up zooms out. When `true`, dragging up zooms in and dragging down zooms out. |
-| `detailedLoadingProgress` | `boolean` | `false` | Toggles between Simple Progress (Fast Mode, default: minimalist, low-overhead progress bar with worker IPC throttled for maximum generation speed) and Detailed Generation Progress (real-time 6-stage pipeline inspector, auto-detected metrics, and live emerging palette swatches). Can also be toggled directly from the loading card HUD. |
+| `detailedLoadingProgress` | `boolean` | `false` | Toggles between Simple Progress (Fast Mode, default: minimalist, low-overhead progress bar with worker IPC throttled for maximum generation speed) and Detailed Generation Progress (real-time 6-stage pipeline inspector, auto-detected metrics, and live emerging palette swatches). |
 | `generatorConfig` | `GeneratorConfig` | *(See PUZZLE.md)* | Engine tuning: algorithm, color count, min region area, max regions, resolution. |
 
 ---
@@ -397,16 +372,20 @@ Capy Web uses **Tailwind CSS 4** with CSS custom properties for hardware insets:
 
 Capy is an installable, 100% offline-first Progressive Web App. It operates without an internet connection after the initial visit, delivering native-like standalone desktop and mobile experiences.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Capy PWA Architecture                           │
-├──────────────────────────┬─────────────────────────────────────────────┤
-│ Install & Manifest Layer │ Offline Service Worker (`sw.js`)            │
-│  ├─ manifest.webmanifest │  ├─ Pre-cache: HTML, manifest, sample assets│
-│  ├─ PwaService.ts        │  ├─ Auto-discovery: Vite JS/CSS bundles     │
-│  ├─ Standalone detection │  ├─ Cache-First: Scripts, styles, workers   │
-│  └─ In-app install card  │  └─ Network-First / Cache Fallback: Document │
-└──────────────────────────┴─────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  subgraph ManifestLayer["Install & Manifest Layer"]
+    M["manifest.webmanifest"]
+    P["PwaService.ts"]
+    S["Standalone Detection & Install Card"]
+  end
+  subgraph ServiceWorker["Offline Service Worker (sw.js - capy-cache-v2)"]
+    Pre["Pre-cache: HTML, manifest, sample WebP assets"]
+    Auto["Auto-discovery: Vite JS/CSS/Worker bundles"]
+    Static["Cache-First: Same-origin scripts, styles, workers"]
+    Doc["Network-First / Cache Fallback: Document navigation"]
+  end
+  ManifestLayer --> ServiceWorker
 ```
 
 1. **Web App Manifest (`manifest.webmanifest`)**:
@@ -417,13 +396,13 @@ Capy is an installable, 100% offline-first Progressive Web App. It operates with
 2. **Offline Service Worker (`web/public/sw.js`)**:
    - Pre-caches core application shell (`./`, `./index.html`, `./manifest.webmanifest`), sample puzzle images (`capybara.webp`, `mushrooms.webp`, `capy_forest.webp`, `snail_guitar.webp`), and application icons.
    - Dynamically parses `index.html` during the `install` phase to discover and pre-cache hashed Vite script and CSS bundles (`assets/index-*.js`, `assets/index-*.css`) and Web Worker scripts (`assets/puzzle.worker-*.js`).
+   - Strictly scopes `fetch` interception to same-origin static assets (`url.origin === self.location.origin` and non-`/api/` paths) so cross-origin catalog, cloud sync, and auth requests are never polluted by Cache Storage.
    - Implements cache-first strategy for static assets and network-first with offline cache fallback for document navigation.
-   - Uses URL-string matching in addition to `Request` object matching to prevent CORS mode discrepancies when fetching module scripts.
-   - Skips waiting and claims active clients immediately upon installation to ensure immediate offline readiness.
 
 3. **Application Lifecycle Bridge (`PwaService.ts`)**:
    - Detects standalone execution via `display-mode: standalone` media query and `navigator.standalone`.
    - Captures `beforeinstallprompt` events and surfaces a direct "Install Web App" action card in the Settings modal under Platforms & Applications.
+   - Waits for `navigator.serviceWorker` `controllerchange` before reloading during `applyUpdate()` so updated caches activate deterministically without double-reloads.
    - Bypasses service worker registration when running inside the native Android launcher wrapper (`NativeBridge.isAndroid`), allowing AndroidX `WebViewAssetLoader` to manage APK assets directly.
 
 ---
@@ -442,13 +421,16 @@ npm run lint
 # Compile production bundle into web/dist/
 npm run build
 
+# Run Compact Binary Codec v2 unit and round-trip tests
+npm run test:codec
+
 # Run Playwright interaction test suite
 npm run test:game
 
 # Run comprehensive end-to-end full gameplay test suite
 npm run test:gameplay
 
-# Capture showcase screenshots for gallery
+# Capture showcase screenshots for docs/gallery/
 npm run gallery:capture
 
 # Launch Vite development server on http://localhost:3000

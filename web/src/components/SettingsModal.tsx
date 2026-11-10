@@ -177,17 +177,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, [isOpen, initialTab]);
 
-  // Close on Escape key
+  // Close on Escape key (cancel inline rename first if active)
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (renamingId) {
+          setRenamingId(null);
+          return;
+        }
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, renamingId]);
 
   // Artwork resolution and snapping calculations
   const nativeW = sourceImage?.naturalWidth || sourceImage?.width || 0;
@@ -230,6 +234,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   if (!isOpen) return null;
+
+  const updateSettings = (patch: Partial<UserSettings>) => {
+    onUpdateSettings({ ...settings, ...patch });
+  };
 
   const updateSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
     onUpdateSettings({ ...settings, [key]: value });
@@ -387,8 +395,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         type="button"
                         title={item.label}
                         onClick={() => {
-                          updateSetting('canvasBgColor', key);
-                          updateSetting('canvasBgArgb', item.argb);
+                          updateSettings({ canvasBgColor: key, canvasBgArgb: item.argb });
                         }}
                         className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
                           isSelected
@@ -422,8 +429,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       type="color"
                       value={argbToHex(settings.canvasBgArgb)}
                       onChange={(e) => {
-                        updateSetting('canvasBgColor', 'CUSTOM');
-                        updateSetting('canvasBgArgb', hexToArgb(e.target.value));
+                        updateSettings({
+                          canvasBgColor: 'CUSTOM',
+                          canvasBgArgb: hexToArgb(e.target.value),
+                        });
                       }}
                       className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
                     />
@@ -691,10 +700,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     value={settings.minLabelSize ?? 6}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
-                      updateSetting('minLabelSize', val);
-                      if (val > (settings.maxLabelSize ?? 18)) {
-                        updateSetting('maxLabelSize', val);
-                      }
+                      const maxVal = settings.maxLabelSize ?? 18;
+                      updateSettings(
+                        val > maxVal
+                          ? { minLabelSize: val, maxLabelSize: val }
+                          : { minLabelSize: val }
+                      );
                     }}
                     className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
@@ -719,10 +730,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     value={settings.maxLabelSize ?? 18}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
-                      updateSetting('maxLabelSize', val);
-                      if (val < (settings.minLabelSize ?? 6)) {
-                        updateSetting('minLabelSize', val);
-                      }
+                      const minVal = settings.minLabelSize ?? 6;
+                      updateSettings(
+                        val < minVal
+                          ? { maxLabelSize: val, minLabelSize: val }
+                          : { maxLabelSize: val }
+                      );
                     }}
                     className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
@@ -1476,7 +1489,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".capy,.json,application/json"
+                accept=".capy,.json,application/json,application/octet-stream"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -1581,6 +1594,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 if (renameText.trim()) onRenameSnapshot(selectedSave.id, renameText.trim());
                                 setRenamingId(null);
                               } else if (e.key === 'Escape') {
+                                e.stopPropagation();
                                 setRenamingId(null);
                               }
                             }}

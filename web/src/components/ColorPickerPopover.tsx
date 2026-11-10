@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Palette, Pipette, Plus, RefreshCw, X } from 'lucide-react';
 import { COLORING_PALETTE_PRESETS, PaletteColor, PalettePreset } from '../types';
+import { NativeBridge } from '../services/NativeBridge';
 
 interface ColorPickerPopoverProps {
   isOpen: boolean;
@@ -94,6 +95,23 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
       setLightness(l);
     }
   }, [activeColor, isOpen]);
+
+  // Register Android Back stack and Escape key dismissal while open
+  useEffect(() => {
+    if (!isOpen) return;
+    const popBack = NativeBridge.pushBackHandler(onClose);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      popBack();
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

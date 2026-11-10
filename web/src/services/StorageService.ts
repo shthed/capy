@@ -1,4 +1,16 @@
 import { PaletteColor, PuzzleData, SavedSnapshot, UserSettings } from '../types';
+import {
+  CompactPuzzleRecordV2,
+  compressPuzzleRecord,
+  decodeBinarySaveV2,
+  decompressPuzzleRecord,
+  encodeArchiveSaveBinaryV2,
+  encodeSingleSaveBinaryV2,
+  estimateCompactPuzzleBytes,
+  hasBinaryMagicHeader,
+  isCompactPuzzleRecordV2,
+  serializableToRecord,
+} from './CapyCodec';
 import { NativeBridge } from './NativeBridge';
 
 const SETTINGS_KEY = 'capy_user_settings_v8';
@@ -76,10 +88,27 @@ export class StorageService {
           }
         };
         req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+        req.onerror = () => {
+          this.dbPromise = null;
+          reject(req.error);
+        };
       });
     }
     return this.dbPromise;
+  }
+
+  private static async runTransaction(
+    storeNames: string | string[],
+    work: (tx: IDBTransaction) => void
+  ): Promise<void> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(storeNames, 'readwrite');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed'));
+      tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+      work(tx);
+    });
   }
 
   static loadSettings(): UserSettings {
@@ -145,15 +174,7 @@ export class StorageService {
   }
 
   static estimatePuzzleSaveBytes(puzzle: PuzzleData, previewDataUrl?: string): number {
-    let bytes = puzzle.regionMap.byteLength + puzzle.borderMap.byteLength;
-    for (const r of puzzle.regions) {
-      bytes += r.pixels.byteLength + 64;
-    }
-    bytes += puzzle.palette.length * 48;
-    if (previewDataUrl) {
-      bytes += previewDataUrl.length;
-    }
-    return bytes;
+    return estimateCompactPuzzleBytes(puzzle, previewDataUrl);
   }
 
   static updateSnapshotProgress(
@@ -215,12 +236,12 @@ export class StorageService {
     this.saveSnapshots(updated);
 
     try {
-      const db = await this.getDB();
-      const tx = db.transaction([STORE_PUZZLES, STORE_IMAGES], 'readwrite');
-      tx.objectStore(STORE_PUZZLES).delete(id);
-      tx.objectStore(STORE_IMAGES).delete(id);
-    } catch {
-      // ignore
+      await this.runTransaction([STORE_PUZZLES, STORE_IMAGES], (tx) => {
+        tx.objectStore(STORE_PUZZLES).delete(id);
+        tx.objectStore(STORE_IMAGES).delete(id);
+      });
+    } catch (e) {
+      console.warn('Failed to delete snapshot IndexedDB entries', e);
     }
 
     return updated;
@@ -229,26 +250,31 @@ export class StorageService {
   static async clearAllSnapshots(): Promise<void> {
     this.saveSnapshots([]);
     try {
-      const db = await this.getDB();
-      const tx = db.transaction([STORE_PUZZLES, STORE_IMAGES], 'readwrite');
-      tx.objectStore(STORE_PUZZLES).clear();
-      tx.objectStore(STORE_IMAGES).clear();
-    } catch {
-      // ignore
+      await this.runTransaction([STORE_PUZZLES, STORE_IMAGES], (tx) => {
+        tx.objectStore(STORE_PUZZLES).clear();
+        tx.objectStore(STORE_IMAGES).clear();
+      });
+    } catch (e) {
+      console.warn('Failed to clear snapshot IndexedDB stores', e);
     }
   }
 
   static async savePuzzleData(id: string, puzzle: PuzzleData): Promise<void> {
     try {
-      const db = await this.getDB();
-      const tx = db.transaction(STORE_PUZZLES, 'readwrite');
-      tx.objectStore(STORE_PUZZLES).put(puzzle, id);
+      const compactRecord = compressPuzzleRecord(puzzle);
+      await this.saveCompactPuzzleRecord(id, compactRecord);
     } catch (e) {
-      console.warn('Failed to save puzzle data to IndexedDB', e);
+      console.warn('Failed to save compact puzzle data to IndexedDB', e);
     }
   }
 
-  static async loadPuzzleData(id: string): Promise<PuzzleData | null> {
+  static async saveCompactPuzzleRecord(id: string, record: CompactPuzzleRecordV2): Promise<void> {
+    await this.runTransaction(STORE_PUZZLES, (tx) => {
+      tx.objectStore(STORE_PUZZLES).put(record, id);
+    });
+  }
+
+  private static async loadRawPuzzleEntry(id: string): Promise<unknown> {
     try {
       const db = await this.getDB();
       return new Promise((resolve) => {
@@ -262,11 +288,45 @@ export class StorageService {
     }
   }
 
+  static async loadPuzzleData(id: string): Promise<PuzzleData | null> {
+    const raw = await this.loadRawPuzzleEntry(id);
+    if (!raw) return null;
+
+    if (isCompactPuzzleRecordV2(raw)) {
+      return decompressPuzzleRecord(raw);
+    }
+
+    // Backward-compatible transparent migration for legacy v1 IndexedDB PuzzleData entries
+    const legacy = raw as PuzzleData;
+    if (legacy && legacy.regionMap && Array.isArray(legacy.regions)) {
+      this.savePuzzleData(id, legacy).catch(() => {
+        // Non-blocking background compaction
+      });
+      return legacy;
+    }
+
+    return null;
+  }
+
+  static async loadCompactPuzzleRecord(id: string): Promise<CompactPuzzleRecordV2 | null> {
+    const raw = await this.loadRawPuzzleEntry(id);
+    if (!raw) return null;
+    if (isCompactPuzzleRecordV2(raw)) return raw;
+
+    const legacy = raw as PuzzleData;
+    if (legacy && legacy.regionMap && Array.isArray(legacy.regions)) {
+      const compact = compressPuzzleRecord(legacy);
+      this.saveCompactPuzzleRecord(id, compact).catch(() => {});
+      return compact;
+    }
+    return null;
+  }
+
   static async saveImageBlob(id: string, blob: Blob): Promise<void> {
     try {
-      const db = await this.getDB();
-      const tx = db.transaction(STORE_IMAGES, 'readwrite');
-      tx.objectStore(STORE_IMAGES).put(blob, id);
+      await this.runTransaction(STORE_IMAGES, (tx) => {
+        tx.objectStore(STORE_IMAGES).put(blob, id);
+      });
     } catch (e) {
       console.warn('Failed to save image blob to IndexedDB', e);
     }
@@ -324,24 +384,84 @@ export class StorageService {
     }
   }
 
-  static async saveMultiplePuzzleData(entries: Array<{ id: string; puzzle: PuzzleData }>): Promise<void> {
+  static async saveMultipleCompactPuzzleRecords(
+    entries: Array<{ id: string; record: CompactPuzzleRecordV2 }>
+  ): Promise<void> {
     if (entries.length === 0) return;
     try {
-      const db = await this.getDB();
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_PUZZLES, 'readwrite');
+      await this.runTransaction(STORE_PUZZLES, (tx) => {
         const store = tx.objectStore(STORE_PUZZLES);
         for (const entry of entries) {
-          store.put(entry.puzzle, entry.id);
+          store.put(entry.record, entry.id);
         }
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
       });
     } catch (e) {
-      console.warn('Failed to batch save puzzle data to IndexedDB', e);
+      console.warn('Failed to batch save compact puzzle records to IndexedDB', e);
     }
   }
 
+  static async saveMultiplePuzzleData(entries: Array<{ id: string; puzzle: PuzzleData }>): Promise<void> {
+    if (entries.length === 0) return;
+    await this.saveMultipleCompactPuzzleRecords(
+      entries.map((entry) => ({
+        id: entry.id,
+        record: compressPuzzleRecord(entry.puzzle),
+      }))
+    );
+  }
+
+  /**
+   * Exports a single save in Compact Binary Format v2 (`CAPY\x02...`, ~45-95 KB).
+   * Embeds custom uploaded image blobs automatically while keeping built-in/catalog references zero-copy.
+   */
+  static async exportSnapshotBinary(id: string): Promise<Uint8Array> {
+    const snapshots = this.loadSnapshots();
+    const snapshot = snapshots.find((s) => s.id === id);
+    if (!snapshot) throw new Error('Snapshot not found');
+
+    const compactRecord = await this.loadCompactPuzzleRecord(id);
+    const isZeroCopyRef =
+      Boolean(snapshot.sampleAssetPath) ||
+      snapshot.sourceRef?.kind === 'sample' ||
+      snapshot.sourceRef?.kind === 'catalog' ||
+      snapshot.sourceRef?.kind === 'url';
+    const imageBlob = isZeroCopyRef ? null : await this.loadImageBlob(id);
+
+    return encodeSingleSaveBinaryV2(snapshot, compactRecord, imageBlob);
+  }
+
+  /**
+   * Exports all saves into a single Compact Binary Archive v2 (`CAPY\x02...`).
+   */
+  static async exportAllSnapshotsBinary(): Promise<Uint8Array> {
+    const snapshots = this.loadSnapshots();
+    const compactRecords: Record<string, CompactPuzzleRecordV2> = {};
+    const imageBlobs: Record<string, Blob> = {};
+
+    for (const snap of snapshots) {
+      const rec = await this.loadCompactPuzzleRecord(snap.id);
+      if (rec) {
+        compactRecords[snap.id] = rec;
+      }
+      const isZeroCopyRef =
+        Boolean(snap.sampleAssetPath) ||
+        snap.sourceRef?.kind === 'sample' ||
+        snap.sourceRef?.kind === 'catalog' ||
+        snap.sourceRef?.kind === 'url';
+      if (!isZeroCopyRef) {
+        const blob = await this.loadImageBlob(snap.id);
+        if (blob) {
+          imageBlobs[snap.id] = blob;
+        }
+      }
+    }
+
+    return encodeArchiveSaveBinaryV2(snapshots, compactRecords, imageBlobs);
+  }
+
+  /**
+   * JSON v2 RLE export helper preserved for programmatic inspection and backward compatibility.
+   */
   static async exportSnapshot(id: string): Promise<string> {
     const snapshots = this.loadSnapshots();
     const snapshot = snapshots.find((s) => s.id === id);
@@ -376,6 +496,110 @@ export class StorageService {
     return JSON.stringify(bundle);
   }
 
+  /**
+   * Unified importer supporting Compact Binary v2 (`CAPY\x02...`), JSON v2 RLE, and legacy v1 JSON `.capy` saves.
+   */
+  static async importSnapshotData(
+    input: ArrayBuffer | Uint8Array | string,
+    options?: { refreshTimestamps?: boolean }
+  ): Promise<{
+    importedCount: number;
+    firstSnapshot?: SavedSnapshot;
+    firstPuzzle?: PuzzleData;
+    error?: string;
+  }> {
+    try {
+      if (typeof input !== 'string') {
+        const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+        if (hasBinaryMagicHeader(bytes)) {
+          const decoded = await decodeBinarySaveV2(bytes);
+          const now = Date.now();
+
+          if (decoded.format === 'capy-single-save-v2' && decoded.snapshot) {
+            const rawSnap = decoded.snapshot;
+            if (!rawSnap.id || !rawSnap.title) {
+              return { importedCount: 0, error: 'Invalid binary snapshot structure' };
+            }
+            const snap: SavedSnapshot = options?.refreshTimestamps
+              ? { ...rawSnap, timestamp: now, lastOpened: now }
+              : rawSnap;
+            this.addSnapshot(snap);
+            let firstPuzzle: PuzzleData | undefined;
+            if (decoded.compactPuzzle) {
+              const record = serializableToRecord(decoded.compactPuzzle);
+              await this.saveCompactPuzzleRecord(snap.id, record);
+              firstPuzzle = decompressPuzzleRecord(record);
+            }
+            if (decoded.imageBytes && decoded.imageBytes.byteLength > 0) {
+              const blob = new Blob([new Uint8Array(decoded.imageBytes)], {
+                type: decoded.imageMimeType || 'image/webp',
+              });
+              await this.saveImageBlob(snap.id, blob);
+            }
+            return { importedCount: 1, firstSnapshot: snap, firstPuzzle };
+          }
+
+          if (decoded.format === 'capy-archive-save-v2' && Array.isArray(decoded.snapshots)) {
+            const validSnapshots = decoded.snapshots
+              .filter((s) => Boolean(s && s.id && s.title))
+              .map((s, idx) =>
+                options?.refreshTimestamps
+                  ? { ...s, timestamp: now - idx * 1000, lastOpened: now - idx * 1000 }
+                  : s
+              );
+
+            if (validSnapshots.length === 0) {
+              return { importedCount: 0, error: 'No valid snapshots in binary archive' };
+            }
+
+            const existing = this.loadSnapshots();
+            const importedIds = new Set(validSnapshots.map((s) => s.id));
+            const remaining = existing.filter((s) => !importedIds.has(s.id));
+            this.saveSnapshots([...validSnapshots, ...remaining]);
+
+            const compactEntries: Array<{ id: string; record: CompactPuzzleRecordV2 }> = [];
+            let firstPuzzle: PuzzleData | undefined;
+
+            for (let i = 0; i < validSnapshots.length; i++) {
+              const snap = validSnapshots[i];
+              const comp = decoded.compactPuzzles?.[snap.id];
+              if (comp) {
+                const record = serializableToRecord(comp);
+                if (i === 0) {
+                  firstPuzzle = decompressPuzzleRecord(record);
+                }
+                compactEntries.push({ id: snap.id, record });
+              }
+              const imgEntry = decoded.images?.[snap.id];
+              if (imgEntry && imgEntry.bytes.byteLength > 0) {
+                const blob = new Blob([new Uint8Array(imgEntry.bytes)], {
+                  type: imgEntry.mimeType || 'image/webp',
+                });
+                await this.saveImageBlob(snap.id, blob);
+              }
+            }
+
+            await this.saveMultipleCompactPuzzleRecords(compactEntries);
+            return {
+              importedCount: validSnapshots.length,
+              firstSnapshot: validSnapshots[0],
+              firstPuzzle,
+            };
+          }
+
+          return { importedCount: 0, error: 'Unrecognized Capy v2 binary payload' };
+        }
+
+        const text = new TextDecoder().decode(bytes);
+        return this.importSnapshotBundle(text, options);
+      }
+
+      return this.importSnapshotBundle(input, options);
+    } catch (err: any) {
+      return { importedCount: 0, error: err?.message || 'Failed to import Capy save file' };
+    }
+  }
+
   static async importSnapshotBundle(
     jsonString: string,
     options?: { refreshTimestamps?: boolean }
@@ -391,7 +615,7 @@ export class StorageService {
 
       const now = Date.now();
 
-      // Single snapshot format
+      // Single snapshot format (v1 JSON)
       if (data.format === 'capy-single-save' && data.snapshot) {
         const rawSnap = data.snapshot as SavedSnapshot;
         if (!rawSnap.id || !rawSnap.title) {
@@ -409,7 +633,7 @@ export class StorageService {
         return { importedCount: 1, firstSnapshot: snap, firstPuzzle };
       }
 
-      // Archive format
+      // Archive format (v1 JSON)
       if (data.format === 'capy-archive-save' && Array.isArray(data.snapshots)) {
         const validSnapshots = (data.snapshots as SavedSnapshot[])
           .filter((s) => Boolean(s && s.id && s.title))

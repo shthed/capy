@@ -94,10 +94,10 @@ async function runPwaOfflineTest() {
     console.log('3️⃣ Inspecting Cache Storage...');
     const cacheDetails = await page.evaluate(async () => {
       const cacheNames = await caches.keys();
-      const hasCapyCache = cacheNames.includes('capy-cache-v1');
-      if (!hasCapyCache) return { hasCapyCache: false, count: 0, sampleUrls: [] };
+      const hasCapyCache = cacheNames.includes('capy-cache-v2');
+      if (!hasCapyCache) return { hasCapyCache: false, count: 0, urls: [] };
 
-      const cache = await caches.open('capy-cache-v1');
+      const cache = await caches.open('capy-cache-v2');
       const requests = await cache.keys();
       const urls = requests.map((r) => r.url);
       return {
@@ -107,10 +107,10 @@ async function runPwaOfflineTest() {
       };
     });
 
-    console.log(`   Cache "capy-cache-v1" found with ${cacheDetails.count} cached entries:`);
+    console.log(`   Cache "capy-cache-v2" found with ${cacheDetails.count} cached entries:`);
     cacheDetails.urls.forEach((u) => console.log(`     - ${u}`));
     if (!cacheDetails.hasCapyCache || cacheDetails.count === 0) {
-      throw new Error('Expected capy-cache-v1 to contain cached assets.');
+      throw new Error('Expected capy-cache-v2 to contain cached assets.');
     }
     console.log('   ✅ Cache Storage populated with application shell.');
 
