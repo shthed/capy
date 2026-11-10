@@ -145,4 +145,40 @@ class CapyAndroidBridgeTest {
         assertTrue(CapyAndroidBridge.saveBackupToDir(cloudDir, "sample_capybara", payload))
         assertEquals(payload, CapyAndroidBridge.loadBackupFromDir(cloudDir, "sample_capybara"))
     }
+
+    @Test
+    fun `resolveHapticSpec maps tactile haptic types to predefined effects view constants and waveforms`() {
+        val tickSpec = CapyAndroidBridge.resolveHapticSpec("tick")
+        assertEquals("tick", tickSpec.normalizedType)
+        assertEquals(android.view.HapticFeedbackConstants.CLOCK_TICK, tickSpec.viewConstant)
+        assertEquals(android.os.VibrationEffect.EFFECT_TICK, tickSpec.predefinedEffectId)
+        assertEquals(10L, tickSpec.oneShotDurationMs)
+        assertNull(tickSpec.waveformTimings)
+
+        val warningSpec = CapyAndroidBridge.resolveHapticSpec("warning")
+        assertEquals("warning", warningSpec.normalizedType)
+        assertEquals(android.view.HapticFeedbackConstants.LONG_PRESS, warningSpec.viewConstant)
+        assertEquals(android.os.VibrationEffect.EFFECT_HEAVY_CLICK, warningSpec.predefinedEffectId)
+        assertEquals(18L, warningSpec.oneShotDurationMs)
+        assertNull(warningSpec.waveformTimings)
+
+        val successSpec = CapyAndroidBridge.resolveHapticSpec("success")
+        assertEquals("success", successSpec.normalizedType)
+        assertNull(successSpec.predefinedEffectId)
+        assertNotNull(successSpec.waveformTimings)
+        assertEquals(4, successSpec.waveformTimings?.size)
+
+        val errorSpec = CapyAndroidBridge.resolveHapticSpec("error")
+        assertEquals("error", errorSpec.normalizedType)
+        assertNull(errorSpec.predefinedEffectId)
+        assertNotNull(errorSpec.waveformTimings)
+        assertEquals(4, errorSpec.waveformTimings?.size)
+
+        val defaultSpec = CapyAndroidBridge.resolveHapticSpec("unknown_custom")
+        assertEquals("click", defaultSpec.normalizedType)
+        assertEquals(android.view.HapticFeedbackConstants.KEYBOARD_TAP, defaultSpec.viewConstant)
+        assertEquals(android.os.VibrationEffect.EFFECT_CLICK, defaultSpec.predefinedEffectId)
+        assertEquals(12L, defaultSpec.oneShotDurationMs)
+        assertNull(defaultSpec.waveformTimings)
+    }
 }

@@ -59,6 +59,33 @@ function isDefaultGeneratorConfig(cfg: GeneratorConfig): boolean {
   );
 }
 
+export function mergeCustomPalette(
+  generatedPalette: PaletteColor[],
+  customPalette?: PaletteColor[]
+): PaletteColor[] {
+  if (!customPalette || customPalette.length === 0) {
+    return generatedPalette;
+  }
+  const customById = new Map<number, PaletteColor>();
+  for (let i = 0; i < customPalette.length; i++) {
+    const col = customPalette[i];
+    customById.set(col.id, col);
+  }
+  const seenIds = new Set<number>();
+  const merged: PaletteColor[] = generatedPalette.map((col) => {
+    seenIds.add(col.id);
+    return customById.get(col.id) || col;
+  });
+  for (let i = 0; i < customPalette.length; i++) {
+    const col = customPalette[i];
+    if (!seenIds.has(col.id)) {
+      merged.push(col);
+      seenIds.add(col.id);
+    }
+  }
+  return merged;
+}
+
 interface UndoHistoryEntry {
   regionId: number;
   wasPreviouslyFilled: boolean;
@@ -607,7 +634,9 @@ export const App: React.FC = () => {
       shouldAutoReplay: boolean = false,
       sourceBlob?: Blob | null,
       initialPaintedColors?: Record<number, number>,
-      initialViewportOverride?: { zoomScale: number; panOffsetX: number; panOffsetY: number }
+      initialViewportOverride?: { zoomScale: number; panOffsetX: number; panOffsetY: number },
+      initialCustomPalette?: PaletteColor[],
+      initialIsFreeColor?: boolean
     ) => {
       const currentSeq = ++generationSeqRef.current;
       setIsReplaying(false);
@@ -654,6 +683,10 @@ export const App: React.FC = () => {
         totalCount: 100,
         filledRegionIds: Array.from(initialFilledRegionIds),
         ...(initialPaintedColors ? { paintedRegionColors: initialPaintedColors } : {}),
+        ...(initialCustomPalette && initialCustomPalette.length > 0
+          ? { customPalette: initialCustomPalette }
+          : {}),
+        ...(initialIsFreeColor !== undefined ? { isFreeColor: initialIsFreeColor } : {}),
         zoomScale: targetView.zoomScale,
         panOffsetX: targetView.panOffsetX,
         panOffsetY: targetView.panOffsetY,
@@ -703,6 +736,10 @@ export const App: React.FC = () => {
 
           if (currentSeq !== generationSeqRef.current) return;
 
+          if (initialCustomPalette && initialCustomPalette.length > 0) {
+            puzzleData.palette = mergeCustomPalette(puzzleData.palette, initialCustomPalette);
+          }
+
           const initialOrder = Array.from(initialFilledRegionIds);
           const restoredPaintedMap = initialPaintedColors
             ? new Map(Object.entries(initialPaintedColors).map(([k, v]) => [Number(k), v]))
@@ -719,7 +756,11 @@ export const App: React.FC = () => {
           );
           setRedoStack([]);
 
-          const isFree = Boolean(puzzleData.isFreeColor || (initialPaintedColors && Object.keys(initialPaintedColors).length > 0));
+          const isFree = Boolean(
+            initialIsFreeColor ||
+              puzzleData.isFreeColor ||
+              (initialPaintedColors && Object.keys(initialPaintedColors).length > 0)
+          );
           handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
 
           // Defensively find the first available color that actually has uncompleted regions
@@ -975,26 +1016,44 @@ export const App: React.FC = () => {
 
       if (candidateSnap) {
         const cachedPuzzle = await StorageService.loadPuzzleData(candidateSnap.id);
-        if (cachedPuzzle && isMounted) {
-          const resolvedSrc = await resolveSnapshotImageSrc(candidateSnap);
-          if (!isMounted) return;
-          const img = await loadHtmlImage(
-            resolvedSrc,
-            candidateSnap.previewDataUrl || './assets/capybara.webp'
-          );
-          if (!isMounted || !img) {
-            if (isMounted) setIsLoading(false);
-            return;
-          }
+        const resolvedSrc = await resolveSnapshotImageSrc(candidateSnap);
+        if (!isMounted) return;
+        const img = await loadHtmlImage(
+          resolvedSrc,
+          candidateSnap.previewDataUrl || './assets/capybara.webp'
+        );
+        if (!isMounted || !img) {
+          if (isMounted) setIsLoading(false);
+          return;
+        }
 
-          const isMatchingActive = activeState?.activeSnapshotId === candidateSnap.id;
-          const orderedIds =
-            (isMatchingActive ? activeState?.filledRegionIds : undefined) ??
-            candidateSnap.filledRegionIds ??
-            [];
-          const filledSet = new Set(orderedIds);
+        const isMatchingActive = activeState?.activeSnapshotId === candidateSnap.id;
+        const orderedIds =
+          (isMatchingActive ? activeState?.filledRegionIds : undefined) ??
+          candidateSnap.filledRegionIds ??
+          [];
+        const filledSet = new Set(orderedIds);
+        const restoredView = {
+          zoomScale:
+            (isMatchingActive ? activeState?.zoomScale : undefined) ??
+            candidateSnap.zoomScale ??
+            1.0,
+          panOffsetX:
+            (isMatchingActive ? activeState?.panOffsetX : undefined) ??
+            candidateSnap.panOffsetX ??
+            0,
+          panOffsetY:
+            (isMatchingActive ? activeState?.panOffsetY : undefined) ??
+            candidateSnap.panOffsetY ??
+            0,
+        };
+
+        if (cachedPuzzle && isMounted) {
           if (candidateSnap.customPalette && candidateSnap.customPalette.length > 0) {
-            cachedPuzzle.palette = candidateSnap.customPalette;
+            cachedPuzzle.palette = mergeCustomPalette(
+              cachedPuzzle.palette,
+              candidateSnap.customPalette
+            );
           }
           const availableColors = getVisiblePalette(
             cachedPuzzle.palette,
@@ -1026,20 +1085,6 @@ export const App: React.FC = () => {
               : candidateSnap.isFreeColor || cachedPuzzle.isFreeColor
           );
 
-          const restoredView = {
-            zoomScale:
-              (isMatchingActive ? activeState?.zoomScale : undefined) ??
-              candidateSnap.zoomScale ??
-              1.0,
-            panOffsetX:
-              (isMatchingActive ? activeState?.panOffsetX : undefined) ??
-              candidateSnap.panOffsetX ??
-              0,
-            panOffsetY:
-              (isMatchingActive ? activeState?.panOffsetY : undefined) ??
-              candidateSnap.panOffsetY ??
-              0,
-          };
           viewportRef.current = restoredView;
           setInitialViewport(restoredView);
           setRestoreViewTrigger((prev) => prev + 1);
@@ -1064,6 +1109,39 @@ export const App: React.FC = () => {
           }
           return;
         }
+
+        // IndexedDB cache evicted for candidateSnap: regenerate while preserving customPalette, progress, and viewport
+        const storedBlob = candidateSnap.sampleAssetPath
+          ? null
+          : await StorageService.loadImageBlob(
+              candidateSnap.sourceRef?.kind === 'blob'
+                ? candidateSnap.sourceRef.uri
+                : candidateSnap.id
+            );
+        if (!isMounted) return;
+        const fallbackPainted =
+          candidateSnap.paintedRegionColors ||
+          (isMatchingActive ? activeState?.paintedRegionColors : undefined);
+        const fallbackFreeColor =
+          isMatchingActive && activeState?.isFreeColorMode !== undefined
+            ? activeState.isFreeColorMode
+            : candidateSnap.isFreeColor;
+        loadArtworkFromImage(
+          img,
+          candidateSnap.title,
+          settings.generatorConfig,
+          filledSet,
+          isMatchingActive ? activeState?.activeColorId : undefined,
+          candidateSnap.id,
+          candidateSnap.sampleAssetPath,
+          settings.autoReplayOnLoad !== false,
+          storedBlob,
+          fallbackPainted,
+          restoredView,
+          candidateSnap.customPalette,
+          fallbackFreeColor
+        );
+        return;
       }
 
       const defaultSample = SAMPLE_GALLERY[0];
@@ -2208,7 +2286,7 @@ export const App: React.FC = () => {
         const orderedIds = snapshot.filledRegionIds || [];
         const filledSet = new Set(orderedIds);
         if (snapshot.customPalette && snapshot.customPalette.length > 0) {
-          cachedPuzzle.palette = snapshot.customPalette;
+          cachedPuzzle.palette = mergeCustomPalette(cachedPuzzle.palette, snapshot.customPalette);
         }
         let paintedObj: Record<number, number> = {};
         if (snapshot.paintedRegionColors) {
@@ -2274,7 +2352,7 @@ export const App: React.FC = () => {
       return;
     }
 
-    // Fallback: regenerate from image
+    // Fallback: regenerate from image while preserving customPalette, paintedRegionColors, isFreeColor, and viewport
     const storedBlob = snapshot.sampleAssetPath
       ? null
       : await StorageService.loadImageBlob(
@@ -2298,7 +2376,9 @@ export const App: React.FC = () => {
           zoomScale: snapshot.zoomScale ?? 1.0,
           panOffsetX: snapshot.panOffsetX ?? 0,
           panOffsetY: snapshot.panOffsetY ?? 0,
-        }
+        },
+        snapshot.customPalette,
+        snapshot.isFreeColor
       );
     };
     img.onerror = () => {

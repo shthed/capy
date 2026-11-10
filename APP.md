@@ -34,12 +34,14 @@ Extends `androidx.activity.ComponentActivity` with edge-to-edge window decor (`W
   - **Google Play Games Services v2 (`com.google.android.gms:play-services-games-v2:20.1.2`)**: When a real Play Console Project ID is configured (`@string/game_services_project_id` / `CAPY_PLAY_GAMES_APP_ID`), `MainActivity` initializes `PlayGamesSdk.initialize(this)`, checks `PlayGames.getGamesSignInClient(this).isAuthenticated`, and queries `PlayGames.getPlayersClient(this).currentPlayer` to read the signed-in user's official Google Play Games profile name (`player.displayName`) and `player.playerId`. The resolved profile is cached in `SharedPreferences` (`capy_play_games_prefs`) and pushed to `window.__capyReceivePlayGamesProfile({"playerId":"...","displayName":"..."})`. See [`CLOUD.md`](./CLOUD.md) for the complete architecture.
 
 ### [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt)
-Class registered via `webView.addJavascriptInterface(bridge, "CapyAndroid")`.
-- `@JavascriptInterface fun haptic(type: String)`: Dispatches tactile haptics:
-  - `"tick"`: `HapticFeedbackConstants.CLOCK_TICK` via `view.performHapticFeedback()`
+Class registered via `webView.addJavascriptInterface(bridge, "CapyAndroid")` (with `webView.isHapticFeedbackEnabled = true` set in [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt)).
+- `@JavascriptInterface fun haptic(type: String)`: Resolves tactile specifications via `CapyAndroidBridge.resolveHapticSpec(type)` (`HapticSpec`) and dispatches hardware haptics across Android API levels:
+  - `"tick"`: `VibrationEffect.EFFECT_TICK` (API 29+) / `HapticFeedbackConstants.CLOCK_TICK` / 10ms fallback pulse
   - `"success"`: Custom 4-pulse waveform (`[0, 14, 45, 24]`)
-  - `"warning"`: One-shot 18ms pulse
+  - `"warning"`: `VibrationEffect.EFFECT_HEAVY_CLICK` (API 29+) / `HapticFeedbackConstants.LONG_PRESS` / 18ms fallback pulse
   - `"error"`: Double-pulse waveform (`[0, 28, 50, 28]`)
+  - Default (`"click"` fallback): `VibrationEffect.EFFECT_CLICK` (API 29+) / `HapticFeedbackConstants.KEYBOARD_TAP` / 12ms fallback pulse
+  - **API 33+ Touch Usage Routing (`VibrationAttributes.USAGE_TOUCH`)**: Passes `VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH)` on Android 13+ (API 33+) and `AudioAttributes.USAGE_ASSISTANCE_SONIFICATION` on API 26–32 (`vibrateEffectWithTouchAttributes`), with `HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING` on `view.performHapticFeedback(...)`, preventing Pixel linear resonant actuators (LRAs) from silently suppressing touch haptics under default notification vibration settings.
 - `@JavascriptInterface fun getSafeAreaInsets(): String`: Returns `{"top":...,"bottom":...,"left":...,"right":...}` for immediate synchronous retrieval by [`NativeBridge.ts`](./web/src/services/NativeBridge.ts).
 - `@JavascriptInterface fun setModalOpen(isOpen: Boolean)`: Updates `isModalOpen` and toggles `backPressedCallback.isEnabled`.
 - `@JavascriptInterface fun saveBackup(key: String, data: String): Boolean`: Writes UTF-8 JSON data atomically to `filesDir/capy_saves/<sanitized_key>.json`.

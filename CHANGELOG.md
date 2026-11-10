@@ -15,10 +15,10 @@ Capy uses a unified **Semantic Versioning (`MAJOR.MINOR.PATCH`)** scheme shared 
 
 | Component | Source / Location | Rule & Formula | Current Value |
 | :--- | :--- | :--- | :--- |
-| **Canonical SemVer** | [`web/package.json`](./web/package.json) (`"version"`) | Single source of truth formatted as `MAJOR.MINOR.PATCH` (`0 <= MINOR <= 99`, `0 <= PATCH <= 99`). | `2.5.1` |
-| **Web Runtime Constant** | [`web/src/version.ts`](./web/src/version.ts) (`APP_VERSION`, `APP_VERSION_CODE`) | Imported directly from [`web/package.json`](./web/package.json) and displayed in [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) (`data-testid="app-version-badge"`). | `v2.5.1` (`20501`) |
-| **Android `versionName`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionName`) | Automatically parsed at Gradle configuration time from [`../web/package.json`](./web/package.json). | `"2.5.1"` |
-| **Android `versionCode`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionCode`) | Deterministically computed as `(MAJOR * 10000) + (MINOR * 100) + PATCH` for strictly monotonic Google Play Console uploads. | `20501` |
+| **Canonical SemVer** | [`web/package.json`](./web/package.json) (`"version"`) | Single source of truth formatted as `MAJOR.MINOR.PATCH` (`0 <= MINOR <= 99`, `0 <= PATCH <= 99`). | `2.5.2` |
+| **Web Runtime Constant** | [`web/src/version.ts`](./web/src/version.ts) (`APP_VERSION`, `APP_VERSION_CODE`) | Imported directly from [`web/package.json`](./web/package.json) and displayed in [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) (`data-testid="app-version-badge"`). | `v2.5.2` (`20502`) |
+| **Android `versionName`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionName`) | Automatically parsed at Gradle configuration time from [`../web/package.json`](./web/package.json). | `"2.5.2"` |
+| **Android `versionCode`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionCode`) | Deterministically computed as `(MAJOR * 10000) + (MINOR * 100) + PATCH` for strictly monotonic Google Play Console uploads. | `20502` |
 
 ### When to Increment Each Version Segment
 
@@ -32,6 +32,19 @@ Capy uses a unified **Semantic Versioning (`MAJOR.MINOR.PATCH`)** scheme shared 
 ---
 
 ## Release History
+
+## [2.5.2] - 2026-11-10 (Android `versionCode`: `20502`)
+
+### Fixed
+- **Canvas Container Resize & Orientation Change Clamping (`BF-2`, [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`test.mjs`](./web/scripts/test.mjs))**:
+  - Attached a `ResizeObserver` (with a `window` `resize` listener fallback) to `containerRef` in [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx) so viewport resizes, mobile portrait/landscape rotations, split-screen adjustments, and DevTools dock changes immediately clamp `offsetRef.current` via `clampCanvasOffset`, resize and repaint the high-DPI onscreen `<canvas>` via `drawCompositeFrame(pulseAlphaRef.current)`, notify `onViewExtentChangedRef`, and recompute visible on-screen regions/colors (`containerSize`).
+- **IndexedDB Cache Eviction Custom Palette Restoration (`BF-6`, [`App.tsx`](./web/src/App.tsx), [`test.mjs`](./web/scripts/test.mjs))**:
+  - Added `mergeCustomPalette` in [`App.tsx`](./web/src/App.tsx) and extended `loadArtworkFromImage`, `handleLoadSnapshot`, and cold-start `restoreSession` so when `StorageService.loadPuzzleData(snapshot.id)` returns `null` after browser IndexedDB cache eviction and falls back to re-segmenting the source image, both user-edited swatches and user-added custom swatches (`snapshot.customPalette`) as well as `snapshot.isFreeColor` are preserved instead of resetting to newly quantized colors.
+- **Android Pixel / API 33+ Tactile Haptic Feedback Silent Suppression (`BF-7`, [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt), [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt), [`CapyAndroidBridgeTest.kt`](./app/src/test/java/com/capypaint/capy/CapyAndroidBridgeTest.kt))**:
+  - Enabled `isHapticFeedbackEnabled = true` on the host `WebView` in [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt) and passed `HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING` to `view.performHapticFeedback(...)` in [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt).
+  - Updated `performHaptic` in [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt) (`resolveHapticSpec`, `vibrateEffectWithTouchAttributes`, `vibratePredefined`) to attach `VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH)` on API 33+ (Android 13–15) and `AudioAttributes.USAGE_ASSISTANCE_SONIFICATION` on API 26–32, while using crisp hardware-tuned `VibrationEffect.createPredefined` effects (`EFFECT_TICK`, `EFFECT_CLICK`, `EFFECT_HEAVY_CLICK`) on API 29+ so Pixel linear resonant actuators (LRAs) never silently drop region-fill and UI haptics under default notification vibration rules.
+
+---
 
 ## [2.5.1] - 2026-11-10 ([PR #464](https://github.com/shthed/capy/pull/464), Android `versionCode`: `20501`)
 
