@@ -166,5 +166,5 @@ flowchart TD
    - Open `https://github.com/shthed/capy/settings/variables/actions` and create a repository variable:
      - **Name**: `CAPY_PLAY_GAMES_APP_ID`
      - **Value**: `<your-12-digit-play-games-app-id>`
-   - Both [`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml) and [`.github/workflows/android-release.yml`](./.github/workflows/android-release.yml) automatically inject `VITE_GOOGLE_CLIENT_ID` and `CAPY_PLAY_GAMES_APP_ID` into every Web and Android build.
+   - [`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml) automatically injects `VITE_GOOGLE_CLIENT_ID` and `CAPY_PLAY_GAMES_APP_ID` into every Web and Android build.
 

@@ -2,6 +2,18 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+val webPackageJson = layout.projectDirectory.file("../web/package.json").asFile
+val semverMatch = if (webPackageJson.exists()) {
+    Regex(""""version"\s*:\s*"(\d+)\.(\d+)\.(\d+)"""").find(webPackageJson.readText())
+} else {
+    null
+}
+val verMajor = semverMatch?.groupValues?.get(1)?.toIntOrNull() ?: 2
+val verMinor = semverMatch?.groupValues?.get(2)?.toIntOrNull() ?: 5
+val verPatch = semverMatch?.groupValues?.get(3)?.toIntOrNull() ?: 0
+val capyVersionName = "$verMajor.$verMinor.$verPatch"
+val capyVersionCode = (verMajor * 10000) + (verMinor * 100) + verPatch
+
 android {
     namespace = "com.capypaint.capy"
     compileSdk = 35
@@ -10,8 +22,8 @@ android {
         applicationId = "com.capypaint.capy"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = capyVersionCode
+        versionName = capyVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
