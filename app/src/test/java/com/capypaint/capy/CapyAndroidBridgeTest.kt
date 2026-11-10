@@ -97,4 +97,40 @@ class CapyAndroidBridgeTest {
             json,
         )
     }
+
+    @Test
+    fun `isAllowedCapyDeepLink accepts verified capy HTTPS app links and rejects untrusted URIs`() {
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/#s=abc123_XYZ-9"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/?room=ABC123#s=abc123"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/pull/459/#s=token"))
+
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink(null))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink(""))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("javascript:alert(1)"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("http://shthed.github.io/capy/#s=insecure"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://evil.example.com/capy/#s=abc"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/other-repo/#s=abc"))
+    }
+
+    @Test
+    fun `formatPlayGamesIdentityJson escapes quotes and angle brackets safely`() {
+        val json = CapyAndroidBridge.formatPlayGamesIdentityJson(
+            playerId = "pg_12345",
+            displayName = "Capy \"Painter\" <Pro>",
+        )
+        assertEquals(
+            """{"playerId":"pg_12345","displayName":"Capy \"Painter\" \u003cPro\u003e"}""",
+            json,
+        )
+    }
+
+    @Test
+    fun `cloud snapshot directory round-trips CRDT progress envelopes independently from local saves`() {
+        val cloudDir = tempFolder.newFolder(CapyAndroidBridge.CLOUD_FOLDER_NAME)
+        val payload = """{"version":1,"slotKey":"sample_capybara","updatedAt":1700000000000,"token":"abc"}"""
+
+        assertTrue(CapyAndroidBridge.saveBackupToDir(cloudDir, "sample_capybara", payload))
+        assertEquals(payload, CapyAndroidBridge.loadBackupFromDir(cloudDir, "sample_capybara"))
+    }
 }

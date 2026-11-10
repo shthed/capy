@@ -1,5 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  COOP_RIPPLE_DURATION_MS,
+  CoopRippleBuffer,
+  MAX_COOP_RIPPLES,
+} from '../engine/CoopRippleBuffer';
+import {
   CANVAS_BG_MAP,
   CanvasBgColor,
   HintFillStyle,
@@ -52,6 +57,7 @@ interface PuzzleCanvasProps {
   detailedProgress?: boolean;
   generationProgress?: number;
   generationStepIndex?: number;
+  coopRippleBuffer?: CoopRippleBuffer;
   onViewExtentChanged?: (zoom: number, panX: number, panY: number) => void;
   onRegionClicked: (regionId: number) => void;
   onBatchRegionsClicked: (regionIds: Set<number>) => void;
@@ -159,6 +165,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   detailedProgress = false,
   generationProgress = 0,
   generationStepIndex = 1,
+  coopRippleBuffer,
   onViewExtentChanged,
   onRegionClicked,
   onBatchRegionsClicked,
@@ -1100,6 +1107,31 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         ctx.fill();
       }
 
+      // 5. Zero-allocation Co-op Collaborator Paint Ripples (typed ring buffer, zero heap allocs)
+      if (coopRippleBuffer) {
+        const nowMs = performance.now();
+        ctx.save();
+        ctx.lineWidth = 2.5 / effScale;
+        for (let i = 0; i < MAX_COOP_RIPPLES; i++) {
+          const started = coopRippleBuffer.startTimeMs[i];
+          if (started <= 0) continue;
+          const age = nowMs - started;
+          if (age < 0 || age >= COOP_RIPPLE_DURATION_MS) {
+            coopRippleBuffer.startTimeMs[i] = 0;
+            continue;
+          }
+          const progress = age / COOP_RIPPLE_DURATION_MS;
+          const ease = 1 - (1 - progress) * (1 - progress);
+          const radius = (8 + ease * 26) / effScale;
+          ctx.globalAlpha = (1 - progress) * 0.92;
+          ctx.strokeStyle = coopRippleBuffer.strokeHex[i];
+          ctx.beginPath();
+          ctx.arc(coopRippleBuffer.x[i], coopRippleBuffer.y[i], radius, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
       ctx.restore(); // Transform restore
       ctx.restore(); // DPR scale restore
     },
@@ -1135,6 +1167,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       detailedProgress,
       generationProgress,
       generationStepIndex,
+      coopRippleBuffer,
     ]
   );
 
@@ -1142,6 +1175,28 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   useEffect(() => {
     drawCompositeFrame(pulseAlphaRef.current);
   }, [drawCompositeFrame]);
+
+  // Demand-driven Co-op Ripple decay rAF loop (sleeps completely when idle; zero React state updates)
+  useEffect(() => {
+    if (!coopRippleBuffer) return;
+    let rippleRafId = 0;
+    const stepRipples = (now: number) => {
+      rippleRafId = 0;
+      drawCompositeFrame(pulseAlphaRef.current);
+      if (coopRippleBuffer.hasActiveRipples(now)) {
+        rippleRafId = requestAnimationFrame(stepRipples);
+      }
+    };
+    coopRippleBuffer.setWakeCallback(() => {
+      if (rippleRafId === 0) {
+        rippleRafId = requestAnimationFrame(stepRipples);
+      }
+    });
+    return () => {
+      coopRippleBuffer.setWakeCallback(null);
+      if (rippleRafId !== 0) cancelAnimationFrame(rippleRafId);
+    };
+  }, [coopRippleBuffer, drawCompositeFrame]);
 
   // Direct-to-canvas hint pulse rAF loop (zero React state updates; pauses completely when idle/completed)
   useEffect(() => {
