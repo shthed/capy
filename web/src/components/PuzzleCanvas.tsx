@@ -57,6 +57,8 @@ interface PuzzleCanvasProps {
   detailedProgress?: boolean;
   generationProgress?: number;
   generationStepIndex?: number;
+  replayFollowRegionId?: number | null;
+  replaySpeed?: number;
   coopRippleBuffer?: CoopRippleBuffer;
   onViewExtentChanged?: (
     zoom: number,
@@ -83,9 +85,15 @@ export function clampCanvasOffset(
   puzzleWidth: number,
   puzzleHeight: number,
   containerWidth: number,
-  containerHeight: number
+  containerHeight: number,
+  out?: { x: number; y: number }
 ): { x: number; y: number } {
   if (containerWidth <= 0 || containerHeight <= 0 || puzzleWidth <= 0 || puzzleHeight <= 0) {
+    if (out) {
+      out.x = rawOffset.x;
+      out.y = rawOffset.y;
+      return out;
+    }
     return rawOffset;
   }
 
@@ -125,10 +133,14 @@ export function clampCanvasOffset(
     maxOffsetY = marginY - baseOffsetY;
   }
 
-  return {
-    x: Math.max(minOffsetX, Math.min(maxOffsetX, rawOffset.x)),
-    y: Math.max(minOffsetY, Math.min(maxOffsetY, rawOffset.y)),
-  };
+  const cx = Math.max(minOffsetX, Math.min(maxOffsetX, rawOffset.x));
+  const cy = Math.max(minOffsetY, Math.min(maxOffsetY, rawOffset.y));
+  if (out) {
+    out.x = cx;
+    out.y = cy;
+    return out;
+  }
+  return { x: cx, y: cy };
 }
 
 export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
@@ -171,6 +183,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   detailedProgress = false,
   generationProgress = 0,
   generationStepIndex = 1,
+  replayFollowRegionId = null,
+  replaySpeed = 1,
   coopRippleBuffer,
   onViewExtentChanged,
   onRegionClicked,
@@ -381,6 +395,84 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       return clamped;
     });
   }, [scale, puzzle]);
+
+  // Smooth camera pan to follow the next region being painted during Replay Follow Mode
+  const replayFollowRegionIdRef = useRef<number | null>(replayFollowRegionId ?? null);
+  replayFollowRegionIdRef.current = replayFollowRegionId ?? null;
+  const replaySpeedRef = useRef<number>(replaySpeed || 1);
+  replaySpeedRef.current = replaySpeed || 1;
+  const followRawScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const followClampedScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const isFollowingReplay = replayFollowRegionId !== null && replayFollowRegionId !== undefined;
+
+  useEffect(() => {
+    if (!isFollowingReplay || !puzzle) return;
+    let animId: number;
+    let lastTime = performance.now();
+
+    const stepFollow = (now: number) => {
+      const dt = Math.min(64, Math.max(0, now - lastTime));
+      lastTime = now;
+
+      const targetRegionId = replayFollowRegionIdRef.current;
+      const isUserInteracting =
+        isDraggingRef.current ||
+        activePointersRef.current.size > 0 ||
+        isOneFingerZoomingRef.current ||
+        isDoubleTapPanningRef.current ||
+        momentumAnimIdRef.current !== null;
+
+      if (targetRegionId !== null && !isUserInteracting && containerRef.current) {
+        const reg = regionByIdRef.current.get(targetRegionId);
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        if (reg && w > 0 && h > 0) {
+          const curScale = scaleRef.current;
+          const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
+          const baseOffsetX = (w - puzzle.width * baseScale) / 2;
+          const baseOffsetY = (h - puzzle.height * baseScale) / 2;
+          const effScale = curScale * baseScale;
+
+          const rawScratch = followRawScratchRef.current;
+          rawScratch.x = w / 2 - baseOffsetX - reg.centroidX * effScale;
+          rawScratch.y = h / 2 - baseOffsetY - reg.centroidY * effScale;
+          const clampedTarget = clampCanvasOffset(
+            rawScratch,
+            curScale,
+            puzzle.width,
+            puzzle.height,
+            w,
+            h,
+            followClampedScratchRef.current
+          );
+
+          const curOff = offsetRef.current;
+          const dx = clampedTarget.x - curOff.x;
+          const dy = clampedTarget.y - curOff.y;
+          const dist = Math.hypot(dx, dy);
+
+          if (dist > 0.5) {
+            const spd = replaySpeedRef.current;
+            const lerpStep = dist * (1 - Math.exp((-dt * Math.max(12, 8 * spd)) / 1000));
+            const minStep = (Math.max(520, 420 * spd) * dt) / 1000;
+            const move = Math.min(dist, Math.max(lerpStep, minStep));
+            const nextOffset = {
+              x: curOff.x + (dx / dist) * move,
+              y: curOff.y + (dy / dist) * move,
+            };
+            offsetRef.current = nextOffset;
+            setOffset(nextOffset);
+            onViewExtentChangedRef.current?.(curScale, nextOffset.x, nextOffset.y, w, h);
+          }
+        }
+      }
+
+      animId = requestAnimationFrame(stepFollow);
+    };
+
+    animId = requestAnimationFrame(stepFollow);
+    return () => cancelAnimationFrame(animId);
+  }, [isFollowingReplay, puzzle]);
 
   // Tap dot decay
   useEffect(() => {

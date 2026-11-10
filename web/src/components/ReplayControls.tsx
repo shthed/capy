@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   ChevronDown,
   ChevronUp,
+  Crosshair,
   Download,
   FastForward,
   ImagePlus,
   Pause,
   Play,
+  Repeat,
   RotateCcw,
   SkipForward,
   Sparkles,
@@ -22,11 +24,15 @@ interface ReplayControlsProps {
   totalSteps: number;
   replaySpeed: number;
   raiseDock: boolean;
+  isLooping?: boolean;
+  isFollowing?: boolean;
   onTogglePlay: () => void;
   onRestart: () => void;
   onSkipToEnd: () => void;
   onSeek: (step: number) => void;
   onChangeSpeed: (speed: number) => void;
+  onToggleLoop?: () => void;
+  onToggleFollow?: () => void;
   onExitReplay: () => void;
   onExportImage: () => void;
   onOpenCreate: () => void;
@@ -41,11 +47,15 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
   totalSteps,
   replaySpeed,
   raiseDock,
+  isLooping = false,
+  isFollowing = false,
   onTogglePlay,
   onRestart,
   onSkipToEnd,
   onSeek,
   onChangeSpeed,
+  onToggleLoop,
+  onToggleFollow,
   onExitReplay,
   onExportImage,
   onOpenCreate,
@@ -83,7 +93,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
         <div
           data-testid="replay-controls-window"
           data-minimized="true"
-          className="pointer-events-auto inline-flex items-center gap-2 bg-slate-900/92 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-xl px-2.5 py-1.5 text-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-200"
+          className="pointer-events-auto inline-flex items-center gap-1.5 sm:gap-2 bg-slate-900/92 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-xl px-2.5 py-1.5 text-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-200"
         >
           {/* Play / Pause / Replay */}
           <button
@@ -104,8 +114,8 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
           </button>
 
           {/* Compact Progress Bar & Step Counter */}
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-16 sm:w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden flex-shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <div className="w-12 sm:w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden flex-shrink-0">
               <div
                 className="h-full bg-amber-400 transition-all duration-75"
                 style={{ width: `${pct}%` }}
@@ -128,6 +138,66 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
             <FastForward size={11} />
             <span>{replaySpeed}x</span>
           </button>
+
+          {/* Follow Painting Toggle */}
+          {onToggleFollow && (
+            <button
+              type="button"
+              onClick={() => {
+                onUserInteract?.();
+                onToggleFollow();
+              }}
+              aria-pressed={isFollowing}
+              aria-label={
+                isFollowing
+                  ? 'Follow Painting Active (Smooth Camera Pan)'
+                  : 'Follow Painting Process (Smooth Camera Pan)'
+              }
+              title={
+                isFollowing
+                  ? 'Follow Painting Active (Smooth Camera Pan)'
+                  : 'Follow Painting Process (Smooth Camera Pan)'
+              }
+              data-testid="replay-follow-btn"
+              className={`p-1.5 rounded-full border transition-colors cursor-pointer flex-shrink-0 ${
+                isFollowing
+                  ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
+              }`}
+            >
+              <Crosshair size={12} />
+            </button>
+          )}
+
+          {/* Auto-Loop Toggle */}
+          {onToggleLoop && (
+            <button
+              type="button"
+              onClick={() => {
+                onUserInteract?.();
+                onToggleLoop();
+              }}
+              aria-pressed={isLooping}
+              aria-label={
+                isLooping
+                  ? 'Auto-Loop Replay Enabled (Click to Disable)'
+                  : 'Auto-Loop Replay When Finished'
+              }
+              title={
+                isLooping
+                  ? 'Auto-Loop Replay Enabled (Click to Disable)'
+                  : 'Auto-Loop Replay When Finished'
+              }
+              data-testid="replay-loop-btn"
+              className={`p-1.5 rounded-full border transition-colors cursor-pointer flex-shrink-0 ${
+                isLooping
+                  ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
+              }`}
+            >
+              <Repeat size={12} />
+            </button>
+          )}
 
           {/* Skip to End */}
           {!isFinished && (
@@ -324,6 +394,66 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
               <FastForward size={13} />
               <span>{replaySpeed}x</span>
             </button>
+
+            {/* Follow Painting Toggle */}
+            {onToggleFollow && (
+              <button
+                type="button"
+                onClick={() => {
+                  onUserInteract?.();
+                  onToggleFollow();
+                }}
+                aria-pressed={isFollowing}
+                aria-label={
+                  isFollowing
+                    ? 'Follow Painting Active (Smooth Camera Pan)'
+                    : 'Follow Painting Process (Smooth Camera Pan)'
+                }
+                title={
+                  isFollowing
+                    ? 'Follow Painting Active (Smooth Camera Pan)'
+                    : 'Follow Painting Process (Smooth Camera Pan)'
+                }
+                data-testid="replay-follow-btn"
+                className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
+                  isFollowing
+                    ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
+                }`}
+              >
+                <Crosshair size={14} />
+              </button>
+            )}
+
+            {/* Auto-Loop Toggle */}
+            {onToggleLoop && (
+              <button
+                type="button"
+                onClick={() => {
+                  onUserInteract?.();
+                  onToggleLoop();
+                }}
+                aria-pressed={isLooping}
+                aria-label={
+                  isLooping
+                    ? 'Auto-Loop Replay Enabled (Click to Disable)'
+                    : 'Auto-Loop Replay When Finished'
+                }
+                title={
+                  isLooping
+                    ? 'Auto-Loop Replay Enabled (Click to Disable)'
+                    : 'Auto-Loop Replay When Finished'
+                }
+                data-testid="replay-loop-btn"
+                className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
+                  isLooping
+                    ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
+                }`}
+              >
+                <Repeat size={14} />
+              </button>
+            )}
           </div>
 
           {/* Post-Completion Quick Actions */}

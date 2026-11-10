@@ -30,7 +30,7 @@ import { ProviderRegistry } from './services/providers/ProviderRegistry';
 import { CoopParticipant } from './services/providers/types';
 import { CoopRippleBuffer } from './engine/CoopRippleBuffer';
 import { getDisplayNumberMap, getDockPalette, getVisiblePalette } from './components/PaletteDock';
-import { PuzzleCanvas } from './components/PuzzleCanvas';
+import { clampCanvasOffset, PuzzleCanvas } from './components/PuzzleCanvas';
 import { GameTopBar } from './components/GameTopBar';
 import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
@@ -377,6 +377,65 @@ export const App: React.FC = () => {
     [puzzle]
   );
 
+  // Pre-allocated scratch vectors for zero-allocation camera-follow frustum checks
+  const followRawScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const followClampedScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Zero-allocation check for whether the viewport has panned to bring the target region onscreen during replayFollow
+  const isViewportCaughtUpToRegion = useCallback(
+    (regionId: number): boolean => {
+      if (!puzzle) return true;
+      const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+      if (zoomScale <= 1.02 && Math.abs(panOffsetX) <= 4 && Math.abs(panOffsetY) <= 4) {
+        return true;
+      }
+      const reg = regionByIdRef.current.get(regionId);
+      if (!reg) return true;
+      const w = canvasContainerSizeRef.current.width || window.innerWidth || 1024;
+      const h = canvasContainerSizeRef.current.height || window.innerHeight || 768;
+      const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
+      const baseOffsetX = (w - puzzle.width * baseScale) / 2;
+      const baseOffsetY = (h - puzzle.height * baseScale) / 2;
+      const effScale = zoomScale * baseScale;
+      if (effScale <= 0) return true;
+
+      // Check if viewport is already within 12px of its clamped target offset for this region
+      const rawScratch = followRawScratchRef.current;
+      rawScratch.x = w / 2 - (baseOffsetX + reg.centroidX * effScale);
+      rawScratch.y = h / 2 - (baseOffsetY + reg.centroidY * effScale);
+      const clampedTarget = clampCanvasOffset(
+        rawScratch,
+        zoomScale,
+        puzzle.width,
+        puzzle.height,
+        w,
+        h,
+        followClampedScratchRef.current
+      );
+      if (Math.hypot(clampedTarget.x - panOffsetX, clampedTarget.y - panOffsetY) <= 12) {
+        return true;
+      }
+
+      const visLeft = (-panOffsetX - baseOffsetX) / effScale;
+      const visTop = (-panOffsetY - baseOffsetY) / effScale;
+      const visW = w / effScale;
+      const visH = h / effScale;
+      const visRight = visLeft + visW;
+      const visBottom = visTop + visH;
+
+      // Require the region's centroid to be comfortably inside the visible viewport (inner 76% bounds)
+      const padX = visW * 0.12;
+      const padY = visH * 0.12;
+      return (
+        reg.centroidX >= visLeft + padX &&
+        reg.centroidX <= visRight - padX &&
+        reg.centroidY >= visTop + padY &&
+        reg.centroidY <= visBottom - padY
+      );
+    },
+    [puzzle]
+  );
+
   // Start animated region-by-region replay (preserving restored zoom extent unless resetView is requested)
   const startReplay = useCallback(
     (
@@ -403,7 +462,7 @@ export const App: React.FC = () => {
     []
   );
 
-  // Animated Replay Loop (60 FPS smooth accumulator scaled by replaySpeed with automatic offscreen fast-forward)
+  // Animated Replay Loop (60 FPS smooth accumulator scaled by replaySpeed with offscreen fast-forward, camera follow, and auto-loop)
   useEffect(() => {
     const finishAutoResume = () => {
       autoResumeReplayRef.current = false;
@@ -428,6 +487,7 @@ export const App: React.FC = () => {
     let animId: number;
     let lastTime = performance.now();
     let accRegions = 0;
+    let loopPauseUntil = 0;
 
     // Base speed: complete puzzle replay in ~5.5s at 1x, clamped between 12 and 65 regions/sec
     const baseRate = Math.max(12, Math.min(65, replaySequence.length / 5.5));
@@ -437,15 +497,22 @@ export const App: React.FC = () => {
     const tick = (now: number) => {
       const dt = Math.min(64, Math.max(0, now - lastTime));
       lastTime = now;
-      accRegions += dt * regionsPerMs;
-
-      const stepDelta = accRegions >= 1 ? Math.floor(accRegions) : 0;
-      if (stepDelta > 0) {
-        accRegions -= stepDelta;
-      }
 
       const prev = replayStepRef.current;
       if (prev >= replaySequence.length) {
+        if (settings.replayLoop) {
+          if (loopPauseUntil === 0) {
+            loopPauseUntil = now + 350;
+          }
+          if (now >= loopPauseUntil) {
+            loopPauseUntil = 0;
+            accRegions = 0;
+            replayStepRef.current = 0;
+            setReplayStep(0);
+          }
+          animId = requestAnimationFrame(tick);
+          return;
+        }
         setIsReplayPlaying(false);
         if (autoResumeReplayRef.current) {
           finishAutoResume();
@@ -453,23 +520,45 @@ export const App: React.FC = () => {
         return;
       }
 
-      let cursor = prev;
-      // Immediately fast-forward past consecutive offscreen regions
-      while (
-        cursor < replaySequence.length &&
-        !isRegionVisibleInViewport(replaySequence[cursor])
-      ) {
-        cursor++;
+      if (settings.replayFollow) {
+        // Wait for the camera to smoothly pan until the next region is onscreen; never skip offscreen steps
+        if (!isViewportCaughtUpToRegion(replaySequence[prev])) {
+          accRegions = Math.min(accRegions, 1);
+          animId = requestAnimationFrame(tick);
+          return;
+        }
       }
 
-      // Advance stepDelta on-screen steps and fast-forward any consecutive offscreen steps following each
-      for (let s = 0; s < stepDelta && cursor < replaySequence.length; s++) {
-        cursor++;
+      accRegions += dt * regionsPerMs;
+      const stepDelta = accRegions >= 1 ? Math.floor(accRegions) : 0;
+      if (stepDelta > 0) {
+        accRegions -= stepDelta;
+      }
+
+      let cursor = prev;
+      if (settings.replayFollow) {
+        if (stepDelta > 0) {
+          // Advance 1 step at a time so each subsequent region is followed and verified onscreen before painting
+          cursor = prev + 1;
+        }
+      } else {
+        // Immediately fast-forward past consecutive offscreen regions
         while (
           cursor < replaySequence.length &&
           !isRegionVisibleInViewport(replaySequence[cursor])
         ) {
           cursor++;
+        }
+
+        // Advance stepDelta on-screen steps and fast-forward any consecutive offscreen steps following each
+        for (let s = 0; s < stepDelta && cursor < replaySequence.length; s++) {
+          cursor++;
+          while (
+            cursor < replaySequence.length &&
+            !isRegionVisibleInViewport(replaySequence[cursor])
+          ) {
+            cursor++;
+          }
         }
       }
 
@@ -480,6 +569,11 @@ export const App: React.FC = () => {
       }
 
       if (next >= replaySequence.length) {
+        if (settings.replayLoop) {
+          loopPauseUntil = now + 350;
+          animId = requestAnimationFrame(tick);
+          return;
+        }
         setIsReplayPlaying(false);
         if (autoResumeReplayRef.current) {
           finishAutoResume();
@@ -497,7 +591,10 @@ export const App: React.FC = () => {
     isReplayPlaying,
     replaySequence,
     settings.replaySpeed,
+    settings.replayLoop,
+    settings.replayFollow,
     isRegionVisibleInViewport,
+    isViewportCaughtUpToRegion,
   ]);
 
   // Generation sequence tracking to ignore cancelled/superseded requests
@@ -3270,6 +3367,15 @@ export const App: React.FC = () => {
         zoomOutTrigger={zoomOutTrigger}
         resetViewTrigger={resetViewTrigger}
         restoreViewTrigger={restoreViewTrigger}
+        replayFollowRegionId={
+          isReplaying &&
+          isReplayPlaying &&
+          settings.replayFollow &&
+          replayStep < replaySequence.length
+            ? replaySequence[replayStep]
+            : null
+        }
+        replaySpeed={settings.replaySpeed || 1}
         isGenerating={isLoading}
         detailedProgress={Boolean(settings.detailedLoadingProgress)}
         generationProgress={loadingProgress}
@@ -3351,10 +3457,34 @@ export const App: React.FC = () => {
           currentStep={replayStep}
           totalSteps={replaySequence.length}
           replaySpeed={settings.replaySpeed || 1}
+          isLooping={Boolean(settings.replayLoop)}
+          isFollowing={Boolean(settings.replayFollow)}
           raiseDock={settings.raisePaletteDock}
           onTogglePlay={() => {
             cancelAutoResume();
-            setIsReplayPlaying((prev) => !prev);
+            if (!isReplayPlaying && replayStepRef.current >= replaySequence.length) {
+              replayStepRef.current = 0;
+              setReplayStep(0);
+              setIsReplayPlaying(true);
+            } else {
+              setIsReplayPlaying((prev) => !prev);
+            }
+          }}
+          onToggleLoop={() => {
+            cancelAutoResume();
+            NativeBridge.haptic('tick', settings.hapticsEnabled);
+            const nextLoop = !settings.replayLoop;
+            handleUpdateSettings((prev) => ({ ...prev, replayLoop: nextLoop }));
+            if (nextLoop && replayStepRef.current >= replaySequence.length) {
+              replayStepRef.current = 0;
+              setReplayStep(0);
+              setIsReplayPlaying(true);
+            }
+          }}
+          onToggleFollow={() => {
+            cancelAutoResume();
+            NativeBridge.haptic('tick', settings.hapticsEnabled);
+            handleUpdateSettings((prev) => ({ ...prev, replayFollow: !prev.replayFollow }));
           }}
           onRestart={() => {
             cancelAutoResume();

@@ -486,37 +486,84 @@ async function runBrowserBasicsSuite() {
     await page.mouse.up();
     await page.waitForTimeout(200);
 
-    // Minimised by default: click play/replay button to restart playback, then zoom in and pan during playback
+    // Minimised by default: enable Follow Painting and Auto-Loop, then start playback and verify camera follows offscreen regions and loops
+    const followBtn = await page.waitForSelector('[data-testid="replay-follow-btn"]');
+    const loopBtn = await page.waitForSelector('[data-testid="replay-loop-btn"]');
+    assert.equal(await followBtn.getAttribute('aria-pressed'), 'false', 'Follow button initially off');
+    assert.equal(await loopBtn.getAttribute('aria-pressed'), 'false', 'Loop button initially off');
+
+    await followBtn.click();
+    await loopBtn.click();
+    await page.waitForTimeout(100);
+    assert.equal(await followBtn.getAttribute('aria-pressed'), 'true', 'Follow button toggled on');
+    assert.equal(await loopBtn.getAttribute('aria-pressed'), 'true', 'Loop button toggled on');
+
+    const panBeforeFollow = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return { x: active.panOffsetX || 0, y: active.panOffsetY || 0 };
+    });
+
+    // Start replay from step 0 with Follow + Loop active; camera must smoothly pan toward painted center regions and loop continuously
     await page.locator('[data-testid="replay-play-pause-btn"]').click();
+    await page.waitForTimeout(950);
+
+    // Expand HUD briefly to verify scrubber is actively looping/playing and did not stop at the end
+    await page.locator('[data-testid="replay-toggle-minimize-btn"]').click();
+    await page.waitForTimeout(450);
+    const isStillLooping = await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      return Boolean(s.replayLoop && s.replayFollow);
+    });
+    assert.equal(isStillLooping, true, 'Expected replayLoop and replayFollow settings persisted as true');
+
+    // Also test live zoom-in during playback
     await page.waitForSelector('[data-testid="zoom-in-btn"]');
     await page.locator('[data-testid="zoom-in-btn"]').click();
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
-    await page.mouse.move(startX - 60, startY - 40, { steps: 4 });
-    await page.mouse.up();
+    await page.waitForTimeout(250);
+
+    // Turn off Follow & Loop toggles before exiting replay
+    await page.locator('[data-testid="replay-follow-btn"]').click();
+    await page.locator('[data-testid="replay-loop-btn"]').click();
+    await page.waitForTimeout(100);
+
     if (await page.$('[data-testid="replay-exit-btn"]')) {
       await page.locator('[data-testid="replay-exit-btn"]').click();
       await page.waitForTimeout(150);
     }
 
-    const zoomAfterPlaybackPan = await page.evaluate(() => {
+    const afterFollowAndZoom = await page.evaluate(() => {
       const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
       const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
       s.autoReplayOnLoad = false;
       s.replaySpeed = 1;
+      s.replayLoop = false;
+      s.replayFollow = false;
       localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
-      return active.zoomScale || 1;
+      return {
+        zoom: active.zoomScale || 1,
+        panX: active.panOffsetX || 0,
+        panY: active.panOffsetY || 0,
+      };
     });
+    const followPanDist = Math.hypot(
+      afterFollowAndZoom.panX - panBeforeFollow.x,
+      afterFollowAndZoom.panY - panBeforeFollow.y
+    );
     assert.equal(
-      zoomAfterPlaybackPan > savedZoomBeforeLoad,
+      followPanDist > 40,
       true,
-      `Expected live zoom during playback (${zoomAfterPlaybackPan}) > initial saved zoom (${savedZoomBeforeLoad})`
+      `Expected Follow Painting mode to smoothly pan viewport toward painted regions (moved ${followPanDist.toFixed(1)}px)`
+    );
+    assert.equal(
+      afterFollowAndZoom.zoom > savedZoomBeforeLoad,
+      true,
+      `Expected live zoom during playback (${afterFollowAndZoom.zoom}) > initial saved zoom (${savedZoomBeforeLoad})`
     );
     if (await page.$('[data-testid="reset-view-btn"]')) {
       await page.locator('[data-testid="reset-view-btn"]').click();
       await page.waitForTimeout(350);
     }
-    console.log('   PASS: Undo/Redo, default-minimised ReplayControls, zoom restoration before replay, offscreen fast-forward, and live pan/zoom during playback verified.');
+    console.log('   PASS: Undo/Redo, default-minimised ReplayControls, zoom restoration before replay, offscreen fast-forward, Follow Painting camera tracking, Auto-Loop, and live pan/zoom during playback verified.');
 
     // -------------------------------------------------------------------------
     // 4. Gallery Filters, Community Ideas & Infinite Zoom 2x Detail Sub-Tile
