@@ -332,6 +332,17 @@ export const App: React.FC = () => {
   );
 
   const autoResumeReplayRef = useRef<boolean>(false);
+  const autoResumeTimerRef = useRef<number | null>(null);
+  const replayStepRef = useRef<number>(0);
+  replayStepRef.current = replayStep;
+
+  const cancelAutoResume = useCallback(() => {
+    autoResumeReplayRef.current = false;
+    if (autoResumeTimerRef.current !== null) {
+      window.clearTimeout(autoResumeTimerRef.current);
+      autoResumeTimerRef.current = null;
+    }
+  }, []);
 
   // Zero-allocation bounding-box frustum check against the current canvas viewport
   const isRegionVisibleInViewport = useCallback(
@@ -374,12 +385,17 @@ export const App: React.FC = () => {
       options?: { resetView?: boolean }
     ) => {
       if (!sequence || sequence.length === 0) return;
+      if (autoResumeTimerRef.current !== null) {
+        window.clearTimeout(autoResumeTimerRef.current);
+        autoResumeTimerRef.current = null;
+      }
       autoResumeReplayRef.current = autoResumeOnFinish;
       if (options?.resetView) {
         setResetViewTrigger((prev) => prev + 1);
       }
       setHintRegionId(null);
       setReplaySequence(sequence);
+      replayStepRef.current = 0;
       setReplayStep(0);
       setIsReplaying(true);
       setIsReplayPlaying(true);
@@ -391,7 +407,11 @@ export const App: React.FC = () => {
   useEffect(() => {
     const finishAutoResume = () => {
       autoResumeReplayRef.current = false;
-      setTimeout(() => {
+      if (autoResumeTimerRef.current !== null) {
+        window.clearTimeout(autoResumeTimerRef.current);
+      }
+      autoResumeTimerRef.current = window.setTimeout(() => {
+        autoResumeTimerRef.current = null;
         setIsReplaying(false);
       }, 250);
     };
@@ -424,47 +444,48 @@ export const App: React.FC = () => {
         accRegions -= stepDelta;
       }
 
-      setReplayStep((prev) => {
-        if (prev >= replaySequence.length) {
-          setIsReplayPlaying(false);
-          if (autoResumeReplayRef.current) {
-            finishAutoResume();
-          }
-          return prev;
+      const prev = replayStepRef.current;
+      if (prev >= replaySequence.length) {
+        setIsReplayPlaying(false);
+        if (autoResumeReplayRef.current) {
+          finishAutoResume();
         }
+        return;
+      }
 
-        let cursor = prev;
-        // Immediately fast-forward past consecutive offscreen regions
+      let cursor = prev;
+      // Immediately fast-forward past consecutive offscreen regions
+      while (
+        cursor < replaySequence.length &&
+        !isRegionVisibleInViewport(replaySequence[cursor])
+      ) {
+        cursor++;
+      }
+
+      // Advance stepDelta on-screen steps and fast-forward any consecutive offscreen steps following each
+      for (let s = 0; s < stepDelta && cursor < replaySequence.length; s++) {
+        cursor++;
         while (
           cursor < replaySequence.length &&
           !isRegionVisibleInViewport(replaySequence[cursor])
         ) {
           cursor++;
         }
+      }
 
-        // Advance stepDelta on-screen steps and fast-forward any consecutive offscreen steps following each
-        for (let s = 0; s < stepDelta && cursor < replaySequence.length; s++) {
-          cursor++;
-          while (
-            cursor < replaySequence.length &&
-            !isRegionVisibleInViewport(replaySequence[cursor])
-          ) {
-            cursor++;
-          }
-        }
+      const next = Math.min(replaySequence.length, cursor);
+      if (next !== prev) {
+        replayStepRef.current = next;
+        setReplayStep(next);
+      }
 
-        const next = Math.min(replaySequence.length, cursor);
-        if (next === prev) {
-          return prev;
+      if (next >= replaySequence.length) {
+        setIsReplayPlaying(false);
+        if (autoResumeReplayRef.current) {
+          finishAutoResume();
         }
-        if (next >= replaySequence.length) {
-          setIsReplayPlaying(false);
-          if (autoResumeReplayRef.current) {
-            finishAutoResume();
-          }
-        }
-        return next;
-      });
+        return;
+      }
 
       animId = requestAnimationFrame(tick);
     };
@@ -3332,42 +3353,48 @@ export const App: React.FC = () => {
           replaySpeed={settings.replaySpeed || 1}
           raiseDock={settings.raisePaletteDock}
           onTogglePlay={() => {
-            autoResumeReplayRef.current = false;
+            cancelAutoResume();
             setIsReplayPlaying((prev) => !prev);
           }}
           onRestart={() => {
-            autoResumeReplayRef.current = false;
+            cancelAutoResume();
+            replayStepRef.current = 0;
             setReplayStep(0);
             setIsReplayPlaying(true);
           }}
           onSkipToEnd={() => {
-            autoResumeReplayRef.current = false;
+            cancelAutoResume();
+            replayStepRef.current = replaySequence.length;
             setReplayStep(replaySequence.length);
             setIsReplayPlaying(false);
           }}
           onSeek={(step) => {
-            autoResumeReplayRef.current = false;
+            cancelAutoResume();
+            replayStepRef.current = step;
             setReplayStep(step);
             setIsReplayPlaying(false);
           }}
           onChangeSpeed={(spd) => {
+            cancelAutoResume();
             handleUpdateSettings((prev) => ({ ...prev, replaySpeed: spd }));
           }}
           onExitReplay={() => {
             flushPendingViewportSave();
-            autoResumeReplayRef.current = false;
+            cancelAutoResume();
             setIsReplaying(false);
             setIsReplayPlaying(false);
           }}
           onExportImage={handleExportArtwork}
           onOpenCreate={() => {
             flushPendingViewportSave();
+            cancelAutoResume();
             setIsReplaying(false);
             setIsReplayPlaying(false);
             setSettingsInitialTab(2);
             setShowSettings(true);
           }}
           onResumeFromStep={handleResumeFromReplayStep}
+          onUserInteract={cancelAutoResume}
         />
       )}
 

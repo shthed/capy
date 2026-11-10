@@ -262,25 +262,23 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   useEffect(() => {
     stopMomentum();
     let targetOffset = { x: initialPanOffsetX, y: initialPanOffsetY };
-    if (
-      containerRef.current &&
-      puzzle &&
-      containerRef.current.clientWidth > 0 &&
-      containerRef.current.clientHeight > 0
-    ) {
+    const w = containerRef.current?.clientWidth || window.innerWidth;
+    const h = containerRef.current?.clientHeight || window.innerHeight;
+    if (containerRef.current && puzzle && w > 0 && h > 0) {
       targetOffset = clampCanvasOffset(
         targetOffset,
         initialZoomScale,
         puzzle.width,
         puzzle.height,
-        containerRef.current.clientWidth,
-        containerRef.current.clientHeight
+        w,
+        h
       );
     }
     scaleRef.current = initialZoomScale;
     offsetRef.current = targetOffset;
     setScale(initialZoomScale);
     setOffset(targetOffset);
+    onViewExtentChangedRef.current?.(initialZoomScale, targetOffset.x, targetOffset.y, w, h);
   }, [puzzle?.regionMap, initialZoomScale, initialPanOffsetX, initialPanOffsetY, restoreViewTrigger, stopMomentum]);
 
   // Handle FloatingActions zoom in/out button triggers

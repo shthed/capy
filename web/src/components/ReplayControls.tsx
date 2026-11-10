@@ -31,6 +31,7 @@ interface ReplayControlsProps {
   onExportImage: () => void;
   onOpenCreate: () => void;
   onResumeFromStep?: (step: number) => void;
+  onUserInteract?: () => void;
 }
 
 export const ReplayControls: React.FC<ReplayControlsProps> = ({
@@ -49,6 +50,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
   onExportImage,
   onOpenCreate,
   onResumeFromStep,
+  onUserInteract,
 }) => {
   const [isMinimized, setIsMinimized] = useState<boolean>(true);
 
@@ -64,6 +66,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
   const pct = Math.min(100, Math.max(0, Math.round((currentStep / totalSteps) * 100)));
 
   const handleCycleSpeed = () => {
+    onUserInteract?.();
     const idx = REPLAY_SPEED_OPTIONS.indexOf(replaySpeed);
     const nextIdx = (idx + 1) % REPLAY_SPEED_OPTIONS.length;
     onChangeSpeed(REPLAY_SPEED_OPTIONS[nextIdx]);
@@ -143,7 +146,10 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
           {/* Expand Controls Button */}
           <button
             type="button"
-            onClick={() => setIsMinimized(false)}
+            onClick={() => {
+              onUserInteract?.();
+              setIsMinimized(false);
+            }}
             aria-label="Expand Replay Controls"
             title="Expand Replay Controls"
             data-testid="replay-toggle-minimize-btn"
@@ -209,7 +215,10 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
 
             <button
               type="button"
-              onClick={() => setIsMinimized(true)}
+              onClick={() => {
+                onUserInteract?.();
+                setIsMinimized(true);
+              }}
               aria-label="Minimise Replay Controls"
               title="Minimise Replay Controls"
               data-testid="replay-toggle-minimize-btn"
