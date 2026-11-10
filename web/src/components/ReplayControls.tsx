@@ -247,11 +247,6 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
           {/* Dominant Interactive YouTube-Style Progress Slider (takes up most of the bar width) */}
           {renderYouTubeScrubber()}
 
-          {/* Compact Step & Percentage Readout */}
-          <span className="text-[11px] font-bold text-slate-200 tabular-nums whitespace-nowrap flex-shrink-0">
-            {currentStep}/{totalSteps} <span className="text-amber-300">({pct}%)</span>
-          </span>
-
           {/* Speed Selector */}
           <button
             type="button"
@@ -383,11 +378,8 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
         className="pointer-events-auto w-full max-w-2xl bg-slate-900/94 border border-amber-400/40 rounded-2xl shadow-2xl backdrop-blur-xl p-3 text-slate-100 space-y-2 animate-in fade-in slide-in-from-bottom-3 duration-200"
       >
         {/* Top Row: Full-Width YouTube-Style Progress Scrubber */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center">
           {renderYouTubeScrubber()}
-          <span className="text-xs font-bold text-slate-200 tabular-nums whitespace-nowrap flex-shrink-0">
-            {currentStep} / {totalSteps} regions <span className="text-amber-300">({pct}%)</span>
-          </span>
         </div>
 
         {/* Bottom Row: YouTube-Style Transport Controls (Left) + Actions & Window Controls (Right) */}
