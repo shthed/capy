@@ -18,7 +18,7 @@ All contributors and AI agents must strictly observe these absolute core invaria
 8. **Always display working thoughts**: Continuously display thoughts while working to explain what is being done and why, stating what file, component, or system is being inspected and the exact reasoning for each action.
 9. **Never open a PR without verifying builds**: Always run `npm run lint` and `npm run build` cleanly before creating or updating a pull request. Never submit unverified changes to CI.
 10. **Verify code reality before documenting**: Never document speculative, non-existent function names, setting keys, file paths, or CLI flags. Verify names and signatures directly against the codebase before updating documentation.
-11. **Evaluate & report PR Readiness & Perfection Confidence Score before requesting merge**: Whenever finishing a PR and preparing it for merge, compute a weighted `0-100%` (`5` pillars x `20` points) **PR Readiness & Perfection Confidence Score** (Functionality & Edge Cases, Automated Tests, Performance & Golden Invariants, Docs & Changelog Sync, CI & Preview Verification). Require `>= 95%` confidence before requesting merge approval (automatically fixing any technical/test/doc gaps first and asking clarifying questions via `/grill-me` if design ambiguity remains), and display the score and 5-pillar rubric table in chat, near the top of the PR description (immediately below the live preview link), and in the PR Development Summary comment (explicitly stating the exact delta if `< 100%`).
+11. **Evaluate & report PR Readiness & Perfection Confidence Score before requesting merge**: Whenever finishing a PR and preparing it for merge, compute a weighted `0-100%` (`5` pillars x `20` points) **PR Readiness & Perfection Confidence Score** (Functionality & Edge Cases, Automated Tests, Performance & Golden Invariants, Docs & Changelog Sync, CI & Preview Verification). Require `>= 95%` confidence before requesting merge approval (automatically fixing any technical/test/doc gaps first and asking clarifying questions via `/grill-me` if design ambiguity remains), and display the score as a concise bullet-point list near the top of the PR description (immediately below the live preview link) with full details in the PR Development Summary comment and chat response (explicitly stating the exact delta if `< 100%`).
 
 ---
 
@@ -156,7 +156,7 @@ From the repository root:
     - **Require `>= 95%` confidence** before asking the user for merge approval.
     - If any technical, test, lint, or documentation gap lowers the score below `95%`, fix the gap automatically before presenting the PR.
     - If design ambiguity lowers the score below `95%`, proactively ask clarifying questions (`/grill-me` style) to resolve the ambiguity with the user.
-    - Report the score and 5-pillar table in **three places**: (1) the chat response requesting merge approval, (2) near the top of the PR description right below the live preview callout, and (3) inside the PR Development Summary comment. Whenever the score is `< 100%`, explicitly state the exact `-N` point delta explaining what accounts for the remaining points.
+    - Report the score in **three places**: (1) near the top of the PR description right below the live preview callout as a **concise bullet-point list** (avoiding excessive detail that belongs in the progress report comments), (2) inside the PR Development Summary comment, and (3) in the chat response requesting merge approval. Whenever the score is `< 100%`, explicitly state the exact `-N` point delta explaining what accounts for the remaining points.
 
 ---
 
@@ -242,7 +242,7 @@ cd ..
 ### C. Final Merge Readiness & Confidence Score Audit (`>= 95%`)
 1. Verify that the live preview link (`https://shthed.github.io/capy/pull/<number>/`) is at the very top of the PR description.
 2. Compute the **5-Pillar PR Readiness & Perfection Confidence Score (`0-100%`)** (Section 5) and ensure it is `>= 95%` (fixing any technical/test/doc gaps or resolving design ambiguities first).
-3. Include the Confidence Score and 5-pillar rubric table near the top of the PR description, in the PR Development Summary comment, and in the chat response requesting merge approval.
+3. Include the Confidence Score near the top of the PR description as a concise bullet-point list (keeping detailed breakdowns in the PR Development Summary comment) and in the chat response requesting merge approval.
 
 ---
 
