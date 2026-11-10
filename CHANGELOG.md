@@ -1,11 +1,11 @@
-# Changelog & Versioning Scheme -- Capy Monorepo (`web/`, `app/`)
+# Changelog & Versioning Scheme -- Capy Monorepo ([`web/`](./web), [`app/`](./app))
 
-All notable changes to the **Capy** color-by-number suite across the Web Application (`web/`) and Unified Native Android Launcher (`app/`) are documented in this file.
+All notable changes to the **Capy** color-by-number suite across the Web Application ([`web/`](./web)) and Unified Native Android Launcher ([`app/`](./app)) are documented in this file.
 
 The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
 
 > [!NOTE]
-> **Documentation Hygiene**: Never include unicode emojis or ASCII box-drawing diagrams in `CHANGELOG.md`. Every feature, bugfix, or architectural pull request must bump the version in [`web/package.json`](./web/package.json) according to the scheme below and record its changes under a matching version heading in this file.
+> **Documentation Hygiene**: Never include unicode emojis or ASCII box-drawing diagrams in [`CHANGELOG.md`](./CHANGELOG.md). Every feature, bugfix, or architectural pull request must bump the version in [`web/package.json`](./web/package.json) according to the scheme below and record its changes under a matching version heading in this file.
 
 ---
 
@@ -16,16 +16,16 @@ Capy uses a unified **Semantic Versioning (`MAJOR.MINOR.PATCH`)** scheme shared 
 | Component | Source / Location | Rule & Formula | Current Value |
 | :--- | :--- | :--- | :--- |
 | **Canonical SemVer** | [`web/package.json`](./web/package.json) (`"version"`) | Single source of truth formatted as `MAJOR.MINOR.PATCH` (`0 <= MINOR <= 99`, `0 <= PATCH <= 99`). | `2.5.0` |
-| **Web Runtime Constant** | [`web/src/version.ts`](./web/src/version.ts) (`APP_VERSION`, `APP_VERSION_CODE`) | Imported directly from `web/package.json` and displayed in `SettingsModal.tsx` (`data-testid="app-version-badge"`). | `v2.5.0` (`20500`) |
-| **Android `versionName`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionName`) | Automatically parsed at Gradle configuration time from `../web/package.json`. | `"2.5.0"` |
+| **Web Runtime Constant** | [`web/src/version.ts`](./web/src/version.ts) (`APP_VERSION`, `APP_VERSION_CODE`) | Imported directly from [`web/package.json`](./web/package.json) and displayed in [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) (`data-testid="app-version-badge"`). | `v2.5.0` (`20500`) |
+| **Android `versionName`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionName`) | Automatically parsed at Gradle configuration time from [`../web/package.json`](./web/package.json). | `"2.5.0"` |
 | **Android `versionCode`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionCode`) | Deterministically computed as `(MAJOR * 10000) + (MINOR * 100) + PATCH` for strictly monotonic Google Play Console uploads. | `20500` |
 
 ### When to Increment Each Version Segment
 
 1. **`MAJOR` (`X.0.0`, e.g., `1.0.0` $\rightarrow$ `2.0.0`)**:
-   - Incremented for major storage epoch upgrades (such as the transition from legacy JSON saves to `.capy` v2 Gzip binary archives), fundamental architecture migrations, or new top-level platform launches.
+   - Incremented for major storage epoch upgrades (such as the transition from legacy JSON saves to `.capy` v2 Gzip binary archives in [`CapyCodec.ts`](./web/src/services/CapyCodec.ts)), fundamental architecture migrations, or new top-level platform launches.
 2. **`MINOR` (`2.Y.0`, e.g., `2.4.0` $\rightarrow$ `2.5.0`)**:
-   - Incremented whenever backward-compatible gameplay features, replay modes, UI controls, cloud/multiplayer drivers, or new `UserSettings` keys are added.
+   - Incremented whenever backward-compatible gameplay features, replay modes, UI controls, cloud/multiplayer drivers, or new `UserSettings` keys ([`web/src/types/index.ts`](./web/src/types/index.ts)) are added.
 3. **`PATCH` (`2.5.Z`, e.g., `2.5.0` $\rightarrow$ `2.5.1`)**:
    - Incremented for backward-compatible bug fixes, gesture edge-case corrections, performance optimizations, test suite consolidation, or dependency security updates.
 
@@ -33,128 +33,140 @@ Capy uses a unified **Semantic Versioning (`MAJOR.MINOR.PATCH`)** scheme shared 
 
 ## Release History
 
-## [2.5.0] - 2026-11-10 (Android `versionCode`: `20500`)
+## [2.5.0] - 2026-11-10 ([PR #463](https://github.com/shthed/capy/pull/463), Android `versionCode`: `20500`)
 
 ### Added
-- **Save-Load Zoom Extent Restoration Before Replay ([`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx))**:
-  - Restores the saved puzzle's previous `zoomScale`, `panOffsetX`, and `panOffsetY` on the canvas (`restoreViewTrigger` + immediate `clampCanvasOffset` clamping) before initiating chronological replay on app launch or save switching.
-- **Automatic Offscreen Replay Step Fast-Forward ([`web/src/App.tsx`](./web/src/App.tsx))**:
-  - Added a zero-allocation O(1) bounding-box frustum check (`isRegionVisibleInViewport`) inside the 60 FPS replay `requestAnimationFrame` loop that immediately skips consecutive offscreen regions when `replayFollow` is disabled.
-- **Follow Painting Camera Tracking (`replayFollow`, [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx))**:
-  - Added `replayFollow: boolean` (default `false`) to `UserSettings` (`capy_user_settings_v8`) with toggle buttons in both the minimised and expanded `ReplayControls` HUD (`data-testid="replay-follow-btn"`) and `SettingsModal` (`data-testid="toggle-replay-follow-btn"`).
-  - Smoothly pans the camera (`stepFollow` at 60 FPS with pre-allocated scratch vectors) toward the next region being painted (`replaySequence[replayStep]`), bypasses offscreen step skipping, and waits for the viewport to catch up (`isViewportCaughtUpToRegion`) so every region is onscreen before painting.
-- **Auto-Loop Replay (`replayLoop`, [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx))**:
-  - Added `replayLoop: boolean` (default `false`) to `UserSettings` (`capy_user_settings_v8`) with toggle buttons in `ReplayControls` (`data-testid="replay-loop-btn"`) and `SettingsModal` (`data-testid="toggle-replay-loop-btn"`).
+- **Save-Load Zoom Extent Restoration Before Replay ([`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [PR #463](https://github.com/shthed/capy/pull/463))**:
+  - Restores the saved puzzle's previous `zoomScale`, `panOffsetX`, and `panOffsetY` on the canvas (`restoreViewTrigger` + immediate `clampCanvasOffset` clamping in [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)) before initiating chronological replay on app launch or save switching.
+- **Automatic Offscreen Replay Step Fast-Forward ([`web/src/App.tsx`](./web/src/App.tsx), [PR #463](https://github.com/shthed/capy/pull/463))**:
+  - Added a zero-allocation O(1) bounding-box frustum check (`isRegionVisibleInViewport` in [`App.tsx`](./web/src/App.tsx)) inside the 60 FPS replay `requestAnimationFrame` loop that immediately skips consecutive offscreen regions when `replayFollow` is disabled.
+- **Follow Painting Camera Tracking (`replayFollow`, [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [PR #463](https://github.com/shthed/capy/pull/463))**:
+  - Added `replayFollow: boolean` (default `false`) to `UserSettings` (`capy_user_settings_v8` in [`web/src/types/index.ts`](./web/src/types/index.ts) and [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts)) with toggle buttons in both the minimised and expanded [`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx) HUD (`data-testid="replay-follow-btn"`) and [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) (`data-testid="toggle-replay-follow-btn"`).
+  - Smoothly pans the camera (`stepFollow` at 60 FPS with pre-allocated scratch vectors in [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)) toward the next region being painted (`replaySequence[replayStep]`), bypasses offscreen step skipping, and waits for the viewport to catch up (`isViewportCaughtUpToRegion` in [`App.tsx`](./web/src/App.tsx)) so every region is onscreen before painting.
+- **Auto-Loop Replay (`replayLoop`, [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [PR #463](https://github.com/shthed/capy/pull/463))**:
+  - Added `replayLoop: boolean` (default `false`) to `UserSettings` (`capy_user_settings_v8` in [`web/src/types/index.ts`](./web/src/types/index.ts) and [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts)) with toggle buttons in [`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx) (`data-testid="replay-loop-btn"`) and [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) (`data-testid="toggle-replay-loop-btn"`).
   - Automatically holds at `100%` for 350ms (`loopPauseUntil`) and restarts replay from step `0` when enabled.
-- **Live Panning & Zooming During Replay Playback ([`web/src/App.tsx`](./web/src/App.tsx))**:
+- **Live Panning & Zooming During Replay Playback ([`web/src/App.tsx`](./web/src/App.tsx), [PR #463](https://github.com/shthed/capy/pull/463))**:
   - Enabled live viewport pan and zoom persistence during active replay playback and added `flushPendingViewportSave` on replay exit, save switching, and `beforeunload`/`pagehide`.
-- **Unified Versioning Scheme & Runtime Version Badge ([`web/src/version.ts`](./web/src/version.ts), [`app/build.gradle.kts`](./app/build.gradle.kts), [`CHANGELOG.md`](./CHANGELOG.md))**:
-  - Established `web/package.json` as the single source of truth for Semantic Versioning (`2.5.0`), wired `app/build.gradle.kts` to compute `versionCode = (MAJOR * 10000) + (MINOR * 100) + PATCH` (`20500`), and added `data-testid="app-version-badge"` in `SettingsModal.tsx`.
+- **Unified Versioning Scheme & Runtime Version Badge ([`web/src/version.ts`](./web/src/version.ts), [`app/build.gradle.kts`](./app/build.gradle.kts), [`CHANGELOG.md`](./CHANGELOG.md), [PR #463](https://github.com/shthed/capy/pull/463))**:
+  - Established [`web/package.json`](./web/package.json) as the single source of truth for Semantic Versioning (`2.5.0`), wired [`app/build.gradle.kts`](./app/build.gradle.kts) to compute `versionCode = (MAJOR * 10000) + (MINOR * 100) + PATCH` (`20500`), and added `data-testid="app-version-badge"` in [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx).
 
 ### Changed
-- **Default-Minimised Replay Controls HUD ([`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx))**:
-  - `ReplayControls` now opens minimised by default (`data-minimized="true"`) as a compact floating pill and expands to the full timeline scrubber card via `data-testid="replay-toggle-minimize-btn"`.
-- **Unified Single-Script Test Suite ([`web/scripts/test.mjs`](./web/scripts/test.mjs), [`web/package.json`](./web/package.json))**:
-  - Consolidated all 7 standalone test scripts in `web/scripts/` into a single unified test runner (`npm test` $\rightarrow$ `node scripts/test.mjs`) verifying engine/codec unit checks, version/changelog invariants, and 6 comprehensive Playwright E2E browser stages.
-- **Prioritized AAA Roadmap & Effort Ledger ([`TODO.md`](./TODO.md))**:
-  - Reorganized `TODO.md` into `Bugfixes -- Audit Findings` and `P0`–`P5` tiers with token budgets, agent/human time estimates, and standardized `priority`, `type`, `domain`, `complexity`, and `difficulty` labels.
+- **Default-Minimised Replay Controls HUD ([`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [PR #463](https://github.com/shthed/capy/pull/463))**:
+  - [`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx) now opens minimised by default (`data-minimized="true"`) as a compact floating pill and expands to the full timeline scrubber card via `data-testid="replay-toggle-minimize-btn"`.
+- **Unified Single-Script Test Suite ([`web/scripts/test.mjs`](./web/scripts/test.mjs), [`web/package.json`](./web/package.json), [PR #463](https://github.com/shthed/capy/pull/463))**:
+  - Consolidated all 7 standalone test scripts into a single unified test runner (`npm test` $\rightarrow$ [`web/scripts/test.mjs`](./web/scripts/test.mjs)) verifying engine/codec unit checks, version/changelog invariants, and 6 comprehensive Playwright E2E browser stages.
+- **Prioritized AAA Roadmap & Effort Ledger ([`TODO.md`](./TODO.md), [PR #463](https://github.com/shthed/capy/pull/463))**:
+  - Reorganized [`TODO.md`](./TODO.md) into `Bugfixes -- Audit Findings` and `P0`–`P5` tiers with token budgets, agent/human time estimates, and standardized `priority`, `type`, `domain`, `complexity`, and `difficulty` labels.
 
 ### Fixed
-- **Inactive Save Card Replay Trigger ([`web/src/App.tsx`](./web/src/App.tsx))**:
-  - Fixed `handleLoadSnapshot` so clicking Replay (`forceReplay = true`) on an inactive save card starts the replay after loading even when `settings.autoReplayOnLoad` is `false`.
-- **Free Colour Override Persistence ([`web/src/App.tsx`](./web/src/App.tsx))**:
-  - Preserved `paintedRegionColors` when calling `StorageService.saveActiveState` in `attemptFillRegion`, `attemptBatchFillRegions`, and worker regeneration fallbacks.
-- **Hardware Back & Escape Modal Stack Registration ([`web/src/App.tsx`](./web/src/App.tsx))**:
-  - Registered `isReplaying` (`ReplayControls`) and `showPaletteOptions` (`ColorPickerPopover`) with `NativeBridge.pushBackHandler`.
+- **Inactive Save Card Replay Trigger ([`web/src/App.tsx`](./web/src/App.tsx), [PR #463](https://github.com/shthed/capy/pull/463))**:
+  - Fixed `handleLoadSnapshot` in [`App.tsx`](./web/src/App.tsx) so clicking Replay (`forceReplay = true`) on an inactive save card starts the replay after loading even when `settings.autoReplayOnLoad` is `false`.
+- **Free Colour Override Persistence ([`web/src/App.tsx`](./web/src/App.tsx), [PR #463](https://github.com/shthed/capy/pull/463))**:
+  - Preserved `paintedRegionColors` when calling `StorageService.saveActiveState` ([`StorageService.ts`](./web/src/services/StorageService.ts)) in `attemptFillRegion`, `attemptBatchFillRegions`, and worker regeneration fallbacks.
+- **Hardware Back & Escape Modal Stack Registration ([`web/src/App.tsx`](./web/src/App.tsx), [PR #463](https://github.com/shthed/capy/pull/463))**:
+  - Registered `isReplaying` ([`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx)) and `showPaletteOptions` ([`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx)) with `NativeBridge.pushBackHandler` ([`NativeBridge.ts`](./web/src/services/NativeBridge.ts)).
 
 ---
 
-## [2.4.0] - 2026-11-10 (Android `versionCode`: `20400`)
+## [2.4.0] - 2026-11-10 ([PR #461](https://github.com/shthed/capy/pull/461), Android `versionCode`: `20400`)
 
 ### Added
-- **Modular Cloud Provider Driver Architecture ([`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts), PR #461)**:
-  - Implemented pluggable `CloudProviderDriver` backends (`LocalVaultCloudDriver`, `GoogleDriveCloudDriver`, `SteamCloudDriver`, `AppleCloudDriver`, `MicrosoftCloudDriver`) managed by `MultiProviderCloudSaveAdapter`.
-- **Google OAuth 2.0 GIS & Drive `appDataFolder` Cross-Device Sync (PR #461)**:
+- **Modular Cloud Provider Driver Architecture ([`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts), [PR #461](https://github.com/shthed/capy/pull/461))**:
+  - Implemented pluggable `CloudProviderDriver` backends (`LocalVaultCloudDriver`, `GoogleDriveCloudDriver`, `SteamCloudDriver`, `AppleCloudDriver`, `MicrosoftCloudDriver`) managed by `MultiProviderCloudSaveAdapter` in [`CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts).
+- **Google OAuth 2.0 GIS & Drive `appDataFolder` Cross-Device Sync ([`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts), [PR #461](https://github.com/shthed/capy/pull/461))**:
   - Added browser-native Google Identity Services OAuth 2.0 token acquisition (`drive.appdata` + `userinfo.profile`) and hidden Google Drive `appDataFolder` synchronization for CRDT `CloudSaveEnvelope` slots and `.capy` v2 custom puzzle archives.
 
 ---
 
-## [2.3.0] - 2026-11-09 (Android `versionCode`: `20300`)
+## [2.3.0] - 2026-11-09 ([PR #462](https://github.com/shthed/capy/pull/462), Android `versionCode`: `20300`)
 
 ### Fixed
-- **Runtime Share Link & Co-op Pre-Baked Sample Resolution ([`web/src/App.tsx`](./web/src/App.tsx), PR #462)**:
-  - Added `loadSampleFromPrebakedOrGenerate` so incoming `#s=<token>` share links, Co-op `WELCOME_STATE` puzzle switches, and Create tab sample loads resolve directly against pre-baked `IndexedDB` records with 100% matching region IDs and zero duplicate snapshots.
-- **Canvas Undo/Unfill Incremental Dirty-Rect Repaint ([`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), PR #462)**:
-  - Fixed incremental base canvas updates so unfilling regions via single-step Undo, Replay scrubbing, or `Resume Here` repaints dirty bounding boxes without requiring a full canvas rebuild.
-- **Lazy Modal Code-Splitting & Passive Viewport Updates ([`web/vite.config.ts`](./web/vite.config.ts), [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts), PR #462)**:
-  - Code-split `SettingsModal`, `ColorPickerPopover`, and vendor chunks under 225 KB and added `StorageService.updateSnapshotViewport` so passive pan/zoom updates do not reorder `LAST_ACTIVE` save sorting.
+- **Runtime Share Link & Co-op Pre-Baked Sample Resolution ([`web/src/App.tsx`](./web/src/App.tsx), [PR #462](https://github.com/shthed/capy/pull/462))**:
+  - Added `loadSampleFromPrebakedOrGenerate` in [`App.tsx`](./web/src/App.tsx) so incoming `#s=<token>` share links, Co-op `WELCOME_STATE` puzzle switches, and Create tab sample loads resolve directly against pre-baked `IndexedDB` records ([`StorageService.ts`](./web/src/services/StorageService.ts)) with 100% matching region IDs and zero duplicate snapshots.
+- **Canvas Undo/Unfill Incremental Dirty-Rect Repaint ([`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [PR #462](https://github.com/shthed/capy/pull/462))**:
+  - Fixed incremental base canvas updates in [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx) so unfilling regions via single-step Undo, Replay scrubbing, or `Resume Here` repaints dirty bounding boxes without requiring a full canvas rebuild.
+- **Lazy Modal Code-Splitting & Passive Viewport Updates ([`web/vite.config.ts`](./web/vite.config.ts), [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts), [PR #462](https://github.com/shthed/capy/pull/462))**:
+  - Code-split [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx), and vendor chunks under 225 KB and added `StorageService.updateSnapshotViewport` in [`StorageService.ts`](./web/src/services/StorageService.ts) so passive pan/zoom updates do not reorder `LAST_ACTIVE` save sorting.
 
 ---
 
-## [2.2.0] - 2026-11-09 (Android `versionCode`: `20200`)
+## [2.2.0] - 2026-11-09 ([PR #460](https://github.com/shthed/capy/pull/460), Android `versionCode`: `20200`)
 
 ### Added
-- **Shareable `< 2 KB` Progress Links & Simultaneous Co-op Rooms ([`web/src/services/ShareLinkService.ts`](./web/src/services/ShareLinkService.ts), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), PR #460)**:
-  - Added `#s=<token>` URL progress sharing, 6-character simultaneous Co-op rooms (`HybridCoopRoomAdapter` with `BroadcastChannel` + WebSocket transport), and zero-allocation collaborator paint ripples (`CoopRippleBuffer.ts`).
-- **Google Play Games Services v2 Sign-In & Storefront Compliance ([`app/src/main/java/com/capypaint/capy/MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt), [`web/public/privacy-policy.html`](./web/public/privacy-policy.html), PR #460)**:
-  - Integrated Play Games Services v2 silent sign-in (`PlayGamesSignInClient`), release keystore signing configuration, ProGuard rules, and family-friendly moderated Community Puzzle Ideas.
+- **Shareable `< 2 KB` Progress Links & Simultaneous Co-op Rooms ([`web/src/services/ShareLinkService.ts`](./web/src/services/ShareLinkService.ts), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [PR #460](https://github.com/shthed/capy/pull/460))**:
+  - Added `#s=<token>` URL progress sharing ([`ShareLinkService.ts`](./web/src/services/ShareLinkService.ts)), 6-character simultaneous Co-op rooms (`HybridCoopRoomAdapter` in [`ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts) with `BroadcastChannel` + WebSocket transport), and zero-allocation collaborator paint ripples ([`CoopRippleBuffer.ts`](./web/src/engine/CoopRippleBuffer.ts)).
+- **Google Play Games Services v2 Sign-In & Storefront Compliance ([`app/src/main/java/com/capypaint/capy/MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt), [`web/public/privacy-policy.html`](./web/public/privacy-policy.html), [PR #460](https://github.com/shthed/capy/pull/460))**:
+  - Integrated Play Games Services v2 silent sign-in (`PlayGamesSignInClient` in [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt)), release keystore signing configuration ([`app/build.gradle.kts`](./app/build.gradle.kts)), ProGuard rules ([`app/proguard-rules.pro`](./app/proguard-rules.pro)), and family-friendly moderated Community Puzzle Ideas.
 
 ---
 
-## [2.1.0] - 2026-11-08 (Android `versionCode`: `20100`)
+## [2.1.0] - 2026-11-08 ([PR #459](https://github.com/shthed/capy/pull/459), Android `versionCode`: `20100`)
 
 ### Added
-- **Instant First-Launch Sample Bootstrap (`./assets/sample_saves.capy`, [`web/scripts/generate-sample-saves.mjs`](./web/scripts/generate-sample-saves.mjs), PR #459)**:
-  - Pre-baked all 4 built-in `SAMPLE_GALLERY` artworks (`Capybara`, `Mushroom Forest`, `Capy Forest`, `Snail Guitar`) into a 225 KB `.capy` v2 Gzip binary archive with deterministic K-Means++ initialization (`0xca91ba7a`) so first-time players enter gameplay immediately without waiting for Web Worker segmentation.
+- **Instant First-Launch Sample Bootstrap ([`web/public/assets/sample_saves.capy`](./web/public/assets/sample_saves.capy), [`web/scripts/generate-sample-saves.mjs`](./web/scripts/generate-sample-saves.mjs), [PR #459](https://github.com/shthed/capy/pull/459))**:
+  - Pre-baked all 4 built-in `SAMPLE_GALLERY` artworks (`Capybara`, `Mushroom Forest`, `Capy Forest`, `Snail Guitar` in [`web/src/types/index.ts`](./web/src/types/index.ts)) into a 225 KB `.capy` v2 Gzip binary archive ([`web/public/assets/sample_saves.capy`](./web/public/assets/sample_saves.capy)) with deterministic K-Means++ initialization (`0xca91ba7a` in [`ColorQuantizer.ts`](./web/src/engine/ColorQuantizer.ts)) so first-time players enter gameplay immediately without waiting for Web Worker segmentation.
 
 ---
 
-## [2.0.0] - 2026-11-08 (Android `versionCode`: `20000`)
+## [2.0.0] - 2026-11-08 ([PR #458](https://github.com/shthed/capy/pull/458), Android `versionCode`: `20000`)
 
 ### Added
-- **Compact Binary Storage Format v2 (`.capy` v2, [`web/src/services/CapyCodec.ts`](./web/src/services/CapyCodec.ts), PR #458)**:
-  - Introduced `CAPY\x02` Gzip-compressed binary framing, `uint16` Run-Length Encoding (`regionMapRleB64`), LEB128 varint delta encoding, and CRDT `ProgressDeltaV2` tokens, reducing save storage footprint by ~140x (`~54 KB` per puzzle in `IndexedDB` and `~22 KB` per `.capy` export).
+- **Compact Binary Storage Format v2 (`.capy` v2, [`web/src/services/CapyCodec.ts`](./web/src/services/CapyCodec.ts), [PR #458](https://github.com/shthed/capy/pull/458))**:
+  - Introduced `CAPY\x02` Gzip-compressed binary framing, `uint16` Run-Length Encoding (`regionMapRleB64`), LEB128 varint delta encoding, and CRDT `ProgressDeltaV2` tokens in [`CapyCodec.ts`](./web/src/services/CapyCodec.ts), reducing save storage footprint by ~140x (`~54 KB` per puzzle in `IndexedDB` via [`StorageService.ts`](./web/src/services/StorageService.ts) and `~22 KB` per `.capy` export).
 
 ---
 
-## [1.4.0] - 2026-11-07 (Android `versionCode`: `10400`)
+## [1.4.0] - 2026-11-07 ([PR #457](https://github.com/shthed/capy/pull/457), [PR #456](https://github.com/shthed/capy/pull/456), [PR #455](https://github.com/shthed/capy/pull/455), [PR #454](https://github.com/shthed/capy/pull/454), Android `versionCode`: `10400`)
 
 ### Added
-- **Inscribed-Circle Label Fitting & Circle-Free `NUMBER_ONLY` Hints ([`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), PR #457)**:
-  - Added configurable `minLabelSize` (2–14px), `maxLabelSize` (10–36px), and `labelScale` settings, mathematical inscribed-circle bounds guarantees for 1–3 digit labels, and circle-free `NUMBER_ONLY` label text color highlighting.
-- **Simple (Fast Mode) vs. Detailed Generation Progress & Authentic Palette Metrics ([`web/src/components/LoadingOverlay.tsx`](./web/src/components/LoadingOverlay.tsx), PR #454, PR #455, PR #456)**:
-  - Added low-overhead Simple Progress (Fast Mode default) alongside Detailed 6-stage pipeline inspection with live K-Means clustered palette swatches.
+- **Inscribed-Circle Label Fitting & Circle-Free `NUMBER_ONLY` Hints ([`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [PR #457](https://github.com/shthed/capy/pull/457))**:
+  - Added configurable `minLabelSize` (2–14px), `maxLabelSize` (10–36px), and `labelScale` settings in [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), mathematical inscribed-circle bounds guarantees for 1–3 digit labels, and circle-free `NUMBER_ONLY` label text color highlighting in [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
+- **Simple (Fast Mode) vs. Detailed Generation Progress & Authentic Palette Metrics ([`web/src/components/LoadingOverlay.tsx`](./web/src/components/LoadingOverlay.tsx), [PR #454](https://github.com/shthed/capy/pull/454), [PR #455](https://github.com/shthed/capy/pull/455), [PR #456](https://github.com/shthed/capy/pull/456))**:
+  - Added low-overhead Simple Progress (Fast Mode default) alongside Detailed 6-stage pipeline inspection with live K-Means clustered palette swatches in [`LoadingOverlay.tsx`](./web/src/components/LoadingOverlay.tsx).
 
 ---
 
-## [1.3.0] - 2026-11-06 (Android `versionCode`: `10300`)
+## [1.3.0] - 2026-11-06 ([PR #452](https://github.com/shthed/capy/pull/452), [PR #449](https://github.com/shthed/capy/pull/449), Android `versionCode`: `10300`)
 
 ### Added
-- **Installable Offline-First Progressive Web App ([`web/public/sw.js`](./web/public/sw.js), [`web/public/manifest.webmanifest`](./web/public/manifest.webmanifest), [`web/src/services/PwaService.ts`](./web/src/services/PwaService.ts), PR #452)**:
-  - Added `capy-cache-v2` offline Service Worker with automatic Vite bundle discovery, standalone PWA manifest, and in-app install prompt integration.
-- **Saves Gallery Modernization ([`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), PR #449)**:
-  - Added Detail vs. Thumbnails grid view switcher (`capy_saves_view_mode`), save pinning (`isPinned`), and sticky library action toolbar.
+- **Installable Offline-First Progressive Web App ([`web/public/sw.js`](./web/public/sw.js), [`web/public/manifest.webmanifest`](./web/public/manifest.webmanifest), [`web/src/services/PwaService.ts`](./web/src/services/PwaService.ts), [PR #452](https://github.com/shthed/capy/pull/452))**:
+  - Added `capy-cache-v2` offline Service Worker ([`web/public/sw.js`](./web/public/sw.js)) with automatic Vite bundle discovery, standalone PWA manifest ([`web/public/manifest.webmanifest`](./web/public/manifest.webmanifest)), and in-app install prompt integration ([`PwaService.ts`](./web/src/services/PwaService.ts)).
+- **Saves Gallery Modernization ([`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [PR #449](https://github.com/shthed/capy/pull/449))**:
+  - Added Detail vs. Thumbnails grid view switcher (`capy_saves_view_mode`), save pinning (`isPinned`), and sticky library action toolbar in [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx).
 
 ---
 
-## [1.2.0] - 2026-11-05 (Android `versionCode`: `10200`)
+## [1.2.0] - 2026-11-05 ([PR #448](https://github.com/shthed/capy/pull/448), [PR #447](https://github.com/shthed/capy/pull/447), [PR #446](https://github.com/shthed/capy/pull/446), Android `versionCode`: `10200`)
 
 ### Added
-- **Animated Chronological Replay, Long-Press Undo Scrubber & Multi-Step Redo ([`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`web/src/components/FloatingActions.tsx`](./web/src/components/FloatingActions.tsx), PR #446, PR #447, PR #448)**:
-  - Added 60 FPS chronological puzzle completion replays, single-step Undo/Redo (`Ctrl+Z` / `Ctrl+Y`), long-press Undo (`>= 450ms`) timeline scrubbing with "Resume Here", and automatic post-replay gameplay resumption on save load.
+- **Animated Chronological Replay, Long-Press Undo Scrubber & Multi-Step Redo ([`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`web/src/components/FloatingActions.tsx`](./web/src/components/FloatingActions.tsx), [PR #446](https://github.com/shthed/capy/pull/446), [PR #447](https://github.com/shthed/capy/pull/447), [PR #448](https://github.com/shthed/capy/pull/448))**:
+  - Added 60 FPS chronological puzzle completion replays ([`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx)), single-step Undo/Redo (`Ctrl+Z` / `Ctrl+Y` via [`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx)), long-press Undo (`>= 450ms`) timeline scrubbing with "Resume Here", and automatic post-replay gameplay resumption on save load.
 
 ---
 
-## [1.1.0] - 2026-11-04 (Android `versionCode`: `10100`)
+## [1.1.0] - 2026-11-04 ([PR #445](https://github.com/shthed/capy/pull/445), [PR #444](https://github.com/shthed/capy/pull/444), [PR #442](https://github.com/shthed/capy/pull/442), Android `versionCode`: `10100`)
 
 ### Added
-- **Google Maps-Style One-Finger Double-Tap Zoom, Inertial Pan Momentum & Custom Pipette Pickers ([`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), PR #442, PR #444, PR #445)**:
-  - Added one-finger double-tap-and-drag focal zoom, friction-decayed pan momentum gliding, dynamic corner pan margins, custom `<Pipette>` hex color pickers for canvas background and hints, and automated Playwright gallery screenshot capture (`npm run gallery:capture`).
+- **Google Maps-Style One-Finger Double-Tap Zoom, Inertial Pan Momentum & Custom Pipette Pickers ([`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [PR #442](https://github.com/shthed/capy/pull/442), [PR #444](https://github.com/shthed/capy/pull/444), [PR #445](https://github.com/shthed/capy/pull/445))**:
+  - Added one-finger double-tap-and-drag focal zoom, friction-decayed pan momentum gliding, dynamic corner pan margins in [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), custom `<Pipette>` hex color pickers for canvas background and hints in [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), and automated Playwright gallery screenshot capture (`npm run gallery:capture` via [`web/scripts/capture-gallery.mjs`](./web/scripts/capture-gallery.mjs)).
 
 ---
 
-## [1.0.0] - 2026-11-01 (Android `versionCode`: `10000`)
+## [1.0.0] - 2026-11-01 ([PR #441](https://github.com/shthed/capy/pull/441), Android `versionCode`: `10000`)
 
 ### Added
-- **Initial Capy Monorepo Release (`web/` & `app/`, PR #441)**:
-  - Launched the React 19 + TypeScript + Vite 6 Web Application (`web/`) with 3-tier offscreen canvas caching (`PuzzleCanvas.tsx`), 5-strategy Web Worker segmentation pipeline (`puzzle.worker.ts`), Free Colour mode (`ColorPickerPopover.tsx`), and the unified Kotlin Android `WebViewAssetLoader` wrapper (`app/`).
+- **Initial Capy Monorepo Release ([`web/`](./web) & [`app/`](./app), [PR #441](https://github.com/shthed/capy/pull/441))**:
+  - Launched the React 19 + TypeScript + Vite 6 Web Application ([`web/`](./web)) with 3-tier offscreen canvas caching ([`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)), 5-strategy Web Worker segmentation pipeline ([`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts)), Free Colour mode ([`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx)), and the unified Kotlin Android `WebViewAssetLoader` wrapper ([`app/`](./app), [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt), [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt)).
+
+[2.5.0]: https://github.com/shthed/capy/pull/463
+[2.4.0]: https://github.com/shthed/capy/pull/461
+[2.3.0]: https://github.com/shthed/capy/pull/462
+[2.2.0]: https://github.com/shthed/capy/pull/460
+[2.1.0]: https://github.com/shthed/capy/pull/459
+[2.0.0]: https://github.com/shthed/capy/pull/458
+[1.4.0]: https://github.com/shthed/capy/pull/457
+[1.3.0]: https://github.com/shthed/capy/pull/452
+[1.2.0]: https://github.com/shthed/capy/pull/448
+[1.1.0]: https://github.com/shthed/capy/pull/445
+[1.0.0]: https://github.com/shthed/capy/pull/441
