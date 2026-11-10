@@ -542,8 +542,27 @@ async function runBrowserBasicsSuite() {
     await page.locator('[data-testid="zoom-in-btn"]').click();
     await page.waitForTimeout(250);
 
-    // Turn off Follow & Loop toggles before exiting replay
-    await page.locator('[data-testid="replay-follow-btn"]').click();
+    // Manually pan-drag the canvas slightly during replay and verify Follow Painting automatically disengages
+    const canvasBoxAfterLoad = await page.locator('canvas').boundingBox();
+    await page.mouse.move(
+      canvasBoxAfterLoad.x + canvasBoxAfterLoad.width / 2,
+      canvasBoxAfterLoad.y + canvasBoxAfterLoad.height / 2
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      canvasBoxAfterLoad.x + canvasBoxAfterLoad.width / 2 + 14,
+      canvasBoxAfterLoad.y + canvasBoxAfterLoad.height / 2 + 10,
+      { steps: 3 }
+    );
+    await page.mouse.up();
+    await page.waitForTimeout(420);
+    assert.equal(
+      await page.locator('[data-testid="replay-follow-btn"]').getAttribute('aria-pressed'),
+      'false',
+      'Expected Follow Painting to automatically disengage on manual canvas pan'
+    );
+
+    // Turn off Loop toggle before exiting replay
     await page.locator('[data-testid="replay-loop-btn"]').click();
     await page.waitForTimeout(100);
 

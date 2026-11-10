@@ -380,12 +380,19 @@ export const App: React.FC = () => {
   // Pre-allocated scratch vectors for zero-allocation camera-follow frustum checks
   const followRawScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const followClampedScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const preReplayViewportRef = useRef<{ zoomScale: number; panOffsetX: number; panOffsetY: number }>({
+    zoomScale: 1,
+    panOffsetX: 0,
+    panOffsetY: 0,
+  });
 
   // Zero-allocation check for whether the viewport has panned to bring the target region onscreen during replayFollow
   const isViewportCaughtUpToRegion = useCallback(
     (regionId: number): boolean => {
       if (!puzzle) return true;
       const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+      // When Follow Painting is enabled from fit-to-screen zoom (<1.8x), wait for smooth auto-zoom toward ~2.5x
+      if (zoomScale < 1.8) return false;
       const reg = regionByIdRef.current.get(regionId);
       if (!reg) return true;
       const w = canvasContainerSizeRef.current.width || window.innerWidth || 1024;
@@ -446,6 +453,7 @@ export const App: React.FC = () => {
         autoResumeTimerRef.current = null;
       }
       autoResumeReplayRef.current = autoResumeOnFinish;
+      preReplayViewportRef.current = { ...viewportRef.current };
       if (options?.resetView) {
         setResetViewTrigger((prev) => prev + 1);
       }
@@ -469,6 +477,10 @@ export const App: React.FC = () => {
       autoResumeTimerRef.current = window.setTimeout(() => {
         autoResumeTimerRef.current = null;
         setIsReplaying(false);
+        const savedView = preReplayViewportRef.current;
+        viewportRef.current = { ...savedView };
+        setInitialViewport({ ...savedView });
+        setRestoreViewTrigger((prev) => prev + 1);
       }, 250);
     };
 
@@ -3412,6 +3424,14 @@ export const App: React.FC = () => {
                 panOffsetY: panY,
               });
             }, 350);
+          }
+        }}
+        onManualPanStart={() => {
+          if (isReplaying) {
+            cancelAutoResume();
+            if (settings.replayFollow) {
+              handleUpdateSettings((prev) => ({ ...prev, replayFollow: false }));
+            }
           }
         }}
         onRegionClicked={attemptFillRegion}
