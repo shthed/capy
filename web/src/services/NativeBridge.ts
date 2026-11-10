@@ -27,6 +27,7 @@ declare global {
     __capyReceivePlayGamesProfile?: (
       profile: { playerId?: string; displayName?: string } | string
     ) => void;
+    __capyReceiveCloudSnapshot?: (slotKey: string, payloadJson: string) => void;
     webkit?: {
       messageHandlers?: {
         CapyIOS?: {
@@ -60,6 +61,7 @@ class NativeBridgeService {
   private playGamesProfileHandler:
     | ((profile: { playerId: string; displayName: string }) => void)
     | null = null;
+  private cloudSnapshotHandler: ((slotKey: string, payloadJson: string) => void) | null = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -109,6 +111,12 @@ class NativeBridgeService {
           }
         } catch {
           // Ignore malformed payload
+        }
+      };
+
+      window.__capyReceiveCloudSnapshot = (slotKey: string, payloadJson: string) => {
+        if (slotKey && payloadJson && this.cloudSnapshotHandler) {
+          this.cloudSnapshotHandler(slotKey, payloadJson);
         }
       };
     }
@@ -376,6 +384,15 @@ class NativeBridgeService {
     return () => {
       if (this.playGamesProfileHandler === handler) {
         this.playGamesProfileHandler = null;
+      }
+    };
+  }
+
+  onCloudSnapshot(handler: (slotKey: string, payloadJson: string) => void): () => void {
+    this.cloudSnapshotHandler = handler;
+    return () => {
+      if (this.cloudSnapshotHandler === handler) {
+        this.cloudSnapshotHandler = null;
       }
     };
   }

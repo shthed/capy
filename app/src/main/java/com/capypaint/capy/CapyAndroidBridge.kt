@@ -21,6 +21,7 @@ class CapyAndroidBridge(
     private val rootViewProvider: () -> View?,
     private val onModalStateChanged: (Boolean) -> Unit,
     private val onRequestPlayGamesSignIn: (() -> Unit)? = null,
+    private val onSaveCloudSnapshot: ((String, String) -> Unit)? = null,
 ) {
     @Volatile
     var isModalOpen: Boolean = false
@@ -87,9 +88,15 @@ class CapyAndroidBridge(
         return loadBackupFromDir(backupDir, key)
     }
 
+    fun saveLocalCloudSnapshotOnly(slotKey: String, payloadJson: String): Boolean {
+        return saveBackupToDir(cloudDir, slotKey, payloadJson)
+    }
+
     @JavascriptInterface
     fun saveCloudSnapshot(slotKey: String, payloadJson: String): Boolean {
-        return saveBackupToDir(cloudDir, slotKey, payloadJson)
+        val savedLocal = saveBackupToDir(cloudDir, slotKey, payloadJson)
+        onSaveCloudSnapshot?.invoke(slotKey, payloadJson)
+        return savedLocal
     }
 
     @JavascriptInterface

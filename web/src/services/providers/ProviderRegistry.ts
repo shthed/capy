@@ -1,4 +1,4 @@
-import { SAMPLE_GALLERY, SampleArtwork } from '../../types';
+import { SAMPLE_GALLERY, SampleArtwork, SavedSnapshot } from '../../types';
 import {
   decodeProgressDeltaToken,
   encodeProgressDeltaToken,
@@ -6,11 +6,30 @@ import {
   ProgressDeltaV2,
 } from '../CapyCodec';
 import { NativeBridge } from '../NativeBridge';
+import { StorageService } from '../StorageService';
+import {
+  AppleCloudDriver,
+  GoogleCloudDriver,
+  MicrosoftCloudDriver,
+  PlayGamesAndroidDriver,
+  SteamCloudDriver,
+} from './CloudProviderDrivers';
+import {
+  getConfiguredGoogleClientId,
+  setConfiguredGoogleClientId,
+} from './GoogleCloudSyncClient';
 import {
   AiArtworkProvider,
   AiCreditLedger,
   AuthProvider,
   CatalogStorageProvider,
+  CloudBackendKind,
+  CloudLibraryManifestV2,
+  CloudLibrarySyncSummary,
+  CloudProviderDescriptor,
+  CloudProviderDriver,
+  CloudProviderId,
+  CloudSaveEntryV2,
   CloudSaveEnvelope,
   CloudSaveProvider,
   CloudSyncResult,
@@ -27,6 +46,7 @@ import {
 const IDENTITY_STORAGE_KEY = 'capy_player_identity_v1';
 const TAB_SESSION_SUFFIX_KEY = 'capy_tab_peer_suffix_v1';
 const CLOUD_VAULT_STORAGE_KEY = 'capy_cloud_vault_v1';
+const CLOUD_MANIFEST_STORAGE_KEY = 'capy_cloud_library_manifest_v2';
 const COMMUNITY_IDEAS_STORAGE_KEY = 'capy_community_ideas_v1';
 const AI_CREDITS_STORAGE_KEY = 'capy_ai_credits_v1';
 
@@ -67,19 +87,109 @@ function getTabPeerSuffix(): string {
   }
 }
 
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.byteLength; i += chunkSize) {
+    binary += String.fromCharCode(
+      ...Array.from(bytes.subarray(i, Math.min(i + chunkSize, bytes.byteLength)))
+    );
+  }
+  return btoa(binary);
+}
+
+function base64ToUint8(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    out[i] = binary.charCodeAt(i);
+  }
+  return out;
+}
+
+export function computeSlotKeyForSnapshot(snap: {
+  id: string;
+  sampleAssetPath?: string | null;
+  sourceRef?: { kind: string; uri: string };
+}): string {
+  const sampleUri =
+    snap.sampleAssetPath ||
+    (snap.sourceRef?.kind === 'sample' || snap.sourceRef?.kind === 'catalog'
+      ? snap.sourceRef.uri
+      : undefined);
+  if (sampleUri) {
+    return `sample_${sampleUri.replace(/^\.\//, '').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  }
+  return `save_${snap.id}`;
+}
+
+function mapProviderToBackendKind(providerId?: CloudProviderId): CloudBackendKind {
+  switch (providerId) {
+    case 'google':
+      return 'google_drive_appdata';
+    case 'play_games_v2':
+      return 'play_games_snapshots';
+    case 'steam':
+      return 'steam_remote_storage';
+    case 'microsoft':
+      return 'microsoft_onedrive_approot';
+    case 'apple':
+      return 'apple_cloudkit';
+    default:
+      return 'local_cache';
+  }
+}
+
 // ---------------------------------------------------------------------------
-// 1. AuthProvider: Guest + Google Play Games Services v2 Bridge
+// 1. AuthProvider: Modular Multi-Provider Cloud Identity Manager
 // ---------------------------------------------------------------------------
 
-class GuestAndPlayGamesAuthAdapter implements AuthProvider {
+class MultiProviderAuthManager implements AuthProvider {
+  private readonly drivers = new Map<CloudProviderId, CloudProviderDriver>();
+  private readonly playGamesDriver: PlayGamesAndroidDriver;
   private identity: PlayerIdentity;
   private listeners = new Set<(id: PlayerIdentity) => void>();
 
   constructor() {
+    const googleDriver = new GoogleCloudDriver();
+    this.playGamesDriver = new PlayGamesAndroidDriver();
+    this.registerDriver(googleDriver);
+    this.registerDriver(this.playGamesDriver);
+    this.registerDriver(new SteamCloudDriver());
+    this.registerDriver(new MicrosoftCloudDriver());
+    this.registerDriver(new AppleCloudDriver());
+
     this.identity = this.loadOrCreateIdentity();
+
     NativeBridge.onPlayGamesProfile((profile) => {
+      this.playGamesDriver.setResolvedProfile(profile.playerId, profile.displayName);
       this.applyPlayGamesProfile(profile.playerId, profile.displayName);
     });
+  }
+
+  registerDriver(driver: CloudProviderDriver): void {
+    this.drivers.set(driver.id, driver);
+  }
+
+  getAvailableCloudProviders(): CloudProviderDescriptor[] {
+    return Array.from(this.drivers.values()).map((d) => d.getDescriptor());
+  }
+
+  getCloudDriver(providerId: CloudProviderId): CloudProviderDriver | undefined {
+    return this.drivers.get(providerId);
+  }
+
+  getActiveCloudDriver(): CloudProviderDriver | null {
+    if (this.identity.isAuthenticated && this.identity.provider !== 'guest') {
+      const explicit = this.drivers.get(this.identity.provider as CloudProviderId);
+      if (explicit && explicit.hasActiveSession()) {
+        return explicit;
+      }
+    }
+    for (const driver of this.drivers.values()) {
+      if (driver.hasActiveSession()) return driver;
+    }
+    return null;
   }
 
   private applyPlayGamesProfile(playerId: string, displayName: string): PlayerIdentity {
@@ -101,15 +211,52 @@ class GuestAndPlayGamesAuthAdapter implements AuthProvider {
 
   private loadOrCreateIdentity(): PlayerIdentity {
     const tabSuffix = getTabPeerSuffix();
+    let restoredDriverSession: Partial<PlayerIdentity> | null = null;
+    for (const driver of this.drivers.values()) {
+      const restored = driver.restoreSession();
+      if (restored && restored.playerId && restored.displayName) {
+        restoredDriverSession = restored;
+        break;
+      }
+    }
+
     try {
       const raw = localStorage.getItem(IDENTITY_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as PlayerIdentity;
         if (parsed && parsed.playerId && parsed.displayName) {
+          if (restoredDriverSession) {
+            return {
+              ...parsed,
+              ...restoredDriverSession,
+              isAuthenticated: true,
+            } as PlayerIdentity;
+          }
+          const hasValidNativePlayGames =
+            NativeBridge.isAndroid &&
+            parsed.provider === 'play_games_v2' &&
+            !parsed.playerId.startsWith('pgs_capy_');
+          if (!hasValidNativePlayGames && parsed.isAuthenticated) {
+            const baseGuestId = parsed.playerId
+              .replace(/^(pgs_|google_|steam_|ms_|apple_)/, '')
+              .split(':')[0];
+            const downgraded: PlayerIdentity = {
+              ...parsed,
+              playerId: `${baseGuestId}:${tabSuffix}`,
+              email: undefined,
+              avatarUrl: undefined,
+              provider: 'guest',
+              isAuthenticated: false,
+            };
+            this.persistBaseIdentity(downgraded);
+            return downgraded;
+          }
           return {
             ...parsed,
-            // Append tab peer suffix when in guest mode so multi-tab local co-op distinguishes peers
-            playerId: parsed.provider === 'guest' ? `${parsed.playerId.split(':')[0]}:${tabSuffix}` : parsed.playerId,
+            playerId:
+              parsed.provider === 'guest'
+                ? `${parsed.playerId.split(':')[0]}:${tabSuffix}`
+                : parsed.playerId,
           };
         }
       }
@@ -122,6 +269,21 @@ class GuestAndPlayGamesAuthAdapter implements AuthProvider {
     const color =
       COLLABORATOR_AVATAR_COLORS[Math.floor(Math.random() * COLLABORATOR_AVATAR_COLORS.length)];
     const baseId = `capy_${randomHexId(8)}`;
+
+    if (restoredDriverSession && restoredDriverSession.playerId && restoredDriverSession.displayName) {
+      const restoredIdentity: PlayerIdentity = {
+        playerId: restoredDriverSession.playerId,
+        displayName: restoredDriverSession.displayName,
+        email: restoredDriverSession.email,
+        avatarUrl: restoredDriverSession.avatarUrl,
+        avatarColorHex: color,
+        provider: (restoredDriverSession.provider as CloudProviderId) || 'google',
+        isAuthenticated: true,
+      };
+      this.persistBaseIdentity(restoredIdentity);
+      return restoredIdentity;
+    }
+
     const fresh: PlayerIdentity = {
       playerId: `${baseId}:${tabSuffix}`,
       displayName: `${adj} ${noun}`,
@@ -155,6 +317,18 @@ class GuestAndPlayGamesAuthAdapter implements AuthProvider {
     return this.identity;
   }
 
+  getGoogleClientId(): string {
+    return getConfiguredGoogleClientId();
+  }
+
+  setGoogleClientId(clientId: string): void {
+    setConfiguredGoogleClientId(clientId);
+  }
+
+  hasActiveCloudToken(): boolean {
+    return Boolean(this.getActiveCloudDriver());
+  }
+
   updateGuestProfile(displayName: string, avatarColorHex?: string): PlayerIdentity {
     const trimmed = displayName.trim().slice(0, 24) || this.identity.displayName;
     this.identity = {
@@ -167,45 +341,86 @@ class GuestAndPlayGamesAuthAdapter implements AuthProvider {
     return this.identity;
   }
 
-  async signInWithPlayGames(): Promise<PlayerIdentity> {
-    const nativeResult = NativeBridge.signInPlayGames();
-    if (nativeResult) {
-      this.identity = {
-        playerId: nativeResult.playerId,
-        displayName: nativeResult.displayName,
-        avatarColorHex: this.identity.avatarColorHex,
-        provider: 'play_games_v2',
-        isAuthenticated: true,
-        lastSyncedAt: Date.now(),
-      };
-    } else {
-      // Graceful local Play Games profile link when testing in web browser / debug shell without Play Store signature
-      const baseId = this.identity.playerId.split(':')[0];
-      this.identity = {
-        ...this.identity,
-        playerId: `pgs_${baseId}`,
-        provider: 'play_games_v2',
-        isAuthenticated: true,
-        lastSyncedAt: Date.now(),
-      };
+  async signInWithProvider(
+    providerId: CloudProviderId,
+    options?: { clientId?: string }
+  ): Promise<PlayerIdentity> {
+    const driver = this.drivers.get(providerId);
+    if (!driver) {
+      throw new Error(`Unsupported cloud provider: ${providerId}`);
     }
+    const partial = await driver.signIn(options);
+    this.identity = {
+      ...this.identity,
+      ...partial,
+      playerId: partial.playerId || this.identity.playerId,
+      displayName: (partial.displayName || this.identity.displayName).slice(0, 32),
+      provider: (partial.provider as CloudProviderId) || providerId,
+      isAuthenticated: true,
+      lastSyncedAt: Date.now(),
+    };
     this.persistBaseIdentity(this.identity);
     this.emit();
     return this.identity;
   }
 
+  async signInWithGoogle(customClientId?: string): Promise<PlayerIdentity> {
+    if (customClientId !== undefined) {
+      setConfiguredGoogleClientId(customClientId);
+    }
+    const clientId = customClientId?.trim() || getConfiguredGoogleClientId();
+    const hasMockToken =
+      typeof window !== 'undefined' && Boolean(window.__capyMockGoogleOAuthToken);
+
+    if (NativeBridge.isAndroid && !clientId && !hasMockToken) {
+      try {
+        return await this.signInWithProvider('play_games_v2');
+      } catch {
+        // Fall through to Google OAuth
+      }
+    }
+    return this.signInWithProvider('google', { clientId });
+  }
+
+  async signInWithPlayGames(): Promise<PlayerIdentity> {
+    if (NativeBridge.isAndroid) {
+      try {
+        return await this.signInWithProvider('play_games_v2');
+      } catch {
+        // Fall through to Google OAuth
+      }
+    }
+    return this.signInWithGoogle();
+  }
+
   async signOut(): Promise<PlayerIdentity> {
+    for (const driver of this.drivers.values()) {
+      await driver.signOut().catch(() => {});
+    }
     const tabSuffix = getTabPeerSuffix();
-    const baseId = this.identity.playerId.replace(/^pgs_/, '').split(':')[0];
+    const baseId = this.identity.playerId
+      .replace(/^(pgs_|google_|steam_|ms_|apple_)/, '')
+      .split(':')[0];
     this.identity = {
       ...this.identity,
       playerId: `${baseId}:${tabSuffix}`,
+      email: undefined,
+      avatarUrl: undefined,
       provider: 'guest',
       isAuthenticated: false,
     };
     this.persistBaseIdentity(this.identity);
     this.emit();
     return this.identity;
+  }
+
+  markSynced(syncedAt: number): void {
+    this.identity = {
+      ...this.identity,
+      lastSyncedAt: syncedAt,
+    };
+    this.persistBaseIdentity(this.identity);
+    this.emit();
   }
 
   subscribe(listener: (identity: PlayerIdentity) => void): () => void {
@@ -217,13 +432,19 @@ class GuestAndPlayGamesAuthAdapter implements AuthProvider {
 }
 
 // ---------------------------------------------------------------------------
-// 2. CloudSaveProvider: Conflict-Free CRDT Set-Union + LWW Cloud Sync
+// 2. CloudSaveProvider: Provider-Agnostic CRDT Cloud Sync Orchestrator
 // ---------------------------------------------------------------------------
 
 class CrdtCloudSaveAdapter implements CloudSaveProvider {
-  readonly providerName = NativeBridge.isAndroid ? 'Google Play Games Cloud' : 'Capy Cloud Vault';
+  constructor(private readonly auth: MultiProviderAuthManager) {}
 
-  constructor(private readonly auth: AuthProvider) {}
+  get providerName(): string {
+    const activeDriver = this.auth.getActiveCloudDriver();
+    if (activeDriver) {
+      return activeDriver.getDescriptor().storageName;
+    }
+    return NativeBridge.isAndroid ? 'Google Play Games Cloud' : 'Capy Cloud Vault';
+  }
 
   private readLocalVault(): Record<string, CloudSaveEnvelope> {
     try {
@@ -243,7 +464,40 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
     }
   }
 
+  private readLocalManifest(): CloudLibraryManifestV2 | null {
+    try {
+      const raw = localStorage.getItem(CLOUD_MANIFEST_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as CloudLibraryManifestV2;
+        if (parsed && parsed.version === 2 && parsed.entries) return parsed;
+      }
+    } catch {
+      // Ignore
+    }
+    return null;
+  }
+
+  private writeLocalManifest(manifest: CloudLibraryManifestV2): void {
+    try {
+      localStorage.setItem(CLOUD_MANIFEST_STORAGE_KEY, JSON.stringify(manifest));
+    } catch {
+      // Ignore
+    }
+  }
+
   async pullEnvelope(slotKey: string): Promise<CloudSaveEnvelope | null> {
+    const activeDriver = this.auth.getActiveCloudDriver();
+    if (activeDriver) {
+      try {
+        const remoteEnv = await activeDriver.readSlotEnvelope(slotKey);
+        if (remoteEnv && remoteEnv.deltaToken) {
+          return remoteEnv;
+        }
+      } catch (err) {
+        console.warn(`Cloud driver (${activeDriver.id}) slot pull failed:`, err);
+      }
+    }
+
     const nativeRaw = NativeBridge.loadCloudSnapshot(slotKey);
     if (nativeRaw) {
       try {
@@ -262,7 +516,383 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
     const vault = this.readLocalVault();
     vault[envelope.slotKey] = envelope;
     this.writeLocalVault(vault);
+
+    const activeDriver = this.auth.getActiveCloudDriver();
+    if (activeDriver) {
+      try {
+        const ok = await activeDriver.writeSlotEnvelope(envelope);
+        if (ok) return true;
+      } catch (err) {
+        console.warn(`Cloud driver (${activeDriver.id}) slot push failed:`, err);
+      }
+    }
+
     return nativeSaved || true;
+  }
+
+  private async pullRemoteLibraryManifest(): Promise<{
+    manifest: CloudLibraryManifestV2 | null;
+    backend: CloudBackendKind;
+  }> {
+    let mergedEntries: Record<string, CloudSaveEntryV2> = {};
+    let backend: CloudBackendKind = 'local_cache';
+    let latestUpdatedAt = 0;
+
+    const localManifest = this.readLocalManifest();
+    if (localManifest?.entries) {
+      mergedEntries = { ...localManifest.entries };
+      latestUpdatedAt = Math.max(latestUpdatedAt, localManifest.updatedAt || 0);
+    }
+
+    // Check Play Games Android driver if running on Android
+    const playGamesDriver = this.auth.getCloudDriver('play_games_v2');
+    if (playGamesDriver && NativeBridge.isAndroid) {
+      try {
+        const nativeManifest = await playGamesDriver.readManifest();
+        if (nativeManifest?.entries) {
+          backend = 'play_games_snapshots';
+          latestUpdatedAt = Math.max(latestUpdatedAt, nativeManifest.updatedAt || 0);
+          for (const [k, entry] of Object.entries(nativeManifest.entries)) {
+            const existing = mergedEntries[k];
+            if (!existing || entry.lastOpened >= existing.lastOpened) {
+              mergedEntries[k] = entry;
+            }
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    // Check active cloud provider driver (Google, Steam, Microsoft, Apple)
+    const activeDriver = this.auth.getActiveCloudDriver();
+    if (activeDriver) {
+      try {
+        const remoteManifest = await activeDriver.readManifest();
+        backend = mapProviderToBackendKind(activeDriver.id);
+        if (remoteManifest?.entries) {
+          latestUpdatedAt = Math.max(latestUpdatedAt, remoteManifest.updatedAt || 0);
+          for (const [k, entry] of Object.entries(remoteManifest.entries)) {
+            const existing = mergedEntries[k];
+            if (!existing || entry.lastOpened >= existing.lastOpened) {
+              mergedEntries[k] = entry;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`Failed to pull manifest from cloud driver (${activeDriver.id}):`, err);
+      }
+    }
+
+    if (Object.keys(mergedEntries).length === 0) {
+      return { manifest: null, backend };
+    }
+
+    return {
+      manifest: {
+        version: 2,
+        updatedAt: latestUpdatedAt || Date.now(),
+        devicePlayerId: this.auth.getCurrentIdentity().playerId,
+        providerId: activeDriver?.id,
+        entries: mergedEntries,
+      },
+      backend,
+    };
+  }
+
+  private async pushRemoteLibraryManifest(
+    manifest: CloudLibraryManifestV2
+  ): Promise<{
+    pushed: boolean;
+    backend: CloudBackendKind;
+  }> {
+    this.writeLocalManifest(manifest);
+
+    let nativeSaved = false;
+    const playGamesDriver = this.auth.getCloudDriver('play_games_v2');
+    if (playGamesDriver && NativeBridge.isAndroid) {
+      nativeSaved = await playGamesDriver.writeManifest(manifest).catch(() => false);
+    }
+
+    const activeDriver = this.auth.getActiveCloudDriver();
+    if (activeDriver) {
+      try {
+        const ok = await activeDriver.writeManifest(manifest);
+        if (ok) {
+          return {
+            pushed: true,
+            backend: mapProviderToBackendKind(activeDriver.id),
+          };
+        }
+      } catch (err) {
+        console.warn(`Failed to push manifest to cloud driver (${activeDriver.id}):`, err);
+      }
+    }
+
+    return {
+      pushed: nativeSaved || true,
+      backend: nativeSaved ? 'play_games_snapshots' : 'local_cache',
+    };
+  }
+
+  async syncFullLibrary(localSnapshots: SavedSnapshot[]): Promise<CloudLibrarySyncSummary> {
+    const { manifest: remoteManifest } = await this.pullRemoteLibraryManifest();
+    const activeDriver = this.auth.getActiveCloudDriver();
+    let importedSavesFromCloud = 0;
+    let mergedRegionsFromCloud = 0;
+
+    let currentSnapshots = [...localSnapshots];
+    const localBySlot = new Map<string, SavedSnapshot>();
+    for (const snap of currentSnapshots) {
+      localBySlot.set(computeSlotKeyForSnapshot(snap), snap);
+    }
+
+    // 1. Merge remote manifest entries into local StorageService
+    if (remoteManifest?.entries) {
+      for (const [slotKey, remoteEntry] of Object.entries(remoteManifest.entries)) {
+        let remoteDelta: ProgressDeltaV2;
+        try {
+          remoteDelta = await decodeProgressDeltaToken(remoteEntry.deltaToken);
+        } catch {
+          continue;
+        }
+
+        let localSnap =
+          localBySlot.get(slotKey) ||
+          currentSnapshots.find((s) => s.id === remoteEntry.snapshotId);
+
+        const remoteBlobRef = remoteEntry.cloudBinaryRef || remoteEntry.driveBinaryFileId;
+
+        if (!localSnap) {
+          if (remoteBlobRef && activeDriver) {
+            try {
+              const bin = await activeDriver.readBinaryBlob(remoteBlobRef);
+              if (bin && bin.byteLength > 0) {
+                const imported = await StorageService.importSnapshotData(bin);
+                if (imported.importedCount > 0) {
+                  importedSavesFromCloud += imported.importedCount;
+                  currentSnapshots = StorageService.loadSnapshots();
+                  localSnap = currentSnapshots.find((s) => s.id === remoteEntry.snapshotId);
+                }
+              }
+            } catch (err) {
+              console.warn(`Failed to download binary save from ${activeDriver.id}:`, err);
+            }
+          } else if (remoteEntry.inlineBinaryB64) {
+            try {
+              const bin = base64ToUint8(remoteEntry.inlineBinaryB64);
+              const imported = await StorageService.importSnapshotData(bin);
+              if (imported.importedCount > 0) {
+                importedSavesFromCloud += imported.importedCount;
+                currentSnapshots = StorageService.loadSnapshots();
+                localSnap = currentSnapshots.find((s) => s.id === remoteEntry.snapshotId);
+              }
+            } catch (err) {
+              console.warn('Failed to import inline binary puzzle from cloud manifest:', err);
+            }
+          } else if (
+            remoteEntry.sampleAssetPath ||
+            remoteEntry.sourceRef?.kind === 'sample'
+          ) {
+            const targetUri = (
+              remoteEntry.sampleAssetPath ||
+              remoteEntry.sourceRef?.uri ||
+              ''
+            ).replace(/^\.\//, '');
+            const matchedSample = SAMPLE_GALLERY.find(
+              (s) => s.assetPath.replace(/^\.\//, '') === targetUri
+            );
+            if (matchedSample && typeof fetch !== 'undefined') {
+              try {
+                const bundleResp = await fetch('./assets/sample_saves.capy').catch(() => null);
+                if (bundleResp && bundleResp.ok) {
+                  await StorageService.importSnapshotData(await bundleResp.arrayBuffer());
+                  currentSnapshots = StorageService.loadSnapshots();
+                  localSnap = currentSnapshots.find(
+                    (s) =>
+                      (s.sampleAssetPath || s.sourceRef?.uri || '').replace(/^\.\//, '') ===
+                      targetUri
+                  );
+                  if (localSnap) {
+                    importedSavesFromCloud += 1;
+                  }
+                }
+              } catch {
+                // Ignore sample bundle bootstrap error
+              }
+            }
+          }
+        }
+
+        if (localSnap) {
+          const localDelta: ProgressDeltaV2 = {
+            version: 2,
+            sourceRef: localSnap.sourceRef,
+            filledRegionIds: localSnap.filledRegionIds || [],
+            paintedRegionColors: localSnap.paintedRegionColors,
+            isFreeColor: localSnap.isFreeColor,
+            updatedAt: localSnap.lastOpened || localSnap.timestamp || 0,
+          };
+          const beforeCount = localDelta.filledRegionIds.length;
+          const mergedDelta = mergeProgressDeltas(localDelta, remoteDelta);
+          const added = Math.max(0, mergedDelta.filledRegionIds.length - beforeCount);
+          mergedRegionsFromCloud += added;
+
+          if (
+            added > 0 ||
+            (remoteDelta.paintedRegionColors &&
+              Object.keys(remoteDelta.paintedRegionColors).length > 0)
+          ) {
+            currentSnapshots = StorageService.updateSnapshotProgress(
+              localSnap.id,
+              mergedDelta.filledRegionIds.length,
+              Math.max(localSnap.totalCount || 0, remoteEntry.totalCount || 0),
+              mergedDelta.filledRegionIds,
+              localSnap.zoomScale,
+              localSnap.panOffsetX,
+              localSnap.panOffsetY,
+              undefined,
+              mergedDelta.paintedRegionColors,
+              localSnap.customPalette,
+              mergedDelta.isFreeColor ?? localSnap.isFreeColor
+            );
+            localBySlot.set(slotKey, currentSnapshots.find((s) => s.id === localSnap!.id)!);
+          }
+        }
+      }
+    }
+
+    // 2. Also merge any legacy single-slot vault envelopes into matching local snapshots
+    const legacyVault = this.readLocalVault();
+    for (const [slotKey, env] of Object.entries(legacyVault)) {
+      const localSnap = localBySlot.get(slotKey);
+      if (!localSnap || !env.deltaToken) continue;
+      try {
+        const remoteDelta = await decodeProgressDeltaToken(env.deltaToken);
+        const localDelta: ProgressDeltaV2 = {
+          version: 2,
+          sourceRef: localSnap.sourceRef,
+          filledRegionIds: localSnap.filledRegionIds || [],
+          paintedRegionColors: localSnap.paintedRegionColors,
+          isFreeColor: localSnap.isFreeColor,
+          updatedAt: localSnap.lastOpened || localSnap.timestamp || 0,
+        };
+        const beforeCount = localDelta.filledRegionIds.length;
+        const mergedDelta = mergeProgressDeltas(localDelta, remoteDelta);
+        const added = Math.max(0, mergedDelta.filledRegionIds.length - beforeCount);
+        if (added > 0) {
+          mergedRegionsFromCloud += added;
+          currentSnapshots = StorageService.updateSnapshotProgress(
+            localSnap.id,
+            mergedDelta.filledRegionIds.length,
+            Math.max(localSnap.totalCount || 0, env.totalCount || 0),
+            mergedDelta.filledRegionIds,
+            localSnap.zoomScale,
+            localSnap.panOffsetX,
+            localSnap.panOffsetY,
+            undefined,
+            mergedDelta.paintedRegionColors,
+            localSnap.customPalette,
+            mergedDelta.isFreeColor ?? localSnap.isFreeColor
+          );
+          localBySlot.set(slotKey, currentSnapshots.find((s) => s.id === localSnap.id)!);
+        }
+      } catch {
+        // Ignore malformed legacy envelope
+      }
+    }
+
+    // 3. Build updated CloudLibraryManifestV2 from all local snapshots & upload any new custom .capy v2 binaries
+    currentSnapshots = StorageService.loadSnapshots();
+    const nextEntries: Record<string, CloudSaveEntryV2> = {
+      ...(remoteManifest?.entries || {}),
+    };
+
+    for (const snap of currentSnapshots) {
+      const slotKey = computeSlotKeyForSnapshot(snap);
+      const existingRemote = nextEntries[slotKey];
+      const deltaToken = await encodeProgressDeltaToken({
+        version: 2,
+        sourceRef:
+          snap.sourceRef ||
+          (snap.sampleAssetPath ? { kind: 'sample', uri: snap.sampleAssetPath } : undefined),
+        filledRegionIds: snap.filledRegionIds || [],
+        ...(snap.paintedRegionColors && Object.keys(snap.paintedRegionColors).length > 0
+          ? { paintedRegionColors: snap.paintedRegionColors }
+          : {}),
+        ...(snap.isFreeColor ? { isFreeColor: true } : {}),
+        updatedAt: snap.lastOpened || snap.timestamp || Date.now(),
+      });
+
+      let cloudBinaryRef = existingRemote?.cloudBinaryRef || existingRemote?.driveBinaryFileId;
+      let inlineBinaryB64 = existingRemote?.inlineBinaryB64;
+      const isBuiltInSample = Boolean(
+        snap.sampleAssetPath ||
+          snap.sourceRef?.kind === 'sample' ||
+          snap.sourceRef?.kind === 'catalog'
+      );
+
+      if (!isBuiltInSample && (!cloudBinaryRef || !inlineBinaryB64)) {
+        try {
+          const binaryBytes = await StorageService.exportSnapshotBinary(snap.id);
+          if (binaryBytes.byteLength <= 180_000) {
+            inlineBinaryB64 = uint8ToBase64(binaryBytes);
+          }
+          if (activeDriver && !cloudBinaryRef) {
+            const binFileName = `capy_save_${snap.id.replace(/[^a-zA-Z0-9_-]/g, '_')}.capy`;
+            const uploadedRef = await activeDriver.writeBinaryBlob(
+              slotKey,
+              binFileName,
+              binaryBytes
+            );
+            if (uploadedRef) {
+              cloudBinaryRef = uploadedRef;
+            }
+          }
+        } catch {
+          // Puzzle binary may still be generating
+        }
+      }
+
+      nextEntries[slotKey] = {
+        snapshotId: snap.id,
+        slotKey,
+        title: snap.title,
+        createdAt: snap.timestamp || Date.now(),
+        lastOpened: snap.lastOpened || Date.now(),
+        isPinned: snap.isPinned,
+        filledCount: (snap.filledRegionIds || []).length,
+        totalCount: snap.totalCount || 0,
+        deltaToken,
+        sourceRef: snap.sourceRef,
+        sampleAssetPath: snap.sampleAssetPath,
+        ...(cloudBinaryRef
+          ? { cloudBinaryRef, driveBinaryFileId: cloudBinaryRef }
+          : {}),
+        ...(inlineBinaryB64 ? { inlineBinaryB64 } : {}),
+      };
+    }
+
+    const syncedAt = Date.now();
+    const updatedManifest: CloudLibraryManifestV2 = {
+      version: 2,
+      updatedAt: syncedAt,
+      devicePlayerId: this.auth.getCurrentIdentity().playerId,
+      providerId: activeDriver?.id,
+      entries: nextEntries,
+    };
+
+    const { pushed, backend } = await this.pushRemoteLibraryManifest(updatedManifest);
+    this.auth.markSynced(syncedAt);
+
+    return {
+      syncedAt,
+      totalSavesSynced: Object.keys(nextEntries).length,
+      importedSavesFromCloud,
+      mergedRegionsFromCloud,
+      pushedToCloud: pushed,
+      cloudBackend: backend,
+    };
   }
 
   async syncProgress(
@@ -286,6 +916,19 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
       }
     }
 
+    const { manifest: remoteManifest, backend } = await this.pullRemoteLibraryManifest();
+    const manifestEntry = remoteManifest?.entries?.[slotKey];
+    if (manifestEntry?.deltaToken) {
+      try {
+        const manifestDelta = await decodeProgressDeltaToken(manifestEntry.deltaToken);
+        const beforeCount = merged.filledRegionIds.length;
+        merged = mergeProgressDeltas(merged, manifestDelta);
+        addedFromCloud += Math.max(0, merged.filledRegionIds.length - beforeCount);
+      } catch {
+        // Ignore
+      }
+    }
+
     const mergedToken = await encodeProgressDeltaToken(merged);
     const syncedAt = Date.now();
     const envelope: CloudSaveEnvelope = {
@@ -298,6 +941,7 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
       devicePlayerId: this.auth.getCurrentIdentity().playerId,
     };
     const pushedToCloud = await this.pushEnvelope(envelope);
+    this.auth.markSynced(syncedAt);
 
     return {
       slotKey,
@@ -305,6 +949,7 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
       addedFromCloud,
       pushedToCloud,
       syncedAt,
+      cloudBackend: backend,
     };
   }
 }
@@ -811,7 +1456,7 @@ class ConsentRewardedAdAdapter implements MonetizationProvider {
 // Singleton Provider Registry
 // ---------------------------------------------------------------------------
 
-const auth = new GuestAndPlayGamesAuthAdapter();
+const auth = new MultiProviderAuthManager();
 const cloudSave = new CrdtCloudSaveAdapter(auth);
 const realtimeRoom = new HybridCoopRoomAdapter();
 const catalog = new StaticAndCommunityCatalogAdapter();
