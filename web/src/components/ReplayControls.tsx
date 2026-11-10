@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react';
 
-export const REPLAY_SPEED_OPTIONS = [0.5, 1, 2, 5, 10];
+export const REPLAY_SPEED_OPTIONS = [0.5, 1, 2, 5, 10, 20];
 
 interface ReplayControlsProps {
   isOpen: boolean;
@@ -63,23 +63,154 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
   onUserInteract,
 }) => {
   const [isMinimized, setIsMinimized] = useState<boolean>(true);
+  const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
+  const [hoverStep, setHoverStep] = useState<number | null>(null);
+  const [hoverRatio, setHoverRatio] = useState<number>(0);
 
   useEffect(() => {
     if (isOpen) {
       setIsMinimized(true);
+      setIsScrubbing(false);
+      setHoverStep(null);
     }
   }, [isOpen]);
 
   if (!isOpen || totalSteps <= 0) return null;
 
   const isFinished = currentStep >= totalSteps;
-  const pct = Math.min(100, Math.max(0, Math.round((currentStep / totalSteps) * 100)));
+  const exactRatio = Math.min(1, Math.max(0, currentStep / totalSteps));
+  const pct = Math.round(exactRatio * 100);
 
   const handleCycleSpeed = () => {
     onUserInteract?.();
     const idx = REPLAY_SPEED_OPTIONS.indexOf(replaySpeed);
     const nextIdx = (idx + 1) % REPLAY_SPEED_OPTIONS.length;
     onChangeSpeed(REPLAY_SPEED_OPTIONS[nextIdx]);
+  };
+
+  const computeStepFromPointer = (clientX: number, rect: DOMRect) => {
+    if (rect.width <= 0) return { step: currentStep, ratio: exactRatio };
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    const step = Math.round(ratio * totalSteps);
+    return { step, ratio };
+  };
+
+  const handleTrackPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    onUserInteract?.();
+    setIsScrubbing(true);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore if pointer capture is unsupported in synthetic test events
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const { step, ratio } = computeStepFromPointer(e.clientX, rect);
+    setHoverStep(step);
+    setHoverRatio(ratio);
+    if (step !== currentStep) {
+      onSeek(step);
+    }
+  };
+
+  const handleTrackPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const { step, ratio } = computeStepFromPointer(e.clientX, rect);
+    setHoverStep(step);
+    setHoverRatio(ratio);
+    if (isScrubbing && step !== currentStep) {
+      onSeek(step);
+    }
+  };
+
+  const handleTrackPointerUpOrCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isScrubbing) {
+      setIsScrubbing(false);
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // Ignore
+      }
+    }
+  };
+
+  const renderYouTubeScrubber = () => {
+    const previewStep = isScrubbing ? currentStep : hoverStep;
+    const previewPct =
+      previewStep !== null ? Math.round((previewStep / totalSteps) * 100) : pct;
+    const tooltipRatio = isScrubbing ? exactRatio : hoverRatio;
+
+    return (
+      <div
+        data-testid="replay-scrubber-track"
+        onPointerDown={handleTrackPointerDown}
+        onPointerMove={handleTrackPointerMove}
+        onPointerUp={handleTrackPointerUpOrCancel}
+        onPointerCancel={handleTrackPointerUpOrCancel}
+        onPointerLeave={() => {
+          if (!isScrubbing) setHoverStep(null);
+        }}
+        className="relative flex-1 min-w-[140px] h-7 flex items-center cursor-pointer select-none touch-none group"
+      >
+        {/* YouTube-style hover / scrub preview pill above thumb */}
+        {previewStep !== null && (
+          <div
+            className="pointer-events-none absolute -top-6 -translate-x-1/2 px-1.5 py-0.5 rounded bg-slate-950/95 border border-amber-400/50 text-[10px] font-bold text-amber-300 tabular-nums whitespace-nowrap shadow-lg"
+            style={{
+              left: `${Math.min(94, Math.max(6, tooltipRatio * 100))}%`,
+            }}
+          >
+            {previewStep}/{totalSteps} ({previewPct}%)
+          </div>
+        )}
+
+        {/* Background Track */}
+        <div className="relative w-full h-1.5 group-hover:h-2.5 bg-slate-800/95 rounded-full overflow-visible transition-[height] duration-75">
+          {/* Hover preview ghost fill */}
+          {hoverStep !== null && !isScrubbing && (
+            <div
+              className="pointer-events-none absolute inset-y-0 left-0 bg-slate-600/60 rounded-full transition-none"
+              style={{ width: `${hoverRatio * 100}%` }}
+            />
+          )}
+
+          {/* Active filled progress bar (zero CSS transition delay for instant scrubbing) */}
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 bg-amber-400 rounded-full transition-none"
+            style={{ width: `${exactRatio * 100}%` }}
+          />
+
+          {/* YouTube-style Scrubber Thumb Handle */}
+          <div
+            className={`pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-amber-400 ring-2 ring-slate-950 shadow-md transition-transform duration-75 ${
+              isScrubbing
+                ? 'w-4 h-4 scale-110'
+                : 'w-3.5 h-3.5 group-hover:scale-110'
+            }`}
+            style={{ left: `${exactRatio * 100}%` }}
+          />
+        </div>
+
+        {/* Native Range Input overlaid for accessibility, keyboard scrubbing, and automated E2E tests */}
+        <input
+          type="range"
+          min={0}
+          max={totalSteps}
+          step={1}
+          value={currentStep}
+          aria-label="Replay Timeline Scrubber"
+          data-testid="replay-scrubber"
+          onInput={(e) => {
+            onUserInteract?.();
+            onSeek(Number((e.target as HTMLInputElement).value));
+          }}
+          onChange={(e) => {
+            onUserInteract?.();
+            onSeek(Number(e.target.value));
+          }}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer m-0"
+        />
+      </div>
+    );
   };
 
   if (isMinimized) {
@@ -93,7 +224,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
         <div
           data-testid="replay-controls-window"
           data-minimized="true"
-          className="pointer-events-auto inline-flex items-center gap-1.5 sm:gap-2 bg-slate-900/92 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-xl px-2.5 py-1.5 text-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-200"
+          className="pointer-events-auto w-full max-w-2xl flex items-center gap-2 sm:gap-2.5 bg-slate-900/94 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-xl px-3 py-1.5 text-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-200"
         >
           {/* Play / Pause / Replay */}
           <button
@@ -113,18 +244,13 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
             )}
           </button>
 
-          {/* Compact Progress Bar & Step Counter */}
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-            <div className="w-12 sm:w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden flex-shrink-0">
-              <div
-                className="h-full bg-amber-400 transition-all duration-75"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <span className="text-[11px] font-bold text-slate-200 tabular-nums whitespace-nowrap">
-              {currentStep}/{totalSteps} ({pct}%)
-            </span>
-          </div>
+          {/* Dominant Interactive YouTube-Style Progress Slider (takes up most of the bar width) */}
+          {renderYouTubeScrubber()}
+
+          {/* Compact Step & Percentage Readout */}
+          <span className="text-[11px] font-bold text-slate-200 tabular-nums whitespace-nowrap flex-shrink-0">
+            {currentStep}/{totalSteps} <span className="text-amber-300">({pct}%)</span>
+          </span>
 
           {/* Speed Selector */}
           <button
@@ -254,78 +380,18 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
       <div
         data-testid="replay-controls-window"
         data-minimized="false"
-        className="pointer-events-auto w-full max-w-md bg-slate-900/92 border border-amber-400/40 rounded-2xl shadow-2xl backdrop-blur-xl p-3 text-slate-100 space-y-2.5 animate-in fade-in slide-in-from-bottom-3 duration-200"
+        className="pointer-events-auto w-full max-w-2xl bg-slate-900/94 border border-amber-400/40 rounded-2xl shadow-2xl backdrop-blur-xl p-3 text-slate-100 space-y-2 animate-in fade-in slide-in-from-bottom-3 duration-200"
       >
-        {/* Top Row: Replay Badge, Region Counter, Resume Play Action, Minimise & Close */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950 flex-shrink-0">
-              <Sparkles size={10} />
-              {isFinished ? 'Completed' : 'Replay'}
-            </span>
-            <span className="text-xs font-bold text-slate-200 tabular-nums truncate">
-              {currentStep} / {totalSteps} regions ({pct}%)
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {onResumeFromStep && (
-              <button
-                type="button"
-                onClick={() => onResumeFromStep(currentStep)}
-                aria-label="Resume Play From Here"
-                title={`Resume active gameplay from region step ${currentStep}`}
-                data-testid="replay-resume-btn"
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-md transition-all active:scale-95 cursor-pointer"
-              >
-                <Play size={12} className="fill-slate-950" />
-                <span>Resume Here</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                onUserInteract?.();
-                setIsMinimized(true);
-              }}
-              aria-label="Minimise Replay Controls"
-              title="Minimise Replay Controls"
-              data-testid="replay-toggle-minimize-btn"
-              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              <ChevronDown size={16} />
-            </button>
-
-            <button
-              type="button"
-              onClick={onExitReplay}
-              aria-label="Exit Replay"
-              title="Exit Replay"
-              data-testid="replay-exit-btn"
-              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              <X size={16} />
-            </button>
-          </div>
+        {/* Top Row: Full-Width YouTube-Style Progress Scrubber */}
+        <div className="flex items-center gap-3">
+          {renderYouTubeScrubber()}
+          <span className="text-xs font-bold text-slate-200 tabular-nums whitespace-nowrap flex-shrink-0">
+            {currentStep} / {totalSteps} regions <span className="text-amber-300">({pct}%)</span>
+          </span>
         </div>
 
-        {/* Interactive Scrubber */}
-        <div className="flex items-center gap-2">
-          <input
-            type="range"
-            min={0}
-            max={totalSteps}
-            value={currentStep}
-            aria-label="Replay Timeline Scrubber"
-            data-testid="replay-scrubber"
-            onChange={(e) => onSeek(Number(e.target.value))}
-            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
-          />
-        </div>
-
-        {/* Playback Controls */}
-        <div className="flex items-center justify-between gap-2">
+        {/* Bottom Row: YouTube-Style Transport Controls (Left) + Actions & Window Controls (Right) */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1.5">
             {/* Play / Pause / Restart */}
             <button
@@ -456,8 +522,26 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
             )}
           </div>
 
-          {/* Post-Completion Quick Actions */}
           <div className="flex items-center gap-1.5">
+            <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/40">
+              <Sparkles size={10} />
+              {isFinished ? 'Completed' : 'Replay'}
+            </span>
+
+            {onResumeFromStep && (
+              <button
+                type="button"
+                onClick={() => onResumeFromStep(currentStep)}
+                aria-label="Resume Play From Here"
+                title={`Resume active gameplay from region step ${currentStep}`}
+                data-testid="replay-resume-btn"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                <Play size={12} className="fill-slate-950" />
+                <span>Resume Here</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={onExportImage}
@@ -476,6 +560,31 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
             >
               <ImagePlus size={13} />
               <span className="hidden sm:inline">Next</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onUserInteract?.();
+                setIsMinimized(true);
+              }}
+              aria-label="Minimise Replay Controls"
+              title="Minimise Replay Controls"
+              data-testid="replay-toggle-minimize-btn"
+              className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <ChevronDown size={16} />
+            </button>
+
+            <button
+              type="button"
+              onClick={onExitReplay}
+              aria-label="Exit Replay"
+              title="Exit Replay"
+              data-testid="replay-exit-btn"
+              className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X size={16} />
             </button>
           </div>
         </div>

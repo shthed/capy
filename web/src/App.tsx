@@ -2318,7 +2318,12 @@ export const App: React.FC = () => {
   // Displayed regions on canvas (animated slice during Replay mode, or full filled set)
   const displayedFilledRegionIds = useMemo(() => {
     if (!isReplaying) return filledRegionIds;
-    return new Set(replaySequence.slice(0, replayStep));
+    const set = new Set<number>();
+    const limit = Math.min(replayStep, replaySequence.length);
+    for (let i = 0; i < limit; i++) {
+      set.add(replaySequence[i]);
+    }
+    return set;
   }, [isReplaying, replaySequence, replayStep, filledRegionIds]);
 
   // Export full-resolution colored artwork as PNG (supports Web download and Android native Share Sheet)

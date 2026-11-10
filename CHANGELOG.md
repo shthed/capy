@@ -35,6 +35,12 @@ Capy uses a unified **Semantic Versioning (`MAJOR.MINOR.PATCH`)** scheme shared 
 
 ## [2.5.1] - 2026-11-10 ([PR #464](https://github.com/shthed/capy/pull/464), Android `versionCode`: `20501`)
 
+### Added
+- **YouTube-Style Playback Control Bar & Zero-Latency Timeline Scrubber ([`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/App.tsx`](./web/src/App.tsx), [PR #464](https://github.com/shthed/capy/pull/464))**:
+  - Redesigned [`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx) as a YouTube-style video control bar (`w-full max-w-2xl`) where the interactive progress slider (`data-testid="replay-scrubber-track"` / `data-testid="replay-scrubber"`) occupies the majority of the horizontal space (`flex-1`) and can be clicked or dragged at any time in both the default compact bar (`data-minimized="true"`) and the expanded deck (`data-minimized="false"`).
+  - Implemented zero-latency pointer-capture scrubbing (`onPointerDown` / `onPointerMove` with `setPointerCapture`), a `transition-none` progress fill bar, an interactive thumb indicator, a live hover/scrub step preview tooltip, and a `20x` ultra-fast playback speed option (`REPLAY_SPEED_OPTIONS = [0.5, 1, 2, 5, 10, 20]`).
+  - Eliminated intermediate `Array.prototype.slice` and per-frame `new Set` / `new Map` cloning in [`App.tsx`](./web/src/App.tsx) (`displayedFilledRegionIds`) and [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx) (`paintedCacheRef` / `prevColorsRef` in-place mutation) for instant timeline scrubbing across hundreds of regions.
+
 ### Fixed
 - **Strict Viewport Invariance on Puzzle Completion & Replay Playback ([`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/FloatingActions.tsx`](./web/src/components/FloatingActions.tsx), [PR #464](https://github.com/shthed/capy/pull/464))**:
   - Removed automatic fit-to-screen zoom-out (`resetViewTrigger`) when completing the final region of a puzzle or when pressing the **Watch Puzzle Replay** button (`data-testid="replay-btn"` in [`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx)) so replays always play directly from the player's current zoom and pan position.

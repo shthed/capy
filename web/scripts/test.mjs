@@ -433,6 +433,22 @@ async function runBrowserBasicsSuite() {
       'true',
       'ReplayControls window must be minimised by default'
     );
+    // Verify YouTube-style progress slider is immediately interactive in the default bar and takes up wide horizontal space
+    const trackInCompact = await page.waitForSelector('[data-testid="replay-scrubber-track"]');
+    const trackBox = await trackInCompact.boundingBox();
+    assert.equal(
+      trackBox.width >= 140,
+      true,
+      `Expected YouTube-style scrubber track width >= 140px in compact bar, got ${trackBox.width}`
+    );
+    // Drag along the YouTube-style scrubber track in compact mode and verify instant seek response
+    await page.mouse.move(trackBox.x + trackBox.width * 0.85, trackBox.y + trackBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(trackBox.x + trackBox.width * 0.25, trackBox.y + trackBox.height / 2, { steps: 3 });
+    await page.mouse.up();
+    const valAfterDrag = Number(await page.locator('[data-testid="replay-scrubber"]').inputValue());
+    assert.equal(valAfterDrag >= 0 && valAfterDrag <= 3, true, `Expected instant pointer-drag scrub in compact mode, got ${valAfterDrag}`);
+
     await page.locator('[data-testid="replay-toggle-minimize-btn"]').click();
     await page.waitForTimeout(150);
     assert.equal(

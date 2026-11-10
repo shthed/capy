@@ -701,7 +701,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     let maxDirtyX = -1;
     let maxDirtyY = -1;
 
-    // Check newly filled or repainted regions
+    // Check newly filled or repainted regions (in-place cache mutation, zero Set/Map cloning)
     for (const rId of filledRegionIds) {
       const curCol = paintedRegionColors?.get(rId);
       const prevCol = prevColors.get(rId);
@@ -726,10 +726,16 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
           if (reg.maxY > maxDirtyY) maxDirtyY = reg.maxY;
         }
+        prevPainted.add(rId);
+        if (curCol !== undefined) {
+          prevColors.set(rId, curCol);
+        } else {
+          prevColors.delete(rId);
+        }
       }
     }
 
-    // Check any regions that were unfilled (e.g., Reset Progress)
+    // Check any regions that were unfilled (e.g., Replay backward scrubbing, Undo, or Reset Progress)
     for (const rId of prevPainted) {
       if (!filledRegionIds.has(rId)) {
         const reg = regMap.get(rId);
@@ -750,6 +756,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
           if (reg.maxY > maxDirtyY) maxDirtyY = reg.maxY;
         }
+        prevPainted.delete(rId);
+        prevColors.delete(rId);
       }
     }
 
@@ -765,8 +773,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       );
     }
 
-    paintedCacheRef.current = new Set(filledRegionIds);
-    prevColorsRef.current = new Map(paintedRegionColors || []);
     lastBaseFreeColorRef.current = isFreeColorMode;
   }, [puzzle, sourceImage, regionColorMode, filledRegionIds, paintedRegionColors, isFreeColorMode, writeRegionToImageData]);
 
