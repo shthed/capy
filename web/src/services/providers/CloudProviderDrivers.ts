@@ -1,10 +1,13 @@
 import { NativeBridge } from '../NativeBridge';
 import {
+  attemptSilentOrOneTapGoogleSignIn,
   clearCachedGoogleSession,
   getConfiguredGoogleClientId,
   GoogleDriveAppDataClient,
+  isExplicitlySignedOut,
   loadCachedGoogleSession,
   setConfiguredGoogleClientId,
+  setExplicitlySignedOut,
   signInWithGoogleOAuthPopup,
 } from './GoogleCloudSyncClient';
 import {
@@ -56,7 +59,24 @@ export class GoogleCloudDriver implements CloudProviderDriver {
     };
   }
 
+  async attemptAutoSignIn(): Promise<Partial<PlayerIdentity> | null> {
+    if (isExplicitlySignedOut()) return null;
+    const clientId = getConfiguredGoogleClientId();
+    const session = await attemptSilentOrOneTapGoogleSignIn(clientId);
+    if (!session) return null;
+    return {
+      playerId: `google_${session.sub}`,
+      displayName: session.displayName.slice(0, 32),
+      email: session.email,
+      avatarUrl: session.picture,
+      provider: 'google',
+      isAuthenticated: true,
+      lastSyncedAt: Date.now(),
+    };
+  }
+
   async signIn(options?: { clientId?: string }): Promise<Partial<PlayerIdentity>> {
+    setExplicitlySignedOut(false);
     if (options?.clientId !== undefined) {
       setConfiguredGoogleClientId(options.clientId);
     }
@@ -79,6 +99,7 @@ export class GoogleCloudDriver implements CloudProviderDriver {
 
   async signOut(): Promise<void> {
     this.cachedManifestFileId = undefined;
+    setExplicitlySignedOut(true);
     clearCachedGoogleSession();
   }
 
@@ -212,15 +233,92 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
     };
   }
 
+  async attemptAutoSignIn(): Promise<Partial<PlayerIdentity> | null> {
+    if (!NativeBridge.isAndroid || isExplicitlySignedOut()) return null;
+    if (this.activeProfile) {
+      return {
+        playerId: this.activeProfile.playerId,
+        displayName: this.activeProfile.displayName,
+        provider: 'play_games_v2',
+        isAuthenticated: true,
+        lastSyncedAt: Date.now(),
+      };
+    }
+    const immediate = NativeBridge.signInPlayGames();
+    if (immediate) {
+      this.activeProfile = immediate;
+      return {
+        playerId: immediate.playerId,
+        displayName: immediate.displayName,
+        provider: 'play_games_v2',
+        isAuthenticated: true,
+        lastSyncedAt: Date.now(),
+      };
+    }
+    return new Promise<Partial<PlayerIdentity> | null>((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        unsub();
+        resolve(null);
+      }, 4500);
+      const unsub = NativeBridge.onPlayGamesProfile((profile) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        unsub();
+        this.activeProfile = profile;
+        resolve({
+          playerId: profile.playerId,
+          displayName: profile.displayName,
+          provider: 'play_games_v2',
+          isAuthenticated: true,
+          lastSyncedAt: Date.now(),
+        });
+      });
+    });
+  }
+
   async signIn(): Promise<Partial<PlayerIdentity>> {
-    const res = NativeBridge.signInPlayGames();
-    if (!res) {
+    setExplicitlySignedOut(false);
+    const immediate = NativeBridge.signInPlayGames();
+    if (immediate) {
+      this.activeProfile = immediate;
+      return {
+        playerId: immediate.playerId,
+        displayName: immediate.displayName,
+        provider: 'play_games_v2',
+        isAuthenticated: true,
+        lastSyncedAt: Date.now(),
+      };
+    }
+    // Wait up to 8 seconds for the native Play Games interactive signIn() callback
+    const asyncProfile = await new Promise<{ playerId: string; displayName: string } | null>(
+      (resolve) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          unsub();
+          resolve(null);
+        }, 8000);
+        const unsub = NativeBridge.onPlayGamesProfile((profile) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          unsub();
+          resolve(profile);
+        });
+      }
+    );
+    if (!asyncProfile) {
       throw new Error('PLAY_GAMES_UNCONFIGURED');
     }
-    this.activeProfile = res;
+    this.activeProfile = asyncProfile;
     return {
-      playerId: res.playerId,
-      displayName: res.displayName,
+      playerId: asyncProfile.playerId,
+      displayName: asyncProfile.displayName,
       provider: 'play_games_v2',
       isAuthenticated: true,
       lastSyncedAt: Date.now(),
@@ -229,6 +327,7 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
 
   async signOut(): Promise<void> {
     this.activeProfile = null;
+    setExplicitlySignedOut(true);
   }
 
   async readManifest(): Promise<CloudLibraryManifestV2 | null> {
@@ -304,6 +403,10 @@ export class SteamCloudDriver implements CloudProviderDriver {
     return null;
   }
 
+  async attemptAutoSignIn(): Promise<Partial<PlayerIdentity> | null> {
+    return null;
+  }
+
   async signIn(): Promise<Partial<PlayerIdentity>> {
     throw new Error('Steam Cloud sign-in requires the Capy Desktop (Steamworks) runtime.');
   }
@@ -351,6 +454,10 @@ export class MicrosoftCloudDriver implements CloudProviderDriver {
   }
 
   restoreSession(): Partial<PlayerIdentity> | null {
+    return null;
+  }
+
+  async attemptAutoSignIn(): Promise<Partial<PlayerIdentity> | null> {
     return null;
   }
 
@@ -402,6 +509,10 @@ export class AppleCloudDriver implements CloudProviderDriver {
   }
 
   restoreSession(): Partial<PlayerIdentity> | null {
+    return null;
+  }
+
+  async attemptAutoSignIn(): Promise<Partial<PlayerIdentity> | null> {
     return null;
   }
 

@@ -396,24 +396,28 @@ async function run() {
     await pageA.getByTestId('leave-coop-room-btn').click();
     await pageA.waitForTimeout(150);
 
-    // Verify modular Cloud Provider badges (Google, Steam, Microsoft, Apple)
+    // Verify modular Cloud Provider badges (Google, Steam, Microsoft, Apple) and NO OAuth Client ID prompt
     await pageA.getByTestId('cloud-provider-badge-google').waitFor({ state: 'visible' });
     await pageA.getByTestId('cloud-provider-badge-steam').waitFor({ state: 'visible' });
     await pageA.getByTestId('cloud-provider-badge-microsoft').waitFor({ state: 'visible' });
     await pageA.getByTestId('cloud-provider-badge-apple').waitFor({ state: 'visible' });
-
-    // Click Google Login without Client ID configured -> verify OAuth Setup drawer opens
-    await pageA.getByTestId('play-games-signin-btn').click();
-    await pageA.waitForTimeout(150);
-    await pageA.getByTestId('google-client-id-drawer').waitFor({ state: 'visible' });
-    await pageA
-      .getByTestId('google-client-id-input')
-      .fill('1234567890-capytest.apps.googleusercontent.com');
-    await pageA.getByTestId('google-client-id-save-btn').click();
-    await pageA.waitForTimeout(150);
+    assert.equal(
+      await pageA.getByTestId('google-client-id-drawer').count(),
+      0,
+      'Expected no in-app Google OAuth Client ID prompt drawer'
+    );
+    assert.equal(
+      await pageA.getByTestId('google-oauth-setup-toggle-btn').count(),
+      0,
+      'Expected no OAuth Setup button in player UI'
+    );
 
     // Inject mock Google OAuth token on Device 1 (Page A) and click Google Login -> signs in & pushes saves to Google Drive appDataFolder!
     await pageA.evaluate(() => {
+      localStorage.setItem(
+        'capy_google_oauth_client_id_v1',
+        '1234567890-capytest.apps.googleusercontent.com'
+      );
       window.__capyMockGoogleOAuthToken = 'mock_google_access_token_device_1';
     });
     await pageA.getByTestId('play-games-signin-btn').click();
@@ -450,29 +454,32 @@ async function run() {
       return active.filledRegionIds || [];
     });
 
-    // Sign into the same Google Account on Device 2 -> automatically pulls & merges Device 1's saves from Google Drive appDataFolder!
-    await pageDevice2.evaluate(() => {
+    // Configure Google session on Device 2 and reload -> verify AUTOMATIC startup Google login & automatic cloud sync without clicking any login button!
+    await ctxCloudDevice2.addInitScript(() => {
       localStorage.setItem(
         'capy_google_oauth_client_id_v1',
         '1234567890-capytest.apps.googleusercontent.com'
       );
       window.__capyMockGoogleOAuthToken = 'mock_google_access_token_device_2';
     });
+    await pageDevice2.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(pageDevice2);
+    await pageDevice2.waitForTimeout(700);
+
+    // Open Cloud & Co-op hub to verify Device 2 is already automatically signed in as CapybaraLegend99
     await pageDevice2.getByTestId('topbar-coop-btn').click();
     await pageDevice2.waitForTimeout(200);
-    await pageDevice2.getByTestId('play-games-signin-btn').click();
-    await pageDevice2.waitForTimeout(600);
 
     const hubProfileText = await pageDevice2.getByTestId('cloud-coop-hub').innerText();
     assert.equal(
       hubProfileText.includes('CapybaraLegend99'),
       true,
-      `Expected Google Account display name 'CapybaraLegend99' in Cloud & Co-op hub, got: ${hubProfileText}`
+      `Expected automatic Google Account display name 'CapybaraLegend99' in Cloud & Co-op hub, got: ${hubProfileText}`
     );
     assert.equal(
       hubProfileText.includes('capy@example.com'),
       true,
-      `Expected Google Account email 'capy@example.com' in Cloud & Co-op hub, got: ${hubProfileText}`
+      `Expected automatic Google Account email 'capy@example.com' in Cloud & Co-op hub, got: ${hubProfileText}`
     );
 
     const mergedIdsAfterSync = await pageDevice2.evaluate(() => {
@@ -484,14 +491,14 @@ async function run() {
     assert.equal(
       mergedIdsAfterSync.length,
       expectedUnion.size,
-      `Expected CRDT Set-Union size ${expectedUnion.size} across Google Drive appDataFolder, got ${mergedIdsAfterSync.length}`
+      `Expected automatic CRDT Set-Union size ${expectedUnion.size} across Google Drive appDataFolder on startup, got ${mergedIdsAfterSync.length}`
     );
     for (const id of expectedUnion) {
       assert.equal(mergedIdsAfterSync.includes(id), true, `Missing region ${id} from CRDT Set-Union`);
     }
     await ctxCloudDevice2.close();
     console.log(
-      `   PASS: Google OAuth 2.0 + Google Drive appDataFolder synced & CRDT-merged Device 1 (${device1FilledIds.length}) + Device 2 (${localIdsBeforeSync.length}) -> ${mergedIdsAfterSync.length} union regions across isolated devices!`
+      `   PASS: Automatic startup Google Sign-In + Google Drive appDataFolder synced & CRDT-merged Device 1 (${device1FilledIds.length}) + Device 2 (${localIdsBeforeSync.length}) -> ${mergedIdsAfterSync.length} union regions across isolated devices!`
     );
 
     // =========================================================================

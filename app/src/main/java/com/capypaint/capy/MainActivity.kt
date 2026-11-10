@@ -378,6 +378,8 @@ class MainActivity : ComponentActivity() {
                 if (isAuthenticated) {
                     fetchAndDeliverPlayGamesPlayerProfile()
                     pullSnapshotFromPlayGames(CLOUD_MANIFEST_SLOT_KEY)
+                } else {
+                    requestPlayGamesSignIn()
                 }
             }
         } catch (e: Exception) {

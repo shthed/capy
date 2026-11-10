@@ -30,6 +30,7 @@ export interface CloudProviderDriver {
   getDescriptor(): CloudProviderDescriptor;
   hasActiveSession(): boolean;
   restoreSession(): Partial<PlayerIdentity> | null;
+  attemptAutoSignIn(): Promise<Partial<PlayerIdentity> | null>;
   signIn(options?: { clientId?: string }): Promise<Partial<PlayerIdentity>>;
   signOut(): Promise<void>;
   readManifest(): Promise<CloudLibraryManifestV2 | null>;
@@ -60,6 +61,7 @@ export interface AuthProvider {
   getGoogleClientId(): string;
   setGoogleClientId(clientId: string): void;
   hasActiveCloudToken(): boolean;
+  attemptAutoSignIn(): Promise<PlayerIdentity | null>;
   signInWithProvider(
     providerId: CloudProviderId,
     options?: { clientId?: string }

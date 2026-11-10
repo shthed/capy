@@ -195,10 +195,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [hubNotice, setHubNotice] = useState<string | null>(null);
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
-  const [showOAuthSetup, setShowOAuthSetup] = useState(false);
-  const [googleClientIdInput, setGoogleClientIdInput] = useState(() =>
-    ProviderRegistry.auth.getGoogleClientId()
-  );
   const cloudProviders = useMemo(
     () => ProviderRegistry.auth.getAvailableCloudProviders(),
     [playerIdentity]
@@ -1953,10 +1949,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={async () => {
                           try {
                             setIsSyncingCloud(true);
-                            const signedIn = await ProviderRegistry.auth.signInWithGoogle(
-                              googleClientIdInput.trim() || undefined
-                            );
-                            setShowOAuthSetup(false);
+                            const signedIn = await ProviderRegistry.auth.signInWithPlayGames();
                             const syncRes = onSyncCloudProgress
                               ? await onSyncCloudProgress()
                               : null;
@@ -1968,16 +1961,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 ? ` (${syncRes.downloadedCount || 0} pulled, ${syncRes.uploadedCount || 0} pushed)`
                                 : '';
                             setHubNotice(
-                              `Signed in with Google as ${signedIn.displayName}${
+                              `Signed in with ${
+                                signedIn.provider === 'play_games_v2' ? 'Play Games' : 'Google'
+                              } as ${signedIn.displayName}${
                                 signedIn.email ? ` (${signedIn.email})` : ''
                               }! Cloud saves synced${syncDetail}.`
                             );
                           } catch (err) {
                             const msg = err instanceof Error ? err.message : String(err);
-                            if (msg === 'GOOGLE_CLIENT_ID_REQUIRED') {
-                              setShowOAuthSetup(true);
+                            if (
+                              msg === 'GOOGLE_CLIENT_ID_REQUIRED' ||
+                              msg === 'PLAY_GAMES_UNCONFIGURED'
+                            ) {
                               setHubNotice(
-                                'Enter your Google Cloud OAuth 2.0 Web Client ID below to enable cross-device Google Drive appDataFolder sync.'
+                                'Google Cloud Sign-In requires VITE_GOOGLE_CLIENT_ID (Web) or CAPY_PLAY_GAMES_APP_ID (Android) configured in repository build variables — see CLOUD.md.'
                               );
                             } else {
                               setHubNotice(`Google Sign-In failed: ${msg}`);
@@ -1988,19 +1985,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }}
                         className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-bold border border-emerald-500/40 cursor-pointer"
                       >
-                        Google Login
-                      </button>
-                    )}
-
-                    {!NativeBridge.isAndroid && (
-                      <button
-                        type="button"
-                        data-testid="google-oauth-setup-toggle-btn"
-                        onClick={() => setShowOAuthSetup((prev) => !prev)}
-                        title="Configure Google Cloud OAuth 2.0 Client ID"
-                        className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-[10px] font-semibold border border-slate-800 cursor-pointer"
-                      >
-                        OAuth Setup
+                        {NativeBridge.isAndroid ? 'Play Games Login' : 'Google Login'}
                       </button>
                     )}
 
@@ -2077,50 +2062,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       })}
                   </div>
                 </div>
-
-                {/* Inline Google Cloud OAuth 2.0 Client ID Setup Drawer */}
-                {showOAuthSetup && (
-                  <div
-                    data-testid="google-client-id-drawer"
-                    className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-700/80 space-y-2 text-[11px]"
-                  >
-                    <div className="text-slate-200 font-semibold">
-                      Google Cloud OAuth 2.0 Web Client ID (Google Drive appDataFolder)
-                    </div>
-                    <p className="text-[10px] text-slate-400 leading-relaxed">
-                      Paste a Google Cloud OAuth 2.0 Web Client ID (ending in{' '}
-                      <code className="text-amber-300">.apps.googleusercontent.com</code>) with the{' '}
-                      <code className="text-sky-300">drive.appdata</code> scope enabled to sync your
-                      entire save library across browsers and devices.
-                    </p>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        data-testid="google-client-id-input"
-                        value={googleClientIdInput}
-                        onChange={(e) => setGoogleClientIdInput(e.target.value)}
-                        placeholder="1234567890-abcdef.apps.googleusercontent.com"
-                        className="flex-1 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white focus:border-emerald-400 focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        data-testid="google-client-id-save-btn"
-                        onClick={() => {
-                          ProviderRegistry.auth.setGoogleClientId(googleClientIdInput);
-                          setShowOAuthSetup(false);
-                          setHubNotice(
-                            googleClientIdInput.trim()
-                              ? 'Saved Google OAuth Client ID. Click Google Login to sign in!'
-                              : 'Cleared custom Google OAuth Client ID.'
-                          );
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-xs font-extrabold cursor-pointer"
-                      >
-                        Save ID
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 {/* Row B: Shareable Game Link & Simultaneous Co-op Room */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">

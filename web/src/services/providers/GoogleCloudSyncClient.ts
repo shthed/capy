@@ -1,5 +1,6 @@
 export const GOOGLE_CLIENT_ID_STORAGE_KEY = 'capy_google_oauth_client_id_v1';
 export const GOOGLE_TOKEN_STORAGE_KEY = 'capy_google_oauth_token_v1';
+export const EXPLICIT_SIGNOUT_STORAGE_KEY = 'capy_cloud_explicit_signout_v1';
 export const GOOGLE_OAUTH_SCOPES =
   'openid profile email https://www.googleapis.com/auth/drive.appdata';
 
@@ -27,18 +28,41 @@ interface GoogleTokenResponse {
 }
 
 interface GoogleTokenClient {
-  requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
+  requestAccessToken: (overrideConfig?: { prompt?: string; hint?: string }) => void;
+}
+
+interface GoogleCredentialResponse {
+  credential?: string;
+  select_by?: string;
 }
 
 declare global {
   interface Window {
     google?: {
       accounts?: {
+        id?: {
+          initialize: (config: {
+            client_id: string;
+            auto_select?: boolean;
+            cancel_on_tap_outside?: boolean;
+            use_fedcm_for_prompt?: boolean;
+            callback: (response: GoogleCredentialResponse) => void;
+          }) => void;
+          prompt: (
+            momentListener?: (notification: {
+              isNotDisplayed?: () => boolean;
+              isSkippedMoment?: () => boolean;
+              isDismissedMoment?: () => boolean;
+            }) => void
+          ) => void;
+          disableAutoSelect?: () => void;
+        };
         oauth2?: {
           initTokenClient: (config: {
             client_id: string;
             scope: string;
             prompt?: string;
+            hint?: string;
             callback: (response: GoogleTokenResponse) => void;
             error_callback?: (err: { type?: string; message?: string }) => void;
           }) => GoogleTokenClient;
@@ -47,6 +71,31 @@ declare global {
       };
     };
     __capyMockGoogleOAuthToken?: string;
+  }
+}
+
+export function isExplicitlySignedOut(): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    return localStorage.getItem(EXPLICIT_SIGNOUT_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setExplicitlySignedOut(signedOut: boolean): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (signedOut) {
+      localStorage.setItem(EXPLICIT_SIGNOUT_STORAGE_KEY, '1');
+      if (typeof window !== 'undefined') {
+        window.google?.accounts?.id?.disableAutoSelect?.();
+      }
+    } else {
+      localStorage.removeItem(EXPLICIT_SIGNOUT_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors
   }
 }
 
@@ -168,6 +217,42 @@ function ensureGoogleIdentityScriptLoaded(): Promise<void> {
   return gsiScriptPromise;
 }
 
+export function decodeGoogleIdTokenPayload(jwt: string): {
+  sub: string;
+  displayName: string;
+  email?: string;
+  picture?: string;
+} | null {
+  try {
+    const parts = jwt.split('.');
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const jsonStr = decodeURIComponent(
+      Array.from(atob(padded))
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const data = JSON.parse(jsonStr) as {
+      sub?: string;
+      name?: string;
+      given_name?: string;
+      email?: string;
+      picture?: string;
+    };
+    const sub = (data.sub || data.email || '').trim();
+    if (!sub) return null;
+    return {
+      sub,
+      displayName: (data.name || data.given_name || data.email || 'Google Player').trim(),
+      email: data.email?.trim(),
+      picture: data.picture?.trim(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchGoogleUserProfile(accessToken: string): Promise<{
   sub: string;
   displayName: string;
@@ -202,10 +287,152 @@ export async function fetchGoogleUserProfile(accessToken: string): Promise<{
   };
 }
 
+/**
+ * Attempts automatic Google sign-in on startup without requiring a manual button click:
+ * 1. Returns cached non-expired OAuth session if available.
+ * 2. Supports E2E Playwright mock token when `window.__capyMockGoogleOAuthToken` is present.
+ * 3. Uses Google One Tap / FedCM (`google.accounts.id.initialize({ auto_select: true })` + `prompt()`)
+ *    and silent OAuth token refresh (`prompt: ''`) when `VITE_GOOGLE_CLIENT_ID` is configured.
+ */
+export async function attemptSilentOrOneTapGoogleSignIn(
+  clientId: string
+): Promise<GoogleOAuthSession | null> {
+  if (isExplicitlySignedOut()) return null;
+
+  const cached = loadCachedGoogleSession();
+  if (cached) return cached;
+
+  const hasMock =
+    typeof window !== 'undefined' && Boolean(window.__capyMockGoogleOAuthToken);
+  const cleanClientId = clientId.trim() || (hasMock ? 'capy_mock_client_id' : '');
+  if (!cleanClientId) return null;
+
+  try {
+    await ensureGoogleIdentityScriptLoaded();
+  } catch {
+    return null;
+  }
+
+  if (typeof window !== 'undefined' && window.__capyMockGoogleOAuthToken) {
+    try {
+      const accessToken = window.__capyMockGoogleOAuthToken;
+      const profile = await fetchGoogleUserProfile(accessToken);
+      const session: GoogleOAuthSession = {
+        accessToken,
+        expiresAt: Date.now() + 3600 * 1000,
+        sub: profile.sub,
+        displayName: profile.displayName,
+        email: profile.email,
+        picture: profile.picture,
+      };
+      saveCachedGoogleSession(session);
+      return session;
+    } catch {
+      return null;
+    }
+  }
+
+  const gId = window.google?.accounts?.id;
+  if (!gId) return null;
+
+  return new Promise<GoogleOAuthSession | null>((resolve) => {
+    let settled = false;
+    const finish = (val: GoogleOAuthSession | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(val);
+    };
+
+    const timer = window.setTimeout(() => finish(null), 5000);
+
+    gId.initialize({
+      client_id: cleanClientId,
+      auto_select: true,
+      cancel_on_tap_outside: false,
+      use_fedcm_for_prompt: true,
+      callback: async (credResp) => {
+        window.clearTimeout(timer);
+        if (!credResp?.credential) {
+          finish(null);
+          return;
+        }
+        const decoded = decodeGoogleIdTokenPayload(credResp.credential);
+        if (!decoded) {
+          finish(null);
+          return;
+        }
+
+        // Attempt silent OAuth2 access_token upgrade (prompt: '') so Drive appDataFolder can sync immediately if already granted
+        const oauth2 = window.google?.accounts?.oauth2;
+        if (oauth2) {
+          try {
+            const silentToken = await new Promise<string | null>((resToken) => {
+              const tTimer = window.setTimeout(() => resToken(null), 2500);
+              const tokenClient = oauth2.initTokenClient({
+                client_id: cleanClientId,
+                scope: GOOGLE_OAUTH_SCOPES,
+                prompt: '',
+                hint: decoded.email,
+                callback: (tr) => {
+                  window.clearTimeout(tTimer);
+                  resToken(tr.access_token || null);
+                },
+                error_callback: () => {
+                  window.clearTimeout(tTimer);
+                  resToken(null);
+                },
+              });
+              tokenClient.requestAccessToken({ prompt: '', hint: decoded.email });
+            });
+
+            if (silentToken) {
+              const fullSession: GoogleOAuthSession = {
+                accessToken: silentToken,
+                expiresAt: Date.now() + 3500 * 1000,
+                sub: decoded.sub,
+                displayName: decoded.displayName,
+                email: decoded.email,
+                picture: decoded.picture,
+              };
+              saveCachedGoogleSession(fullSession);
+              finish(fullSession);
+              return;
+            }
+          } catch {
+            // Fall through to One Tap identity session
+          }
+        }
+
+        const oneTapSession: GoogleOAuthSession = {
+          accessToken: '',
+          expiresAt: Date.now() + 3500 * 1000,
+          sub: decoded.sub,
+          displayName: decoded.displayName,
+          email: decoded.email,
+          picture: decoded.picture,
+        };
+        finish(oneTapSession);
+      },
+    });
+
+    gId.prompt((notification) => {
+      if (
+        notification?.isNotDisplayed?.() ||
+        notification?.isSkippedMoment?.() ||
+        notification?.isDismissedMoment?.()
+      ) {
+        window.clearTimeout(timer);
+        finish(null);
+      }
+    });
+  });
+}
+
 export async function signInWithGoogleOAuthPopup(
   clientId: string,
   prompt: 'consent' | 'select_account' | '' = 'select_account'
 ): Promise<GoogleOAuthSession> {
+  setExplicitlySignedOut(false);
   const cleanClientId = clientId.trim();
   if (!cleanClientId) {
     const err = new Error('GOOGLE_CLIENT_ID_REQUIRED');

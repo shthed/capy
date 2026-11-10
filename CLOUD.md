@@ -17,17 +17,17 @@ Capy separates **CRDT save merging** (`CrdtCloudSaveAdapter` in [`ProviderRegist
 | `'microsoft'` | `MicrosoftCloudDriver` | Microsoft Entra ID / MSA OAuth 2.0 PKCE (`Files.ReadWrite.AppFolder`) | Microsoft Graph OneDrive `special/approot` REST API / Xbox Connected Storage | **Modular Driver Ready (Planned)** |
 | `'apple'` | `AppleCloudDriver` | Sign in with Apple JS / Native GameKit (`GKLocalPlayer`) | Apple CloudKit JS (`privateCloudDatabase`) / iCloud `GKSavedGame` | **Modular Driver Ready (Planned)** |
 
-### B. How Google Account & Play Games Login Works
+### B. How Automatic Google Account & Play Games Login Works
 1. **Instant Local Profile (Zero Friction)**:
    - Every player starts immediately with a local profile (for example, `Sunny Capy` with a chosen avatar color) stored in `localStorage` under `capy_player_identity_v1`. No account is required to play, save, or share links.
-2. **Google Account OAuth 2.0 Login (Web, Desktop & Cross-Device)**:
-   - When the user clicks **Google Login** in **Settings -> Saves**, [`GoogleCloudDriver`](./web/src/services/providers/CloudProviderDrivers.ts) invokes [`signInWithGoogleOAuthPopup`](./web/src/services/providers/GoogleCloudSyncClient.ts) using Google Identity Services (`google.accounts.oauth2.initTokenClient`) with scopes `openid profile email https://www.googleapis.com/auth/drive.appdata`.
-   - Once the user authorizes with their Google Account, [`fetchGoogleUserProfile`](./web/src/services/providers/GoogleCloudSyncClient.ts) calls `https://www.googleapis.com/oauth2/v3/userinfo` to retrieve their real Google Account `name`, `email`, `picture` (avatar URL), and `sub` (stable Google ID), and displays them in the Saves & Co-op Hub.
-   - Immediately upon sign-in, Capy runs `ProviderRegistry.cloudSave.syncFullLibrary(snapshots)` to pull any saves from the user's hidden Google Drive `appDataFolder`, CRDT-merge all puzzle progress, and push the unified library back to Google Drive `appDataFolder`.
-3. **Google Play Games Services v2 Login & Saved Games (`SnapshotsClient`) on Android**:
-   - On Android (`app/`), [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt) initializes `PlayGamesSdk.initialize(this)` and checks `PlayGames.getGamesSignInClient(this).isAuthenticated`.
-   - When authenticated, `MainActivity.kt` queries `PlayGames.getPlayersClient(this).currentPlayer` for `player.displayName` and `player.playerId`, caches them via `bridge.cachePlayGamesProfile(playerId, displayName)`, and delivers them to the WebView via `window.__capyReceivePlayGamesProfile(...)`.
-   - `MainActivity.kt` also calls `PlayGames.getSnapshotsClient(this).open("capy_cloud_manifest_v2", ...)` to pull and push the cloud save manifest to Google Play Games Saved Games storage (`SnapshotMetadataChange` + `commitAndClose`).
+2. **Automatic Google Account Login & Silent Sync on Web / Desktop (`attemptAutoSignIn`)**:
+   - On startup (`App.tsx`), `ProviderRegistry.auth.attemptAutoSignIn()` automatically checks for a valid cached Google OAuth session or invokes **Google Identity Services One Tap** (`google.accounts.id.initialize({ auto_select: true, cancel_on_tap_outside: false, use_fedcm_for_prompt: true })` + `google.accounts.id.prompt()`) and silent OAuth token refresh (`prompt: ''`) unless the player explicitly clicked **Sign Out** (`capy_cloud_explicit_signout_v1`).
+   - Players are **never** asked to paste an OAuth Client ID inside the game; the Web OAuth 2.0 Client ID is baked into the build via `VITE_GOOGLE_CLIENT_ID`.
+   - When the user clicks **Google Login** in **Settings -> Saves** (or when One Tap / silent sign-in succeeds on startup), [`GoogleCloudDriver`](./web/src/services/providers/CloudProviderDrivers.ts) retrieves their Google Account `name`, `email`, `picture` (avatar URL), and `sub` (stable Google ID) and immediately runs `ProviderRegistry.cloudSave.syncFullLibrary(snapshots)` against their hidden Google Drive `appDataFolder`.
+3. **Automatic Google Play Games Services v2 Login & Saved Games (`SnapshotsClient`) on Android**:
+   - On Android (`app/`), [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt) initializes `PlayGamesSdk.initialize(this)` on app launch and checks `PlayGames.getGamesSignInClient(this).isAuthenticated`.
+   - If the player is not yet authenticated on launch, `MainActivity.kt` automatically calls `PlayGames.getGamesSignInClient(this).signIn()` (`requestPlayGamesSignIn()`) so the native Google Play Games welcome banner signs them in automatically.
+   - Once authenticated, `MainActivity.kt` queries `PlayGames.getPlayersClient(this).currentPlayer` for `player.displayName` and `player.playerId`, caches them via `bridge.cachePlayGamesProfile(playerId, displayName)`, delivers them to the WebView via `window.__capyReceivePlayGamesProfile(...)`, and syncs `capy_cloud_manifest_v2` via `PlayGames.getSnapshotsClient(this)`.
 
 ### C. How Data Is Shared Between Players
 Capy supports **four complementary ways** to share puzzle data and paint together:
@@ -59,16 +59,15 @@ Traditional cloud saves overwrite File A with File B if you play on two devices 
 ```mermaid
 sequenceDiagram
     participant User as Player (Device 1 or 2)
-    participant UI as SettingsModal.tsx / App.tsx
+    participant UI as App.tsx / SettingsModal.tsx
     participant Auth as MultiProviderAuthManager
     participant Sync as CrdtCloudSaveAdapter
     participant Driver as CloudProviderDriver (Google / Play Games / Steam / MS / Apple)
     participant Cloud as Remote Cloud Storage (Google Drive appDataFolder / SnapshotsClient)
 
-    User->>UI: Clicks "Google Login"
-    UI->>Auth: signInWithGoogle(clientId)
-    Auth->>Driver: GoogleCloudDriver.signIn({ clientId })
-    Driver->>Cloud: Google OAuth 2.0 (openid profile email drive.appdata)
+    UI->>Auth: attemptAutoSignIn() on startup (or click "Google Login")
+    Auth->>Driver: GoogleCloudDriver.attemptAutoSignIn() / signIn()
+    Driver->>Cloud: Google One Tap + OAuth 2.0 (openid profile email drive.appdata)
     Cloud-->>Driver: access_token + /oauth2/v3/userinfo (sub, name, email, picture)
     Driver-->>Auth: PlayerIdentity(isAuthenticated = true, displayName, email, avatarUrl)
     UI->>Sync: syncFullLibrary(StorageService.loadSnapshots())
@@ -125,17 +124,47 @@ flowchart TD
 
 ---
 
-## 3. Configuring Google OAuth 2.0 (`VITE_GOOGLE_CLIENT_ID`) & Play Games v2 (`CAPY_PLAY_GAMES_APP_ID`)
+## 3. Step-by-Step Developer Guide: Provisioning Google Cloud OAuth 2.0 (`VITE_GOOGLE_CLIENT_ID`) & Play Games v2 (`CAPY_PLAY_GAMES_APP_ID`)
 
-### A. Web / Cross-Device Google Cloud OAuth 2.0 Setup
-1. In **Google Cloud Console**, open **APIs & Services -> Library** and enable the **Google Drive API**.
-2. Under **APIs & Services -> OAuth consent screen**, add the non-sensitive `.../auth/drive.appdata` scope (hidden application-specific configuration/save folder).
-3. Under **APIs & Services -> Credentials**, create an **OAuth 2.0 Client ID** of type **Web application**, and add your authorized JavaScript origins (for example, `https://shthed.github.io` and `http://localhost:3000`).
-4. Provide the Client ID (`xxxx.apps.googleusercontent.com`) either:
-   - At build time via the `VITE_GOOGLE_CLIENT_ID` environment variable, or
-   - At runtime inside the app by opening **Settings -> Saves -> OAuth Setup** and pasting the Client ID into the **Google Cloud OAuth 2.0 Web Client ID** input.
+### Part A: Web / Cross-Device Google Login & Google Drive `appDataFolder` Sync
+1. **Create or select a project in Google Cloud Console**:
+   - Open `https://console.cloud.google.com/` and create or select your project (for example, `Capy Paint`).
+2. **Enable the Google Drive API**:
+   - Navigate to **APIs & Services -> Library**, search for **Google Drive API**, and click **Enable**.
+3. **Configure the Google Auth Platform / OAuth Consent Screen**:
+   - Navigate to **APIs & Services -> OAuth consent screen** (or **Google Auth Platform -> Branding / Audience / Data Access**).
+   - Set **User Type** to **External** and set the Privacy Policy URL to `https://shthed.github.io/capy/privacy-policy.html`.
+   - Under **Data Access / Scopes**, click **Add or Remove Scopes** and add:
+     - `openid`
+     - `.../auth/userinfo.profile`
+     - `.../auth/userinfo.email`
+     - `https://www.googleapis.com/auth/drive.appdata` (*View and manage its own configuration data in your Google Drive* — non-sensitive scope).
+   - If the app is in **Testing** mode, add your Google account email under **Audience -> Test users** (or click **Publish App** so any Google account can sign in).
+4. **Create the Web OAuth 2.0 Client ID**:
+   - Navigate to **APIs & Services -> Credentials -> + Create Credentials -> OAuth client ID**.
+   - Select **Application type**: `Web application`.
+   - Under **Authorized JavaScript origins**, add:
+     - `https://shthed.github.io`
+     - `http://localhost:3000`
+     - `http://localhost:4173`
+   - Click **Create** and copy the generated Client ID (`1234567890-xxxxxxxx.apps.googleusercontent.com`).
+5. **Save `VITE_GOOGLE_CLIENT_ID` in GitHub Repository Variables**:
+   - Open `https://github.com/shthed/capy/settings/variables/actions` (**Settings -> Secrets and variables -> Actions -> Variables** tab).
+   - Click **New repository variable**:
+     - **Name**: `VITE_GOOGLE_CLIENT_ID`
+     - **Value**: `<your-client-id>.apps.googleusercontent.com`
+   - For local development, you can also add `VITE_GOOGLE_CLIENT_ID=<your-client-id>.apps.googleusercontent.com` to `web/.env.local`.
 
-### B. Android Google Play Games Services v2 Setup (`app/`)
-1. In **Google Play Console**, open **Play Games Services -> Setup and management -> Configuration** and enable **SavedGames** (`SnapshotsClient`).
-2. Copy the 12-digit **Project ID** (App ID) and provide it via the `CAPY_PLAY_GAMES_APP_ID` environment variable during CI/release builds (or set `game_services_project_id` in [`app/src/main/res/values/strings.xml`](./app/src/main/res/values/strings.xml)).
-3. Register both your **Upload Key SHA-1** and **Play App Signing SHA-1** certificate fingerprints under **Play Games Services -> Credentials** for package name `com.capypaint.capy`.
+### Part B: Android Google Play Games Services v2 (`CAPY_PLAY_GAMES_APP_ID`)
+1. **Enable Play Games Services & Saved Games in Google Play Console**:
+   - Open `https://play.google.com/console/`, select your app (`com.capypaint.capy`), and navigate to **Grow users -> Play Games Services -> Setup and management -> Configuration**.
+   - Link your Google Cloud Project from Part A, set **Saved Games** (`SnapshotsClient`) to **ON**, and copy your **12-digit Play Games Project ID (App ID)**.
+2. **Register Android Signing Certificate SHA-1 Fingerprints**:
+   - Under **Play Games Services -> Setup and management -> Configuration -> Credentials -> Add credential**, select **Android** (`com.capypaint.capy`).
+   - Register the SHA-1 fingerprint for your debug/upload keystore (`keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android`) and your Play App Signing certificate (**Test and release -> Setup -> App signing**).
+3. **Save `CAPY_PLAY_GAMES_APP_ID` in GitHub Repository Variables**:
+   - Open `https://github.com/shthed/capy/settings/variables/actions` and create a repository variable:
+     - **Name**: `CAPY_PLAY_GAMES_APP_ID`
+     - **Value**: `<your-12-digit-play-games-app-id>`
+   - Both [`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml) and [`.github/workflows/android-release.yml`](./.github/workflows/android-release.yml) automatically inject `VITE_GOOGLE_CLIENT_ID` and `CAPY_PLAY_GAMES_APP_ID` into every Web and Android build.
+

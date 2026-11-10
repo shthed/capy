@@ -341,6 +341,41 @@ class MultiProviderAuthManager implements AuthProvider {
     return this.identity;
   }
 
+  async attemptAutoSignIn(): Promise<PlayerIdentity | null> {
+    if (this.identity.isAuthenticated && this.hasActiveCloudToken()) {
+      return this.identity;
+    }
+
+    const orderedProviderIds: CloudProviderId[] = NativeBridge.isAndroid
+      ? ['play_games_v2', 'google']
+      : ['google', 'steam', 'microsoft', 'apple'];
+
+    for (const providerId of orderedProviderIds) {
+      const driver = this.drivers.get(providerId);
+      if (!driver) continue;
+      try {
+        const partial = await driver.attemptAutoSignIn();
+        if (partial && partial.playerId && partial.displayName) {
+          this.identity = {
+            ...this.identity,
+            ...partial,
+            playerId: partial.playerId,
+            displayName: partial.displayName.slice(0, 32),
+            provider: (partial.provider as CloudProviderId) || providerId,
+            isAuthenticated: true,
+            lastSyncedAt: Date.now(),
+          };
+          this.persistBaseIdentity(this.identity);
+          this.emit();
+          return this.identity;
+        }
+      } catch {
+        // Ignore auto-sign-in errors and continue
+      }
+    }
+    return null;
+  }
+
   async signInWithProvider(
     providerId: CloudProviderId,
     options?: { clientId?: string }

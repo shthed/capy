@@ -2891,6 +2891,54 @@ export const App: React.FC = () => {
     });
   }, [handleSyncCloudProgress]);
 
+  // Automatically attempt Google / Play Games sign-in on startup and sync saves once puzzle is ready
+  const hasAttemptedStartupSignInRef = useRef(false);
+  const lastAutoSyncedPlayerIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isLoading || !puzzle || !activeSnapshotId) return;
+    let cancelled = false;
+
+    const runAutoLoginAndSync = async () => {
+      if (!hasAttemptedStartupSignInRef.current) {
+        hasAttemptedStartupSignInRef.current = true;
+        await ProviderRegistry.auth.attemptAutoSignIn();
+      }
+      if (cancelled) return;
+      const currentId = ProviderRegistry.auth.getCurrentIdentity();
+      if (
+        currentId.isAuthenticated &&
+        ProviderRegistry.auth.hasActiveCloudToken() &&
+        lastAutoSyncedPlayerIdRef.current !== currentId.playerId
+      ) {
+        lastAutoSyncedPlayerIdRef.current = currentId.playerId;
+        await handleSyncCloudProgress();
+      }
+    };
+
+    void runAutoLoginAndSync();
+
+    const unsubAuth = ProviderRegistry.auth.subscribe((id) => {
+      if (!id.isAuthenticated) {
+        lastAutoSyncedPlayerIdRef.current = null;
+        return;
+      }
+      if (
+        !cancelled &&
+        ProviderRegistry.auth.hasActiveCloudToken() &&
+        lastAutoSyncedPlayerIdRef.current !== id.playerId
+      ) {
+        lastAutoSyncedPlayerIdRef.current = id.playerId;
+        void handleSyncCloudProgress();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubAuth();
+    };
+  }, [isLoading, puzzle, activeSnapshotId, handleSyncCloudProgress]);
+
   // Multi-resolution Infinite Zoom: extract 2x high-detail center sub-tile with seam-preserving palette continuity
   const handleZoomIntoDetailTile = useCallback(() => {
     if (!sourceImage) return;
