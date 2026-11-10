@@ -82,9 +82,9 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-Run the automated browser test suite (tests gestures, settings, canvas):
+Run the unified automated test suite (verifies binary codec, engine, gestures, settings, and E2E gameplay):
 ```bash
-npm run test:game
+npm test
 ```
 
 ---
@@ -98,5 +98,6 @@ All detailed architectural guides, computer vision algorithms, and native bridge
 - **Cloud Sync, Google Play Games and Multiplayer Data Sharing**: [`CLOUD.md`](./CLOUD.md) -- Plain-English and technical guide to Play Games profile login, CRDT Cloud Sync, `< 2 KB` shareable URL links, and simultaneous Co-op rooms.
 - **Puzzle Generation Engine**: [`PUZZLE.md`](./PUZZLE.md) -- Web Worker segmentation, Sobel line extraction, Red-Mean K-Means clustering, and watershed absorption.
 - **Testing Architecture**: [`TESTING.md`](./TESTING.md) -- Playwright E2E testing guide, multi-touch gesture verification, and CI pipelines.
+- **Versioning Scheme and Changelog**: [`CHANGELOG.md`](./CHANGELOG.md) -- Semantic Versioning (`MAJOR.MINOR.PATCH`), Android `versionCode` mapping, and chronological release history.
 - **Project Roadmap and Tasks**: [`TODO.md`](./TODO.md) -- Active milestones and post-merge cleanup tracking.
 - **Agent and Contributor Playbook**: [`AGENTS.md`](./AGENTS.md) -- Monorepo workflows, development rules, and PR standards.

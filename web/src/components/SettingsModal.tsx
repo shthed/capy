@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
+import { APP_VERSION } from '../version';
 import {
   COLLABORATOR_AVATAR_COLORS,
   ProviderRegistry,
@@ -895,12 +896,74 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                   </button>
                 </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/80">
+                  <div className="pr-3">
+                    <div className="text-xs sm:text-sm font-bold text-slate-200">
+                      Follow Painting During Replay
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Smoothly pan the camera to follow each region being painted without skipping offscreen steps
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    data-testid="toggle-replay-follow-btn"
+                    aria-checked={Boolean(settings.replayFollow)}
+                    onClick={() => updateSetting('replayFollow', !settings.replayFollow)}
+                    className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                      settings.replayFollow ? 'bg-amber-400' : 'bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
+                        settings.replayFollow ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/80">
+                  <div className="pr-3">
+                    <div className="text-xs sm:text-sm font-bold text-slate-200">
+                      Auto-Loop Replay
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Automatically restart and loop the replay animation when it finishes
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    data-testid="toggle-replay-loop-btn"
+                    aria-checked={Boolean(settings.replayLoop)}
+                    onClick={() => updateSetting('replayLoop', !settings.replayLoop)}
+                    className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                      settings.replayLoop ? 'bg-amber-400' : 'bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
+                        settings.replayLoop ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
 
               {/* Platform & External Application Links */}
               <div className="pt-3 border-t border-slate-800/80 space-y-2">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Platforms & Applications
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Platforms & Applications
+                  </div>
+                  <span
+                    data-testid="app-version-badge"
+                    className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-[10px] font-mono font-bold text-slate-400"
+                  >
+                    v{APP_VERSION}
+                  </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {NativeBridge.isNative ? (

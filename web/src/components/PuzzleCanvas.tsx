@@ -57,8 +57,17 @@ interface PuzzleCanvasProps {
   detailedProgress?: boolean;
   generationProgress?: number;
   generationStepIndex?: number;
+  replayFollowRegionId?: number | null;
+  replaySpeed?: number;
   coopRippleBuffer?: CoopRippleBuffer;
-  onViewExtentChanged?: (zoom: number, panX: number, panY: number) => void;
+  onViewExtentChanged?: (
+    zoom: number,
+    panX: number,
+    panY: number,
+    containerWidth?: number,
+    containerHeight?: number
+  ) => void;
+  onManualPanStart?: () => void;
   onRegionClicked: (regionId: number) => void;
   onBatchRegionsClicked: (regionIds: Set<number>) => void;
   onVisibleColorsChanged: (colorIds: Set<number>) => void;
@@ -77,9 +86,15 @@ export function clampCanvasOffset(
   puzzleWidth: number,
   puzzleHeight: number,
   containerWidth: number,
-  containerHeight: number
+  containerHeight: number,
+  out?: { x: number; y: number }
 ): { x: number; y: number } {
   if (containerWidth <= 0 || containerHeight <= 0 || puzzleWidth <= 0 || puzzleHeight <= 0) {
+    if (out) {
+      out.x = rawOffset.x;
+      out.y = rawOffset.y;
+      return out;
+    }
     return rawOffset;
   }
 
@@ -119,10 +134,14 @@ export function clampCanvasOffset(
     maxOffsetY = marginY - baseOffsetY;
   }
 
-  return {
-    x: Math.max(minOffsetX, Math.min(maxOffsetX, rawOffset.x)),
-    y: Math.max(minOffsetY, Math.min(maxOffsetY, rawOffset.y)),
-  };
+  const cx = Math.max(minOffsetX, Math.min(maxOffsetX, rawOffset.x));
+  const cy = Math.max(minOffsetY, Math.min(maxOffsetY, rawOffset.y));
+  if (out) {
+    out.x = cx;
+    out.y = cy;
+    return out;
+  }
+  return { x: cx, y: cy };
 }
 
 export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
@@ -165,8 +184,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   detailedProgress = false,
   generationProgress = 0,
   generationStepIndex = 1,
+  replayFollowRegionId = null,
+  replaySpeed = 1,
   coopRippleBuffer,
   onViewExtentChanged,
+  onManualPanStart,
   onRegionClicked,
   onBatchRegionsClicked,
   onVisibleColorsChanged,
@@ -252,13 +274,27 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     };
   }, [stopMomentum]);
 
-  // Reset or restore zoom/offset when a brand-new puzzle geometry is loaded or post-replay restoration triggers
+  // Reset or restore zoom/offset when a brand-new puzzle geometry is loaded or viewport restoration triggers
   useEffect(() => {
     stopMomentum();
+    let targetOffset = { x: initialPanOffsetX, y: initialPanOffsetY };
+    const w = containerRef.current?.clientWidth || window.innerWidth;
+    const h = containerRef.current?.clientHeight || window.innerHeight;
+    if (containerRef.current && puzzle && w > 0 && h > 0) {
+      targetOffset = clampCanvasOffset(
+        targetOffset,
+        initialZoomScale,
+        puzzle.width,
+        puzzle.height,
+        w,
+        h
+      );
+    }
     scaleRef.current = initialZoomScale;
-    offsetRef.current = { x: initialPanOffsetX, y: initialPanOffsetY };
+    offsetRef.current = targetOffset;
     setScale(initialZoomScale);
-    setOffset({ x: initialPanOffsetX, y: initialPanOffsetY });
+    setOffset(targetOffset);
+    onViewExtentChangedRef.current?.(initialZoomScale, targetOffset.x, targetOffset.y, w, h);
   }, [puzzle?.regionMap, initialZoomScale, initialPanOffsetX, initialPanOffsetY, restoreViewTrigger, stopMomentum]);
 
   // Handle FloatingActions zoom in/out button triggers
@@ -361,6 +397,123 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       return clamped;
     });
   }, [scale, puzzle]);
+
+  // Smooth camera pan (and auto-zoom to ~2.5x when starting from fit-to-screen <1.8x) during Replay Follow Mode
+  const onManualPanStartRef = useRef(onManualPanStart);
+  onManualPanStartRef.current = onManualPanStart;
+  const hasNotifiedManualPanRef = useRef(false);
+  const replayFollowRegionIdRef = useRef<number | null>(replayFollowRegionId ?? null);
+  replayFollowRegionIdRef.current = replayFollowRegionId ?? null;
+  const replaySpeedRef = useRef<number>(replaySpeed || 1);
+  replaySpeedRef.current = replaySpeed || 1;
+  const followRawScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const followClampedScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const followAutoZoomingRef = useRef<boolean>(false);
+  const isFollowingReplay = replayFollowRegionId !== null && replayFollowRegionId !== undefined;
+
+  useEffect(() => {
+    if (!isFollowingReplay || !puzzle) {
+      followAutoZoomingRef.current = false;
+      return;
+    }
+    if (scaleRef.current < 1.8) {
+      followAutoZoomingRef.current = true;
+    }
+    let animId: number;
+    let lastTime = performance.now();
+
+    const stepFollow = (now: number) => {
+      const dt = Math.min(64, Math.max(0, now - lastTime));
+      lastTime = now;
+
+      const targetRegionId = replayFollowRegionIdRef.current;
+      const isUserInteracting =
+        isDraggingRef.current ||
+        activePointersRef.current.size > 0 ||
+        isOneFingerZoomingRef.current ||
+        isDoubleTapPanningRef.current ||
+        momentumAnimIdRef.current !== null;
+
+      if (isUserInteracting) {
+        followAutoZoomingRef.current = false;
+      } else if (scaleRef.current < 1.8) {
+        followAutoZoomingRef.current = true;
+      }
+
+      if (targetRegionId !== null && !isUserInteracting && containerRef.current) {
+        const reg = regionByIdRef.current.get(targetRegionId);
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        if (reg && w > 0 && h > 0) {
+          const curScale = scaleRef.current;
+          const spd = replaySpeedRef.current;
+          let nextScale = curScale;
+          if (followAutoZoomingRef.current) {
+            if (curScale < 2.48) {
+              const scaleDiff = 2.5 - curScale;
+              const scaleLerp = scaleDiff * (1 - Math.exp((-dt * Math.max(14, 10 * spd)) / 1000));
+              const minScaleStep = (Math.max(2.2, 1.8 * spd) * dt) / 1000;
+              nextScale = Math.min(2.5, curScale + Math.max(scaleLerp, minScaleStep));
+            } else {
+              nextScale = 2.5;
+              followAutoZoomingRef.current = false;
+            }
+          }
+
+          const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
+          const baseOffsetX = (w - puzzle.width * baseScale) / 2;
+          const baseOffsetY = (h - puzzle.height * baseScale) / 2;
+          const effScale = nextScale * baseScale;
+
+          const rawScratch = followRawScratchRef.current;
+          rawScratch.x = w / 2 - baseOffsetX - reg.centroidX * effScale;
+          rawScratch.y = h / 2 - baseOffsetY - reg.centroidY * effScale;
+          const clampedTarget = clampCanvasOffset(
+            rawScratch,
+            nextScale,
+            puzzle.width,
+            puzzle.height,
+            w,
+            h,
+            followClampedScratchRef.current
+          );
+
+          const curOff = offsetRef.current;
+          const dx = clampedTarget.x - curOff.x;
+          const dy = clampedTarget.y - curOff.y;
+          const dist = Math.hypot(dx, dy);
+          const scaleChanged = Math.abs(nextScale - curScale) > 0.0005;
+
+          if (dist > 0.5 || scaleChanged) {
+            let nextOffset = curOff;
+            if (dist > 0.5) {
+              const lerpStep = dist * (1 - Math.exp((-dt * Math.max(12, 8 * spd)) / 1000));
+              const minStep = (Math.max(520, 420 * spd) * dt) / 1000;
+              const move = Math.min(dist, Math.max(lerpStep, minStep));
+              nextOffset = {
+                x: curOff.x + (dx / dist) * move,
+                y: curOff.y + (dy / dist) * move,
+              };
+            } else if (scaleChanged) {
+              nextOffset = { x: clampedTarget.x, y: clampedTarget.y };
+            }
+            if (scaleChanged) {
+              scaleRef.current = nextScale;
+              setScale(nextScale);
+            }
+            offsetRef.current = nextOffset;
+            setOffset(nextOffset);
+            onViewExtentChangedRef.current?.(nextScale, nextOffset.x, nextOffset.y, w, h);
+          }
+        }
+      }
+
+      animId = requestAnimationFrame(stepFollow);
+    };
+
+    animId = requestAnimationFrame(stepFollow);
+    return () => cancelAnimationFrame(animId);
+  }, [isFollowingReplay, puzzle]);
 
   // Tap dot decay
   useEffect(() => {
@@ -814,7 +967,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const onViewExtentChangedRef = useRef(onViewExtentChanged);
   onViewExtentChangedRef.current = onViewExtentChanged;
   useEffect(() => {
-    onViewExtentChangedRef.current?.(scale, offset.x, offset.y);
+    const w = containerRef.current?.clientWidth || window.innerWidth;
+    const h = containerRef.current?.clientHeight || window.innerHeight;
+    onViewExtentChangedRef.current?.(scale, offset.x, offset.y, w, h);
   }, [scale, offset]);
 
   // Coordinate conversion helper
@@ -1276,6 +1431,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
     isDraggingRef.current = true;
     isPinchPanningRef.current = false;
+    hasNotifiedManualPanRef.current = false;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     lastPointerPosRef.current = { x: e.clientX, y: e.clientY };
     totalDragDistanceRef.current = 0;
@@ -1355,6 +1511,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       }
 
       if (isDoubleTapPanningRef.current && containerRef.current && puzzle) {
+        if (!hasNotifiedManualPanRef.current) {
+          hasNotifiedManualPanRef.current = true;
+          onManualPanStartRef.current?.();
+        }
         const moveDx = e.clientX - lastPointerPosRef.current.x;
         const moveDy = e.clientY - lastPointerPosRef.current.y;
         lastPointerPosRef.current = { x: e.clientX, y: e.clientY };
@@ -1437,6 +1597,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     } else {
       const container = containerRef.current;
       if (!container || !puzzle) return;
+      if (!hasNotifiedManualPanRef.current && totalDragDistanceRef.current >= 6) {
+        hasNotifiedManualPanRef.current = true;
+        onManualPanStartRef.current?.();
+      }
       const w = container.clientWidth;
       const h = container.clientHeight;
       const targetOffset = {

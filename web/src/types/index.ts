@@ -93,6 +93,8 @@ export interface UserSettings {
   enableUndo: boolean;
   replaySpeed: number;
   autoReplayOnLoad: boolean;
+  replayLoop: boolean;
+  replayFollow: boolean;
   reverseDoubleTapZoom: boolean;
   detailedLoadingProgress: boolean;
   generatorConfig: GeneratorConfig;

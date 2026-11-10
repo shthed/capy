@@ -58,6 +58,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   enableUndo: false,
   replaySpeed: 1,
   autoReplayOnLoad: true,
+  replayLoop: false,
+  replayFollow: false,
   reverseDoubleTapZoom: false,
   detailedLoadingProgress: false,
   generatorConfig: {
