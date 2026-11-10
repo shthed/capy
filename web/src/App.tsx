@@ -50,7 +50,25 @@ export const App: React.FC = () => {
   const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState<number>(0);
   const [resetViewTrigger, setResetViewTrigger] = useState<number>(0);
+  const [restoreViewTrigger, setRestoreViewTrigger] = useState<number>(0);
   const [isCanvasTransformed, setIsCanvasTransformed] = useState<boolean>(false);
+  const [initialViewport, setInitialViewport] = useState<{
+    zoomScale: number;
+    panOffsetX: number;
+    panOffsetY: number;
+  }>({ zoomScale: 1, panOffsetX: 0, panOffsetY: 0 });
+  const viewportRef = useRef<{ zoomScale: number; panOffsetX: number; panOffsetY: number }>({
+    zoomScale: 1,
+    panOffsetX: 0,
+    panOffsetY: 0,
+  });
+  const preReplayViewportRef = useRef<{
+    zoomScale: number;
+    panOffsetX: number;
+    panOffsetY: number;
+  } | null>(null);
+  const viewportSaveTimerRef = useRef<number | null>(null);
+  const activeBlobUrlRef = useRef<string | null>(null);
 
   // Replay State
   const [isReplaying, setIsReplaying] = useState<boolean>(false);
@@ -99,6 +117,18 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (viewportSaveTimerRef.current !== null) {
+        window.clearTimeout(viewportSaveTimerRef.current);
+      }
+      if (activeBlobUrlRef.current) {
+        URL.revokeObjectURL(activeBlobUrlRef.current);
+        activeBlobUrlRef.current = null;
+      }
+    };
+  }, []);
+
   const handleToggleFullscreen = useCallback(async () => {
     try {
       if (
@@ -126,16 +156,46 @@ export const App: React.FC = () => {
   // Hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync modal state with native hardware back button handler
+  // Sync modal state with native LIFO hardware back button stack
   useEffect(() => {
-    NativeBridge.setBackModalOpen(showSettings, () => setShowSettings(false));
+    if (!showSettings) return;
+    return NativeBridge.pushBackHandler(() => setShowSettings(false));
   }, [showSettings]);
 
-  // Sync settings updates to storage
-  const handleUpdateSettings = (newSettings: UserSettings) => {
-    setSettings(newSettings);
-    StorageService.saveSettings(newSettings);
-  };
+  // Sync settings updates to storage without stale closure overwrites
+  const handleUpdateSettings = useCallback(
+    (updater: UserSettings | ((prev: UserSettings) => UserSettings)) => {
+      setSettings((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        StorageService.saveSettings(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  // Resolve full-resolution source image URL for built-in samples or IndexedDB image blobs
+  const resolveSnapshotImageSrc = useCallback(async (snap: SavedSnapshot): Promise<string> => {
+    if (snap.sourceRef?.kind === 'sample' && snap.sourceRef.uri) {
+      return snap.sourceRef.uri;
+    }
+    if (snap.sampleAssetPath) {
+      return snap.sampleAssetPath;
+    }
+
+    const blobId = snap.sourceRef?.kind === 'blob' ? snap.sourceRef.uri : snap.id;
+    const storedBlob = await StorageService.loadImageBlob(blobId);
+    if (storedBlob) {
+      const nextUrl = URL.createObjectURL(storedBlob);
+      if (activeBlobUrlRef.current) {
+        URL.revokeObjectURL(activeBlobUrlRef.current);
+      }
+      activeBlobUrlRef.current = nextUrl;
+      return nextUrl;
+    }
+
+    return snap.previewDataUrl || 'assets/capybara.webp';
+  }, []);
 
   // Generate thumbnail data URL
   const generatePreviewDataUrl = useCallback(
@@ -207,6 +267,11 @@ export const App: React.FC = () => {
   const startReplay = useCallback((sequence: number[], autoResumeOnFinish: boolean = false) => {
     if (!sequence || sequence.length === 0) return;
     autoResumeReplayRef.current = autoResumeOnFinish;
+    if (autoResumeOnFinish) {
+      preReplayViewportRef.current = { ...viewportRef.current };
+    } else {
+      preReplayViewportRef.current = null;
+    }
     setResetViewTrigger((prev) => prev + 1);
     setHintRegionId(null);
     setReplaySequence(sequence);
@@ -217,14 +282,25 @@ export const App: React.FC = () => {
 
   // Animated Replay Loop (60 FPS smooth accumulator scaled by replaySpeed)
   useEffect(() => {
+    const finishAutoResume = () => {
+      autoResumeReplayRef.current = false;
+      setTimeout(() => {
+        setIsReplaying(false);
+        if (preReplayViewportRef.current) {
+          const savedView = preReplayViewportRef.current;
+          preReplayViewportRef.current = null;
+          viewportRef.current = savedView;
+          setInitialViewport({ ...savedView });
+          setRestoreViewTrigger((prev) => prev + 1);
+        }
+      }, 250);
+    };
+
     if (!isReplaying || !isReplayPlaying) return;
     if (replayStep >= replaySequence.length) {
       setIsReplayPlaying(false);
       if (autoResumeReplayRef.current) {
-        autoResumeReplayRef.current = false;
-        setTimeout(() => {
-          setIsReplaying(false);
-        }, 250);
+        finishAutoResume();
       }
       return;
     }
@@ -251,10 +327,7 @@ export const App: React.FC = () => {
           if (next >= replaySequence.length) {
             setIsReplayPlaying(false);
             if (autoResumeReplayRef.current) {
-              autoResumeReplayRef.current = false;
-              setTimeout(() => {
-                setIsReplaying(false);
-              }, 250);
+              finishAutoResume();
             }
           }
           return next;
@@ -281,7 +354,8 @@ export const App: React.FC = () => {
       initialActiveColorId?: number,
       existingSnapshotId?: string,
       sampleAssetPath?: string | null,
-      shouldAutoReplay: boolean = false
+      shouldAutoReplay: boolean = false,
+      sourceBlob?: Blob | null
     ) => {
       const currentSeq = ++generationSeqRef.current;
       setIsReplaying(false);
@@ -296,6 +370,9 @@ export const App: React.FC = () => {
       setSourceImage(img);
       setPuzzle(null);
       setHintRegionId(null);
+      setRedoStack([]);
+      viewportRef.current = { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 };
+      setInitialViewport({ zoomScale: 1, panOffsetX: 0, panOffsetY: 0 });
 
       // Prepare canvas from image
       const canvas = document.createElement('canvas');
@@ -306,6 +383,10 @@ export const App: React.FC = () => {
 
       // Pre-register snapshot at 0ms so it appears in Saves instantly!
       const snapId = existingSnapshotId || crypto.randomUUID();
+      const sourceRef = sampleAssetPath
+        ? ({ kind: 'sample', uri: sampleAssetPath } as const)
+        : ({ kind: 'blob', uri: snapId } as const);
+
       const newSnapshot: SavedSnapshot = {
         id: snapId,
         title: title || 'Artwork',
@@ -318,11 +399,28 @@ export const App: React.FC = () => {
         panOffsetX: 0,
         panOffsetY: 0,
         sampleAssetPath,
+        sourceRef,
       };
 
       setActiveSnapshotId(snapId);
       const updatedSnapshots = StorageService.addSnapshot(newSnapshot);
       setSnapshots(updatedSnapshots);
+
+      // Persist full-resolution custom image blob to IndexedDB so reloads never degrade to thumbnails
+      if (!sampleAssetPath) {
+        const persistBlobPromise = sourceBlob
+          ? Promise.resolve(sourceBlob)
+          : new Promise<Blob | null>((resolve) =>
+              canvas.toBlob((b) => resolve(b), 'image/webp', 0.92)
+            );
+        persistBlobPromise
+          .then((blob) => {
+            if (blob) {
+              return StorageService.saveImageBlob(snapId, blob);
+            }
+          })
+          .catch((err) => console.warn('Failed to persist source image blob:', err));
+      }
 
       // Run generator in background Web Worker thread to prevent freezing browser
       setTimeout(async () => {
@@ -357,9 +455,10 @@ export const App: React.FC = () => {
               wasPreviouslyFilled: false,
             }))
           );
+          setRedoStack([]);
 
           const isFree = Boolean(puzzleData.isFreeColor);
-          handleUpdateSettings({ ...settings, isFreeColorMode: isFree });
+          handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
 
           // Defensively find the first available color that actually has uncompleted regions
           const availableColors = getVisiblePalette(
@@ -431,7 +530,7 @@ export const App: React.FC = () => {
         }
       }, 50);
     },
-    [settings, generatePreviewDataUrl, startReplay]
+    [settings, generatePreviewDataUrl, startReplay, handleUpdateSettings]
   );
 
   // Restore session on app launch (or bootstrap pre-generated sample saves on first open)
@@ -469,15 +568,22 @@ export const App: React.FC = () => {
       if (candidateSnap) {
         const cachedPuzzle = await StorageService.loadPuzzleData(candidateSnap.id);
         if (cachedPuzzle && isMounted) {
-          const imgSrc =
-            candidateSnap.sampleAssetPath || candidateSnap.previewDataUrl || './assets/capybara.webp';
-          const img = await loadHtmlImage(imgSrc, './assets/capybara.webp');
+          const resolvedSrc = await resolveSnapshotImageSrc(candidateSnap);
+          if (!isMounted) return;
+          const img = await loadHtmlImage(
+            resolvedSrc,
+            candidateSnap.previewDataUrl || './assets/capybara.webp'
+          );
           if (!isMounted || !img) {
             if (isMounted) setIsLoading(false);
             return;
           }
 
-          const orderedIds = candidateSnap.filledRegionIds || [];
+          const isMatchingActive = activeState?.activeSnapshotId === candidateSnap.id;
+          const orderedIds =
+            (isMatchingActive ? activeState?.filledRegionIds : undefined) ??
+            candidateSnap.filledRegionIds ??
+            [];
           const filledSet = new Set(orderedIds);
           if (candidateSnap.customPalette && candidateSnap.customPalette.length > 0) {
             cachedPuzzle.palette = candidateSnap.customPalette;
@@ -489,8 +595,8 @@ export const App: React.FC = () => {
             settings.paletteSort
           );
           const restoredColor =
-            activeState?.activeSnapshotId === candidateSnap.id &&
-            activeState.activeColorId &&
+            isMatchingActive &&
+            activeState?.activeColorId &&
             availableColors.some((c) => c.id === activeState.activeColorId)
               ? activeState.activeColorId
               : availableColors[0]?.id || cachedPuzzle.palette[0]?.id || 1;
@@ -500,21 +606,34 @@ export const App: React.FC = () => {
             restoredPaintedMap = new Map(
               Object.entries(candidateSnap.paintedRegionColors).map(([k, v]) => [Number(k), v])
             );
-          } else if (
-            activeState?.activeSnapshotId === candidateSnap.id &&
-            activeState.paintedRegionColors
-          ) {
+          } else if (isMatchingActive && activeState?.paintedRegionColors) {
             restoredPaintedMap = new Map(
               Object.entries(activeState.paintedRegionColors).map(([k, v]) => [Number(k), v])
             );
           }
 
           const isFree = Boolean(
-            activeState?.activeSnapshotId === candidateSnap.id &&
-              activeState.isFreeColorMode !== undefined
+            isMatchingActive && activeState?.isFreeColorMode !== undefined
               ? activeState.isFreeColorMode
               : candidateSnap.isFreeColor || cachedPuzzle.isFreeColor
           );
+
+          const restoredView = {
+            zoomScale:
+              (isMatchingActive ? activeState?.zoomScale : undefined) ??
+              candidateSnap.zoomScale ??
+              1.0,
+            panOffsetX:
+              (isMatchingActive ? activeState?.panOffsetX : undefined) ??
+              candidateSnap.panOffsetX ??
+              0,
+            panOffsetY:
+              (isMatchingActive ? activeState?.panOffsetY : undefined) ??
+              candidateSnap.panOffsetY ??
+              0,
+          };
+          viewportRef.current = restoredView;
+          setInitialViewport(restoredView);
 
           setPaintedRegionColors(restoredPaintedMap);
           setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
@@ -529,6 +648,7 @@ export const App: React.FC = () => {
               wasPreviouslyFilled: false,
             }))
           );
+          setRedoStack([]);
           setIsLoading(false);
           if (settings.autoReplayOnLoad !== false && orderedIds.length > 0) {
             startReplay(orderedIds, true);
@@ -551,8 +671,8 @@ export const App: React.FC = () => {
           ]);
 
           if (bundleResp && bundleResp.ok && sampleImg && isMounted) {
-            const bundleJson = await bundleResp.text();
-            const imported = await StorageService.importSnapshotBundle(bundleJson, {
+            const bundleBuffer = await bundleResp.arrayBuffer();
+            const imported = await StorageService.importSnapshotData(bundleBuffer, {
               refreshTimestamps: true,
             });
 
@@ -646,8 +766,24 @@ export const App: React.FC = () => {
   useEffect(() => {
     return NativeBridge.onSharedImage((title, dataUrl) => {
       const img = new Image();
-      img.onload = () => {
-        loadArtworkFromImage(img, title, settings.generatorConfig);
+      img.onload = async () => {
+        let sharedBlob: Blob | null = null;
+        try {
+          sharedBlob = await (await fetch(dataUrl)).blob();
+        } catch {
+          sharedBlob = null;
+        }
+        loadArtworkFromImage(
+          img,
+          title,
+          settings.generatorConfig,
+          new Set(),
+          undefined,
+          undefined,
+          undefined,
+          false,
+          sharedBlob
+        );
       };
       img.src = dataUrl;
     });
@@ -666,10 +802,9 @@ export const App: React.FC = () => {
   const isUndoEnabled = Boolean(settings.enableUndo || isFreeColorMode || puzzle?.isFreeColor);
 
   const handleToggleFreeColorMode = useCallback(() => {
-    const nextMode = !settings.isFreeColorMode;
-    handleUpdateSettings({ ...settings, isFreeColorMode: nextMode });
+    handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: !prev.isFreeColorMode }));
     NativeBridge.haptic('tick', settings.hapticsEnabled);
-  }, [settings]);
+  }, [handleUpdateSettings, settings.hapticsEnabled]);
 
   // Undo last region completion
   const handleUndo = useCallback(() => {
@@ -705,14 +840,15 @@ export const App: React.FC = () => {
 
     if (activeSnapshotId) {
       const paintedObj = Object.fromEntries(nextPainted);
+      const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
       const updated = StorageService.updateSnapshotProgress(
         activeSnapshotId,
         nextFilled.size,
         puzzle.regions.length,
         Array.from(nextFilled),
-        undefined,
-        undefined,
-        undefined,
+        zoomScale,
+        panOffsetX,
+        panOffsetY,
         undefined,
         paintedObj,
         puzzle.palette,
@@ -725,9 +861,9 @@ export const App: React.FC = () => {
         filledRegionIds: Array.from(nextFilled),
         paintedRegionColors: paintedObj,
         isFreeColorMode,
-        zoomScale: 1.0,
-        panOffsetX: 0,
-        panOffsetY: 0,
+        zoomScale,
+        panOffsetX,
+        panOffsetY,
       });
     }
   }, [
@@ -776,14 +912,15 @@ export const App: React.FC = () => {
 
     if (activeSnapshotId) {
       const paintedObj = Object.fromEntries(nextPainted);
+      const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
       const updated = StorageService.updateSnapshotProgress(
         activeSnapshotId,
         nextFilled.size,
         puzzle.regions.length,
         Array.from(nextFilled),
-        undefined,
-        undefined,
-        undefined,
+        zoomScale,
+        panOffsetX,
+        panOffsetY,
         undefined,
         paintedObj,
         puzzle.palette,
@@ -796,9 +933,9 @@ export const App: React.FC = () => {
         filledRegionIds: Array.from(nextFilled),
         paintedRegionColors: paintedObj,
         isFreeColorMode,
-        zoomScale: 1.0,
-        panOffsetX: 0,
-        panOffsetY: 0,
+        zoomScale,
+        panOffsetX,
+        panOffsetY,
       });
     }
   }, [
@@ -877,23 +1014,26 @@ export const App: React.FC = () => {
       setHintRegionId(null);
       NativeBridge.haptic('success', settings.hapticsEnabled);
 
+      let resolvedActiveColorId = activeColorId;
       if (!isFreeColorMode && undoneRegionIds.length > 0) {
         const nextRegion = puzzle.regions.find((r) => r.id === undoneRegionIds[0]);
         if (nextRegion) {
+          resolvedActiveColorId = nextRegion.colorId;
           setActiveColorId(nextRegion.colorId);
         }
       }
 
       if (activeSnapshotId) {
         const paintedObj = Object.fromEntries(nextPainted);
+        const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
         const updated = StorageService.updateSnapshotProgress(
           activeSnapshotId,
           nextFilled.size,
           puzzle.regions.length,
           keptRegionIds,
-          undefined,
-          undefined,
-          undefined,
+          zoomScale,
+          panOffsetX,
+          panOffsetY,
           undefined,
           paintedObj,
           puzzle.palette,
@@ -902,13 +1042,13 @@ export const App: React.FC = () => {
         setSnapshots(updated);
         StorageService.saveActiveState({
           activeSnapshotId,
-          activeColorId,
+          activeColorId: resolvedActiveColorId,
           filledRegionIds: keptRegionIds,
           paintedRegionColors: paintedObj,
           isFreeColorMode,
-          zoomScale: 1.0,
-          panOffsetX: 0,
-          panOffsetY: 0,
+          zoomScale,
+          panOffsetX,
+          panOffsetY,
         });
       }
     },
@@ -994,14 +1134,15 @@ export const App: React.FC = () => {
 
         if (activeSnapshotId) {
           const paintedObj = Object.fromEntries(nextPainted);
+          const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
           const updated = StorageService.updateSnapshotProgress(
             activeSnapshotId,
             nextFilled.size,
             puzzle.regions.length,
             orderedList,
-            undefined,
-            undefined,
-            undefined,
+            zoomScale,
+            panOffsetX,
+            panOffsetY,
             undefined,
             paintedObj,
             puzzle.palette,
@@ -1014,9 +1155,9 @@ export const App: React.FC = () => {
             filledRegionIds: orderedList,
             paintedRegionColors: paintedObj,
             isFreeColorMode: true,
-            zoomScale: 1.0,
-            panOffsetX: 0,
-            panOffsetY: 0,
+            zoomScale,
+            panOffsetX,
+            panOffsetY,
           });
         }
         return;
@@ -1071,29 +1212,11 @@ export const App: React.FC = () => {
         startReplay(orderedList);
       }
 
-      // Persistence
-      if (activeSnapshotId) {
-        const updated = StorageService.updateSnapshotProgress(
-          activeSnapshotId,
-          nextFilled.size,
-          puzzle.regions.length,
-          orderedList
-        );
-        setSnapshots(updated);
-        StorageService.saveActiveState({
-          activeSnapshotId,
-          activeColorId: region.colorId,
-          filledRegionIds: orderedList,
-          zoomScale: 1.0,
-          panOffsetX: 0,
-          panOffsetY: 0,
-        });
-      }
-
       // Auto-advance check
+      let nextActiveColId = isEasy ? region.colorId : activeColorId;
       if (settings.autoAdvance && !isComplete) {
         const remainingForCurrent = puzzle.regions.filter(
-          (r) => r.colorId === activeColorId && !nextFilled.has(r.id)
+          (r) => r.colorId === nextActiveColId && !nextFilled.has(r.id)
         );
         if (remainingForCurrent.length === 0) {
           const basePalette = getVisiblePalette(
@@ -1109,9 +1232,33 @@ export const App: React.FC = () => {
           );
           const nextCol = dockPalette[0] || basePalette[0];
           if (nextCol) {
+            nextActiveColId = nextCol.id;
             setActiveColorId(nextCol.id);
           }
         }
+      }
+
+      // Persistence
+      if (activeSnapshotId) {
+        const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+        const updated = StorageService.updateSnapshotProgress(
+          activeSnapshotId,
+          nextFilled.size,
+          puzzle.regions.length,
+          orderedList,
+          zoomScale,
+          panOffsetX,
+          panOffsetY
+        );
+        setSnapshots(updated);
+        StorageService.saveActiveState({
+          activeSnapshotId,
+          activeColorId: nextActiveColId,
+          filledRegionIds: orderedList,
+          zoomScale,
+          panOffsetX,
+          panOffsetY,
+        });
       }
     },
     [
@@ -1183,20 +1330,31 @@ export const App: React.FC = () => {
 
           if (activeSnapshotId) {
             const paintedObj = Object.fromEntries(nextPainted);
+            const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
             const updated = StorageService.updateSnapshotProgress(
               activeSnapshotId,
               nextFilled.size,
               puzzle.regions.length,
               orderedList,
-              undefined,
-              undefined,
-              undefined,
+              zoomScale,
+              panOffsetX,
+              panOffsetY,
               undefined,
               paintedObj,
               puzzle.palette,
               puzzle.isFreeColor
             );
             setSnapshots(updated);
+            StorageService.saveActiveState({
+              activeSnapshotId,
+              activeColorId,
+              filledRegionIds: orderedList,
+              paintedRegionColors: paintedObj,
+              isFreeColorMode: true,
+              zoomScale,
+              panOffsetX,
+              panOffsetY,
+            });
           }
         }
         return;
@@ -1248,16 +1406,7 @@ export const App: React.FC = () => {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
         }
 
-        if (activeSnapshotId) {
-          const updated = StorageService.updateSnapshotProgress(
-            activeSnapshotId,
-            nextFilled.size,
-            puzzle.regions.length,
-            orderedList
-          );
-          setSnapshots(updated);
-        }
-
+        let nextActiveColId = activeColorId;
         if (settings.autoAdvance && !isComplete) {
           const remainingForCurrent = puzzle.regions.filter(
             (r) => r.colorId === activeColorId && !nextFilled.has(r.id)
@@ -1276,9 +1425,32 @@ export const App: React.FC = () => {
             );
             const nextCol = dockPalette[0] || basePalette[0];
             if (nextCol) {
+              nextActiveColId = nextCol.id;
               setActiveColorId(nextCol.id);
             }
           }
+        }
+
+        if (activeSnapshotId) {
+          const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+          const updated = StorageService.updateSnapshotProgress(
+            activeSnapshotId,
+            nextFilled.size,
+            puzzle.regions.length,
+            orderedList,
+            zoomScale,
+            panOffsetX,
+            panOffsetY
+          );
+          setSnapshots(updated);
+          StorageService.saveActiveState({
+            activeSnapshotId,
+            activeColorId: nextActiveColId,
+            filledRegionIds: orderedList,
+            zoomScale,
+            panOffsetX,
+            panOffsetY,
+          });
         }
       }
     },
@@ -1309,7 +1481,7 @@ export const App: React.FC = () => {
       ];
       const nextId = Math.max(...puzzle.palette.map((c) => c.id), 0) + 1;
       const isLight = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) > 160;
-      const argb = (0xff << 24) | (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+      const argb = ((0xff << 24) | (rgb[0] << 16) | (rgb[1] << 8) | rgb[2]) >>> 0;
       const newColor: PaletteColor = {
         id: nextId,
         hex: hex.startsWith('#') ? hex : `#${hex}`,
@@ -1327,7 +1499,7 @@ export const App: React.FC = () => {
 
       if (activeSnapshotId) {
         StorageService.savePuzzleData(activeSnapshotId, updatedPuzzle);
-        StorageService.updateSnapshotProgress(
+        const updated = StorageService.updateSnapshotProgress(
           activeSnapshotId,
           filledRegionIds.size,
           puzzle.regions.length,
@@ -1340,6 +1512,7 @@ export const App: React.FC = () => {
           updatedPalette,
           puzzle.isFreeColor
         );
+        setSnapshots(updated);
       }
     },
     [puzzle, settings.hapticsEnabled, activeSnapshotId, filledRegionIds, paintedRegionColors]
@@ -1356,7 +1529,7 @@ export const App: React.FC = () => {
         num & 255,
       ];
       const isLight = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) > 160;
-      const argb = (0xff << 24) | (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+      const argb = ((0xff << 24) | (rgb[0] << 16) | (rgb[1] << 8) | rgb[2]) >>> 0;
       const updatedPalette = puzzle.palette.map((c) =>
         c.id === colorId
           ? {
@@ -1376,7 +1549,7 @@ export const App: React.FC = () => {
 
       if (activeSnapshotId) {
         StorageService.savePuzzleData(activeSnapshotId, updatedPuzzle);
-        StorageService.updateSnapshotProgress(
+        const updated = StorageService.updateSnapshotProgress(
           activeSnapshotId,
           filledRegionIds.size,
           puzzle.regions.length,
@@ -1389,6 +1562,7 @@ export const App: React.FC = () => {
           updatedPalette,
           puzzle.isFreeColor
         );
+        setSnapshots(updated);
       }
     },
     [puzzle, settings.hapticsEnabled, activeSnapshotId, filledRegionIds, paintedRegionColors]
@@ -1405,7 +1579,7 @@ export const App: React.FC = () => {
         const g = (num >> 8) & 255;
         const b = num & 255;
         const isLight = (0.299 * r + 0.587 * g + 0.114 * b) > 160;
-        const argb = (0xff << 24) | (r << 16) | (g << 8) | b;
+        const argb = ((0xff << 24) | (r << 16) | (g << 8) | b) >>> 0;
         return {
           ...c,
           hex,
@@ -1422,7 +1596,7 @@ export const App: React.FC = () => {
 
       if (activeSnapshotId) {
         StorageService.savePuzzleData(activeSnapshotId, updatedPuzzle);
-        StorageService.updateSnapshotProgress(
+        const updated = StorageService.updateSnapshotProgress(
           activeSnapshotId,
           filledRegionIds.size,
           puzzle.regions.length,
@@ -1435,6 +1609,7 @@ export const App: React.FC = () => {
           updatedPalette,
           puzzle.isFreeColor
         );
+        setSnapshots(updated);
       }
     },
     [puzzle, settings.hapticsEnabled, activeSnapshotId, filledRegionIds, paintedRegionColors]
@@ -1474,7 +1649,17 @@ export const App: React.FC = () => {
       const img = new Image();
       img.onload = () => {
         const title = file.name.replace(/\.[^/.]+$/, '');
-        loadArtworkFromImage(img, title, settings.generatorConfig);
+        loadArtworkFromImage(
+          img,
+          title,
+          settings.generatorConfig,
+          new Set(),
+          undefined,
+          undefined,
+          undefined,
+          false,
+          file
+        );
       };
       img.src = event.target?.result as string;
     };
@@ -1501,6 +1686,8 @@ export const App: React.FC = () => {
 
     setActiveSnapshotId(snapshot.id);
 
+    const resolvedSrc = await resolveSnapshotImageSrc(snapshot);
+
     // Try IndexedDB first
     const cachedPuzzle = await StorageService.loadPuzzleData(snapshot.id);
     if (cachedPuzzle) {
@@ -1512,7 +1699,9 @@ export const App: React.FC = () => {
         if (snapshot.customPalette && snapshot.customPalette.length > 0) {
           cachedPuzzle.palette = snapshot.customPalette;
         }
+        let paintedObj: Record<number, number> = {};
         if (snapshot.paintedRegionColors) {
+          paintedObj = snapshot.paintedRegionColors;
           setPaintedRegionColors(
             new Map(Object.entries(snapshot.paintedRegionColors).map(([k, v]) => [Number(k), v]))
           );
@@ -1520,7 +1709,7 @@ export const App: React.FC = () => {
           setPaintedRegionColors(new Map());
         }
         const isFree = Boolean(snapshot.isFreeColor || cachedPuzzle.isFreeColor);
-        handleUpdateSettings({ ...settings, isFreeColorMode: isFree });
+        handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
         const availableColors = getVisiblePalette(
           cachedPuzzle.palette,
           cachedPuzzle.regions,
@@ -1528,6 +1717,13 @@ export const App: React.FC = () => {
           settings.paletteSort
         );
         const restoredColor = availableColors[0]?.id || cachedPuzzle.palette[0]?.id || 1;
+        const restoredView = {
+          zoomScale: snapshot.zoomScale ?? 1.0,
+          panOffsetX: snapshot.panOffsetX ?? 0,
+          panOffsetY: snapshot.panOffsetY ?? 0,
+        };
+        viewportRef.current = restoredView;
+        setInitialViewport(restoredView);
         setSourceImage(img);
         setPuzzle(cachedPuzzle);
         setActiveColorId(restoredColor);
@@ -1538,17 +1734,40 @@ export const App: React.FC = () => {
             wasPreviouslyFilled: false,
           }))
         );
+        setRedoStack([]);
+        StorageService.saveActiveState({
+          activeSnapshotId: snapshot.id,
+          activeColorId: restoredColor,
+          filledRegionIds: orderedIds,
+          paintedRegionColors: paintedObj,
+          isFreeColorMode: isFree,
+          zoomScale: restoredView.zoomScale,
+          panOffsetX: restoredView.panOffsetX,
+          panOffsetY: restoredView.panOffsetY,
+        });
         setIsLoading(false);
 
         if ((forceReplay || settings.autoReplayOnLoad !== false) && orderedIds.length > 0) {
           startReplay(orderedIds, !forceReplay);
         }
       };
-      img.src = snapshot.sampleAssetPath || snapshot.previewDataUrl || 'assets/capybara.webp';
+      img.onerror = () => {
+        if (snapshot.previewDataUrl && img.src !== snapshot.previewDataUrl) {
+          img.src = snapshot.previewDataUrl;
+        } else {
+          setIsLoading(false);
+        }
+      };
+      img.src = resolvedSrc;
       return;
     }
 
     // Fallback: regenerate from image
+    const storedBlob = snapshot.sampleAssetPath
+      ? null
+      : await StorageService.loadImageBlob(
+          snapshot.sourceRef?.kind === 'blob' ? snapshot.sourceRef.uri : snapshot.id
+        );
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -1560,10 +1779,14 @@ export const App: React.FC = () => {
         undefined,
         snapshot.id,
         snapshot.sampleAssetPath,
-        forceReplay || settings.autoReplayOnLoad !== false
+        forceReplay || settings.autoReplayOnLoad !== false,
+        storedBlob
       );
     };
-    img.src = snapshot.sampleAssetPath || snapshot.previewDataUrl || 'assets/capybara.webp';
+    img.onerror = () => {
+      setIsLoading(false);
+    };
+    img.src = resolvedSrc;
   };
 
   // Active Save Title & Progress
@@ -1580,7 +1803,7 @@ export const App: React.FC = () => {
     return new Set(replaySequence.slice(0, replayStep));
   }, [isReplaying, replaySequence, replayStep, filledRegionIds]);
 
-  // Export full-resolution colored artwork as PNG
+  // Export full-resolution colored artwork as PNG (supports Web download and Android native Share Sheet)
   const handleExportArtwork = useCallback(() => {
     if (!puzzle || !sourceImage) return;
     const canvas = document.createElement('canvas');
@@ -1646,25 +1869,31 @@ export const App: React.FC = () => {
     }
 
     const titleStr = activeTitle || 'capy-artwork';
-    const link = document.createElement('a');
-    link.download = `${titleStr.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  }, [puzzle, sourceImage, filledRegionIds, paintedRegionColors, activeTitle]);
+    const fileName = `${titleStr.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      void NativeBridge.exportOrShareFile({
+        title: titleStr,
+        fileName,
+        mimeType: 'image/png',
+        data: blob,
+      });
+      NativeBridge.haptic('tick', settings.hapticsEnabled);
+    }, 'image/png');
+  }, [puzzle, sourceImage, filledRegionIds, paintedRegionColors, activeTitle, settings.hapticsEnabled]);
 
-  // Export single snapshot to .capy file
+  // Export single snapshot to compact .capy v2 binary file
   const handleExportSnapshot = useCallback(
     async (id: string, title: string) => {
       try {
-        const json = await StorageService.exportSnapshot(id);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const cleanTitle = title.replace(/[^a-zA-Z0-9_-]/g, '_');
-        a.download = `${cleanTitle}.capy`;
-        a.click();
-        URL.revokeObjectURL(url);
+        const bytes = await StorageService.exportSnapshotBinary(id);
+        const cleanTitle = (title || 'puzzle').replace(/[^a-zA-Z0-9_-]/g, '_');
+        await NativeBridge.exportOrShareFile({
+          title: title || 'Capy Save',
+          fileName: `${cleanTitle}.capy`,
+          mimeType: 'application/octet-stream',
+          data: bytes,
+        });
         NativeBridge.haptic('tick', settings.hapticsEnabled);
       } catch (e) {
         console.error('Failed to export snapshot', e);
@@ -1673,29 +1902,28 @@ export const App: React.FC = () => {
     [settings.hapticsEnabled]
   );
 
-  // Export all saved puzzles to backup archive
+  // Export all saved puzzles to compact .capy v2 backup archive
   const handleExportAllSnapshots = useCallback(async () => {
     try {
-      const json = await StorageService.exportAllSnapshots();
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'capy_saves_backup.capy';
-      a.click();
-      URL.revokeObjectURL(url);
+      const bytes = await StorageService.exportAllSnapshotsBinary();
+      await NativeBridge.exportOrShareFile({
+        title: 'Capy Saves Backup',
+        fileName: 'capy_saves_backup.capy',
+        mimeType: 'application/octet-stream',
+        data: bytes,
+      });
       NativeBridge.haptic('tick', settings.hapticsEnabled);
     } catch (e) {
       console.error('Failed to export all snapshots', e);
     }
   }, [settings.hapticsEnabled]);
 
-  // Import saves from .capy or .json file
+  // Import saves from .capy (v2 binary or v1 JSON) or .json file
   const handleImportSnapshots = useCallback(
     async (file: File) => {
       try {
-        const text = await file.text();
-        const result = await StorageService.importSnapshotBundle(text);
+        const buffer = await file.arrayBuffer();
+        const result = await StorageService.importSnapshotData(buffer);
         if (result.importedCount > 0) {
           const refreshed = StorageService.loadSnapshots();
           setSnapshots(refreshed);
@@ -1772,15 +2000,50 @@ export const App: React.FC = () => {
         panMomentum={settings.panMomentum}
         reverseDoubleTapZoom={settings.reverseDoubleTapZoom}
         displayNumberMap={displayNumberMap}
+        initialZoomScale={initialViewport.zoomScale}
+        initialPanOffsetX={initialViewport.panOffsetX}
+        initialPanOffsetY={initialViewport.panOffsetY}
         zoomInTrigger={zoomInTrigger}
         zoomOutTrigger={zoomOutTrigger}
         resetViewTrigger={resetViewTrigger}
+        restoreViewTrigger={restoreViewTrigger}
         isGenerating={isLoading}
         detailedProgress={Boolean(settings.detailedLoadingProgress)}
         generationProgress={loadingProgress}
         generationStepIndex={loadingPayload?.stepIndex || 1}
         onViewExtentChanged={(zoom, panX, panY) => {
           setIsCanvasTransformed(zoom > 1.05 || Math.abs(panX) > 6 || Math.abs(panY) > 6);
+          if (!isReplaying && !isLoading && puzzle && activeSnapshotId) {
+            viewportRef.current = { zoomScale: zoom, panOffsetX: panX, panOffsetY: panY };
+            if (viewportSaveTimerRef.current !== null) {
+              window.clearTimeout(viewportSaveTimerRef.current);
+            }
+            viewportSaveTimerRef.current = window.setTimeout(() => {
+              viewportSaveTimerRef.current = null;
+              const orderedList = Array.from(filledRegionIds);
+              const paintedObj = Object.fromEntries(paintedRegionColors);
+              const updated = StorageService.updateSnapshotProgress(
+                activeSnapshotId,
+                filledRegionIds.size,
+                puzzle.regions.length,
+                orderedList,
+                zoom,
+                panX,
+                panY
+              );
+              setSnapshots(updated);
+              StorageService.saveActiveState({
+                activeSnapshotId,
+                activeColorId,
+                filledRegionIds: orderedList,
+                paintedRegionColors: paintedObj,
+                isFreeColorMode,
+                zoomScale: zoom,
+                panOffsetX: panX,
+                panOffsetY: panY,
+              });
+            }, 350);
+          }
         }}
         onRegionClicked={attemptFillRegion}
         onBatchRegionsClicked={attemptBatchFillRegions}
@@ -1808,7 +2071,7 @@ export const App: React.FC = () => {
           onStartReplay={() => startReplay(Array.from(filledRegionIds))}
           onTogglePaintMode={() => {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
-            handleUpdateSettings({ ...settings, isPaintMode: !settings.isPaintMode });
+            handleUpdateSettings((prev) => ({ ...prev, isPaintMode: !prev.isPaintMode }));
           }}
           onZoomIn={() => setZoomInTrigger((prev) => prev + 1)}
           onZoomOut={() => setZoomOutTrigger((prev) => prev + 1)}
@@ -1846,7 +2109,7 @@ export const App: React.FC = () => {
             setIsReplayPlaying(false);
           }}
           onChangeSpeed={(spd) => {
-            handleUpdateSettings({ ...settings, replaySpeed: spd });
+            handleUpdateSettings((prev) => ({ ...prev, replaySpeed: spd }));
           }}
           onExitReplay={() => {
             autoResumeReplayRef.current = false;
@@ -1913,10 +2176,10 @@ export const App: React.FC = () => {
         payload={loadingPayload}
         detailedProgress={Boolean(settings.detailedLoadingProgress)}
         onToggleDetailedProgress={(enabled) => {
-          handleUpdateSettings({
-            ...settings,
+          handleUpdateSettings((prev) => ({
+            ...prev,
             detailedLoadingProgress: enabled,
-          });
+          }));
           PuzzleWorkerService.setDetailedProgress(enabled);
         }}
       />
@@ -1944,6 +2207,10 @@ export const App: React.FC = () => {
           setSnapshots(updated);
         }}
         onDeleteSnapshot={async (id) => {
+          if (viewportSaveTimerRef.current !== null) {
+            window.clearTimeout(viewportSaveTimerRef.current);
+            viewportSaveTimerRef.current = null;
+          }
           const updated = await StorageService.deleteSnapshot(id);
           setSnapshots(updated);
           if (id === activeSnapshotId) {
@@ -1961,6 +2228,10 @@ export const App: React.FC = () => {
           }
         }}
         onClearAllSnapshots={async () => {
+          if (viewportSaveTimerRef.current !== null) {
+            window.clearTimeout(viewportSaveTimerRef.current);
+            viewportSaveTimerRef.current = null;
+          }
           await StorageService.clearAllSnapshots();
           setSnapshots([]);
           const defaultSample = SAMPLE_GALLERY[0];
@@ -1977,16 +2248,57 @@ export const App: React.FC = () => {
           setFilledRegionIds(new Set());
           setPaintedRegionColors(new Map());
           setUndoStack([]);
+          setRedoStack([]);
           setHintRegionId(null);
           if (activeSnapshotId && puzzle) {
-            const updated = StorageService.updateSnapshotProgress(activeSnapshotId, 0, puzzle.regions.length, [], undefined, undefined, undefined, undefined, {});
+            const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+            const updated = StorageService.updateSnapshotProgress(
+              activeSnapshotId,
+              0,
+              puzzle.regions.length,
+              [],
+              zoomScale,
+              panOffsetX,
+              panOffsetY,
+              undefined,
+              {}
+            );
             setSnapshots(updated);
+            StorageService.saveActiveState({
+              activeSnapshotId,
+              activeColorId: puzzle.palette[0]?.id || 1,
+              filledRegionIds: [],
+              paintedRegionColors: {},
+              isFreeColorMode,
+              zoomScale,
+              panOffsetX,
+              panOffsetY,
+            });
           }
           setShowSettings(false);
         }}
-        onRegenerate={(cfg) => {
+        onRegenerate={async (cfg) => {
           if (sourceImage) {
-            loadArtworkFromImage(sourceImage, activeTitle, cfg);
+            const samplePath = activeSave?.sourceRef?.kind === 'sample'
+              ? activeSave.sourceRef.uri
+              : activeSave?.sampleAssetPath;
+            const existingBlob =
+              !samplePath && activeSave
+                ? await StorageService.loadImageBlob(
+                    activeSave.sourceRef?.kind === 'blob' ? activeSave.sourceRef.uri : activeSave.id
+                  )
+                : null;
+            loadArtworkFromImage(
+              sourceImage,
+              activeTitle,
+              cfg,
+              new Set(),
+              undefined,
+              undefined,
+              samplePath,
+              false,
+              existingBlob
+            );
           }
         }}
         onSelectSample={(sample: SampleArtwork) => {

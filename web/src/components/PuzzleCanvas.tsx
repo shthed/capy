@@ -44,6 +44,7 @@ interface PuzzleCanvasProps {
   zoomInTrigger?: number;
   zoomOutTrigger?: number;
   resetViewTrigger?: number;
+  restoreViewTrigger?: number;
   initialZoomScale?: number;
   initialPanOffsetX?: number;
   initialPanOffsetY?: number;
@@ -150,6 +151,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   zoomInTrigger = 0,
   zoomOutTrigger = 0,
   resetViewTrigger = 0,
+  restoreViewTrigger = 0,
   initialZoomScale = 1.0,
   initialPanOffsetX = 0,
   initialPanOffsetY = 0,
@@ -196,8 +198,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   // Interactive feedback
   const [tapDot, setTapDot] = useState<{ x: number; y: number; alpha: number } | null>(null);
 
-  // Animation pulse
-  const [pulseAlpha, setPulseAlpha] = useState(0.6);
+  // Animation pulse (stored in ref to avoid 60 FPS React state reconciliation)
+  const pulseAlphaRef = useRef(0.7);
 
   // Drag & Pinch interaction tracking
   const isDraggingRef = useRef(false);
@@ -243,13 +245,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     };
   }, [stopMomentum]);
 
-  // Reset zoom/offset when a brand-new puzzle object is loaded
+  // Reset or restore zoom/offset when a brand-new puzzle geometry is loaded or post-replay restoration triggers
   useEffect(() => {
+    stopMomentum();
     scaleRef.current = initialZoomScale;
     offsetRef.current = { x: initialPanOffsetX, y: initialPanOffsetY };
     setScale(initialZoomScale);
     setOffset({ x: initialPanOffsetX, y: initialPanOffsetY });
-  }, [puzzle, initialZoomScale, initialPanOffsetX, initialPanOffsetY]);
+  }, [puzzle?.regionMap, initialZoomScale, initialPanOffsetX, initialPanOffsetY, restoreViewTrigger, stopMomentum]);
 
   // Handle FloatingActions zoom in/out button triggers
   useEffect(() => {
@@ -351,27 +354,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       return clamped;
     });
   }, [scale, puzzle]);
-
-  // Pulse animation frame (runs when animateHint is active)
-  useEffect(() => {
-    let animId: number;
-    const startTime = performance.now();
-
-    const loop = (now: number) => {
-      const elapsed = now - startTime;
-      const t = (Math.sin(elapsed / 250) + 1) / 2; // 0 to 1
-      setPulseAlpha(0.35 + t * 0.6);
-      animId = requestAnimationFrame(loop);
-    };
-
-    if (animateHint) {
-      animId = requestAnimationFrame(loop);
-    } else {
-      setPulseAlpha(0.7);
-    }
-
-    return () => cancelAnimationFrame(animId);
-  }, [animateHint]);
 
   // Tap dot decay
   useEffect(() => {
@@ -933,224 +915,279 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     return () => clearTimeout(timer);
   }, [scale, offset, puzzle, activeColorId, filledRegionIds, onVisibleColorsChanged, onVisibleRegionsChanged]);
 
-  // Main GPU-Accelerated Composite Rendering Loop
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
+  // Main GPU-Accelerated Composite Rendering Routine (invocable directly from rAF without React state updates)
+  const drawCompositeFrame = useCallback(
+    (currentPulseAlpha: number) => {
+      const canvas = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) return;
 
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    if (w <= 0 || h <= 0) return;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w <= 0 || h <= 0) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      canvas.style.width = `${w}px`;
-      canvas.style.height = `${h}px`;
-    }
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.save();
-    ctx.scale(dpr, dpr);
-
-    // Canvas stage background
-    const bgHex =
-      canvasBgColor === 'CUSTOM' || !CANVAS_BG_MAP[canvasBgColor]
-        ? `#${(canvasBgArgb & 0x00ffffff).toString(16).padStart(6, '0')}`
-        : CANVAS_BG_MAP[canvasBgColor].hex;
-    ctx.fillStyle = bgHex;
-    ctx.fillRect(0, 0, w, h);
-
-    if (!puzzle) {
-      if (
-        sourceImage &&
-        sourceImage.complete &&
-        (sourceImage.naturalWidth > 0 || sourceImage.width > 0)
-      ) {
-        const imgW = sourceImage.naturalWidth || sourceImage.width;
-        const imgH = sourceImage.naturalHeight || sourceImage.height;
-        const baseScale = Math.min(w / imgW, h / imgH) * 0.92;
-        const baseOffsetX = (w - imgW * baseScale) / 2;
-        const baseOffsetY = (h - imgH * baseScale) / 2;
-        const artW = imgW * baseScale;
-        const artH = imgH * baseScale;
-
-        // Draw artwork drop shadow framing on stage
-        ctx.save();
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-        ctx.shadowBlur = 24;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 6;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(baseOffsetX, baseOffsetY, artW, artH);
-        ctx.restore();
-
-        // Draw source image cleanly
-        ctx.save();
-        ctx.translate(baseOffsetX, baseOffsetY);
-        ctx.drawImage(sourceImage, 0, 0, artW, artH);
-        ctx.restore();
+      const dpr = window.devicePixelRatio || 1;
+      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        canvas.style.width = `${w}px`;
+        canvas.style.height = `${h}px`;
       }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+
+      // Canvas stage background
+      const bgHex =
+        canvasBgColor === 'CUSTOM' || !CANVAS_BG_MAP[canvasBgColor]
+          ? `#${(canvasBgArgb & 0x00ffffff).toString(16).padStart(6, '0')}`
+          : CANVAS_BG_MAP[canvasBgColor].hex;
+      ctx.fillStyle = bgHex;
+      ctx.fillRect(0, 0, w, h);
+
+      if (!puzzle) {
+        if (
+          sourceImage &&
+          sourceImage.complete &&
+          (sourceImage.naturalWidth > 0 || sourceImage.width > 0)
+        ) {
+          const imgW = sourceImage.naturalWidth || sourceImage.width;
+          const imgH = sourceImage.naturalHeight || sourceImage.height;
+          const baseScale = Math.min(w / imgW, h / imgH) * 0.92;
+          const baseOffsetX = (w - imgW * baseScale) / 2;
+          const baseOffsetY = (h - imgH * baseScale) / 2;
+          const artW = imgW * baseScale;
+          const artH = imgH * baseScale;
+
+          // Draw artwork drop shadow framing on stage
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+          ctx.shadowBlur = 24;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 6;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(baseOffsetX, baseOffsetY, artW, artH);
+          ctx.restore();
+
+          // Draw source image cleanly
+          ctx.save();
+          ctx.translate(baseOffsetX, baseOffsetY);
+          ctx.drawImage(sourceImage, 0, 0, artW, artH);
+          ctx.restore();
+        }
+        ctx.restore();
+        return;
+      }
+
+      const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
+      const baseOffsetX = (w - puzzle.width * baseScale) / 2;
+      const baseOffsetY = (h - puzzle.height * baseScale) / 2;
+      const effScale = scale * baseScale;
+
+      // Draw artwork drop shadow framing on stage
+      const artScreenX = offset.x + baseOffsetX;
+      const artScreenY = offset.y + baseOffsetY;
+      const artScreenW = puzzle.width * effScale;
+      const artScreenH = puzzle.height * effScale;
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 6;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(artScreenX, artScreenY, artScreenW, artScreenH);
       ctx.restore();
+
+      ctx.save();
+      ctx.translate(offset.x + baseOffsetX, offset.y + baseOffsetY);
+      ctx.scale(effScale, effScale);
+
+      const isEffectivePreview = isPreviewMode;
+
+      // 1. Draw Base Layer from cached offscreen canvas (0 CPU pixel loops!)
+      if (isEffectivePreview) {
+        if (sourceImage && sourceImage.complete) {
+          ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
+        } else if (baseCanvasRef.current) {
+          ctx.drawImage(baseCanvasRef.current, 0, 0);
+        }
+
+        if (showPreviewBorders && borderCanvasRef.current) {
+          ctx.drawImage(borderCanvasRef.current, 0, 0);
+        }
+      } else {
+        if (baseCanvasRef.current) {
+          ctx.drawImage(baseCanvasRef.current, 0, 0);
+        }
+
+        // 2. Draw Highlight Overlay Layer with hardware-accelerated alpha pulse
+        if (
+          hasHighlightPixelsRef.current &&
+          highlightCanvasRef.current &&
+          (highlightStyle === 'FULL_REGION' || highlightStyle === 'BOUNDARY_ONLY')
+        ) {
+          ctx.save();
+          ctx.globalAlpha = animateHint
+            ? Math.min(1, Math.max(0.05, currentPulseAlpha * hintIntensity))
+            : Math.min(1, Math.max(0.05, hintIntensity * 0.78));
+          ctx.drawImage(highlightCanvasRef.current, 0, 0);
+          ctx.restore();
+        }
+
+        // 3. For coloring book / free color mode: composite authentic ink artwork on top with multiply blend!
+        const isColoring = Boolean(isFreeColorMode || puzzle.isFreeColor);
+        if (
+          isColoring &&
+          sourceImage &&
+          sourceImage.complete &&
+          (sourceImage.naturalWidth > 0 || sourceImage.width > 0)
+        ) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'multiply';
+          ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
+          ctx.restore();
+        }
+      }
+
+      // 3. Draw Visible Number Labels & Centroid Glows
+      const drawLabelsNow = isEffectivePreview
+        ? showRegionLabels && showPreviewLabels
+        : isFreeColorMode
+        ? false
+        : showRegionLabels;
+
+      if (drawLabelsNow || highlightMatching || hintRegionId !== null) {
+        const visLeft = (-offset.x - baseOffsetX) / effScale;
+        const visTop = (-offset.y - baseOffsetY) / effScale;
+        const visRight = visLeft + w / effScale;
+        const visBottom = visTop + h / effScale;
+
+        renderLabels(
+          ctx,
+          puzzle,
+          filledRegionIds,
+          activeColorId,
+          hintRegionId,
+          displayNumberMap,
+          drawLabelsNow,
+          highlightMatching,
+          highlightStyle,
+          hintColorArgb,
+          hintIntensity,
+          currentPulseAlpha,
+          animateHint,
+          effScale,
+          labelScale,
+          minLabelSize,
+          maxLabelSize,
+          visLeft,
+          visTop,
+          visRight,
+          visBottom,
+          isEffectivePreview
+        );
+      }
+
+      // 4. Tap feedback animation dot
+      if (tapDot && tapDot.alpha > 0) {
+        ctx.beginPath();
+        ctx.arc(tapDot.x, tapDot.y, 7 / effScale, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(56, 189, 248, ${tapDot.alpha * 0.9})`;
+        ctx.fill();
+      }
+
+      ctx.restore(); // Transform restore
+      ctx.restore(); // DPR scale restore
+    },
+    [
+      puzzle,
+      sourceImage,
+      scale,
+      offset,
+      activeColorId,
+      filledRegionIds,
+      paintedRegionColors,
+      hintRegionId,
+      isPreviewMode,
+      isFreeColorMode,
+      canvasBgColor,
+      canvasBgArgb,
+      regionColorMode,
+      showRegionLabels,
+      showPreviewLabels,
+      showPreviewBorders,
+      labelScale,
+      minLabelSize,
+      maxLabelSize,
+      highlightMatching,
+      highlightStyle,
+      hintColorArgb,
+      hintFillStyle,
+      animateHint,
+      hintIntensity,
+      displayNumberMap,
+      tapDot,
+      isGenerating,
+      detailedProgress,
+      generationProgress,
+      generationStepIndex,
+    ]
+  );
+
+  // Redraw immediately whenever visual props or viewport state change
+  useEffect(() => {
+    drawCompositeFrame(pulseAlphaRef.current);
+  }, [drawCompositeFrame]);
+
+  // Direct-to-canvas hint pulse rAF loop (zero React state updates; pauses completely when idle/completed)
+  useEffect(() => {
+    const hasActivePulseTarget =
+      Boolean(puzzle) &&
+      !isPreviewMode &&
+      !isGenerating &&
+      (hintRegionId !== null ||
+        (!isFreeColorMode &&
+          highlightMatching &&
+          highlightStyle !== 'NUMBER_ONLY' &&
+          filledRegionIds.size < (puzzle?.regions.length || 0)));
+
+    if (!animateHint || !hasActivePulseTarget) {
+      pulseAlphaRef.current = 0.7;
+      drawCompositeFrame(0.7);
       return;
     }
 
-    const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
-    const baseOffsetX = (w - puzzle.width * baseScale) / 2;
-    const baseOffsetY = (h - puzzle.height * baseScale) / 2;
-    const effScale = scale * baseScale;
+    let animId = 0;
+    const startTime = performance.now();
 
-    // Draw artwork drop shadow framing on stage
-    const artScreenX = offset.x + baseOffsetX;
-    const artScreenY = offset.y + baseOffsetY;
-    const artScreenW = puzzle.width * effScale;
-    const artScreenH = puzzle.height * effScale;
-
-    ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-    ctx.shadowBlur = 24;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 6;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(artScreenX, artScreenY, artScreenW, artScreenH);
-    ctx.restore();
-
-    ctx.save();
-    ctx.translate(offset.x + baseOffsetX, offset.y + baseOffsetY);
-    ctx.scale(effScale, effScale);
-
-    const isEffectivePreview = isPreviewMode;
-
-    // 1. Draw Base Layer from cached offscreen canvas (0 CPU pixel loops!)
-    if (isEffectivePreview) {
-      if (sourceImage && sourceImage.complete) {
-        ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
-      } else if (baseCanvasRef.current) {
-        ctx.drawImage(baseCanvasRef.current, 0, 0);
+    const loop = (now: number) => {
+      if (!document.hidden) {
+        const elapsed = now - startTime;
+        const t = (Math.sin(elapsed / 250) + 1) / 2;
+        const nextAlpha = 0.35 + t * 0.6;
+        pulseAlphaRef.current = nextAlpha;
+        drawCompositeFrame(nextAlpha);
       }
+      animId = requestAnimationFrame(loop);
+    };
 
-      if (showPreviewBorders && borderCanvasRef.current) {
-        ctx.drawImage(borderCanvasRef.current, 0, 0);
-      }
-    } else {
-      if (baseCanvasRef.current) {
-        ctx.drawImage(baseCanvasRef.current, 0, 0);
-      }
-
-      // 2. Draw Highlight Overlay Layer with hardware-accelerated alpha pulse
-      if (
-        hasHighlightPixelsRef.current &&
-        highlightCanvasRef.current &&
-        (highlightStyle === 'FULL_REGION' || highlightStyle === 'BOUNDARY_ONLY')
-      ) {
-        ctx.save();
-        ctx.globalAlpha = animateHint
-          ? Math.min(1, Math.max(0.05, pulseAlpha * hintIntensity))
-          : Math.min(1, Math.max(0.05, hintIntensity * 0.78));
-        ctx.drawImage(highlightCanvasRef.current, 0, 0);
-        ctx.restore();
-      }
-
-      // 3. For coloring book / free color mode: composite authentic ink artwork on top with multiply blend!
-      const isColoring = Boolean(isFreeColorMode || puzzle.isFreeColor);
-      if (
-        isColoring &&
-        sourceImage &&
-        sourceImage.complete &&
-        (sourceImage.naturalWidth > 0 || sourceImage.width > 0)
-      ) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'multiply';
-        ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
-        ctx.restore();
-      }
-    }
-
-    // 3. Draw Visible Number Labels & Centroid Glows
-    const drawLabelsNow = isEffectivePreview
-      ? showRegionLabels && showPreviewLabels
-      : isFreeColorMode
-      ? false
-      : showRegionLabels;
-
-    if (drawLabelsNow || highlightMatching || hintRegionId !== null) {
-      const visLeft = (-offset.x - baseOffsetX) / effScale;
-      const visTop = (-offset.y - baseOffsetY) / effScale;
-      const visRight = visLeft + w / effScale;
-      const visBottom = visTop + h / effScale;
-
-      renderLabels(
-        ctx,
-        puzzle,
-        filledRegionIds,
-        activeColorId,
-        hintRegionId,
-        displayNumberMap,
-        drawLabelsNow,
-        highlightMatching,
-        highlightStyle,
-        hintColorArgb,
-        hintIntensity,
-        pulseAlpha,
-        animateHint,
-        effScale,
-        labelScale,
-        minLabelSize,
-        maxLabelSize,
-        visLeft,
-        visTop,
-        visRight,
-        visBottom,
-        isEffectivePreview
-      );
-    }
-
-    // 4. Tap feedback animation dot
-    if (tapDot && tapDot.alpha > 0) {
-      ctx.beginPath();
-      ctx.arc(tapDot.x, tapDot.y, 7 / effScale, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(56, 189, 248, ${tapDot.alpha * 0.9})`;
-      ctx.fill();
-    }
-
-    ctx.restore(); // Transform restore
-    ctx.restore(); // DPR scale restore
+    animId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animId);
   }, [
+    animateHint,
     puzzle,
-    sourceImage,
-    scale,
-    offset,
-    activeColorId,
-    filledRegionIds,
-    hintRegionId,
     isPreviewMode,
+    isGenerating,
+    hintRegionId,
     isFreeColorMode,
-    canvasBgColor,
-    canvasBgArgb,
-    regionColorMode,
-    showRegionLabels,
-    showPreviewLabels,
-    showPreviewBorders,
-    labelScale,
-    minLabelSize,
-    maxLabelSize,
     highlightMatching,
     highlightStyle,
-    hintColorArgb,
-    hintFillStyle,
-    animateHint,
-    hintIntensity,
-    displayNumberMap,
-    pulseAlpha,
-    tapDot,
-    isGenerating,
-    detailedProgress,
-    generationProgress,
-    generationStepIndex,
+    filledRegionIds.size,
+    drawCompositeFrame,
   ]);
 
   // Pointer event handlers for touch/mouse

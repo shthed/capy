@@ -57,6 +57,7 @@ val buildWeb = tasks.register<Exec>("buildWeb") {
     commandLine(if (isWindows) listOf("cmd", "/c", "npm", "run", "build") else listOf("npm", "run", "build"))
 
     inputs.dir(layout.projectDirectory.dir("../web/src"))
+    inputs.dir(layout.projectDirectory.dir("../web/public"))
     inputs.file(layout.projectDirectory.file("../web/package.json"))
     inputs.file(layout.projectDirectory.file("../web/vite.config.ts"))
     inputs.file(layout.projectDirectory.file("../web/index.html"))

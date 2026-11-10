@@ -1,6 +1,7 @@
 package com.capypaint.capy
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -18,6 +19,30 @@ class CapyAndroidBridgeTest {
         assertEquals("capy_user_settings_v8", CapyAndroidBridge.sanitizeKey("capy_user_settings_v8"))
         assertEquals(".._.._etc_passwd", CapyAndroidBridge.sanitizeKey("../../etc/passwd"))
         assertEquals("default_key", CapyAndroidBridge.sanitizeKey(""))
+    }
+
+    @Test
+    fun `sanitizeFileName preserves safe extensions and prevents directory traversal`() {
+        assertEquals("Capybara.capy", CapyAndroidBridge.sanitizeFileName("Capybara.capy"))
+        assertEquals("_.._secret.capy", CapyAndroidBridge.sanitizeFileName("../../secret.capy"))
+        assertEquals("capy_export.bin", CapyAndroidBridge.sanitizeFileName("   "))
+        assertEquals("capy_export.bin", CapyAndroidBridge.sanitizeFileName("..."))
+    }
+
+    @Test
+    fun `shouldUsePhotoPicker routes image accept types to photo picker and capy saves to SAF OpenDocument`() {
+        assertTrue(CapyAndroidBridge.shouldUsePhotoPicker(arrayOf("image/*")))
+        assertTrue(CapyAndroidBridge.shouldUsePhotoPicker(arrayOf(".png,.webp,image/jpeg")))
+
+        assertFalse(CapyAndroidBridge.shouldUsePhotoPicker(null))
+        assertFalse(CapyAndroidBridge.shouldUsePhotoPicker(emptyArray()))
+        assertFalse(CapyAndroidBridge.shouldUsePhotoPicker(arrayOf("")))
+        assertFalse(
+            CapyAndroidBridge.shouldUsePhotoPicker(
+                arrayOf(".capy,.json,application/json,application/octet-stream")
+            )
+        )
+        assertFalse(CapyAndroidBridge.shouldUsePhotoPicker(arrayOf("image/*,.capy")))
     }
 
     @Test

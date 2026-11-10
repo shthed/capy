@@ -1,7 +1,7 @@
 // Capy Service Worker - Offline PWA Caching Engine
 // Respects relative subpath hosting across GitHub Pages root, PR previews, and local dev.
 
-const CACHE_NAME = 'capy-cache-v1';
+const CACHE_NAME = 'capy-cache-v2';
 
 const PRECACHE_RELATIVE_URLS = [
   './',
@@ -97,14 +97,16 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Strategy depending on request type
+// Fetch: Strategy depending on request type (strictly same-origin non-API assets)
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
-  // Only handle GET requests with http/https schemes
+  // Only handle same-origin GET requests with http/https schemes and non-API paths
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (!url.protocol.startsWith('http')) return;
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.includes('/api/')) return;
 
   // 1. Navigation requests (HTML document): Network-first with cache fallback
   if (request.mode === 'navigate') {
@@ -137,7 +139,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Static assets & workers (JS, CSS, images, workers): Cache-first with network fallback & dynamic cache population
+  // 2. Same-origin static assets & workers (JS, CSS, images, workers): Cache-first with network fallback
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
@@ -150,8 +152,7 @@ self.addEventListener('fetch', (event) => {
 
       try {
         const response = await fetch(request);
-        // Cache valid responses within our origin or opaque no-cors responses
-        if (response && (response.status === 200 || response.type === 'opaque')) {
+        if (response && response.status === 200) {
           try {
             await cache.put(request, response.clone());
           } catch (cacheErr) {
