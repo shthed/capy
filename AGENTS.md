@@ -46,10 +46,10 @@ Match incoming user tasks to the matrix below to determine target files, mandato
 
 | Task Domain | Target Files & Directories | Mandatory Verification Commands | Documentation to Sync |
 | :--- | :--- | :--- | :--- |
-| **Gameplay UI & Controls** | `web/src/components/*`, `web/src/index.css` | `npm run lint`<br>`npm run build`<br>`npm run test:undo`<br>`npm run gallery:capture` (if styling changed) | [`WEB.md`](./WEB.md)<br>[`TODO.md`](./TODO.md) |
-| **Puzzle Engine & Workers** | `web/src/engine/*`, `web/src/engine/puzzle.worker.ts` | `npm run lint`<br>`npm run build`<br>`npm run test:gameplay` | [`PUZZLE.md`](./PUZZLE.md)<br>[`TODO.md`](./TODO.md) |
+| **Gameplay UI & Controls** | `web/src/components/*`, `web/src/index.css` | `npm run lint`<br>`npm run build`<br>`npm test`<br>`npm run gallery:capture` (if styling changed) | [`WEB.md`](./WEB.md)<br>[`TODO.md`](./TODO.md) |
+| **Puzzle Engine & Workers** | `web/src/engine/*`, `web/src/engine/puzzle.worker.ts` | `npm run lint`<br>`npm run build`<br>`npm test` | [`PUZZLE.md`](./PUZZLE.md)<br>[`TODO.md`](./TODO.md) |
 | **Native Android Wrapper** | `app/src/main/*`, `web/src/services/NativeBridge.ts` | `npm run lint`<br>`npm run build`<br>`./gradlew app:testDebugUnitTest`<br>`./gradlew app:assembleDebug` | [`APP.md`](./APP.md)<br>[`TODO.md`](./TODO.md) |
-| **Testing & Automation** | `web/scripts/*`, Playwright test specs | `npm run lint`<br>`npm run build`<br>`npm run test:undo`<br>`npm run test:gameplay` | [`TESTING.md`](./TESTING.md)<br>[`TODO.md`](./TODO.md) |
+| **Testing & Automation** | `web/scripts/*`, Playwright test specs | `npm run lint`<br>`npm run build`<br>`npm test` | [`TESTING.md`](./TESTING.md)<br>[`TODO.md`](./TODO.md) |
 | **CI/CD & Deployment** | `.github/workflows/*` | Validate YAML workflow syntax; verify dual-job pipeline permissions | [`AGENTS.md`](./AGENTS.md) |
 | **Documentation & Roadmap** | `*.md`, `docs/*` | Verify links and headings; zero emojis & no ASCII art | [`TODO.md`](./TODO.md) |
 
@@ -65,10 +65,9 @@ npm run lint            # Type check with tsc --noEmit
 npm run build           # Compile production bundle (tsc && vite build -> web/dist/)
 npm run dev             # Vite dev server on http://localhost:3000
 npm run preview         # Serve compiled web/dist/ on http://localhost:3000
-npm run test:undo       # Tests undo timeline, long-press replay scrubber, and redo stack
-npm run test:gameplay   # Tests core tap region coloring and canvas state
-npm run test:game       # Comprehensive Playwright browser suite
+npm test                # Unified test suite: codec/engine unit checks + full E2E browser basics
 npm run gallery:capture # Captures automated UI showcase gallery screenshots
+npm run generate:samples # Pre-bakes built-in sample puzzles into sample_saves.capy
 ```
 
 ### Android Application (`app/`)
@@ -205,9 +204,8 @@ npm run build                 # Compile production bundle (tsc && vite build -> 
 
 ### B. Domain-Specific Verification
 ```bash
-# 1. Gameplay UI, Canvas & State Changes
-npm run test:undo             # Undo timeline, scrubber, and redo stack (requires preview server)
-npm run test:gameplay         # Core tap region coloring and canvas state
+# 1. Gameplay UI, Engine, Codec & Canvas Changes
+npm test                      # Unified engine, codec, and Playwright E2E browser test suite
 npm run gallery:capture       # Generates automated UI showcase screenshots (if styling changed)
 
 # 2. Native Android Launcher (:app)

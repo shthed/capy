@@ -82,9 +82,9 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-Run the automated browser test suite (tests gestures, settings, canvas):
+Run the unified automated test suite (verifies binary codec, engine, gestures, settings, and E2E gameplay):
 ```bash
-npm run test:game
+npm test
 ```
 
 ---

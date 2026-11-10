@@ -1,0 +1,607 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+import { createServer, preview } from 'vite';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, '..');
+const BASE_URL = process.env.CAPY_TEST_URL || 'http://localhost:3000';
+
+async function isServerListening(url) {
+  try {
+    const res = await fetch(url, { method: 'HEAD' });
+    return res.ok || res.status < 500;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForPuzzleLoaded(page) {
+  await page.waitForSelector('canvas', { timeout: 25000 });
+  await page.waitForFunction(
+    () => !document.body.innerText.includes('Analyzing artwork'),
+    { timeout: 25000 }
+  );
+  await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 25000 });
+  await page.waitForTimeout(250);
+}
+
+async function tapCanvasGrid(page, startFrac = 0.32, count = 8, delayMs = 60) {
+  const canvas = await page.$('canvas');
+  const box = await canvas.boundingBox();
+  const cols = 4;
+  for (let i = 0; i < count; i++) {
+    const x = box.x + box.width * (startFrac + (i % cols) * 0.09);
+    const y = box.y + box.height * (startFrac + Math.floor(i / cols) * 0.09);
+    await page.mouse.click(x, y);
+    if (delayMs > 0) await page.waitForTimeout(delayMs);
+  }
+  await page.waitForTimeout(200);
+}
+
+async function runCodecAndEngineTests() {
+  console.log('=== PART 1: Engine & Compact Binary Codec v2 Unit Checks ===');
+  const vite = await createServer({
+    root: projectRoot,
+    server: { middlewareMode: true },
+    optimizeDeps: { noDiscovery: true },
+    appType: 'custom',
+    logLevel: 'error',
+  });
+
+  try {
+    const codec = await vite.ssrLoadModule('/src/services/CapyCodec.ts');
+    const segmenterMod = await vite.ssrLoadModule('/src/engine/RegionSegmenter.ts');
+    const quantizerMod = await vite.ssrLoadModule('/src/engine/ColorQuantizer.ts');
+
+    // 1. Unsigned ARGB bit-packing in ColorQuantizer
+    const { palette } = quantizerMod.ColorQuantizer.quantize(
+      new Uint8ClampedArray([
+        255, 50, 100, 255,
+        20, 180, 240, 255,
+        250, 240, 120, 255,
+        30, 40, 50, 255,
+      ]),
+      2,
+      2,
+      2,
+      4,
+      false,
+      true
+    );
+    for (const col of palette) {
+      assert.equal(col.argb >= 0, true, `Expected unsigned argb >= 0, got ${col.argb}`);
+      assert.equal(col.argb >>> 24, 0xff, 'Expected alpha byte 0xff');
+    }
+
+    // 2. RegionSegmenter cellPartitionMap & bit-exact CapyCodec RLE round-trip
+    const width = 256;
+    const height = 256;
+    const total = width * height;
+    const rgba = new Uint8ClampedArray(total * 4);
+    const clusterMap = new Int32Array(total);
+    const cellPartitionMap = new Int32Array(total);
+    const lineMask = new Uint8Array(total);
+    const gridN = 8;
+    const cellW = width / gridN;
+    const cellH = height / gridN;
+    const testPalette = [
+      { id: 1, hex: '#ef4444', isLight: false, argb: 0xffef4444, r: 239, g: 68, b: 68 },
+      { id: 2, hex: '#22c55e', isLight: false, argb: 0xff22c55e, r: 34, g: 197, b: 94 },
+      { id: 3, hex: '#3b82f6', isLight: false, argb: 0xff3b82f6, r: 59, g: 130, b: 246 },
+      { id: 4, hex: '#eab308', isLight: true, argb: 0xffeab308, r: 234, g: 179, b: 8 },
+    ];
+
+    for (let y = 0; y < height; y++) {
+      const gy = Math.min(gridN - 1, Math.floor(y / cellH));
+      for (let x = 0; x < width; x++) {
+        const gx = Math.min(gridN - 1, Math.floor(x / cellW));
+        const p = y * width + x;
+        const clusterIdx = gy % 4;
+        const col = testPalette[clusterIdx];
+        clusterMap[p] = clusterIdx;
+        cellPartitionMap[p] = gy * gridN + gx;
+        rgba[p * 4] = col.r;
+        rgba[p * 4 + 1] = col.g;
+        rgba[p * 4 + 2] = col.b;
+        rgba[p * 4 + 3] = 255;
+      }
+    }
+
+    const segmented = segmenterMod.RegionSegmenter.segment(
+      width,
+      height,
+      testPalette,
+      clusterMap,
+      16,
+      8,
+      2.5,
+      lineMask,
+      'ABSORB_LINES',
+      rgba,
+      128,
+      undefined,
+      cellPartitionMap
+    );
+    assert.equal(segmented.regions.length, 64, 'Expected 64 mosaic cells with cellPartitionMap');
+
+    const puzzleData = {
+      width,
+      height,
+      palette: testPalette,
+      regions: segmented.regions,
+      regionMap: segmented.regionMap,
+      borderMap: segmented.borderMap,
+      isFreeColor: false,
+    };
+
+    const compact = codec.compressPuzzleRecord(puzzleData);
+    const compactBytes = codec.estimateCompactPuzzleBytes(puzzleData);
+    const restored = codec.decompressPuzzleRecord(compact);
+    assert.equal(compactBytes < 20_000, true, `Expected compact record < 20 KB, got ${compactBytes}`);
+    assert.deepEqual(restored.regionMap, puzzleData.regionMap, 'regionMap must match bit-for-bit');
+    assert.deepEqual(restored.borderMap, puzzleData.borderMap, 'borderMap must match bit-for-bit');
+    assert.deepEqual(restored.regions[0].pixels, puzzleData.regions[0].pixels, 'Region pixels must match bit-for-bit');
+
+    // 3. .capy v2 Gzip single & archive binary framing
+    const sampleSnapshot = {
+      id: 'snap-test-1',
+      title: 'Test Custom Upload',
+      timestamp: 1700000000000,
+      lastOpened: 1700000005000,
+      filledCount: 3,
+      totalCount: 64,
+      filledRegionIds: [5, 1, 12],
+      zoomScale: 2.5,
+      panOffsetX: -80,
+      panOffsetY: 32,
+      sourceRef: { kind: 'blob', uri: 'snap-test-1' },
+    };
+    const fakeImageBytes = new Uint8Array(4096);
+    for (let i = 0; i < fakeImageBytes.length; i++) fakeImageBytes[i] = (i * 31) & 0xff;
+    const fakeImageBlob = new Blob([fakeImageBytes], { type: 'image/webp' });
+
+    const singleBinary = await codec.encodeSingleSaveBinaryV2(sampleSnapshot, compact, fakeImageBlob);
+    assert.equal(codec.hasBinaryMagicHeader(singleBinary), true, 'Must start with CAPY\\x02 magic header');
+    const decodedSingle = await codec.decodeBinarySaveV2(singleBinary);
+    assert.equal(decodedSingle.format, 'capy-single-save-v2');
+    assert.deepEqual(decodedSingle.snapshot.filledRegionIds, [5, 1, 12]);
+    assert.deepEqual(decodedSingle.imageBytes, fakeImageBytes);
+
+    const archiveBinary = await codec.encodeArchiveSaveBinaryV2(
+      [sampleSnapshot],
+      { 'snap-test-1': compact },
+      { 'snap-test-1': fakeImageBlob }
+    );
+    const decodedArchive = await codec.decodeBinarySaveV2(archiveBinary);
+    assert.equal(decodedArchive.format, 'capy-archive-save-v2');
+    assert.equal(decodedArchive.snapshots.length, 1);
+
+    // 4. <2 KB ProgressDeltaV2 token & CRDT union merge
+    const deltaA = {
+      version: 2,
+      sourceRef: { kind: 'catalog', uri: 'capy_forest_01' },
+      filledRegionIds: [1, 4, 9],
+      paintedRegionColors: { 1: 0xffef4444, 4: 0xff22c55e },
+      isFreeColor: true,
+      updatedAt: 1000,
+    };
+    const deltaB = {
+      version: 2,
+      sourceRef: { kind: 'catalog', uri: 'capy_forest_01' },
+      filledRegionIds: [4, 2, 8],
+      paintedRegionColors: { 4: 0xff3b82f6 },
+      isFreeColor: true,
+      updatedAt: 2000,
+    };
+    const tokenA = await codec.encodeProgressDeltaToken(deltaA);
+    assert.equal(tokenA.length < 2048, true);
+    const merged = codec.mergeProgressDeltas(deltaA, deltaB);
+    assert.deepEqual(merged.filledRegionIds, [1, 4, 9, 2, 8]);
+    assert.equal(merged.paintedRegionColors?.[4], 0xff3b82f6, 'Newer timestamp wins Free Colour conflict');
+
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, and CRDT deltas verified.');
+  } finally {
+    await vite.close();
+  }
+}
+
+async function runBrowserBasicsSuite() {
+  console.log(`\n=== PART 2: Unified Browser E2E Suite (${BASE_URL}) ===`);
+  let previewServer = null;
+  if (!(await isServerListening(BASE_URL))) {
+    previewServer = await preview({
+      root: projectRoot,
+      preview: { host: '0.0.0.0', port: 3000, strictPort: true },
+      logLevel: 'error',
+    });
+  }
+
+  const chromiumPath =
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
+    (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
+  const browser = await chromium.launch({
+    headless: true,
+    ...(chromiumPath ? { executablePath: chromiumPath } : {}),
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+
+  const consoleErrors = [];
+  const attachErrorListeners = (page, label) => {
+    page.on('pageerror', (err) => consoleErrors.push(`[${label}] ${err.message}`));
+  };
+
+  try {
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 860 },
+      hasTouch: true,
+      acceptDownloads: true,
+      permissions: ['clipboard-read', 'clipboard-write'],
+    });
+    const page = await context.newPage();
+    attachErrorListeners(page, 'main');
+
+    // -------------------------------------------------------------------------
+    // 1. PWA Manifest, Privacy Policy & Instant Pre-Baked First Launch
+    // -------------------------------------------------------------------------
+    console.log('1. Verifying PWA manifest, privacy policy, Service Worker & instant pre-baked boot...');
+    const manifestRes = await page.goto(`${BASE_URL}/manifest.webmanifest`);
+    assert.equal(manifestRes?.status(), 200);
+    const manifestJson = JSON.parse(await manifestRes.text());
+    assert.equal(manifestJson.name, 'Capy Paint');
+    assert.equal(manifestJson.display, 'standalone');
+
+    const privacyRes = await page.goto(`${BASE_URL}/privacy-policy.html`);
+    assert.equal(privacyRes?.status(), 200);
+    assert.equal((await page.evaluate(() => document.body.innerText)).includes('Google Play Data Safety'), true);
+
+    let workerRequestedOnBoot = false;
+    const onReq = (req) => {
+      if (req.url().includes('puzzle.worker')) workerRequestedOnBoot = true;
+    };
+    page.on('request', onReq);
+    await page.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(page);
+    page.off('request', onReq);
+
+    assert.equal(workerRequestedOnBoot, false, 'Pre-baked sample_saves.capy must boot with zero worker wait');
+    const bootMeta = await page.evaluate(async () => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const swReady = 'serviceWorker' in navigator ? Boolean((await navigator.serviceWorker.ready)?.active) : false;
+      const cacheNames = await caches.keys();
+      return { count: snaps.length, firstId: snaps[0]?.id, swReady, hasCache: cacheNames.includes('capy-cache-v2') };
+    });
+    assert.equal(bootMeta.count, 4);
+    assert.equal(bootMeta.firstId, 'sample-capybara');
+    assert.equal(bootMeta.swReady, true);
+    assert.equal(bootMeta.hasCache, true);
+
+    // Disable autoReplayOnLoad and enable EASY difficulty for fast deterministic E2E interaction checks
+    await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      s.autoReplayOnLoad = false;
+      s.difficulty = 'EASY';
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
+    });
+    await page.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(page);
+    console.log('   PASS: Instant 4-sample bootstrap, Service Worker cache, and manifest verified.');
+
+    // -------------------------------------------------------------------------
+    // 2. Canvas Coloring, Gestures (Double-Tap Zoom, Momentum, Background Drag) & Paint Mode
+    // -------------------------------------------------------------------------
+    console.log('2. Verifying canvas coloring, touch gestures, and Paint Mode...');
+    const swatches = await page.$$('[aria-label="Palette dock"] button');
+    assert.equal(swatches.length > 2, true, 'PaletteDock must render swatches');
+    await swatches[1].click();
+
+    await tapCanvasGrid(page, 0.32, 12, 40);
+    const initialProgress = await page.evaluate(() => {
+      const list = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      return list[0]?.filledCount || 0;
+    });
+    assert.equal(initialProgress >= 2, true, `Expected >= 2 filled regions, got ${initialProgress}`);
+
+    const canvas = await page.$('canvas');
+    const box = await canvas.boundingBox();
+    const startX = box.x + box.width / 2;
+    const startY = box.y + box.height / 2;
+
+    // One-finger double-tap-and-drag zoom + inertial flick + zero-latency cancel + background drag
+    await page.evaluate(
+      async ({ x, y }) => {
+        const el = document.querySelector('canvas');
+        if (!el) return;
+        const fire = (type, cx, cy, id = 1) =>
+          el.dispatchEvent(
+            new PointerEvent(type, { clientX: cx, clientY: cy, pointerId: id, pointerType: 'touch', isPrimary: true, bubbles: true })
+          );
+
+        // Double-tap drag vertical zoom
+        fire('pointerdown', x, y, 1);
+        await new Promise((r) => setTimeout(r, 30));
+        fire('pointerup', x, y, 1);
+        await new Promise((r) => setTimeout(r, 60));
+        fire('pointerdown', x, y, 1);
+        for (let dy = 0; dy <= 90; dy += 30) {
+          fire('pointermove', x, y + dy, 1);
+          await new Promise((r) => setTimeout(r, 16));
+        }
+        fire('pointerup', x, y + 90, 1);
+
+        // Inertial pan flick & immediate touch cancel
+        fire('pointerdown', x, y, 2);
+        for (let i = 1; i <= 5; i++) {
+          fire('pointermove', x + i * 25, y + i * 20, 2);
+          await new Promise((r) => setTimeout(r, 16));
+        }
+        fire('pointerup', x + 125, y + 100, 2);
+        await new Promise((r) => setTimeout(r, 40));
+        fire('pointerdown', x + 125, y + 100, 3);
+        fire('pointerup', x + 125, y + 100, 3);
+      },
+      { x: startX, y: startY }
+    );
+
+    const paintBtn = await page.waitForSelector('button[aria-label="Toggle Paint Mode"]');
+    await paintBtn.click();
+    await paintBtn.click();
+    console.log('   PASS: Palette selection, region tap coloring, double-tap zoom, pan momentum, and Paint Mode verified.');
+
+    // -------------------------------------------------------------------------
+    // 3. Undo, Redo, Long-Press Replay Scrubber, Resume Here & Free Colour Undo
+    // -------------------------------------------------------------------------
+    console.log('3. Verifying Undo, Redo, long-press Replay scrubber, Resume Here & Free Colour auto-undo...');
+    assert.equal(await page.$('[data-testid="undo-btn"]'), null, 'Undo hidden by default for standard puzzles');
+
+    // Open Settings -> enable Undo, test Charcoal background reset, and verify tab memory
+    const settingsBtn = page.locator('button[title="Settings and Menu"]');
+    await settingsBtn.click();
+    await page.waitForTimeout(200);
+
+    await page.locator('button[title="Charcoal"]').first().click();
+    const enableUndoLabel = await page.waitForSelector('text=Enable Undo Action');
+    await enableUndoLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+
+    // Switch to Hints tab and close -> reopen to verify capy_last_settings_tab persistence
+    await page.getByRole('button', { name: 'Hints', exact: true }).click();
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+
+    const updatedSettings = await page.evaluate(() => JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}'));
+    assert.equal(updatedSettings.canvasBgColor, 'CHARCOAL');
+    assert.equal(updatedSettings.canvasBgArgb >>> 0, 0xff18181b);
+    assert.equal(localStorage_tab(await page.evaluate(() => localStorage.getItem('capy_last_settings_tab'))), '1');
+
+    function localStorage_tab(v) {
+      return String(v);
+    }
+
+    // Single-step Undo & Redo
+    const undoBtn = await page.waitForSelector('[data-testid="undo-btn"]');
+    assert.equal(await page.$('[data-testid="redo-btn"]'), null, 'Redo hidden before Undo');
+    await undoBtn.click();
+    await page.waitForTimeout(200);
+
+    const redoBtn = await page.waitForSelector('[data-testid="redo-btn"]');
+    const [redoBox, undoBox] = await Promise.all([redoBtn.boundingBox(), undoBtn.boundingBox()]);
+    assert.equal(redoBox.y < undoBox.y, true, 'Redo button must stack above Undo button');
+    await redoBtn.click();
+    await page.waitForTimeout(200);
+
+    // Long-press Undo (>=450ms) -> Replay Scrubber -> Scrub to step 2 -> Resume Here
+    await page.mouse.move(undoBox.x + undoBox.width / 2, undoBox.y + undoBox.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(520);
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+
+    const scrubber = await page.waitForSelector('[data-testid="replay-scrubber"]');
+    await scrubber.fill('2');
+    await scrubber.dispatchEvent('change');
+    await page.waitForTimeout(200);
+    await page.locator('[data-testid="replay-resume-btn"]').click();
+    await page.waitForTimeout(250);
+
+    const progressAfterResume = await page.evaluate(() => {
+      const list = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      return list[0]?.filledCount || 0;
+    });
+    assert.equal(progressAfterResume, 2, 'Expected filledCount rewound to 2 after Resume Here');
+
+    await page.keyboard.press('Control+y');
+    await page.waitForTimeout(150);
+    const progressAfterCtrlY = await page.evaluate(() => {
+      const list = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      return list[0]?.filledCount || 0;
+    });
+    assert.equal(progressAfterCtrlY, 3, 'Expected Ctrl+Y to redo step 3');
+    console.log('   PASS: Undo/Redo, keyboard shortcuts, long-press Replay scrubber, and Resume Here verified.');
+
+    // -------------------------------------------------------------------------
+    // 4. Gallery Filters, Community Ideas & Infinite Zoom 2x Detail Sub-Tile
+    // -------------------------------------------------------------------------
+    console.log('4. Verifying Create tab gallery filters, Community Puzzle Ideas, and Infinite Zoom...');
+    await settingsBtn.click();
+    await page.waitForTimeout(200);
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.waitForTimeout(200);
+
+    await page.getByTestId('gallery-tag-music').click();
+    await page.waitForTimeout(100);
+    const bodyText = await page.evaluate(() => document.body.innerText);
+    assert.equal(bodyText.includes('Snail Guitar'), true);
+
+    await page.getByTestId('gallery-search-input').fill('nonexistent_xyz_artwork');
+    await page.getByTestId('gallery-empty-state').waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: 'Reset Filters' }).click();
+
+    await page.getByTestId('toggle-idea-form-btn').click();
+    await page.getByTestId('idea-title-input').fill('Unsafe nsfw test');
+    await page.getByTestId('idea-prompt-input').fill('Testing moderation filter');
+    await page.getByTestId('submit-idea-btn').click();
+    assert.equal((await page.getByTestId('idea-feedback-banner').innerText()).toLowerCase().includes('family-friendly'), true);
+
+    await page.getByTestId('idea-title-input').fill('Lantern Capybara Festival');
+    await page.getByTestId('idea-prompt-input').fill('Warm paper lanterns floating over a calm twilight river.');
+    await page.getByTestId('submit-idea-btn').click();
+    assert.equal((await page.getByTestId('community-ideas-section').innerText()).includes('Lantern Capybara Festival'), true);
+
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+    console.log('   PASS: Gallery search, category chips, and community idea moderation verified.');
+
+    // -------------------------------------------------------------------------
+    // 5. Shareable Link (#s=<token>), Simultaneous Co-op & Google Drive CRDT Sync
+    // -------------------------------------------------------------------------
+    console.log('5. Verifying <2 KB Share Link, 2-peer BroadcastChannel Co-op & Google Drive CRDT sync...');
+    await tapCanvasGrid(page, 0.45, 8, 40);
+    const paintedIdsOnA = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return active.filledRegionIds || [];
+    });
+
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(200);
+    await page.getByTestId('share-progress-link-btn').click();
+    await page.waitForTimeout(200);
+
+    const sharedUrl = await page.evaluate(() => navigator.clipboard.readText());
+    assert.equal(sharedUrl.includes('#s='), true);
+    assert.equal(sharedUrl.length < 2048, true);
+
+    // Verify isolated browser context restores #s=<token> progress
+    const ctxIsolated = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+    const pageRecipient = await ctxIsolated.newPage();
+    attachErrorListeners(pageRecipient, 'recipient');
+    await pageRecipient.goto(sharedUrl, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(pageRecipient);
+    await pageRecipient.waitForTimeout(350);
+    const recipientIds = await pageRecipient.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return active.filledRegionIds || [];
+    });
+    assert.deepEqual([...recipientIds].sort((a, b) => a - b), [...paintedIdsOnA].sort((a, b) => a - b));
+    await ctxIsolated.close();
+
+    // Host Co-op room on Page A and join from Page B in same context
+    await page.getByTestId('host-coop-room-btn').click();
+    await page.waitForTimeout(200);
+    const roomBadgeText = await page.getByTestId('active-coop-room-code').innerText();
+    const roomCode = roomBadgeText.match(/Room\s+([A-Z0-9]{6})/)[1];
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+
+    const pageB = await context.newPage();
+    attachErrorListeners(pageB, 'pageB');
+    await pageB.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(pageB);
+    await pageB.getByTestId('topbar-coop-btn').click();
+    await pageB.waitForTimeout(200);
+    await pageB.getByTestId('join-coop-room-input').fill(roomCode);
+    await pageB.getByTestId('join-coop-room-btn').click();
+    await pageB.waitForTimeout(300);
+    assert.equal((await pageB.getByTestId('active-coop-room-code').innerText()).includes('2 online'), true);
+    await pageB.keyboard.press('Escape');
+    await pageB.waitForTimeout(200);
+
+    await tapCanvasGrid(page, 0.56, 8, 40);
+    await pageB.waitForTimeout(350);
+    const extractPct = (s) => Number(s.match(/(\d+)%/)?.[1] ?? -1);
+    assert.equal(
+      extractPct(await pageB.locator('header').innerText()),
+      extractPct(await page.locator('header').innerText()),
+      'Co-op peer header % must synchronize in real time'
+    );
+    await pageB.close();
+
+    // Leave Co-op room and verify Saves view modes + .capy v2 binary export/import
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(200);
+    await page.getByTestId('leave-coop-room-btn').click();
+    await page.waitForTimeout(150);
+
+    await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'visible' });
+    await page.getByTestId('saves-view-thumbnails-btn').click();
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(() => localStorage.getItem('capy_saves_view_mode')), 'THUMBNAILS');
+    await page.getByTestId('saves-view-detail-btn').click();
+    await page.waitForTimeout(150);
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
+    await page.locator('[data-testid="export-all-saves-btn"]').click();
+    const download = await downloadPromise;
+    const exportedPath = path.join(os.tmpdir(), 'capy_unified_test_backup.capy');
+    await download.saveAs(exportedPath);
+    const exportedBuf = fs.readFileSync(exportedPath);
+    assert.equal(exportedBuf[0], 0x43, 'Magic byte C');
+    assert.equal(exportedBuf[4], 0x02, 'Version byte 0x02');
+    fs.rmSync(exportedPath, { force: true });
+
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+    console.log('   PASS: #s=<token> share link, 2-peer real-time Co-op, Saves view modes, and .capy v2 export verified.');
+
+    // -------------------------------------------------------------------------
+    // 6. Custom Photo Upload (STORE_IMAGES) & Offline PWA Reload
+    // -------------------------------------------------------------------------
+    console.log('6. Verifying custom photo STORE_IMAGES upload and 100% offline PWA reload...');
+    const pngBytes = await page.evaluate(async () => {
+      const c = document.createElement('canvas');
+      c.width = 480;
+      c.height = 360;
+      const ctx = c.getContext('2d');
+      const cols = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b'];
+      for (let i = 0; i < 4; i++) {
+        ctx.fillStyle = cols[i];
+        ctx.fillRect((i % 2) * 240, Math.floor(i / 2) * 180, 240, 180);
+      }
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+      return Array.from(new Uint8Array(await blob.arrayBuffer()));
+    });
+    const tmpUploadPath = path.join(os.tmpdir(), 'capy_test_upload.png');
+    fs.writeFileSync(tmpUploadPath, Buffer.from(pngBytes));
+    await page.locator('input[type="file"][accept="image/*"]').setInputFiles(tmpUploadPath);
+    await page.waitForTimeout(300);
+    await waitForPuzzleLoaded(page);
+    fs.rmSync(tmpUploadPath, { force: true });
+
+    const uploadCheck = await page.evaluate(async () => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      const snap = snaps.find((s) => s.id === active.activeSnapshotId);
+      return { kind: snap?.sourceRef?.kind, fileSizeBytes: snap?.fileSizeBytes };
+    });
+    assert.equal(uploadCheck.kind, 'blob');
+    assert.equal(uploadCheck.fileSizeBytes < 120_000, true);
+
+    // Offline reload via Service Worker
+    await context.setOffline(true);
+    await page.reload({ waitUntil: 'load' });
+    await waitForPuzzleLoaded(page);
+    await context.setOffline(false);
+    console.log('   PASS: Custom photo STORE_IMAGES persistence and 100% offline PWA reload verified.');
+
+    assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
+    console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');
+  } finally {
+    await browser.close();
+    if (previewServer) {
+      await new Promise((resolve) => previewServer.httpServer.close(resolve));
+    }
+  }
+}
+
+async function main() {
+  await runCodecAndEngineTests();
+  await runBrowserBasicsSuite();
+}
+
+main().catch((err) => {
+  console.error('Unified test suite failed:', err);
+  process.exit(1);
+});

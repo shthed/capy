@@ -440,14 +440,8 @@ npm run lint
 # Compile production bundle into web/dist/
 npm run build
 
-# Run Compact Binary Codec v2 unit and round-trip tests
-npm run test:codec
-
-# Run Playwright interaction test suite
-npm run test:game
-
-# Run comprehensive end-to-end full gameplay test suite
-npm run test:gameplay
+# Run unified engine, binary codec v2, and Playwright E2E browser test suite
+npm test
 
 # Capture showcase screenshots for docs/gallery/
 npm run gallery:capture
