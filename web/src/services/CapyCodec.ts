@@ -561,26 +561,61 @@ export async function decodeBinarySaveV2(
 // Ultra-Compact Progress Delta (< 2 KB) & CRDT Conflict-Free Merge
 // ---------------------------------------------------------------------------
 
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.byteLength; i += chunkSize) {
-    binary += String.fromCharCode(
-      ...Array.from(bytes.subarray(i, Math.min(i + chunkSize, bytes.byteLength)))
-    );
+export function buildBorderMapFromRegionMap(
+  regionMap: Int32Array,
+  width: number,
+  height: number
+): Uint8Array {
+  const borderMap = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const yRow = y * width;
+    for (let x = 0; x < width; x++) {
+      const idx = yRow + x;
+      const rid = regionMap[idx];
+      if (
+        (x < width - 1 && regionMap[idx + 1] !== rid) ||
+        (y < height - 1 && regionMap[idx + width] !== rid)
+      ) {
+        borderMap[idx] = 1;
+      }
+    }
   }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return borderMap;
+}
+
+export function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const len = bytes.byteLength;
+  const chunkSize = 0x2000;
+  for (let i = 0; i < len; i += chunkSize) {
+    const end = Math.min(i + chunkSize, len);
+    let chunk = '';
+    for (let j = i; j < end; j++) {
+      chunk += String.fromCharCode(bytes[j]);
+    }
+    binary += chunk;
+  }
+  return btoa(binary);
+}
+
+export function base64ToUint8(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const len = binary.length;
+  const out = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    out[i] = binary.charCodeAt(i);
+  }
+  return out;
+}
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  return uint8ToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function base64UrlToBytes(token: string): Uint8Array {
   const padded = token.replace(/-/g, '+').replace(/_/g, '/');
   const padLen = (4 - (padded.length % 4)) % 4;
-  const binary = atob(padded + '='.repeat(padLen));
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    out[i] = binary.charCodeAt(i);
-  }
-  return out;
+  return base64ToUint8(padded + '='.repeat(padLen));
 }
 
 /**

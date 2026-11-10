@@ -587,7 +587,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     for (const rId of filledRegionIds) {
       const curCol = paintedRegionColors?.get(rId);
       const prevCol = prevColors.get(rId);
-      const colorChanged = curCol !== undefined && curCol !== prevCol;
+      const colorChanged = curCol !== prevCol;
 
       if (!prevPainted.has(rId) || colorChanged) {
         const reg = regMap.get(rId);
@@ -810,10 +810,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
   }, [hintRegionId, puzzle, showNextRegionHint]);
 
-  // Notify view extent updates
+  // Notify view extent updates only when scale or offset actually changes
+  const onViewExtentChangedRef = useRef(onViewExtentChanged);
+  onViewExtentChangedRef.current = onViewExtentChanged;
   useEffect(() => {
-    onViewExtentChanged?.(scale, offset.x, offset.y);
-  }, [scale, offset, onViewExtentChanged]);
+    onViewExtentChangedRef.current?.(scale, offset.x, offset.y);
+  }, [scale, offset]);
 
   // Coordinate conversion helper
   const screenToCanvasCoords = useCallback(
