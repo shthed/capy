@@ -58,6 +58,8 @@ interface PuzzleCanvasProps {
   generationProgress?: number;
   generationStepIndex?: number;
   replayFollowRegionId?: number | null;
+  replayFollowSequence?: number[] | null;
+  replayFollowStep?: number;
   replaySpeed?: number;
   coopRippleBuffer?: CoopRippleBuffer;
   onViewExtentChanged?: (
@@ -185,6 +187,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   generationProgress = 0,
   generationStepIndex = 1,
   replayFollowRegionId = null,
+  replayFollowSequence = null,
+  replayFollowStep = 0,
   replaySpeed = 1,
   coopRippleBuffer,
   onViewExtentChanged,
@@ -398,29 +402,37 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     });
   }, [scale, puzzle]);
 
-  // Smooth camera pan (and auto-zoom to ~2.5x when starting from fit-to-screen <1.8x) during Replay Follow Mode
+  // Smooth predictive camera controller for Replay Follow Mode:
+  // - Safe-frame dead-zone: never moves the viewport while upcoming regions remain comfortably inside the screen
+  // - Predictive lookahead: anticipates upcoming region completions (up to 10 steps ahead) to frame clusters in a single glide
+  // - Critically-damped 2D spring-damper (SmoothDamp): C1-continuous velocity with smooth ease-in and ease-out (zero jerk)
   const onManualPanStartRef = useRef(onManualPanStart);
   onManualPanStartRef.current = onManualPanStart;
   const hasNotifiedManualPanRef = useRef(false);
   const replayFollowRegionIdRef = useRef<number | null>(replayFollowRegionId ?? null);
   replayFollowRegionIdRef.current = replayFollowRegionId ?? null;
+  const replayFollowSequenceRef = useRef<number[] | null>(replayFollowSequence ?? null);
+  replayFollowSequenceRef.current = replayFollowSequence ?? null;
+  const replayFollowStepRef = useRef<number>(replayFollowStep ?? 0);
+  replayFollowStepRef.current = replayFollowStep ?? 0;
   const replaySpeedRef = useRef<number>(replaySpeed || 1);
   replaySpeedRef.current = replaySpeed || 1;
   const followRawScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const followClampedScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const followAutoZoomingRef = useRef<boolean>(false);
+  const followAnchorOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const followVelRef = useRef<{ vx: number; vy: number }>({ vx: 0, vy: 0 });
   const isFollowingReplay = replayFollowRegionId !== null && replayFollowRegionId !== undefined;
 
   useEffect(() => {
-    if (!isFollowingReplay || !puzzle) {
-      followAutoZoomingRef.current = false;
-      return;
-    }
-    if (scaleRef.current < 1.8) {
-      followAutoZoomingRef.current = true;
-    }
+    if (!isFollowingReplay || !puzzle) return;
     let animId: number;
     let lastTime = performance.now();
+
+    // Initialize anchor to current viewport offset and zero velocity so camera starts completely still
+    followAnchorOffsetRef.current.x = offsetRef.current.x;
+    followAnchorOffsetRef.current.y = offsetRef.current.y;
+    followVelRef.current.vx = 0;
+    followVelRef.current.vy = 0;
 
     const stepFollow = (now: number) => {
       const dt = Math.min(64, Math.max(0, now - lastTime));
@@ -434,76 +446,139 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         isDoubleTapPanningRef.current ||
         momentumAnimIdRef.current !== null;
 
-      if (isUserInteracting) {
-        followAutoZoomingRef.current = false;
-      } else if (scaleRef.current < 1.8) {
-        followAutoZoomingRef.current = true;
-      }
-
       if (targetRegionId !== null && !isUserInteracting && containerRef.current) {
+        const curScale = scaleRef.current;
         const reg = regionByIdRef.current.get(targetRegionId);
         const w = containerRef.current.clientWidth;
         const h = containerRef.current.clientHeight;
-        if (reg && w > 0 && h > 0) {
-          const curScale = scaleRef.current;
-          const spd = replaySpeedRef.current;
-          let nextScale = curScale;
-          if (followAutoZoomingRef.current) {
-            if (curScale < 2.48) {
-              const scaleDiff = 2.5 - curScale;
-              const scaleLerp = scaleDiff * (1 - Math.exp((-dt * Math.max(14, 10 * spd)) / 1000));
-              const minScaleStep = (Math.max(2.2, 1.8 * spd) * dt) / 1000;
-              nextScale = Math.min(2.5, curScale + Math.max(scaleLerp, minScaleStep));
-            } else {
-              nextScale = 2.5;
-              followAutoZoomingRef.current = false;
-            }
-          }
-
+        // Only pan when zoomed in (> 1.05x); never change scale or shift a fit-to-screen puzzle
+        if (reg && w > 0 && h > 0 && curScale > 1.05) {
           const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
           const baseOffsetX = (w - puzzle.width * baseScale) / 2;
           const baseOffsetY = (h - puzzle.height * baseScale) / 2;
-          const effScale = nextScale * baseScale;
+          const effScale = curScale * baseScale;
 
-          const rawScratch = followRawScratchRef.current;
-          rawScratch.x = w / 2 - baseOffsetX - reg.centroidX * effScale;
-          rawScratch.y = h / 2 - baseOffsetY - reg.centroidY * effScale;
-          const clampedTarget = clampCanvasOffset(
-            rawScratch,
-            nextScale,
-            puzzle.width,
-            puzzle.height,
-            w,
-            h,
-            followClampedScratchRef.current
-          );
+          // Inner Safe-Frame Dead-Zone: do not move camera while upcoming regions stay inside this frame
+          const safeLeft = w * 0.18;
+          const safeRight = w * 0.82;
+          const safeTop = Math.max(68, h * 0.18);
+          const safeBottom = h - Math.max(92, h * 0.22);
+          const safeCenterX = w * 0.5;
+          const safeCenterY = (safeTop + safeBottom) * 0.5;
+          const safeHalfW = Math.max(60, (safeRight - safeLeft) * 0.45);
+          const safeHalfH = Math.max(60, (safeBottom - safeTop) * 0.45);
 
+          const anchor = followAnchorOffsetRef.current;
+          const regAnchorX = anchor.x + baseOffsetX + reg.centroidX * effScale;
+          const regAnchorY = anchor.y + baseOffsetY + reg.centroidY * effScale;
+          const isCurrentOutsideSafeZone =
+            regAnchorX < safeLeft ||
+            regAnchorX > safeRight ||
+            regAnchorY < safeTop ||
+            regAnchorY > safeBottom;
+
+          // Predictive lookahead: check if the next few upcoming regions (steps +1..+4) are about to exit the safe zone
+          const seq = replayFollowSequenceRef.current;
+          const curStep = replayFollowStepRef.current;
+          let isLookaheadApproachingEdge = false;
+          if (!isCurrentOutsideSafeZone && seq && curStep < seq.length) {
+            const lookTriggerEnd = Math.min(seq.length, curStep + 5);
+            for (let i = curStep + 1; i < lookTriggerEnd; i++) {
+              const futureReg = regionByIdRef.current.get(seq[i]);
+              if (!futureReg) continue;
+              // Only anticipate if the future region is part of a nearby progression (fits in safe frame with current region)
+              if (
+                Math.abs(futureReg.centroidX - reg.centroidX) * effScale <= safeHalfW &&
+                Math.abs(futureReg.centroidY - reg.centroidY) * effScale <= safeHalfH
+              ) {
+                const fx = anchor.x + baseOffsetX + futureReg.centroidX * effScale;
+                const fy = anchor.y + baseOffsetY + futureReg.centroidY * effScale;
+                if (fx < safeLeft || fx > safeRight || fy < safeTop || fy > safeBottom) {
+                  isLookaheadApproachingEdge = true;
+                  break;
+                }
+              } else {
+                break;
+              }
+            }
+          }
+
+          // Only update the camera anchor when current or anticipated upcoming regions approach the screen edge
+          if (isCurrentOutsideSafeZone || isLookaheadApproachingEdge) {
+            let sumWX = reg.centroidX;
+            let sumWY = reg.centroidY;
+            let sumW = 1.0;
+
+            // Predict future region completions (up to 10 steps ahead) that fit in the same safe frame as reg
+            if (seq && curStep < seq.length) {
+              const horizonEnd = Math.min(seq.length, curStep + 10);
+              for (let i = curStep + 1; i < horizonEnd; i++) {
+                const futureReg = regionByIdRef.current.get(seq[i]);
+                if (!futureReg) continue;
+                const dxPx = Math.abs(futureReg.centroidX - reg.centroidX) * effScale;
+                const dyPx = Math.abs(futureReg.centroidY - reg.centroidY) * effScale;
+                if (dxPx <= safeHalfW && dyPx <= safeHalfH) {
+                  const weight = 1 / (1 + (i - curStep) * 0.22);
+                  sumWX += futureReg.centroidX * weight;
+                  sumWY += futureReg.centroidY * weight;
+                  sumW += weight;
+                } else {
+                  break;
+                }
+              }
+            }
+
+            const predCentroidX = sumWX / sumW;
+            const predCentroidY = sumWY / sumW;
+
+            const rawScratch = followRawScratchRef.current;
+            rawScratch.x = safeCenterX - baseOffsetX - predCentroidX * effScale;
+            rawScratch.y = safeCenterY - baseOffsetY - predCentroidY * effScale;
+            const clampedTarget = clampCanvasOffset(
+              rawScratch,
+              curScale,
+              puzzle.width,
+              puzzle.height,
+              w,
+              h,
+              followClampedScratchRef.current
+            );
+            anchor.x = clampedTarget.x;
+            anchor.y = clampedTarget.y;
+          }
+
+          // Critically-damped 2D spring-damper (SmoothDamp) toward anchor
           const curOff = offsetRef.current;
-          const dx = clampedTarget.x - curOff.x;
-          const dy = clampedTarget.y - curOff.y;
+          const dx = curOff.x - anchor.x;
+          const dy = curOff.y - anchor.y;
           const dist = Math.hypot(dx, dy);
-          const scaleChanged = Math.abs(nextScale - curScale) > 0.0005;
+          const vel = followVelRef.current;
+          const speed = Math.hypot(vel.vx, vel.vy);
 
-          if (dist > 0.5 || scaleChanged) {
-            let nextOffset = curOff;
-            if (dist > 0.5) {
-              const lerpStep = dist * (1 - Math.exp((-dt * Math.max(12, 8 * spd)) / 1000));
-              const minStep = (Math.max(520, 420 * spd) * dt) / 1000;
-              const move = Math.min(dist, Math.max(lerpStep, minStep));
-              nextOffset = {
-                x: curOff.x + (dx / dist) * move,
-                y: curOff.y + (dy / dist) * move,
-              };
-            } else if (scaleChanged) {
-              nextOffset = { x: clampedTarget.x, y: clampedTarget.y };
-            }
-            if (scaleChanged) {
-              scaleRef.current = nextScale;
-              setScale(nextScale);
-            }
+          if (dist > 0.35 || speed > 2.0) {
+            const dtSec = Math.max(0.001, dt / 1000);
+            const spd = replaySpeedRef.current;
+            const smoothTime = Math.max(0.12, Math.min(0.32, 0.26 / Math.sqrt(Math.max(0.5, spd))));
+            const omega = 2 / smoothTime;
+            const xParam = omega * dtSec;
+            const exp =
+              1 / (1 + xParam + 0.48 * xParam * xParam + 0.235 * xParam * xParam * xParam);
+
+            const tempX = (vel.vx + omega * dx) * dtSec;
+            const tempY = (vel.vy + omega * dy) * dtSec;
+            vel.vx = (vel.vx - omega * tempX) * exp;
+            vel.vy = (vel.vy - omega * tempY) * exp;
+
+            const nextOffset = {
+              x: anchor.x + (dx + tempX) * exp,
+              y: anchor.y + (dy + tempY) * exp,
+            };
             offsetRef.current = nextOffset;
             setOffset(nextOffset);
-            onViewExtentChangedRef.current?.(nextScale, nextOffset.x, nextOffset.y, w, h);
+            onViewExtentChangedRef.current?.(curScale, nextOffset.x, nextOffset.y, w, h);
+          } else if (dist > 0) {
+            vel.vx = 0;
+            vel.vy = 0;
           }
         }
       }
@@ -736,7 +811,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     let maxDirtyX = -1;
     let maxDirtyY = -1;
 
-    // Check newly filled or repainted regions
+    // Check newly filled or repainted regions (in-place cache mutation, zero Set/Map cloning)
     for (const rId of filledRegionIds) {
       const curCol = paintedRegionColors?.get(rId);
       const prevCol = prevColors.get(rId);
@@ -761,10 +836,16 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
           if (reg.maxY > maxDirtyY) maxDirtyY = reg.maxY;
         }
+        prevPainted.add(rId);
+        if (curCol !== undefined) {
+          prevColors.set(rId, curCol);
+        } else {
+          prevColors.delete(rId);
+        }
       }
     }
 
-    // Check any regions that were unfilled (e.g., Reset Progress)
+    // Check any regions that were unfilled (e.g., Replay backward scrubbing, Undo, or Reset Progress)
     for (const rId of prevPainted) {
       if (!filledRegionIds.has(rId)) {
         const reg = regMap.get(rId);
@@ -785,6 +866,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
           if (reg.maxY > maxDirtyY) maxDirtyY = reg.maxY;
         }
+        prevPainted.delete(rId);
+        prevColors.delete(rId);
       }
     }
 
@@ -800,8 +883,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       );
     }
 
-    paintedCacheRef.current = new Set(filledRegionIds);
-    prevColorsRef.current = new Map(paintedRegionColors || []);
     lastBaseFreeColorRef.current = isFreeColorMode;
   }, [puzzle, sourceImage, regionColorMode, filledRegionIds, paintedRegionColors, isFreeColorMode, writeRegionToImageData]);
 
