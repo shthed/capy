@@ -66,6 +66,23 @@ class CapyAndroidBridgeTest {
     }
 
     @Test
+    fun `saveBackupToDir atomically overwrites existing backup and leaves zero tmp files`() {
+        val backupDir = tempFolder.newFolder("capy_saves_atomic")
+        val initialJson = """{"autoAdvance":true,"difficulty":"EASY","version":1}"""
+        val updatedJson = """{"autoAdvance":false,"difficulty":"HARD","version":2}"""
+
+        assertTrue(CapyAndroidBridge.saveBackupToDir(backupDir, "capy_snapshots_v8", initialJson))
+        assertEquals(initialJson, CapyAndroidBridge.loadBackupFromDir(backupDir, "capy_snapshots_v8"))
+
+        assertTrue(CapyAndroidBridge.saveBackupToDir(backupDir, "capy_snapshots_v8", updatedJson))
+        assertEquals(updatedJson, CapyAndroidBridge.loadBackupFromDir(backupDir, "capy_snapshots_v8"))
+
+        val remainingFiles = backupDir.listFiles()?.map { it.name } ?: emptyList()
+        assertEquals(listOf("capy_snapshots_v8.json"), remainingFiles)
+        assertTrue(remainingFiles.none { it.endsWith(".tmp") })
+    }
+
+    @Test
     fun `loadBackupFromDir returns null when key does not exist`() {
         val backupDir = tempFolder.newFolder("capy_saves_empty")
         val loaded = CapyAndroidBridge.loadBackupFromDir(backupDir, "non_existent_key")

@@ -6,29 +6,27 @@ Active, prioritized product and engineering backlog for the **Capy** monorepo ([
 
 **Table of Contents**:
 1. [Quick-Win Ready Queue (`<= 15 min` Agent / `Flash`-Ready)](#1-quick-win-ready-queue--15-min-agent--flash-ready)
-2. [`EPIC-1`: Core Reliability, Crash-Safe Persistence & UI Integrity](#2-epic-1-core-reliability-crash-safe-persistence--ui-integrity)
-3. [`EPIC-2`: Mobile Touch Precision & Tactile Sensory Polish](#3-epic-2-mobile-touch-precision--tactile-sensory-polish)
-4. [`EPIC-3`: Daily Retention, Inclusive Accessibility & Shareable Replays](#4-epic-3-daily-retention-inclusive-accessibility--shareable-replays)
-5. [`EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish](#5-epic-4-serverless-infinite-zoom-printable-art--local-co-op-polish)
-6. [`EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation](#6-epic-5-production-cloud-auth-cross-network-co-op--optional-ai-creation)
-7. [Unscheduled Platform Icebox (`ICE-1`--`ICE-3`)](#7-unscheduled-platform-icebox-ice-1--ice-3)
+2. [`EPIC-2`: Mobile Touch Precision & Tactile Sensory Polish](#2-epic-2-mobile-touch-precision--tactile-sensory-polish)
+3. [`EPIC-3`: Daily Retention, Inclusive Accessibility & Shareable Replays](#3-epic-3-daily-retention-inclusive-accessibility--shareable-replays)
+4. [`EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish](#4-epic-4-serverless-infinite-zoom-printable-art--local-co-op-polish)
+5. [`EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation](#5-epic-5-production-cloud-auth-cross-network-co-op--optional-ai-creation)
+6. [Unscheduled Platform Icebox (`ICE-1`--`ICE-3`)](#6-unscheduled-platform-icebox-ice-1--ice-3)
 
 <details>
 <summary>Capy Lean Agile Methodology, Entry Quick-Reference & Backlog Totals</summary>
 
 - **3-Tier Delivery Hierarchy**:
-  - **Epics (`EPIC-1`..`EPIC-5`)**: Player-outcome pillars ordered strictly by execution priority.
+  - **Epics (`EPIC-2`..`EPIC-5`)**: Player-outcome pillars ordered strictly by execution priority.
   - **Stories (`US-*`) & Bugs (`BUG-*`)**: Cohesive player capabilities or verified defects. Every card displays **Description**, **Value**, **Why Now**, and **1-line Shippable Tasks** visibly on mobile, tucking verbose tags, estimates, file paths, and acceptance criteria inside `<details>`.
   - **Tasks (`TASK-*`)**: Independently mergeable `1-PR` slices. `[quick-win]` marks `<= 15 min` agent tasks (`1--3` files, zero external backend blockers, suitable for `Flash`).
 - **Definition of Ready (Anti-Busywork Gate)**: Items enter `TODO.md` *only* when they deliver measurable gameplay delight, accessibility, retention, or crash/test reliability. Zero-impact chores, unused dependency pruning with zero binary impact, placeholder config scaffolds, and ad-SDK bloat are rejected.
 - **Definition of Done (Immediate Deletion)**: Never leave `[x]` checkboxes in `TODO.md`. When a `TASK-*` ships, delete that `TASK-*` line (and its Quick-Win Ready Queue pointer) in the same PR; when a Story or Bug's final task ships, delete the entire card. History lives in Git and [`CHANGELOG.md`](./CHANGELOG.md).
-- **Active Backlog Rollup (`19` Stories/Bugs across `5` Epics, `13` `[quick-win]` tasks)**:
-  - `EPIC-1` (*3 Bugs*): `~44k tokens` | `~19--30 min agent` (`~3--5 hrs human`).
+- **Active Backlog Rollup (`16` Stories across `4` Epics, `10` `[quick-win]` tasks)**:
   - `EPIC-2` (*4 Stories*): `~145k tokens` | `~65--95 min agent` (`~16--24 hrs human`).
   - `EPIC-3` (*4 Stories*): `~175k tokens` | `~80--115 min agent` (`~22--32 hrs human`).
   - `EPIC-4` (*3 Stories*): `~117k tokens` | `~54--77 min agent` (`~15--22 hrs human`).
   - `EPIC-5` (*5 Stories*): `~245k tokens` | `~113--165 min agent` (`~34--50 hrs human`).
-  - **Active Total**: `~726k tokens` | `~5.5--8.0 hrs agent` (`~90--133 hrs human`).
+  - **Active Total**: `~682k tokens` | `~5.2--7.5 hrs agent` (`~87--128 hrs human`).
 
 </details>
 
@@ -38,90 +36,20 @@ Active, prioritized product and engineering backlog for the **Capy** monorepo ([
 
 Self-contained `1-PR` tasks (`1--3` files, zero external backend dependencies) ready to pull and ship immediately with `Flash` or `Pro`:
 
-1. **`TASK-1.1a`** ([`BUG-1`](#bug-1-stale-indexeddb-name-in-cache-eviction-e2e-test)): Point `BF-6` cache-eviction E2E test at `'capy_game_storage_v8'` (`'puzzles'` store) in `test.mjs`.
-2. **`TASK-1.2a`** ([`BUG-2`](#bug-2-replay-speed-selector-grid-overflow-in-settings)): Fix `REPLAY_SPEED_OPTIONS` grid from `grid-cols-5` to `grid-cols-3 sm:grid-cols-6` in `SettingsModal.tsx`.
-3. **`TASK-1.3a`** ([`BUG-3`](#bug-3-non-atomic-android-disk-backup-writes)): Make Android `saveBackupToDir` crash-safe via `.tmp` + `fsync` + atomic move in `CapyAndroidBridge.kt`.
-4. **`TASK-2.2a`** ([`US-2.2`](#us-22-custom-zoom-sensitivity--magnetic-scale-detents)): Add `zoomSensitivity` (`0.5x--2.0x`) slider in Controls and scale canvas zoom deltas.
-5. **`TASK-2.2b`** ([`US-2.2`](#us-22-custom-zoom-sensitivity--magnetic-scale-detents)): Add `snapZoomLevels` (`1x`, `2x`, `4x`, `8x`, `12x`) magnetic detents and zoom-badge tap stepping.
-6. **`TASK-2.3a`** ([`US-2.3`](#us-23-zero-asset-procedural-asmr-web-audio-engine)): Scaffold `SoundService.ts` (`AudioContext` + visibility auto-suspend + tap woodblock click) and Settings controls.
-7. **`TASK-3.1a`** ([`US-3.1`](#us-31-daily-featured-puzzle--streak-medals)): Add deterministic UTC "Puzzle of the Day" hero card at the top of the **Create** tab.
-8. **`TASK-3.2a`** ([`US-3.2`](#us-32-inclusive-accessibility--reduced-motion-keyboard--colorblind-patterns)): Add `reducedMotion` setting (auto-detecting `prefers-reduced-motion: reduce`) to skip confetti, camera glides, and hint pulses.
-9. **`TASK-3.2b`** ([`US-3.2`](#us-32-inclusive-accessibility--reduced-motion-keyboard--colorblind-patterns)): Add `1`--`9` swatch select, `+`/`-` zoom, `0` reset view, and Arrow/WASD pan keyboard shortcuts.
-10. **`TASK-3.4a`** ([`US-3.4`](#us-34-lifetime-player-statistics--milestone-achievements)): Build local `PlayerStatsService.ts` (`capy_player_stats_v1`) and a **Lifetime Stats** card in Settings.
-11. **`TASK-4.1a`** ([`US-4.1`](#us-41-focal-point-quadtree-sub-tiles--parent-breadcrumbs)): Persist `parentSnapshotId` on detail tiles and show a "Back to Parent Puzzle" pill in `GameTopBar.tsx`.
-12. **`TASK-4.2a`** ([`US-4.2`](#us-42-printable-vector-svg--pdf-coloring-sheet-exporter)): Build `SvgPrintExporter.ts` exporting `borderMap` outlines, region numbers, and swatch legend as `.svg`.
-13. **`TASK-4.3a`** ([`US-4.3`](#us-43-co-op-collaborator-undo-sync--region-ping-beacon)): Broadcast `'UNFILL_EVENT'` over `HybridCoopRoomAdapter` so initial-fill Undo syncs across Co-op peers.
+1. **`TASK-2.2a`** ([`US-2.2`](#us-22-custom-zoom-sensitivity--magnetic-scale-detents)): Add `zoomSensitivity` (`0.5x--2.0x`) slider in Controls and scale canvas zoom deltas.
+2. **`TASK-2.2b`** ([`US-2.2`](#us-22-custom-zoom-sensitivity--magnetic-scale-detents)): Add `snapZoomLevels` (`1x`, `2x`, `4x`, `8x`, `12x`) magnetic detents and zoom-badge tap stepping.
+3. **`TASK-2.3a`** ([`US-2.3`](#us-23-zero-asset-procedural-asmr-web-audio-engine)): Scaffold `SoundService.ts` (`AudioContext` + visibility auto-suspend + tap woodblock click) and Settings controls.
+4. **`TASK-3.1a`** ([`US-3.1`](#us-31-daily-featured-puzzle--streak-medals)): Add deterministic UTC "Puzzle of the Day" hero card at the top of the **Create** tab.
+5. **`TASK-3.2a`** ([`US-3.2`](#us-32-inclusive-accessibility--reduced-motion-keyboard--colorblind-patterns)): Add `reducedMotion` setting (auto-detecting `prefers-reduced-motion: reduce`) to skip confetti, camera glides, and hint pulses.
+6. **`TASK-3.2b`** ([`US-3.2`](#us-32-inclusive-accessibility--reduced-motion-keyboard--colorblind-patterns)): Add `1`--`9` swatch select, `+`/`-` zoom, `0` reset view, and Arrow/WASD pan keyboard shortcuts.
+7. **`TASK-3.4a`** ([`US-3.4`](#us-34-lifetime-player-statistics--milestone-achievements)): Build local `PlayerStatsService.ts` (`capy_player_stats_v1`) and a **Lifetime Stats** card in Settings.
+8. **`TASK-4.1a`** ([`US-4.1`](#us-41-focal-point-quadtree-sub-tiles--parent-breadcrumbs)): Persist `parentSnapshotId` on detail tiles and show a "Back to Parent Puzzle" pill in `GameTopBar.tsx`.
+9. **`TASK-4.2a`** ([`US-4.2`](#us-42-printable-vector-svg--pdf-coloring-sheet-exporter)): Build `SvgPrintExporter.ts` exporting `borderMap` outlines, region numbers, and swatch legend as `.svg`.
+10. **`TASK-4.3a`** ([`US-4.3`](#us-43-co-op-collaborator-undo-sync--region-ping-beacon)): Broadcast `'UNFILL_EVENT'` over `HybridCoopRoomAdapter` so initial-fill Undo syncs across Co-op peers.
 
 ---
 
-## 2. `EPIC-1`: Core Reliability, Crash-Safe Persistence & UI Integrity
-
-**Epic Goal**: Eliminate verified test blindspots, layout defects, and crash-truncation risks before layering new gameplay features.
-
-### BUG-1: Stale IndexedDB Name in Cache-Eviction E2E Test
-
-- **Description**: Update the `BF-6` IndexedDB cache-eviction E2E assertion in `web/scripts/test.mjs` to open `'capy_game_storage_v8'` instead of the non-existent `'capy_puzzles_db'` database.
-- **Value**: Restores genuine automated test coverage for cold-start Web Worker puzzle regeneration and custom Free Colour palette recovery under browser storage pressure.
-- **Why Now**: Right now `db.objectStoreNames.contains('puzzles')` silently evaluates to `false`, meaning regressions in custom-palette recovery (`mergeCustomPalette`) could ship unnoticed on `main`.
-- **Tasks**:
-  - **TASK-1.1a** `[quick-win]`: Open `'capy_game_storage_v8'`, delete `snapId` from `'puzzles'`, and assert cold-start regeneration preserves `customPalette` and `isFreeColor` in `test.mjs`.
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Bug` | `EPIC-1` | `priority: critical-fix` | `domain: testing`
-- **Complexity & Model**: `low` / `easy` | **Recommended Model**: `Flash`
-- **Effort Estimate**: `~14,000 tokens` | `~6--10 min agent` (`~1--1.5 hrs human`)
-- **Target Files**: [`web/scripts/test.mjs`](./web/scripts/test.mjs) (`#L946-L968`), [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts) (`#L22-L25`), [`TESTING.md`](./TESTING.md)
-- **Acceptance Criteria**:
-  - Eviction helper verifies the `'puzzles'` store exists and deletes `snapId` before reload (`assert.equal(evicted, true)`).
-  - Reloading triggers cold-start worker regeneration from `sourceRef` and preserves both edited and added custom swatches.
-
-</details>
-
-### BUG-2: Replay Speed Selector Grid Overflow in Settings
-
-- **Description**: Fix the Default Replay Speed button grid in `SettingsModal.tsx` so all `6` speed options (`0.5x`, `1x`, `2x`, `5x`, `10x`, `20x`) align cleanly instead of wrapping `20x` onto an orphan second row.
-- **Value**: Removes a visible UI layout defect inside the Controls settings panel across mobile and desktop screens.
-- **Why Now**: `20x` was added as a 6th speed option while the container remained `grid-cols-5`; fixing this is a zero-risk 1-line layout polish.
-- **Tasks**:
-  - **TASK-1.2a** `[quick-win]`: Update the Default Replay Speed container from `grid-cols-5` to `grid-cols-3 sm:grid-cols-6` in `SettingsModal.tsx`.
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Bug` | `EPIC-1` | `priority: critical-fix` | `domain: ui`
-- **Complexity & Model**: `low` / `easy` | **Recommended Model**: `Flash`
-- **Effort Estimate**: `~12,000 tokens` | `~5--8 min agent` (`~0.5--1 hr human`)
-- **Target Files**: [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) (`#L854`), [`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx) (`#L18`)
-- **Acceptance Criteria**:
-  - All 6 `REPLAY_SPEED_OPTIONS` render in an even `3x2` grid on narrow phones and a single `6x1` row on `sm+` viewports with zero horizontal overflow.
-
-</details>
-
-### BUG-3: Non-Atomic Android Disk Backup Writes
-
-- **Description**: Upgrade `CapyAndroidBridge.saveBackupToDir` on Android from direct `targetFile.writeText(...)` to write-temp + `fsync` + atomic file replacement.
-- **Value**: Prevents corrupt, half-written JSON save backups if the Android OS kills the app process or battery dies mid-save.
-- **Why Now**: Native disk backups (`filesDir/capy_backups/` and `filesDir/capy_cloud/`) are the last-resort safety net when Android WebView IndexedDB is cleared; a last-resort backup must never corrupt the prior good save.
-- **Tasks**:
-  - **TASK-1.3a** `[quick-win]`: Write `<key>.json.tmp`, flush/`fd.sync()`, and atomically replace `<key>.json` (`Files.move` with `renameTo` fallback) in `CapyAndroidBridge.kt` with JUnit4 tests.
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Bug` | `EPIC-1` | `priority: critical-fix` | `domain: android`
-- **Complexity & Model**: `low` / `moderate` | **Recommended Model**: `Flash`
-- **Effort Estimate**: `~18,000 tokens` | `~8--12 min agent` (`~1.5--2.5 hrs human`)
-- **Target Files**: [`app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt) (`#L286-L300`), [`app/src/test/java/com/capypaint/capy/CapyAndroidBridgeTest.kt`](./app/src/test/java/com/capypaint/capy/CapyAndroidBridgeTest.kt), [`APP.md`](./APP.md)
-- **Acceptance Criteria**:
-  - Overwriting an existing backup leaves zero leftover `.tmp` files and preserves valid UTF-8 JSON across concurrent or repeated writes in `CapyAndroidBridgeTest.kt`.
-
-</details>
-
----
-
-## 3. `EPIC-2`: Mobile Touch Precision & Tactile Sensory Polish
+## 2. `EPIC-2`: Mobile Touch Precision & Tactile Sensory Polish
 
 **Epic Goal**: Make core region tapping, micro-detail targeting, zooming, and stroke feedback feel effortless and deeply satisfying on phones and tablets.
 
@@ -214,7 +142,7 @@ Self-contained `1-PR` tasks (`1--3` files, zero external backend dependencies) r
 
 ---
 
-## 4. `EPIC-3`: Daily Retention, Inclusive Accessibility & Shareable Replays
+## 3. `EPIC-3`: Daily Retention, Inclusive Accessibility & Shareable Replays
 
 **Epic Goal**: Give players a reason to return daily, make every puzzle accessible regardless of color vision or motor preference, and turn replays into shareable videos—100% client-side with zero backend.
 
@@ -306,7 +234,7 @@ Self-contained `1-PR` tasks (`1--3` files, zero external backend dependencies) r
 
 ---
 
-## 5. `EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish
+## 4. `EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish
 
 **Epic Goal**: Complete Capy's signature offline creative workflows—focal-point sub-tile exploration, physical paper coloring sheets, and seamless local Co-op—before introducing external backend infrastructure.
 
@@ -375,7 +303,7 @@ Self-contained `1-PR` tasks (`1--3` files, zero external backend dependencies) r
 
 ---
 
-## 6. `EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation
+## 5. `EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation
 
 **Epic Goal**: Connect Capy's hexagonal cloud, room-sync, and AI provider interfaces (`ProviderRegistry.ts`) to live production credentials and lightweight serverless endpoints when ready for public store and cross-network scale.
 
@@ -484,9 +412,9 @@ Self-contained `1-PR` tasks (`1--3` files, zero external backend dependencies) r
 
 ---
 
-## 7. Unscheduled Platform Icebox (`ICE-1`--`ICE-3`)
+## 6. Unscheduled Platform Icebox (`ICE-1`--`ICE-3`)
 
-Parked native desktop/mobile store wrappers awaiting completion of `EPIC-1`--`EPIC-4` Web/Android stabilization before active scheduling:
+Parked native desktop/mobile store wrappers awaiting completion of `EPIC-2`--`EPIC-4` Web/Android stabilization before active scheduling:
 
 <details>
 <summary>Expand Unscheduled Multi-Platform Shell Epics (Steam, iOS/iPadOS, Microsoft/Xbox)</summary>

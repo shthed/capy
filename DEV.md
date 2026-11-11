@@ -17,7 +17,7 @@ This guide defines the end-to-end human and AI co-development workflow, shared a
 
 > [!IMPORTANT]
 > **Division Between `DEV.md` and `AGENTS.md`**:
-> - [`AGENTS.md`](./AGENTS.md) is the **compact, auto-loaded AI operational contract** (`< 7 KB`) injected into every agent turn. Keep `AGENTS.md` strictly AI-specific and free of long tutorials so it never exceeds system-prompt limits or burns unnecessary tokens.
+> - [`AGENTS.md`](./AGENTS.md) is the **auto-loaded AI operational contract** injected into every agent turn. Keep `AGENTS.md` strictly AI-specific and free of human-only tutorials, while letting it grow to whatever size is needed for optimal agent performance and reliability over raw token savings.
 > - [`DEV.md`](./DEV.md) (this file) is the **comprehensive Human + AI collaboration, coding guardrail, and maintenance manual**, consulted by human contributors and loaded on demand by AI agents when modifying code, planning workflows, choosing models, debugging CI, or updating dependencies.
 
 ---
@@ -26,8 +26,8 @@ This guide defines the end-to-end human and AI co-development workflow, shared a
 
 ```mermaid
 flowchart TD
-    subgraph AutoLoaded["Auto-Loaded Every Agent Turn (< 7 KB)"]
-        AGENTS["AGENTS.md (Core Invariants, Token Discipline & PR Rubric)"]
+    subgraph AutoLoaded["Auto-Loaded Every Agent Turn"]
+        AGENTS["AGENTS.md (AI Invariants, Context Discipline & PR Rubric)"]
     end
 
     subgraph ProcessAndRoadmap["Process, History & Roadmap"]
@@ -58,7 +58,7 @@ flowchart TD
 
 - **[`README.md`](./README.md)** (*Players & Contributors*): Product showcase, controls cheat sheet, developer quick start, privacy policy link, and documentation index.
 - **[`DEV.md`](./DEV.md)** (*Humans & AI Agents*): Co-development philosophy, model selection, `#NNN` session hygiene, shared technical guardrails, CI/CD, and maintenance playbooks.
-- **[`AGENTS.md`](./AGENTS.md)** (*AI Agents — Auto-Loaded `< 7 KB`*): High-density AI guardrails, mobile-first formatting rule, token-efficiency discipline, task routing, and PR readiness contract.
+- **[`AGENTS.md`](./AGENTS.md)** (*AI Agents — Auto-Loaded*): AI-specific guardrails, mobile-first formatting rule, context discipline, task routing, and PR readiness contract.
 - **[`WEB.md`](./WEB.md)** (*Humans & AI Agents*): React 19 UI hierarchy, `PuzzleCanvas.tsx` 3-tier offscreen caching, 6-mode touch gesture engine, Worker IPC, `NativeBridge`, storage keys, and `UserSettings` dictionary.
 - **[`PUZZLE.md`](./PUZZLE.md)** (*Humans & AI Agents*): `puzzle.worker.ts` 5-strategy computer-vision pipeline, Red-Mean K-Means++ clustering, adaptive Otsu/Sobel contours, watershed absorption, and 6-stage telemetry.
 - **[`APP.md`](./APP.md)** (*Humans & AI Agents*): Unified Android `:app` launcher (`MainActivity.kt`, `CapyAndroidBridge.kt`), `WebViewAssetLoader`, Pixel API 33+ LRA touch haptics, `SnapshotsClient` sync, and disk backups.
@@ -303,12 +303,12 @@ npm run generate:samples # Rebuild web/public/assets/sample_saves.capy when buil
    - `ci`: GitHub Actions workflows and deployment scripts.
    - `deps`: `npm` or Gradle version catalog (`libs.versions.toml`) updates.
 3. **Top-of-PR Live Preview Callout**: Whenever `deploy-branch.yml` deploys a PR preview, place the playable preview URL (`https://shthed.github.io/capy/pull/<number>/`) and Android preview APK (`https://shthed.github.io/capy/pull/<number>/capy.apk`) at the very top of the PR body.
-4. **Plain-English Top Overview Paragraph & "Why" Rationale**: Immediately below the live preview callout (and above the PR Readiness Score), include a concise plain-English overview paragraph summarizing everything included in the PR and *why* it was needed. If a PR bundles multiple unrelated bugfixes or cleanup chores together, state that candidly rather than inventing an artificial unifying theme, and explain the *why* behind each major work item in the body.
+4. **Plain-English Top Overview Paragraph & "Why" Rationale**: Immediately below the live preview callout (and above the commit-pinned change breakdown), include a concise plain-English overview paragraph summarizing everything included in the PR and *why* it was needed. If a PR bundles multiple unrelated bugfixes or cleanup chores together, state that candidly rather than inventing an artificial unifying theme, and explain the *why* behind each major work item in the body.
 5. **Commit-Pinned Line Links**: Whenever referencing code lines in PR bodies, PR comments, or chat summaries, **never** link to `blob/main/...` (which drifts over time) or `blob/<feature-branch>/...` (which `404`s after branch deletion). Always pin to the exact commit SHA or PR diff anchor:
    - `https://github.com/shthed/capy/blob/<commit-sha>/<path>#L<start>-L<end>`
    - `https://github.com/shthed/capy/pull/<number>/files#diff-<sha256(path)>R<start>-R<end>`
 
-### Step 4: Pre-Merge Development Summary & 5-Pillar Readiness Score (`>= 95%`)
+### Step 4: Pre-Merge Development Summary & End-of-PR 5-Pillar Readiness Score (`>= 95%`)
 
 Before asking the human to merge a PR:
 1. Post a mobile-friendly **Development Summary comment** on the PR (using structured bullet lists—never wide tables!) documenting user requirements, architectural decisions, commit-pinned implementation links, verification output, and visual checks (never include secrets, tokens, or raw chat transcripts).
@@ -318,7 +318,12 @@ Before asking the human to merge a PR:
    - **Pillar 3 -- Performance & Golden Invariants (`20` pts)**: Zero per-frame allocations, worker-only segmentation, relative `./assets/...` URLs, and safe `NativeBridge` fallbacks.
    - **Pillar 4 -- Docs & Changelog Sync (`20` pts)**: [`web/package.json`](./web/package.json) version bumped, [`CHANGELOG.md`](./CHANGELOG.md) updated with a flat single brief bullet per item ending in a clickable GitHub PR link, commit-pinned file/line links included in the PR description and summary comment, completed items removed from [`TODO.md`](./TODO.md), and subsystem `.md` files synchronized (zero emojis/ASCII art, mobile-safe lists).
    - **Pillar 5 -- CI & Preview Verification (`20` pts)**: Local lint/build and GitHub Actions pass on HEAD, with both the live preview URL and plain-English overview paragraph at the top of the PR description (or intentional `paths-ignore` skip verified for `.md`-only PRs).
-3. Require **`>= 95%`** before requesting merge approval. Self-correct technical/test/doc gaps automatically; use `/grill-me` if design ambiguity remains. Report the score in **(1)** the top of the PR description as a concise bullet list right below the overview paragraph, **(2)** the PR Development Summary comment, and **(3)** the chat message requesting merge approval (explicitly noting the `-N` point reason whenever `< 100%`).
+3. **End-of-PR Placement, Collapsible `<details>` Rubric & Closing Confidence + Subtask Checklist**:
+   - Require **`>= 95%`** before requesting merge approval. Self-correct technical/test/doc gaps automatically; use `/grill-me` if design ambiguity remains.
+   - Place the **`### PR Readiness & Perfection Confidence Score: <N>% (<N> / 100)`** section at the **end** of the PR description (and at the end of the PR Development Summary comment):
+     - Wrap the detailed 5-Pillar breakdown, test commands, and invariant checks inside a collapsible `<details><summary>Expand 5-Pillar Readiness Rubric & Verification Details (100 / 100)</summary> ... </details>` block (with blank lines immediately after `</summary>` and before `</details>`).
+     - Immediately after `</details>`, finish the PR description with a **final closing paragraph** explaining in plain English why you believe the PR is complete/perfect (or noting the exact `-N` point reason if `< 100%`), followed by any remaining open [`TODO.md`](./TODO.md) subtasks formatted as a **Markdown checklist (`- [ ] ...`)**.
+   - Also report the score and remaining subtask checklist concisely in the chat message requesting merge approval.
 4. **Wait for Explicit Approval**: Never merge a PR or push directly to `main` without explicit user confirmation.
 
 ### Reopening & Continuing Work on a Closed Pull Request
