@@ -27,10 +27,10 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
   - When a Story or Epic's final task merges to `main`, move that Story or Epic into the single collapsed **Shipped Epics & Stories** `<details>` summary in [Section 6](#6-shipped-epics--stories-epic-1--completed-stories) with clickable `#<PR>` links.
 - **Remaining Roadmap Rollup (`15` Active/Queued Stories across `4` Epics)**:
   - `EPIC-2` (*3 Remaining Stories -- Active in Sprint 1*): `~104k tokens` | `~48--69 min agent` (`~12.5--17.5 hrs human`).
-  - `EPIC-3` (*5 Stories -- Ready for Sprint 2*): `~213k tokens` | `~98--140 min agent` (`~27--39 hrs human`).
+  - `EPIC-3` (*5 Stories -- Ready for Sprint 2*): `~152k tokens` | `~71--102 min agent` (`~19.5--28.5 hrs human`).
   - `EPIC-4` (*3 Stories -- Ready for Sprint 3*): `~102k tokens` | `~46--65 min agent` (`~13--19 hrs human`).
   - `EPIC-5` (*5 Stories -- Blocked on External Infra*): `~245k tokens` | `~113--165 min agent` (`~34--50 hrs human`).
-  - **Total Strategic Horizon**: `~664k tokens` | `~5.1--7.3 hrs agent` (`~86.5--125.5 hrs human`).
+  - **Total Strategic Horizon**: `~603k tokens` | `~4.6--6.7 hrs agent` (`~79--115 hrs human`).
 
 </details>
 
@@ -67,48 +67,44 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 **Epic Goal**: Forgive near-miss mobile taps on tiny micro-regions without requiring pixel-perfect precision, give players a reason to return daily, make every puzzle accessible regardless of color vision or motor preference, and turn replays into shareable videos—100% client-side with zero backend.
 
-### US-3.1: Daily Featured Puzzle & Streak Medals
+### US-3.1: Daily Featured Puzzle Streak & Completion Medals
 
-- **Readiness**: `Ready for Sprint 2` (Zero external blockers)
-- **Description**: Surface a deterministic UTC date-seeded "Puzzle of the Day" hero card in the **Create** tab with consecutive-day streak tracking and Relaxed vs. Zero-Hint completion medals.
-- **Value**: Removes choice paralysis on launch and builds a lightweight, rewarding daily coloring habit that works completely offline.
-- **Why Now**: Delivers high player retention with zero server cost by deterministically rotating curated `SAMPLE_GALLERY` artworks and preset variations by UTC date.
+- **Readiness**: `Ready for Sprint 2` (Zero external blockers; base UTC `DailyPuzzleService.ts` & **Create** hero card `TASK-3.1a` shipped in [#474](https://github.com/shthed/capy/pull/474))
+- **Description**: Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint completion medals on top of `DailyPuzzleService.ts`.
+- **Value**: Turns one-off daily puzzle launches into a rewarding consecutive-day coloring habit completely offline.
+- **Why Now**: `DailyPuzzleService.ts` (`#474`) already rotates featured artworks deterministically by UTC date; adding streak persistence completes the retention loop.
 - **Planned Sprint Slices**:
-  - **TASK-3.1a** `[quick-win]`: Render a deterministic UTC date-seeded "Puzzle of the Day" card at the top of the **Create** tab in `SettingsModal.tsx` with one-tap launch.
   - **TASK-3.1b**: Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint medal badges.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: ui`
-- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 3.8 Flash` (`3.1a`), `Gemini 4 Argon` (`3.1b`)
-- **Effort Estimate**: `~35,000 tokens` (`~15k` + `~20k`) | `~16--22 min agent` (`~4--6 hrs human`)
-- **Target Files**: [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
+- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~20,000 tokens` | `~9--13 min agent` (`~2.5--3.5 hrs human`)
+- **Target Files**: [`web/src/services/DailyPuzzleService.ts`](./web/src/services/DailyPuzzleService.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
-  - Same UTC calendar date resolves to the identical featured artwork + preset across all devices offline, covered by Playwright E2E assertions.
+  - Consecutive UTC-day completions increment streak accurately while preserving Relaxed vs. Zero-Hint medal badges offline, covered by Playwright E2E assertions.
 
 </details>
 
-### US-3.2: Inclusive Accessibility -- Reduced Motion, Keyboard & Colorblind Patterns
+### US-3.2: Inclusive Accessibility -- Colorblind Geometric Region Patterns
 
-- **Readiness**: `Ready for Sprint 2` (Zero external blockers)
-- **Description**: Add `reducedMotion` support, full desktop keyboard gameplay (`1`--`9` swatches, `+/-` zoom, `0` reset, Arrow/WASD pan), and geometric `CanvasPattern` hatch overlays (`colorblindPatternMode`) for active/hinted regions.
-- **Value**: Ensures players with color-vision deficiency, vestibular motion sensitivity, or keyboard-first setups can play comfortably without relying solely on hue contrast or pointer drags.
-- **Why Now**: Color-by-number games inherently risk excluding deuteranopia/protanopia/tritanopia players on similar palette shades; shipping client-side accessibility unlocks inclusive play immediately.
+- **Readiness**: `Ready for Sprint 2` (Zero external blockers; `reducedMotion` `TASK-3.2a` & desktop keyboard shortcuts `TASK-3.2b` shipped in [#474](https://github.com/shthed/capy/pull/474))
+- **Description**: Add geometric `CanvasPattern` hatch overlays (`colorblindPatternMode`) for active and hinted regions alongside existing `reducedMotion` and desktop keyboard gameplay shortcuts.
+- **Value**: Ensures players with deuteranopia, protanopia, or tritanopia can distinguish similar palette shades comfortably without relying solely on hue contrast.
+- **Why Now**: `reducedMotion` and desktop keyboard shortcuts (`1`--`9`, `+`/`-`, `0`, Arrow/WASD) are live (`#474`); adding cached `CanvasPattern` textures finishes full visual accessibility.
 - **Planned Sprint Slices**:
-  - **TASK-3.2a** `[quick-win]`: Add `reducedMotion: boolean` (seeded from `prefers-reduced-motion: reduce`) in `SettingsModal.tsx` to skip `canvas-confetti`, smooth camera glides, and hint/bloom pulses.
-  - **TASK-3.2b** `[quick-win]`: Extend `handleKeyDown` in `App.tsx` (`#L1601`) and `PuzzleCanvas.tsx` with `1`--`9` swatch selection, `+`/`-` zoom, `0` reset view, and Arrow/WASD viewport panning.
   - **TASK-3.2c**: Add `colorblindPatternMode: boolean` rendering cached `CanvasPattern` geometric textures (dots, stripes, crosshatch, checkerboard) over active and hinted regions.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: a11y, canvas, ui`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 3.8 Flash` (`3.2a`, `3.2b`), `Gemini 4 Argon` (`3.2c`)
-- **Effort Estimate**: `~45,000 tokens` (`~14k` + `~14k` + `~17k`) | `~20--30 min agent` (`~6--8 hrs human`)
-- **Target Files**: [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md), [`README.md`](./README.md)
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~17,000 tokens` | `~8--12 min agent` (`~2--3 hrs human`)
+- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
-  - Keyboard shortcuts explicitly guard against `e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement` (not just `showSettings`).
   - `CanvasPattern` tiles are generated once at setup/theme change—zero per-frame pattern creation inside `requestAnimationFrame`.
 
 </details>
@@ -135,23 +131,22 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 </details>
 
-### US-3.4: Lifetime Player Statistics & Milestone Achievements
+### US-3.4: Milestone Achievement Toasts & CRDT Lifetime Stats Sync
 
-- **Readiness**: `Ready for Sprint 2` (Zero external blockers; Play Games native hook safely feature-detects until `US-5.1` IDs exist)
-- **Description**: Track lifetime coloring stats (`totalRegionsColored`, `puzzlesCompleted`, `zeroHintPuzzles`, `fastestCompletionMs`, `freeColorCreations`, `coopRegionsPainted`) with non-blocking milestone unlock toasts, CRDT cloud sync, and optional Play Games hooks.
-- **Value**: Rewards long-term mastery across Easy, Hard, Free Colour, and Co-op modes without cluttering the minimalist coloring canvas.
-- **Why Now**: Decoupling local stats + CRDT manifest sync from external Play Console achievement IDs (`US-5.1`) lets players accumulate lifetime progress immediately.
+- **Readiness**: `Ready for Sprint 2` (Zero external blockers; local `PlayerStatsService.ts` & Settings **Lifetime Stats** card `TASK-3.4a` shipped in [#474](https://github.com/shthed/capy/pull/474))
+- **Description**: Layer non-blocking milestone achievement unlock toasts, monotonic CRDT cloud stat sync, and optional Play Games hooks onto `PlayerStatsService.ts` (`capy_player_stats_v1`).
+- **Value**: Rewards long-term mastery across Easy, Hard, Free Colour, and Co-op modes and keeps lifetime totals synced monotonically across devices.
+- **Why Now**: Local `PlayerStatsService.ts` (`mergeLifetimeStats`) and the Settings **Lifetime Stats** card are live (`#474`); wiring milestone unlock toasts and cloud/Play Games bridges completes cross-device progression.
 - **Planned Sprint Slices**:
-  - **TASK-3.4a** `[quick-win]`: Create `web/src/services/PlayerStatsService.ts` (`capy_player_stats_v1`) and render a **Lifetime Stats** summary card in `SettingsModal.tsx`.
   - **TASK-3.4b**: Add milestone achievement unlock toasts, monotonic CRDT stat merging in `ProviderRegistry.ts` / `CloudProviderDrivers.ts`, and defensive no-op `NativeBridge.unlockAchievement` hooks.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: ui, cloud, android`
-- **Complexity & Model**: `high` / `moderate` | **Recommended Model**: `Gemini 3.8 Flash` (`3.4a`), `Gemini 4 Argon` (`3.4b`)
-- **Effort Estimate**: `~50,000 tokens` (`~18k` + `~32k`) | `~22--32 min agent` (`~6--9 hrs human`)
-- **Target Files**: `web/src/services/PlayerStatsService.ts`, [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
+- **Complexity & Model**: `high` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~32,000 tokens` | `~14--20 min agent` (`~4--6 hrs human`)
+- **Target Files**: [`web/src/services/PlayerStatsService.ts`](./web/src/services/PlayerStatsService.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - Stat counters merge monotonically (`Math.max` / set-count union) across devices so syncing an older offline tab never decrements lifetime totals.
 
@@ -385,8 +380,10 @@ Parked native desktop/mobile store wrappers awaiting completion of `EPIC-2`--`EP
 Completed Epics and User Stories archived upon merge to `main` (full granular PR history lives in [`CHANGELOG.md`](./CHANGELOG.md)):
 
 <details>
-<summary>Expand Shipped Epics & Stories (EPIC-1 & EPIC-2 US-2.2 -- PRs #431--#472)</summary>
+<summary>Expand Shipped Epics & Stories (EPIC-1 & Shipped Slices -- PRs #431--#474)</summary>
 
+- **Shipped Slices from `EPIC-3` (*Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays*)**:
+  - **Daily Featured Puzzle (`TASK-3.1a`), Reduced Motion (`TASK-3.2a`), Desktop Keyboard Shortcuts (`TASK-3.2b`) & Lifetime Player Stats (`TASK-3.4a`)** -- [#474](https://github.com/shthed/capy/pull/474)
 - **Shipped Stories from `EPIC-2` (*Mobile Touch Precision & Tactile Sensory Polish*)**:
   - **`US-2.2`: Custom Zoom Sensitivity, Top-Bar Scale Pill & Magnetic Scale Detents** (plus `TASK-2.3a` Web Audio woodblock tap synth) -- [#472](https://github.com/shthed/capy/pull/472)
 - **`EPIC-1`: Unified Web + Android Monorepo, Gesture Engine, `.capy` v2 Codec, Replay Scrubber & Cloud/Co-op Foundation (`Shipped v1.0--v2.5`)**:
