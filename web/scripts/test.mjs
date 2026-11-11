@@ -975,7 +975,7 @@ async function runBrowserBasicsSuite() {
     await page.waitForTimeout(350);
 
     // 8. BF-6: IndexedDB Cache Eviction Fallback preserves snapshot.customPalette and added swatches
-    await page.evaluate(async (snapId) => {
+    const evicted = await page.evaluate(async (snapId) => {
       const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
       const snap = snaps.find((s) => s.id === snapId);
       if (snap) {
@@ -990,30 +990,31 @@ async function runBrowserBasicsSuite() {
         snap.isFreeColor = true;
         localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
       }
-      // Evict only the puzzle data entry in IndexedDB (keeping the image blob in capy_images_v8)
-      await new Promise((resolve) => {
-        const req = indexedDB.open('capy_puzzles_db');
+      // Evict only the puzzle data entry in IndexedDB (keeping the image blob in the 'images' store)
+      return await new Promise((resolve) => {
+        const req = indexedDB.open('capy_game_storage_v8');
         req.onsuccess = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains('puzzles')) {
             db.close();
-            resolve();
+            resolve(false);
             return;
           }
           const tx = db.transaction('puzzles', 'readwrite');
           tx.objectStore('puzzles').delete(snapId);
           tx.oncomplete = () => {
             db.close();
-            resolve();
+            resolve(true);
           };
           tx.onerror = () => {
             db.close();
-            resolve();
+            resolve(false);
           };
         };
-        req.onerror = () => resolve();
+        req.onerror = () => resolve(false);
       });
     }, uploadCheck.id);
+    assert.equal(evicted, true, 'Expected puzzle record to be evicted from IndexedDB cache');
 
     await page.reload({ waitUntil: 'load' });
     await waitForPuzzleLoaded(page);

@@ -16,7 +16,11 @@ import android.webkit.JavascriptInterface
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
 import java.io.File
+import java.io.FileOutputStream
 import java.net.URI
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 class CapyAndroidBridge(
     private val context: Context,
@@ -284,16 +288,45 @@ class CapyAndroidBridge(
         }
 
         fun saveBackupToDir(dir: File, key: String, data: String): Boolean {
+            val safeKey = sanitizeKey(key)
+            val tmpFile = File(dir, "$safeKey.json.tmp")
             return try {
                 if (!dir.exists() && !dir.mkdirs()) {
                     Log.e(TAG, "Failed to create backup directory: ${dir.absolutePath}")
                     return false
                 }
-                val targetFile = File(dir, "${sanitizeKey(key)}.json")
-                targetFile.writeText(data, Charsets.UTF_8)
+                val targetFile = File(dir, "$safeKey.json")
+                FileOutputStream(tmpFile).use { fos ->
+                    fos.write(data.toByteArray(Charsets.UTF_8))
+                    fos.flush()
+                    fos.fd.sync()
+                }
+                try {
+                    Files.move(
+                        tmpFile.toPath(),
+                        targetFile.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE,
+                    )
+                } catch (_: AtomicMoveNotSupportedException) {
+                    try {
+                        Files.move(
+                            tmpFile.toPath(),
+                            targetFile.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING,
+                        )
+                    } catch (_: Exception) {
+                        if (!tmpFile.renameTo(targetFile)) {
+                            throw IllegalStateException("Failed to rename ${tmpFile.name} to ${targetFile.name}")
+                        }
+                    }
+                }
                 Log.d(TAG, "Saved backup: $key (${data.length} chars)")
                 true
             } catch (e: Exception) {
+                if (tmpFile.exists()) {
+                    tmpFile.delete()
+                }
                 Log.e(TAG, "Failed to save backup: $key", e)
                 false
             }

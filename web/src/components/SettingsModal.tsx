@@ -851,7 +851,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {settings.replaySpeed || 1}x
                   </span>
                 </div>
-                <div className="grid grid-cols-5 gap-1.5">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                   {REPLAY_SPEED_OPTIONS.map((spd) => (
                     <button
                       key={spd}

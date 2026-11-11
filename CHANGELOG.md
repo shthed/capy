@@ -1,5 +1,6 @@
 ### 2.5 - 2026-11-11
 
+- Fix cache-eviction E2E test, replay speed grid, and atomic Android backups [#471](https://github.com/shthed/capy/pull/471)
 - Standardize TODO.md under Lean Agile epics, stories, and collapsible task specs [#470](https://github.com/shthed/capy/pull/470)
 - Add DEV.md, streamline AGENTS.md, and overhaul repository documentation and privacy policy [#467](https://github.com/shthed/capy/pull/467)
 - Compact changelog headings for mobile, remove preamble, and group same-day patch releases [#469](https://github.com/shthed/capy/pull/469)
