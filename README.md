@@ -59,8 +59,9 @@
 
 - **Tap Region**: In **Easy Mode** (default), auto-selects the tapped region's color and fills it immediately; in **Normal Mode**, fills the region when it matches the active swatch; in **Free Colour Mode**, paints with any selected color.
 - **Drag Canvas**: Pans the artwork smoothly across the screen with inertial gliding momentum.
-- **Double-Tap and Drag Down / Up**: Google Maps-style one-finger focal zoom—drag down to zoom in, drag up to zoom out (reversible via Settings).
-- **Pinch / Mouse Wheel**: Multi-touch focal zoom in or out between `0.5x` and `12x`.
+- **Double-Tap and Drag Down / Up**: Google Maps-style one-finger focal zoom—drag down to zoom in, drag up to zoom out (reversible and sensitivity-scalable via Settings).
+- **Pinch / Mouse Wheel**: Multi-touch focal zoom in or out between `0.5x` and `12x`, with optional magnetic zoom detents (`1x`, `2x`, `4x`, `8x`, `12x`) in Settings.
+- **Top-Bar Zoom Badge**: Taps step cleanly through `1x` -> `2x` -> `4x` -> `8x` -> `12x` -> `1x` relative zoom stops anchored at the viewport center.
 - **Paint Brush Button**: Toggles continuous drag-to-paint stroke mode.
 - **Undo Button (`Ctrl+Z` / `Cmd+Z`)**: Undoes the last painted region (enabled automatically in Free Colour mode or via Settings toggle).
 - **Long-Press Undo Button (`>= 450ms`)**: Opens the interactive YouTube-style Replay timeline scrubber (`0.5x`–`20x`) to scrub history and resume play from any step.

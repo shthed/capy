@@ -42,6 +42,7 @@ flowchart TB
       Storage["StorageService (IndexedDB + LocalStorage)"]
       Cloud["ProviderRegistry & CloudProviderDrivers"]
       Bridge["NativeBridge (Android / WebKit / Web)"]
+      Sound["SoundService (Procedural Web Audio)"]
       Pwa["PwaService (Install & Offline Cache)"]
     end
   end
@@ -79,8 +80,8 @@ flowchart TB
 - **[`web/src/types/index.ts`](./web/src/types/index.ts)**: Central TypeScript types (`PuzzleData`, `PaletteColor`, `UserSettings`, `SavedSnapshot`, `GeneratorConfig`, `GENERATION_PIPELINE_STEPS`, `SAMPLE_GALLERY`).
 
 ### UI Components (`web/src/components/`)
-- **[`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**: 3-tier offscreen 2D canvas renderer, 6-mode touch/pointer gesture engine, Pole-of-Inaccessibility label layout, Follow Painting camera controller, and Co-op ripples.
-- **[`GameTopBar.tsx`](./web/src/components/GameTopBar.tsx)**: Puzzle title, completion badge, active Co-op presence pill (`topbar-active-coop-pill`), preview toggle, fullscreen, image upload, and settings button.
+- **[`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**: 3-tier offscreen 2D canvas renderer, 6-mode touch/pointer gesture engine with custom zoom sensitivity and magnetic zoom detents, Pole-of-Inaccessibility label layout, Follow Painting camera controller, and Co-op ripples.
+- **[`GameTopBar.tsx`](./web/src/components/GameTopBar.tsx)**: Puzzle title, completion badge, active Co-op presence pill (`topbar-active-coop-pill`), interactive relative zoom badge (`topbar-zoom-badge`, cycling `1x -> 2x -> 4x -> 8x -> 12x -> 1x`), preview toggle, fullscreen, image upload, and settings button.
 - **[`PaletteDock.tsx`](./web/src/components/PaletteDock.tsx)**: Horizontal swatch dock with completion badges, viewport spatial priority (`prioritizeOnScreen`), and dynamic sort modes.
 - **[`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx)**: Undo (`Ctrl+Z`, long-press `>= 450ms` for timeline scrubber), conditional Redo (`Ctrl+Y`), Watch Puzzle Replay (`replay-btn`), continuous Paint Mode, zoom `+/-`, and fit-to-screen reset.
 - **[`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx)**: Lazy-loaded 4-tab configuration sheet (`Settings`, `Hints`, `Create`, `Saves` & Cloud/Co-op Hub).
@@ -92,6 +93,7 @@ flowchart TB
 - **[`CapyCodec.ts`](./web/src/services/CapyCodec.ts)**: Scanline RLE + LEB128 varints (`CompactPuzzleRecordV2`), `.capy` v2 Gzip framing, and CRDT `ProgressDeltaV2` tokens.
 - **[`StorageService.ts`](./web/src/services/StorageService.ts)**: IndexedDB (`capy_game_storage_v8`) + `localStorage` + native Android disk backup persistence.
 - **[`ShareLinkService.ts`](./web/src/services/ShareLinkService.ts)**: `< 2 KB` `#s=<token>` share URLs and `?room=<ROOM6>` Co-op room invite helpers.
+- **[`SoundService.ts`](./web/src/services/SoundService.ts)**: Zero-asset procedural Web Audio API synthesizer (`playRegionTap` tactile woodblock/brush envelope, `25ms` drag rate-throttling, lazy user-gesture unlock, and automatic `AudioContext.suspend()` on `visibilitychange` / `pagehide` / `blur`).
 - **[`providers/GoogleCloudSyncClient.ts`](./web/src/services/providers/GoogleCloudSyncClient.ts)**: Browser/PWA Google Identity Services OAuth 2.0 (`openid profile email drive.appdata`) and Google Drive `appDataFolder` REST v3 client.
 - **[`providers/types.ts`](./web/src/services/providers/types.ts)**: Hexagonal interfaces (`CloudProviderDriver`, `AuthProvider`, `CloudSaveProvider`, `RealtimeRoomProvider`, `CatalogStorageProvider`, `AiArtworkProvider`, `MonetizationProvider`).
 - **[`providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts)**: Pluggable cloud drivers (`GoogleCloudDriver` with per-file `writeLocks` mutex, `PlayGamesAndroidDriver`, `SteamCloudDriver`, `MicrosoftCloudDriver`, `AppleCloudDriver`).
@@ -119,7 +121,7 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
 - **[`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**:
   - Renders the puzzle via 3-tier offscreen canvas caching, hit-tests region taps via `regionMap`, renders zero-allocation Co-op ripples, and centers clean `sourceImage` previews while `puzzle.worker.ts` runs.
 - **[`GameTopBar.tsx`](./web/src/components/GameTopBar.tsx)**:
-  - Displays puzzle title (taps open Saves), completion percentage, live Co-op collaborator presence pill (`topbar-active-coop-pill`), preview eye toggle, fullscreen toggle, photo upload shortcut, and Settings button.
+  - Displays puzzle title (taps open Saves), completion percentage, live Co-op collaborator presence pill (`topbar-active-coop-pill`), interactive relative zoom badge (`topbar-zoom-badge`, tapping steps viewport-center-anchored zoom through `1x -> 2x -> 4x -> 8x -> 12x -> 1x`), preview eye toggle, fullscreen toggle, photo upload shortcut, and Settings button.
 - **[`PaletteDock.tsx`](./web/src/components/PaletteDock.tsx)**:
   - Renders numbered color swatches with remaining region counts. Tapping an already-active swatch triggers a directional region hint; `+` opens `ColorPickerPopover`. Supports sorting by `NUMBER`, `REMAINING`, `HUE`, or `LIGHTNESS` plus `prioritizeOnScreen` spatial floating.
 - **[`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx) & Global Keyboard Shortcuts**:
@@ -129,7 +131,7 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
   - Also hosts Watch Puzzle Replay (`replay-btn`), continuous Paint Mode brush toggle, optional `+/-` zoom buttons, and fit-to-screen reset (`reset-view-btn`).
 - **[`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx)**:
   - Restores the last open tab via `localStorage['capy_last_settings_tab']` (`'0'`--`'3'`):
-  - **Tab 0 -- Settings**: Difficulty (`EASY` / `NORMAL`), `autoAdvance`, default `replaySpeed` (`0.5x`, `1x`, `2x`, `5x`, `10x`, `20x`), `Replay on Load`, `Follow Painting During Replay` (`toggle-replay-follow-btn`), `Auto-Loop Replay` (`toggle-replay-loop-btn`), `panMomentum`, canvas background presets + `<Pipette>` custom color picker, `raisePaletteDock`, label bounds (`minLabelSize`, `maxLabelSize`, `labelScale`), PWA install card, and Android APK download link.
+  - **Tab 0 -- Settings**: Difficulty (`EASY` / `NORMAL`), `autoAdvance`, default `replaySpeed` (`0.5x`, `1x`, `2x`, `5x`, `10x`, `20x`), `Replay on Load`, `Follow Painting During Replay` (`toggle-replay-follow-btn`), `Auto-Loop Replay` (`toggle-replay-loop-btn`), Controls (`zoomSensitivity` `0.5x`--`2.0x` slider, `snapZoomLevels` `1x/2x/4x/8x/12x` magnetic stops toggle, `soundEnabled` toggle, `soundVolume` `0%`--`100%` slider), `panMomentum`, canvas background presets + `<Pipette>` custom color picker, `raisePaletteDock`, label bounds (`minLabelSize`, `maxLabelSize`, `labelScale`), PWA install card, and Android APK download link.
   - **Tab 1 -- Hints**: `highlightStyle` (`FULL_REGION`, `BOUNDARY_ONLY`, `NUMBER_ONLY`, `CENTROID_GLOW`), `hintFillStyle`, custom `hintColorArgb` (`<Pipette>`), `hintIntensity`, and `animateHint`.
   - **Tab 2 -- Create**: Real-time gallery search (`gallery-search-input`), category filter chips (`All`, `Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), **Infinite Zoom 2x Detail Tile** cropper (`infinite-zoom-subtile-btn`), moderated **Community Puzzle Ideas** feed (`community-ideas-section`), `GeneratorConfig` controls, and device photo upload.
   - **Tab 3 -- Saves**: Cloud Sync & Simultaneous Co-op Hub (`cloud-coop-hub`) featuring player name/avatar editor, multi-provider cloud status bar (`data-testid="cloud-providers-bar"`), browser/PWA **Google Account Login** (Google Identity Services OAuth 2.0 $\rightarrow$ Google Drive `appDataFolder`), Android **Google Play Games Services v2** sign-in, CRDT `Cloud Sync`, `< 2 KB` `Share Progress Link`, and 6-char `Host Co-op Room` / `Join` controls, alongside sticky library actions (Sort, `Replay on Load`, Detail/Thumbnails view toggle, Pin/Unpin, Load, Replay, inline Rename, Export `.capy`, Import, Export All, Delete All).
@@ -180,18 +182,18 @@ flowchart TD
 - **Hint Highlighting (`hintColorArgb`) & `NUMBER_ONLY`**: Hints render `SOLID`, `CHECKER`, or `STRIPES` overlays in `settings.hintColorArgb` (`#FBBF24` default). `NUMBER_ONLY` tints label text directly with a crisp white stroke halo rather than drawing centroid circles (reserved for `CENTROID_GLOW`).
 - **Inscribed-Circle Label Fitting**: Labels render at each region's Pole of Inaccessibility (`centroidX`, `centroidY`), sized from `region.maxRadius / sqrt((0.3 * charCount)^2 + 0.1444)` with a 10% margin and clamped to `[minLabelSize, maxLabelSize]` so 1--3 digit numbers never cross borders.
 
-### Viewport Clamping (`clampCanvasOffset`) & `ResizeObserver`
-- **Zoom Range**: Smoothly clamped between **`0.5x`** and **`12.0x`**.
+### Viewport Clamping (`clampCanvasOffset`), Magnetic Detents & `ResizeObserver`
+- **Zoom Range, Sensitivity & Magnetic Detents**: Smoothly clamped between **`0.5x`** and **`12.0x`**. Mouse-wheel, two-finger pinch (`Math.pow(rawRatio, zoomSensitivity)`), and one-finger double-tap drag deltas scale smoothly in log-space by `zoomSensitivity` (`0.5`--`2.0`). When `snapZoomLevels` is enabled, `applyZoomSnapDetent` snaps relative zoom within `+-4%` onto magnetic stops `[1, 2, 4, 8, 12]` while re-anchoring `offset` around the active cursor/pinch/double-tap focal point. Tapping `topbar-zoom-badge` in `GameTopBar` steps cleanly through `1x -> 2x -> 4x -> 8x -> 12x -> 1x` (`getNextZoomStop`) anchored at the viewport center.
 - **Dynamic Corner Margins**: Scales pan bounds dynamically with `containerWidth * 0.72` and `containerHeight * 0.72` when zoomed in so all four puzzle corners can pan comfortably past screen center above `PaletteDock` and below `GameTopBar`.
 - **Immediate Resize & Rotation Clamping (`BF-2`)**: A `ResizeObserver` on `containerRef` (plus `window` `resize` fallback) immediately re-clamps `offsetRef.current`, updates `containerSize`, resizes the high-DPI `<canvas>`, and repaints synchronously on portrait/landscape rotation or split-screen resize.
 
 ### 6-Mode Touch, Mouse & Gesture Engine
 `PuzzleCanvas` orchestrates **6 distinct** interaction modes:
 1. **Tap Hit-Testing**: Inverse-transforms client $(x, y)$ to `(puzzleX, puzzleY)` and looks up `regionMap[y * width + x]`. In **Easy Mode** (`difficulty: 'EASY'`, default), tapping any unpainted region auto-selects its color and fills it; in **Normal Mode**, fills matching `activeColorId` regions (or pulses a subtle mismatch indicator); in **Free Colour Mode**, fills or repaints with `activeColorId`.
-2. **Google Maps-Style One-Finger Double-Tap-and-Drag Zoom & Horizontal Pan**: Second tap-and-hold within `350ms` and `40px` zooms focal-point-invariantly on vertical drag (`dy > 0` zooms **in**, `dy < 0` zooms **out` unless `reverseDoubleTapZoom` is `true`, `Math.exp((dir * dy) / 220)`), while horizontal drag (`|dx| >= |dy|`) pans cleanly even when Paint Mode is active.
+2. **Google Maps-Style One-Finger Double-Tap-and-Drag Zoom & Horizontal Pan**: Second tap-and-hold within `350ms` and `40px` zooms focal-point-invariantly on vertical drag (`dy > 0` zooms **in**, `dy < 0` zooms **out** unless `reverseDoubleTapZoom` is `true`, `Math.exp(((dir * dy) / 220) * zoomSensitivity)`), while horizontal drag (`|dx| >= |dy|`) pans cleanly even when Paint Mode is active.
 3. **Background Margin Drag Panning**: Touching outside the artwork bounds (`x < 0 || y < 0 || x >= width || y >= height`) always pans the viewport even when Paint Mode is active.
 4. **Smooth Pan Momentum (Inertial Gliding)**: Samples pointer velocity over a `100ms` sliding window; flicks $\ge 0.18\text{ px/ms}$ glide via `requestAnimationFrame` with $0.92^{\Delta t / 16}$ exponential friction decay and zero-latency cancellation on the next `pointerdown`.
-5. **Multi-Touch Pinch-to-Zoom**: Two-finger midpoint focal tracking between `0.5x` and `12.0x`, re-anchoring single-finger pan coordinates seamlessly when one finger lifts.
+5. **Multi-Touch Pinch-to-Zoom**: Two-finger midpoint focal tracking between `0.5x` and `12.0x` scaled by `Math.pow(rawRatio, zoomSensitivity)`, re-anchoring single-finger pan coordinates seamlessly when one finger lifts.
 6. **Drag-to-Color (Continuous Paint Mode)**: Interpolates stroke segments across pointer moves inside the artwork and batch-fills matching regions via `onBatchRegionsClicked` (disabled automatically during replay).
 
 ---
@@ -335,6 +337,10 @@ Defined in [`web/src/types/index.ts`](./web/src/types/index.ts) (`DEFAULT_SETTIN
 - **`replayFollow`**: `boolean` (default `false`) -- Enables predictive safe-frame camera tracking during replay when zoomed in (`scale > 1.05`).
 - **`autoReplayOnLoad`**: `boolean` (default `true`) -- Replays completed regions chronologically upon loading a saved puzzle before resuming play in place.
 - **`reverseDoubleTapZoom`**: `boolean` (default `false`) -- Inverts one-finger double-tap drag zoom direction (`false`: down = zoom in; `true`: up = zoom in).
+- **`zoomSensitivity`**: `number` (default `1.0`, range `0.5`--`2.0`) -- Log-space multiplier scaling mouse-wheel, two-finger pinch, one-finger double-tap drag, and `+/-` button zoom speed while preserving focal-point invariance.
+- **`snapZoomLevels`**: `boolean` (default `false`) -- Snaps relative zoom onto magnetic stops (`1x`, `2x`, `4x`, `8x`, `12x`) whenever zoom enters `+-4%` of a stop.
+- **`soundEnabled`**: `boolean` (default `true`) -- Enables zero-asset procedural Web Audio tap effects (`SoundService.ts`).
+- **`soundVolume`**: `number` (default `0.7`, range `0.0`--`1.0`) -- Master gain scalar for procedural Web Audio effects.
 - **`detailedLoadingProgress`**: `boolean` (default `false`) -- Switches `LoadingOverlay` between Simple Fast Mode (`false`) and Detailed 6-Stage Inspector Mode (`true`).
 - **`generatorConfig`**: `GeneratorConfig` (default `DEFAULT_GENERATOR_CONFIG`) -- Persisted puzzle segmentation parameters (documented in [`PUZZLE.md`](./PUZZLE.md)).
 
