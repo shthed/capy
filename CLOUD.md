@@ -2,7 +2,7 @@
 
 This document explains how modular multi-platform cloud login (`Google`, `Google Play Games v2`, `Steam`, `Microsoft`, `Apple`), conflict-free cross-device Save Library sync, shareable progress links, and simultaneous Co-op multiplayer rooms work across the **Capy** monorepo (`web/` and `app/`).
 
-**Related Guides**: [`README.md`](./README.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`TESTING.md`](./TESTING.md) | [`TODO.md`](./TODO.md) | [`CHANGELOG.md`](./CHANGELOG.md)
+**Related Guides**: [`README.md`](./README.md) | [`ROADMAP.md`](./ROADMAP.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
 
 **Table of Contents**:
 1. [Plain-English Overview: How Everything Works](#1-plain-english-overview-how-everything-works)
@@ -22,11 +22,11 @@ Capy separates **CRDT save merging** (`CrdtCloudSaveAdapter` in [`ProviderRegist
 - **`'play_games_v2'` (`PlayGamesAndroidDriver`) -- Active on Android (`:app`)**:
   - *Auth*: Native Google Play Games Services v2 SDK (`GamesSignInClient` + `PlayersClient` in [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt)).
   - *Storage*: `PlayGames.getSnapshotsClient(activity)` Saved Games API (`RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED`) paired with local `filesDir/capy_cloud/` caching and `inlineBinaryB64` custom-save embedding.
-- **`'steam'` (`SteamCloudDriver`) -- Modular Driver Ready (`ICE-1`)**:
+- **`'steam'` (`SteamCloudDriver`) -- Modular Driver Ready (`ICE-1` in [`ROADMAP.md`](./ROADMAP.md))**:
   - *Auth & Storage*: Steamworks Auth Session Ticket (`window.__capySteamBridge`) + `ISteamRemoteStorage` (`fileWriteAsync` / `fileReadAsync`), awaiting the Tauri desktop wrapper.
-- **`'microsoft'` (`MicrosoftCloudDriver`) -- Modular Driver Ready (`ICE-3`)**:
+- **`'microsoft'` (`MicrosoftCloudDriver`) -- Modular Driver Ready (`ICE-3` in [`ROADMAP.md`](./ROADMAP.md))**:
   - *Auth & Storage*: Microsoft Entra ID / MSA OAuth 2.0 PKCE (`Files.ReadWrite.AppFolder`) + OneDrive `special/approot` / Xbox Connected Storage.
-- **`'apple'` (`AppleCloudDriver`) -- Modular Driver Ready (`ICE-2`)**:
+- **`'apple'` (`AppleCloudDriver`) -- Modular Driver Ready (`ICE-2` in [`ROADMAP.md`](./ROADMAP.md))**:
   - *Auth & Storage*: Sign in with Apple JS / Native GameKit (`GKLocalPlayer`) + CloudKit `privateCloudDatabase` / iCloud `GKSavedGame`.
 
 ### B. How Automatic Google Account & Play Games Login Works
@@ -173,4 +173,6 @@ flowchart TD
 2. **Register Android Signing Certificate SHA-1 Fingerprints**:
    - Under **Credentials -> Add credential** (`Android`, `com.capypaint.capy`), register the SHA-1 fingerprint for both your debug/upload keystore and your Play App Signing certificate.
 3. **Save `CAPY_PLAY_GAMES_APP_ID` in GitHub Repository Variables**:
-   - Add `CAPY_PLAY_GAMES_APP_ID` (`<your-12-digit-play-games-app-id>`) in `https://github.com/shthed/capy/settings/variables/actions`. [`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml) automatically injects `VITE_GOOGLE_CLIENT_ID` and `CAPY_PLAY_GAMES_APP_ID` into Web and Android builds.
+   - Add `CAPY_PLAY_GAMES_APP_ID` (`<your-12-digit-play-games-app-id>`) in `https://github.com/shthed/capy/settings/variables/actions` (wiring `${{ vars.VITE_GOOGLE_CLIENT_ID }}` and `${{ vars.CAPY_PLAY_GAMES_APP_ID }}` into [`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml) is queued as `BUG-2` in [`TODO.md`](./TODO.md)).
+4. **Android App Links (`autoVerify="true"`) Root-Domain Note**:
+   - Android Digital Asset Links verification for `https://shthed.github.io/capy/` queries `https://shthed.github.io/.well-known/assetlinks.json` at the GitHub Pages **domain root** (`shthed.github.io` repository), not `/capy/.well-known/assetlinks.json` (tracked under `EPIC-5` `US-5.1` in [`ROADMAP.md`](./ROADMAP.md)).

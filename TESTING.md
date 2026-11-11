@@ -2,7 +2,7 @@
 
 This document outlines the testing strategy, tooling rationale, unified end-to-end verification suite, and platform test commands across **Web** ([`web/`](./web/)) and **Android** ([`app/`](./app/)).
 
-**Related Guides**: [`README.md`](./README.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TODO.md`](./TODO.md) | [`CHANGELOG.md`](./CHANGELOG.md)
+**Related Guides**: [`README.md`](./README.md) | [`ROADMAP.md`](./ROADMAP.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`CHANGELOG.md`](./CHANGELOG.md)
 
 **Table of Contents**:
 1. [Tooling Evaluation: Why Playwright + Vite SSR Is Optimal](#1-tooling-evaluation-why-playwright--vite-ssr-is-optimal)
@@ -120,4 +120,4 @@ Capy uses a two-stage GitHub Actions workflow balancing fast verification and mi
    - Publishes `main` merges to the production root (`https://shthed.github.io/capy/`) as a single squashed orphan commit on `gh-pages`.
 
 > [!NOTE]
-> **Local Pre-PR Gate vs. GitHub Actions Runner Scope**: `npm test` (Vite SSR unit/codec checks + Playwright headless Chromium E2E suite) is a **mandatory local pre-PR verification gate** before pushing Web/engine/codec changes, while `deploy-branch.yml` runs `npm ci && npm run build` and `./gradlew app:testDebugUnitTest app:assembleDebug` in CI (and skips CI completely via `paths-ignore` when a PR modifies only `.md` or `docs/**` files).
+> **Fast-CI / Thorough-Antigravity-VM Philosophy**: `npm test` (Vite SSR unit/codec checks + Playwright headless Chromium E2E suite) is a **mandatory pre-PR verification gate inside the Antigravity VM** before pushing Web/engine/codec changes. GitHub Actions (`deploy-branch.yml`) intentionally stays ultra-fast and minimal—running `npm ci && npm run build` and `./gradlew app:testDebugUnitTest app:assembleDebug` without multi-minute Playwright browser downloads—so PR preview deploys never bottleneck the dev/test/release loop (and skipping CI completely via `paths-ignore` when a PR modifies only `.md` or `docs/**` files).
