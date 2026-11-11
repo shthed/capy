@@ -219,6 +219,34 @@ async function runCodecAndEngineTests() {
       true,
       `CHANGELOG.md must contain a release heading for current version [${versionMod.APP_VERSION}]`
     );
+    assert.equal(
+      changelogText.includes('## [0.1.0]'),
+      true,
+      'CHANGELOG.md must include retrospective 0.1.0--0.9.x release history'
+    );
+    assert.equal(
+      /^###\s+/m.test(changelogText),
+      false,
+      'CHANGELOG.md must not contain ### Added/Changed/Fixed sub-headings'
+    );
+    assert.equal(
+      /^[ \t]+-\s+/m.test(changelogText),
+      false,
+      'CHANGELOG.md must not contain nested sub-bullets'
+    );
+    const changelogBullets = changelogText.split('\n').filter((line) => line.startsWith('- '));
+    assert.equal(
+      changelogBullets.length >= 397,
+      true,
+      `Expected >= 397 single-line PR bullets in CHANGELOG.md, got ${changelogBullets.length}`
+    );
+    for (const bullet of changelogBullets) {
+      assert.equal(
+        /\(\[PR #\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)\)$/.test(bullet),
+        true,
+        `Each CHANGELOG.md bullet must end with a PR link: ${bullet}`
+      );
+    }
 
     console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, and Version/Changelog sync verified.');
   } finally {
@@ -513,6 +541,7 @@ async function runBrowserBasicsSuite() {
     await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
     // Because the painted center regions are offscreen at the restored top-left zoom extent, offscreen steps fast-forward automatically
     await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 4000 });
+    await page.waitForTimeout(220);
 
     // Trigger replay via long-press Undo, start playback from 0, and verify live zoom/pan during playback
     const undoBtnAfterLoad = await page.waitForSelector('[data-testid="undo-btn"]');
