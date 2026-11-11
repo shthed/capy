@@ -381,12 +381,8 @@ class CapyAndroidBridge(
             if (srcWidth <= 0 || srcHeight <= 0 || maxDimension <= 0) {
                 return inSampleSize
             }
-            if (srcWidth > maxDimension || srcHeight > maxDimension) {
-                val halfWidth = srcWidth / 2
-                val halfHeight = srcHeight / 2
-                while ((halfWidth / inSampleSize) >= maxDimension || (halfHeight / inSampleSize) >= maxDimension) {
-                    inSampleSize *= 2
-                }
+            while ((srcWidth / inSampleSize) > maxDimension || (srcHeight / inSampleSize) > maxDimension) {
+                inSampleSize *= 2
             }
             return inSampleSize
         }
