@@ -1080,9 +1080,9 @@ export const App: React.FC = () => {
           }
 
           const isFree = Boolean(
-            isMatchingActive && activeState?.isFreeColorMode !== undefined
-              ? activeState.isFreeColorMode
-              : candidateSnap.isFreeColor || cachedPuzzle.isFreeColor
+            candidateSnap.isFreeColor ||
+              cachedPuzzle.isFreeColor ||
+              (isMatchingActive && activeState?.isFreeColorMode)
           );
 
           viewportRef.current = restoredView;
@@ -1122,10 +1122,9 @@ export const App: React.FC = () => {
         const fallbackPainted =
           candidateSnap.paintedRegionColors ||
           (isMatchingActive ? activeState?.paintedRegionColors : undefined);
-        const fallbackFreeColor =
-          isMatchingActive && activeState?.isFreeColorMode !== undefined
-            ? activeState.isFreeColorMode
-            : candidateSnap.isFreeColor;
+        const fallbackFreeColor = Boolean(
+          candidateSnap.isFreeColor || (isMatchingActive && activeState?.isFreeColorMode)
+        );
         loadArtworkFromImage(
           img,
           candidateSnap.title,
