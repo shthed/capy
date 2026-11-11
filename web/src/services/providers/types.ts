@@ -161,6 +161,7 @@ export type CoopMessageType =
   | 'HELLO'
   | 'WELCOME_STATE'
   | 'PAINT_EVENT'
+  | 'UNFILL_EVENT'
   | 'HEARTBEAT'
   | 'LEAVE';
 
@@ -177,14 +178,29 @@ export interface CoopPaintEvent {
   timestamp: number;
 }
 
+export interface CoopUnfillEvent {
+  eventId: string;
+  roomCode: string;
+  senderId: string;
+  playerId: string;
+  displayName: string;
+  avatarColorHex: string;
+  regionId?: number;
+  regionIds: number[];
+  timestamp: number;
+}
+
 export interface CoopRoomWireMessage {
   type: CoopMessageType;
   roomCode: string;
   sender: CoopParticipant;
   seedToken?: string;
   paintEvent?: CoopPaintEvent;
+  unfillEvent?: CoopUnfillEvent;
   sentAt: number;
 }
+
+export type RealtimeRoomMessage = CoopRoomWireMessage;
 
 export interface RealtimeRoomProvider {
   readonly activeRoomCode: string | null;
@@ -195,10 +211,12 @@ export interface RealtimeRoomProvider {
   ): Promise<void>;
   leaveRoom(): void;
   broadcastPaintEvent(event: CoopPaintEvent): void;
+  broadcastUnfillEvent(event: CoopUnfillEvent): void;
   broadcastWelcomeState(seedToken: string): void;
   updateSeedToken(seedToken: string): void;
   getParticipants(): CoopParticipant[];
   onPaintEvent(handler: (event: CoopPaintEvent) => void): () => void;
+  onUnfillEvent(handler: (event: CoopUnfillEvent) => void): () => void;
   onWelcomeState(handler: (seedToken: string, sender: CoopParticipant) => void): () => void;
   onParticipantsChanged(handler: (participants: CoopParticipant[]) => void): () => void;
 }

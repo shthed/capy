@@ -207,6 +207,7 @@ export interface SavedSnapshot {
   isAutoSample?: boolean;
   sampleAssetPath?: string | null;
   sourceRef?: PuzzleSourceRef;
+  parentSnapshotId?: string;
   zoomScale: number;
   panOffsetX: number;
   panOffsetY: number;
