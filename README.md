@@ -38,8 +38,8 @@
 - **Turn Any Photo into a Puzzle**: Tap the photo upload button to convert your favorite pictures, pets, landscapes, or drawings into instant playable puzzles, or zoom in with **Infinite Zoom 2x Detail Tiles**.
 - **Shareable Links and Simultaneous Co-op**: Share a compact `< 2 KB` progress URL (`#s=<token>`) with friends, or host a 6-character **Co-op Room** to paint the same puzzle simultaneously with live collaborator ripples.
 - **Compact `.capy` v2 Saves and CRDT Cloud Sync**: Ultra-compact RLE binary saves (`~140x` smaller footprint) and conflict-free Set-Union Cloud Sync across Google Account (Google Drive `appDataFolder`) and Android Google Play Games Services v2 ensure zero progress is ever lost across devices.
-- **Searchable Gallery and Community Ideas**: Filter artwork by category tags (`Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), submit family-friendly puzzle ideas, and vote on upcoming community gallery packs.
-- **Smooth Navigation**: One-finger double-tap-and-drag zoom, fluid pinch-to-zoom up to 12x, and inertial gliding pan momentum just like Google Maps.
+- **Daily Featured Puzzle, Searchable Gallery and Community Ideas**: Play a fresh deterministic UTC **Puzzle of the Day** completely offline, filter artwork by category tags (`Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), track your **Lifetime Stats**, and vote on upcoming community gallery packs.
+- **Smooth Navigation and Inclusive Accessibility**: One-finger double-tap-and-drag zoom, fluid pinch-to-zoom up to 12x, inertial gliding pan momentum, full desktop keyboard gameplay shortcuts, and a **Reduced Motion** accessibility mode.
 - **Continuous Paint Mode**: Drag your finger across the screen to quickly fill connected matching regions without tapping each one individually.
 - **100% Offline-First and Private**: All image processing and coloring run locally inside a sandboxed Web Worker. Play completely offline with zero forced accounts or ads.
 
@@ -47,7 +47,7 @@
 
 ## How to Play
 
-1. **Pick an Artwork**: Start playing instantly with pre-generated built-in favorites (*Capybara*, *Mushroom Forest*, *Capy Forest*, and *Snail Guitar*) with zero generation wait, or import your own photo.
+1. **Pick an Artwork**: Start playing instantly with pre-generated built-in favorites (*Capybara*, *Mushroom Forest*, *Capy Forest*, and *Snail Guitar*) with zero generation wait, launch the **Puzzle of the Day** in the **Create** tab, or import your own photo.
 2. **Choose a Color**: Tap any numbered swatch in the bottom **Palette Dock** (or simply tap any region directly in default **Easy Mode** to auto-select its color). Matching puzzle shapes highlight instantly.
 3. **Tap or Drag to Paint**: Tap numbered shapes on the canvas to fill them, or turn on the **Paint Brush** tool to color continuously by dragging.
 4. **Zoom and Pan**: Double-tap and drag (down to zoom in, up to zoom out, configurable in Settings), or pinch with two fingers to inspect fine micro-regions.
@@ -62,6 +62,7 @@
 - **Double-Tap and Drag Down / Up**: Google Maps-style one-finger focal zoom—drag down to zoom in, drag up to zoom out (reversible and sensitivity-scalable via Settings).
 - **Pinch / Mouse Wheel**: Multi-touch focal zoom in or out between `0.5x` and `12x`, with optional magnetic zoom detents (`1x`, `2x`, `4x`, `8x`, `12x`) in Settings.
 - **Top-Bar Zoom Badge**: Taps step cleanly through `1x` -> `2x` -> `4x` -> `8x` -> `12x` -> `1x` relative zoom stops anchored at the viewport center.
+- **Desktop Keyboard Shortcuts**: Keys `1`--`9` select the corresponding palette swatch, `+` / `=` zoom in, `-` / `_` zoom out, `0` resets the viewport to `1x` fit view, and `ArrowUp`/`W`, `ArrowDown`/`S`, `ArrowLeft`/`A`, `ArrowRight`/`D` pan the canvas by `64px` steps (automatically ignored when modals or text inputs are active or browser modifiers are held).
 - **Paint Brush Button**: Toggles continuous drag-to-paint stroke mode.
 - **Undo Button (`Ctrl+Z` / `Cmd+Z`)**: Undoes the last painted region (enabled automatically in Free Colour mode or via Settings toggle).
 - **Long-Press Undo Button (`>= 450ms`)**: Opens the interactive YouTube-style Replay timeline scrubber (`0.5x`–`20x`) to scrub history and resume play from any step.

@@ -100,6 +100,7 @@ export interface UserSettings {
   snapZoomLevels: boolean;
   soundEnabled: boolean;
   soundVolume: number;
+  reducedMotion: boolean;
   detailedLoadingProgress: boolean;
   generatorConfig: GeneratorConfig;
 }

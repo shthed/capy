@@ -21,12 +21,12 @@ Active, prioritized product and engineering backlog for the **Capy** monorepo ([
   - **Tasks (`TASK-*`)**: Independently mergeable `1-PR` slices. `[quick-win]` marks `<= 15 min` agent tasks (`1--3` files, zero external backend blockers, suitable for `Flash`).
 - **Definition of Ready (Anti-Busywork Gate)**: Items enter `TODO.md` *only* when they deliver measurable gameplay delight, accessibility, retention, or crash/test reliability. Zero-impact chores, unused dependency pruning with zero binary impact, placeholder config scaffolds, and ad-SDK bloat are rejected.
 - **Definition of Done (Immediate Deletion)**: Never leave `[x]` checkboxes in `TODO.md`. When a `TASK-*` ships, delete that `TASK-*` line (and its Quick-Win Ready Queue pointer) in the same PR; when a Story or Bug's final task ships, delete the entire card. History lives in Git and [`CHANGELOG.md`](./CHANGELOG.md).
-- **Active Backlog Rollup (`15` Stories across `4` Epics, `7` `[quick-win]` tasks)**:
+- **Active Backlog Rollup (`15` Stories across `4` Epics, `3` `[quick-win]` tasks)**:
   - `EPIC-2` (*3 Stories*): `~104k tokens` | `~48--69 min agent` (`~12.5--17.5 hrs human`).
-  - `EPIC-3` (*4 Stories*): `~175k tokens` | `~80--115 min agent` (`~22--32 hrs human`).
+  - `EPIC-3` (*4 Stories*): `~114k tokens` | `~53--75 min agent` (`~14.5--21.5 hrs human`).
   - `EPIC-4` (*3 Stories*): `~117k tokens` | `~54--77 min agent` (`~15--22 hrs human`).
   - `EPIC-5` (*5 Stories*): `~245k tokens` | `~113--165 min agent` (`~34--50 hrs human`).
-  - **Active Total**: `~641k tokens` | `~4.9--7.1 hrs agent` (`~83.5--121.5 hrs human`).
+  - **Active Total**: `~580k tokens` | `~4.5--6.4 hrs agent` (`~76--111 hrs human`).
 
 </details>
 
@@ -36,13 +36,9 @@ Active, prioritized product and engineering backlog for the **Capy** monorepo ([
 
 Self-contained `1-PR` tasks (`1--3` files, zero external backend dependencies) ready to pull and ship immediately with `Flash` or `Pro`:
 
-1. **`TASK-3.1a`** ([`US-3.1`](#us-31-daily-featured-puzzle--streak-medals)): Add deterministic UTC "Puzzle of the Day" hero card at the top of the **Create** tab.
-2. **`TASK-3.2a`** ([`US-3.2`](#us-32-inclusive-accessibility--reduced-motion-keyboard--colorblind-patterns)): Add `reducedMotion` setting (auto-detecting `prefers-reduced-motion: reduce`) to skip confetti, camera glides, and hint pulses.
-3. **`TASK-3.2b`** ([`US-3.2`](#us-32-inclusive-accessibility--reduced-motion-keyboard--colorblind-patterns)): Add `1`--`9` swatch select, `+`/`-` zoom, `0` reset view, and Arrow/WASD pan keyboard shortcuts.
-4. **`TASK-3.4a`** ([`US-3.4`](#us-34-lifetime-player-statistics--milestone-achievements)): Build local `PlayerStatsService.ts` (`capy_player_stats_v1`) and a **Lifetime Stats** card in Settings.
-5. **`TASK-4.1a`** ([`US-4.1`](#us-41-focal-point-quadtree-sub-tiles--parent-breadcrumbs)): Persist `parentSnapshotId` on detail tiles and show a "Back to Parent Puzzle" pill in `GameTopBar.tsx`.
-6. **`TASK-4.2a`** ([`US-4.2`](#us-42-printable-vector-svg--pdf-coloring-sheet-exporter)): Build `SvgPrintExporter.ts` exporting `borderMap` outlines, region numbers, and swatch legend as `.svg`.
-7. **`TASK-4.3a`** ([`US-4.3`](#us-43-co-op-collaborator-undo-sync--region-ping-beacon)): Broadcast `'UNFILL_EVENT'` over `HybridCoopRoomAdapter` so initial-fill Undo syncs across Co-op peers.
+1. **`TASK-4.1a`** ([`US-4.1`](#us-41-focal-point-quadtree-sub-tiles--parent-breadcrumbs)): Persist `parentSnapshotId` on detail tiles and show a "Back to Parent Puzzle" pill in `GameTopBar.tsx`.
+2. **`TASK-4.2a`** ([`US-4.2`](#us-42-printable-vector-svg--pdf-coloring-sheet-exporter)): Build `SvgPrintExporter.ts` exporting `borderMap` outlines, region numbers, and swatch legend as `.svg`.
+3. **`TASK-4.3a`** ([`US-4.3`](#us-43-co-op-collaborator-undo-sync--region-ping-beacon)): Broadcast `'UNFILL_EVENT'` over `HybridCoopRoomAdapter` so initial-fill Undo syncs across Co-op peers.
 
 ---
 
@@ -123,9 +119,8 @@ Self-contained `1-PR` tasks (`1--3` files, zero external backend dependencies) r
 
 - **Description**: Surface a deterministic UTC date-seeded "Puzzle of the Day" hero card in the **Create** tab with consecutive-day streak tracking and Relaxed vs. Zero-Hint completion medals.
 - **Value**: Removes choice paralysis on launch and builds a lightweight, rewarding daily coloring habit that works completely offline.
-- **Why Now**: Delivers high player retention with zero server cost by deterministically rotating curated `SAMPLE_GALLERY` artworks and preset variations by UTC date.
+- **Why Now**: The deterministic UTC "Puzzle of the Day" hero card (`DailyPuzzleService.ts`) is live in the **Create** tab; adding streak history and completion medals completes the daily retention loop.
 - **Tasks**:
-  - **TASK-3.1a** `[quick-win]`: Render a deterministic UTC date-seeded "Puzzle of the Day" card at the top of the **Create** tab in `SettingsModal.tsx` with one-tap launch.
   - **TASK-3.1b**: Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint medal badges.
 
 <details>
@@ -133,32 +128,29 @@ Self-contained `1-PR` tasks (`1--3` files, zero external backend dependencies) r
 
 - **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: ui`
 - **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Flash`
-- **Effort Estimate**: `~35,000 tokens` (`~15k` + `~20k`) | `~16--22 min agent` (`~4--6 hrs human`)
-- **Target Files**: [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
+- **Effort Estimate**: `~20,000 tokens` | `~9--13 min agent` (`~2.5--3.5 hrs human`)
+- **Target Files**: [`web/src/services/DailyPuzzleService.ts`](./web/src/services/DailyPuzzleService.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
-  - Same UTC calendar date resolves to the identical featured artwork + preset across all devices offline, covered by Playwright E2E assertions.
+  - Consecutive UTC-day completions increment streak accurately while preserving Relaxed vs. Zero-Hint medal badges offline, covered by Playwright E2E assertions.
 
 </details>
 
 ### US-3.2: Inclusive Accessibility — Reduced Motion, Keyboard & Colorblind Patterns
 
-- **Description**: Add `reducedMotion` support, full desktop keyboard gameplay (`1`--`9` swatches, `+/-` zoom, `0` reset, Arrow/WASD pan), and geometric `CanvasPattern` hatch overlays (`colorblindPatternMode`) for active/hinted regions.
-- **Value**: Ensures players with color-vision deficiency, vestibular motion sensitivity, or keyboard-first setups can play comfortably without relying solely on hue contrast or pointer drags.
-- **Why Now**: Color-by-number games inherently risk excluding deuteranopia/protanopia/tritanopia players on similar palette shades; shipping client-side accessibility unlocks inclusive play immediately.
+- **Description**: Add geometric `CanvasPattern` hatch overlays (`colorblindPatternMode`) for active and hinted regions alongside `reducedMotion` and desktop keyboard gameplay shortcuts.
+- **Value**: Ensures players with color-vision deficiency can distinguish similar palette shades comfortably without relying solely on hue contrast.
+- **Why Now**: `reducedMotion` and desktop keyboard shortcuts (`1`--`9`, `+`/`-`, `0`, Arrow/WASD) are now live; adding cached `CanvasPattern` textures finishes full visual accessibility.
 - **Tasks**:
-  - **TASK-3.2a** `[quick-win]`: Add `reducedMotion: boolean` (seeded from `prefers-reduced-motion: reduce`) in `SettingsModal.tsx` to skip `canvas-confetti`, smooth camera glides, and hint pulses.
-  - **TASK-3.2b** `[quick-win]`: Extend `handleKeyDown` in `App.tsx` and `PuzzleCanvas.tsx` with `1`--`9` swatch selection, `+`/`-` zoom, `0` reset view, and Arrow/WASD viewport panning.
   - **TASK-3.2c**: Add `colorblindPatternMode: boolean` rendering cached `CanvasPattern` geometric textures (dots, stripes, crosshatch, checkerboard) over active and hinted regions.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: a11y, canvas, ui`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Flash` (`3.2a`, `3.2b`), `Pro` (`3.2c`)
-- **Effort Estimate**: `~45,000 tokens` (`~14k` + `~14k` + `~17k`) | `~20--30 min agent` (`~6--8 hrs human`)
-- **Target Files**: [`web/src/App.tsx`](./web/src/App.tsx) (`#L1590-L1606`), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md), [`README.md`](./README.md)
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Pro`
+- **Effort Estimate**: `~17,000 tokens` | `~8--12 min agent` (`~2--3 hrs human`)
+- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
-  - Keyboard shortcuts ignore events while typing inside `<input>` / `<textarea>` fields.
   - `CanvasPattern` tiles are generated once at setup/theme change—zero per-frame pattern creation inside `requestAnimationFrame`.
 
 </details>
@@ -186,20 +178,19 @@ Self-contained `1-PR` tasks (`1--3` files, zero external backend dependencies) r
 
 ### US-3.4: Lifetime Player Statistics & Milestone Achievements
 
-- **Description**: Track lifetime coloring stats (`totalRegionsColored`, `puzzlesCompleted`, `zeroHintPuzzles`, `fastestCompletionMs`, `freeColorCreations`, `coopRegionsPainted`) with non-blocking milestone unlock toasts, CRDT cloud sync, and optional Play Games hooks.
-- **Value**: Rewards long-term mastery across Easy, Hard, Free Colour, and Co-op modes without cluttering the minimalist coloring canvas.
-- **Why Now**: Decoupling `TASK-3.4a` (local stats) from `TASK-3.4b` (achievements + cloud/Play bridges) lets players start accumulating lifetime progress immediately before Play Console IDs (`US-5.1`) are provisioned.
+- **Description**: Layer non-blocking milestone achievement unlock toasts, CRDT cloud sync, and optional Play Games hooks onto `PlayerStatsService.ts` (`capy_player_stats_v1`).
+- **Value**: Rewards long-term mastery across Easy, Hard, Free Colour, and Co-op modes and keeps lifetime totals synced monotonically across devices.
+- **Why Now**: Local `PlayerStatsService.ts` (`mergeLifetimeStats`) and the Settings **Lifetime Stats** card are live; wiring milestone unlock toasts and cloud/Play Games bridges completes cross-device progression.
 - **Tasks**:
-  - **TASK-3.4a** `[quick-win]`: Create `PlayerStatsService.ts` (`capy_player_stats_v1`) and render a **Lifetime Stats** summary card in `SettingsModal.tsx`.
   - **TASK-3.4b**: Add milestone achievement unlock toasts, monotonic CRDT stat merging in `CloudProviderDrivers.ts`, and `NativeBridge` Play Games achievement hooks.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: ui, cloud, android`
-- **Complexity & Model**: `high` / `moderate` | **Recommended Model**: `Flash` (`3.4a`), `Pro` (`3.4b`)
-- **Effort Estimate**: `~50,000 tokens` (`~18k` + `~32k`) | `~22--32 min agent` (`~6--9 hrs human`)
-- **Target Files**: `web/src/services/PlayerStatsService.ts`, [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
+- **Complexity & Model**: `high` / `moderate` | **Recommended Model**: `Pro`
+- **Effort Estimate**: `~32,000 tokens` | `~14--20 min agent` (`~4--6 hrs human`)
+- **Target Files**: [`web/src/services/PlayerStatsService.ts`](./web/src/services/PlayerStatsService.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - Stat counters merge monotonically (`Math.max` / set-count union) across devices so syncing an older offline tab never decrements lifetime totals.
 

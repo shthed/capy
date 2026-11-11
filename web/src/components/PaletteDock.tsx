@@ -18,6 +18,7 @@ interface PaletteDockProps {
   visibleColorIds: Set<number>;
   raiseDock: boolean;
   isFreeColorMode?: boolean;
+  reducedMotion?: boolean;
   showCustomColorButton?: boolean;
   onColorSelected: (colorId: number) => void;
   onColorHintRequested: (colorId: number) => void;
@@ -159,6 +160,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   visibleColorIds,
   raiseDock,
   isFreeColorMode = false,
+  reducedMotion = false,
   showCustomColorButton = false,
   onColorSelected,
   onColorHintRequested,
@@ -256,12 +258,12 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   useEffect(() => {
     if (activeSwatchRef.current) {
       activeSwatchRef.current.scrollIntoView({
-        behavior: 'smooth',
+        behavior: reducedMotion ? 'auto' : 'smooth',
         block: 'nearest',
         inline: 'center',
       });
     }
-  }, [activeColorId]);
+  }, [activeColorId, reducedMotion]);
 
   // Enable horizontal mouse wheel scrolling across the color chooser
   useEffect(() => {
@@ -333,6 +335,8 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
               key={color.id}
               ref={isActive ? activeSwatchRef : undefined}
               type="button"
+              data-testid={`palette-swatch-${dispNum}`}
+              aria-pressed={isActive}
               onClick={() => handleSwatchClick(color)}
               title={`Color #${dispNum}${
                 isFreeColorMode

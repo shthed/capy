@@ -43,6 +43,8 @@ flowchart TB
       Cloud["ProviderRegistry & CloudProviderDrivers"]
       Bridge["NativeBridge (Android / WebKit / Web)"]
       Sound["SoundService (Procedural Web Audio)"]
+      Daily["DailyPuzzleService (UTC Featured Rotation)"]
+      Stats["PlayerStatsService (Lifetime Stats)"]
       Pwa["PwaService (Install & Offline Cache)"]
     end
   end
@@ -75,16 +77,16 @@ flowchart TB
 ### Core Shell, Types & Styling (`web/src/`)
 - **[`web/src/main.tsx`](./web/src/main.tsx)**: React 19 root mount and Service Worker bootstrap.
 - **[`web/src/version.ts`](./web/src/version.ts)**: Exports `APP_VERSION`, `APP_VERSION_CODE = MAJOR*10000 + MINOR*100 + PATCH`, and `parseSemVer`.
-- **[`web/src/App.tsx`](./web/src/App.tsx)**: Top-level state orchestrator, `#s=<token>` share resolution, Co-op room sync, replay loop, and keyboard shortcuts.
+- **[`web/src/App.tsx`](./web/src/App.tsx)**: Top-level state orchestrator, `#s=<token>` share resolution, Co-op room sync, replay loop, lifetime stats tracking, and desktop keyboard gameplay shortcuts.
 - **[`web/src/index.css`](./web/src/index.css)**: Tailwind CSS 4 imports, safe-area utility classes, and `touch-action: none` resets.
 - **[`web/src/types/index.ts`](./web/src/types/index.ts)**: Central TypeScript types (`PuzzleData`, `PaletteColor`, `UserSettings`, `SavedSnapshot`, `GeneratorConfig`, `GENERATION_PIPELINE_STEPS`, `SAMPLE_GALLERY`).
 
 ### UI Components (`web/src/components/`)
-- **[`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**: 3-tier offscreen 2D canvas renderer, 6-mode touch/pointer gesture engine with custom zoom sensitivity and magnetic zoom detents, Pole-of-Inaccessibility label layout, Follow Painting camera controller, and Co-op ripples.
+- **[`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**: 3-tier offscreen 2D canvas renderer, 6-mode touch/pointer gesture engine with custom zoom sensitivity, magnetic zoom detents, `reducedMotion` instant camera/highlight overrides, keyboard `panStepRequest` clamping, Pole-of-Inaccessibility label layout, Follow Painting camera controller, and Co-op ripples.
 - **[`GameTopBar.tsx`](./web/src/components/GameTopBar.tsx)**: Puzzle title, completion badge, active Co-op presence pill (`topbar-active-coop-pill`), interactive relative zoom badge (`topbar-zoom-badge`, cycling `1x -> 2x -> 4x -> 8x -> 12x -> 1x`), preview toggle, fullscreen, image upload, and settings button.
-- **[`PaletteDock.tsx`](./web/src/components/PaletteDock.tsx)**: Horizontal swatch dock with completion badges, viewport spatial priority (`prioritizeOnScreen`), and dynamic sort modes.
+- **[`PaletteDock.tsx`](./web/src/components/PaletteDock.tsx)**: Horizontal swatch dock (`palette-swatch-<n>`) with completion badges, viewport spatial priority (`prioritizeOnScreen`), `reducedMotion` scroll overrides, and dynamic sort modes.
 - **[`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx)**: Undo (`Ctrl+Z`, long-press `>= 450ms` for timeline scrubber), conditional Redo (`Ctrl+Y`), Watch Puzzle Replay (`replay-btn`), continuous Paint Mode, zoom `+/-`, and fit-to-screen reset.
-- **[`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx)**: Lazy-loaded 4-tab configuration sheet (`Settings`, `Hints`, `Create`, `Saves` & Cloud/Co-op Hub).
+- **[`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx)**: Lazy-loaded 4-tab configuration sheet (`Settings` + `Lifetime Stats`, `Hints`, `Create` + `Puzzle of the Day`, `Saves` & Cloud/Co-op Hub).
 - **[`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx)**: Default-minimised YouTube-style playback scrubber HUD (`0.5x`--`20x`, Follow Painting, Auto-Loop, `Resume Here`, `Save PNG`, `Next`).
 - **[`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx)**: Lazy-loaded custom HSL/Hex swatch editor and 5 theme presets for Free Colour mode.
 - **[`LoadingOverlay.tsx`](./web/src/components/LoadingOverlay.tsx)**: Non-blocking bottom progress HUD supporting Simple (Fast Mode) and Detailed 6-stage pipeline inspection.
@@ -92,6 +94,8 @@ flowchart TB
 ### Services, Providers & Engine (`web/src/services/`, `web/src/engine/`)
 - **[`CapyCodec.ts`](./web/src/services/CapyCodec.ts)**: Scanline RLE + LEB128 varints (`CompactPuzzleRecordV2`), `.capy` v2 Gzip framing, and CRDT `ProgressDeltaV2` tokens.
 - **[`StorageService.ts`](./web/src/services/StorageService.ts)**: IndexedDB (`capy_game_storage_v8`) + `localStorage` + native Android disk backup persistence.
+- **[`DailyPuzzleService.ts`](./web/src/services/DailyPuzzleService.ts)**: Pure, 100% offline deterministic UTC featured puzzle selector (`getDailyFeaturedPuzzle(utcDateStr?)` rotating `SAMPLE_GALLERY` artworks x `DAILY_PRESET_VARIATIONS`).
+- **[`PlayerStatsService.ts`](./web/src/services/PlayerStatsService.ts)**: Local + Android-backed `PlayerLifetimeStats` store (`capy_player_stats_v1`) with SSR memory fallback, non-negative clamping, and monotonic CRDT-ready `mergeLifetimeStats(a, b)`.
 - **[`ShareLinkService.ts`](./web/src/services/ShareLinkService.ts)**: `< 2 KB` `#s=<token>` share URLs and `?room=<ROOM6>` Co-op room invite helpers.
 - **[`SoundService.ts`](./web/src/services/SoundService.ts)**: Zero-asset procedural Web Audio API synthesizer (`playRegionTap` tactile woodblock/brush envelope, `25ms` drag rate-throttling, lazy user-gesture unlock, and automatic `AudioContext.suspend()` on `visibilitychange` / `pagehide` / `blur`).
 - **[`providers/GoogleCloudSyncClient.ts`](./web/src/services/providers/GoogleCloudSyncClient.ts)**: Browser/PWA Google Identity Services OAuth 2.0 (`openid profile email drive.appdata`) and Google Drive `appDataFolder` REST v3 client.
@@ -127,13 +131,14 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
 - **[`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx) & Global Keyboard Shortcuts**:
   - **Undo (`Ctrl+Z` / `Cmd+Z`)**: Undoes the last fill/repaint (enabled automatically in Free Colour mode or via `enableUndo`). Long-pressing Undo (`>= 450ms`) opens `ReplayControls` for historical timeline scrubbing.
   - **Redo (`Ctrl+Y` / `Ctrl+Shift+Z`)**: Stacked above Undo whenever `redoStack.length > 0`; re-applies undone strokes.
+  - **Desktop Gameplay Shortcuts (`1`--`9`, `+`/`=`, `-`/`_`, `0`, Arrow/WASD)**: When the puzzle canvas is active (no modal open, no `Ctrl`/`Meta`/`Alt` modifier held, and focus is not inside `<input>`, `<textarea>`, `<select>`, or `isContentEditable`), keys `1`--`9` select the corresponding visible palette swatch, `+`/`=` and `-`/`_` zoom in/out anchored at the viewport center, `0` resets zoom and pan to `1x` fit view, and `ArrowUp`/`W`, `ArrowDown`/`S`, `ArrowLeft`/`A`, `ArrowRight`/`D` pan the viewport by `64` CSS px clamped via `clampCanvasOffset` (calling `e.preventDefault()`).
   - **`Escape` & `Enter` Keys**: Pressing `Escape` cancels an active inline save-card rename in `SettingsModal` first (`Enter` commits the rename); otherwise `Escape` pops the topmost overlay on the LIFO modal stack (`ColorPickerPopover` $\rightarrow$ `SettingsModal` $\rightarrow$ `ReplayControls`).
   - Also hosts Watch Puzzle Replay (`replay-btn`), continuous Paint Mode brush toggle, optional `+/-` zoom buttons, and fit-to-screen reset (`reset-view-btn`).
 - **[`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx)**:
   - Restores the last open tab via `localStorage['capy_last_settings_tab']` (`'0'`--`'3'`):
-  - **Tab 0 -- Settings**: Difficulty (`EASY` / `NORMAL`), `autoAdvance`, default `replaySpeed` (`0.5x`, `1x`, `2x`, `5x`, `10x`, `20x`), `Replay on Load`, `Follow Painting During Replay` (`toggle-replay-follow-btn`), `Auto-Loop Replay` (`toggle-replay-loop-btn`), Controls (`zoomSensitivity` `0.5x`--`2.0x` slider, `snapZoomLevels` `1x/2x/4x/8x/12x` magnetic stops toggle, `soundEnabled` toggle, `soundVolume` `0%`--`100%` slider), `panMomentum`, canvas background presets + `<Pipette>` custom color picker, `raisePaletteDock`, label bounds (`minLabelSize`, `maxLabelSize`, `labelScale`), PWA install card, and Android APK download link.
+  - **Tab 0 -- Settings**: Difficulty (`EASY` / `NORMAL`), `autoAdvance`, default `replaySpeed` (`0.5x`, `1x`, `2x`, `5x`, `10x`, `20x`), `Replay on Load`, `Follow Painting During Replay` (`toggle-replay-follow-btn`), `Auto-Loop Replay` (`toggle-replay-loop-btn`), Controls (`zoomSensitivity` `0.5x`--`2.0x` slider, `snapZoomLevels` `1x/2x/4x/8x/12x` magnetic stops toggle, `soundEnabled` toggle, `soundVolume` `0%`--`100%` slider, `reducedMotion` `setting-reduced-motion` toggle), `panMomentum`, canvas background presets + `<Pipette>` custom color picker, `raisePaletteDock`, label bounds (`minLabelSize`, `maxLabelSize`, `labelScale`), 2-column **Lifetime Stats** card (`lifetime-stats-card`), PWA install card, and Android APK download link.
   - **Tab 1 -- Hints**: `highlightStyle` (`FULL_REGION`, `BOUNDARY_ONLY`, `NUMBER_ONLY`, `CENTROID_GLOW`), `hintFillStyle`, custom `hintColorArgb` (`<Pipette>`), `hintIntensity`, and `animateHint`.
-  - **Tab 2 -- Create**: Real-time gallery search (`gallery-search-input`), category filter chips (`All`, `Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), **Infinite Zoom 2x Detail Tile** cropper (`infinite-zoom-subtile-btn`), moderated **Community Puzzle Ideas** feed (`community-ideas-section`), `GeneratorConfig` controls, and device photo upload.
+  - **Tab 2 -- Create**: Deterministic UTC **Puzzle of the Day** hero card (`daily-puzzle-card`, `daily-puzzle-play-btn`), real-time gallery search (`gallery-search-input`), category filter chips (`All`, `Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), **Infinite Zoom 2x Detail Tile** cropper (`infinite-zoom-subtile-btn`), moderated **Community Puzzle Ideas** feed (`community-ideas-section`), `GeneratorConfig` controls, and device photo upload.
   - **Tab 3 -- Saves**: Cloud Sync & Simultaneous Co-op Hub (`cloud-coop-hub`) featuring player name/avatar editor, multi-provider cloud status bar (`data-testid="cloud-providers-bar"`), browser/PWA **Google Account Login** (Google Identity Services OAuth 2.0 $\rightarrow$ Google Drive `appDataFolder`), Android **Google Play Games Services v2** sign-in, CRDT `Cloud Sync`, `< 2 KB` `Share Progress Link`, and 6-char `Host Co-op Room` / `Join` controls, alongside sticky library actions (Sort, `Replay on Load`, Detail/Thumbnails view toggle, Pin/Unpin, Load, Replay, inline Rename, Export `.capy`, Import, Export All, Delete All).
 - **[`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx)**:
   - Opens minimised by default (`data-minimized="true"`) as a YouTube-style bottom control bar (`w-full max-w-2xl`). **Both** the compact minimised bar and the expanded two-row deck (`data-minimized="false"`, toggled via `replay-toggle-minimize-btn`) render the full-width interactive pointer-captured timeline scrubber (`renderYouTubeScrubber`, `data-testid="replay-scrubber-track"` / `replay-scrubber`), Play/Pause, speed selector (`0.5x`, `1x`, `2x`, `5x`, `10x`, `20x`), **Follow Painting** (`replay-follow-btn`), **Auto-Loop** (`replay-loop-btn`), Skip-to-End, and Exit. Expanding adds `Resume Here` (rewinding active play to step $K$ and pushing later steps onto `redoStack`) plus post-victory `Save PNG` and `Next` actions.
@@ -296,6 +301,7 @@ type WorkerResponse =
 - **`capy_google_oauth_client_id_v1`** (`localStorage`): Optional developer runtime override for `VITE_GOOGLE_CLIENT_ID`.
 - **`capy_community_ideas_v1`** (`localStorage`): Moderated `CommunityPuzzleIdea` entries and vote state.
 - **`capy_ai_credits_v1`** (`localStorage`): Opt-in `AiCreditLedger` (`availableCredits`, `lifetimeEarnedCredits`, `lifetimeSpentCredits`, `adFreePlatform`, `personalizedAdsConsent`).
+- **`capy_player_stats_v1`** (`localStorage`, backed up via `NativeBridge`): `PlayerLifetimeStats` (`totalRegionsColored`, `puzzlesCompleted`, `zeroHintPuzzles`, `fastestCompletionMs`, `freeColorCreations`, `coopRegionsPainted`).
 
 ### 8.1 Comprehensive `UserSettings` Reference (`capy_user_settings_v8`)
 
@@ -318,7 +324,7 @@ Defined in [`web/src/types/index.ts`](./web/src/types/index.ts) (`DEFAULT_SETTIN
 - **`showPreviewLabels`**: `boolean` (default `false`) -- Keeps region numbers visible while holding/toggling Preview mode.
 - **`showPreviewBorders`**: `boolean` (default `false`) -- Keeps 1px region borders visible in Preview mode.
 - **`highlightMatching`**: `boolean` (default `true`) -- Toggles active-swatch region highlighting on the canvas.
-- **`animateHint`**: `boolean` (default `true`) -- Drives a zero-React-re-render `requestAnimationFrame` pulse on hinted regions.
+- **`animateHint`**: `boolean` (default `true`) -- Drives a zero-React-re-render `requestAnimationFrame` pulse on hinted regions (when `reducedMotion` is `false`).
 - **`showNextRegionHint`**: `boolean` (default `true`) -- Targets and highlights the nearest unpainted matching region when requesting a hint.
 - **`hintIntensity`**: `number` (default `0.65`, range `0.0`--`1.0`) -- Opacity multiplier for hint and active-color overlays.
 - **`minLabelSize`**: `number` (default `6`, range `2`--`14` px) -- Minimum rendered label font size before tiny labels hide until zoomed in.
@@ -329,7 +335,7 @@ Defined in [`web/src/types/index.ts`](./web/src/types/index.ts) (`DEFAULT_SETTIN
 - **`paletteSort`**: `'NUMBER' | 'REMAINING' | 'HUE' | 'LIGHTNESS'` (default `'NUMBER'`) -- Swatch ordering in `PaletteDock`.
 - **`prioritizeOnScreen`**: `boolean` (default `true`) -- Floats swatches visible in the current zoomed viewport to the front of `PaletteDock`.
 - **`hapticsEnabled`**: `boolean` (default `true`) -- Enables native Android / `navigator.vibrate` tactile feedback.
-- **`panMomentum`**: `boolean` (default `true`) -- Enables Google Maps-style inertial gliding on canvas pan flicks.
+- **`panMomentum`**: `boolean` (default `true`) -- Enables Google Maps-style inertial gliding on canvas pan flicks (skipped when `reducedMotion` is `true`).
 - **`enableCustomColorForAllPuzzles`**: `boolean` (default `false`) -- Unlocks custom swatch editing in standard Color-by-Number puzzles as well as Free Colour puzzles.
 - **`enableUndo`**: `boolean` (default `false`) -- Shows Undo/Redo controls on standard puzzles (always enabled automatically in Free Colour mode).
 - **`replaySpeed`**: `number` (default `1`, options `0.5 | 1 | 2 | 5 | 10 | 20`) -- Playback speed multiplier for chronological puzzle replays.
@@ -341,6 +347,7 @@ Defined in [`web/src/types/index.ts`](./web/src/types/index.ts) (`DEFAULT_SETTIN
 - **`snapZoomLevels`**: `boolean` (default `false`) -- Snaps relative zoom onto magnetic stops (`1x`, `2x`, `4x`, `8x`, `12x`) whenever zoom enters `+-4%` of a stop.
 - **`soundEnabled`**: `boolean` (default `true`) -- Enables zero-asset procedural Web Audio tap effects (`SoundService.ts`).
 - **`soundVolume`**: `number` (default `0.7`, range `0.0`--`1.0`) -- Master gain scalar for procedural Web Audio effects.
+- **`reducedMotion`**: `boolean` (seeded from `window.matchMedia('(prefers-reduced-motion: reduce)').matches`, fallback `false`) -- Skips `canvas-confetti` bursts, multi-frame camera glides, pan-momentum flick glides, and `requestAnimationFrame` hint-pulse oscillations (rendering a steady high-contrast highlight instead).
 - **`detailedLoadingProgress`**: `boolean` (default `false`) -- Switches `LoadingOverlay` between Simple Fast Mode (`false`) and Detailed 6-Stage Inspector Mode (`true`).
 - **`generatorConfig`**: `GeneratorConfig` (default `DEFAULT_GENERATOR_CONFIG`) -- Persisted puzzle segmentation parameters (documented in [`PUZZLE.md`](./PUZZLE.md)).
 

@@ -60,11 +60,18 @@ import {
   UserSettings,
 } from '../types';
 import { REPLAY_SPEED_OPTIONS } from './ReplayControls';
+import { getDailyFeaturedPuzzle } from '../services/DailyPuzzleService';
+import {
+  formatFastestCompletion,
+  PlayerLifetimeStats,
+  PlayerStatsService,
+} from '../services/PlayerStatsService';
 
 interface SettingsModalProps {
   isOpen: boolean;
   initialTab?: number;
   settings: UserSettings;
+  lifetimeStats?: PlayerLifetimeStats;
   snapshots: SavedSnapshot[];
   activeSnapshotId: string | null;
   sourceImage?: HTMLImageElement | null;
@@ -110,6 +117,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   initialTab,
   settings,
+  lifetimeStats,
   snapshots,
   activeSnapshotId,
   sourceImage,
@@ -142,6 +150,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onZoomIntoDetailTile,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dailyPuzzle = useMemo(() => getDailyFeaturedPuzzle(), [isOpen]);
+  const effectiveStats = useMemo(
+    () => lifetimeStats ?? PlayerStatsService.loadStats(),
+    [lifetimeStats, isOpen]
+  );
   const [activeTab, setActiveTab] = useState<number>(() => {
     if (initialTab !== undefined) return initialTab;
     try {
@@ -868,6 +881,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
                 </div>
+
+                {/* Reduced Motion */}
+                <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
+                  <div className="pr-3 min-w-0">
+                    <div className="text-xs sm:text-sm font-semibold text-slate-200">
+                      Reduced Motion
+                    </div>
+                    <div className="text-[11px] text-slate-400 leading-tight">
+                      Skips confetti bursts, smooth camera glides, and breathing hint pulses
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    data-testid="setting-reduced-motion"
+                    aria-checked={Boolean(settings.reducedMotion)}
+                    onClick={() => updateSetting('reducedMotion', !settings.reducedMotion)}
+                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                      settings.reducedMotion ? 'bg-amber-500' : 'bg-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                        settings.reducedMotion ? 'translate-x-4.5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
 
               {/* Label Sizing & Constraints */}
@@ -1064,6 +1105,89 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }`}
                     />
                   </button>
+                </div>
+              </div>
+
+              {/* Lifetime Player Statistics (compact 2-column mobile-first grid) */}
+              <div
+                data-testid="lifetime-stats-card"
+                className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80 space-y-2.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs sm:text-sm font-semibold text-slate-200">
+                    Lifetime Stats
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400/90">
+                    Local Progress
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Regions Colored
+                    </div>
+                    <div
+                      data-testid="stat-total-regions"
+                      className="text-sm sm:text-base font-extrabold font-mono text-amber-400 tabular-nums"
+                    >
+                      {effectiveStats.totalRegionsColored.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Puzzles Completed
+                    </div>
+                    <div
+                      data-testid="stat-puzzles-completed"
+                      className="text-sm sm:text-base font-extrabold font-mono text-slate-100 tabular-nums"
+                    >
+                      {effectiveStats.puzzlesCompleted.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Zero-Hint Clears
+                    </div>
+                    <div
+                      data-testid="stat-zero-hint-puzzles"
+                      className="text-sm sm:text-base font-extrabold font-mono text-emerald-400 tabular-nums"
+                    >
+                      {effectiveStats.zeroHintPuzzles.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Fastest Clear
+                    </div>
+                    <div
+                      data-testid="stat-fastest-completion"
+                      className="text-sm sm:text-base font-extrabold font-mono text-sky-300 tabular-nums"
+                    >
+                      {formatFastestCompletion(effectiveStats.fastestCompletionMs)}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Free Colour Art
+                    </div>
+                    <div
+                      data-testid="stat-free-color-creations"
+                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
+                    >
+                      {effectiveStats.freeColorCreations.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Co-op Regions
+                    </div>
+                    <div
+                      data-testid="stat-coop-regions"
+                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
+                    >
+                      {effectiveStats.coopRegionsPainted.toLocaleString()}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1346,6 +1470,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* TAB 2: CREATE / GENERATOR */}
           {activeTab === 2 && (
             <div className="space-y-4 sm:space-y-5">
+              {/* Deterministic Offline UTC Puzzle of the Day Hero Card */}
+              <div
+                data-testid="daily-puzzle-card"
+                className="relative overflow-hidden rounded-xl border border-amber-400/40 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950/25 p-3 sm:p-3.5 shadow-lg"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="relative h-24 sm:h-20 sm:w-28 w-full flex-shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+                    <img
+                      src={dailyPuzzle.sample.assetPath}
+                      alt={dailyPuzzle.sample.title}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 border border-amber-400/40 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-300">
+                        <Sparkles size={11} />
+                        <span>Puzzle of the Day</span>
+                      </span>
+                      <span
+                        data-testid="daily-puzzle-date-badge"
+                        className="rounded-full bg-slate-900/90 border border-slate-700/80 px-2 py-0.5 text-[10px] font-mono font-bold text-slate-300"
+                      >
+                        {dailyPuzzle.utcDate} UTC
+                      </span>
+                    </div>
+                    <div className="text-sm sm:text-base font-extrabold text-slate-100 truncate">
+                      {dailyPuzzle.sample.title}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-300">
+                      <span
+                        data-testid="daily-puzzle-preset-label"
+                        className="font-bold text-amber-300"
+                      >
+                        {dailyPuzzle.presetLabel}
+                      </span>
+                      <span className="text-slate-500">•</span>
+                      <span className="text-slate-400">{dailyPuzzle.presetDescription}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="daily-puzzle-play-btn"
+                    onClick={() => {
+                      setLocalConfig(dailyPuzzle.config);
+                      updateSetting('generatorConfig', dailyPuzzle.config);
+                      onSelectSample(dailyPuzzle.sample, dailyPuzzle.config);
+                      onClose();
+                    }}
+                    className="w-full sm:w-auto flex-shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs sm:text-sm font-extrabold shadow-md transition-colors cursor-pointer"
+                  >
+                    <Play size={14} className="fill-current" />
+                    <span>Play Daily</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Built-in Sample Artwork Gallery with Search & Tag Filter Chips */}
               <div className="space-y-2">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
