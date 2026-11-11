@@ -532,6 +532,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        shareDecodeExecutor.shutdownNow()
         webView?.destroy()
         webView = null
         super.onDestroy()

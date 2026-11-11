@@ -15,10 +15,10 @@ Capy uses a unified **Semantic Versioning (`MAJOR.MINOR.PATCH`)** scheme shared 
 
 | Component | Source / Location | Rule & Formula | Current Value |
 | :--- | :--- | :--- | :--- |
-| **Canonical SemVer** | [`web/package.json`](./web/package.json) (`"version"`) | Single source of truth formatted as `MAJOR.MINOR.PATCH` (`0 <= MINOR <= 99`, `0 <= PATCH <= 99`). | `2.5.2` |
-| **Web Runtime Constant** | [`web/src/version.ts`](./web/src/version.ts) (`APP_VERSION`, `APP_VERSION_CODE`) | Imported directly from [`web/package.json`](./web/package.json) and displayed in [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) (`data-testid="app-version-badge"`). | `v2.5.2` (`20502`) |
-| **Android `versionName`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionName`) | Automatically parsed at Gradle configuration time from [`../web/package.json`](./web/package.json). | `"2.5.2"` |
-| **Android `versionCode`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionCode`) | Deterministically computed as `(MAJOR * 10000) + (MINOR * 100) + PATCH` for strictly monotonic Google Play Console uploads. | `20502` |
+| **Canonical SemVer** | [`web/package.json`](./web/package.json) (`"version"`) | Single source of truth formatted as `MAJOR.MINOR.PATCH` (`0 <= MINOR <= 99`, `0 <= PATCH <= 99`). | `2.5.3` |
+| **Web Runtime Constant** | [`web/src/version.ts`](./web/src/version.ts) (`APP_VERSION`, `APP_VERSION_CODE`) | Imported directly from [`web/package.json`](./web/package.json) and displayed in [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) (`data-testid="app-version-badge"`). | `v2.5.3` (`20503`) |
+| **Android `versionName`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionName`) | Automatically parsed at Gradle configuration time from [`../web/package.json`](./web/package.json). | `"2.5.3"` |
+| **Android `versionCode`** | [`app/build.gradle.kts`](./app/build.gradle.kts) (`capyVersionCode`) | Deterministically computed as `(MAJOR * 10000) + (MINOR * 100) + PATCH` for strictly monotonic Google Play Console uploads. | `20503` |
 
 ### When to Increment Each Version Segment
 
@@ -32,6 +32,21 @@ Capy uses a unified **Semantic Versioning (`MAJOR.MINOR.PATCH`)** scheme shared 
 ---
 
 ## Release History
+
+## [2.5.3] - 2026-11-10 ([PR #466](https://github.com/shthed/capy/pull/466), Android `versionCode`: `20503`)
+
+### Fixed
+- **Free Colour Undo Co-op Sync & First-Fill Chronological Order Preservation (`BF-1`, [`App.tsx#L1325-L1354`](./web/src/App.tsx#L1325-L1354), [`App.tsx#L1413-L1425`](./web/src/App.tsx#L1413-L1425), [`App.tsx#L1475-L1486`](./web/src/App.tsx#L1475-L1486), [`App.tsx#L1615-L1640`](./web/src/App.tsx#L1615-L1640), [`App.tsx#L1818-L1840`](./web/src/App.tsx#L1818-L1840), [`test.mjs#L868-L930`](./web/scripts/test.mjs#L868-L930))**:
+  - Preserved original first-fill chronological ordering in `filledRegionIds` when repainting an already-filled region in Free Colour mode (`attemptFillRegion`, `attemptBatchFillRegions`, and `handleOpenTimelineReplay`) instead of deleting and re-appending the region ID to the tail of the set.
+  - Recorded `effectivePrevColor = paintedRegionColors.get(regionId) ?? (wasAlreadyFilled ? region.colorId : undefined)` on `UndoHistoryEntry.previousPaintedColorId` and broadcast restored/re-applied `paintedColors` via `ProviderRegistry.room.broadcastPaintEvent` during both `handleUndo` and `handleRedo` so connected Co-op collaborators stay strictly synchronized when Free Colour repaints are undone or redone.
+- **Google Drive `appDataFolder` Per-File Concurrent Write Mutex & File-ID Caching (`BF-3`, [`CloudProviderDrivers.ts#L28-L55`](./web/src/services/providers/CloudProviderDrivers.ts#L28-L55), [`CloudProviderDrivers.ts#L152-L215`](./web/src/services/providers/CloudProviderDrivers.ts#L152-L215), [`test.mjs#L276-L372`](./web/scripts/test.mjs#L276-L372))**:
+  - Added in-memory file-ID caches (`cachedSlotFileIds`, `cachedBlobFileIds`) alongside `cachedManifestFileId` and a per-filename async promise-queue mutex (`writeLocks` / `enqueueWrite`) in `GoogleCloudDriver` across `writeManifest`, `readSlotEnvelope`, `writeSlotEnvelope`, and `writeBinaryBlob`, eliminating duplicate file accumulation in Google Drive `appDataFolder` during concurrent or rapid back-to-back cloud syncs.
+- **B&W Coloring Book Source Accent Fill Preservation During Graph Coloring (`BF-4`, [`PuzzleGenerator.ts#L329-L418`](./web/src/engine/PuzzleGenerator.ts#L329-L418), [`test.mjs#L223-L274`](./web/scripts/test.mjs#L223-L274))**:
+  - Updated `LineArtPuzzleGenerator.generateFromRgba` when `isBwColoring` is active to run a two-pass coloring algorithm: Pass 1 inspects each segmented region's non-line source pixels (`lineMask[idx] === 0`) and locks regions with `> 25%` chromatic interior pixels (`maxC - minC > 35 && maxC > 50`) to their closest perceptual palette color (`lockedSourceColorRegionIds`); Pass 2 runs balanced greedy graph coloring exclusively on the remaining blank paper regions while respecting locked neighbor colors.
+- **Android `ACTION_SEND` Background Image Decoding & Bounded Downsampling (`BF-5`, [`CapyAndroidBridge.kt#L368-L410`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt#L368-L410), [`MainActivity.kt#L58`](./app/src/main/java/com/capypaint/capy/MainActivity.kt#L58), [`MainActivity.kt#L313-L415`](./app/src/main/java/com/capypaint/capy/MainActivity.kt#L313-L415), [`MainActivity.kt#L623`](./app/src/main/java/com/capypaint/capy/MainActivity.kt#L623), [`CapyAndroidBridgeTest.kt#L185-L200`](./app/src/test/java/com/capypaint/capy/CapyAndroidBridgeTest.kt#L185-L200))**:
+  - Offloaded `Intent.ACTION_SEND` (`image/*`) stream decoding from the main UI thread onto a dedicated background executor (`shareDecodeExecutor`) in `MainActivity.kt`, probing dimensions with `inJustDecodeBounds = true`, subsampling via `CapyAndroidBridge.calculateInSampleSize` (`MAX_SHARED_IMAGE_DIMENSION = 2048`), scaling oversized camera photos via `CapyAndroidBridge.calculateTargetDimensions` (with a `MAX_RAW_SHARED_IMAGE_BYTES = 4 MB` fallback cap), and posting the Base64 data URL back to the UI thread to prevent `OutOfMemoryError` and ANRs.
+
+---
 
 ## [2.5.2] - 2026-11-10 ([PR #465](https://github.com/shthed/capy/pull/465), Android `versionCode`: `20502`)
 

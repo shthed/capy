@@ -365,8 +365,48 @@ class CapyAndroidBridge(
             return """{"playerId":"$safeId","displayName":"$safeName"}"""
         }
 
+        const val MAX_SHARED_IMAGE_DIMENSION = 2048
+        const val MAX_RAW_SHARED_IMAGE_BYTES = 4 * 1024 * 1024
+
         fun formatSafeAreaInsetsJson(top: Int, bottom: Int, left: Int, right: Int): String {
             return """{"top":$top,"bottom":$bottom,"left":$left,"right":$right}"""
+        }
+
+        fun calculateInSampleSize(
+            srcWidth: Int,
+            srcHeight: Int,
+            maxDimension: Int = MAX_SHARED_IMAGE_DIMENSION,
+        ): Int {
+            var inSampleSize = 1
+            if (srcWidth <= 0 || srcHeight <= 0 || maxDimension <= 0) {
+                return inSampleSize
+            }
+            if (srcWidth > maxDimension || srcHeight > maxDimension) {
+                val halfWidth = srcWidth / 2
+                val halfHeight = srcHeight / 2
+                while ((halfWidth / inSampleSize) >= maxDimension || (halfHeight / inSampleSize) >= maxDimension) {
+                    inSampleSize *= 2
+                }
+            }
+            return inSampleSize
+        }
+
+        fun calculateTargetDimensions(
+            srcWidth: Int,
+            srcHeight: Int,
+            maxDimension: Int = MAX_SHARED_IMAGE_DIMENSION,
+        ): Pair<Int, Int> {
+            if (srcWidth <= 0 || srcHeight <= 0 || maxDimension <= 0) {
+                return Pair(1, 1)
+            }
+            val maxSrc = maxOf(srcWidth, srcHeight)
+            if (maxSrc <= maxDimension) {
+                return Pair(srcWidth, srcHeight)
+            }
+            val scale = maxDimension.toDouble() / maxSrc.toDouble()
+            val targetW = maxOf(1, Math.round(srcWidth * scale).toInt())
+            val targetH = maxOf(1, Math.round(srcHeight * scale).toInt())
+            return Pair(targetW, targetH)
         }
 
         data class HapticSpec(

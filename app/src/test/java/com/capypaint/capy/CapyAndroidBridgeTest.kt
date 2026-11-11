@@ -181,4 +181,20 @@ class CapyAndroidBridgeTest {
         assertEquals(12L, defaultSpec.oneShotDurationMs)
         assertNull(defaultSpec.waveformTimings)
     }
+
+    @Test
+    fun `calculateInSampleSize and calculateTargetDimensions cap oversized shared camera images`() {
+        assertEquals(1, CapyAndroidBridge.calculateInSampleSize(1024, 768, 2048))
+        assertEquals(1, CapyAndroidBridge.calculateInSampleSize(2048, 2048, 2048))
+        assertEquals(1, CapyAndroidBridge.calculateInSampleSize(4032, 3024, 2048))
+        assertEquals(2, CapyAndroidBridge.calculateInSampleSize(4096, 3072, 2048))
+        assertEquals(2, CapyAndroidBridge.calculateInSampleSize(8000, 6000, 2048))
+        assertEquals(4, CapyAndroidBridge.calculateInSampleSize(16384, 12288, 2048))
+        assertEquals(1, CapyAndroidBridge.calculateInSampleSize(0, -10, 2048))
+
+        assertEquals(Pair(1024, 768), CapyAndroidBridge.calculateTargetDimensions(1024, 768, 2048))
+        assertEquals(Pair(2048, 1536), CapyAndroidBridge.calculateTargetDimensions(4032, 3024, 2048))
+        assertEquals(Pair(1536, 2048), CapyAndroidBridge.calculateTargetDimensions(3000, 4000, 2048))
+        assertEquals(Pair(1, 1), CapyAndroidBridge.calculateTargetDimensions(0, 0, 2048))
+    }
 }
