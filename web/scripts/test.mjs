@@ -22,7 +22,9 @@ async function isServerListening(url) {
 async function waitForPuzzleLoaded(page) {
   await page.waitForSelector('canvas', { timeout: 25000 });
   await page.waitForFunction(
-    () => !document.body.innerText.includes('Analyzing artwork'),
+    () =>
+      !document.body.innerText.includes('Analyzing artwork') &&
+      !document.body.innerText.includes('Generating puzzle'),
     { timeout: 25000 }
   );
   await page.waitForSelector('[aria-label="Palette dock"], [data-testid="replay-btn"]', { timeout: 25000 });
@@ -155,6 +157,7 @@ async function runCodecAndEngineTests() {
       filledCount: 3,
       totalCount: 64,
       filledRegionIds: [5, 1, 12],
+      parentSnapshotId: 'parent-snap-0',
       zoomScale: 2.5,
       panOffsetX: -80,
       panOffsetY: 32,
@@ -169,6 +172,7 @@ async function runCodecAndEngineTests() {
     const decodedSingle = await codec.decodeBinarySaveV2(singleBinary);
     assert.equal(decodedSingle.format, 'capy-single-save-v2');
     assert.deepEqual(decodedSingle.snapshot.filledRegionIds, [5, 1, 12]);
+    assert.equal(decodedSingle.snapshot.parentSnapshotId, 'parent-snap-0');
     assert.deepEqual(decodedSingle.imageBytes, fakeImageBytes);
 
     const archiveBinary = await codec.encodeArchiveSaveBinaryV2(
@@ -179,6 +183,7 @@ async function runCodecAndEngineTests() {
     const decodedArchive = await codec.decodeBinarySaveV2(archiveBinary);
     assert.equal(decodedArchive.format, 'capy-archive-save-v2');
     assert.equal(decodedArchive.snapshots.length, 1);
+    assert.equal(decodedArchive.snapshots[0].parentSnapshotId, 'parent-snap-0');
 
     // 4. <2 KB ProgressDeltaV2 token & CRDT union merge
     const deltaA = {
@@ -482,7 +487,56 @@ async function runCodecAndEngineTests() {
       statsMod.PlayerStatsService.resetStats();
     }
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, and Version/Changelog sync verified.');
+    // 10. SvgPrintExporter SSR vector coloring sheet generation, legend items & XML escaping
+    const svgMod = await vite.ssrLoadModule('/src/services/SvgPrintExporter.ts');
+    const rawSpecialTitle = 'Capy & Friends <"Zen" Sheet>';
+    const svgDoc = svgMod.buildPrintableColoringSvg(puzzleData, {
+      title: rawSpecialTitle,
+      palette: puzzleData.palette,
+    });
+    assert.equal(
+      svgDoc.includes('<svg xmlns="http://www.w3.org/2000/svg"') && svgDoc.trim().endsWith('</svg>'),
+      true,
+      'buildPrintableColoringSvg must emit a valid self-contained <svg>...</svg> XML document'
+    );
+    assert.equal(
+      svgDoc.includes('<rect width="100%" height="100%" fill="#ffffff" />'),
+      true,
+      'Printable SVG must render a crisp white #ffffff paper background'
+    );
+    assert.equal(
+      svgDoc.includes('<path id="region-outlines" d="M'),
+      true,
+      'Printable SVG must trace inter-region boundaries into a vector <path>'
+    );
+    assert.equal(
+      svgDoc.includes('<g id="region-numbers"') && /<text x="[0-9.]+" y="[0-9.]+" font-size="[0-9.]+">\d+<\/text>/.test(svgDoc),
+      true,
+      'Printable SVG must emit centered region color number <text> labels'
+    );
+    for (let idx = 0; idx < puzzleData.palette.length; idx++) {
+      assert.equal(
+        svgDoc.includes(`data-swatch-number="${idx + 1}"`),
+        true,
+        `Printable SVG must include swatch legend item #${idx + 1}`
+      );
+    }
+    assert.equal(
+      svgDoc.includes('Capy &amp; Friends &lt;&quot;Zen&quot; Sheet&gt;'),
+      true,
+      'Printable SVG must XML-escape &, <, >, and " characters in title headers'
+    );
+    assert.equal(
+      svgDoc.includes(rawSpecialTitle),
+      false,
+      'Printable SVG must never contain unescaped special XML characters'
+    );
+    assert.equal(
+      svgMod.sanitizeColoringSheetFileName(rawSpecialTitle),
+      'capy-friends-zen-sheet-coloring-sheet.svg'
+    );
+
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
@@ -1488,6 +1542,272 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
     console.log('   PASS: Daily Featured Puzzle card/launch, Reduced Motion persistence, Keyboard Gameplay Shortcuts + input-focus guard, and Lifetime Stats verified.');
+
+    // -------------------------------------------------------------------------
+    // 11. EPIC-4 Quick-Wins: Printable SVG Export, Sub-Tile Parent Breadcrumbs & Co-op Undo Sync
+    // -------------------------------------------------------------------------
+    console.log('11. Verifying Printable SVG export, Sub-Tile Parent Breadcrumbs & 2-peer Co-op UNFILL_EVENT Undo sync...');
+
+    // 11a. TASK-4.2a: Clicking export-printable-svg-btn triggers a valid .svg download
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    const svgDownloadPromise = page.waitForEvent('download', { timeout: 10000 });
+    await page.getByTestId('export-printable-svg-btn').click();
+    const svgDownload = await svgDownloadPromise;
+    assert.equal(
+      svgDownload.suggestedFilename().endsWith('.svg'),
+      true,
+      `Expected printable coloring sheet filename to end with .svg, got ${svgDownload.suggestedFilename()}`
+    );
+    const svgDownloadPath = await svgDownload.path();
+    assert.ok(svgDownloadPath, 'Expected Playwright download path for printable .svg');
+    const downloadedSvgText = fs.readFileSync(svgDownloadPath, 'utf8');
+    assert.equal(
+      downloadedSvgText.includes('<svg xmlns="http://www.w3.org/2000/svg"') &&
+        downloadedSvgText.includes('<path id="region-outlines"') &&
+        downloadedSvgText.trim().endsWith('</svg>'),
+      true,
+      'Downloaded .svg file must contain valid vector <svg> coloring sheet content'
+    );
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+
+    // 11b. TASK-4.1a: Infinite Zoom detail sub-tile sets parentSnapshotId, renders topbar-parent-puzzle-btn,
+    // restores parent puzzle & viewport on tap, and hides breadcrumb pill when parent snapshot is deleted
+    await page.getByTestId('topbar-zoom-badge').click();
+    await page.waitForTimeout(120);
+    assert.equal(
+      (await page.getByTestId('topbar-zoom-badge').innerText()).trim(),
+      '2x',
+      'Parent puzzle should be zoomed to 2x before spawning detail sub-tile'
+    );
+    const parentSnapId = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId || null;
+    });
+    assert.ok(parentSnapId, 'Parent puzzle must have an activeSnapshotId');
+
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.waitForTimeout(120);
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.waitForTimeout(120);
+    await page.getByTestId('infinite-zoom-subtile-btn').click();
+    await page.waitForFunction(
+      (prevId) => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Boolean(active.activeSnapshotId && active.activeSnapshotId !== prevId);
+      },
+      parentSnapId,
+      { timeout: 25000 }
+    );
+    await waitForPuzzleLoaded(page);
+    await page.waitForTimeout(200);
+
+    const childSnapMeta = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      return snaps.find((s) => s.id === active.activeSnapshotId) || null;
+    });
+    assert.ok(childSnapMeta && childSnapMeta.id !== parentSnapId, 'Detail sub-tile must create a distinct child snapshot');
+    assert.equal(
+      childSnapMeta.parentSnapshotId,
+      parentSnapId,
+      'Detail sub-tile snapshot must persist parentSnapshotId pointing to parent puzzle'
+    );
+    const parentBreadcrumbBtn = page.getByTestId('topbar-parent-puzzle-btn');
+    await parentBreadcrumbBtn.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Clicking topbar-parent-puzzle-btn switches back to parent puzzle and restores its saved 2x zoom
+    await parentBreadcrumbBtn.click();
+    await page.waitForFunction(
+      (expectedId) => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return active.activeSnapshotId === expectedId;
+      },
+      parentSnapId,
+      { timeout: 15000 }
+    );
+    await waitForPuzzleLoaded(page);
+    await page.waitForTimeout(250);
+    const restoredActiveId = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId || null;
+    });
+    assert.equal(restoredActiveId, parentSnapId, 'Clicking topbar-parent-puzzle-btn must restore parent snapshot');
+    assert.equal(
+      (await page.getByTestId('topbar-zoom-badge').innerText()).trim(),
+      '2x',
+      'Returning to parent puzzle via breadcrumb must restore parent saved 2x viewport zoom'
+    );
+    assert.equal(
+      await parentBreadcrumbBtn.count(),
+      0,
+      'Parent puzzle without parentSnapshotId must not show topbar-parent-puzzle-btn'
+    );
+
+    // Reload child sub-tile, delete parent snapshot, and verify dangling breadcrumb pill hides gracefully
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId(`save-card-${childSnapMeta.id}`).click();
+    await page.waitForTimeout(100);
+    await page.getByTestId('save-action-load').click();
+    await page.waitForFunction(
+      (expectedId) => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return active.activeSnapshotId === expectedId;
+      },
+      childSnapMeta.id,
+      { timeout: 15000 }
+    );
+    await waitForPuzzleLoaded(page);
+    await parentBreadcrumbBtn.waitFor({ state: 'visible', timeout: 5000 });
+
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId(`save-card-${parentSnapId}`).click();
+    await page.waitForTimeout(100);
+    await page.getByTestId('save-action-delete').click();
+    await page.waitForTimeout(80);
+    await page.getByTestId('save-action-confirm-delete').click();
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    assert.equal(
+      await parentBreadcrumbBtn.count(),
+      0,
+      'Deleting parent snapshot must immediately hide dangling topbar-parent-puzzle-btn'
+    );
+
+    // 11c. TASK-4.3a: 2-peer BroadcastChannel Co-op UNFILL_EVENT Undo synchronization
+    // Load a pre-baked built-in sample save with unfilled regions so both peers share identical puzzle geometry instantly
+    const coopSampleId = await page.evaluate(() => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const candidate = snaps.find((s) => s.id.startsWith('sample-') && s.filledCount < s.totalCount) || snaps.find((s) => s.id.startsWith('sample-'));
+      return candidate ? candidate.id : null;
+    });
+    assert.ok(coopSampleId, 'Expected a pre-baked sample-* snapshot in capy_snapshots_v8');
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId(`save-card-${coopSampleId}`).click();
+    await page.waitForTimeout(100);
+    await page.getByTestId('save-action-load').click();
+    await page.waitForFunction(
+      (expectedId) => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return active.activeSnapshotId === expectedId;
+      },
+      coopSampleId,
+      { timeout: 15000 }
+    );
+    await waitForPuzzleLoaded(page);
+    await page.waitForTimeout(200);
+
+    // Ensure Enable Undo Action is ON and Free Colour Mode is OFF on Peer A
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.waitForTimeout(120);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.waitForTimeout(100);
+    const currentSettings11c = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+    });
+    if (currentSettings11c.isFreeColorMode) {
+      const fcLabel = await page.waitForSelector('text=Free Colour Mode');
+      await fcLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+      await page.waitForTimeout(80);
+    }
+    const isUndoVisibleAlready = (await page.getByTestId('undo-btn').count()) > 0;
+    if (!isUndoVisibleAlready) {
+      const undoSettingLabel = await page.waitForSelector('text=Enable Undo Action');
+      await undoSettingLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+      await page.waitForTimeout(80);
+    }
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    await page.getByTestId('undo-btn').waitFor({ state: 'visible', timeout: 5000 });
+
+    // Host Co-op room on Peer A and join on Peer B
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('host-coop-room-btn').click();
+    await page.waitForTimeout(200);
+    const undoRoomBadge = await page.getByTestId('active-coop-room-code').innerText();
+    const undoRoomCode = undoRoomBadge.match(/Room\s+([A-Z0-9]{6})/)[1];
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+
+    const peerB = await context.newPage();
+    attachErrorListeners(peerB, 'peerB-unfill');
+    await peerB.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(peerB);
+    await peerB.getByTestId('topbar-coop-btn').click();
+    await peerB.waitForTimeout(150);
+    await peerB.getByTestId('join-coop-room-input').fill(undoRoomCode);
+    await peerB.getByTestId('join-coop-room-btn').click();
+    await peerB.waitForTimeout(350);
+    assert.equal(
+      (await peerB.getByTestId('active-coop-room-code').innerText()).includes('2 online'),
+      true,
+      'Peer B must join Peer A Co-op room with 2 peers online'
+    );
+    await peerB.keyboard.press('Escape');
+    await peerB.waitForTimeout(200);
+
+    const readTotalRemainingRegions = async (targetPage) => {
+      return targetPage.evaluate(() => {
+        const buttons = Array.from(
+          document.querySelectorAll('[aria-label="Palette dock"] button[data-testid^="palette-swatch-"]')
+        );
+        return buttons.reduce((sum, btn) => {
+          const title = btn.getAttribute('title') || '';
+          const m = title.match(/\((\d+)\s+remaining\)/);
+          return sum + (m ? Number(m[1]) : 0);
+        }, 0);
+      });
+    };
+
+    const remainingBeforeA = await readTotalRemainingRegions(page);
+    const remainingBeforeB = await readTotalRemainingRegions(peerB);
+    assert.equal(remainingBeforeB, remainingBeforeA, 'Peers A and B must start with identical remaining region counts');
+    assert.ok(remainingBeforeA > 0, 'Active sample puzzle must have unfilled regions before Co-op undo test');
+
+    // Fill regions on Peer A and verify Peer B's remaining region count decrements
+    await tapCanvasGrid(page, 0.45, 10, 35);
+    await peerB.waitForTimeout(350);
+    const remainingAfterFillA = await readTotalRemainingRegions(page);
+    const remainingAfterFillB = await readTotalRemainingRegions(peerB);
+    assert.ok(
+      remainingAfterFillA < remainingBeforeA,
+      `Expected Peer A canvas taps to fill >= 1 region (${remainingBeforeA} -> ${remainingAfterFillA})`
+    );
+    assert.equal(
+      remainingAfterFillB,
+      remainingAfterFillA,
+      'Peer B remaining region count must decrement in real time when Peer A fills regions'
+    );
+
+    // Click Undo (undo-btn) on Peer A and verify Peer B's unfilled region count increments by +1 via UNFILL_EVENT
+    await page.getByTestId('undo-btn').click();
+    await page.waitForTimeout(150);
+    await peerB.waitForTimeout(350);
+    const remainingAfterUndoA = await readTotalRemainingRegions(page);
+    const remainingAfterUndoB = await readTotalRemainingRegions(peerB);
+    assert.equal(
+      remainingAfterUndoA,
+      remainingAfterFillA + 1,
+      `Expected Peer A undo-btn click to unfill 1 region (${remainingAfterFillA} -> ${remainingAfterUndoA})`
+    );
+    assert.equal(
+      remainingAfterUndoB,
+      remainingAfterUndoA,
+      'Peer B must revert the undone region back to unfilled (0) cleanly via UNFILL_EVENT'
+    );
+
+    await peerB.close();
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('leave-coop-room-btn').click();
+    await page.waitForTimeout(120);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    console.log('   PASS: Printable SVG download, Sub-Tile Parent Breadcrumbs + parent delete cleanup, and 2-peer Co-op UNFILL_EVENT Undo sync verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');

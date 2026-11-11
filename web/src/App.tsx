@@ -15,6 +15,7 @@ import {
 import { DEFAULT_SETTINGS, StorageService } from './services/StorageService';
 import { NativeBridge } from './services/NativeBridge';
 import { SoundService } from './services/SoundService';
+import { exportPrintableColoringSvg } from './services/SvgPrintExporter';
 import { PlayerLifetimeStats, PlayerStatsService } from './services/PlayerStatsService';
 import { GenerationCancelledError, PuzzleWorkerService } from './services/PuzzleWorkerService';
 import {
@@ -731,7 +732,8 @@ export const App: React.FC = () => {
       initialPaintedColors?: Record<number, number>,
       initialViewportOverride?: { zoomScale: number; panOffsetX: number; panOffsetY: number },
       initialCustomPalette?: PaletteColor[],
-      initialIsFreeColor?: boolean
+      initialIsFreeColor?: boolean,
+      parentSnapshotId?: string
     ) => {
       const currentSeq = ++generationSeqRef.current;
       setIsReplaying(false);
@@ -782,6 +784,7 @@ export const App: React.FC = () => {
           ? { customPalette: initialCustomPalette }
           : {}),
         ...(initialIsFreeColor !== undefined ? { isFreeColor: initialIsFreeColor } : {}),
+        ...(parentSnapshotId ? { parentSnapshotId } : {}),
         zoomScale: targetView.zoomScale,
         panOffsetX: targetView.panOffsetX,
         panOffsetY: targetView.panOffsetY,
@@ -1430,6 +1433,24 @@ export const App: React.FC = () => {
     []
   );
 
+  const emitCoopUnfill = useCallback((regionIds: number[]) => {
+    const room = ProviderRegistry.realtimeRoom.activeRoomCode;
+    if (!room || regionIds.length === 0) return;
+    const identity = ProviderRegistry.auth.getCurrentIdentity();
+    const now = Date.now();
+    ProviderRegistry.realtimeRoom.broadcastUnfillEvent({
+      eventId: `${identity.playerId}_unfill_${now}_${Math.random().toString(36).slice(2, 6)}`,
+      roomCode: room,
+      senderId: identity.playerId,
+      playerId: identity.playerId,
+      displayName: identity.displayName,
+      avatarColorHex: identity.avatarColorHex,
+      regionId: regionIds[0],
+      regionIds,
+      timestamp: now,
+    });
+  }, []);
+
   // Undo last region completion
   const handleUndo = useCallback(() => {
     if (!puzzle || isReplaying || undoStack.length === 0 || !isUndoEnabled) return;
@@ -1459,7 +1480,7 @@ export const App: React.FC = () => {
     } else {
       nextFilled.delete(lastAction.regionId);
       nextPainted.delete(lastAction.regionId);
-      emitCoopPaint('UNFILL', [lastAction.regionId]);
+      emitCoopUnfill([lastAction.regionId]);
     }
 
     setFilledRegionIds(nextFilled);
@@ -1511,6 +1532,7 @@ export const App: React.FC = () => {
     activeSnapshotId,
     activeColorId,
     emitCoopPaint,
+    emitCoopUnfill,
   ]);
 
   // Redo last undone region action
@@ -2641,7 +2663,8 @@ export const App: React.FC = () => {
           panOffsetY: snapshot.panOffsetY ?? 0,
         },
         snapshot.customPalette,
-        snapshot.isFreeColor
+        snapshot.isFreeColor,
+        snapshot.parentSnapshotId
       );
     };
     img.onerror = () => {
@@ -2652,6 +2675,13 @@ export const App: React.FC = () => {
 
   // Active Save Title & Progress
   const activeSave = snapshots.find((s) => s.id === activeSnapshotId);
+  const parentSave = useMemo(
+    () =>
+      activeSave?.parentSnapshotId
+        ? snapshots.find((s) => s.id === activeSave.parentSnapshotId) ?? null
+        : null,
+    [activeSave?.parentSnapshotId, snapshots]
+  );
   const activeTitle = activeSave?.title || 'Capy';
   const totalCount = puzzle?.regions.length || 0;
   const filledCount = filledRegionIds.size;
@@ -2747,6 +2777,57 @@ export const App: React.FC = () => {
       NativeBridge.haptic('tick', settings.hapticsEnabled);
     }, 'image/png');
   }, [puzzle, sourceImage, filledRegionIds, paintedRegionColors, activeTitle, settings.hapticsEnabled]);
+
+  // Export active puzzle as a printable monochrome vector SVG coloring sheet
+  const handleExportPrintableSvg = useCallback(async (): Promise<boolean> => {
+    if (!puzzle) return false;
+    const ok = await exportPrintableColoringSvg(puzzle, {
+      title: activeTitle || 'Capy Coloring Sheet',
+      palette: puzzle.palette,
+    });
+    if (ok) {
+      NativeBridge.haptic('tick', settings.hapticsEnabled);
+    }
+    return ok;
+  }, [puzzle, activeTitle, settings.hapticsEnabled]);
+
+  // Export any saved snapshot's puzzle as a printable monochrome vector SVG coloring sheet
+  const handleExportSnapshotSvg = useCallback(
+    async (id: string, title: string): Promise<boolean> => {
+      if (id === activeSnapshotId && puzzle) {
+        const ok = await exportPrintableColoringSvg(puzzle, {
+          title: title || activeTitle || 'Capy Coloring Sheet',
+          palette: puzzle.palette,
+        });
+        if (ok) {
+          NativeBridge.haptic('tick', settings.hapticsEnabled);
+        }
+        return ok;
+      }
+
+      try {
+        const cachedPuzzle = await StorageService.loadPuzzleData(id);
+        if (!cachedPuzzle) return false;
+        const snap = snapshots.find((s) => s.id === id);
+        const palette =
+          snap?.customPalette && snap.customPalette.length > 0
+            ? mergeCustomPalette(cachedPuzzle.palette, snap.customPalette)
+            : cachedPuzzle.palette;
+        const ok = await exportPrintableColoringSvg(cachedPuzzle, {
+          title: title || snap?.title || 'Capy Coloring Sheet',
+          palette,
+        });
+        if (ok) {
+          NativeBridge.haptic('tick', settings.hapticsEnabled);
+        }
+        return ok;
+      } catch (e) {
+        console.error('Failed to export snapshot printable SVG', e);
+        return false;
+      }
+    },
+    [activeSnapshotId, puzzle, activeTitle, snapshots, settings.hapticsEnabled]
+  );
 
   // Export single snapshot to compact .capy v2 binary file
   const handleExportSnapshot = useCallback(
@@ -3111,6 +3192,91 @@ export const App: React.FC = () => {
       }
     });
 
+    const unsubUnfill = ProviderRegistry.realtimeRoom.onUnfillEvent((event) => {
+      const localPeerId = ProviderRegistry.auth.getCurrentIdentity().playerId;
+      if ((event.senderId || event.playerId) === localPeerId) return;
+
+      const cur = liveCoopRef.current;
+      if (!cur.puzzle) return;
+
+      const targetIds =
+        event.regionIds && event.regionIds.length > 0
+          ? event.regionIds
+          : event.regionId !== undefined
+            ? [event.regionId]
+            : [];
+      if (targetIds.length === 0) return;
+
+      const nextFilled = new Set(cur.filledRegionIds);
+      const nextPainted = new Map(cur.paintedRegionColors);
+      let changed = false;
+      let firstUnfilledColorId: number | null = null;
+
+      for (const rId of targetIds) {
+        if (nextFilled.has(rId)) {
+          nextFilled.delete(rId);
+          nextPainted.delete(rId);
+          changed = true;
+          if (firstUnfilledColorId === null) {
+            const reg = cur.puzzle.regions.find((r) => r.id === rId);
+            if (reg) {
+              firstUnfilledColorId = reg.colorId;
+              coopRippleBufferRef.current.spawn(
+                reg.centroidX,
+                reg.centroidY,
+                event.avatarColorHex
+              );
+            }
+          }
+        }
+      }
+
+      if (!changed) return;
+
+      const wasCompleted =
+        cur.puzzle.regions.length > 0 && cur.filledRegionIds.size >= cur.puzzle.regions.length;
+      const nextActiveColorId =
+        (wasCompleted || cur.activeColorId === 0) && firstUnfilledColorId !== null
+          ? firstUnfilledColorId
+          : cur.activeColorId;
+      if (nextActiveColorId !== cur.activeColorId) {
+        setActiveColorId(nextActiveColorId);
+      }
+
+      const orderedList = Array.from(nextFilled);
+      const paintedObj = Object.fromEntries(nextPainted);
+      setFilledRegionIds(nextFilled);
+      setPaintedRegionColors(nextPainted);
+
+      if (cur.activeSnapshotId) {
+        const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+        const updated = StorageService.updateSnapshotProgress(
+          cur.activeSnapshotId,
+          nextFilled.size,
+          cur.puzzle.regions.length,
+          orderedList,
+          zoomScale,
+          panOffsetX,
+          panOffsetY,
+          undefined,
+          paintedObj,
+          cur.puzzle.palette,
+          cur.puzzle.isFreeColor
+        );
+        setSnapshots(updated);
+        StorageService.saveActiveState({
+          activeSnapshotId: cur.activeSnapshotId,
+          activeColorId: nextActiveColorId,
+          filledRegionIds: orderedList,
+          paintedRegionColors: paintedObj,
+          isFreeColorMode: cur.isFreeColorMode,
+          zoomScale,
+          panOffsetX,
+          panOffsetY,
+        });
+      }
+    });
+
     const unsubWelcome = ProviderRegistry.realtimeRoom.onWelcomeState(async (seedToken) => {
       try {
         const delta = await decodeProgressDeltaToken(seedToken);
@@ -3184,6 +3350,7 @@ export const App: React.FC = () => {
     return () => {
       unsubParticipants();
       unsubPaint();
+      unsubUnfill();
       unsubWelcome();
     };
   }, [loadSampleFromPrebakedOrGenerate]);
@@ -3593,6 +3760,67 @@ export const App: React.FC = () => {
     const srcH = sourceImage.naturalHeight || sourceImage.height;
     if (srcW <= 0 || srcH <= 0) return;
 
+    // Persist parent puzzle's snapshot ID and current viewport zoom/pan before switching to the child sub-tile
+    if (viewportSaveTimerRef.current !== null) {
+      window.clearTimeout(viewportSaveTimerRef.current);
+      viewportSaveTimerRef.current = null;
+    }
+    const parentId = activeSnapshotId || crypto.randomUUID();
+    const currentView = { ...viewportRef.current };
+    const existingList = StorageService.loadSnapshots();
+    const existingParent = existingList.find((s) => s.id === parentId);
+    const paintedObj = Object.fromEntries(paintedRegionColors);
+    const orderedIds = Array.from(filledRegionIds);
+
+    if (existingParent && puzzle) {
+      const updatedParentList = StorageService.updateSnapshotProgress(
+        parentId,
+        filledRegionIds.size,
+        puzzle.regions.length,
+        orderedIds,
+        currentView.zoomScale,
+        currentView.panOffsetX,
+        currentView.panOffsetY,
+        undefined,
+        paintedObj,
+        puzzle.palette,
+        puzzle.isFreeColor
+      );
+      setSnapshots(updatedParentList);
+      void StorageService.savePuzzleData(parentId, puzzle);
+    } else if (existingParent) {
+      const updatedParentList = StorageService.updateSnapshotViewport(
+        parentId,
+        currentView.zoomScale,
+        currentView.panOffsetX,
+        currentView.panOffsetY
+      );
+      setSnapshots(updatedParentList);
+    } else {
+      const now = Date.now();
+      const parentSnapshot: SavedSnapshot = {
+        id: parentId,
+        title: activeTitle || 'Artwork',
+        timestamp: now,
+        lastOpened: now,
+        filledCount: filledRegionIds.size,
+        totalCount: puzzle?.regions.length || 100,
+        filledRegionIds: orderedIds,
+        ...(paintedRegionColors.size > 0 ? { paintedRegionColors: paintedObj } : {}),
+        ...(puzzle?.palette ? { customPalette: puzzle.palette } : {}),
+        ...(puzzle?.isFreeColor !== undefined ? { isFreeColor: puzzle.isFreeColor } : {}),
+        zoomScale: currentView.zoomScale,
+        panOffsetX: currentView.panOffsetX,
+        panOffsetY: currentView.panOffsetY,
+        sampleAssetPath: activeSave?.sampleAssetPath ?? null,
+        sourceRef: activeSave?.sourceRef ?? { kind: 'blob', uri: parentId },
+      };
+      setSnapshots(StorageService.addSnapshot(parentSnapshot));
+      if (puzzle) {
+        void StorageService.savePuzzleData(parentId, puzzle);
+      }
+    }
+
     const cropW = Math.max(128, Math.round(srcW * 0.5));
     const cropH = Math.max(128, Math.round(srcH * 0.5));
     const cropX = Math.max(0, Math.min(srcW - cropW, Math.round((srcW - cropW) / 2)));
@@ -3628,12 +3856,27 @@ export const App: React.FC = () => {
           undefined,
           null,
           false,
-          blob
+          blob,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          parentId
         );
       };
       detailImg.src = url;
     }, 'image/webp', 0.94);
-  }, [sourceImage, activeTitle, settings.generatorConfig, loadArtworkFromImage]);
+  }, [
+    sourceImage,
+    activeSnapshotId,
+    activeSave,
+    puzzle,
+    filledRegionIds,
+    paintedRegionColors,
+    activeTitle,
+    settings.generatorConfig,
+    loadArtworkFromImage,
+  ]);
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-black select-none">
@@ -3656,6 +3899,7 @@ export const App: React.FC = () => {
         isFullscreen={isFullscreen}
         coopRoomCode={coopRoomCode}
         coopParticipants={coopParticipants}
+        parentPuzzleTitle={parentSave?.title ?? null}
         onPickImage={() => fileInputRef.current?.click()}
         onTogglePreview={() => setIsPreviewMode((prev) => !prev)}
         onToggleFullscreen={handleToggleFullscreen}
@@ -3676,6 +3920,14 @@ export const App: React.FC = () => {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
           setStepZoomTrigger((prev) => prev + 1);
         }}
+        onBackToParentPuzzle={
+          parentSave
+            ? () => {
+                NativeBridge.haptic('tick', settings.hapticsEnabled);
+                void handleLoadSnapshot(parentSave);
+              }
+            : undefined
+        }
       />
 
       {/* Full Screen Interactive Canvas */}
@@ -4089,6 +4341,8 @@ export const App: React.FC = () => {
           }}
           onUploadImage={() => fileInputRef.current?.click()}
           onExportSnapshot={handleExportSnapshot}
+          onExportPrintableSvg={puzzle ? handleExportPrintableSvg : undefined}
+          onExportSnapshotSvg={handleExportSnapshotSvg}
           onExportAllSnapshots={handleExportAllSnapshots}
           onImportSnapshots={handleImportSnapshots}
           onHostCoopRoom={handleHostCoopRoom}

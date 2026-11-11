@@ -35,8 +35,8 @@
 ## Why You'll Love Capy
 
 - **Two Ways to Play**: Classic **Color by Number** guided coloring or relaxed **Free Colour** creative mode.
-- **Turn Any Photo into a Puzzle**: Tap the photo upload button to convert your favorite pictures, pets, landscapes, or drawings into instant playable puzzles, or zoom in with **Infinite Zoom 2x Detail Tiles**.
-- **Shareable Links and Simultaneous Co-op**: Share a compact `< 2 KB` progress URL (`#s=<token>`) with friends, or host a 6-character **Co-op Room** to paint the same puzzle simultaneously with live collaborator ripples.
+- **Turn Any Photo into a Puzzle or Printable Sheet**: Tap the photo upload button to convert your favorite pictures, pets, landscapes, or drawings into instant playable puzzles, dive into **Infinite Zoom 2x Detail Tiles** with one-tap **Parent Puzzle** breadcrumbs, or export crisp monochrome **Printable Vector SVG (`.svg`) Coloring Sheets** for physical paper coloring.
+- **Shareable Links and Simultaneous Co-op**: Share a compact `< 2 KB` progress URL (`#s=<token>`) with friends, or host a 6-character **Co-op Room** to paint the same puzzle simultaneously with live collaborator ripples and real-time undo sync.
 - **Compact `.capy` v2 Saves and CRDT Cloud Sync**: Ultra-compact RLE binary saves (`~140x` smaller footprint) and conflict-free Set-Union Cloud Sync across Google Account (Google Drive `appDataFolder`) and Android Google Play Games Services v2 ensure zero progress is ever lost across devices.
 - **Daily Featured Puzzle, Searchable Gallery and Community Ideas**: Play a fresh deterministic UTC **Puzzle of the Day** completely offline, filter artwork by category tags (`Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), track your **Lifetime Stats**, and vote on upcoming community gallery packs.
 - **Smooth Navigation and Inclusive Accessibility**: One-finger double-tap-and-drag zoom, fluid pinch-to-zoom up to 12x, inertial gliding pan momentum, full desktop keyboard gameplay shortcuts, and a **Reduced Motion** accessibility mode.
