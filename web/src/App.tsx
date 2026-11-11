@@ -15,6 +15,7 @@ import {
 import { DEFAULT_SETTINGS, StorageService } from './services/StorageService';
 import { NativeBridge } from './services/NativeBridge';
 import { SoundService } from './services/SoundService';
+import { PlayerLifetimeStats, PlayerStatsService } from './services/PlayerStatsService';
 import { GenerationCancelledError, PuzzleWorkerService } from './services/PuzzleWorkerService';
 import {
   decodeProgressDeltaToken,
@@ -94,11 +95,33 @@ interface UndoHistoryEntry {
   paintedColorId?: number;
 }
 
+function isEditableKeyboardTarget(el: EventTarget | null): boolean {
+  if (!el || typeof el !== 'object') return false;
+  const node = el as HTMLElement;
+  const tag = node.tagName ? node.tagName.toUpperCase() : '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (node.isContentEditable || node.contentEditable === 'true') return true;
+  return false;
+}
+
 export const App: React.FC = () => {
   // Persistence & Settings
   const [settings, setSettings] = useState<UserSettings>(() => StorageService.loadSettings());
+  const [lifetimeStats, setLifetimeStats] = useState<PlayerLifetimeStats>(() =>
+    PlayerStatsService.loadStats()
+  );
   const [snapshots, setSnapshots] = useState<SavedSnapshot[]>(() => StorageService.loadSnapshots());
   const [activeSnapshotId, setActiveSnapshotId] = useState<string | null>(null);
+  const hintsUsedInSessionRef = useRef<number>(0);
+  const activeElapsedMsRef = useRef<number>(0);
+  const activeSessionResumedPerfRef = useRef<number | null>(null);
+  const completedSnapshotIdsRef = useRef<Set<string>>(
+    new Set(
+      snapshots
+        .filter((s) => s.totalCount > 0 && s.filledCount >= s.totalCount)
+        .map((s) => s.id)
+    )
+  );
 
   // Sync procedural Web Audio synthesizer settings
   useEffect(() => {
@@ -123,6 +146,11 @@ export const App: React.FC = () => {
   const [stepZoomTrigger, setStepZoomTrigger] = useState<number>(0);
   const [resetViewTrigger, setResetViewTrigger] = useState<number>(0);
   const [restoreViewTrigger, setRestoreViewTrigger] = useState<number>(0);
+  const [panStepRequest, setPanStepRequest] = useState<{ seq: number; dx: number; dy: number }>({
+    seq: 0,
+    dx: 0,
+    dy: 0,
+  });
   const [currentZoomScale, setCurrentZoomScale] = useState<number>(1);
   const [isCanvasTransformed, setIsCanvasTransformed] = useState<boolean>(false);
   const [initialViewport, setInitialViewport] = useState<{
@@ -218,6 +246,62 @@ export const App: React.FC = () => {
       }
     };
   }, []);
+
+  const resetActivePuzzleSessionStats = useCallback(
+    (snapshotId: string | null | undefined, alreadyCompleted: boolean) => {
+      hintsUsedInSessionRef.current = 0;
+      activeElapsedMsRef.current = 0;
+      activeSessionResumedPerfRef.current = alreadyCompleted ? null : performance.now();
+      if (snapshotId) {
+        if (alreadyCompleted) {
+          completedSnapshotIdsRef.current.add(snapshotId);
+        } else {
+          completedSnapshotIdsRef.current.delete(snapshotId);
+        }
+      }
+    },
+    []
+  );
+
+  const getCurrentActiveElapsedMs = useCallback((): number => {
+    const runningDelta =
+      activeSessionResumedPerfRef.current !== null
+        ? Math.max(0, performance.now() - activeSessionResumedPerfRef.current)
+        : 0;
+    return Math.max(1, Math.round(activeElapsedMsRef.current + runningDelta));
+  }, []);
+
+  // Pause active coloring timer when modals open, replay runs, puzzle loads, or tab is hidden
+  useEffect(() => {
+    const syncTimer = () => {
+      const isActivelyColoring =
+        Boolean(puzzle) &&
+        !isLoading &&
+        !isReplaying &&
+        !showSettings &&
+        !showPaletteOptions &&
+        filledRegionIds.size < (puzzle?.regions.length || 0) &&
+        (typeof document === 'undefined' || !document.hidden);
+
+      if (isActivelyColoring) {
+        if (activeSessionResumedPerfRef.current === null) {
+          activeSessionResumedPerfRef.current = performance.now();
+        }
+      } else if (activeSessionResumedPerfRef.current !== null) {
+        activeElapsedMsRef.current += Math.max(
+          0,
+          performance.now() - activeSessionResumedPerfRef.current
+        );
+        activeSessionResumedPerfRef.current = null;
+      }
+    };
+
+    syncTimer();
+    document.addEventListener('visibilitychange', syncTimer);
+    return () => {
+      document.removeEventListener('visibilitychange', syncTimer);
+    };
+  }, [puzzle, isLoading, isReplaying, showSettings, showPaletteOptions, filledRegionIds.size]);
 
   const handleToggleFullscreen = useCallback(async () => {
     try {
@@ -769,10 +853,18 @@ export const App: React.FC = () => {
 
           const isFree = Boolean(
             initialIsFreeColor ||
+              config.isFreeColor ||
               puzzleData.isFreeColor ||
               (initialPaintedColors && Object.keys(initialPaintedColors).length > 0)
           );
           handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
+          resetActivePuzzleSessionStats(
+            snapId,
+            initialFilledRegionIds.size >= puzzleData.regions.length
+          );
+          if (!existingSnapshotId && initialFilledRegionIds.size === 0 && isFree) {
+            setLifetimeStats(PlayerStatsService.recordFreeColorCreation());
+          }
 
           // Defensively find the first available color that actually has uncompleted regions
           const availableColors = getVisiblePalette(
@@ -849,7 +941,13 @@ export const App: React.FC = () => {
         }
       }, 50);
     },
-    [settings, generatePreviewDataUrl, startReplay, handleUpdateSettings]
+    [
+      settings,
+      generatePreviewDataUrl,
+      startReplay,
+      handleUpdateSettings,
+      resetActivePuzzleSessionStats,
+    ]
   );
 
   // Restore session on app launch (checking incoming #s=<token> / ?room=<ROOM6> links and instant sample bootstrap)
@@ -1114,6 +1212,10 @@ export const App: React.FC = () => {
             }))
           );
           setRedoStack([]);
+          resetActivePuzzleSessionStats(
+            candidateSnap.id,
+            cachedPuzzle.regions.length > 0 && filledSet.size >= cachedPuzzle.regions.length
+          );
           setIsLoading(false);
           if (settings.autoReplayOnLoad !== false && orderedIds.length > 0) {
             startReplay(orderedIds, true);
@@ -1211,6 +1313,10 @@ export const App: React.FC = () => {
               setUndoStack([]);
               setRedoStack([]);
               setHintRegionId(null);
+              resetActivePuzzleSessionStats(
+                firstSnap.id,
+                firstPuzzle.regions.length > 0 && filledSet.size >= firstPuzzle.regions.length
+              );
 
               StorageService.saveActiveState({
                 activeSnapshotId: firstSnap.id,
@@ -1596,24 +1702,133 @@ export const App: React.FC = () => {
     ]
   );
 
-  // Keyboard shortcut Ctrl+Z / Cmd+Z for Undo, Ctrl+Y / Cmd+Y / Ctrl+Shift+Z for Redo
+  // Keyboard shortcuts:
+  // - Ctrl+Z / Cmd+Z (Undo), Ctrl+Y / Cmd+Y / Ctrl+Shift+Z (Redo)
+  // - 1..9 swatch select, +/= zoom in, -/_ zoom out, 0 reset fit view, Arrow/WASD 64px pan
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showSettings || isReplaying || isLoading || !isUndoEnabled) return;
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        handleUndo();
-      } else if (
-        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')
+      if (showSettings || showPaletteOptions || isLoading) return;
+      if (
+        isEditableKeyboardTarget(e.target) ||
+        (typeof document !== 'undefined' && isEditableKeyboardTarget(document.activeElement))
       ) {
-        e.preventDefault();
-        handleRedo();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        if (isReplaying || !isUndoEnabled) return;
+        const lowerKey = e.key.toLowerCase();
+        if (!e.shiftKey && lowerKey === 'z') {
+          e.preventDefault();
+          handleUndo();
+        } else if (lowerKey === 'y' || (e.shiftKey && lowerKey === 'z')) {
+          e.preventDefault();
+          handleRedo();
+        }
+        return;
+      }
+
+      // Never hijack browser shortcuts when Ctrl, Meta, or Alt modifiers are held
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!puzzle) return;
+
+      if (e.key >= '1' && e.key <= '9') {
+        if (isReplaying || filledRegionIds.size >= puzzle.regions.length) return;
+        const selectablePalette = getVisiblePalette(
+          puzzle.palette,
+          puzzle.regions,
+          filledRegionIds,
+          settings.paletteSort,
+          isFreeColorMode
+        );
+        const index = Number(e.key) - 1;
+        if (index >= 0 && index < selectablePalette.length) {
+          e.preventDefault();
+          NativeBridge.haptic('tick', settings.hapticsEnabled);
+          setActiveColorId(selectablePalette[index].id);
+          setHintRegionId(null);
+        }
+        return;
+      }
+
+      switch (e.key) {
+        case '+':
+        case '=':
+          e.preventDefault();
+          setZoomInTrigger((prev) => prev + 1);
+          return;
+        case '-':
+        case '_':
+          e.preventDefault();
+          setZoomOutTrigger((prev) => prev + 1);
+          return;
+        case '0':
+          e.preventDefault();
+          setResetViewTrigger((prev) => prev + 1);
+          return;
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          e.preventDefault();
+          setPanStepRequest((prev) => ({ seq: prev.seq + 1, dx: 0, dy: 64 }));
+          return;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          e.preventDefault();
+          setPanStepRequest((prev) => ({ seq: prev.seq + 1, dx: 0, dy: -64 }));
+          return;
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          e.preventDefault();
+          setPanStepRequest((prev) => ({ seq: prev.seq + 1, dx: 64, dy: 0 }));
+          return;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          e.preventDefault();
+          setPanStepRequest((prev) => ({ seq: prev.seq + 1, dx: -64, dy: 0 }));
+          return;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSettings, isReplaying, isLoading, handleUndo, handleRedo, isUndoEnabled]);
+  }, [
+    showSettings,
+    showPaletteOptions,
+    isReplaying,
+    isLoading,
+    puzzle,
+    filledRegionIds,
+    settings.paletteSort,
+    settings.hapticsEnabled,
+    isFreeColorMode,
+    handleUndo,
+    handleRedo,
+    isUndoEnabled,
+  ]);
+
+  const recordFirstTimePuzzleCompletionIfNeeded = useCallback(
+    (wasIncomplete: boolean, isNowComplete: boolean) => {
+      if (!wasIncomplete || !isNowComplete) return;
+      if (activeSnapshotId && completedSnapshotIdsRef.current.has(activeSnapshotId)) {
+        return;
+      }
+      if (activeSnapshotId) {
+        completedSnapshotIdsRef.current.add(activeSnapshotId);
+      }
+      const elapsedMs = getCurrentActiveElapsedMs();
+      activeSessionResumedPerfRef.current = null;
+      setLifetimeStats(
+        PlayerStatsService.recordPuzzleCompleted({
+          hintsUsed: hintsUsedInSessionRef.current,
+          activeElapsedMs: elapsedMs,
+        })
+      );
+    },
+    [activeSnapshotId, getCurrentActiveElapsedMs]
+  );
 
   // Handle single region coloring
   const attemptFillRegion = useCallback(
@@ -1621,6 +1836,7 @@ export const App: React.FC = () => {
       if (!puzzle || isReplaying) return;
       const region = puzzle.regions.find((r) => r.id === regionId);
       if (!region) return;
+      const wasPuzzleIncomplete = filledRegionIds.size < puzzle.regions.length;
 
       if (isFreeColorMode) {
         const wasFilled = filledRegionIds.has(regionId);
@@ -1653,17 +1869,21 @@ export const App: React.FC = () => {
         setFilledRegionIds(nextFilled);
         setHintRegionId(null);
         emitCoopPaint('FILL', [regionId], { [regionId]: activeColorId });
+        setLifetimeStats(PlayerStatsService.recordRegionsColored(1, Boolean(coopRoomCode)));
 
         const orderedList = Array.from(nextFilled);
         const isComplete = nextFilled.size >= puzzle.regions.length;
         SoundService.playRegionTap(activeColorId);
         if (isComplete) {
+          recordFirstTimePuzzleCompletionIfNeeded(wasPuzzleIncomplete, true);
           NativeBridge.haptic('success', settings.hapticsEnabled);
-          confetti({
-            particleCount: 120,
-            spread: 80,
-            origin: { y: 0.6 },
-          });
+          if (!settings.reducedMotion) {
+            confetti({
+              particleCount: 120,
+              spread: 80,
+              origin: { y: 0.6 },
+            });
+          }
           startReplay(orderedList);
         } else {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
@@ -1726,6 +1946,7 @@ export const App: React.FC = () => {
       setFilledRegionIds(nextFilled);
       setHintRegionId(null);
       emitCoopPaint('FILL', [regionId]);
+      setLifetimeStats(PlayerStatsService.recordRegionsColored(1, Boolean(coopRoomCode)));
       SoundService.playRegionTap(region.colorId);
 
       const orderedList = Array.from(nextFilled);
@@ -1743,11 +1964,14 @@ export const App: React.FC = () => {
       }
 
       if (isComplete) {
-        confetti({
-          particleCount: 120,
-          spread: 80,
-          origin: { y: 0.6 },
-        });
+        recordFirstTimePuzzleCompletionIfNeeded(wasPuzzleIncomplete, true);
+        if (!settings.reducedMotion) {
+          confetti({
+            particleCount: 120,
+            spread: 80,
+            origin: { y: 0.6 },
+          });
+        }
         startReplay(orderedList);
       }
 
@@ -1816,8 +2040,10 @@ export const App: React.FC = () => {
       activeColorId,
       activeSnapshotId,
       visibleColorIds,
+      coopRoomCode,
       startReplay,
       emitCoopPaint,
+      recordFirstTimePuzzleCompletionIfNeeded,
     ]
   );
 
@@ -1825,6 +2051,7 @@ export const App: React.FC = () => {
   const attemptBatchFillRegions = useCallback(
     (regionIds: Set<number>) => {
       if (!puzzle || isReplaying || regionIds.size === 0) return;
+      const wasPuzzleIncomplete = filledRegionIds.size < puzzle.regions.length;
 
       if (isFreeColorMode) {
         let changed = false;
@@ -1865,17 +2092,23 @@ export const App: React.FC = () => {
             newUndoEntries.map((u) => u.regionId),
             changedColors
           );
+          setLifetimeStats(
+            PlayerStatsService.recordRegionsColored(newUndoEntries.length, Boolean(coopRoomCode))
+          );
           SoundService.playRegionTap(activeColorId);
 
           const orderedList = Array.from(nextFilled);
           const isComplete = nextFilled.size >= puzzle.regions.length;
           if (isComplete) {
+            recordFirstTimePuzzleCompletionIfNeeded(wasPuzzleIncomplete, true);
             NativeBridge.haptic('success', settings.hapticsEnabled);
-            confetti({
-              particleCount: 120,
-              spread: 80,
-              origin: { y: 0.6 },
-            });
+            if (!settings.reducedMotion) {
+              confetti({
+                particleCount: 120,
+                spread: 80,
+                origin: { y: 0.6 },
+              });
+            }
             startReplay(orderedList);
           } else {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
@@ -1948,6 +2181,9 @@ export const App: React.FC = () => {
           'FILL',
           newUndoEntries.map((u) => u.regionId)
         );
+        setLifetimeStats(
+          PlayerStatsService.recordRegionsColored(newUndoEntries.length, Boolean(coopRoomCode))
+        );
         SoundService.playRegionTap(
           newUndoEntries[newUndoEntries.length - 1]?.paintedColorId ?? activeColorId
         );
@@ -1955,12 +2191,15 @@ export const App: React.FC = () => {
         const orderedList = Array.from(nextFilled);
         const isComplete = nextFilled.size >= puzzle.regions.length;
         if (isComplete) {
+          recordFirstTimePuzzleCompletionIfNeeded(wasPuzzleIncomplete, true);
           NativeBridge.haptic('success', settings.hapticsEnabled);
-          confetti({
-            particleCount: 120,
-            spread: 80,
-            origin: { y: 0.6 },
-          });
+          if (!settings.reducedMotion) {
+            confetti({
+              particleCount: 120,
+              spread: 80,
+              origin: { y: 0.6 },
+            });
+          }
           startReplay(orderedList);
         } else {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
@@ -2030,8 +2269,10 @@ export const App: React.FC = () => {
       filledRegionIds,
       activeSnapshotId,
       visibleColorIds,
+      coopRoomCode,
       startReplay,
       emitCoopPaint,
+      recordFirstTimePuzzleCompletionIfNeeded,
     ]
   );
 
@@ -2223,6 +2464,7 @@ export const App: React.FC = () => {
       // Prefer on-screen regions if available
       const onScreen = unfilled.find((r) => visibleRegionIds.has(r.id));
       const target = onScreen || unfilled[0];
+      hintsUsedInSessionRef.current += 1;
       setHintRegionId(target.id);
     },
     [puzzle, activeColorId, filledRegionIds, visibleRegionIds, settings.hapticsEnabled]
@@ -2342,6 +2584,10 @@ export const App: React.FC = () => {
           }))
         );
         setRedoStack([]);
+        resetActivePuzzleSessionStats(
+          snapshot.id,
+          cachedPuzzle.regions.length > 0 && filledSet.size >= cachedPuzzle.regions.length
+        );
         StorageService.saveActiveState({
           activeSnapshotId: snapshot.id,
           activeColorId: restoredColor,
@@ -2738,6 +2984,13 @@ export const App: React.FC = () => {
               );
               setRedoStack([]);
               setHintRegionId(null);
+              resetActivePuzzleSessionStats(
+                prebakedSnap.id,
+                cachedPuzzle.regions.length > 0 && filledSet.size >= cachedPuzzle.regions.length
+              );
+              if (isFree && deltaFilledIds === undefined) {
+                setLifetimeStats(PlayerStatsService.recordFreeColorCreation());
+              }
               StorageService.saveActiveState({
                 activeSnapshotId: prebakedSnap.id,
                 activeColorId: initialColor,
@@ -2761,9 +3014,11 @@ export const App: React.FC = () => {
         loadArtworkFromImage(
           img,
           sample.title,
-          forceGeneratorConfig || {
-            ...DEFAULT_SETTINGS.generatorConfig,
-            isFreeColor: Boolean(sample.isFreeColor),
+          {
+            ...(forceGeneratorConfig || DEFAULT_SETTINGS.generatorConfig),
+            isFreeColor: Boolean(
+              forceGeneratorConfig?.isFreeColor || deltaIsFreeColor || sample.isFreeColor
+            ),
           },
           new Set(deltaFilledIds || []),
           undefined,
@@ -3451,6 +3706,7 @@ export const App: React.FC = () => {
         animateHint={settings.animateHint}
         showNextRegionHint={isReplaying ? false : settings.showNextRegionHint}
         hintIntensity={settings.hintIntensity}
+        reducedMotion={Boolean(settings.reducedMotion)}
         panMomentum={settings.panMomentum}
         reverseDoubleTapZoom={settings.reverseDoubleTapZoom}
         zoomSensitivity={settings.zoomSensitivity}
@@ -3464,6 +3720,7 @@ export const App: React.FC = () => {
         stepZoomTrigger={stepZoomTrigger}
         resetViewTrigger={resetViewTrigger}
         restoreViewTrigger={restoreViewTrigger}
+        panStepRequest={panStepRequest}
         replayFollowRegionId={
           isReplaying &&
           isReplayPlaying &&
@@ -3650,6 +3907,7 @@ export const App: React.FC = () => {
           prioritizeOnScreen={settings.prioritizeOnScreen}
           visibleColorIds={visibleColorIds}
           raiseDock={settings.raisePaletteDock}
+          reducedMotion={Boolean(settings.reducedMotion)}
           isFreeColorMode={isFreeColorMode}
           showCustomColorButton={Boolean(
             isFreeColorMode || puzzle.isFreeColor || settings.enableCustomColorForAllPuzzles
@@ -3703,6 +3961,7 @@ export const App: React.FC = () => {
           isOpen={showSettings}
           initialTab={settingsInitialTab}
           settings={settings}
+          lifetimeStats={lifetimeStats}
           snapshots={snapshots}
           activeSnapshotId={activeSnapshotId}
           sourceImage={sourceImage}
@@ -3767,6 +4026,7 @@ export const App: React.FC = () => {
             setUndoStack([]);
             setRedoStack([]);
             setHintRegionId(null);
+            resetActivePuzzleSessionStats(activeSnapshotId, false);
             if (activeSnapshotId && puzzle) {
               const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
               const updated = StorageService.updateSnapshotProgress(

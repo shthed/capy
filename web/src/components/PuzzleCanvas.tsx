@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 import {
   COOP_RIPPLE_DURATION_MS,
   CoopRippleBuffer,
@@ -47,12 +49,14 @@ interface PuzzleCanvasProps {
   reverseDoubleTapZoom?: boolean;
   zoomSensitivity?: number;
   snapZoomLevels?: boolean;
+  reducedMotion?: boolean;
   displayNumberMap: Map<number, string>;
   zoomInTrigger?: number;
   zoomOutTrigger?: number;
   stepZoomTrigger?: number;
   resetViewTrigger?: number;
   restoreViewTrigger?: number;
+  panStepRequest?: { seq: number; dx: number; dy: number };
   initialZoomScale?: number;
   initialPanOffsetX?: number;
   initialPanOffsetY?: number;
@@ -211,12 +215,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   reverseDoubleTapZoom = false,
   zoomSensitivity = 1.0,
   snapZoomLevels = false,
+  reducedMotion = false,
   displayNumberMap,
   zoomInTrigger = 0,
   zoomOutTrigger = 0,
   stepZoomTrigger = 0,
   resetViewTrigger = 0,
   restoreViewTrigger = 0,
+  panStepRequest,
   initialZoomScale = 1.0,
   initialPanOffsetX = 0,
   initialPanOffsetY = 0,
@@ -272,8 +278,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   );
   const effectiveZoomSensitivityRef = useRef(effectiveZoomSensitivity);
   const snapZoomLevelsRef = useRef(snapZoomLevels);
+  const reducedMotionRef = useRef(reducedMotion);
   effectiveZoomSensitivityRef.current = effectiveZoomSensitivity;
   snapZoomLevelsRef.current = snapZoomLevels;
+  reducedMotionRef.current = reducedMotion;
 
   // Pre-allocated scratch vectors for zero-allocation hot zoom/pan gesture math
   const gestureRawOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -352,8 +360,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     onViewExtentChangedRef.current?.(initialZoomScale, targetOffset.x, targetOffset.y, w, h);
   }, [puzzle?.regionMap, initialZoomScale, initialPanOffsetX, initialPanOffsetY, restoreViewTrigger, stopMomentum]);
 
-  // Handle FloatingActions zoom in/out button triggers
-  useEffect(() => {
+  // Handle FloatingActions & keyboard zoom in/out triggers synchronously on discrete events
+  useIsomorphicLayoutEffect(() => {
     if (zoomInTrigger <= 0 || !containerRef.current || !puzzle) return;
     const currentScale = scaleRef.current;
     const currentOffset = offsetRef.current;
@@ -377,9 +385,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     offsetRef.current = clamped;
     setScale(newScale);
     setOffset(clamped);
+    onViewExtentChangedRef.current?.(newScale, clamped.x, clamped.y, w, h);
   }, [zoomInTrigger]);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (zoomOutTrigger <= 0 || !containerRef.current || !puzzle) return;
     const currentScale = scaleRef.current;
     const currentOffset = offsetRef.current;
@@ -403,10 +412,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     offsetRef.current = clamped;
     setScale(newScale);
     setOffset(clamped);
+    onViewExtentChangedRef.current?.(newScale, clamped.x, clamped.y, w, h);
   }, [zoomOutTrigger]);
 
   // Handle GameTopBar zoom badge tap stepping through [1x, 2x, 4x, 8x, 12x] anchored at viewport center
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (stepZoomTrigger <= 0 || !containerRef.current || !puzzle) return;
     stopMomentum();
     const currentScale = scaleRef.current;
@@ -430,18 +440,25 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     offsetRef.current = clamped;
     setScale(newScale);
     setOffset(clamped);
+    onViewExtentChangedRef.current?.(newScale, clamped.x, clamped.y, w, h);
   }, [stepZoomTrigger, stopMomentum]);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (resetViewTrigger <= 0) return;
     stopMomentum();
     const startScale = scaleRef.current;
     const startOffset = { ...offsetRef.current };
-    if (Math.abs(startScale - 1.0) < 0.01 && Math.hypot(startOffset.x, startOffset.y) < 1) {
+    const w = containerRef.current?.clientWidth || window.innerWidth;
+    const h = containerRef.current?.clientHeight || window.innerHeight;
+    if (
+      reducedMotionRef.current ||
+      (Math.abs(startScale - 1.0) < 0.01 && Math.hypot(startOffset.x, startOffset.y) < 1)
+    ) {
       scaleRef.current = 1.0;
       offsetRef.current = { x: 0, y: 0 };
       setScale(1.0);
       setOffset({ x: 0, y: 0 });
+      onViewExtentChangedRef.current?.(1.0, 0, 0, w, h);
       return;
     }
 
@@ -461,6 +478,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       offsetRef.current = nextOffset;
       setScale(nextScale);
       setOffset(nextOffset);
+      onViewExtentChangedRef.current?.(nextScale, nextOffset.x, nextOffset.y, w, h);
       if (t < 1) {
         animId = requestAnimationFrame(stepZoomOut);
       }
@@ -469,6 +487,28 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     animId = requestAnimationFrame(stepZoomOut);
     return () => cancelAnimationFrame(animId);
   }, [resetViewTrigger, stopMomentum]);
+
+  // Handle crisp keyboard pan steps (Arrow keys / WASD) clamped via clampCanvasOffset
+  useIsomorphicLayoutEffect(() => {
+    if (!panStepRequest || panStepRequest.seq <= 0 || !containerRef.current || !puzzle) return;
+    stopMomentum();
+    onManualPanStartRef.current?.();
+    const w = containerRef.current.clientWidth;
+    const h = containerRef.current.clientHeight;
+    if (w <= 0 || h <= 0) return;
+    const cur = offsetRef.current;
+    const clamped = clampCanvasOffset(
+      { x: cur.x + panStepRequest.dx, y: cur.y + panStepRequest.dy },
+      scaleRef.current,
+      puzzle.width,
+      puzzle.height,
+      w,
+      h
+    );
+    offsetRef.current = clamped;
+    setOffset(clamped);
+    onViewExtentChangedRef.current?.(scaleRef.current, clamped.x, clamped.y, w, h);
+  }, [panStepRequest, stopMomentum]);
 
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
     width: 0,
@@ -508,9 +548,63 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const followAnchorOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const followVelRef = useRef<{ vx: number; vy: number }>({ vx: 0, vy: 0 });
   const isFollowingReplay = replayFollowRegionId !== null && replayFollowRegionId !== undefined;
+  const isSmoothFollowingReplay = isFollowingReplay && !reducedMotion;
+
+  // Reduced-motion Replay Follow: snap directly without multi-frame SmoothDamp glide or rAF loop
+  useEffect(() => {
+    if (!isFollowingReplay || !reducedMotion || !puzzle || !containerRef.current) return;
+    if (replayFollowRegionId === null || replayFollowRegionId === undefined) return;
+    const isUserInteracting =
+      isDraggingRef.current ||
+      activePointersRef.current.size > 0 ||
+      isOneFingerZoomingRef.current ||
+      isDoubleTapPanningRef.current;
+    if (isUserInteracting) return;
+
+    const curScale = scaleRef.current;
+    const reg = regionByIdRef.current.get(replayFollowRegionId);
+    const w = containerRef.current.clientWidth;
+    const h = containerRef.current.clientHeight;
+    if (!reg || w <= 0 || h <= 0 || curScale <= 1.05) return;
+
+    const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
+    const baseOffsetX = (w - puzzle.width * baseScale) / 2;
+    const baseOffsetY = (h - puzzle.height * baseScale) / 2;
+    const effScale = curScale * baseScale;
+    const safeLeft = w * 0.18;
+    const safeRight = w * 0.82;
+    const safeTop = Math.max(68, h * 0.18);
+    const safeBottom = h - Math.max(92, h * 0.22);
+    const curOff = offsetRef.current;
+    const regScreenX = curOff.x + baseOffsetX + reg.centroidX * effScale;
+    const regScreenY = curOff.y + baseOffsetY + reg.centroidY * effScale;
+    if (
+      regScreenX < safeLeft ||
+      regScreenX > safeRight ||
+      regScreenY < safeTop ||
+      regScreenY > safeBottom
+    ) {
+      const safeCenterX = w * 0.5;
+      const safeCenterY = (safeTop + safeBottom) * 0.5;
+      const clamped = clampCanvasOffset(
+        {
+          x: safeCenterX - baseOffsetX - reg.centroidX * effScale,
+          y: safeCenterY - baseOffsetY - reg.centroidY * effScale,
+        },
+        curScale,
+        puzzle.width,
+        puzzle.height,
+        w,
+        h
+      );
+      offsetRef.current = clamped;
+      setOffset(clamped);
+      onViewExtentChangedRef.current?.(curScale, clamped.x, clamped.y, w, h);
+    }
+  }, [isFollowingReplay, reducedMotion, puzzle, replayFollowRegionId]);
 
   useEffect(() => {
-    if (!isFollowingReplay || !puzzle) return;
+    if (!isSmoothFollowingReplay || !puzzle) return;
     let animId: number;
     let lastTime = performance.now();
 
@@ -674,7 +768,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
     animId = requestAnimationFrame(stepFollow);
     return () => cancelAnimationFrame(animId);
-  }, [isFollowingReplay, puzzle]);
+  }, [isSmoothFollowingReplay, puzzle]);
 
   // Tap dot decay
   useEffect(() => {
@@ -1355,16 +1449,20 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           ctx.drawImage(baseCanvasRef.current, 0, 0);
         }
 
-        // 2. Draw Highlight Overlay Layer with hardware-accelerated alpha pulse
+        // 2. Draw Highlight Overlay Layer with hardware-accelerated alpha pulse (steady high-contrast when reducedMotion is enabled)
+        const effectiveAnimateHint = Boolean(animateHint && !reducedMotion);
         if (
           hasHighlightPixelsRef.current &&
           highlightCanvasRef.current &&
           (highlightStyle === 'FULL_REGION' || highlightStyle === 'BOUNDARY_ONLY')
         ) {
           ctx.save();
-          ctx.globalAlpha = animateHint
+          ctx.globalAlpha = effectiveAnimateHint
             ? Math.min(1, Math.max(0.05, currentPulseAlpha * hintIntensity))
-            : Math.min(1, Math.max(0.05, hintIntensity * 0.78));
+            : Math.min(
+                1,
+                Math.max(0.05, reducedMotion ? Math.max(0.88, hintIntensity) : hintIntensity * 0.78)
+              );
           ctx.drawImage(highlightCanvasRef.current, 0, 0);
           ctx.restore();
         }
@@ -1410,7 +1508,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           hintColorArgb,
           hintIntensity,
           currentPulseAlpha,
-          animateHint,
+          Boolean(animateHint && !reducedMotion),
           effScale,
           labelScale,
           minLabelSize,
@@ -1484,6 +1582,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       hintColorArgb,
       hintFillStyle,
       animateHint,
+      reducedMotion,
       hintIntensity,
       displayNumberMap,
       tapDot,
@@ -1568,7 +1667,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     };
   }, [coopRippleBuffer, drawCompositeFrame]);
 
-  // Direct-to-canvas hint pulse rAF loop (zero React state updates; pauses completely when idle/completed)
+  // Direct-to-canvas hint pulse rAF loop (zero React state updates; pauses completely when idle/completed or under reducedMotion)
   useEffect(() => {
     const hasActivePulseTarget =
       Boolean(puzzle) &&
@@ -1580,9 +1679,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           highlightStyle !== 'NUMBER_ONLY' &&
           filledRegionIds.size < (puzzle?.regions.length || 0)));
 
-    if (!animateHint || !hasActivePulseTarget) {
-      pulseAlphaRef.current = 0.7;
-      drawCompositeFrame(0.7);
+    if (!animateHint || reducedMotion || !hasActivePulseTarget) {
+      const steadyAlpha = reducedMotion ? 0.95 : 0.7;
+      pulseAlphaRef.current = steadyAlpha;
+      drawCompositeFrame(steadyAlpha);
       return;
     }
 
@@ -1604,6 +1704,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [
     animateHint,
+    reducedMotion,
     puzzle,
     isPreviewMode,
     isGenerating,
@@ -1936,7 +2037,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
     // Trigger smooth pan momentum if dragged sufficiently
     if (totalDragDistanceRef.current >= 12) {
-      if (panMomentum && (!isPaintMode || isPreviewMode || wasPinchPan)) {
+      if (panMomentum && !reducedMotionRef.current && (!isPaintMode || isPreviewMode || wasPinchPan)) {
         const history = pointerHistoryRef.current;
         if (history.length >= 2) {
           const oldest = history[0];

@@ -65,6 +65,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   snapZoomLevels: false,
   soundEnabled: true,
   soundVolume: 0.7,
+  reducedMotion: false,
   detailedLoadingProgress: false,
   generatorConfig: {
     algorithm: 'AUTO',
@@ -79,6 +80,16 @@ export const DEFAULT_SETTINGS: UserSettings = {
     smoothingPasses: 2,
   },
 };
+
+function detectSystemReducedMotion(): boolean {
+  try {
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false;
+  } catch {
+    return false;
+  }
+}
 
 export class StorageService {
   private static dbPromise: Promise<IDBDatabase> | null = null;
@@ -121,9 +132,15 @@ export class StorageService {
   }
 
   static loadSettings(): UserSettings {
+    const systemReducedMotion = detectSystemReducedMotion();
     try {
       const raw = localStorage.getItem(SETTINGS_KEY) || NativeBridge.loadBackup(SETTINGS_KEY);
-      if (!raw) return DEFAULT_SETTINGS;
+      if (!raw) {
+        return {
+          ...DEFAULT_SETTINGS,
+          reducedMotion: systemReducedMotion,
+        };
+      }
       const parsed = JSON.parse(raw);
       const rawZoomSensitivity = Number(parsed.zoomSensitivity);
       const zoomSensitivity = Number.isFinite(rawZoomSensitivity)
@@ -141,6 +158,8 @@ export class StorageService {
       const soundVolume = Number.isFinite(rawSoundVolume)
         ? Math.min(1.0, Math.max(0.0, rawSoundVolume))
         : DEFAULT_SETTINGS.soundVolume;
+      const reducedMotion =
+        typeof parsed.reducedMotion === 'boolean' ? parsed.reducedMotion : systemReducedMotion;
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
@@ -148,13 +167,17 @@ export class StorageService {
         snapZoomLevels,
         soundEnabled,
         soundVolume,
+        reducedMotion,
         generatorConfig: {
           ...DEFAULT_SETTINGS.generatorConfig,
           ...(parsed.generatorConfig || {}),
         },
       };
     } catch {
-      return DEFAULT_SETTINGS;
+      return {
+        ...DEFAULT_SETTINGS,
+        reducedMotion: systemReducedMotion,
+      };
     }
   }
 
