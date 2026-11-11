@@ -61,6 +61,10 @@ export const DEFAULT_SETTINGS: UserSettings = {
   replayLoop: false,
   replayFollow: false,
   reverseDoubleTapZoom: false,
+  zoomSensitivity: 1.0,
+  snapZoomLevels: false,
+  soundEnabled: true,
+  soundVolume: 0.7,
   detailedLoadingProgress: false,
   generatorConfig: {
     algorithm: 'AUTO',
@@ -121,9 +125,29 @@ export class StorageService {
       const raw = localStorage.getItem(SETTINGS_KEY) || NativeBridge.loadBackup(SETTINGS_KEY);
       if (!raw) return DEFAULT_SETTINGS;
       const parsed = JSON.parse(raw);
+      const rawZoomSensitivity = Number(parsed.zoomSensitivity);
+      const zoomSensitivity = Number.isFinite(rawZoomSensitivity)
+        ? Math.min(2.0, Math.max(0.5, rawZoomSensitivity))
+        : DEFAULT_SETTINGS.zoomSensitivity;
+      const snapZoomLevels =
+        typeof parsed.snapZoomLevels === 'boolean'
+          ? parsed.snapZoomLevels
+          : DEFAULT_SETTINGS.snapZoomLevels;
+      const soundEnabled =
+        typeof parsed.soundEnabled === 'boolean'
+          ? parsed.soundEnabled
+          : DEFAULT_SETTINGS.soundEnabled;
+      const rawSoundVolume = Number(parsed.soundVolume);
+      const soundVolume = Number.isFinite(rawSoundVolume)
+        ? Math.min(1.0, Math.max(0.0, rawSoundVolume))
+        : DEFAULT_SETTINGS.soundVolume;
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
+        zoomSensitivity,
+        snapZoomLevels,
+        soundEnabled,
+        soundVolume,
         generatorConfig: {
           ...DEFAULT_SETTINGS.generatorConfig,
           ...(parsed.generatorConfig || {}),

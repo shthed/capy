@@ -96,6 +96,10 @@ export interface UserSettings {
   replayLoop: boolean;
   replayFollow: boolean;
   reverseDoubleTapZoom: boolean;
+  zoomSensitivity: number;
+  snapZoomLevels: boolean;
+  soundEnabled: boolean;
+  soundVolume: number;
   detailedLoadingProgress: boolean;
   generatorConfig: GeneratorConfig;
 }
