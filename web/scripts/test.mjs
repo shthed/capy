@@ -383,7 +383,106 @@ async function runCodecAndEngineTests() {
     assert.equal(canvasMod.getNextZoomStop(8), 12);
     assert.equal(canvasMod.getNextZoomStop(12), 1);
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, and Version/Changelog sync verified.');
+    // 8. DailyPuzzleService deterministic UTC date seeding & consecutive-date variation
+    const dailyMod = await vite.ssrLoadModule('/src/services/DailyPuzzleService.ts');
+    const dailyA = dailyMod.getDailyFeaturedPuzzle('2026-11-11');
+    const dailyB = dailyMod.getDailyFeaturedPuzzle('2026-11-11');
+    assert.deepEqual(dailyA, dailyB, 'getDailyFeaturedPuzzle("2026-11-11") must be 100% deterministic');
+    assert.equal(dailyA.utcDate, '2026-11-11');
+    assert.ok(dailyA.sample?.id && dailyA.presetId && dailyA.presetLabel && dailyA.config);
+
+    const dailyNext1 = dailyMod.getDailyFeaturedPuzzle('2026-11-12');
+    const dailyNext2 = dailyMod.getDailyFeaturedPuzzle('2026-11-13');
+    assert.notEqual(
+      dailyA.sample.id,
+      dailyNext1.sample.id,
+      'Consecutive UTC dates must rotate SAMPLE_GALLERY artwork'
+    );
+    assert.notEqual(
+      dailyA.presetId,
+      dailyNext1.presetId,
+      'Consecutive UTC dates must rotate preset variation'
+    );
+    assert.notEqual(dailyNext1.sample.id, dailyNext2.sample.id);
+    assert.notEqual(dailyNext1.presetId, dailyNext2.presetId);
+
+    // 9. PlayerStatsService SSR load, increment, clamping, persistence & monotonic mergeLifetimeStats
+    const statsMod = await vite.ssrLoadModule('/src/services/PlayerStatsService.ts');
+    try {
+      const resetInitial = statsMod.PlayerStatsService.resetStats();
+      assert.deepEqual(resetInitial, {
+        totalRegionsColored: 0,
+        puzzlesCompleted: 0,
+        zeroHintPuzzles: 0,
+        fastestCompletionMs: null,
+        freeColorCreations: 0,
+        coopRegionsPainted: 0,
+      });
+
+      statsMod.PlayerStatsService.recordRegionsColored(4, false);
+      const afterCoop = statsMod.PlayerStatsService.recordRegionsColored(3, true);
+      assert.equal(afterCoop.totalRegionsColored, 7);
+      assert.equal(afterCoop.coopRegionsPainted, 3);
+
+      // Negative or zero increments must be clamped safely without decrementing totals
+      const afterNeg = statsMod.PlayerStatsService.recordRegionsColored(-5, true);
+      assert.equal(afterNeg.totalRegionsColored, 7);
+      assert.equal(afterNeg.coopRegionsPainted, 3);
+
+      statsMod.PlayerStatsService.recordFreeColorCreation();
+      statsMod.PlayerStatsService.recordPuzzleCompleted({ hintsUsed: 2, activeElapsedMs: 52_000 });
+      statsMod.PlayerStatsService.recordPuzzleCompleted({ hintsUsed: 0, activeElapsedMs: 34_500 });
+      const finalSaved = statsMod.PlayerStatsService.recordPuzzleCompleted({
+        hintsUsed: 0,
+        activeElapsedMs: 75_000,
+      });
+
+      assert.deepEqual(finalSaved, {
+        totalRegionsColored: 7,
+        puzzlesCompleted: 3,
+        zeroHintPuzzles: 2,
+        fastestCompletionMs: 34_500,
+        freeColorCreations: 1,
+        coopRegionsPainted: 3,
+      });
+      assert.deepEqual(statsMod.PlayerStatsService.loadStats(), finalSaved);
+
+      const merged = statsMod.mergeLifetimeStats(
+        {
+          totalRegionsColored: 120,
+          puzzlesCompleted: 4,
+          zeroHintPuzzles: 1,
+          fastestCompletionMs: 49_000,
+          freeColorCreations: 2,
+          coopRegionsPainted: 15,
+        },
+        {
+          totalRegionsColored: 85,
+          puzzlesCompleted: 9,
+          zeroHintPuzzles: 6,
+          fastestCompletionMs: 28_400,
+          freeColorCreations: 5,
+          coopRegionsPainted: 4,
+        }
+      );
+      assert.deepEqual(merged, {
+        totalRegionsColored: 120,
+        puzzlesCompleted: 9,
+        zeroHintPuzzles: 6,
+        fastestCompletionMs: 28_400,
+        freeColorCreations: 5,
+        coopRegionsPainted: 15,
+      });
+      assert.equal(
+        statsMod.mergeLifetimeStats({ fastestCompletionMs: null }, { fastestCompletionMs: 19_000 })
+          .fastestCompletionMs,
+        19_000
+      );
+    } finally {
+      statsMod.PlayerStatsService.resetStats();
+    }
+
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
@@ -1229,6 +1328,166 @@ async function runBrowserBasicsSuite() {
       );
     }
     console.log('   PASS: Controls settings (zoomSensitivity, snapZoomLevels, soundEnabled, soundVolume) and HUD zoom-badge cycle (1x -> 2x -> 4x -> 8x -> 12x -> 1x) verified.');
+
+    // ------------------------------------------------------------------
+    // 10. Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats
+    // ------------------------------------------------------------------
+    console.log('-> [E2E 10] Verifying Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats...');
+
+    // 10a. Daily Featured Puzzle hero card at top of Create tab + one-tap Play Daily launch
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+
+    const dailyCard = page.getByTestId('daily-puzzle-card');
+    await dailyCard.waitFor({ state: 'visible', timeout: 5000 });
+    const dateBadgeText = (await page.getByTestId('daily-puzzle-date-badge').innerText()).trim();
+    assert.match(dateBadgeText, /^\d{4}-\d{2}-\d{2} UTC$/, `Expected UTC date badge, got '${dateBadgeText}'`);
+
+    const searchInputForOrder = page.getByTestId('gallery-search-input');
+    await searchInputForOrder.waitFor({ state: 'visible', timeout: 5000 });
+    const dailyBox = await dailyCard.boundingBox();
+    const searchBox = await searchInputForOrder.boundingBox();
+    assert.ok(
+      dailyBox && searchBox && dailyBox.y < searchBox.y,
+      'Expected daily-puzzle-card to render above gallery-search-input at the top of the Create tab'
+    );
+
+    await page.getByTestId('daily-puzzle-play-btn').click();
+    await waitForPuzzleLoaded(page);
+    assert.equal(await dailyCard.isVisible(), false, 'Settings modal should close after clicking Play Daily');
+
+    // 10b. Reduced Motion toggle persistence in capy_user_settings_v8
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const reducedMotionToggle = page.getByTestId('setting-reduced-motion');
+    await reducedMotionToggle.waitFor({ state: 'visible', timeout: 5000 });
+    await reducedMotionToggle.click();
+
+    const persistedA11y = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+    });
+    assert.equal(
+      persistedA11y.reducedMotion,
+      true,
+      `Expected reducedMotion=true in capy_user_settings_v8, got ${persistedA11y.reducedMotion}`
+    );
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    // 10c. Keyboard shortcuts: '1' / '2' swatch select, input-focus guard, '+' zoom, ArrowRight/ArrowLeft pan, '0' reset
+    await page.keyboard.press('1');
+    await page.waitForTimeout(80);
+    assert.equal(
+      await page.getByTestId('palette-swatch-1').getAttribute('aria-pressed'),
+      'true',
+      'Expected keyboard "1" to select swatch #1'
+    );
+
+    // Verify typing '2' inside Gallery search <input> does NOT change selected swatch
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    const gallerySearchInput = page.getByTestId('gallery-search-input');
+    await gallerySearchInput.waitFor({ state: 'visible', timeout: 5000 });
+    await gallerySearchInput.focus();
+    await page.keyboard.type('2');
+    await page.waitForTimeout(80);
+    await gallerySearchInput.fill('');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    assert.equal(
+      await page.getByTestId('palette-swatch-1').getAttribute('aria-pressed'),
+      'true',
+      'Typing "2" inside gallery-search-input must NOT hijack active swatch #1'
+    );
+    assert.equal(
+      await page.getByTestId('palette-swatch-2').getAttribute('aria-pressed'),
+      'false',
+      'Swatch #2 must remain unselected after typing "2" in gallery-search-input'
+    );
+
+    // Active canvas keyboard '2' selects swatch #2
+    await page.keyboard.press('2');
+    await page.waitForTimeout(80);
+    assert.equal(
+      await page.getByTestId('palette-swatch-2').getAttribute('aria-pressed'),
+      'true',
+      'Expected keyboard "2" on active canvas to select swatch #2'
+    );
+
+    // '+' zooms in above 1.0x (press twice so there is ample horizontal pan headroom)
+    assert.equal((await zoomBadge.innerText()).trim(), '1x', 'Expected daily puzzle initial zoom at 1x');
+    await page.keyboard.press('+');
+    await page.waitForTimeout(80);
+    const zoomAfterFirstPlus = parseFloat((await zoomBadge.innerText()).replace('x', '').trim());
+    assert.ok(
+      zoomAfterFirstPlus > 1.0,
+      `Expected keyboard "+" to zoom above 1.0x, got '${zoomAfterFirstPlus}'`
+    );
+    await page.keyboard.press('+');
+    await page.waitForTimeout(420);
+
+    const panBefore = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').panOffsetX ?? 0;
+    });
+
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(420);
+    const panAfterRight = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').panOffsetX ?? 0;
+    });
+    assert.ok(
+      panAfterRight < panBefore,
+      `Expected ArrowRight to pan viewport right (decreasing panOffsetX from ${panBefore}), got ${panAfterRight}`
+    );
+
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForTimeout(420);
+    const panAfterLeft = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').panOffsetX ?? 0;
+    });
+    assert.ok(
+      panAfterLeft > panAfterRight,
+      `Expected ArrowLeft to pan viewport left (increasing panOffsetX from ${panAfterRight}), got ${panAfterLeft}`
+    );
+
+    await page.keyboard.press('0');
+    await page.waitForTimeout(100);
+    assert.equal(
+      (await zoomBadge.innerText()).trim(),
+      '1x',
+      'Expected keyboard "0" to reset zoom back to 1x'
+    );
+
+    // 10d. Coloring regions increments totalRegionsColored in capy_player_stats_v1 & displays in lifetime-stats-card
+    const statsBeforeTap = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_player_stats_v1') || '{}');
+    });
+    const prevTotalColored = Number(statsBeforeTap.totalRegionsColored || 0);
+
+    await tapCanvasGrid(page, 0.32, 12, 35);
+    const statsAfterTap = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_player_stats_v1') || '{}');
+    });
+    const nextTotalColored = Number(statsAfterTap.totalRegionsColored || 0);
+    assert.ok(
+      nextTotalColored > prevTotalColored,
+      `Expected coloring regions to increment totalRegionsColored in capy_player_stats_v1 (${prevTotalColored} -> ${nextTotalColored})`
+    );
+
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const statsCard = page.getByTestId('lifetime-stats-card');
+    await statsCard.waitFor({ state: 'visible', timeout: 5000 });
+    const renderedTotalText = (await page.getByTestId('stat-total-regions').innerText()).replace(/,/g, '').trim();
+    assert.equal(
+      Number(renderedTotalText),
+      nextTotalColored,
+      `Expected lifetime-stats-card stat-total-regions (${renderedTotalText}) to match persisted totalRegionsColored (${nextTotalColored})`
+    );
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    console.log('   PASS: Daily Featured Puzzle card/launch, Reduced Motion persistence, Keyboard Gameplay Shortcuts + input-focus guard, and Lifetime Stats verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');
