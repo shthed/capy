@@ -25,14 +25,13 @@ For subsystem references, see:
 
 | Priority Tier | Items | Focus Domain | Aggregate Complexity | Aggregate Difficulty | Est. Total Tokens | Est. Agent Time | Est. Human Dev Time |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Bugfixes -- Audit Findings** | 4 | State Consistency, Cloud Concurrency, Graph Coloring & Android Memory Safety | Medium | Moderate | `~91,000 tokens` | `~40-60 min` | `~8-12 hrs` |
 | **P0 -- Critical Polish** | 4 | Sensory Audio, Tactile Juice & Precision Controls | Medium to High | Moderate to Hard | `~145,000 tokens` | `~65-95 min` | `~16-24 hrs` |
 | **P1 -- Retention & Accessibility** | 4 | Achievements, Daily Content, Accessibility & Video Export | Medium to High | Moderate to Hard | `~175,000 tokens` | `~80-115 min` | `~22-32 hrs` |
 | **P2 -- Engine & Infinite Zoom** | 3 | Focal-Point Infinite Zoom Pyramid & Vector Export | High | Hard | `~130,000 tokens` | `~60-85 min` | `~18-26 hrs` |
 | **P3 -- Real-Time Multiplayer** | 4 | Internet Co-op Relay, WebRTC P2P & Undo/Ping Sync | High to Very High | Hard to Expert | `~190,000 tokens` | `~90-130 min` | `~28-40 hrs` |
 | **P4 -- Cloud, Storefront & AI** | 4 | Play Console Credentials, AdMob UMP & Live AI Catalog | Medium to High | Moderate to Hard | `~155,000 tokens` | `~70-105 min` | `~20-30 hrs` |
 | **P5 -- Multi-Platform Expansion** | 3 | Steam Desktop (`Tauri`), iOS (`WKWebView`) & Microsoft Store | Very High | Hard to Expert | `~170,000 tokens` | `~80-115 min` | `~28-40 hrs` |
-| **Total Roadmap** | **26** | **Full Multi-Platform AAA Production Readiness** | **Low to Very High** | **Easy to Expert** | **`~1,056,000 tokens`** | **`~8.1-11.8 hrs`** | **`~140-204 hrs`** |
+| **Total Roadmap** | **22** | **Full Multi-Platform AAA Production Readiness** | **Low to Very High** | **Easy to Expert** | **`~965,000 tokens`** | **`~7.4-10.8 hrs`** | **`~132-192 hrs`** |
 
 ---
 
@@ -42,7 +41,7 @@ Every task in this roadmap is tagged with five standardized classification dimen
 
 | Label Category | Allowed Values | Meaning & Scope |
 | :--- | :--- | :--- |
-| **Priority (`priority:*`)** | `P0-fix`, `P0-critical`, `P1-high`, `P2-medium-high`, `P3-medium`, `P4-medium-low`, `P5-long-term` | Execution order and criticality for AAA production readiness. |
+| **Priority (`priority:*`)** | `P0-critical`, `P1-high`, `P2-medium-high`, `P3-medium`, `P4-medium-low`, `P5-long-term` | Execution order and criticality for AAA production readiness. |
 | **Work Type (`type:*`)** | `fix`, `feature`, `polish`, `infra`, `integration` | Nature of the engineering change (bug resolution, new gameplay feature, sensory UX polish, or cloud/platform integration). |
 | **Subsystem (`domain:*`)** | `canvas`, `ui`, `engine`, `audio`, `a11y`, `cloud`, `multiplayer`, `android`, `ai`, `export`, `desktop`, `ios` | Primary target architecture boundary (`web/`, `app/`, `relay/`, `desktop/`, `ios/`). |
 | **Complexity (`complexity:*`)** | `low` (1-2 files, localized), `medium` (2-4 files, state + UI), `high` (4-7 files, cross-layer/worker), `very-high` (multi-package / native + web protocol) | Architectural surface area, state coordination, and number of files touched. |
@@ -54,10 +53,6 @@ Every task in this roadmap is tagged with five standardized classification dimen
 
 | ID | Task Title | Priority | Type | Domain | Complexity | Difficulty | Est. Tokens | Est. Agent Time | Est. Human Time |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **BF-1** | Free Colour Undo Co-op Desync & Chronological Order Shift | `P0-fix` | `fix` | `multiplayer`, `ui` | `medium` | `moderate` | `~22,000` | `10-15 min` | `2-3 hrs` |
-| **BF-3** | Google Drive `appDataFolder` Concurrent Write Mutex | `P0-fix` | `fix` | `cloud` | `medium` | `moderate` | `~24,000` | `10-15 min` | `2-3 hrs` |
-| **BF-4** | B&W Coloring Book Graph-Coloring Source Fill Preservation | `P0-fix` | `fix` | `engine` | `medium` | `moderate` | `~22,000` | `10-15 min` | `2-3 hrs` |
-| **BF-5** | Android `ACTION_SEND` Downsampling & Background Decode | `P0-fix` | `fix` | `android` | `medium` | `moderate` | `~23,000` | `10-15 min` | `2-3 hrs` |
 | **P0-1** | Procedural Web Audio & ASMR Sound Effects Engine | `P0-critical` | `feature` | `audio`, `ui` | `medium` | `moderate` | `~38,000` | `18-25 min` | `4-6 hrs` |
 | **P0-2** | Zero-Allocation Region Fill Micro-Animations & Bursts | `P0-critical` | `polish` | `canvas` | `high` | `hard` | `~42,000` | `20-28 min` | `5-7 hrs` |
 | **P0-3** | Floating Precision Loupe Magnifier & Crosshair Offset | `P0-critical` | `feature` | `canvas`, `ui` | `high` | `hard` | `~40,000` | `18-26 min` | `5-7 hrs` |
@@ -83,28 +78,7 @@ Every task in this roadmap is tagged with five standardized classification dimen
 
 ---
 
-## 4. Priority Bugfixes (Codebase Audit Findings)
-
-- [ ] **BF-1: Free Colour Undo Co-op Desync & Chronological Order Shift ([`web/src/App.tsx`](./web/src/App.tsx))**:
-  - **Labels**: `[priority: P0-fix]` `[type: fix]` `[domain: multiplayer]` `[domain: ui]` `[complexity: medium]` `[difficulty: moderate]`
-  - **Estimates**: `Est. Tokens: ~22,000 tokens` | `Est. Time: ~10-15 min agent (~2-3 hrs human dev)`
-  - **Scope**: Repainting an already-filled region in Free Colour mode currently deletes and re-inserts the region ID at the tail of `filledRegionIds`, altering its original fill chronology, and undoing a Free Colour repaint when `previousPaintedColorId !== undefined` omits broadcasting a color-restoration `CoopPaintEvent` to connected Co-op collaborators.
-- [ ] **BF-3: Google Drive `appDataFolder` Duplicate Slot File Accumulation on Concurrent Writes ([`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts))**:
-  - **Labels**: `[priority: P0-fix]` `[type: fix]` `[domain: cloud]` `[complexity: medium]` `[difficulty: moderate]`
-  - **Estimates**: `Est. Tokens: ~24,000 tokens` | `Est. Time: ~10-15 min agent (~2-3 hrs human dev)`
-  - **Scope**: `writeSlotEnvelope` and `writeBinaryBlob` query `findFileByName` before uploading without an in-memory per-slot mutex or file-ID cache (unlike `cachedManifestFileId`), allowing rapid back-to-back syncs to create duplicate slot files in Drive `appDataFolder`.
-- [ ] **BF-4: B&W Coloring Book Graph-Coloring Overwrites Source Fill Hints ([`web/src/engine/PuzzleGenerator.ts`](./web/src/engine/PuzzleGenerator.ts))**:
-  - **Labels**: `[priority: P0-fix]` `[type: fix]` `[domain: engine]` `[complexity: medium]` `[difficulty: moderate]`
-  - **Estimates**: `Est. Tokens: ~22,000 tokens` | `Est. Time: ~10-15 min agent (~2-3 hrs human dev)`
-  - **Scope**: In `LineArtPuzzleGenerator`, the greedy graph-coloring pass unconditionally overwrites `reg.colorId` for all regions when `isColoringBook` is true, discarding explicit non-white source accent fills in hybrid B&W illustrations.
-- [ ] **BF-5: Android `ACTION_SEND` Large Image OOM & UI Thread Blocking Risk ([`app/src/main/java/com/capypaint/capy/MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt))**:
-  - **Labels**: `[priority: P0-fix]` `[type: fix]` `[domain: android]` `[complexity: medium]` `[difficulty: moderate]`
-  - **Estimates**: `Est. Tokens: ~23,000 tokens` | `Est. Time: ~10-15 min agent (~2-3 hrs human dev)`
-  - **Scope**: `handleIncomingIntent` reads the entire shared `InputStream` into a `ByteArray` and Base64-encodes it synchronously on the UI thread without downsampling or size-capping ultra-high-resolution camera photos, risking `OutOfMemoryError` or ANR on low-RAM devices.
-
----
-
-## 5. Priority P0: AAA Sensory Polish, Tactile Audio & Precision Controls
+## 4. Priority P0: AAA Sensory Polish, Tactile Audio & Precision Controls
 
 - [ ] **P0-1: Procedural Web Audio & ASMR Sound Effects Engine (`web/src/services/SoundService.ts`)**:
   - **Labels**: `[priority: P0-critical]` `[type: feature]` `[domain: audio]` `[domain: ui]` `[complexity: medium]` `[difficulty: moderate]`
@@ -130,7 +104,7 @@ Every task in this roadmap is tagged with five standardized classification dimen
 
 ---
 
-## 6. Priority P1: Player Progression, Daily Challenges, Accessibility & Video Export
+## 5. Priority P1: Player Progression, Daily Challenges, Accessibility & Video Export
 
 - [ ] **P1-1: In-App Achievement System, Player Statistics & Native Play Games / Steam Bridges**:
   - **Labels**: `[priority: P1-high]` `[type: feature]` `[domain: ui]` `[domain: cloud]` `[domain: android]` `[complexity: high]` `[difficulty: moderate]`
@@ -158,7 +132,7 @@ Every task in this roadmap is tagged with five standardized classification dimen
 
 ---
 
-## 7. Priority P2: Interactive Infinite Zoom Pyramid & Vector Print Exports
+## 6. Priority P2: Interactive Infinite Zoom Pyramid & Vector Print Exports
 
 - [ ] **P2-1: Focal-Point Quadtree Sub-Tile Navigation & Parent Breadcrumb Stack**:
   - **Labels**: `[priority: P2-medium-high]` `[type: feature]` `[domain: canvas]` `[domain: engine]` `[domain: ui]` `[complexity: high]` `[difficulty: hard]`
@@ -179,13 +153,13 @@ Every task in this roadmap is tagged with five standardized classification dimen
 
 ---
 
-## 8. Priority P3: Real-Time Co-op Multiplayer & Cross-Device Sharing Infrastructure
+## 7. Priority P3: Real-Time Co-op Multiplayer & Cross-Device Sharing Infrastructure
 
 - [ ] **P3-1: Co-op Collaborator Undo Sync (`UNFILL_EVENT`) & Interactive "Ping Region" Beacon**:
   - **Labels**: `[priority: P3-medium]` `[type: feature]` `[domain: multiplayer]` `[domain: canvas]` `[complexity: medium]` `[difficulty: moderate]`
   - **Estimates**: `Est. Tokens: ~35,000 tokens` | `Est. Time: ~16-24 min agent (~4-6 hrs human dev)`
   - **Scope**:
-    - Broadcast `UNFILL_EVENT` and Free Colour re-paint messages over [`HybridCoopRoomAdapter`](./web/src/services/providers/ProviderRegistry.ts) when a collaborator undoes a region fill so all peer canvases stay strictly consistent during undo/redo.
+    - Broadcast `UNFILL_EVENT` messages over [`HybridCoopRoomAdapter`](./web/src/services/providers/ProviderRegistry.ts) when a collaborator undoes a first-time region fill back to unfilled so all peer canvases stay strictly consistent during initial-fill undo.
     - Add a tap-and-hold "Ping Region" beacon on [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx) rendered via [`CoopRippleBuffer.ts`](./web/src/engine/CoopRippleBuffer.ts) so collaborators can highlight a tricky micro-region or call attention to a specific area on large puzzles.
 - [ ] **P3-2: Hosted Hibernating WebSocket Room Relay Server (`VITE_CAPY_ROOM_WS_URL`)**:
   - **Labels**: `[priority: P3-medium]` `[type: infra]` `[domain: multiplayer]` `[domain: cloud]` `[complexity: high]` `[difficulty: hard]`
@@ -205,7 +179,7 @@ Every task in this roadmap is tagged with five standardized classification dimen
 
 ---
 
-## 9. Priority P4: Production Storefront Credentials, Cloud Providers & Live AI Catalog
+## 8. Priority P4: Production Storefront Credentials, Cloud Providers & Live AI Catalog
 
 - [ ] **P4-1: Google Play Console Production Credentials & Verified `assetlinks.json`**:
   - **Labels**: `[priority: P4-medium-low]` `[type: infra]` `[domain: android]` `[domain: cloud]` `[complexity: low]` `[difficulty: easy]`
@@ -230,7 +204,7 @@ Every task in this roadmap is tagged with five standardized classification dimen
 
 ---
 
-## 10. Priority P5: Multi-Platform Desktop (Steam / Tauri), iOS & Microsoft Store Packaging
+## 9. Priority P5: Multi-Platform Desktop (Steam / Tauri), iOS & Microsoft Store Packaging
 
 - [ ] **P5-1: Steam Desktop Wrapper (`desktop/`) & `SteamCloudDriver` Bindings**:
   - **Labels**: `[priority: P5-long-term]` `[type: integration]` `[domain: desktop]` `[domain: cloud]` `[complexity: very-high]` `[difficulty: expert]`

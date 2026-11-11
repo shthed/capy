@@ -154,7 +154,9 @@ When opening black and white line art or coloring book pages (such as coloring s
    * Accommodates high-density line drawings with an expanded line coverage threshold (up to 35% line pixels) so detailed coloring book drawings are cleanly categorized as `LINE_ART`.
 3. **Natural Cell Preservation**:
    * For coloring pages, region count caps are relaxed (`maxRegs` up to 2,000, `minArea = 10`) so intricate closed cells (e.g. mushroom spots, leaf veins, grass blades) are preserved as distinct paintable regions rather than being merged into adjacent background areas.
-4. **Graph Coloring Cell Assignment**: Pure black and white images lack interior color information. The generator dynamically produces a vibrant 20-color curated starter palette and performs balanced greedy graph coloring so touching regions receive distinct, non-clashing colors when viewed in "By Number" mode.
+4. **Two-Pass Source Accent Locking & Graph Coloring Cell Assignment (`BF-4`)**: When `isBwColoring` is active, `LineArtPuzzleGenerator.generateFromRgba` performs a two-pass coloring assignment:
+   * **Pass 1 (Explicit Source Accent Fill Preservation)**: Inspects each segmented region's interior source pixels (`lineMask[pIdx] === 0`). If $> 25\%$ of a region's interior pixels are explicitly chromatic (`max(R, G, B) - min(R, G, B) > 35` and `max(R, G, B) > 50`, such as pre-colored eyes, berries, or spot accents on a hybrid coloring page), the engine computes the mean RGB of those chromatic pixels and locks `reg.colorId` to the closest perceptual palette color (`lockedSourceColor`).
+   * **Pass 2 (Balanced Greedy Graph Coloring)**: Generates a vibrant 20-color curated starter palette and assigns distinct, non-clashing palette colors to all remaining uncolored paper regions while treating locked source-colored neighbor regions (`lockedSourceColor`) as fixed boundary constraints.
 5. **Free Colour Painting Engine**: When Free Colour Mode is active:
    * Players can tap or drag with any selected color swatch to fill any region freely.
    * Regions can be repainted at any time with different colors without penalty.

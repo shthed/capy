@@ -2,6 +2,8 @@ package com.capypaint.capy
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -31,6 +33,9 @@ import com.google.android.gms.games.PlayGames
 import com.google.android.gms.games.PlayGamesSdk
 import com.google.android.gms.games.SnapshotsClient
 import com.google.android.gms.games.snapshot.SnapshotMetadataChange
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
 
@@ -38,6 +43,7 @@ class MainActivity : ComponentActivity() {
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private lateinit var bridge: CapyAndroidBridge
     private var isPageLoaded: Boolean = false
+    private val shareDecodeExecutor = Executors.newSingleThreadExecutor()
 
     private val pickMediaLauncher = registerForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
@@ -310,19 +316,111 @@ class MainActivity : ComponentActivity() {
         }
         if (imageUri == null) return
 
-        try {
-            val bytes = contentResolver.openInputStream(imageUri)?.use { it.readBytes() } ?: return
-            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            val dataUrl = "data:$type;base64,$base64"
-            val title = imageUri.lastPathSegment?.substringAfterLast('/') ?: "Shared Photo"
-            Log.i(TAG, "Processed incoming shared image '$title' (${bytes.size} bytes)")
-            bridge.pendingSharedImageJson = CapyAndroidBridge.formatSharedImageJson(title, dataUrl)
-            if (isPageLoaded) {
-                deliverPendingSharedImageIfNeeded()
+        val title = imageUri.lastPathSegment?.substringAfterLast('/') ?: "Shared Photo"
+        val appResolver = applicationContext.contentResolver
+        shareDecodeExecutor.execute {
+            try {
+                val dataUrl = decodeAndDownsampleSharedImage(appResolver, imageUri, type) ?: return@execute
+                runOnUiThread {
+                    if (isDestroyed || isFinishing) return@runOnUiThread
+                    bridge.pendingSharedImageJson = CapyAndroidBridge.formatSharedImageJson(title, dataUrl)
+                    if (isPageLoaded) {
+                        deliverPendingSharedImageIfNeeded()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to resolve incoming share image URI: $imageUri", e)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to resolve incoming share image URI: $imageUri", e)
         }
+    }
+
+    private fun decodeAndDownsampleSharedImage(
+        resolver: android.content.ContentResolver,
+        imageUri: Uri,
+        mimeType: String,
+    ): String? {
+        val boundsOptions = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        resolver.openInputStream(imageUri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, boundsOptions)
+        }
+
+        val srcWidth = boundsOptions.outWidth
+        val srcHeight = boundsOptions.outHeight
+        if (srcWidth > 0 && srcHeight > 0) {
+            val sampleSize = CapyAndroidBridge.calculateInSampleSize(
+                srcWidth,
+                srcHeight,
+                CapyAndroidBridge.MAX_SHARED_IMAGE_DIMENSION,
+            )
+            val decodeOptions = BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val decoded = resolver.openInputStream(imageUri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, decodeOptions)
+            }
+            if (decoded != null) {
+                val (targetW, targetH) = CapyAndroidBridge.calculateTargetDimensions(
+                    decoded.width,
+                    decoded.height,
+                    CapyAndroidBridge.MAX_SHARED_IMAGE_DIMENSION,
+                )
+                val finalBitmap = if (targetW != decoded.width || targetH != decoded.height) {
+                    val scaled = Bitmap.createScaledBitmap(decoded, targetW, targetH, true)
+                    if (scaled !== decoded) {
+                        decoded.recycle()
+                    }
+                    scaled
+                } else {
+                    decoded
+                }
+                val isPngOrWebp = mimeType.contains("png", ignoreCase = true) ||
+                    mimeType.contains("webp", ignoreCase = true)
+                val outStream = ByteArrayOutputStream()
+                val outMime = if (isPngOrWebp) {
+                    finalBitmap.compress(Bitmap.CompressFormat.PNG, 100, outStream)
+                    "image/png"
+                } else {
+                    finalBitmap.compress(Bitmap.CompressFormat.JPEG, 92, outStream)
+                    "image/jpeg"
+                }
+                finalBitmap.recycle()
+                val encodedBytes = outStream.toByteArray()
+                val base64 = Base64.encodeToString(encodedBytes, Base64.NO_WRAP)
+                Log.i(
+                    TAG,
+                    "Processed incoming shared image (${srcWidth}x${srcHeight} -> ${targetW}x${targetH}, ${encodedBytes.size} bytes)",
+                )
+                return "data:$outMime;base64,$base64"
+            }
+        }
+
+        // Fallback for non-bitmap image streams (bounded to MAX_RAW_SHARED_IMAGE_BYTES to prevent OOM)
+        val rawBytes = resolver.openInputStream(imageUri)?.use { stream ->
+            readBoundedBytes(stream, CapyAndroidBridge.MAX_RAW_SHARED_IMAGE_BYTES)
+        } ?: return null
+        if (rawBytes.isEmpty()) return null
+        val base64 = Base64.encodeToString(rawBytes, Base64.NO_WRAP)
+        return "data:$mimeType;base64,$base64"
+    }
+
+    private fun readBoundedBytes(stream: InputStream, maxBytes: Int): ByteArray? {
+        val buffer = ByteArrayOutputStream()
+        val chunk = ByteArray(16 * 1024)
+        var total = 0
+        while (true) {
+            val read = stream.read(chunk)
+            if (read <= 0) break
+            total += read
+            if (total > maxBytes) {
+                Log.w(TAG, "Shared raw image stream exceeded $maxBytes bytes; rejecting fallback read")
+                return null
+            }
+            buffer.write(chunk, 0, read)
+        }
+        return buffer.toByteArray()
     }
 
     private fun deliverPendingSharedImageIfNeeded() {
@@ -532,6 +630,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        shareDecodeExecutor.shutdownNow()
         webView?.destroy()
         webView = null
         super.onDestroy()

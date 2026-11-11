@@ -1324,6 +1324,7 @@ export const App: React.FC = () => {
 
     const nextFilled = new Set(filledRegionIds);
     const nextPainted = new Map(paintedRegionColors);
+    const undoneRegion = puzzle.regions.find((r) => r.id === lastAction.regionId);
 
     if (lastAction.wasPreviouslyFilled) {
       if (lastAction.previousPaintedColorId !== undefined) {
@@ -1333,6 +1334,11 @@ export const App: React.FC = () => {
         });
       } else {
         nextPainted.delete(lastAction.regionId);
+        if (undoneRegion) {
+          emitCoopPaint('FILL', [lastAction.regionId], {
+            [lastAction.regionId]: undoneRegion.colorId,
+          });
+        }
       }
     } else {
       nextFilled.delete(lastAction.regionId);
@@ -1345,7 +1351,6 @@ export const App: React.FC = () => {
     setHintRegionId(null);
     NativeBridge.haptic('tick', settings.hapticsEnabled);
 
-    const undoneRegion = puzzle.regions.find((r) => r.id === lastAction.regionId);
     if (undoneRegion && !isFreeColorMode) {
       setActiveColorId(undoneRegion.colorId);
     }
@@ -1418,7 +1423,7 @@ export const App: React.FC = () => {
     emitCoopPaint(
       'FILL',
       [lastRedo.regionId],
-      isFreeColorMode && redonePaintedCol !== undefined
+      redonePaintedCol !== undefined
         ? { [lastRedo.regionId]: redonePaintedCol }
         : undefined
     );
@@ -1479,17 +1484,11 @@ export const App: React.FC = () => {
   const handleOpenTimelineReplay = useCallback(() => {
     if (!puzzle || (filledRegionIds.size === 0 && undoStack.length === 0)) return;
 
-    // Build unique ordered list of filled regions matching gameplay chronology
+    // Build unique ordered list of filled regions matching first-fill gameplay chronology
     const orderedList =
-      undoStack.length > 0
-        ? Array.from(
-            new Set(
-              undoStack
-                .map((u) => u.regionId)
-                .filter((id) => filledRegionIds.has(id))
-            )
-          )
-        : Array.from(filledRegionIds);
+      filledRegionIds.size > 0
+        ? Array.from(filledRegionIds)
+        : Array.from(new Set(undoStack.map((u) => u.regionId)));
 
     if (orderedList.length === 0) return;
 
@@ -1614,16 +1613,22 @@ export const App: React.FC = () => {
       if (!region) return;
 
       if (isFreeColorMode) {
-        const currentPaintedColor = paintedRegionColors.get(regionId);
-        if (currentPaintedColor === activeColorId) return;
-
         const wasFilled = filledRegionIds.has(regionId);
+        const currentPaintedColor = paintedRegionColors.get(regionId);
+        const effectivePrevColor =
+          currentPaintedColor !== undefined
+            ? currentPaintedColor
+            : wasFilled
+              ? region.colorId
+              : undefined;
+        if (effectivePrevColor === activeColorId) return;
+
         setUndoStack((prev) => [
           ...prev,
           {
             regionId,
             wasPreviouslyFilled: wasFilled,
-            previousPaintedColorId: currentPaintedColor,
+            previousPaintedColorId: effectivePrevColor,
             paintedColorId: activeColorId,
           },
         ]);
@@ -1634,9 +1639,6 @@ export const App: React.FC = () => {
         setPaintedRegionColors(nextPainted);
 
         const nextFilled = new Set(filledRegionIds);
-        if (wasFilled) {
-          nextFilled.delete(regionId);
-        }
         nextFilled.add(regionId);
         setFilledRegionIds(nextFilled);
         setHintRegionId(null);
@@ -1822,20 +1824,19 @@ export const App: React.FC = () => {
         for (const rId of regionIds) {
           const region = puzzle.regions.find((r) => r.id === rId);
           if (!region) continue;
+          const wasFilled = nextFilled.has(rId);
           const prevCol = nextPainted.get(rId);
-          if (prevCol !== activeColorId) {
-            const wasFilled = nextFilled.has(rId);
+          const effectivePrevCol =
+            prevCol !== undefined ? prevCol : wasFilled ? region.colorId : undefined;
+          if (effectivePrevCol !== activeColorId) {
             newUndoEntries.push({
               regionId: rId,
               wasPreviouslyFilled: wasFilled,
-              previousPaintedColorId: prevCol,
+              previousPaintedColorId: effectivePrevCol,
               paintedColorId: activeColorId,
             });
             nextPainted.set(rId, activeColorId);
             changedColors[rId] = activeColorId;
-            if (wasFilled) {
-              nextFilled.delete(rId);
-            }
             nextFilled.add(rId);
             changed = true;
           }
