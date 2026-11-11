@@ -2,7 +2,7 @@
 
 This guide defines the end-to-end human and AI co-development workflow, shared architectural guardrails, model selection strategy, session hygiene, CI/CD architecture, and ongoing maintenance playbooks for **Capy** ([`https://github.com/shthed/capy`](https://github.com/shthed/capy), live at [`https://shthed.github.io/capy/`](https://shthed.github.io/capy/)).
 
-**Related Guides**: [`README.md`](./README.md) | [`AGENTS.md`](./AGENTS.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`TODO.md`](./TODO.md) | [`CHANGELOG.md`](./CHANGELOG.md)
+**Related Guides**: [`README.md`](./README.md) | [`ROADMAP.md`](./ROADMAP.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
 
 **Table of Contents**:
 1. [Documentation Map & Architecture](#1-documentation-map--architecture)
@@ -18,7 +18,7 @@ This guide defines the end-to-end human and AI co-development workflow, shared a
 > [!IMPORTANT]
 > **Division Between `DEV.md` and `AGENTS.md`**:
 > - [`AGENTS.md`](./AGENTS.md) is the **auto-loaded AI operational contract** injected into every agent turn. Keep `AGENTS.md` strictly AI-specific and free of human-only tutorials, while letting it grow to whatever size is needed for optimal agent performance and reliability over raw token savings.
-> - [`DEV.md`](./DEV.md) (this file) is the **comprehensive Human + AI collaboration, coding guardrail, and maintenance manual**, consulted by human contributors and loaded on demand by AI agents when modifying code, planning workflows, choosing models, debugging CI, or updating dependencies.
+> - [`DEV.md`](./DEV.md) (this file) is the **comprehensive Human + AI collaboration, Hybrid Agile sprint, coding guardrail, and maintenance manual**, consulted by human contributors and loaded on demand by AI agents when modifying code, planning sprints, choosing models, debugging CI, or updating dependencies.
 
 ---
 
@@ -30,9 +30,10 @@ flowchart TD
         AGENTS["AGENTS.md (AI Invariants, Context Discipline & PR Rubric)"]
     end
 
-    subgraph ProcessAndRoadmap["Process, History & Roadmap"]
+    subgraph ProcessAndRoadmap["Process, Roadmap & Active Sprint"]
         DEV["DEV.md (Human + AI Workflow, Guardrails, CI/CD & Maintenance)"]
-        TODO["TODO.md (Active Pending Roadmap & Effort Estimates)"]
+        ROADMAP["ROADMAP.md (Epics, User Stories, Icebox & Shipped Archive)"]
+        TODO["TODO.md (Focused 1-Sprint Ready-for-Dev Queue)"]
         CHANGELOG["CHANGELOG.md (SemVer Rules & Release History)"]
     end
 
@@ -45,6 +46,7 @@ flowchart TD
     end
 
     AGENTS --> DEV
+    ROADMAP --> TODO
     AGENTS --> TODO
     AGENTS --> CHANGELOG
     AGENTS --> WEB
@@ -57,14 +59,15 @@ flowchart TD
 ### Repository Documentation Index
 
 - **[`README.md`](./README.md)** (*Players & Contributors*): Product showcase, controls cheat sheet, developer quick start, privacy policy link, and documentation index.
-- **[`DEV.md`](./DEV.md)** (*Humans & AI Agents*): Co-development philosophy, model selection, `#NNN` session hygiene, shared technical guardrails, CI/CD, and maintenance playbooks.
+- **[`ROADMAP.md`](./ROADMAP.md)** (*Humans & AI Agents*): Strategic product Epics (`EPIC-*`), User Stories (`US-*`), external dependency readiness gates, Platform Icebox (`ICE-*`), and collapsed Shipped Epics & Stories.
+- **[`TODO.md`](./TODO.md)** (*Humans & AI Agents*): Focused **1-Sprint Execution Queue** containing only unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices ready for immediate dev work.
+- **[`DEV.md`](./DEV.md)** (*Humans & AI Agents*): Co-development philosophy, Hybrid Automated Sprints, Gemini 4 model selection, `#NNN` session hygiene, shared technical guardrails, CI/CD, and maintenance playbooks.
 - **[`AGENTS.md`](./AGENTS.md)** (*AI Agents — Auto-Loaded*): AI-specific guardrails, mobile-first formatting rule, context discipline, task routing, and PR readiness contract.
 - **[`WEB.md`](./WEB.md)** (*Humans & AI Agents*): React 19 UI hierarchy, `PuzzleCanvas.tsx` 3-tier offscreen caching, 6-mode touch gesture engine, Worker IPC, `NativeBridge`, storage keys, and `UserSettings` dictionary.
 - **[`PUZZLE.md`](./PUZZLE.md)** (*Humans & AI Agents*): `puzzle.worker.ts` 5-strategy computer-vision pipeline, Red-Mean K-Means++ clustering, adaptive Otsu/Sobel contours, watershed absorption, and 6-stage telemetry.
 - **[`APP.md`](./APP.md)** (*Humans & AI Agents*): Unified Android `:app` launcher (`MainActivity.kt`, `CapyAndroidBridge.kt`), `WebViewAssetLoader`, Pixel API 33+ LRA touch haptics, `SnapshotsClient` sync, and disk backups.
 - **[`CLOUD.md`](./CLOUD.md)** (*Humans & AI Agents*): Modular `CloudProviderDriver` backends, Google OAuth 2.0 `appDataFolder` & Play Games Services v2 sign-in, CRDT `mergeProgressDeltas`, `#s=<token>` share links, and Co-op rooms.
 - **[`TESTING.md`](./TESTING.md)** (*Humans & AI Agents*): Unified `web/scripts/test.mjs` runner (Vite SSR unit/codec checks + Playwright multi-touch E2E suite) and Android JUnit4 verification.
-- **[`TODO.md`](./TODO.md)** (*Humans & AI Agents*): Active, uncompleted bugfixes and AAA roadmap items with token and wall-clock effort estimates (completed items are deleted immediately).
 - **[`CHANGELOG.md`](./CHANGELOG.md)** (*Humans & AI Agents*): Chronological `MAJOR.MINOR.PATCH` release history synchronized with `web/package.json` and Android `versionCode`.
 - **[`web/public/privacy-policy.html`](./web/public/privacy-policy.html)** (*Players & Storefronts*): Published Privacy Policy and Google Play Data Safety disclosures (`https://shthed.github.io/capy/privacy-policy.html`).
 
@@ -82,10 +85,10 @@ Capy pairs real-time 60--120fps HTML5 Canvas interaction, off-thread computer vi
 
 ### Optimal Goals for the Human Developer
 
-1. **Product Vision & Prioritization**: Curate [`TODO.md`](./TODO.md) so roadmap priorities reflect player delight, accessibility, and retention rather than speculative over-engineering.
-2. **Subjective Aesthetic & Tactile Judgment**: Evaluate qualities automated headless assertions cannot judge alone—inertial pan glide feel, pinch-to-zoom responsiveness, palette contrast, confetti pacing, and physical Android LRA haptic crispness on `/pull/<number>/` and `/pull/<number>/capy.apk`.
+1. **Product Vision & Sprint Pull Governance**: Curate Epics and Stories in [`ROADMAP.md`](./ROADMAP.md) and promote only unblocked, high-impact tasks into [`TODO.md`](./TODO.md) for the active sprint.
+2. **Subjective Aesthetic & Tactile Judgment**: Evaluate qualities automated headless assertions cannot judge alone—inertial pan glide feel, pinch-to-zoom responsiveness, palette contrast, procedural audio warmth, confetti pacing, and physical Android LRA haptic crispness on `/pull/<number>/` and `/pull/<number>/capy.apk`.
 3. **Upfront Ambiguity Resolution (`/grill-me` & `/plan`)**: Answer focused design trade-off questions and approve `implementation_plan.md` artifacts *before* code generation begins. Five minutes spent aligning on a plan saves tens of thousands of tokens of rework.
-4. **Session & Context Hygiene**: Keep each chat scoped to one PR (or one tightly related batch), prefix new chat prompts with `#NNN` for clean auto-titling, and pin/unpin threads to match open PR state.
+4. **Session & Context Hygiene**: Keep each interactive chat scoped to one PR (or one cohesive Story/Sprint slice under `/goal` or `/swarm`), prefix new chat prompts with `#NNN` for clean auto-titling, and pin/unpin threads to match open PR state.
 5. **Final Merge Gatekeeping**: Verify the live preview link and the **5-Pillar PR Readiness & Perfection Confidence Score (`>= 95%`)** before approving any merge to `main`.
 
 ### Optimal Goals for the AI Agent
@@ -93,31 +96,39 @@ Capy pairs real-time 60--120fps HTML5 Canvas interaction, off-thread computer vi
 1. **Token-Efficient Precision**: Locate exact symbols via targeted search and line-sliced file reads rather than loading entire multi-thousand-line files, batch independent tool calls in parallel, and keep diffs minimal.
 2. **Transparent Live Reasoning**: Continuously surface clear, high-level working status updates explaining *what* file or system is being inspected, *why* each step is being taken, and *what* was learned from the prior tool output.
 3. **Invariant-First Engineering**: Enforce zero per-frame heap allocations in `requestAnimationFrame` hot paths, strict Web Worker isolation in `puzzle.worker.ts`, relative `./assets/...` paths, and defensive `NativeBridge` fallbacks without needing reminders.
-4. **Self-Healing Deterministic Verification**: Author and run unit, codec, Playwright E2E (`npm test`), TypeScript (`npm run lint`), Vite (`npm run build`), and Android Gradle checks (`./gradlew app:testDebugUnitTest`, `./gradlew app:assembleDebug`), fixing regressions autonomously before opening or updating a PR.
-5. **Zero-Drift Documentation & Traceability**: Synchronize subsystem `.md` files, [`CHANGELOG.md`](./CHANGELOG.md), and [`TODO.md`](./TODO.md) in the same PR as the code change, pinning every code reference to an immutable commit SHA (`blob/<sha>/<path>#L<start>-L<end>`).
+4. **Thorough Local VM Verification (Fast-CI Partner)**: Run the complete verification suite (`npm run lint && npm run build && npm test`, plus `./gradlew app:testDebugUnitTest` when available) inside the Antigravity VM before pushing, keeping GitHub Actions ultra-fast and lightweight so PR preview deployments never bottleneck the dev/test/release loop.
+5. **Zero-Drift Documentation & Traceability**: Synchronize subsystem `.md` files, [`CHANGELOG.md`](./CHANGELOG.md), [`TODO.md`](./TODO.md), and [`ROADMAP.md`](./ROADMAP.md) in the same PR as the code change, pinning every code reference to an immutable commit SHA (`blob/<sha>/<path>#L<start>-L<end>`).
 
 ### Capy Lean Agile Backlog & `TODO.md` Entry Standard
 
-Capy uses a lightweight **Lean Agile** backlog in [`TODO.md`](./TODO.md) purpose-built for rapid Human + AI iteration rather than multi-week calendar sprints:
+Capy separates strategic roadmap planning from sprint execution across [`ROADMAP.md`](./ROADMAP.md) and [`TODO.md`](./TODO.md) for clean, high-velocity **Hybrid Automated Agile Sprints**:
 
-1. **3-Tier Hierarchy (`EPIC-*` -> `US-*` / `BUG-*` -> `1-PR TASK-*`, plus `ICE-*`)**:
-   - **Epics (`EPIC-1`..`EPIC-N`)**: Outcome-driven product pillars ordered strictly by execution priority, each stating a clear **Epic Goal**.
-   - **User Stories (`US-N.M`) & Bugs (`BUG-N`)**: Cohesive player-facing capabilities or verified defects.
-   - **Tasks (`TASK-N.Ma`, `TASK-N.Mb`, ...)**: Independently mergeable `1-PR` slices. Tag `<= 15 min` (`1--3` file, zero-backend, `Flash`-ready) slices with `[quick-win]` and index them in Section 1 (`Quick-Win Ready Queue`).
-   - **Platform Icebox (`ICE-*`)**: Unscheduled long-term platform shells kept collapsed at the bottom of `TODO.md` until actively chartered.
-2. **Definition of Ready (Anti-Busywork Gate)**:
-   - An item may enter [`TODO.md`](./TODO.md) **only** if it states concrete **Player Value** (better touch ergonomics, tactile polish, accessibility, daily retention, creative sharing) or **Reliability Value** (fixing a real crash, data-loss vector, UI defect, or silent test blindspot) alongside a **Why Now** priority justification.
-   - Reject zero-impact housekeeping chores (e.g., pruning unreferenced catalog keys that add `0 B` to builds, committing dummy config placeholders before credentials exist, redundant P2P layers, or ad-SDK bloat).
-3. **Definition of Done (Immediate Deletion)**:
-   - Never leave `[x]` checkboxes in [`TODO.md`](./TODO.md). Delete completed `TASK-*` lines (and their Quick-Win Ready Queue pointers) in the same PR that ships them; once a Story or Bug's final task ships, delete the entire card immediately.
-4. **Canonical Mobile-First Card & `<details>` Template**:
+1. **Two-Stage Pull Hierarchy (`ROADMAP.md` -> `TODO.md`)**:
+   - **[`ROADMAP.md`](./ROADMAP.md) (*Strategic Epics, Stories, Icebox & Shipped Archive*)**:
+     - Owns all outcome-driven **Epics (`EPIC-2`..`EPIC-5`)**, **User Stories (`US-N.M`)**, readiness badges (`Active in Sprint N`, `Ready for Next Sprint`, or `Blocked -- External Credentials / Infra`), **Platform Icebox (`ICE-*`)**, and a single collapsed `<details>` **Shipped Epics & Stories** archive at the bottom.
+     - Stories blocked on external credentials, OAuth/Play Console provisioning, WebSocket relays, or paid AI endpoints (`EPIC-5`, `ICE-*`) stay in `ROADMAP.md` with an explicit **Unblock Prerequisite** until unblocked.
+   - **[`TODO.md`](./TODO.md) (*Focused 1-Sprint Ready Queue*)**:
+     - Holds **only** the current sprint's unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices (`~8--10` tasks at a time).
+     - Tag `<= 15 min` (`1--3` file, zero-backend, `Gemini 3.8 Flash` or `Argon`-ready) slices with `[quick-win]` and index them in Section 1 (`Quick-Win Ready Queue`).
+2. **Definition of Ready (Strict Sprint Entry & Anti-Busywork Gate)**:
+   - A task enters [`TODO.md`](./TODO.md) **only** when: (a) it delivers concrete **Player Value** or **Reliability Value** with a clear **Why Now**, (b) all external prerequisites are met, and (c) every referenced file path, component, and type name has been verified against `main`.
+   - Reject zero-impact housekeeping chores (e.g., pruning unreferenced catalog keys that add `0 B` to builds, committing dummy config placeholders before credentials exist, or ad-SDK bloat).
+3. **Definition of Done (`TODO.md` Deletion & `ROADMAP.md` Collapsed Archive)**:
+   - **Delete from `TODO.md` Immediately**: Never leave `[x]` checkboxes in [`TODO.md`](./TODO.md). Delete completed `BUG-*` / `TASK-*` items (and their Quick-Win Ready Queue pointers) in the same PR that ships them.
+   - **Archive Completed Stories in `ROADMAP.md`**: When a Story or Epic's final task ships, move that Story or Epic out of the active sections of [`ROADMAP.md`](./ROADMAP.md) into the single collapsed `<details>` **Shipped Epics & Stories** summary at the bottom of `ROADMAP.md` with clickable `#<PR>` links.
+   - **Sprint Replenishment**: When `TODO.md` drains (or `<= 2` tasks remain), open a lightweight `docs/*` sprint-planning PR pulling the next ready Epic/Stories from `ROADMAP.md` into `TODO.md`.
+4. **Hybrid Automated Sprint Execution (`#NNN` Chats, `/goal` & `/swarm`)**:
+   - **Mode 1 -- Atomic Single-Task PRs (`1-Task = 1-PR`, Default)**: Open a fresh `#NNN` chat for a single `BUG-*` or `TASK-*` on `feature/*` or `fix/*`, verify locally, open the PR, and wait for human merge approval.
+   - **Mode 2 -- Story or Sprint-Slice PRs (`/goal` or `/swarm`)**: When launching an autonomous multi-task run (`/goal` or `/swarm`), execute a cohesive Story (`TASK-X.Ya` + `TASK-X.Yb`) or P0 bug batch (`BUG-1`..`BUG-3`) onto one `automation/sprint-*` or `feature/*` branch using clean atomic commits per task:
+     - Under `/swarm`, assign non-overlapping file ownership to named worker agents and designate a verifier worker to run the full `npm run lint && npm run build && npm test` gate inside the VM before opening **one PR** with **one live preview URL** and pausing at the human merge gate.
+5. **Canonical Mobile-First Card & `<details>` Template**:
    - Keep **Description**, **Value**, **Why Now**, and **1-line `TASK-*` titles** visible on the card surface; wrap verbose **Tags, Priority, Model Tier, Token/Time Estimates, Target Files, and Acceptance Criteria** inside `<details><summary>...</summary></details>` (always keep a blank line after `</summary>` and before `</details>` so GitHub Flavored Markdown renders inner bullet lists):
    ````markdown
    ### US-X.Y: Concise Outcome-Focused Title
 
    - **Description**: Plain-English summary of what is built or fixed.
    - **Value**: Concrete benefit to player experience, accessibility, or reliability.
-   - **Why Now**: Justification for why this item earns its current backlog priority.
+   - **Why Now**: Justification for why this item earns its current sprint priority.
    - **Tasks**:
      - **TASK-X.Ya** `[quick-win]`: Independently mergeable 1-PR slice summary.
      - **TASK-X.Yb**: Follow-up 1-PR slice summary.
@@ -126,7 +137,7 @@ Capy uses a lightweight **Lean Agile** backlog in [`TODO.md`](./TODO.md) purpose
    <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
    - **Type & Priority**: `Story` | `EPIC-X` | `priority: high` | `domain: canvas, ui`
-   - **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Flash` (`X.Ya`), `Pro` (`X.Yb`)
+   - **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 3.8 Flash` (`X.Ya`), `Gemini 4 Argon` (`X.Yb`)
    - **Effort Estimate**: `~35,000 tokens` | `~16--22 min agent` (`~4--6 hrs human`)
    - **Target Files**: `./web/src/...`
    - **Acceptance Criteria**:
@@ -139,48 +150,47 @@ Capy uses a lightweight **Lean Agile** backlog in [`TODO.md`](./TODO.md) purpose
 
 ## 3. Choosing the Right AI Model, Capability Tier & Workflow
 
-Selecting the right model tier and slash workflow maximizes code quality on hard algorithmic problems while avoiding slow latency and high token cost on routine edits.
+Selecting the right Gemini 4 / 3.8 capability tier and slash workflow maximizes code quality on hard algorithmic problems while preserving rolling Antigravity quota and keeping interactive turns fast.
 
 ### A. Capability Tiers & Named Frontier Models
 
-- **Frontier High-Reasoning (`Pro`)**:
-  - *Antigravity Subagent Tier*: `pro` (or `inherit` from a Pro session).
-  - *Representative Models*: **Gemini 2.5 / 3 Pro**, **Claude Opus / Sonnet (Thinking)**, **OpenAI o3 / GPT-5 High-Reasoning**.
-  - *Ideal Capy Use Cases*: Deep multi-file invariant tracking, 2D affine viewport & focal-point math (`PuzzleCanvas.tsx`), K-Means++ / Sobel / watershed segmentation (`puzzle.worker.ts`), binary RLE + LEB128 + CRDT sync (`CapyCodec.ts`), concurrency/mutex debugging, and `/grill-me` + `/plan` design specs.
-  - *Token & Latency Profile*: Higher cost and thinking latency, but eliminates subtle math/state regressions that cheaper models loop on.
-- **Balanced / Fast Frontier (`Flash`)**:
-  - *Antigravity Subagent Tier*: `flash`.
-  - *Representative Models*: **Gemini 2.5 / 3 Flash**, **Claude Sonnet (Standard) / Haiku**, **GPT-4o / Codex-Fast**.
-  - *Ideal Capy Use Cases*: Executing an already-approved `implementation_plan.md`, building React 19 modals & Tailwind CSS 4 layouts (`SettingsModal.tsx`, `PaletteDock.tsx`), adding Playwright E2E test cases (`web/scripts/test.mjs`), parallel `research` subagent exploration, and `.md` / `CHANGELOG.md` synchronization.
-  - *Token & Latency Profile*: Low latency and `~3--5x` lower token cost; ideal for well-specified implementation and research.
+- **Deep-Verification Frontier (`Carbon` -- ~15% of Capy PRs)**:
+  - *Antigravity Selection / Subagent Tier*: **Gemini 4 Carbon** (`gemini-4-carbon`, default `medium` thinking; `high` only for hardest math/security specs) or **Claude Opus 5.5 (Thinking)** (`pro` subagent tier).
+  - *Ideal Capy Use Cases*: `/grill-me` + `/plan` architecture interviews, zero-allocation 2D affine & circular-clip rendering math in `PuzzleCanvas.tsx` (`US-2.1`, `US-2.4`), `puzzle.worker.ts` segmentation invariants, CRDT/concurrency race audits, and `EPIC-5` OAuth/WebCrypto security specs.
+  - *Token & Latency Profile*: Shares Argon's `1M` unified context window and per-token API rate, but spends `~2x--4x` more thinking tokens per turn to explore hypotheses and run extended verification loops (`0%` reward-hacking on Terminal-Bench 4.0). Reserve for high-complexity reasoning rather than routine UI edits.
+- **Efficient Frontier Daily Driver (`Argon` -- ~65--70% of Capy PRs)**:
+  - *Antigravity Selection / Subagent Tier*: **Gemini 4 Argon** (`gemini-4-argon`, `pro` / `inherit` subagent tier).
+  - *Ideal Capy Use Cases*: Default daily driver for multi-file feature stories (`SoundService.ts` `US-2.3`, `ReplayVideoExporter.ts` `US-3.3`, Infinite Zoom `US-4.1`, `SvgPrintExporter.ts` `US-4.2`), `/goal` and `/swarm` sprint execution, Co-op/IndexedDB bugfixes (`BUG-1`), and Android Kotlin + `NativeBridge.ts` integration.
+  - *Token & Latency Profile*: Delivers Gemini 4 frontier coding and `1M`-context cross-repo synthesis with significantly faster responses and lower thinking-token spend per turn than Carbon.
+- **Fast Frontier Workhorse (`Flash` -- ~15--20% of Capy PRs)**:
+  - *Antigravity Selection / Subagent Tier*: **Gemini 3.8 Flash** (`gemini-3.8-flash`, `flash` subagent tier) or **Claude Sonnet / Haiku**.
+  - *Ideal Capy Use Cases*: Executing `[quick-win]` tasks in [`TODO.md`](./TODO.md), React 19 modal/settings controls (`SettingsModal.tsx`), CI workflow variable wiring (`BUG-2`), parallel `research` subagent codebase sweeps, and `.md` / `ROADMAP.md` / `CHANGELOG.md` synchronization.
+  - *Token & Latency Profile*: Low latency and minimal quota burn once architectural ambiguity is already resolved.
 - **Ultra-Light (`Flash-Lite`)**:
-  - *Antigravity Subagent Tier*: `flash_lite`.
-  - *Representative Models*: **Gemini Flash-Lite**, **Claude Haiku-class**.
-  - *Ideal Capy Use Cases*: Mechanical formatting, PR title/label compliance audits, log extraction, link checking, and simple copy tweaks.
-  - *Token & Latency Profile*: Minimal cost and near-instant responses; never use for canvas math or concurrency logic.
+  - *Antigravity Subagent Tier*: `flash_lite` (**Gemini 3.5 Flash-Lite**).
+  - *Ideal Capy Use Cases*: Mechanical log extraction, PR label/title audits, link checks, and copy tweaks; never use for canvas math or concurrency logic.
 
 #### Nuances Across Named Model Families on Capy Tasks
-- **Gemini Pro**: Excels at cross-repository synthesis (holding `App.tsx`, `PuzzleCanvas.tsx`, `NativeBridge.ts`, and `CapyAndroidBridge.kt` invariants together), long-context multimodal screenshot inspection (`docs/gallery/`), and structured `/plan` architecture.
-- **Claude Opus / Sonnet (Thinking)**: Excels at surgical multi-hunk refactoring (`replace_file_content`), nuanced CSS/UI polish, and strict adherence to formatting and documentation constraints.
-- **OpenAI o-series / GPT-5 / Codex**: Excels at self-contained algorithmic kernels (bit-packed typed arrays, binary codecs, graph coloring heuristics, and deterministic unit test edge cases).
-- **Gemini Flash**: Optimal workhorse for fast interactive UI iterations, `research` subagent codebase sweeps, and documentation updates once architectural ambiguity is resolved.
+- **Gemini 4 Carbon (`gemini-4-carbon`)**: Built directly on Gemini 4 Argon with extended RL verification loops; strongest choice when subtle coordinate edge cases, memory-allocation invariants, or security boundaries must be proven right on the first pass.
+- **Gemini 4 Argon (`gemini-4-argon`)**: Optimal everyday frontier coder—holds `App.tsx`, `PuzzleCanvas.tsx`, `NativeBridge.ts`, and `CapyAndroidBridge.kt` together across its `1M` context window without Carbon's extra thinking latency.
+- **Claude Opus 5.5 / Sonnet (Thinking)**: Excels at surgical multi-hunk refactoring (`replace_file_content`), nuanced CSS/UI polish, and strict formatting compliance.
+- **Gemini 3.8 Flash (`gemini-3.8-flash`)**: Fast workhorse for well-specified `[quick-win]` tasks, `research` subagent sweeps, and sprint backlog replenishment.
 
 ### B. Task-to-Model & Slash-Command Routing
 
-- **Ambiguous New Feature or UX Redesign**: Use `Pro` with `/grill-me` + `/plan` to resolve UX/state edge cases one decision at a time before producing a reviewable `implementation_plan.md`.
-- **Canvas Gestures, Worker Pipeline, or Binary Codec**: Use `Pro` with `/plan` to protect coordinate invariants, zero-allocation hot paths, and backward-compatible `.capy` v2 schemas.
-- **Multi-Bug Audit or Autonomous Milestone Sprint**: Use `Pro` with `/goal` so the agent iterates autonomously through implementation, `npm test`, and CI verification until 100% green.
-- **Large Multi-Subsystem Initiative (`web/` + `app/` + `CLOUD.md`)**: Use a `Pro` orchestrator + subagents with `/plan` or `/teamwork` to isolate research, implementation, and E2E verification contexts.
-- **Scoped UI Tweak, New Setting Toggle, or Test Addition**: Use `Flash` (or `Pro` direct) with a direct prompt for a fast single-pass edit + `npm run lint && npm run build && npm test`.
-- **Documentation Sync, Dependency Bump, or CI Tweak**: Use `Flash` with a direct prompt for straightforward verification with minimal reasoning overhead.
-- **PR History Audit, Link Check, or Log Triage**: Use `Flash-Lite` or `Flash` with a direct prompt for near-zero token burn.
+- **Ambiguous New Feature, UX Redesign, or Sprint Charter**: Use **Gemini 4 Carbon** (or **Argon**) with `/grill-me` + `/plan` to resolve design trade-offs one question at a time and approve `implementation_plan.md` before coding.
+- **Canvas Gestures, Zero-Alloc Ring Buffers, or Security/Crypto**: Use **Gemini 4 Carbon** (`medium` thinking) with `/plan` to protect coordinate invariants and zero-allocation `requestAnimationFrame` paths.
+- **Cohesive Story or P0 Bug Batch (`2--4` Sprint Tasks)**: Use **Gemini 4 Argon** with `/goal` (sequential self-healing loop) or `/swarm` (parallel file-scoped workers + verifier running `npm test`) onto one `automation/sprint-*` or `feature/*` PR branch.
+- **Large Multi-Subsystem Campaign (`web/` + `app/` + `relay/`)**: Use **Gemini 4 Carbon** or **Argon** with `/teamwork` for milestone-gated proposer + adversarial verifier execution.
+- **Single Ready `TASK-*` or `BUG-*` from `TODO.md`**: Use **Gemini 4 Argon** (or **Gemini 3.8 Flash** for `[quick-win]` items) in a fresh `#NNN` chat.
+- **Documentation Sync, Sprint Replenishment, or Link Audit**: Use **Gemini 3.8 Flash** (or `Flash-Lite`) via the zero-minute `.md` `paths-ignore` fast-path.
 
 ### C. Subagent Delegation Rules
 
 When working inside Antigravity:
 - **Default Model Inheritance**: Always pass `Model: 'inherit'` when invoking subagents via `invoke_subagent` unless the human explicitly requests a specific tier (`pro`, `flash`, `flash_lite`).
 - **Workspace Mode**: Always use `Workspace: 'inherit'` (branched/worktree subagent workspaces are unsupported in the container sandbox).
-- **When to Spawn a `research` Subagent**: Delegate broad read-only codebase surveys (e.g., auditing every caller of `StorageService` or scanning 10+ files) to `research` so raw search output stays out of the main implementation context window. Perform quick 1--3 file lookups directly in the main agent.
+- **When to Spawn a `research` Subagent**: Delegate broad read-only codebase surveys (e.g., auditing `TODO.md` readiness across 10+ files) to `research` so raw search output stays out of the main implementation context window. Perform quick 1--3 file lookups directly in the main agent.
 
 ---
 
@@ -196,14 +206,14 @@ When working inside Antigravity:
 1. **Start Every New PR Chat With `#NNN` (`First-Prompt Rule`)**:
    - Check the latest PR number on GitHub and start your opening prompt in a new chat with the upcoming PR number:
      ```text
-     #467 Create DEV.md and optimize AGENTS.md for token efficiency
+     #474 Fix Co-op welcome persistence and replay rewind UNFILL sync (BUG-1)
      ```
-   - Because the auto-titler summarizes the opening prompt, your chat thread will automatically begin with `#467` without manual renaming.
+   - Because the auto-titler summarizes the opening prompt, your chat thread will automatically begin with `#474` without manual renaming.
 2. **Pin While Open, Unpin When Merged (`Sidebar Pinning Policy`)**:
    - **Pin** any conversation whose pull request(s) are still **open** or actively under review so in-flight work stays anchored at the top of the sidebar.
    - **Unpin** the conversation as soon as its pull request is **merged** or **closed**.
-3. **One PR (or Tightly Coupled Batch) Per Chat (`Context Freshness`)**:
-   - Long multi-day chats accumulate tens of thousands of historical tokens re-sent on every turn. Starting a fresh `#NNN` chat for each new feature or bugfix batch keeps per-turn token burn low and reasoning sharp.
+3. **One PR (or Cohesive Story/Sprint Slice) Per Chat (`Quota & Context Freshness`)**:
+   - Bundling 3--4 unrelated sequential PRs into a single chat forces frontier models to re-attend over tens of thousands of historical tool outputs on every turn, multiplying thinking-token spend. Start a fresh `#NNN` chat for each new PR so rolling 5-hour/weekly Antigravity quotas stretch much further.
 4. **Canonical `.url.json` Bookmark Cards**:
    - When the agent opens a PR, it bookmarks the PR using `PR_<number>.url.json` (`UserFacing: true`) with `"title": "#<number> <Canonical GitHub PR Title>"`.
    - Once a PR is merged and its `/pull/<number>/` preview is cleaned up, stale preview `.url.json` cards should not be left pointing to `404` URLs.
@@ -257,7 +267,7 @@ Always synchronize with `origin/main` before making edits so branches stay stric
 ```bash
 git fetch --all --prune
 git checkout -b feature/<short-topic> origin/main
-# Allowed prefixes: feature/, automation/, fix/, docs/, ci/, deps/, chore/
+# Allowed prefixes: feature/, automation/ (incl. automation/sprint-*), fix/, docs/, ci/, deps/, chore/
 ```
 
 If `origin/main` advances while a PR is open, rebase cleanly:
@@ -291,7 +301,7 @@ npm run generate:samples # Rebuild web/public/assets/sample_saves.capy when buil
 # NEVER run ./gradlew app:installDebug unless explicitly requested by the user.
 ```
 
-### Step 3: Pull Request Standards, Labels, Overview Paragraph & Live Previews
+### Step 3: Pull Request Standards, Labels, Overview Bullets & Live Previews
 
 1. **Action-Oriented PR Titles**: Write clean, meaningful, high-level action-oriented titles focusing on the overall purpose of the PR (e.g., `Add DEV.md and overhaul repository documentation`, `Resolve all remaining audit bugfixes from TODO`). Never cram comma-separated laundry lists of unrelated subsystems into the title, and avoid `feat(scope):` prefixes or buzzwords.
 2. **GitHub Labels**: Attach all relevant labels when creating or editing a PR:
@@ -303,7 +313,7 @@ npm run generate:samples # Rebuild web/public/assets/sample_saves.capy when buil
    - `ci`: GitHub Actions workflows and deployment scripts.
    - `deps`: `npm` or Gradle version catalog (`libs.versions.toml`) updates.
 3. **Top-of-PR Live Preview Callout**: Whenever `deploy-branch.yml` deploys a PR preview, place the playable preview URL (`https://shthed.github.io/capy/pull/<number>/`) and Android preview APK (`https://shthed.github.io/capy/pull/<number>/capy.apk`) at the very top of the PR body.
-4. **Plain-English Top Overview Paragraph & "Why" Rationale**: Immediately below the live preview callout (and above the commit-pinned change breakdown), include a concise plain-English overview paragraph summarizing everything included in the PR and *why* it was needed. If a PR bundles multiple unrelated bugfixes or cleanup chores together, state that candidly rather than inventing an artificial unifying theme, and explain the *why* behind each major work item in the body.
+4. **Scannable Plain-English Top Overview Bullets & "Why" Rationale**: Immediately below the live preview callout (and above the commit-pinned change breakdown), summarize everything included in the PR and *why* it was needed using **concise, scannable bullet points** rather than a dense multi-sentence paragraph. If a PR bundles multiple unrelated bugfixes or cleanup chores together, state that candidly rather than inventing an artificial unifying theme, and explain the *why* behind each major work item.
 5. **Commit-Pinned Line Links**: Whenever referencing code lines in PR bodies, PR comments, or chat summaries, **never** link to `blob/main/...` (which drifts over time) or `blob/<feature-branch>/...` (which `404`s after branch deletion). Always pin to the exact commit SHA or PR diff anchor:
    - `https://github.com/shthed/capy/blob/<commit-sha>/<path>#L<start>-L<end>`
    - `https://github.com/shthed/capy/pull/<number>/files#diff-<sha256(path)>R<start>-R<end>`
@@ -311,20 +321,22 @@ npm run generate:samples # Rebuild web/public/assets/sample_saves.capy when buil
 ### Step 4: Pre-Merge Development Summary & End-of-PR 5-Pillar Readiness Score (`>= 95%`)
 
 Before asking the human to merge a PR:
-1. Post a mobile-friendly **Development Summary comment** on the PR (using structured bullet lists—never wide tables!) documenting user requirements, architectural decisions, commit-pinned implementation links, verification output, and visual checks (never include secrets, tokens, or raw chat transcripts).
-2. Compute the **5-Pillar PR Readiness & Perfection Confidence Score (`0--100%`)**:
+1. **Check for Merge Conflicts Against `origin/main`**: Run `git fetch origin main` and `gh pr view <number> --json mergeable,mergeStateStatus` to confirm `mergeable: "MERGEABLE"` (`mergeStateStatus: "CLEAN"`). If `origin/main` has advanced or any conflict exists, immediately run `git rebase origin/main`, resolve conflicts cleanly, re-verify tests/links, and `git push --force-with-lease` before asking for review.
+2. Post a mobile-friendly **Development Summary comment** on the PR (using structured bullet lists—never wide tables!) documenting user requirements, architectural decisions, commit-pinned implementation links, verification output, and visual checks (never include secrets, tokens, or raw chat transcripts).
+3. Compute the **5-Pillar PR Readiness & Perfection Confidence Score (`0--100%`)**:
    - **Pillar 1 -- Functionality & Edge Cases (`20` pts)**: Touch/mouse gestures, persistence, modal back-stack, viewport clamping, and fallbacks verified.
-   - **Pillar 2 -- Automated Tests (`20` pts)**: `npm test` (engine, codec, Playwright E2E) and Android JUnit4 tests pass deterministically.
+   - **Pillar 2 -- Automated Tests (`20` pts)**: `npm test` (engine, codec, Playwright E2E) and Android JUnit4 tests pass deterministically inside the Antigravity VM.
    - **Pillar 3 -- Performance & Golden Invariants (`20` pts)**: Zero per-frame allocations, worker-only segmentation, relative `./assets/...` URLs, and safe `NativeBridge` fallbacks.
-   - **Pillar 4 -- Docs & Changelog Sync (`20` pts)**: [`web/package.json`](./web/package.json) version bumped, [`CHANGELOG.md`](./CHANGELOG.md) updated with a flat single brief bullet per item ending in a clickable GitHub PR link, commit-pinned file/line links included in the PR description and summary comment, completed items removed from [`TODO.md`](./TODO.md), and subsystem `.md` files synchronized (zero emojis/ASCII art, mobile-safe lists).
-   - **Pillar 5 -- CI & Preview Verification (`20` pts)**: Local lint/build and GitHub Actions pass on HEAD, with both the live preview URL and plain-English overview paragraph at the top of the PR description (or intentional `paths-ignore` skip verified for `.md`-only PRs).
-3. **End-of-PR Placement, Collapsible `<details>` Rubric & Closing Confidence + Subtask Checklist**:
+   - **Pillar 4 -- Docs & Changelog Sync (`20` pts)**: [`web/package.json`](./web/package.json) version bumped on code PRs, [`CHANGELOG.md`](./CHANGELOG.md) updated with a flat single brief bullet per item ending in a clickable GitHub PR link, commit-pinned file/line links included in the PR description and summary comment, completed `BUG-*` / `TASK-*` items deleted from [`TODO.md`](./TODO.md), completed Stories/Epics moved into the collapsed **Shipped Epics & Stories** archive at the bottom of [`ROADMAP.md`](./ROADMAP.md), and subsystem `.md` files synchronized (zero emojis/ASCII art, mobile-safe lists).
+   - **Pillar 5 -- CI, Mergeability & Preview Verification (`20` pts)**: Zero merge conflicts (`MERGEABLE` / `CLEAN` atop latest `origin/main`), local lint/build and GitHub Actions pass on HEAD, and both the live preview URL and scannable plain-English overview bullets appear at the top of the PR description (or intentional `paths-ignore` skip verified for `.md`-only PRs).
+4. **End-of-PR Placement, Collapsible `<details>` Rubric & Conditional In-PR Subtask Checklist**:
    - Require **`>= 95%`** before requesting merge approval. Self-correct technical/test/doc gaps automatically; use `/grill-me` if design ambiguity remains.
    - Place the **`### PR Readiness & Perfection Confidence Score: <N>% (<N> / 100)`** section at the **end** of the PR description (and at the end of the PR Development Summary comment):
      - Wrap the detailed 5-Pillar breakdown, test commands, and invariant checks inside a collapsible `<details><summary>Expand 5-Pillar Readiness Rubric & Verification Details (100 / 100)</summary> ... </details>` block (with blank lines immediately after `</summary>` and before `</details>`).
-     - Immediately after `</details>`, finish the PR description with a **final closing paragraph** explaining in plain English why you believe the PR is complete/perfect (or noting the exact `-N` point reason if `< 100%`), followed by any remaining open [`TODO.md`](./TODO.md) subtasks formatted as a **Markdown checklist (`- [ ] ...`)**.
-   - Also report the score and remaining subtask checklist concisely in the chat message requesting merge approval.
-4. **Wait for Explicit Approval**: Never merge a PR or push directly to `main` without explicit user confirmation.
+     - Immediately after `</details>`, finish the PR description with a **concise closing note** explaining in plain English why you believe the PR is complete/perfect (or noting the exact `-N` point reason if `< 100%`).
+     - **Only list `TODO.md` subtasks if included in this PR and `< 100%` complete**: Append a `- [ ] ...` Markdown checklist **only** when the PR itself is not yet `100%` complete and still has remaining `TODO.md` subtasks scoped to ship inside *this* PR. Never list unrelated repository-wide backlog items at the bottom of a `100%` complete PR.
+   - Also report the score concisely in the chat message requesting merge approval.
+5. **Wait for Explicit Approval**: Never merge a PR or push directly to `main` without explicit user confirmation.
 
 ### Reopening & Continuing Work on a Closed Pull Request
 
@@ -350,6 +362,7 @@ Before asking the human to merge a PR:
 Capy runs three coordinated GitHub Actions workflows in [`.github/workflows/`](./.github/workflows):
 
 ### 1. Unified Build & Preview Deployment ([`deploy-branch.yml`](./.github/workflows/deploy-branch.yml))
+- **Fast-CI / Thorough-Antigravity-VM Philosophy**: GitHub Actions intentionally stays ultra-fast and lightweight—compiling Web/Android bundles and running fast `< 2s` sanity/JUnit checks without downloading heavy Playwright Chromium browsers in CI—so `/pull/<number>/` preview links deploy in minimal time while the AI agent runs the full `npm run lint && npm run build && npm test` Playwright E2E gate inside the Antigravity VM before pushing.
 - **Zero-Minute Documentation Fast-Path (`paths-ignore`)**: Commits that exclusively touch `**.md`, `docs/**`, `notes/**`, `.gitignore`, or `LICENSE` automatically skip CI builds and Pages deploys, consuming zero runner minutes.
 - **Job 1 -- `build` (`Build & Test`, `contents: read`)**:
   - Runs concurrently across open PRs with `cancel-in-progress: true` per PR/ref.

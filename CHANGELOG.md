@@ -1,5 +1,6 @@
 ### 2.5 - 2026-11-11
 
+- Split strategic ROADMAP.md from Sprint 1 TODO.md and add Gemini 4 sprint playbooks [#473](https://github.com/shthed/capy/pull/473)
 - Add daily featured puzzle, reduced motion, keyboard shortcuts, and lifetime stats [#474](https://github.com/shthed/capy/pull/474)
 - Add zoom sensitivity, magnetic zoom stops, and procedural Web Audio tap effects [#472](https://github.com/shthed/capy/pull/472)
 - Fix cache-eviction E2E test, replay speed grid, and atomic Android backups [#471](https://github.com/shthed/capy/pull/471)
