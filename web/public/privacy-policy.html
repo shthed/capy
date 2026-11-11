@@ -59,19 +59,26 @@
     <h2>1. Local-First Photo &amp; Puzzle Processing</h2>
     <p>
       When you choose a personal photo from your device (using the Android system Photo Picker or
-      your browser file selector), color quantization and region segmentation run locally on your
-      device inside a sandboxed Web Worker. Your personal photos are stored locally on your device
-      (IndexedDB / app-private storage) and are never uploaded to external servers unless you
-      explicitly export or share a file.
+      your browser file selector), color quantization and region segmentation run 100% locally on
+      your device inside a sandboxed Web Worker. By default, your personal photos and puzzle saves
+      stay strictly on your device (IndexedDB and app-private storage) and are never sent to Capy
+      Paint servers. If you opt in to Cloud Sync, custom photo puzzle archives (<code>.capy</code>)
+      are backed up solely to your own private Google Drive <code>appDataFolder</code> or Google
+      Play Games Saved Games storage so you can continue coloring across your own devices.
     </p>
 
     <h2>2. Optional Sign-In &amp; Cloud Save Sync</h2>
     <p>
       You can play Capy Paint completely offline without creating an account. If you choose to sign
-      in with Google Play Games Services or enable Cloud Sync, Capy Paint stores compact puzzle
-      completion progress (region completion bitsets and timestamps) so your progress merges safely
-      across your devices. You may sign out or delete your local and cloud saves at any time from
-      the Saves menu.
+      in with your Google Account on Web/PWA (via Google Identity Services OAuth 2.0 using
+      <code>openid</code>, <code>profile</code>, <code>email</code>, and the app-isolated
+      <code>drive.appdata</code> scope) or with Google Play Games Services v2 on Android, Capy Paint
+      reads your basic display profile (name, avatar, and account identifier) and syncs your save
+      library manifest and compact <code>.capy</code> v2 puzzle saves exclusively inside your hidden,
+      app-private cloud folder (Google Drive <code>appDataFolder</code> or Play Games
+      <code>SnapshotsClient</code>). Capy Paint cannot view or access any other files in your Google
+      Drive. You may sign out or delete your local and cloud saves at any time from
+      <em>Settings &rarr; Saves</em>.
     </p>
 
     <h2>3. Shareable Links &amp; Optional Co-op Rooms</h2>
@@ -90,11 +97,11 @@
       desktop builds are 100% ad-free.
     </p>
 
-    <h2>5. Google Play Data Safety Summary</h2>
+    <h2>5. Google Play Data Safety &amp; Google Auth Summary</h2>
     <ul>
-      <li><strong>Personal Photos &amp; Media:</strong> Processed 100% on-device; never collected or shared automatically.</li>
-      <li><strong>Game Progress &amp; App Activity:</strong> Stored locally by default; synced via encrypted HTTPS only when you opt in to Google Play Games Services or Cloud Sync.</li>
-      <li><strong>Account &amp; Data Deletion:</strong> You can play without an account and clear all local or cloud saves directly inside <em>Settings &rarr; Saves</em>.</li>
+      <li><strong>Personal Photos &amp; Media:</strong> Processed 100% on-device; stored locally by default and backed up only to your own private Google Drive <code>appDataFolder</code> / Play Games Saved Games when you opt in to Cloud Sync.</li>
+      <li><strong>Account Profile &amp; Game Progress:</strong> Stored locally by default; synced via encrypted HTTPS only when you sign in with Google Identity Services (<code>drive.appdata</code>) or Google Play Games Services v2.</li>
+      <li><strong>Account &amp; Data Deletion:</strong> You can play without an account, sign out at any time, and delete local saves from <em>Settings &rarr; Saves</em> or revoke app access from your Google Account settings.</li>
     </ul>
 
     <h2>6. Contact &amp; Open Source</h2>
