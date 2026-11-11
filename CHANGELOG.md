@@ -1,59 +1,40 @@
-# Changelog -- Capy Monorepo ([`web/`](./web), [`app/`](./app))
+### 2.5 - 2026-11-11
 
-All notable changes to the **Capy** color-by-number suite across the Web Application ([`web/`](./web)), Unified Native Android Launcher ([`app/`](./app)), and pre-monorepo Legacy Web1 milestones (`0.1.0`--`0.9.3`) are recorded in this file.
-
-For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` derivation, and changelog formatting guidelines, see [`AGENTS.md`](./AGENTS.md).
-
----
-
-## [2.5.4] - 2026-11-11 ([PR #468](https://github.com/shthed/capy/pull/468), Android `versionCode`: `20504`)
-
-- Standardize pull request titles, descriptions, labels, and retrospective `0.1.0`--`0.9.3` versions across all historical PRs, move changelog guidelines to `AGENTS.md`, and record full PR history in `CHANGELOG.md` ([PR #468](https://github.com/shthed/capy/pull/468))
-
-## [2.5.3] - 2026-11-11 ([PR #466](https://github.com/shthed/capy/pull/466), Android `versionCode`: `20503`)
-
+- Compact changelog headings for mobile, remove preamble, and group same-day patch releases ([PR #469](https://github.com/shthed/capy/pull/469))
+- Standardize historical PR metadata, move changelog rules to AGENTS.md, and add full PR history ([PR #468](https://github.com/shthed/capy/pull/468))
 - Resolve all remaining audit bugfixes from TODO ([PR #466](https://github.com/shthed/capy/pull/466))
-
-## [2.5.2] - 2026-11-11 ([PR #465](https://github.com/shthed/capy/pull/465), Android `versionCode`: `20502`)
-
 - Fix resize clamping, IndexedDB palette recovery, and Pixel API 33+ haptics ([PR #465](https://github.com/shthed/capy/pull/465))
-
-## [2.5.1] - 2026-11-10 ([PR #464](https://github.com/shthed/capy/pull/464), Android `versionCode`: `20501`)
-
 - Add YouTube-style playback scrubber and preserve viewport on replay ([PR #464](https://github.com/shthed/capy/pull/464))
-
-## [2.5.0] - 2026-11-10 ([PR #463](https://github.com/shthed/capy/pull/463), Android `versionCode`: `20500`)
-
 - Consolidate test suite, enhance save-load replay, and add AAA TODO roadmap ([PR #463](https://github.com/shthed/capy/pull/463))
 
-## [2.4.0] - 2026-11-10 ([PR #461](https://github.com/shthed/capy/pull/461), Android `versionCode`: `20400`)
+### 2.4 - 2026-11-10
 
 - Add modular cloud provider drivers and Google Drive cross-device sync ([PR #461](https://github.com/shthed/capy/pull/461))
 
-## [2.3.0] - 2026-11-10 ([PR #462](https://github.com/shthed/capy/pull/462), Android `versionCode`: `20300`)
+### 2.3 - 2026-11-10
 
 - Fix runtime sample resolution, canvas undo repaint, bundle splitting, and prioritize TODO.md ([PR #462](https://github.com/shthed/capy/pull/462))
 
-## [2.2.0] - 2026-11-10 ([PR #460](https://github.com/shthed/capy/pull/460), Android `versionCode`: `20200`)
+### 2.2 - 2026-11-10
 
 - Add shareable progress links, simultaneous Co-op, CRDT Cloud Sync, and Play Store compliance ([PR #460](https://github.com/shthed/capy/pull/460))
 
-## [2.1.0] - 2026-11-10 ([PR #459](https://github.com/shthed/capy/pull/459), Android `versionCode`: `20100`)
+### 2.1 - 2026-11-10
 
 - Preload sample save archive for instant first-launch gameplay ([PR #459](https://github.com/shthed/capy/pull/459))
 
-## [2.0.0] - 2026-11-10 ([PR #458](https://github.com/shthed/capy/pull/458), Android `versionCode`: `20000`)
+### 2.0 - 2026-11-10
 
 - Add Compact Binary Storage v2 (.capy v2) and fix engine edge cases ([PR #458](https://github.com/shthed/capy/pull/458))
 
-## [1.4.0] - 2026-11-09 ([PR #457](https://github.com/shthed/capy/pull/457), [PR #456](https://github.com/shthed/capy/pull/456), [PR #455](https://github.com/shthed/capy/pull/455), [PR #454](https://github.com/shthed/capy/pull/454), Android `versionCode`: `10400`)
+### 1.4 - 2026-11-09
 
 - Add min/max label size options, guarantee region fit, and redo circle-free hint color ([PR #457](https://github.com/shthed/capy/pull/457))
 - Set Fast Mode puzzle generation progress as default ([PR #456](https://github.com/shthed/capy/pull/456))
 - Show real generation metrics and live palette swatches during segmentation ([PR #455](https://github.com/shthed/capy/pull/455))
 - Add loading progress detail toggle and fast mode ([PR #454](https://github.com/shthed/capy/pull/454))
 
-## [1.3.0] - 2026-11-09 ([PR #449](https://github.com/shthed/capy/pull/449)--[PR #453](https://github.com/shthed/capy/pull/453), Android `versionCode`: `10300`)
+### 1.3 - 2026-11-09
 
 - Update AGENTS.md: Refine contributor and agent operational rules ([PR #453](https://github.com/shthed/capy/pull/453))
 - Add PWA offline support and manifest ([PR #452](https://github.com/shthed/capy/pull/452))
@@ -61,20 +42,20 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Add ci and deps GitHub pull request labels to AGENTS.md ([PR #450](https://github.com/shthed/capy/pull/450))
 - Add thumbnails grid view, save pinning, and toolbar to Saves gallery ([PR #449](https://github.com/shthed/capy/pull/449))
 
-## [1.2.0] - 2026-11-09 ([PR #448](https://github.com/shthed/capy/pull/448), [PR #447](https://github.com/shthed/capy/pull/447), [PR #446](https://github.com/shthed/capy/pull/446), Android `versionCode`: `10200`)
+### 1.2 - 2026-11-09
 
 - Fix Undo/Redo state synchronization and add post-replay auto-resume ([PR #448](https://github.com/shthed/capy/pull/448))
 - Add undo timeline scrubber and multi-step redo ([PR #447](https://github.com/shthed/capy/pull/447))
 - Add animated puzzle replay and region undo ([PR #446](https://github.com/shthed/capy/pull/446))
 
-## [1.1.0] - 2026-11-09 ([PR #445](https://github.com/shthed/capy/pull/445), [PR #444](https://github.com/shthed/capy/pull/444), [PR #443](https://github.com/shthed/capy/pull/443), [PR #442](https://github.com/shthed/capy/pull/442), Android `versionCode`: `10100`)
+### 1.1 - 2026-11-09
 
 - Add screenshot showcase gallery and capture script ([PR #445](https://github.com/shthed/capy/pull/445))
 - Improve zoom pan gestures and color pickers ([PR #444](https://github.com/shthed/capy/pull/444))
 - Add PR merge approval rule and preview lifecycle docs ([PR #443](https://github.com/shthed/capy/pull/443))
 - Calibrate pan zoom gestures and sync preview assets ([PR #442](https://github.com/shthed/capy/pull/442))
 
-## [1.0.0] - 2026-11-08 ([PR #431](https://github.com/shthed/capy/pull/431)--[PR #441](https://github.com/shthed/capy/pull/441), Android `versionCode`: `10000`)
+### 1.0 - 2026-11-08
 
 - Add web architecture documentation ([PR #441](https://github.com/shthed/capy/pull/441))
 - Optimize CI builds and Pages deployment pipeline ([PR #440](https://github.com/shthed/capy/pull/440))
@@ -88,7 +69,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Unify Web and Android single-codebase architecture with WebViewAssetLoader ([PR #432](https://github.com/shthed/capy/pull/432))
 - Consolidate Web, Legacy Web1, and Android apps into unified monorepo ([PR #431](https://github.com/shthed/capy/pull/431))
 
-## [0.9.3] - 2026-09-24 ([PR #419](https://github.com/shthed/capy/pull/419)--[PR #430](https://github.com/shthed/capy/pull/430))
+### 0.9.3 - 2026-09-24
 
 - Fix runtime bootstrap scope, default artwork loading, and UI load tests ([PR #430](https://github.com/shthed/capy/pull/430))
 - Rename menu and relocate advanced settings toggle ([PR #429](https://github.com/shthed/capy/pull/429))
@@ -101,7 +82,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Move hint intensity controls to basics tab ([PR #420](https://github.com/shthed/capy/pull/420))
 - Drop raster save artifacts and rebuild maps from vector scenes ([PR #419](https://github.com/shthed/capy/pull/419))
 
-## [0.9.2] - 2025-12-05 ([PR #409](https://github.com/shthed/capy/pull/409)--[PR #418](https://github.com/shthed/capy/pull/418))
+### 0.9.2 - 2025-12-05
 
 - Wrap mobile settings tabs and update settings-menu.json schema ([PR #418](https://github.com/shthed/capy/pull/418))
 - Reduce settings sheet minimum dimensions and safe-area gaps on mobile ([PR #417](https://github.com/shthed/capy/pull/417))
@@ -114,7 +95,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Polish vector sample rendering and docs ([PR #410](https://github.com/shthed/capy/pull/410))
 - Add vector scene loader and refresh sample puzzle ([PR #409](https://github.com/shthed/capy/pull/409))
 
-## [0.9.1] - 2025-12-04 ([PR #399](https://github.com/shthed/capy/pull/399)--[PR #408](https://github.com/shthed/capy/pull/408))
+### 0.9.1 - 2025-12-04
 
 - Handle save quota failures by trimming previews ([PR #408](https://github.com/shthed/capy/pull/408))
 - Fix deploy workflow concurrency scope and env URL ([PR #407](https://github.com/shthed/capy/pull/407))
@@ -127,7 +108,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Consolidate runtime into capy.js ([PR #400](https://github.com/shthed/capy/pull/400))
 - Summarize processed branches in cleanup workflow ([PR #399](https://github.com/shthed/capy/pull/399))
 
-## [0.9.0] - 2025-11-28 ([PR #389](https://github.com/shthed/capy/pull/389)--[PR #398](https://github.com/shthed/capy/pull/398))
+### 0.9.0 - 2025-11-28
 
 - Expose runtime APIs as module exports ([PR #398](https://github.com/shthed/capy/pull/398))
 - Rewrite Pages deployment workflow ([PR #397](https://github.com/shthed/capy/pull/397))
@@ -140,7 +121,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Avoid duplicate createRendererController export ([PR #390](https://github.com/shthed/capy/pull/390))
 - Refresh start hint onboarding UI ([PR #389](https://github.com/shthed/capy/pull/389))
 
-## [0.8.3] - 2025-11-28 ([PR #379](https://github.com/shthed/capy/pull/379)--[PR #388](https://github.com/shthed/capy/pull/388))
+### 0.8.3 - 2025-11-28
 
 - Restore renderer pipeline and fixtures ([PR #388](https://github.com/shthed/capy/pull/388))
 - Improve renderer wiring and tests ([PR #387](https://github.com/shthed/capy/pull/387))
@@ -153,7 +134,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Fix deployment artifact path for branch previews ([PR #380](https://github.com/shthed/capy/pull/380))
 - Remove outdated menu screenshot artifact ([PR #379](https://github.com/shthed/capy/pull/379))
 
-## [0.8.2] - 2025-11-27 ([PR #369](https://github.com/shthed/capy/pull/369)--[PR #378](https://github.com/shthed/capy/pull/378))
+### 0.8.2 - 2025-11-27
 
 - Add responsive tab stacking and themed input controls to settings sheet ([PR #378](https://github.com/shthed/capy/pull/378))
 - Register renderer mode change handler ([PR #377](https://github.com/shthed/capy/pull/377))
@@ -166,7 +147,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Ensure deploy previews checkout into PR-specific pull directories ([PR #370](https://github.com/shthed/capy/pull/370))
 - Consolidate runtime exports ([PR #369](https://github.com/shthed/capy/pull/369))
 
-## [0.8.1] - 2025-11-26 ([PR #359](https://github.com/shthed/capy/pull/359)--[PR #368](https://github.com/shthed/capy/pull/368))
+### 0.8.1 - 2025-11-26
 
 - Fix duplicate renderer controller export ([PR #368](https://github.com/shthed/capy/pull/368))
 - Fix Pages artifact path for main deployments ([PR #367](https://github.com/shthed/capy/pull/367))
@@ -179,7 +160,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Improve deploy preview logging ([PR #360](https://github.com/shthed/capy/pull/360))
 - Gate Pages deploys to open PRs and refresh docs ([PR #359](https://github.com/shthed/capy/pull/359))
 
-## [0.8.0] - 2025-11-26 ([PR #349](https://github.com/shthed/capy/pull/349)--[PR #358](https://github.com/shthed/capy/pull/358))
+### 0.8.0 - 2025-11-26
 
 - Add renderer follow-up tasks ([PR #358](https://github.com/shthed/capy/pull/358))
 - Exclude project files from Pages deploy ([PR #357](https://github.com/shthed/capy/pull/357))
@@ -192,7 +173,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Fix branch preview deployment path ([PR #350](https://github.com/shthed/capy/pull/350))
 - Adjust deploy target directory for main Pages deployment ([PR #349](https://github.com/shthed/capy/pull/349))
 
-## [0.7.3] - 2025-11-24 ([PR #338](https://github.com/shthed/capy/pull/338)--[PR #348](https://github.com/shthed/capy/pull/348))
+### 0.7.3 - 2025-11-24
 
 - Improve responsive settings layout ([PR #348](https://github.com/shthed/capy/pull/348))
 - Fix duplicate createRendererController export ([PR #347](https://github.com/shthed/capy/pull/347))
@@ -205,7 +186,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Trim and document remaining CSS ([PR #339](https://github.com/shthed/capy/pull/339))
 - Add service worker status and debug logging ([PR #338](https://github.com/shthed/capy/pull/338))
 
-## [0.7.2] - 2025-11-23 ([PR #327](https://github.com/shthed/capy/pull/327)--[PR #337](https://github.com/shthed/capy/pull/337))
+### 0.7.2 - 2025-11-23
 
 - Move AGENTS guide to root and mirror Pages HTML ([PR #337](https://github.com/shthed/capy/pull/337))
 - Remove deployment gating for branch deploys ([PR #336](https://github.com/shthed/capy/pull/336))
@@ -218,7 +199,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Add rerun Pages deploy button to PR comments ([PR #328](https://github.com/shthed/capy/pull/328))
 - Improve branch cleanup logging and cutoff ([PR #327](https://github.com/shthed/capy/pull/327))
 
-## [0.7.1] - 2025-11-21 ([PR #316](https://github.com/shthed/capy/pull/316)--[PR #326](https://github.com/shthed/capy/pull/326))
+### 0.7.1 - 2025-11-21
 
 - Add manual dispatch for branch deploys and rerun button ([PR #326](https://github.com/shthed/capy/pull/326))
 - Fix settings tab layout wrappers ([PR #325](https://github.com/shthed/capy/pull/325))
@@ -231,7 +212,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Enhance post-deploy Playwright coverage ([PR #317](https://github.com/shthed/capy/pull/317))
 - Adjust deploy workflow environment per branch ([PR #316](https://github.com/shthed/capy/pull/316))
 
-## [0.7.0] - 2025-11-21 ([PR #305](https://github.com/shthed/capy/pull/305)--[PR #315](https://github.com/shthed/capy/pull/315))
+### 0.7.0 - 2025-11-21
 
 - Stabilize settings toggle and mute test network noise ([PR #315](https://github.com/shthed/capy/pull/315))
 - Simplify settings bootstrap with JSON export ([PR #314](https://github.com/shthed/capy/pull/314))
@@ -244,7 +225,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Simplify post-deploy preview comment ([PR #307](https://github.com/shthed/capy/pull/307))
 - Auto prune stale Pages previews ([PR #305](https://github.com/shthed/capy/pull/305))
 
-## [0.6.3] - 2025-11-18 ([PR #290](https://github.com/shthed/capy/pull/290)--[PR #303](https://github.com/shthed/capy/pull/303))
+### 0.6.3 - 2025-11-18
 
 - Remove legacy autosave migration ([PR #303](https://github.com/shthed/capy/pull/303))
 - Add settings sheet toggle test ([PR #302](https://github.com/shthed/capy/pull/302))
@@ -257,7 +238,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Compute deploy workflow concurrency group directly without env context ([PR #291](https://github.com/shthed/capy/pull/291))
 - Add terminal output guidance to onboarding ([PR #290](https://github.com/shthed/capy/pull/290))
 
-## [0.6.2] - 2025-11-16 ([PR #277](https://github.com/shthed/capy/pull/277)--[PR #288](https://github.com/shthed/capy/pull/288))
+### 0.6.2 - 2025-11-16
 
 - Refactor UI wiring into components ([PR #288](https://github.com/shthed/capy/pull/288))
 - Make branch cleanup asynchronous ([PR #287](https://github.com/shthed/capy/pull/287))
@@ -270,7 +251,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Consolidate runtime bootstrap into single module ([PR #278](https://github.com/shthed/capy/pull/278))
 - Extract runtime styles into stylesheet ([PR #277](https://github.com/shthed/capy/pull/277))
 
-## [0.6.1] - 2025-11-16 ([PR #261](https://github.com/shthed/capy/pull/261)--[PR #276](https://github.com/shthed/capy/pull/276))
+### 0.6.1 - 2025-11-16
 
 - Fix branch cleanup ref encoding ([PR #276](https://github.com/shthed/capy/pull/276))
 - Combine renderer performance updates and testing stack ([PR #275](https://github.com/shthed/capy/pull/275))
@@ -283,7 +264,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Run branch cleanup after deployments ([PR #262](https://github.com/shthed/capy/pull/262))
 - Refresh TECH.md test harness and branch deployment documentation ([PR #261](https://github.com/shthed/capy/pull/261))
 
-## [0.6.0] - 2025-11-15 ([PR #250](https://github.com/shthed/capy/pull/250)--[PR #260](https://github.com/shthed/capy/pull/260))
+### 0.6.0 - 2025-11-15
 
 - Restructure repository around project workspace ([PR #260](https://github.com/shthed/capy/pull/260))
 - Reuse counters for tiny region merging ([PR #259](https://github.com/shthed/capy/pull/259))
@@ -296,7 +277,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Fix post-deploy artifact naming sanitization ([PR #251](https://github.com/shthed/capy/pull/251))
 - Ensure Playwright browsers install with docs ([PR #250](https://github.com/shthed/capy/pull/250))
 
-## [0.5.3] - 2025-11-15 ([PR #238](https://github.com/shthed/capy/pull/238)--[PR #249](https://github.com/shthed/capy/pull/249))
+### 0.5.3 - 2025-11-15
 
 - Simplify branch overview page ([PR #249](https://github.com/shthed/capy/pull/249))
 - Restore stable renderer pipeline with performance logging ([PR #248](https://github.com/shthed/capy/pull/248))
@@ -309,7 +290,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Preserve palette numbering when colours complete ([PR #239](https://github.com/shthed/capy/pull/239))
 - Fix UI scale flash during boot ([PR #238](https://github.com/shthed/capy/pull/238))
 
-## [0.5.2] - 2025-10-26 ([PR #228](https://github.com/shthed/capy/pull/228)--[PR #237](https://github.com/shthed/capy/pull/237))
+### 0.5.2 - 2025-10-26
 
 - Rename palette sort label and renumber swatches ([PR #237](https://github.com/shthed/capy/pull/237))
 - Switch CI workflow to Ubuntu runners ([PR #236](https://github.com/shthed/capy/pull/236))
@@ -322,7 +303,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Improve region label placement with polylabel ([PR #229](https://github.com/shthed/capy/pull/229))
 - Fix settings persistence when no puzzle is loaded ([PR #228](https://github.com/shthed/capy/pull/228))
 
-## [0.5.1] - 2025-10-25 ([PR #217](https://github.com/shthed/capy/pull/217)--[PR #227](https://github.com/shthed/capy/pull/227))
+### 0.5.1 - 2025-10-25
 
 - Render region numbers continuously across all zoom levels ([PR #227](https://github.com/shthed/capy/pull/227))
 - Remove user settings from exported save files ([PR #226](https://github.com/shthed/capy/pull/226))
@@ -335,7 +316,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Support zoom-aware region label layout ([PR #219](https://github.com/shthed/capy/pull/219))
 - Persist user settings in browser storage ([PR #217](https://github.com/shthed/capy/pull/217))
 
-## [0.5.0] - 2025-10-24 ([PR #206](https://github.com/shthed/capy/pull/206)--[PR #216](https://github.com/shthed/capy/pull/216))
+### 0.5.0 - 2025-10-24
 
 - Fix right-click select colour when pan drag is configured ([PR #216](https://github.com/shthed/capy/pull/216))
 - Default to medium detail with larger regions ([PR #215](https://github.com/shthed/capy/pull/215))
@@ -348,7 +329,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Ensure branch deployments include JSON assets ([PR #207](https://github.com/shthed/capy/pull/207))
 - Include all root JS assets in branch deploys ([PR #206](https://github.com/shthed/capy/pull/206))
 
-## [0.4.3] - 2025-10-21 ([PR #196](https://github.com/shthed/capy/pull/196)--[PR #205](https://github.com/shthed/capy/pull/205))
+### 0.4.3 - 2025-10-21
 
 - Expand interface scale limits ([PR #205](https://github.com/shthed/capy/pull/205))
 - Include JS assets in branch deployments ([PR #204](https://github.com/shthed/capy/pull/204))
@@ -361,7 +342,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Add WebGL renderer implementation ([PR #197](https://github.com/shthed/capy/pull/197))
 - Stabilize UI smoke tests with automation helpers ([PR #196](https://github.com/shthed/capy/pull/196))
 
-## [0.4.2] - 2025-10-20 ([PR #184](https://github.com/shthed/capy/pull/184)--[PR #195](https://github.com/shthed/capy/pull/195))
+### 0.4.2 - 2025-10-20
 
 - Document renderer controller and active Playwright smoke run ([PR #195](https://github.com/shthed/capy/pull/195))
 - Add hint type toggles to settings sheet ([PR #194](https://github.com/shthed/capy/pull/194))
@@ -374,7 +355,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Point deployment environment URL to branch preview ([PR #185](https://github.com/shthed/capy/pull/185))
 - Allow pan and zoom gestures from viewport margins ([PR #184](https://github.com/shthed/capy/pull/184))
 
-## [0.4.1] - 2025-10-18 ([PR #173](https://github.com/shthed/capy/pull/173)--[PR #183](https://github.com/shthed/capy/pull/183))
+### 0.4.1 - 2025-10-18
 
 - Use GitHub Markdown API for README builds ([PR #183](https://github.com/shthed/capy/pull/183))
 - Modularize puzzle renderer via controller abstraction ([PR #181](https://github.com/shthed/capy/pull/181))
@@ -387,7 +368,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Fix deploy workflow README conversion block indentation ([PR #174](https://github.com/shthed/capy/pull/174))
 - Fix deploy workflow manifest JSON generation ([PR #173](https://github.com/shthed/capy/pull/173))
 
-## [0.4.0] - 2025-10-17 ([PR #162](https://github.com/shthed/capy/pull/162)--[PR #172](https://github.com/shthed/capy/pull/172))
+### 0.4.0 - 2025-10-17
 
 - Prune inactive branch deployments during Pages sync ([PR #172](https://github.com/shthed/capy/pull/172))
 - Update GitHub Actions deploy-pages workflow action from v4 to v5 ([PR #171](https://github.com/shthed/capy/pull/171))
@@ -400,7 +381,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Add npm scaffolding and placeholder test runner ([PR #163](https://github.com/shthed/capy/pull/163))
 - Add ChatGPT image prompt helper to generator tab ([PR #162](https://github.com/shthed/capy/pull/162))
 
-## [0.3.3] - 2025-10-17 ([PR #152](https://github.com/shthed/capy/pull/152)--[PR #161](https://github.com/shthed/capy/pull/161))
+### 0.3.3 - 2025-10-17
 
 - Improve save management autosave experience ([PR #161](https://github.com/shthed/capy/pull/161))
 - Auto-start generation and relocate saves export ([PR #160](https://github.com/shthed/capy/pull/160))
@@ -413,7 +394,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Remove onboarding start hint and add quick start actions to Saves sheet ([PR #153](https://github.com/shthed/capy/pull/153))
 - Improve branch deployment summary layout ([PR #152](https://github.com/shthed/capy/pull/152))
 
-## [0.3.2] - 2025-10-16 ([PR #137](https://github.com/shthed/capy/pull/137)--[PR #151](https://github.com/shthed/capy/pull/151))
+### 0.3.2 - 2025-10-16
 
 - Document branch update workflow ([PR #151](https://github.com/shthed/capy/pull/151))
 - Fix deploy workflow heredoc indentation ([PR #150](https://github.com/shthed/capy/pull/150))
@@ -426,7 +407,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Remove idle Ready to paint status line ([PR #139](https://github.com/shthed/capy/pull/139))
 - Simplify branch deployments ([PR #137](https://github.com/shthed/capy/pull/137))
 
-## [0.3.1] - 2025-10-15 ([PR #121](https://github.com/shthed/capy/pull/121)--[PR #136](https://github.com/shthed/capy/pull/136))
+### 0.3.1 - 2025-10-15
 
 - Restrict status bar to generation progress ([PR #136](https://github.com/shthed/capy/pull/136))
 - Enable concurrency cancellation for GitHub Pages deployments to prevent 400 errors ([PR #135](https://github.com/shthed/capy/pull/135))
@@ -439,7 +420,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Enhance hint highlights and add easy difficulty ([PR #122](https://github.com/shthed/capy/pull/122))
 - Review and update branch-deployments.md documentation for accuracy ([PR #121](https://github.com/shthed/capy/pull/121))
 
-## [0.3.0] - 2025-10-14 ([PR #110](https://github.com/shthed/capy/pull/110)--[PR #119](https://github.com/shthed/capy/pull/119))
+### 0.3.0 - 2025-10-14
 
 - Add clickable commit and PR links to branch deployment history ([PR #119](https://github.com/shthed/capy/pull/119))
 - Enhance branch deployment with commit and PR links in Recent History ([PR #118](https://github.com/shthed/capy/pull/118))
@@ -452,7 +433,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Add configurable hint fade, intensity, and right-click color selection ([PR #111](https://github.com/shthed/capy/pull/111))
 - Restore capy.json and add fallback puzzle metadata ([PR #110](https://github.com/shthed/capy/pull/110))
 
-## [0.2.3] - 2025-10-13 ([PR #97](https://github.com/shthed/capy/pull/97)--[PR #109](https://github.com/shthed/capy/pull/109))
+### 0.2.3 - 2025-10-13
 
 - Simplify preview mode to color canvas in place ([PR #109](https://github.com/shthed/capy/pull/109))
 - Ensure palette swatches respond to right-click ([PR #105](https://github.com/shthed/capy/pull/105))
@@ -465,7 +446,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Reconcile touch tap responsiveness handlers in index.html ([PR #98](https://github.com/shthed/capy/pull/98))
 - Optimize deployment workflow for 40-60% faster builds ([PR #97](https://github.com/shthed/capy/pull/97))
 
-## [0.2.2] - 2025-10-13 ([PR #86](https://github.com/shthed/capy/pull/86)--[PR #96](https://github.com/shthed/capy/pull/96))
+### 0.2.2 - 2025-10-13
 
 - Trigger region fills on touch pointer events to remove tap delay ([PR #96](https://github.com/shthed/capy/pull/96))
 - Centralize canvas fill validation for touch and click events ([PR #95](https://github.com/shthed/capy/pull/95))
@@ -478,7 +459,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Handle command rail wrapping metrics ([PR #87](https://github.com/shthed/capy/pull/87))
 - Constrain floating command rail within right safe-area inset ([PR #86](https://github.com/shthed/capy/pull/86))
 
-## [0.2.1] - 2025-10-11 ([PR #75](https://github.com/shthed/capy/pull/75)--[PR #85](https://github.com/shthed/capy/pull/85))
+### 0.2.1 - 2025-10-11
 
 - Fix command rail overflow on narrow viewports ([PR #85](https://github.com/shthed/capy/pull/85))
 - Simplify play surface layout ([PR #84](https://github.com/shthed/capy/pull/84))
@@ -491,7 +472,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Add region number visibility toggle ([PR #76](https://github.com/shthed/capy/pull/76))
 - Add GitHub Copilot repository instructions ([PR #75](https://github.com/shthed/capy/pull/75))
 
-## [0.2.0] - 2025-10-09 ([PR #60](https://github.com/shthed/capy/pull/60)--[PR #72](https://github.com/shthed/capy/pull/72))
+### 0.2.0 - 2025-10-09
 
 - Apply edge-to-edge flat palette swatch layout to index.html ([PR #72](https://github.com/shthed/capy/pull/72))
 - Show original artwork behind regions and streamline colour selection ([PR #71](https://github.com/shthed/capy/pull/71))
@@ -504,7 +485,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Flatten palette dock into edge-to-edge swatches with adaptive contrast ([PR #62](https://github.com/shthed/capy/pull/62))
 - Streamline palette dock to swatches only ([PR #60](https://github.com/shthed/capy/pull/60))
 
-## [0.1.3] - 2025-10-08 ([PR #49](https://github.com/shthed/capy/pull/49)--[PR #59](https://github.com/shthed/capy/pull/59))
+### 0.1.3 - 2025-10-08
 
 - Fix authentication for deploy-branch job using GITHUB_TOKEN ([PR #59](https://github.com/shthed/capy/pull/59))
 - Collapse command rail into responsive icon buttons and harden zoom guard ([PR #58](https://github.com/shthed/capy/pull/58))
@@ -517,7 +498,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Improve viewport sizing and zoom handling ([PR #50](https://github.com/shthed/capy/pull/50))
 - Refresh contributor onboarding guidance ([PR #49](https://github.com/shthed/capy/pull/49))
 
-## [0.1.2] - 2025-10-07 ([PR #30](https://github.com/shthed/capy/pull/30)--[PR #48](https://github.com/shthed/capy/pull/48))
+### 0.1.2 - 2025-10-07
 
 - Add custom cursor tooltip for puzzle regions ([PR #48](https://github.com/shthed/capy/pull/48))
 - Add automatic GitHub Pages deployment for all branches ([PR #44](https://github.com/shthed/capy/pull/44))
@@ -530,7 +511,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Derive export titles from source metadata ([PR #33](https://github.com/shthed/capy/pull/33))
 - Add sample detail presets and region legend ([PR #30](https://github.com/shthed/capy/pull/30))
 
-## [0.1.1] - 2025-10-06 ([PR #16](https://github.com/shthed/capy/pull/16)--[PR #29](https://github.com/shthed/capy/pull/29))
+### 0.1.1 - 2025-10-06
 
 - Add autosave restore flow and cloud backup sync ([PR #29](https://github.com/shthed/capy/pull/29))
 - Guard pan move updates without a loaded puzzle ([PR #28](https://github.com/shthed/capy/pull/28))
@@ -543,7 +524,7 @@ For Semantic Versioning rules (`MAJOR.MINOR.PATCH`), Android `versionCode` deriv
 - Remove redundant header buttons and stabilize drag panning ([PR #17](https://github.com/shthed/capy/pull/17))
 - Document starter scene regression checks in PR review notes ([PR #16](https://github.com/shthed/capy/pull/16))
 
-## [0.1.0] - 2025-10-04 ([PR #1](https://github.com/shthed/capy/pull/1)--[PR #15](https://github.com/shthed/capy/pull/15))
+### 0.1.0 - 2025-10-04
 
 - Update smoke test alias to target UI review harness ([PR #15](https://github.com/shthed/capy/pull/15))
 - Restore Babel runtime and unblock starter art loading ([PR #14](https://github.com/shthed/capy/pull/14))

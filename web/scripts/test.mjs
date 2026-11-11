@@ -215,19 +215,37 @@ async function runCodecAndEngineTests() {
     assert.equal(fs.existsSync(changelogPath), true, 'CHANGELOG.md must exist at repository root');
     const changelogText = fs.readFileSync(changelogPath, 'utf8');
     assert.equal(
-      changelogText.includes(`## [${versionMod.APP_VERSION}]`),
+      changelogText.startsWith('### '),
       true,
-      `CHANGELOG.md must contain a release heading for current version [${versionMod.APP_VERSION}]`
+      'CHANGELOG.md must start directly on line 1 with a compact ### version heading (no preamble)'
     );
     assert.equal(
-      changelogText.includes('## [0.1.0]'),
+      /^#{1,2}\s+/m.test(changelogText),
+      false,
+      'CHANGELOG.md must not contain oversized # or ## headings'
+    );
+    const majorMinor = `${semverParts.major}.${semverParts.minor}`;
+    const currentVersionHeadingRe = new RegExp(
+      `^### (?:${versionMod.APP_VERSION.replace(/\./g, '\\.')}|${majorMinor.replace(/\./g, '\\.')}) - \\d{4}-\\d{2}-\\d{2}$`,
+      'm'
+    );
+    assert.equal(
+      currentVersionHeadingRe.test(changelogText),
+      true,
+      `CHANGELOG.md must contain a compact ### release heading for ${versionMod.APP_VERSION} or ${majorMinor}`
+    );
+    const changelogHeadings = changelogText.split('\n').filter((line) => line.startsWith('#'));
+    for (const heading of changelogHeadings) {
+      assert.equal(
+        /^### \d+\.\d+(?:\.\d+)? - \d{4}-\d{2}-\d{2}$/.test(heading),
+        true,
+        `Each CHANGELOG.md heading must be concise "### X.Y[.Z] - YYYY-MM-DD": ${heading}`
+      );
+    }
+    assert.equal(
+      changelogText.includes('### 0.1.0 - '),
       true,
       'CHANGELOG.md must include retrospective 0.1.0--0.9.x release history'
-    );
-    assert.equal(
-      /^###\s+/m.test(changelogText),
-      false,
-      'CHANGELOG.md must not contain ### Added/Changed/Fixed sub-headings'
     );
     assert.equal(
       /^[ \t]+-\s+/m.test(changelogText),
@@ -236,9 +254,9 @@ async function runCodecAndEngineTests() {
     );
     const changelogBullets = changelogText.split('\n').filter((line) => line.startsWith('- '));
     assert.equal(
-      changelogBullets.length >= 397,
+      changelogBullets.length >= 398,
       true,
-      `Expected >= 397 single-line PR bullets in CHANGELOG.md, got ${changelogBullets.length}`
+      `Expected >= 398 single-line PR bullets in CHANGELOG.md, got ${changelogBullets.length}`
     );
     for (const bullet of changelogBullets) {
       assert.equal(
