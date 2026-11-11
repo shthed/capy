@@ -2,12 +2,13 @@
 
 [![Web App](https://img.shields.io/badge/Web_App-Play_Online-blue?style=for-the-badge&logo=googlechrome&logoColor=white)](https://shthed.github.io/capy/)
 [![Android APK](https://img.shields.io/badge/Android-Download_APK-green?style=for-the-badge&logo=android&logoColor=white)](https://shthed.github.io/capy/capy.apk)
-[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-orange?style=for-the-badge)](LICENSE.md)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-orange?style=for-the-badge)](./LICENSE.md)
 
 **Capy** is a serene, delightful color-by-number game you can play directly in your web browser or on Android. Transform any photo or artwork into a crisp, playable color puzzle with smart number guides, or relax with Free Colour coloring pages.
 
 - **[Play Capy in Your Browser](https://shthed.github.io/capy/)**
 - **[Download the Android APK](https://shthed.github.io/capy/capy.apk)**
+- **[Read the Privacy Policy](https://shthed.github.io/capy/privacy-policy.html)**
 
 ---
 
@@ -36,7 +37,7 @@
 - **Two Ways to Play**: Classic **Color by Number** guided coloring or relaxed **Free Colour** creative mode.
 - **Turn Any Photo into a Puzzle**: Tap the photo upload button to convert your favorite pictures, pets, landscapes, or drawings into instant playable puzzles, or zoom in with **Infinite Zoom 2x Detail Tiles**.
 - **Shareable Links and Simultaneous Co-op**: Share a compact `< 2 KB` progress URL (`#s=<token>`) with friends, or host a 6-character **Co-op Room** to paint the same puzzle simultaneously with live collaborator ripples.
-- **Compact `.capy` v2 Saves and CRDT Cloud Sync**: Ultra-compact RLE binary saves (`~140x` smaller footprint) and conflict-free Set-Union Cloud Sync ensure zero progress is ever lost across devices.
+- **Compact `.capy` v2 Saves and CRDT Cloud Sync**: Ultra-compact RLE binary saves (`~140x` smaller footprint) and conflict-free Set-Union Cloud Sync across Google Account (Google Drive `appDataFolder`) and Android Google Play Games Services v2 ensure zero progress is ever lost across devices.
 - **Searchable Gallery and Community Ideas**: Filter artwork by category tags (`Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), submit family-friendly puzzle ideas, and vote on upcoming community gallery packs.
 - **Smooth Navigation**: One-finger double-tap-and-drag zoom, fluid pinch-to-zoom up to 12x, and inertial gliding pan momentum just like Google Maps.
 - **Continuous Paint Mode**: Drag your finger across the screen to quickly fill connected matching regions without tapping each one individually.
@@ -47,27 +48,26 @@
 ## How to Play
 
 1. **Pick an Artwork**: Start playing instantly with pre-generated built-in favorites (*Capybara*, *Mushroom Forest*, *Capy Forest*, and *Snail Guitar*) with zero generation wait, or import your own photo.
-2. **Choose a Color**: Tap any numbered swatch in the bottom **Palette Dock**. Matching puzzle shapes highlight instantly in that color.
-3. **Tap or Drag to Paint**: Tap the numbered shapes on the canvas to fill them. Turn on the **Paint Brush** tool to color continuously by dragging.
+2. **Choose a Color**: Tap any numbered swatch in the bottom **Palette Dock** (or simply tap any region directly in default **Easy Mode** to auto-select its color). Matching puzzle shapes highlight instantly.
+3. **Tap or Drag to Paint**: Tap numbered shapes on the canvas to fill them, or turn on the **Paint Brush** tool to color continuously by dragging.
 4. **Zoom and Pan**: Double-tap and drag (down to zoom in, up to zoom out, configurable in Settings), or pinch with two fingers to inspect fine micro-regions.
-5. **Celebrate**: Complete all colors to trigger the victory confetti burst and download your finished masterpiece.
+5. **Celebrate**: Complete all colors to trigger the victory confetti burst, watch your chronological replay, and download your finished masterpiece.
 
 ---
 
 ## Controls and Gestures Cheat Sheet
 
-| Gesture / Control | Action |
-| :--- | :--- |
-| **Tap Region** | Paints the region if it matches the selected active color. |
-| **Drag Canvas** | Pans the artwork smoothly across the screen with inertial gliding momentum. |
-| **Double-Tap and Drag Down / Up** | Google Maps-style one-finger zoom: drag down to zoom in, drag up to zoom out (reversible via Settings). |
-| **Pinch / Mouse Wheel** | Multi-touch focal zoom in / zoom out up to 12x. |
-| **Paint Brush Button** | Toggles continuous drag-to-paint mode. |
-| **Undo Button (`Ctrl+Z`)** | Undoes the last painted region. |
-| **Long-Press Undo Button** | Opens the interactive Replay timeline scrubber to inspect history and resume play from any point. |
-| **Redo Button (`Ctrl+Y` / `Ctrl+Shift+Z`)** | Steps forward to re-apply previously undone regions. |
-| **Preview Eye Button** | Toggles unmasked preview of the original source artwork. |
-| **Lightbulb / Swatch Double-Tap** | Targets and animates the next unpainted region for the active color. |
+- **Tap Region**: In **Easy Mode** (default), auto-selects the tapped region's color and fills it immediately; in **Normal Mode**, fills the region when it matches the active swatch; in **Free Colour Mode**, paints with any selected color.
+- **Drag Canvas**: Pans the artwork smoothly across the screen with inertial gliding momentum.
+- **Double-Tap and Drag Down / Up**: Google Maps-style one-finger focal zoom—drag down to zoom in, drag up to zoom out (reversible via Settings).
+- **Pinch / Mouse Wheel**: Multi-touch focal zoom in or out between `0.5x` and `12x`.
+- **Paint Brush Button**: Toggles continuous drag-to-paint stroke mode.
+- **Undo Button (`Ctrl+Z` / `Cmd+Z`)**: Undoes the last painted region (enabled automatically in Free Colour mode or via Settings toggle).
+- **Long-Press Undo Button (`>= 450ms`)**: Opens the interactive YouTube-style Replay timeline scrubber (`0.5x`–`20x`) to scrub history and resume play from any step.
+- **Redo Button (`Ctrl+Y` / `Ctrl+Shift+Z`)**: Steps forward to re-apply previously undone regions.
+- **Preview Eye Button**: Toggles unmasked preview of the original source artwork.
+- **Lightbulb / Active Swatch Second Tap**: Targets and animates the next unpainted region for the active color.
+- **`Escape` Key**: Cancels inline save renaming first, or closes the topmost open popover, modal, or replay bar (`Enter` saves an inline save rename).
 
 ---
 
@@ -77,14 +77,14 @@ To run Capy locally in development mode:
 
 ```bash
 cd web
-npm install
+npm ci
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open `http://localhost:3000` in your browser.
 
-Run the unified automated test suite (verifies binary codec, engine, gestures, settings, and E2E gameplay):
+Verify strict TypeScript types, production bundling, and the unified automated test suite (binary codec, engine, gestures, settings, and Playwright E2E gameplay):
 ```bash
-npm test
+npm run lint && npm run build && npm test
 ```
 
 ---
@@ -93,11 +93,13 @@ npm test
 
 All detailed architectural guides, computer vision algorithms, and native bridge specifications live in dedicated documentation files:
 
-- **Web Architecture and UI Reference**: [`WEB.md`](./WEB.md) -- Comprehensive guide to React 19, Vite, 3-tier offscreen canvas rendering, gesture engine, and settings dictionary.
-- **Android Native Launcher**: [`APP.md`](./APP.md) -- Kotlin launcher, AndroidX `WebViewAssetLoader`, Google Play Games Services v2 bridge, native haptics, and backup specifications.
-- **Cloud Sync, Google Play Games and Multiplayer Data Sharing**: [`CLOUD.md`](./CLOUD.md) -- Plain-English and technical guide to Play Games profile login, CRDT Cloud Sync, `< 2 KB` shareable URL links, and simultaneous Co-op rooms.
-- **Puzzle Generation Engine**: [`PUZZLE.md`](./PUZZLE.md) -- Web Worker segmentation, Sobel line extraction, Red-Mean K-Means clustering, and watershed absorption.
-- **Testing Architecture**: [`TESTING.md`](./TESTING.md) -- Playwright E2E testing guide, multi-touch gesture verification, and CI pipelines.
+- **Web Architecture and UI Reference**: [`WEB.md`](./WEB.md) -- React 19, Vite 6, 3-tier offscreen canvas rendering, 6-mode gesture engine, Worker IPC, storage keys, and `UserSettings` dictionary.
+- **Android Native Launcher**: [`APP.md`](./APP.md) -- Kotlin launcher, AndroidX `WebViewAssetLoader`, Google Play Games Services v2 `SnapshotsClient` sync, Pixel API 33+ haptics, and disk backups.
+- **Cloud Sync, Google Account / Play Games and Multiplayer Sharing**: [`CLOUD.md`](./CLOUD.md) -- Google Identity Services OAuth 2.0 (`drive.appdata`), Play Games v2 login, CRDT Cloud Sync, `< 2 KB` shareable URL links, and simultaneous Co-op rooms.
+- **Puzzle Generation Engine**: [`PUZZLE.md`](./PUZZLE.md) -- Web Worker 5-strategy segmentation, adaptive Otsu/Sobel line extraction, Red-Mean K-Means++ clustering, and watershed border alignment.
+- **Testing Architecture**: [`TESTING.md`](./TESTING.md) -- Unified Vite SSR + Playwright E2E verification suite, multi-touch gesture patterns, and CI pipelines.
 - **Versioning Scheme and Changelog**: [`CHANGELOG.md`](./CHANGELOG.md) -- Semantic Versioning (`MAJOR.MINOR.PATCH`), Android `versionCode` mapping, and chronological release history.
-- **Project Roadmap and Tasks**: [`TODO.md`](./TODO.md) -- Active milestones and post-merge cleanup tracking.
-- **Agent and Contributor Playbook**: [`AGENTS.md`](./AGENTS.md) -- Monorepo workflows, development rules, and PR standards.
+- **Project Roadmap and Active Bugfixes**: [`TODO.md`](./TODO.md) -- Audited bugfixes, prioritized `P0`–`P5` milestones, and effort estimates.
+- **Development and Maintenance Guide**: [`DEV.md`](./DEV.md) -- Human + AI co-development workflows, shared technical guardrails, model selection matrix, CI/CD pipelines, and maintenance playbooks.
+- **AI Agent Operational Playbook**: [`AGENTS.md`](./AGENTS.md) -- Compact (`< 7 KB`) guardrails, mobile-first formatting rules, and PR readiness contract for AI coding agents.
+- **Privacy Policy and Data Safety**: [`web/public/privacy-policy.html`](./web/public/privacy-policy.html) -- Local-first photo processing and optional Google Drive `appDataFolder` / Play Games Cloud Sync disclosures.
