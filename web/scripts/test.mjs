@@ -716,6 +716,68 @@ async function runBrowserBasicsSuite() {
       extractPct(await page.locator('header').innerText()),
       'Co-op peer header % must synchronize in real time'
     );
+
+    // BF-1: Verify Free Colour repaint of an already-filled region preserves chronological order and Undo syncs restored color to Co-op peer
+    await settingsBtn.click();
+    await page.waitForTimeout(150);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.waitForTimeout(100);
+    const freeColorLabel = await page.waitForSelector('text=Free Colour Mode');
+    await freeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+
+    // Pick a different swatch in the palette dock on Page A
+    const swatchButtons = page.locator('[aria-label="Palette dock"] button[aria-label^="Color "]');
+    const swatchCount = await swatchButtons.count();
+    if (swatchCount > 1) {
+      await swatchButtons.nth(swatchCount - 1).click();
+      await page.waitForTimeout(100);
+    }
+    const orderBeforeFreeRepaint = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return active.filledRegionIds || [];
+    });
+    // Tap the same canvas grid points so at least one already-filled region is repainted in Free Colour Mode
+    await tapCanvasGrid(page, 0.56, 4, 40);
+    await pageB.waitForTimeout(300);
+
+    const afterFreeRepaint = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return {
+        filledRegionIds: active.filledRegionIds || [],
+        paintedRegionColors: active.paintedRegionColors || {},
+      };
+    });
+    // Verify original prefix of filledRegionIds preserved its exact chronological sequence
+    assert.deepEqual(
+      afterFreeRepaint.filledRegionIds.slice(0, orderBeforeFreeRepaint.length),
+      orderBeforeFreeRepaint,
+      'BF-1: Repainting already-filled regions in Free Colour Mode must not shift their chronological position to the tail'
+    );
+
+    // Undo the last Free Colour repaint on Page A and verify Page B's paintedRegionColors stays synchronized
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(150);
+    await pageB.waitForTimeout(300);
+    const [paintedAfterUndoA, paintedAfterUndoB] = await Promise.all([
+      page.evaluate(() => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').paintedRegionColors || {}),
+      pageB.evaluate(() => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').paintedRegionColors || {}),
+    ]);
+    assert.deepEqual(
+      paintedAfterUndoB,
+      paintedAfterUndoA,
+      'BF-1: Undoing a Free Colour repaint on Page A must broadcast restored color to Co-op peer Page B'
+    );
+
+    // Turn Free Colour Mode back off before closing pageB
+    await settingsBtn.click();
+    await page.waitForTimeout(150);
+    const freeColorLabelOff = await page.waitForSelector('text=Free Colour Mode');
+    await freeColorLabelOff.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+
     await pageB.close();
 
     // Leave Co-op room and verify Saves view modes + .capy v2 binary export/import

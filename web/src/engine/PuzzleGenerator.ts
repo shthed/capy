@@ -329,16 +329,75 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
 
       const numColors = palette.length - 1; // keep last color (dark ink) for outlines if needed
       const colorUsage = new Int32Array(numColors + 1);
+      const lockedSourceColor = new Uint8Array(segmentation.regions.length + 1);
 
+      // Pass 1: Lock regions that had an explicit chromatic fill in the source image (> 25% non-white/chromatic interior pixels)
       for (let r = 1; r <= segmentation.regions.length; r++) {
         const reg = segmentation.regions[r - 1];
         if (!reg) continue;
 
-        // If region had an explicit color from source image (> 25% non-white pixels), keep it
+        let nonLineCount = 0;
+        let chromaticCount = 0;
+        let sumR = 0;
+        let sumG = 0;
+        let sumB = 0;
+
+        for (let i = 0; i < reg.pixels.length; i++) {
+          const pIdx = reg.pixels[i];
+          if (lineMask[pIdx] === 1) continue;
+          nonLineCount++;
+          const rgbaIdx = pIdx * 4;
+          const pr = rawRgba[rgbaIdx];
+          const pg = rawRgba[rgbaIdx + 1];
+          const pb = rawRgba[rgbaIdx + 2];
+          const maxC = Math.max(pr, pg, pb);
+          const minC = Math.min(pr, pg, pb);
+          if (maxC - minC > 35 && maxC > 50) {
+            chromaticCount++;
+            sumR += pr;
+            sumG += pg;
+            sumB += pb;
+          }
+        }
+
+        if (nonLineCount > 0 && chromaticCount / nonLineCount > 0.25) {
+          const avgR = sumR / chromaticCount;
+          const avgG = sumG / chromaticCount;
+          const avgB = sumB / chromaticCount;
+          let bestDist = Infinity;
+          let bestColId = 1;
+          for (let c = 0; c < numColors; c++) {
+            const d = ColorQuantizer.perceptualDistanceSq(
+              avgR,
+              avgG,
+              avgB,
+              palette[c].r,
+              palette[c].g,
+              palette[c].b
+            );
+            if (d < bestDist) {
+              bestDist = d;
+              bestColId = palette[c].id;
+            }
+          }
+          reg.colorId = bestColId;
+          lockedSourceColor[r] = 1;
+          colorUsage[bestColId]++;
+        } else {
+          reg.colorId = 0;
+        }
+      }
+
+      // Pass 2: Greedy graph coloring for remaining blank B&W regions
+      for (let r = 1; r <= segmentation.regions.length; r++) {
+        if (lockedSourceColor[r] === 1) continue;
+        const reg = segmentation.regions[r - 1];
+        if (!reg) continue;
+
         const used = new Set<number>();
         for (const n of adj[r]) {
           const nc = segmentation.regions[n - 1]?.colorId;
-          if (nc) used.add(nc);
+          if (nc && nc > 0) used.add(nc);
         }
 
         let bestC = 1;

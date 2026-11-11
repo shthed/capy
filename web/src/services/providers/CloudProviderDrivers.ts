@@ -28,6 +28,21 @@ export const CLOUD_MANIFEST_SLOT_KEY = 'capy_cloud_manifest_v2';
 export class GoogleCloudDriver implements CloudProviderDriver {
   readonly id = 'google' as const;
   private cachedManifestFileId: string | undefined;
+  private cachedSlotFileIds = new Map<string, string>();
+  private cachedBlobFileIds = new Map<string, string>();
+  private writeLocks = new Map<string, Promise<unknown>>();
+
+  private enqueueWrite<T>(lockKey: string, task: () => Promise<T>): Promise<T> {
+    const prev = this.writeLocks.get(lockKey) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(task);
+    const tracked = next.finally(() => {
+      if (this.writeLocks.get(lockKey) === tracked) {
+        this.writeLocks.delete(lockKey);
+      }
+    });
+    this.writeLocks.set(lockKey, tracked);
+    return next;
+  }
 
   getDescriptor(): CloudProviderDescriptor {
     const clientId = getConfiguredGoogleClientId();
@@ -99,6 +114,9 @@ export class GoogleCloudDriver implements CloudProviderDriver {
 
   async signOut(): Promise<void> {
     this.cachedManifestFileId = undefined;
+    this.cachedSlotFileIds.clear();
+    this.cachedBlobFileIds.clear();
+    this.writeLocks.clear();
     setExplicitlySignedOut(true);
     clearCachedGoogleSession();
   }
@@ -119,23 +137,25 @@ export class GoogleCloudDriver implements CloudProviderDriver {
   }
 
   async writeManifest(manifest: CloudLibraryManifestV2): Promise<boolean> {
-    const session = loadCachedGoogleSession();
-    if (!session?.accessToken) return false;
-    if (!this.cachedManifestFileId) {
-      const existing = await GoogleDriveAppDataClient.findFileByName(
+    return this.enqueueWrite(`manifest:${CLOUD_MANIFEST_FILE_NAME}`, async () => {
+      const session = loadCachedGoogleSession();
+      if (!session?.accessToken) return false;
+      if (!this.cachedManifestFileId) {
+        const existing = await GoogleDriveAppDataClient.findFileByName(
+          session.accessToken,
+          CLOUD_MANIFEST_FILE_NAME
+        );
+        this.cachedManifestFileId = existing?.id;
+      }
+      const uploaded = await GoogleDriveAppDataClient.uploadJsonFile(
         session.accessToken,
-        CLOUD_MANIFEST_FILE_NAME
+        CLOUD_MANIFEST_FILE_NAME,
+        { ...manifest, providerId: 'google' },
+        this.cachedManifestFileId
       );
-      this.cachedManifestFileId = existing?.id;
-    }
-    const uploaded = await GoogleDriveAppDataClient.uploadJsonFile(
-      session.accessToken,
-      CLOUD_MANIFEST_FILE_NAME,
-      { ...manifest, providerId: 'google' },
-      this.cachedManifestFileId
-    );
-    this.cachedManifestFileId = uploaded.id;
-    return true;
+      this.cachedManifestFileId = uploaded.id;
+      return true;
+    });
   }
 
   async readSlotEnvelope(slotKey: string): Promise<CloudSaveEnvelope | null> {
@@ -147,6 +167,7 @@ export class GoogleCloudDriver implements CloudProviderDriver {
       fileName
     );
     if (!fileMeta?.id) return null;
+    this.cachedSlotFileIds.set(fileName, fileMeta.id);
     return GoogleDriveAppDataClient.downloadJsonFile<CloudSaveEnvelope>(
       session.accessToken,
       fileMeta.id
@@ -154,20 +175,32 @@ export class GoogleCloudDriver implements CloudProviderDriver {
   }
 
   async writeSlotEnvelope(envelope: CloudSaveEnvelope): Promise<boolean> {
-    const session = loadCachedGoogleSession();
-    if (!session?.accessToken) return false;
     const fileName = `capy_slot_${envelope.slotKey.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
-    const existing = await GoogleDriveAppDataClient.findFileByName(
-      session.accessToken,
-      fileName
-    );
-    await GoogleDriveAppDataClient.uploadJsonFile(
-      session.accessToken,
-      fileName,
-      envelope,
-      existing?.id
-    );
-    return true;
+    return this.enqueueWrite(`slot:${fileName}`, async () => {
+      const session = loadCachedGoogleSession();
+      if (!session?.accessToken) return false;
+      let existingFileId = this.cachedSlotFileIds.get(fileName);
+      if (!existingFileId) {
+        const existing = await GoogleDriveAppDataClient.findFileByName(
+          session.accessToken,
+          fileName
+        );
+        existingFileId = existing?.id;
+        if (existingFileId) {
+          this.cachedSlotFileIds.set(fileName, existingFileId);
+        }
+      }
+      const uploaded = await GoogleDriveAppDataClient.uploadJsonFile(
+        session.accessToken,
+        fileName,
+        envelope,
+        existingFileId
+      );
+      if (uploaded?.id) {
+        this.cachedSlotFileIds.set(fileName, uploaded.id);
+      }
+      return true;
+    });
   }
 
   async readBinaryBlob(blobRef: string): Promise<Uint8Array | null> {
@@ -181,19 +214,31 @@ export class GoogleCloudDriver implements CloudProviderDriver {
     fileName: string,
     bytes: Uint8Array
   ): Promise<string | null> {
-    const session = loadCachedGoogleSession();
-    if (!session?.accessToken) return null;
-    const existing = await GoogleDriveAppDataClient.findFileByName(
-      session.accessToken,
-      fileName
-    );
-    const uploaded = await GoogleDriveAppDataClient.uploadBinaryFile(
-      session.accessToken,
-      fileName,
-      bytes,
-      existing?.id
-    );
-    return uploaded.id;
+    return this.enqueueWrite(`blob:${fileName}`, async () => {
+      const session = loadCachedGoogleSession();
+      if (!session?.accessToken) return null;
+      let existingFileId = this.cachedBlobFileIds.get(fileName);
+      if (!existingFileId) {
+        const existing = await GoogleDriveAppDataClient.findFileByName(
+          session.accessToken,
+          fileName
+        );
+        existingFileId = existing?.id;
+        if (existingFileId) {
+          this.cachedBlobFileIds.set(fileName, existingFileId);
+        }
+      }
+      const uploaded = await GoogleDriveAppDataClient.uploadBinaryFile(
+        session.accessToken,
+        fileName,
+        bytes,
+        existingFileId
+      );
+      if (uploaded?.id) {
+        this.cachedBlobFileIds.set(fileName, uploaded.id);
+      }
+      return uploaded.id;
+    });
   }
 }
 

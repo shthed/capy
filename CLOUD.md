@@ -49,6 +49,8 @@ Traditional cloud saves overwrite File A with File B if you play on two devices 
   - If you paint regions `[1, 2, 3]` on your phone and regions `[3, 4, 5]` on your laptop, syncing merges both sets into `[1, 2, 3, 4, 5]`. Neither device's painted regions are ever lost.
 - **Custom Free-Colour Overrides (`paintedRegionColors`) use Last-Writer-Wins (LWW)**:
   - If two devices paint the same region with different custom colors, the delta with the newer `updatedAt` timestamp wins deterministically.
+- **Per-File Write Serialization & File-ID Caching (`BF-3`, `GoogleCloudDriver`)**:
+  - `GoogleCloudDriver` in [`CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts) maintains in-memory file-ID caches (`cachedManifestFileId`, `cachedSlotFileIds`, `cachedBlobFileIds`) and a per-filename async promise-queue mutex (`writeLocks` / `enqueueWrite`) across `writeManifest`, `writeSlotEnvelope`, and `writeBinaryBlob`. Concurrent or rapid back-to-back sync writes for the same slot or `.capy` blob serialize deterministically and reuse the resolved Google Drive `fileId` (`PATCH /upload/drive/v3/files/<fileId>`) instead of racing two `findFileByName` lookups and creating duplicate files in `appDataFolder`.
 
 ---
 
