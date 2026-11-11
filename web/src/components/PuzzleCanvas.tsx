@@ -390,17 +390,23 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [resetViewTrigger, stopMomentum]);
 
-  // Ensure offset is strictly clamped whenever scale or container size changes
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
+    width: 0,
+    height: 0,
+  });
+
+  // Ensure offset is strictly clamped whenever scale, puzzle, or container size changes
   useEffect(() => {
     if (!containerRef.current || !puzzle) return;
     const w = containerRef.current.clientWidth;
     const h = containerRef.current.clientHeight;
+    if (w <= 0 || h <= 0) return;
     setOffset((prev) => {
       const clamped = clampCanvasOffset(prev, scaleRef.current, puzzle.width, puzzle.height, w, h);
       offsetRef.current = clamped;
-      return clamped;
+      return clamped.x === prev.x && clamped.y === prev.y ? prev : clamped;
     });
-  }, [scale, puzzle]);
+  }, [scale, puzzle, containerSize]);
 
   // Smooth predictive camera controller for Replay Follow Mode:
   // - Safe-frame dead-zone: never moves the viewport while upcoming regions remain comfortably inside the screen
@@ -1158,7 +1164,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }, 80);
 
     return () => clearTimeout(timer);
-  }, [scale, offset, puzzle, activeColorId, filledRegionIds, onVisibleColorsChanged, onVisibleRegionsChanged]);
+  }, [scale, offset, containerSize, puzzle, activeColorId, filledRegionIds, onVisibleColorsChanged, onVisibleRegionsChanged]);
 
   // Main GPU-Accelerated Composite Rendering Routine (invocable directly from rAF without React state updates)
   const drawCompositeFrame = useCallback(
@@ -1408,6 +1414,52 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       coopRippleBuffer,
     ]
   );
+
+  // Observe container dimension changes (window resize, mobile orientation change, fullscreen toggle)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleResize = () => {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w <= 0 || h <= 0) return;
+
+      setContainerSize((prev) =>
+        prev.width === w && prev.height === h ? prev : { width: w, height: h }
+      );
+
+      if (puzzle) {
+        const curOffset = offsetRef.current;
+        const clamped = clampCanvasOffset(
+          curOffset,
+          scaleRef.current,
+          puzzle.width,
+          puzzle.height,
+          w,
+          h
+        );
+        if (clamped.x !== curOffset.x || clamped.y !== curOffset.y) {
+          offsetRef.current = clamped;
+          setOffset(clamped);
+        }
+        onViewExtentChangedRef.current?.(scaleRef.current, clamped.x, clamped.y, w, h);
+      }
+      drawCompositeFrame(pulseAlphaRef.current);
+    };
+
+    const observer =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => handleResize())
+        : null;
+    observer?.observe(container);
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [puzzle, drawCompositeFrame]);
 
   // Redraw immediately whenever visual props or viewport state change
   useEffect(() => {

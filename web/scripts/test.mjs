@@ -834,7 +834,104 @@ async function runBrowserBasicsSuite() {
       true,
       `Expected post-completion Replay to preserve zoomScale (${preReplayCompletedView.zoom}), got ${duringCompletedReplayView.zoom}`
     );
-    console.log('   PASS: Custom photo STORE_IMAGES persistence, 100% offline PWA reload, and zoomed-in post-completion Replay viewport invariance verified.');
+
+    // Close replay overlay before testing BF-2 container resize and BF-6 IndexedDB eviction fallback
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+
+    // 7. BF-2: Container ResizeObserver immediately updates canvas backing store and clamps pan offsets
+    await page.setViewportSize({ width: 540, height: 420 });
+    await page.waitForTimeout(450);
+    const resizedCanvasCheck = await page.evaluate(() => {
+      const c = document.querySelector('canvas');
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return {
+        canvasWidth: c ? c.width : 0,
+        clientWidth: c ? c.clientWidth : 0,
+        panX: active.panOffsetX || 0,
+        panY: active.panOffsetY || 0,
+      };
+    });
+    assert.equal(
+      resizedCanvasCheck.clientWidth > 0 && resizedCanvasCheck.clientWidth <= 540,
+      true,
+      `Expected resized canvas clientWidth <= 540, got ${resizedCanvasCheck.clientWidth}`
+    );
+    assert.equal(
+      resizedCanvasCheck.canvasWidth,
+      Math.round(resizedCanvasCheck.clientWidth * (await page.evaluate(() => window.devicePixelRatio || 1))),
+      'ResizeObserver must immediately update canvas backing width without waiting for pointer events'
+    );
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await page.waitForTimeout(350);
+
+    // 8. BF-6: IndexedDB Cache Eviction Fallback preserves snapshot.customPalette and added swatches
+    await page.evaluate(async (snapId) => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const snap = snaps.find((s) => s.id === snapId);
+      if (snap) {
+        const basePal = Array.isArray(snap.customPalette) && snap.customPalette.length > 0
+          ? snap.customPalette
+          : [{ id: 1, hex: '#ef4444', isLight: false, argb: 0xffef4444, r: 239, g: 68, b: 68 }];
+        snap.customPalette = [
+          { ...basePal[0], id: 1, hex: '#ff00ff', isLight: false, argb: 0xffff00ff, r: 255, g: 0, b: 255 },
+          ...basePal.slice(1),
+          { id: 99, hex: '#00ffff', isLight: true, argb: 0xff00ffff, r: 0, g: 255, b: 255 },
+        ];
+        snap.isFreeColor = true;
+        localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
+      }
+      // Evict only the puzzle data entry in IndexedDB (keeping the image blob in capy_images_v8)
+      await new Promise((resolve) => {
+        const req = indexedDB.open('capy_puzzles_db');
+        req.onsuccess = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('puzzles')) {
+            db.close();
+            resolve();
+            return;
+          }
+          const tx = db.transaction('puzzles', 'readwrite');
+          tx.objectStore('puzzles').delete(snapId);
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => {
+            db.close();
+            resolve();
+          };
+        };
+        req.onerror = () => resolve();
+      });
+    }, uploadCheck.id);
+
+    await page.reload({ waitUntil: 'load' });
+    await waitForPuzzleLoaded(page);
+    await page.waitForTimeout(350);
+
+    const postEvictionPalette = await page.evaluate((snapId) => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const snap = snaps.find((s) => s.id === snapId);
+      const pal = snap?.customPalette || [];
+      return {
+        swatch1Hex: pal.find((c) => c.id === 1)?.hex?.toLowerCase(),
+        swatch99Hex: pal.find((c) => c.id === 99)?.hex?.toLowerCase(),
+        isFreeColor: Boolean(snap?.isFreeColor),
+      };
+    }, uploadCheck.id);
+    assert.equal(
+      postEvictionPalette.swatch1Hex,
+      '#ff00ff',
+      `BF-6: Expected edited swatch #1 hex '#ff00ff' to survive IndexedDB cache eviction regeneration, got '${postEvictionPalette.swatch1Hex}'`
+    );
+    assert.equal(
+      postEvictionPalette.swatch99Hex,
+      '#00ffff',
+      `BF-6: Expected added custom swatch #99 hex '#00ffff' to survive IndexedDB cache eviction regeneration, got '${postEvictionPalette.swatch99Hex}'`
+    );
+    assert.equal(postEvictionPalette.isFreeColor, true, 'BF-6: Expected isFreeColor to be preserved after cache eviction');
+    console.log('   PASS: Custom photo STORE_IMAGES persistence, 100% offline PWA reload, post-completion Replay viewport invariance, BF-2 ResizeObserver clamping, and BF-6 customPalette eviction recovery verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');

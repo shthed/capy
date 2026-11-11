@@ -198,6 +198,7 @@ Labels are drawn at each region's **Pole of Inaccessibility** (deepest interior 
 - **Animated Fit-to-Screen Reset**: When `resetViewTrigger` increments explicitly via the user's Fit-to-Screen button (`data-testid="reset-view-btn"`), `PuzzleCanvas` smoothly interpolates `scale` to `1` and `offset` to `{x: 0, y: 0}` over 280ms using a cubic ease-out curve.
 - **Dynamic Corner Panning Margins**: When zoomed in (`effScale >= fitScale`), margin caps scale dynamically with viewport size (`containerWidth * 0.72` horizontally and `containerHeight * 0.72` vertically) rather than fixed pixel offsets. This ensures players can pan all four corners of the puzzle comfortably past the center of the viewport, well clear of the bottom `PaletteDock` (~120px) and top `GameTopBar` (~60px).
 - **Centering Elasticity**: When the artwork is smaller than the container, it smoothly snaps to center.
+- **Container Resize & Orientation Change Clamping (`ResizeObserver`)**: `PuzzleCanvas` observes `containerRef` via `ResizeObserver` (with a `window` `resize` listener fallback). Whenever the container dimensions change (e.g., mobile portrait/landscape rotation, split-screen resize, or browser DevTools toggling), `PuzzleCanvas` immediately clamps `offsetRef.current` via `clampCanvasOffset`, updates `containerSize` state to recompute visible on-screen regions/colors, notifies `onViewExtentChanged`, and synchronously resizes and repaints the high-DPI `<canvas>` via `drawCompositeFrame`.
 
 ### Gesture Engine & Interaction Paradigms
 `PuzzleCanvas` orchestrates 5 distinct touch, mouse, and gesture interactions:
@@ -305,10 +306,11 @@ When running inside the Android wrapper (`app/`), `NativeBridge` connects the we
 
 Capy uses a compact hybrid storage model engineered for instant gallery rendering, minimal browser quota usage, and tiny cloud sync payloads:
 
-1. **IndexedDB (`capy_game_storage_v8`) with Transaction Completion Guarantees**:
+1. **IndexedDB (`capy_game_storage_v8`) with Transaction Completion Guarantees & Cache Eviction Recovery**:
    - All IndexedDB mutations await `tx.oncomplete` / `tx.onerror` / `tx.onabort` (`runTransaction`) rather than optimistic `IDBRequest.onsuccess`.
    - `STORE_PUZZLES`: Stores `CompactPuzzleRecordV2` (`CapyCodec.compressPuzzleRecord`) — scanline Run-Length Encoding (RLE) + unsigned LEB128 varints for `regionMap` (`~20-45 KB` instead of `~9.4 MB` raw `Int32Array` maps, an `~140x` reduction). On load, `CapyCodec.decompressPuzzleRecord` reconstructs `regionMap`, `borderMap`, bounding boxes, `area`, and scanline-ordered `Region.pixels` in `< 3ms` in two linear passes. Legacy v1 `PuzzleData` records in IndexedDB are transparently migrated on load.
    - `STORE_IMAGES`: Stores full-resolution source image `Blob` records for custom uploaded or shared photos (referenced via `SavedSnapshot.sourceRef = { kind: 'blob', uri: snapId }`), while built-in samples use zero-copy `{ kind: 'sample', uri: assetPath }`.
+   - **Cache Eviction Recovery (`mergeCustomPalette`)**: If the browser evicts IndexedDB `STORE_PUZZLES` while `localStorage` (`capy_snapshots_v8`) remains intact, both `handleLoadSnapshot` and cold-start `restoreSession` in [`App.tsx`](./web/src/App.tsx) fall back to regenerating the puzzle via `loadArtworkFromImage` and merge `snapshot.customPalette` (both edited swatches and user-added custom swatches) and `snapshot.isFreeColor` onto the regenerated palette.
 2. **LocalStorage (`capy_snapshots_v8`) + Native Disk**:
    - Stores lightweight snapshot metadata (`SavedSnapshot`): ordered `filledRegionIds` array (preserving chronological completion sequence), active color, persisted `zoomScale` / `panOffsetX` / `panOffsetY`, compact storage footprint (`fileSizeBytes`), `sourceRef`, and an aspect-ratio preserved JPEG preview data URL (max 320px).
 3. **Settings Persistence (`capy_user_settings_v8`) & Tab Memory**:

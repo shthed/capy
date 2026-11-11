@@ -2,7 +2,9 @@ package com.capypaint.capy
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.os.Build
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -367,25 +369,84 @@ class CapyAndroidBridge(
             return """{"top":$top,"bottom":$bottom,"left":$left,"right":$right}"""
         }
 
+        data class HapticSpec(
+            val normalizedType: String,
+            val viewConstant: Int?,
+            val predefinedEffectId: Int?,
+            val oneShotDurationMs: Long?,
+            val waveformTimings: LongArray?,
+        )
+
+        fun resolveHapticSpec(type: String): HapticSpec {
+            return when (type.trim().lowercase()) {
+                "tick" -> HapticSpec(
+                    normalizedType = "tick",
+                    viewConstant = HapticFeedbackConstants.CLOCK_TICK,
+                    predefinedEffectId = VibrationEffect.EFFECT_TICK,
+                    oneShotDurationMs = 10L,
+                    waveformTimings = null,
+                )
+                "success" -> HapticSpec(
+                    normalizedType = "success",
+                    viewConstant = null,
+                    predefinedEffectId = null,
+                    oneShotDurationMs = null,
+                    waveformTimings = longArrayOf(0L, 14L, 45L, 24L),
+                )
+                "warning" -> HapticSpec(
+                    normalizedType = "warning",
+                    viewConstant = HapticFeedbackConstants.LONG_PRESS,
+                    predefinedEffectId = VibrationEffect.EFFECT_HEAVY_CLICK,
+                    oneShotDurationMs = 18L,
+                    waveformTimings = null,
+                )
+                "error" -> HapticSpec(
+                    normalizedType = "error",
+                    viewConstant = null,
+                    predefinedEffectId = null,
+                    oneShotDurationMs = null,
+                    waveformTimings = longArrayOf(0L, 28L, 50L, 28L),
+                )
+                else -> HapticSpec(
+                    normalizedType = "click",
+                    viewConstant = HapticFeedbackConstants.KEYBOARD_TAP,
+                    predefinedEffectId = VibrationEffect.EFFECT_CLICK,
+                    oneShotDurationMs = 12L,
+                    waveformTimings = null,
+                )
+            }
+        }
+
         private fun performHaptic(context: Context, view: View, type: String) {
             try {
-                Log.d(TAG, "Triggered haptic: $type")
-                when (type) {
-                    "tick" -> {
-                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                val spec = resolveHapticSpec(type)
+                Log.d(TAG, "Triggered haptic: ${spec.normalizedType} (raw=$type)")
+                if (spec.waveformTimings != null) {
+                    vibratePattern(context, spec.waveformTimings)
+                    return
+                }
+
+                // On API 29+ (Android 10+, including Pixel API 33+), prefer hardware-calibrated
+                // predefined VibrationEffects with USAGE_TOUCH attributes so touch haptics are never
+                // silently suppressed by view settings or notification vibration sliders.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && spec.predefinedEffectId != null) {
+                    if (vibratePredefined(context, spec.predefinedEffectId)) {
+                        return
                     }
-                    "success" -> {
-                        vibratePattern(context, longArrayOf(0, 14, 45, 24))
+                }
+
+                if (spec.viewConstant != null && spec.normalizedType != "warning") {
+                    val performed = view.performHapticFeedback(
+                        spec.viewConstant,
+                        HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING,
+                    )
+                    if (performed) {
+                        return
                     }
-                    "warning" -> {
-                        vibrateOneShot(context, 18L)
-                    }
-                    "error" -> {
-                        vibratePattern(context, longArrayOf(0, 28, 50, 28))
-                    }
-                    else -> {
-                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    }
+                }
+
+                if (spec.oneShotDurationMs != null) {
+                    vibrateOneShot(context, spec.oneShotDurationMs)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Haptic vibration not supported or failed: $type", e)
@@ -402,13 +463,35 @@ class CapyAndroidBridge(
             }
         }
 
+        private fun vibrateEffectWithTouchAttributes(vibrator: Vibrator, effect: VibrationEffect) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val attrs = VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH)
+                vibrator.vibrate(effect, attrs)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val audioAttrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(effect, audioAttrs)
+            }
+        }
+
+        private fun vibratePredefined(context: Context, effectId: Int): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+            val vibrator = getVibrator(context) ?: return false
+            if (!vibrator.hasVibrator()) return false
+            val effect = VibrationEffect.createPredefined(effectId)
+            vibrateEffectWithTouchAttributes(vibrator, effect)
+            return true
+        }
+
         private fun vibrateOneShot(context: Context, durationMs: Long) {
             val vibrator = getVibrator(context) ?: return
             if (!vibrator.hasVibrator()) return
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(
-                    VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE),
-                )
+                val effect = VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE)
+                vibrateEffectWithTouchAttributes(vibrator, effect)
             } else {
                 @Suppress("DEPRECATION")
                 vibrator.vibrate(durationMs)
@@ -419,7 +502,8 @@ class CapyAndroidBridge(
             val vibrator = getVibrator(context) ?: return
             if (!vibrator.hasVibrator()) return
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createWaveform(timings, -1))
+                val effect = VibrationEffect.createWaveform(timings, -1)
+                vibrateEffectWithTouchAttributes(vibrator, effect)
             } else {
                 @Suppress("DEPRECATION")
                 vibrator.vibrate(timings, -1)
