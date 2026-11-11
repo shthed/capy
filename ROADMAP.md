@@ -6,7 +6,7 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 **Table of Contents**:
 1. [`EPIC-2`: Mobile Touch Precision & Tactile Sensory Polish (`Active in Sprint 1`)](#1-epic-2-mobile-touch-precision--tactile-sensory-polish-active-in-sprint-1)
-2. [`EPIC-3`: Daily Retention, Inclusive Accessibility & Shareable Replays (`Ready for Sprint 2`)](#2-epic-3-daily-retention-inclusive-accessibility--shareable-replays-ready-for-sprint-2)
+2. [`EPIC-3`: Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays (`Ready for Sprint 2`)](#2-epic-3-fat-finger-touch-assist-daily-retention-accessibility--replays-ready-for-sprint-2)
 3. [`EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish (`Ready for Sprint 3`)](#3-epic-4-serverless-infinite-zoom-printable-art--local-co-op-polish-ready-for-sprint-3)
 4. [`EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation (`Blocked on External Infra`)](#4-epic-5-production-cloud-auth-cross-network-co-op--optional-ai-creation-blocked-on-external-infra)
 5. [Unscheduled Platform Icebox (`ICE-1`--`ICE-3`)](#5-unscheduled-platform-icebox-ice-1--ice-3)
@@ -25,12 +25,12 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 - **Completion Lifecycle**:
   - When an individual `TASK-*` ships, delete it immediately from [`TODO.md`](./TODO.md).
   - When a Story or Epic's final task merges to `main`, move that Story or Epic into the single collapsed **Shipped Epics & Stories** `<details>` summary in [Section 6](#6-shipped-epics--stories-epic-1--completed-stories) with clickable `#<PR>` links.
-- **Remaining Roadmap Rollup (`14` Active/Queued Stories across `4` Epics)**:
+- **Remaining Roadmap Rollup (`15` Active/Queued Stories across `4` Epics)**:
   - `EPIC-2` (*3 Remaining Stories -- Active in Sprint 1*): `~104k tokens` | `~48--69 min agent` (`~12.5--17.5 hrs human`).
-  - `EPIC-3` (*4 Stories -- Ready for Sprint 2*): `~175k tokens` | `~80--115 min agent` (`~22--32 hrs human`).
+  - `EPIC-3` (*5 Stories -- Ready for Sprint 2*): `~213k tokens` | `~98--140 min agent` (`~27--39 hrs human`).
   - `EPIC-4` (*3 Stories -- Ready for Sprint 3*): `~102k tokens` | `~46--65 min agent` (`~13--19 hrs human`).
   - `EPIC-5` (*5 Stories -- Blocked on External Infra*): `~245k tokens` | `~113--165 min agent` (`~34--50 hrs human`).
-  - **Total Strategic Horizon**: `~626k tokens` | `~4.8--6.9 hrs agent` (`~81.5--118.5 hrs human`).
+  - **Total Strategic Horizon**: `~664k tokens` | `~5.1--7.3 hrs agent` (`~86.5--125.5 hrs human`).
 
 </details>
 
@@ -63,9 +63,9 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ---
 
-## 2. `EPIC-3`: Daily Retention, Inclusive Accessibility & Shareable Replays (`Ready for Sprint 2`)
+## 2. `EPIC-3`: Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays (`Ready for Sprint 2`)
 
-**Epic Goal**: Give players a reason to return daily, make every puzzle accessible regardless of color vision or motor preference, and turn replays into shareable videos—100% client-side with zero backend.
+**Epic Goal**: Forgive near-miss mobile taps on tiny micro-regions without requiring pixel-perfect precision, give players a reason to return daily, make every puzzle accessible regardless of color vision or motor preference, and turn replays into shareable videos—100% client-side with zero backend.
 
 ### US-3.1: Daily Featured Puzzle & Streak Medals
 
@@ -154,6 +154,29 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 - **Target Files**: `web/src/services/PlayerStatsService.ts`, [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - Stat counters merge monotonically (`Math.max` / set-count union) across devices so syncing an older offline tab never decrements lifetime totals.
+
+</details>
+
+### US-3.5: Fat-Finger Mode (Near-Miss Tap Assist) & Finger Reach Radius
+
+- **Readiness**: `Ready for Sprint 2` (Zero external blockers)
+- **Description**: Add an independent **Fat-Finger Tap Assist** toggle (`fatFingerAssist`, enabled by default in `EASY` difficulty and optional in `NORMAL` / Precise difficulty) paired with a configurable **Finger Size / Touch Reach Radius** setting (`touchReachRadiusPx`, `8px`--`40px` screen CSS pixels with `Compact 12px` / `Standard 22px` / `Large 34px` presets) that snaps near-miss mobile taps onto intended tiny micro-regions without requiring pixel-perfect landing.
+- **Value**: Eliminates frustrating dead taps when a fingertip lands `2`--`8px` off a `< 50px` micro-region onto a `borderMap` pixel (`rId <= 0`), an already-filled neighbor, or an adjacent wrong-color region—complementing Sprint 1's press-and-hold Loupe (`US-2.1`) for quick one-handed single-tap play.
+- **Why Now**: Currently `PuzzleCanvas.tsx` (`#L2013`--`#L2024`) checks only the exact `1x1` pixel `regionMap[ly * width + lx]`; adding screen-space radial tolerance makes Easy and mobile play dramatically more forgiving with zero backend or asset cost.
+- **Planned Sprint Slices**:
+  - **TASK-3.5a**: Implement zero-allocation radial near-tap hit-testing (`resolveNearTapRegionId` in `PuzzleCanvas.tsx`) scaling `touchReachRadiusPx / totalScreenScale` dynamically across zoom levels, prioritizing the nearest unfilled `activeColorId` region first and falling back in `EASY` mode to the nearest unfilled region of any color when exact `(lx, ly)` hits a filled neighbor or border.
+  - **TASK-3.5b** `[quick-win]`: Add `fatFingerAssist: boolean` and `touchReachRadiusPx: number` (`Compact 12px` / `Standard 22px` / `Large 34px` presets + `8px`--`40px` slider) under `Difficulty (Tap Forgiveness)` in `SettingsModal.tsx` (`#L565`--`#L589`) with Playwright E2E near-miss micro-region tap tests.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: canvas, gestures, ui`
+- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon` (`3.5a`), `Gemini 3.8 Flash` (`3.5b`)
+- **Effort Estimate**: `~38,000 tokens` (`~22k` + `~16k`) | `~18--25 min agent` (`~5--7 hrs human`)
+- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts), [`web/src/types/index.ts`](./web/src/types/index.ts), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Direct hits on playable unfilled regions remain `O(1)`; radial fallback scans integer offsets inside `Math.min(64, touchReachRadiusPx / totalScreenScale)` using scalar distance registers with zero heap allocations.
+  - In `NORMAL` difficulty with `fatFingerAssist: true`, near-miss taps snap strictly to unfilled `activeColorId` regions; in `EASY` difficulty, near-miss taps on filled/border pixels prefer `activeColorId` first and otherwise snap to the closest unfilled micro-region of any color.
 
 </details>
 
