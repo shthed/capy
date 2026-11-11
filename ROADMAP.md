@@ -1,0 +1,397 @@
+# Capy Product Roadmap -- Strategic Epics, Stories & Milestones (`ROADMAP.md`)
+
+Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./web/) and [`app/`](./app/)). High-level Epics (`EPIC-*`), User Stories (`US-*`), external dependency gates, unscheduled platform shells (`ICE-*`), and shipped milestones live here; only unblocked, codebase-verified tasks pulled into the **current sprint** enter [`TODO.md`](./TODO.md) (full governance in [`DEV.md`](./DEV.md#capy-lean-agile-backlog--todomd-entry-standard)).
+
+**Related Guides**: [`README.md`](./README.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
+
+**Table of Contents**:
+1. [`EPIC-2`: Mobile Touch Precision & Tactile Sensory Polish (`Active in Sprint 1`)](#1-epic-2-mobile-touch-precision--tactile-sensory-polish-active-in-sprint-1)
+2. [`EPIC-3`: Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays (`Ready for Sprint 2`)](#2-epic-3-fat-finger-touch-assist-daily-retention-accessibility--replays-ready-for-sprint-2)
+3. [`EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish (`Ready for Sprint 3`)](#3-epic-4-serverless-infinite-zoom-printable-art--local-co-op-polish-ready-for-sprint-3)
+4. [`EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation (`Blocked on External Infra`)](#4-epic-5-production-cloud-auth-cross-network-co-op--optional-ai-creation-blocked-on-external-infra)
+5. [Unscheduled Platform Icebox (`ICE-1`--`ICE-3`)](#5-unscheduled-platform-icebox-ice-1--ice-3)
+6. [Shipped Epics & Stories (`EPIC-1` & Completed Stories)](#6-shipped-epics--stories-epic-1--completed-stories)
+
+<details>
+<summary>Roadmap Governance, Readiness States & Sprint Promotion Rules</summary>
+
+- **Two-Stage Pull Architecture (`ROADMAP.md` -> `TODO.md`)**:
+  - **`ROADMAP.md` (Strategic Horizon)**: Owns all product Epics, User Stories, readiness gates, external dependency prerequisites, Platform Icebox (`ICE-*`), and collapsed shipped milestones.
+  - **`TODO.md` (Active Sprint Execution Queue)**: Holds **only** the current sprint's unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices (`~8--10` tasks at a time). Future stories stay in `ROADMAP.md` until promoted at sprint replenishment.
+- **Story Readiness States**:
+  - **`Active in Sprint N` ([`TODO.md`](./TODO.md))**: Currently pulled into `TODO.md` with exact file/line targets and deterministic test gates.
+  - **`Ready for Next Sprint`**: Zero external backend/credential blockers; eligible for immediate promotion into `TODO.md` once the current sprint drains.
+  - **`Blocked -- External Credentials / Infra`**: Client hexagonal interfaces are ready, but live execution awaits external OAuth client IDs, Play Console setup, serverless relays, or paid AI API keys. Never pull blocked stories into `TODO.md` until their **Unblock Prerequisite** is satisfied.
+- **Completion Lifecycle**:
+  - When an individual `TASK-*` ships, delete it immediately from [`TODO.md`](./TODO.md).
+  - When a Story or Epic's final task merges to `main`, move that Story or Epic into the single collapsed **Shipped Epics & Stories** `<details>` summary in [Section 6](#6-shipped-epics--stories-epic-1--completed-stories) with clickable `#<PR>` links.
+- **Remaining Roadmap Rollup (`15` Active/Queued Stories across `4` Epics)**:
+  - `EPIC-2` (*3 Remaining Stories -- Active in Sprint 1*): `~104k tokens` | `~48--69 min agent` (`~12.5--17.5 hrs human`).
+  - `EPIC-3` (*5 Stories -- Ready for Sprint 2*): `~152k tokens` | `~71--102 min agent` (`~19.5--28.5 hrs human`).
+  - `EPIC-4` (*3 Stories -- Ready for Sprint 3*): `~102k tokens` | `~46--65 min agent` (`~13--19 hrs human`).
+  - `EPIC-5` (*5 Stories -- Blocked on External Infra*): `~245k tokens` | `~113--165 min agent` (`~34--50 hrs human`).
+  - **Total Strategic Horizon**: `~603k tokens` | `~4.6--6.7 hrs agent` (`~79--115 hrs human`).
+
+</details>
+
+---
+
+## 1. `EPIC-2`: Mobile Touch Precision & Tactile Sensory Polish (`Active in Sprint 1`)
+
+**Epic Goal**: Make core region tapping, micro-detail targeting, zooming, and stroke feedback feel effortless and deeply satisfying on phones and tablets. *(Active Sprint 1 task specs live in [`TODO.md`](./TODO.md); `US-2.2` shipped in [#472](https://github.com/shthed/capy/pull/472)).*
+
+### US-2.1: Floating Precision Loupe Magnifier for Micro-Regions
+
+- **Readiness**: `Active in Sprint 1` ([`TODO.md`](./TODO.md)) -- `TASK-2.1a`, `TASK-2.1b`
+- **Description**: Render an optional floating circular magnifier lens (`showMagnifierLoupe`) offset `72px` above the active finger during press-and-hold or Paint Mode drags on [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
+- **Value**: Eliminates mobile "fat-finger" occlusion so players can target tiny `< 50px` micro-regions accurately without constantly zooming to `12x` and back out.
+- **Why Now**: Intricate stained-glass and detailed photo puzzles generate small regions hidden beneath a fingertip; solving thumb occlusion is the highest-impact mobile usability upgrade remaining.
+
+### US-2.3: Zero-Asset Procedural ASMR Web Audio Engine (Melodic Layer)
+
+- **Readiness**: `Active in Sprint 1` ([`TODO.md`](./TODO.md)) -- `TASK-2.3b` *(base woodblock tap synth `TASK-2.3a` shipped in [#472](https://github.com/shthed/capy/pull/472))*
+- **Description**: Extend [`SoundService.ts`](./web/src/services/SoundService.ts) with rising pentatonic Paint Mode streak notes, warm swatch-completion chord arpeggios, and 100% puzzle-completion chimes.
+- **Value**: Completes Capy's tactile audio-haptic feedback loop while adding `0 KB` of MP3/WAV bundle weight and running 100% offline.
+- **Why Now**: Base `AudioContext` synthesis and volume controls are live; adding melodic progression rewards continuous painting and swatch completion immediately.
+
+### US-2.4: Zero-Allocation Region Fill Bloom & Swatch Shimmer
+
+- **Readiness**: `Active in Sprint 1` ([`TODO.md`](./TODO.md)) -- `TASK-2.4a`, `TASK-2.4b`
+- **Description**: Animate region fills with a `180ms` radial ink-bloom and highlight newly completed palette swatches with a `400ms` shimmer wave across matching regions in [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
+- **Value**: Makes every region tap feel alive and gives clear visual celebration when finishing all regions of a color number without interrupting flow.
+- **Why Now**: Completes the core sensory triad (visual bloom + procedural ASMR audio + Android LRA haptics) using a zero-allocation typed-array ring buffer.
+
+---
+
+## 2. `EPIC-3`: Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays (`Ready for Sprint 2`)
+
+**Epic Goal**: Forgive near-miss mobile taps on tiny micro-regions without requiring pixel-perfect precision, give players a reason to return daily, make every puzzle accessible regardless of color vision or motor preference, and turn replays into shareable videos—100% client-side with zero backend.
+
+### US-3.1: Daily Featured Puzzle Streak & Completion Medals
+
+- **Readiness**: `Ready for Sprint 2` (Zero external blockers; base UTC `DailyPuzzleService.ts` & **Create** hero card `TASK-3.1a` shipped in [#474](https://github.com/shthed/capy/pull/474))
+- **Description**: Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint completion medals on top of `DailyPuzzleService.ts`.
+- **Value**: Turns one-off daily puzzle launches into a rewarding consecutive-day coloring habit completely offline.
+- **Why Now**: `DailyPuzzleService.ts` (`#474`) already rotates featured artworks deterministically by UTC date; adding streak persistence completes the retention loop.
+- **Planned Sprint Slices**:
+  - **TASK-3.1b**: Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint medal badges.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: ui`
+- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~20,000 tokens` | `~9--13 min agent` (`~2.5--3.5 hrs human`)
+- **Target Files**: [`web/src/services/DailyPuzzleService.ts`](./web/src/services/DailyPuzzleService.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Consecutive UTC-day completions increment streak accurately while preserving Relaxed vs. Zero-Hint medal badges offline, covered by Playwright E2E assertions.
+
+</details>
+
+### US-3.2: Inclusive Accessibility -- Colorblind Geometric Region Patterns
+
+- **Readiness**: `Ready for Sprint 2` (Zero external blockers; `reducedMotion` `TASK-3.2a` & desktop keyboard shortcuts `TASK-3.2b` shipped in [#474](https://github.com/shthed/capy/pull/474))
+- **Description**: Add geometric `CanvasPattern` hatch overlays (`colorblindPatternMode`) for active and hinted regions alongside existing `reducedMotion` and desktop keyboard gameplay shortcuts.
+- **Value**: Ensures players with deuteranopia, protanopia, or tritanopia can distinguish similar palette shades comfortably without relying solely on hue contrast.
+- **Why Now**: `reducedMotion` and desktop keyboard shortcuts (`1`--`9`, `+`/`-`, `0`, Arrow/WASD) are live (`#474`); adding cached `CanvasPattern` textures finishes full visual accessibility.
+- **Planned Sprint Slices**:
+  - **TASK-3.2c**: Add `colorblindPatternMode: boolean` rendering cached `CanvasPattern` geometric textures (dots, stripes, crosshatch, checkerboard) over active and hinted regions.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: a11y, canvas, ui`
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~17,000 tokens` | `~8--12 min agent` (`~2--3 hrs human`)
+- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - `CanvasPattern` tiles are generated once at setup/theme change—zero per-frame pattern creation inside `requestAnimationFrame`.
+
+</details>
+
+### US-3.3: Shareable Timelapse Replay Video (`.mp4` / `.webm`) Export
+
+- **Readiness**: `Ready for Sprint 2` (Zero external blockers)
+- **Description**: Add an "Export Timelapse Video" button in `ReplayControls.tsx` recording the puzzle's chronological fill animation via `HTMLCanvasElement.captureStream(60)` + `MediaRecorder` and sharing via `NativeBridge.exportOrShareFile`.
+- **Value**: Turns Capy's YouTube-style replay scrubber into a one-tap shareable timelapse video for friends and social feeds, driving organic word-of-mouth discovery.
+- **Why Now**: Chronological `replaySequence` playback and `NativeBridge.exportOrShareFile` binary sharing already exist; adding `MediaRecorder` export unlocks sharing with zero server encoding cost.
+- **Planned Sprint Slices**:
+  - **TASK-3.3a**: Build `web/src/services/ReplayVideoExporter.ts` (`MediaRecorder` `video/mp4` / `video/webm` fallback + progress bar + clean cancellation) rendering locked-frame timelapse playback.
+  - **TASK-3.3b**: Wire an Export Video button in `ReplayControls.tsx` and completion banner to `NativeBridge.exportOrShareFile` with feature-detection fallback.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: export, canvas`
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~45,000 tokens` | `~22--30 min agent` (`~6--9 hrs human`)
+- **Target Files**: `web/src/services/ReplayVideoExporter.ts`, [`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Prefers `video/mp4;codecs=avc1` where supported with automatic `video/webm;codecs=vp9` fallback, releasing all `MediaStreamTrack` handles on finish or cancel.
+
+</details>
+
+### US-3.4: Milestone Achievement Toasts & CRDT Lifetime Stats Sync
+
+- **Readiness**: `Ready for Sprint 2` (Zero external blockers; local `PlayerStatsService.ts` & Settings **Lifetime Stats** card `TASK-3.4a` shipped in [#474](https://github.com/shthed/capy/pull/474))
+- **Description**: Layer non-blocking milestone achievement unlock toasts, monotonic CRDT cloud stat sync, and optional Play Games hooks onto `PlayerStatsService.ts` (`capy_player_stats_v1`).
+- **Value**: Rewards long-term mastery across Easy, Hard, Free Colour, and Co-op modes and keeps lifetime totals synced monotonically across devices.
+- **Why Now**: Local `PlayerStatsService.ts` (`mergeLifetimeStats`) and the Settings **Lifetime Stats** card are live (`#474`); wiring milestone unlock toasts and cloud/Play Games bridges completes cross-device progression.
+- **Planned Sprint Slices**:
+  - **TASK-3.4b**: Add milestone achievement unlock toasts, monotonic CRDT stat merging in `ProviderRegistry.ts` / `CloudProviderDrivers.ts`, and defensive no-op `NativeBridge.unlockAchievement` hooks.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: ui, cloud, android`
+- **Complexity & Model**: `high` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~32,000 tokens` | `~14--20 min agent` (`~4--6 hrs human`)
+- **Target Files**: [`web/src/services/PlayerStatsService.ts`](./web/src/services/PlayerStatsService.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Stat counters merge monotonically (`Math.max` / set-count union) across devices so syncing an older offline tab never decrements lifetime totals.
+
+</details>
+
+### US-3.5: Fat-Finger Mode (Near-Miss Tap Assist) & Finger Reach Radius
+
+- **Readiness**: `Ready for Sprint 2` (Zero external blockers)
+- **Description**: Add an independent **Fat-Finger Tap Assist** toggle (`fatFingerAssist`, enabled by default in `EASY` difficulty and optional in `NORMAL` / Precise difficulty) paired with a configurable **Finger Size / Touch Reach Radius** setting (`touchReachRadiusPx`, `8px`--`40px` screen CSS pixels with `Compact 12px` / `Standard 22px` / `Large 34px` presets) that snaps near-miss mobile taps onto intended tiny micro-regions without requiring pixel-perfect landing.
+- **Value**: Eliminates frustrating dead taps when a fingertip lands `2`--`8px` off a `< 50px` micro-region onto a `borderMap` pixel (`rId <= 0`), an already-filled neighbor, or an adjacent wrong-color region—complementing Sprint 1's press-and-hold Loupe (`US-2.1`) for quick one-handed single-tap play.
+- **Why Now**: Currently `PuzzleCanvas.tsx` (`#L2013`--`#L2024`) checks only the exact `1x1` pixel `regionMap[ly * width + lx]`; adding screen-space radial tolerance makes Easy and mobile play dramatically more forgiving with zero backend or asset cost.
+- **Planned Sprint Slices**:
+  - **TASK-3.5a**: Implement zero-allocation radial near-tap hit-testing (`resolveNearTapRegionId` in `PuzzleCanvas.tsx`) scaling `touchReachRadiusPx / totalScreenScale` dynamically across zoom levels, prioritizing the nearest unfilled `activeColorId` region first and falling back in `EASY` mode to the nearest unfilled region of any color when exact `(lx, ly)` hits a filled neighbor or border.
+  - **TASK-3.5b** `[quick-win]`: Add `fatFingerAssist: boolean` and `touchReachRadiusPx: number` (`Compact 12px` / `Standard 22px` / `Large 34px` presets + `8px`--`40px` slider) under `Difficulty (Tap Forgiveness)` in `SettingsModal.tsx` (`#L565`--`#L589`) with Playwright E2E near-miss micro-region tap tests.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: canvas, gestures, ui`
+- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon` (`3.5a`), `Gemini 3.8 Flash` (`3.5b`)
+- **Effort Estimate**: `~38,000 tokens` (`~22k` + `~16k`) | `~18--25 min agent` (`~5--7 hrs human`)
+- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts), [`web/src/types/index.ts`](./web/src/types/index.ts), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Direct hits on playable unfilled regions remain `O(1)`; radial fallback scans integer offsets inside `Math.min(64, touchReachRadiusPx / totalScreenScale)` using scalar distance registers with zero heap allocations.
+  - In `NORMAL` difficulty with `fatFingerAssist: true`, near-miss taps snap strictly to unfilled `activeColorId` regions; in `EASY` difficulty, near-miss taps on filled/border pixels prefer `activeColorId` first and otherwise snap to the closest unfilled micro-region of any color.
+
+</details>
+
+---
+
+## 3. `EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish (`Ready for Sprint 3`)
+
+**Epic Goal**: Complete Capy's signature offline creative workflows—focal-point sub-tile exploration, physical paper coloring sheets, and expressive local Co-op—before introducing external backend infrastructure.
+
+### US-4.1: Focal-Point Quadtree Sub-Tiles & Parent Breadcrumbs
+
+- **Readiness**: `Ready for Sprint 3` (Zero external blockers; `InfiniteZoomTileSpec` already defined in `web/src/services/providers/types.ts`)
+- **Description**: Upgrade `handleZoomIntoDetailTile` (`App.tsx` `#L3335`) from a fixed `2x` center crop to generate detail sub-tiles centered on the player's active `(focusX, focusY)` viewport focus, paired with a one-tap "Back to Parent Puzzle" breadcrumb pill in `GameTopBar.tsx`.
+- **Value**: Makes Infinite Zoom genuinely exploratory—players can dive into any interesting corner of an artwork and jump right back to the parent canvas without hunting through the Saves list.
+- **Why Now**: Completes the local Infinite Zoom navigation loop cleanly on top of the existing `2x` sub-tile generator.
+- **Planned Sprint Slices**:
+  - **TASK-4.1a** `[quick-win]`: Add `parentSnapshotId?: string` to `SavedSnapshot` and render a one-tap "Back to Parent Puzzle" breadcrumb pill in `GameTopBar.tsx`.
+  - **TASK-4.1b**: Upgrade `handleZoomIntoDetailTile` to crop around the active `(focusX, focusY)` viewport center with persisted `subTileBounds` for multi-depth navigation.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-4` | `priority: medium-high` | `domain: canvas, engine, ui`
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 3.8 Flash` (`4.1a`), `Gemini 4 Argon` (`4.1b`)
+- **Effort Estimate**: `~42,000 tokens` (`~16k` + `~26k`) | `~20--28 min agent` (`~6--8 hrs human`)
+- **Target Files**: [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/GameTopBar.tsx`](./web/src/components/GameTopBar.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Returning to a parent snapshot restores its saved zoom/pan viewport cleanly; deleting a parent snapshot gracefully clears dangling `parentSnapshotId` pills.
+
+</details>
+
+### US-4.2: Printable Vector SVG / PDF Coloring Sheet Exporter
+
+- **Readiness**: `Ready for Sprint 3` (Zero external blockers)
+- **Description**: Allow players to export any generated puzzle (built-in or custom photo) as a crisp, resolution-independent monochrome `.svg` / print-ready PDF coloring page with region outlines, numbers, and a bottom color-key legend.
+- **Value**: Bridges digital and physical play—parents, teachers, and artists can turn family photos or line art into physical paper coloring sheets in seconds.
+- **Why Now**: `puzzle.worker.ts` already computes clean `borderMap` contours and guaranteed-fit `centroidX`/`centroidY` label coordinates; exporting them to SVG requires zero server infrastructure.
+- **Planned Sprint Slices**:
+  - **TASK-4.2a** `[quick-win]`: Build `web/src/services/SvgPrintExporter.ts` tracing `borderMap` outlines, region numbers, and a swatch-number key into an `.svg` download via `NativeBridge.exportOrShareFile`.
+  - **TASK-4.2b**: Add print sheet layout options in `SettingsModal.tsx` (A4 vs. Letter aspect framing, line thickness, optional number hiding for freehand coloring, and browser Print/PDF trigger).
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-4` | `priority: medium-high` | `domain: export, engine`
+- **Complexity & Model**: `medium` / `hard` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~40,000 tokens` (`~18k` + `~22k`) | `~18--25 min agent` (`~5--8 hrs human`)
+- **Target Files**: `web/src/services/SvgPrintExporter.ts`, [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Generated `.svg` opens cleanly in Chrome/Firefox/Safari and prints cleanly on white paper without dark UI backgrounds.
+
+</details>
+
+### US-4.3: Co-op Collaborator Region Ping Beacon
+
+- **Readiness**: `Ready for Sprint 3` *(Single-step Co-op `UNFILL` sync is already live in `App.tsx` and `HybridCoopRoomAdapter`; replay-rewind `UNFILL` is promoted to Sprint 1 `BUG-1` in [`TODO.md`](./TODO.md)).*
+- **Description**: Add a tap-and-hold or toolbar `'PING'` beacon message over `CoopRoomWireMessage` (`HybridCoopRoomAdapter`) rendered as an expanding dual-ring beacon via `CoopRippleBuffer.ts` on `PuzzleCanvas.tsx`.
+- **Value**: Lets Co-op partners point out tiny hard-to-find micro-regions visually on shared puzzles without verbal coordinates.
+- **Why Now**: Works immediately over same-device `BroadcastChannel` Co-op today with zero server changes and carries forward automatically when the WebSocket relay (`US-5.2`) goes live.
+- **Planned Sprint Slices**:
+  - **TASK-4.3b**: Add `'PING'` wire message to `CoopMessageType` (`web/src/services/providers/types.ts`), relay via `HybridCoopRoomAdapter`, and render expanding dual-ring beacons in `CoopRippleBuffer.ts` and `PuzzleCanvas.tsx`.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-4` | `priority: medium-high` | `domain: multiplayer, canvas`
+- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~20,000 tokens` | `~8--12 min agent` (`~2--3 hrs human`)
+- **Target Files**: [`web/src/services/providers/types.ts`](./web/src/services/providers/types.ts), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`web/src/engine/CoopRippleBuffer.ts`](./web/src/engine/CoopRippleBuffer.ts), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`CLOUD.md`](./CLOUD.md)
+- **Acceptance Criteria**:
+  - Zero per-frame heap allocations in `CoopRippleBuffer.ts`, verified by a 2-peer Playwright `BroadcastChannel` ping E2E test.
+
+</details>
+
+---
+
+## 4. `EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation (`Blocked on External Infra`)
+
+**Epic Goal**: Connect Capy's hexagonal cloud, room-sync, and AI provider interfaces (`ProviderRegistry.ts`) to live production credentials and lightweight serverless endpoints when ready for public store and cross-network scale. *(Do not pull `EPIC-5` stories into `TODO.md` until their stated **Unblock Prerequisite** is satisfied).*
+
+### US-5.1: Production Google OAuth, Play Games IDs & Verified App Links
+
+- **Readiness**: `Blocked -- External Console Credentials & Root Domain Hosting`
+- **Unblock Prerequisite**: Human provisioning of Google Cloud Web OAuth Client ID (`VITE_GOOGLE_CLIENT_ID`), 12-digit Play Games Project ID (`CAPY_PLAY_GAMES_APP_ID`), release keystore SHA-256 fingerprint, and write access to root `https://shthed.github.io/.well-known/assetlinks.json` (Android `autoVerify="true"` queries domain root rather than `/capy/.well-known/`).
+- **Description**: Configure live Google Cloud OAuth and Play Games repository variables and publish verified Digital Asset Links for `com.capypaint.capy`.
+- **Value**: Unlocks live one-tap Google Drive cross-device save sync on web, native Play Games `SnapshotsClient` sync on Android, and seamless Android App Link opening for `#s=<token>` links.
+- **Why Now**: Client drivers (`GoogleCloudDriver`, `PlayGamesAndroidDriver`, `privacy-policy.html`) are already complete; CI variable wiring is queued in Sprint 1 (`BUG-2`).
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-5` | `priority: medium` | `domain: android, cloud`
+- **Complexity & Model**: `low` / `easy` | **Recommended Model**: `Gemini 3.8 Flash` + Human Console Setup
+- **Effort Estimate**: `~20,000 tokens` | `~10--15 min agent` (`~2--4 hrs human`)
+- **Target Files**: [`app/build.gradle.kts`](./app/build.gradle.kts), [`app/src/main/AndroidManifest.xml`](./app/src/main/AndroidManifest.xml), [`CLOUD.md`](./CLOUD.md)
+- **Acceptance Criteria**:
+  - `https://shthed.github.io/.well-known/assetlinks.json` (or custom domain) validates against `pm get-app-links com.capypaint.capy` and Google OAuth sign-in succeeds without sandbox overrides.
+
+</details>
+
+### US-5.2: Hosted Hibernating WebSocket Co-op Room Relay (`VITE_CAPY_ROOM_WS_URL`)
+
+- **Readiness**: `Blocked -- External Cloudflare Workers / Durable Objects Account`
+- **Unblock Prerequisite**: Cloudflare Workers + Durable Objects deployment target and live `VITE_CAPY_ROOM_WS_URL` domain.
+- **Description**: Deploy a lightweight stateless/hibernating WebSocket room relay (`relay/` Cloudflare Worker + Durable Objects) backing `HybridCoopRoomAdapter` for 6-character `?room=ABC123` codes.
+- **Value**: Lets friends and family color the same puzzle together in real time across separate phones, tablets, and laptops over the internet—not just tabs on the same browser.
+- **Why Now**: `HybridCoopRoomAdapter` already implements the full WebSocket room protocol (`HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `HEARTBEAT`, `LEAVE`).
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-5` | `priority: medium` | `domain: multiplayer, cloud`
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`/plan`) + `Gemini 4 Argon`
+- **Effort Estimate**: `~50,000 tokens` | `~25--35 min agent` (`~8--12 hrs human`)
+- **Target Files**: `relay/`, [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`CLOUD.md`](./CLOUD.md)
+- **Acceptance Criteria**:
+  - Hibernates between strokes (`0` billable CPU ms while idle), enforces `<= 4 KB` frame caps, and automatically falls back to `BroadcastChannel` when offline or unconfigured.
+
+</details>
+
+### US-5.3: Ephemeral Encrypted Blob Relay for Custom Photo Share Links
+
+- **Readiness**: `Blocked -- External Ephemeral Blob Storage Endpoint`
+- **Unblock Prerequisite**: Provisioned object/KV storage endpoint supporting `<= 200 KB` blobs with `30`-day automatic TTL expiration.
+- **Description**: Add opt-in client-side AES-GCM encrypted `.capy` v2 blob upload (decryption key kept exclusively inside the URL `#` fragment) so `#s=<token>` share links work across devices for custom uploaded photos.
+- **Value**: Removes the current limitation where `#s=<token>` links work across devices only for built-in Gallery artworks while keeping user photos zero-knowledge encrypted.
+- **Why Now**: Custom photo puzzles (`45--95 KB` `.capy` v2) exceed `< 2 KB` URL hash limits; an encrypted ephemeral relay completes universal link sharing privately.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-5` | `priority: medium` | `domain: cloud, security`
+- **Complexity & Model**: `medium` / `hard` | **Recommended Model**: `Gemini 4 Carbon`
+- **Effort Estimate**: `~40,000 tokens` | `~18--26 min agent` (`~6--8 hrs human`)
+- **Target Files**: [`web/src/services/ShareLinkService.ts`](./web/src/services/ShareLinkService.ts), [`web/public/privacy-policy.html`](./web/public/privacy-policy.html), [`CLOUD.md`](./CLOUD.md)
+- **Acceptance Criteria**:
+  - Decryption key stays strictly inside `#s=...` (never transmitted in HTTP requests), and built-in Gallery `#s=` links continue using zero network calls.
+
+</details>
+
+### US-5.4: Live Prompt-to-Puzzle & Seam-Locked Sub-Tile AI Artwork Endpoint
+
+- **Readiness**: `Blocked -- External Paid Image-Generation API & Rate-Limit Budget`
+- **Unblock Prerequisite**: Provisioned serverless image-generation proxy (`VITE_CAPY_AI_API_URL`), API billing cap, and moderation policy sign-off.
+- **Description**: Connect `DefaultAiArtworkAdapter` (`VITE_CAPY_AI_API_URL`) to a serverless image-generation endpoint supporting both "Create Puzzle from Text Prompt" and seam-locked detail inpainting (`buildSeamLockedInfillPrompt`) for Infinite Zoom sub-tiles.
+- **Value**: Gives players an endless supply of custom coloring-book illustrations from imagination and synthesizes crisp new micro-details when zooming deep into sub-tiles.
+- **Why Now**: Sequenced behind zero-cost client features because live image synthesis incurs per-request API cost (`AiCreditLedger`).
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-5` | `priority: medium-low` | `domain: ai, engine, ui`
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`/plan`) + `Gemini 4 Argon`
+- **Effort Estimate**: `~90,000 tokens` (`~42k` + `~48k`) | `~40--60 min agent` (`~12--18 hrs human`)
+- **Target Files**: [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/App.tsx`](./web/src/App.tsx), [`CLOUD.md`](./CLOUD.md)
+- **Acceptance Criteria**:
+  - Enforces family-friendly prompt moderation prior to API dispatch and degrades cleanly when offline or unconfigured.
+
+</details>
+
+### US-5.5: Moderated Global Community Ideas & Automated `.capy` Pack Publisher
+
+- **Readiness**: `Blocked -- Depends on Shared Moderation API & US-5.4 AI Pipeline`
+- **Unblock Prerequisite**: Shared community voting/moderation endpoint and live `US-5.4` artwork synthesis credentials.
+- **Description**: Back `StaticAndCommunityCatalogAdapter` (`capy_community_ideas_v1`) with a moderated shared API so player puzzle ideas and upvotes sync globally, paired with a scheduled workflow that pre-bakes top-voted ideas into `.capy` v2 gallery packs.
+- **Value**: Turns the local-only Community Puzzle Ideas box into a living, player-curated artwork catalog where popular requests automatically become playable zero-wait puzzles.
+- **Why Now**: Sequenced last in `EPIC-5` because automated pack publishing builds directly on `US-5.4`.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-5` | `priority: medium-low` | `domain: cloud, engine`
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~45,000 tokens` | `~20--30 min agent` (`~6--8 hrs human`)
+- **Target Files**: [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), `.github/workflows/`, [`CLOUD.md`](./CLOUD.md)
+- **Acceptance Criteria**:
+  - Client continues working 100% offline with bundled + cached catalog entries if the community API is unreachable.
+
+</details>
+
+---
+
+## 5. Unscheduled Platform Icebox (`ICE-1`--`ICE-3`)
+
+Parked native desktop/mobile store wrappers awaiting completion of `EPIC-2`--`EPIC-4` Web/Android stabilization before active chartering:
+
+<details>
+<summary>Expand Unscheduled Multi-Platform Shell Epics (Steam, iOS/iPadOS, Microsoft/Xbox)</summary>
+
+- **`ICE-1`: Steam Desktop Wrapper (`desktop/` Tauri v2) & `SteamCloudDriver` Bindings**:
+  - *Value*: Packages `web/dist/` for Windows/macOS/Linux Steam Deck & desktop players with `ISteamRemoteStorage` Cloud Saves, Steam Achievements, and Steam Overlay (`SteamCloudDriver` in [`CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts) is already modularly stubbed).
+  - *Activation Trigger*: Promote to an active Epic after `EPIC-2`--`EPIC-4` desktop keyboard, audio, and achievement contracts stabilize (`~60k tokens`, `Gemini 4 Argon`).
+- **`ICE-2`: iOS & iPadOS Native Wrapper (`ios/` Swift `WKWebView`) & `AppleCloudDriver` Bindings**:
+  - *Value*: Delivers App Store distribution with Apple Pencil hover/tilt ergonomics, CoreHaptics, GameKit (`GKLocalPlayer`), and CloudKit save sync (`window.webkit.messageHandlers.CapyIOS` + `AppleCloudDriver`).
+  - *Activation Trigger*: Promote when Apple Developer Storefront distribution and macOS Xcode signing are scheduled (`~65k tokens`, `Gemini 4 Argon`).
+- **`ICE-3`: Microsoft Store / Xbox Wrapper & `MicrosoftCloudDriver` Bindings**:
+  - *Value*: Connects `MicrosoftCloudDriver` to live Entra ID / MSA OAuth 2.0 PKCE credentials for OneDrive `special/approot` and Xbox Connected Storage sync.
+  - *Activation Trigger*: Promote alongside desktop/console storefront packaging (`~45k tokens`, `Gemini 4 Argon`).
+
+</details>
+
+---
+
+## 6. Shipped Epics & Stories (`EPIC-1` & Completed Stories)
+
+Completed Epics and User Stories archived upon merge to `main` (full granular PR history lives in [`CHANGELOG.md`](./CHANGELOG.md)):
+
+<details>
+<summary>Expand Shipped Epics & Stories (EPIC-1 & Shipped Slices -- PRs #431--#474)</summary>
+
+- **Shipped Slices from `EPIC-3` (*Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays*)**:
+  - **Daily Featured Puzzle (`TASK-3.1a`), Reduced Motion (`TASK-3.2a`), Desktop Keyboard Shortcuts (`TASK-3.2b`) & Lifetime Player Stats (`TASK-3.4a`)** -- [#474](https://github.com/shthed/capy/pull/474)
+- **Shipped Stories from `EPIC-2` (*Mobile Touch Precision & Tactile Sensory Polish*)**:
+  - **`US-2.2`: Custom Zoom Sensitivity, Top-Bar Scale Pill & Magnetic Scale Detents** (plus `TASK-2.3a` Web Audio woodblock tap synth) -- [#472](https://github.com/shthed/capy/pull/472)
+- **`EPIC-1`: Unified Web + Android Monorepo, Gesture Engine, `.capy` v2 Codec, Replay Scrubber & Cloud/Co-op Foundation (`Shipped v1.0--v2.5`)**:
+  - **`US-1.1`: Unified Single-Codebase Monorepo (`web/`, `app/`) & Automated Pages Preview CI** -- [#431](https://github.com/shthed/capy/pull/431), [#432](https://github.com/shthed/capy/pull/432), [#434](https://github.com/shthed/capy/pull/434), [#436](https://github.com/shthed/capy/pull/436), [#438](https://github.com/shthed/capy/pull/438), [#440](https://github.com/shthed/capy/pull/440), [#452](https://github.com/shthed/capy/pull/452)
+  - **`US-1.2`: 6-Mode Touch Gesture Engine, Free Colour Mode & Live Segmentation Telemetry** -- [#433](https://github.com/shthed/capy/pull/433), [#439](https://github.com/shthed/capy/pull/439), [#442](https://github.com/shthed/capy/pull/442), [#444](https://github.com/shthed/capy/pull/444), [#454](https://github.com/shthed/capy/pull/454), [#455](https://github.com/shthed/capy/pull/455), [#456](https://github.com/shthed/capy/pull/456), [#457](https://github.com/shthed/capy/pull/457)
+  - **`US-1.3`: Chronological Undo/Redo & YouTube-Style Interactive Replay Scrubber** -- [#446](https://github.com/shthed/capy/pull/446), [#447](https://github.com/shthed/capy/pull/447), [#448](https://github.com/shthed/capy/pull/448), [#463](https://github.com/shthed/capy/pull/463), [#464](https://github.com/shthed/capy/pull/464)
+  - **`US-1.4`: Saves Gallery Modernization, `.capy` v2 Binary Archive & Instant Pre-Baked Startup** -- [#449](https://github.com/shthed/capy/pull/449), [#458](https://github.com/shthed/capy/pull/458), [#459](https://github.com/shthed/capy/pull/459), [#462](https://github.com/shthed/capy/pull/462)
+  - **`US-1.5`: Modular `CloudProviderDriver` Sync (`GoogleCloudDriver`, `PlayGamesAndroidDriver`), `#s=<token>` Links & Simultaneous Co-op** -- [#460](https://github.com/shthed/capy/pull/460), [#461](https://github.com/shthed/capy/pull/461)
+  - **`US-1.6`: Core Reliability Audit Fixes, Pixel API 33+ Haptics & Lean Agile Documentation Foundation** -- [#465](https://github.com/shthed/capy/pull/465), [#466](https://github.com/shthed/capy/pull/466), [#467](https://github.com/shthed/capy/pull/467), [#468](https://github.com/shthed/capy/pull/468), [#469](https://github.com/shthed/capy/pull/469), [#470](https://github.com/shthed/capy/pull/470), [#471](https://github.com/shthed/capy/pull/471)
+
+</details>
