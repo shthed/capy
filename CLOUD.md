@@ -22,11 +22,11 @@ Capy separates **CRDT save merging** (`CrdtCloudSaveAdapter` in [`ProviderRegist
 - **`'play_games_v2'` (`PlayGamesAndroidDriver`) -- Active on Android (`:app`)**:
   - *Auth*: Native Google Play Games Services v2 SDK (`GamesSignInClient` + `PlayersClient` in [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt)).
   - *Storage*: `PlayGames.getSnapshotsClient(activity)` Saved Games API (`RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED`) paired with local `filesDir/capy_cloud/` caching and `inlineBinaryB64` custom-save embedding.
-- **`'steam'` (`SteamCloudDriver`) -- Modular Driver Ready (`P5-1`)**:
+- **`'steam'` (`SteamCloudDriver`) -- Modular Driver Ready (`ICE-1`)**:
   - *Auth & Storage*: Steamworks Auth Session Ticket (`window.__capySteamBridge`) + `ISteamRemoteStorage` (`fileWriteAsync` / `fileReadAsync`), awaiting the Tauri desktop wrapper.
-- **`'microsoft'` (`MicrosoftCloudDriver`) -- Modular Driver Ready (`P5-3`)**:
+- **`'microsoft'` (`MicrosoftCloudDriver`) -- Modular Driver Ready (`ICE-3`)**:
   - *Auth & Storage*: Microsoft Entra ID / MSA OAuth 2.0 PKCE (`Files.ReadWrite.AppFolder`) + OneDrive `special/approot` / Xbox Connected Storage.
-- **`'apple'` (`AppleCloudDriver`) -- Modular Driver Ready (`P5-2`)**:
+- **`'apple'` (`AppleCloudDriver`) -- Modular Driver Ready (`ICE-2`)**:
   - *Auth & Storage*: Sign in with Apple JS / Native GameKit (`GKLocalPlayer`) + CloudKit `privateCloudDatabase` / iCloud `GKSavedGame`.
 
 ### B. How Automatic Google Account & Play Games Login Works
