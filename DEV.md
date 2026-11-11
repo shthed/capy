@@ -301,7 +301,7 @@ npm run generate:samples # Rebuild web/public/assets/sample_saves.capy when buil
 # NEVER run ./gradlew app:installDebug unless explicitly requested by the user.
 ```
 
-### Step 3: Pull Request Standards, Labels, Overview Paragraph & Live Previews
+### Step 3: Pull Request Standards, Labels, Overview Bullets & Live Previews
 
 1. **Action-Oriented PR Titles**: Write clean, meaningful, high-level action-oriented titles focusing on the overall purpose of the PR (e.g., `Add DEV.md and overhaul repository documentation`, `Resolve all remaining audit bugfixes from TODO`). Never cram comma-separated laundry lists of unrelated subsystems into the title, and avoid `feat(scope):` prefixes or buzzwords.
 2. **GitHub Labels**: Attach all relevant labels when creating or editing a PR:
@@ -313,7 +313,7 @@ npm run generate:samples # Rebuild web/public/assets/sample_saves.capy when buil
    - `ci`: GitHub Actions workflows and deployment scripts.
    - `deps`: `npm` or Gradle version catalog (`libs.versions.toml`) updates.
 3. **Top-of-PR Live Preview Callout**: Whenever `deploy-branch.yml` deploys a PR preview, place the playable preview URL (`https://shthed.github.io/capy/pull/<number>/`) and Android preview APK (`https://shthed.github.io/capy/pull/<number>/capy.apk`) at the very top of the PR body.
-4. **Plain-English Top Overview Paragraph & "Why" Rationale**: Immediately below the live preview callout (and above the commit-pinned change breakdown), include a concise plain-English overview paragraph summarizing everything included in the PR and *why* it was needed. If a PR bundles multiple unrelated bugfixes or cleanup chores together, state that candidly rather than inventing an artificial unifying theme, and explain the *why* behind each major work item in the body.
+4. **Scannable Plain-English Top Overview Bullets & "Why" Rationale**: Immediately below the live preview callout (and above the commit-pinned change breakdown), summarize everything included in the PR and *why* it was needed using **concise, scannable bullet points** rather than a dense multi-sentence paragraph. If a PR bundles multiple unrelated bugfixes or cleanup chores together, state that candidly rather than inventing an artificial unifying theme, and explain the *why* behind each major work item.
 5. **Commit-Pinned Line Links**: Whenever referencing code lines in PR bodies, PR comments, or chat summaries, **never** link to `blob/main/...` (which drifts over time) or `blob/<feature-branch>/...` (which `404`s after branch deletion). Always pin to the exact commit SHA or PR diff anchor:
    - `https://github.com/shthed/capy/blob/<commit-sha>/<path>#L<start>-L<end>`
    - `https://github.com/shthed/capy/pull/<number>/files#diff-<sha256(path)>R<start>-R<end>`
@@ -327,13 +327,14 @@ Before asking the human to merge a PR:
    - **Pillar 2 -- Automated Tests (`20` pts)**: `npm test` (engine, codec, Playwright E2E) and Android JUnit4 tests pass deterministically inside the Antigravity VM.
    - **Pillar 3 -- Performance & Golden Invariants (`20` pts)**: Zero per-frame allocations, worker-only segmentation, relative `./assets/...` URLs, and safe `NativeBridge` fallbacks.
    - **Pillar 4 -- Docs & Changelog Sync (`20` pts)**: [`web/package.json`](./web/package.json) version bumped on code PRs, [`CHANGELOG.md`](./CHANGELOG.md) updated with a flat single brief bullet per item ending in a clickable GitHub PR link, commit-pinned file/line links included in the PR description and summary comment, completed `BUG-*` / `TASK-*` items deleted from [`TODO.md`](./TODO.md), completed Stories/Epics moved into the collapsed **Shipped Epics & Stories** archive at the bottom of [`ROADMAP.md`](./ROADMAP.md), and subsystem `.md` files synchronized (zero emojis/ASCII art, mobile-safe lists).
-   - **Pillar 5 -- CI & Preview Verification (`20` pts)**: Local lint/build and GitHub Actions pass on HEAD, with both the live preview URL and plain-English overview paragraph at the top of the PR description (or intentional `paths-ignore` skip verified for `.md`-only PRs).
-3. **End-of-PR Placement, Collapsible `<details>` Rubric & Closing Confidence + Subtask Checklist**:
+   - **Pillar 5 -- CI & Preview Verification (`20` pts)**: Local lint/build and GitHub Actions pass on HEAD, with both the live preview URL and scannable plain-English overview bullets at the top of the PR description (or intentional `paths-ignore` skip verified for `.md`-only PRs).
+3. **End-of-PR Placement, Collapsible `<details>` Rubric & Conditional In-PR Subtask Checklist**:
    - Require **`>= 95%`** before requesting merge approval. Self-correct technical/test/doc gaps automatically; use `/grill-me` if design ambiguity remains.
    - Place the **`### PR Readiness & Perfection Confidence Score: <N>% (<N> / 100)`** section at the **end** of the PR description (and at the end of the PR Development Summary comment):
      - Wrap the detailed 5-Pillar breakdown, test commands, and invariant checks inside a collapsible `<details><summary>Expand 5-Pillar Readiness Rubric & Verification Details (100 / 100)</summary> ... </details>` block (with blank lines immediately after `</summary>` and before `</details>`).
-     - Immediately after `</details>`, finish the PR description with a **final closing paragraph** explaining in plain English why you believe the PR is complete/perfect (or noting the exact `-N` point reason if `< 100%`), followed by any remaining open [`TODO.md`](./TODO.md) subtasks formatted as a **Markdown checklist (`- [ ] ...`)**.
-   - Also report the score and remaining subtask checklist concisely in the chat message requesting merge approval.
+     - Immediately after `</details>`, finish the PR description with a **concise closing note** explaining in plain English why you believe the PR is complete/perfect (or noting the exact `-N` point reason if `< 100%`).
+     - **Only list `TODO.md` subtasks if included in this PR and `< 100%` complete**: Append a `- [ ] ...` Markdown checklist **only** when the PR itself is not yet `100%` complete and still has remaining `TODO.md` subtasks scoped to ship inside *this* PR. Never list unrelated repository-wide backlog items at the bottom of a `100%` complete PR.
+   - Also report the score concisely in the chat message requesting merge approval.
 4. **Wait for Explicit Approval**: Never merge a PR or push directly to `main` without explicit user confirmation.
 
 ### Reopening & Continuing Work on a Closed Pull Request
