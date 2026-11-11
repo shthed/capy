@@ -260,9 +260,9 @@ async function runCodecAndEngineTests() {
     );
     for (const bullet of changelogBullets) {
       assert.equal(
-        /\(\[PR #\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)\)$/.test(bullet),
+        /\s\[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)$/.test(bullet),
         true,
-        `Each CHANGELOG.md bullet must end with a PR link: ${bullet}`
+        `Each CHANGELOG.md bullet must end with a bare [#000] PR link: ${bullet}`
       );
     }
 
