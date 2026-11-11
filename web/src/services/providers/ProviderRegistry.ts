@@ -37,6 +37,7 @@ import {
   CoopPaintEvent,
   CoopParticipant,
   CoopRoomWireMessage,
+  CoopUnfillEvent,
   InfiniteZoomTileSpec,
   MonetizationProvider,
   PlayerIdentity,
@@ -1004,6 +1005,7 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
   private seenEventIds = new Set<string>();
 
   private paintHandlers = new Set<(event: CoopPaintEvent) => void>();
+  private unfillHandlers = new Set<(event: CoopUnfillEvent) => void>();
   private welcomeHandlers = new Set<(seedToken: string, sender: CoopParticipant) => void>();
   private participantHandlers = new Set<(participants: CoopParticipant[]) => void>();
 
@@ -1186,6 +1188,34 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
       if (this.seenEventIds.has(msg.paintEvent.eventId)) return;
       this.rememberEventId(msg.paintEvent.eventId);
       for (const h of this.paintHandlers) h(msg.paintEvent);
+      return;
+    }
+
+    if (msg.type === 'UNFILL_EVENT' && msg.unfillEvent) {
+      const ev = msg.unfillEvent;
+      const senderId = ev.senderId || ev.playerId || msg.sender.playerId;
+      if (!senderId || (this.selfParticipant && senderId === this.selfParticipant.playerId)) {
+        return;
+      }
+      const normalizedRegionIds = Array.isArray(ev.regionIds)
+        ? ev.regionIds.filter((id) => Number.isInteger(id) && id > 0)
+        : typeof ev.regionId === 'number' && Number.isInteger(ev.regionId) && ev.regionId > 0
+          ? [ev.regionId]
+          : [];
+      if (normalizedRegionIds.length === 0) return;
+      if (ev.eventId) {
+        if (this.seenEventIds.has(ev.eventId)) return;
+        this.rememberEventId(ev.eventId);
+      }
+      const normalizedEvent: CoopUnfillEvent = {
+        ...ev,
+        senderId,
+        playerId: ev.playerId || senderId,
+        regionId: ev.regionId ?? normalizedRegionIds[0],
+        regionIds: normalizedRegionIds,
+        timestamp: typeof ev.timestamp === 'number' ? ev.timestamp : Date.now(),
+      };
+      for (const h of this.unfillHandlers) h(normalizedEvent);
     }
   }
 
@@ -1227,6 +1257,34 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     });
   }
 
+  broadcastUnfillEvent(event: CoopUnfillEvent): void {
+    if (!this.roomCode || !this.selfParticipant) return;
+    const normalizedIds = Array.isArray(event.regionIds)
+      ? event.regionIds.filter((id) => Number.isInteger(id) && id > 0)
+      : typeof event.regionId === 'number' && event.regionId > 0
+        ? [event.regionId]
+        : [];
+    if (normalizedIds.length === 0) return;
+    if (event.eventId) {
+      this.rememberEventId(event.eventId);
+    }
+    const wireEvent: CoopUnfillEvent = {
+      ...event,
+      roomCode: this.roomCode,
+      senderId: event.senderId || this.selfParticipant.playerId,
+      playerId: event.playerId || this.selfParticipant.playerId,
+      regionId: event.regionId ?? normalizedIds[0],
+      regionIds: normalizedIds,
+    };
+    this.sendWireMessage({
+      type: 'UNFILL_EVENT',
+      roomCode: this.roomCode,
+      sender: this.selfParticipant,
+      unfillEvent: wireEvent,
+      sentAt: Date.now(),
+    });
+  }
+
   broadcastWelcomeState(seedToken: string): void {
     this.seedToken = seedToken;
     if (!this.roomCode || !this.selfParticipant) return;
@@ -1251,6 +1309,13 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     this.paintHandlers.add(handler);
     return () => {
       this.paintHandlers.delete(handler);
+    };
+  }
+
+  onUnfillEvent(handler: (event: CoopUnfillEvent) => void): () => void {
+    this.unfillHandlers.add(handler);
+    return () => {
+      this.unfillHandlers.delete(handler);
     };
   }
 

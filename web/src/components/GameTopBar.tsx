@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, EyeOff, ImagePlus, Maximize2, Minimize2, Settings, Users } from 'lucide-react';
+import { CornerUpLeft, Eye, EyeOff, ImagePlus, Maximize2, Minimize2, Settings, Users } from 'lucide-react';
 import { CoopParticipant } from '../services/providers/types';
 
 interface GameTopBarProps {
@@ -11,6 +11,7 @@ interface GameTopBarProps {
   isFullscreen?: boolean;
   coopRoomCode?: string | null;
   coopParticipants?: CoopParticipant[];
+  parentPuzzleTitle?: string | null;
   onPickImage: () => void;
   onTogglePreview: () => void;
   onToggleFullscreen?: () => void;
@@ -18,6 +19,7 @@ interface GameTopBarProps {
   onOpenSaves: () => void;
   onOpenCoop?: () => void;
   onStepZoom?: () => void;
+  onBackToParentPuzzle?: () => void;
 }
 
 function formatZoomBadge(zoomScale: number): string {
@@ -35,6 +37,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
   isFullscreen,
   coopRoomCode,
   coopParticipants = [],
+  parentPuzzleTitle,
   onPickImage,
   onTogglePreview,
   onToggleFullscreen,
@@ -42,6 +45,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
   onOpenSaves,
   onOpenCoop,
   onStepZoom,
+  onBackToParentPuzzle,
 }) => {
   const formattedZoom = formatZoomBadge(zoomScale);
   const isZoomedAwayFromFit = Math.abs(zoomScale - 1) > 0.05;
@@ -54,8 +58,31 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
         paddingRight: 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
       }}
     >
-      {/* Top Left: Progress % / Title Pill & Zoom Stepper */}
+      {/* Top Left: Progress % / Title Pill, Parent Breadcrumb & Zoom Stepper */}
       <div className="pointer-events-auto flex items-center gap-1.5 min-w-0">
+        {onBackToParentPuzzle && (
+          <button
+            type="button"
+            data-testid="topbar-parent-puzzle-btn"
+            onClick={onBackToParentPuzzle}
+            title={
+              parentPuzzleTitle
+                ? `Back to Parent Puzzle (${parentPuzzleTitle})`
+                : 'Back to Parent Puzzle'
+            }
+            aria-label={
+              parentPuzzleTitle
+                ? `Back to Parent Puzzle: ${parentPuzzleTitle}`
+                : 'Back to Parent Puzzle'
+            }
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-extrabold bg-sky-950/90 text-sky-300 border border-sky-400/60 shadow-lg backdrop-blur-md hover:bg-sky-900/90 transition-all active:scale-95 cursor-pointer flex-shrink-0"
+          >
+            <CornerUpLeft size={13} />
+            <span className="hidden sm:inline">Parent Puzzle</span>
+            <span className="sm:hidden">Parent</span>
+          </button>
+        )}
+
         <button
           type="button"
           onClick={onOpenSaves}

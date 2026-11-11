@@ -28,6 +28,7 @@ import {
   Lightbulb,
   ZoomIn,
   Copy,
+  Printer,
 } from 'lucide-react';
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
@@ -93,6 +94,8 @@ interface SettingsModalProps {
   onSelectSample: (sample: SampleArtwork, config?: GeneratorConfig) => void;
   onUploadImage: () => void;
   onExportSnapshot?: (id: string, title: string) => void;
+  onExportPrintableSvg?: () => Promise<boolean> | void;
+  onExportSnapshotSvg?: (id: string, title: string) => Promise<boolean> | void;
   onExportAllSnapshots?: () => void;
   onImportSnapshots?: (file: File) => void;
   onHostCoopRoom?: () => Promise<string | null>;
@@ -139,6 +142,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSelectSample,
   onUploadImage,
   onExportSnapshot,
+  onExportPrintableSvg,
+  onExportSnapshotSvg,
   onExportAllSnapshots,
   onImportSnapshots,
   onHostCoopRoom,
@@ -2451,6 +2456,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span>Share Progress Link</span>
                       </button>
                     )}
+
+                    {onExportPrintableSvg && (
+                      <button
+                        type="button"
+                        data-testid="export-printable-svg-btn"
+                        onClick={async () => {
+                          const ok = await onExportPrintableSvg();
+                          if (ok) {
+                            setHubNotice('Printable vector coloring sheet (.svg) exported!');
+                          }
+                        }}
+                        title="Export active puzzle as a print-ready monochrome vector SVG coloring sheet"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition-colors cursor-pointer"
+                      >
+                        <Printer size={13} className="text-amber-400" />
+                        <span>Printable SVG</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Co-op Room Controls */}
@@ -2795,6 +2818,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             >
                               <Download size={12} />
                               <span>Export</span>
+                            </button>
+                          )}
+
+                          {/* Printable SVG Coloring Sheet */}
+                          {onExportSnapshotSvg && (
+                            <button
+                              type="button"
+                              data-testid="save-action-export-svg"
+                              onClick={() =>
+                                void onExportSnapshotSvg(selectedSave.id, selectedSave.title)
+                              }
+                              title="Export Printable Vector Coloring Sheet (.svg)"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
+                            >
+                              <Printer size={12} className="text-amber-400" />
+                              <span>SVG Sheet</span>
                             </button>
                           )}
 

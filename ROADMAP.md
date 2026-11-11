@@ -28,9 +28,9 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 - **Remaining Roadmap Rollup (`15` Active/Queued Stories across `4` Epics)**:
   - `EPIC-2` (*3 Remaining Stories -- Active in Sprint 1*): `~104k tokens` | `~48--69 min agent` (`~12.5--17.5 hrs human`).
   - `EPIC-3` (*5 Stories -- Ready for Sprint 2*): `~152k tokens` | `~71--102 min agent` (`~19.5--28.5 hrs human`).
-  - `EPIC-4` (*3 Stories -- Ready for Sprint 3*): `~102k tokens` | `~46--65 min agent` (`~13--19 hrs human`).
+  - `EPIC-4` (*3 Stories -- Ready for Sprint 3*): `~68k tokens` | `~32--46 min agent` (`~9--13.5 hrs human`).
   - `EPIC-5` (*5 Stories -- Blocked on External Infra*): `~245k tokens` | `~113--165 min agent` (`~34--50 hrs human`).
-  - **Total Strategic Horizon**: `~603k tokens` | `~4.6--6.7 hrs agent` (`~79--115 hrs human`).
+  - **Total Strategic Horizon**: `~569k tokens` | `~4.4--6.4 hrs agent` (`~75--109.5 hrs human`).
 
 </details>
 
@@ -183,51 +183,49 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ### US-4.1: Focal-Point Quadtree Sub-Tiles & Parent Breadcrumbs
 
-- **Readiness**: `Ready for Sprint 3` (Zero external blockers; `InfiniteZoomTileSpec` already defined in `web/src/services/providers/types.ts`)
-- **Description**: Upgrade `handleZoomIntoDetailTile` (`App.tsx` `#L3335`) from a fixed `2x` center crop to generate detail sub-tiles centered on the player's active `(focusX, focusY)` viewport focus, paired with a one-tap "Back to Parent Puzzle" breadcrumb pill in `GameTopBar.tsx`.
+- **Readiness**: `Ready for Sprint 3` (Zero external blockers; `InfiniteZoomTileSpec` already defined in `web/src/services/providers/types.ts`; `parentSnapshotId` & top-bar breadcrumb `TASK-4.1a` shipped in [#475](https://github.com/shthed/capy/pull/475))
+- **Description**: Upgrade `handleZoomIntoDetailTile` (`App.tsx`) from a fixed `2x` center crop to generate detail sub-tiles centered on the player's active `(focusX, focusY)` viewport focus on top of the live "Back to Parent Puzzle" breadcrumb pill in `GameTopBar.tsx`.
 - **Value**: Makes Infinite Zoom genuinely exploratory—players can dive into any interesting corner of an artwork and jump right back to the parent canvas without hunting through the Saves list.
-- **Why Now**: Completes the local Infinite Zoom navigation loop cleanly on top of the existing `2x` sub-tile generator.
+- **Why Now**: `parentSnapshotId` and `topbar-parent-puzzle-btn` (`#475`) already preserve and restore parent viewports; adding focal-point `(focusX, focusY)` cropping completes multi-depth Infinite Zoom navigation.
 - **Planned Sprint Slices**:
-  - **TASK-4.1a** `[quick-win]`: Add `parentSnapshotId?: string` to `SavedSnapshot` and render a one-tap "Back to Parent Puzzle" breadcrumb pill in `GameTopBar.tsx`.
   - **TASK-4.1b**: Upgrade `handleZoomIntoDetailTile` to crop around the active `(focusX, focusY)` viewport center with persisted `subTileBounds` for multi-depth navigation.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | `EPIC-4` | `priority: medium-high` | `domain: canvas, engine, ui`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 3.8 Flash` (`4.1a`), `Gemini 4 Argon` (`4.1b`)
-- **Effort Estimate**: `~42,000 tokens` (`~16k` + `~26k`) | `~20--28 min agent` (`~6--8 hrs human`)
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Argon` (`4.1b`)
+- **Effort Estimate**: `~26,000 tokens` | `~12--18 min agent` (`~3.5--5 hrs human`)
 - **Target Files**: [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/GameTopBar.tsx`](./web/src/components/GameTopBar.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
-  - Returning to a parent snapshot restores its saved zoom/pan viewport cleanly; deleting a parent snapshot gracefully clears dangling `parentSnapshotId` pills.
+  - Cropping around arbitrary `(focusX, focusY)` clamps cleanly inside source image bounds across repeated `2x` sub-tile depths while preserving parent breadcrumb restoration.
 
 </details>
 
-### US-4.2: Printable Vector SVG / PDF Coloring Sheet Exporter
+### US-4.2: Printable Vector SVG / PDF Coloring Sheet Layout Options
 
-- **Readiness**: `Ready for Sprint 3` (Zero external blockers)
-- **Description**: Allow players to export any generated puzzle (built-in or custom photo) as a crisp, resolution-independent monochrome `.svg` / print-ready PDF coloring page with region outlines, numbers, and a bottom color-key legend.
-- **Value**: Bridges digital and physical play—parents, teachers, and artists can turn family photos or line art into physical paper coloring sheets in seconds.
-- **Why Now**: `puzzle.worker.ts` already computes clean `borderMap` contours and guaranteed-fit `centroidX`/`centroidY` label coordinates; exporting them to SVG requires zero server infrastructure.
+- **Readiness**: `Ready for Sprint 3` (Zero external blockers; monochrome vector `.svg` exporter [`SvgPrintExporter.ts`](./web/src/services/SvgPrintExporter.ts) `TASK-4.2a` shipped in [#475](https://github.com/shthed/capy/pull/475))
+- **Description**: Add print sheet framing and styling controls in `SettingsModal.tsx` on top of `SvgPrintExporter.ts` so players can tailor exported `.svg` / browser-printed PDF coloring sheets for A4 vs. Letter paper, stroke weight, and optional numberless freehand coloring.
+- **Value**: Bridges digital and physical play—parents, teachers, and artists can customize page margins, stroke thickness, and number visibility before printing on home printers.
+- **Why Now**: `SvgPrintExporter.ts` (`#475`) already exports crisp collinear-merged vector `.svg` sheets; adding print framing options completes physical paper support with zero server infrastructure.
 - **Planned Sprint Slices**:
-  - **TASK-4.2a** `[quick-win]`: Build `web/src/services/SvgPrintExporter.ts` tracing `borderMap` outlines, region numbers, and a swatch-number key into an `.svg` download via `NativeBridge.exportOrShareFile`.
   - **TASK-4.2b**: Add print sheet layout options in `SettingsModal.tsx` (A4 vs. Letter aspect framing, line thickness, optional number hiding for freehand coloring, and browser Print/PDF trigger).
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | `EPIC-4` | `priority: medium-high` | `domain: export, engine`
-- **Complexity & Model**: `medium` / `hard` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~40,000 tokens` (`~18k` + `~22k`) | `~18--25 min agent` (`~5--8 hrs human`)
-- **Target Files**: `web/src/services/SvgPrintExporter.ts`, [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
+- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~22,000 tokens` | `~12--16 min agent` (`~3.5--5.5 hrs human`)
+- **Target Files**: [`web/src/services/SvgPrintExporter.ts`](./web/src/services/SvgPrintExporter.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
-  - Generated `.svg` opens cleanly in Chrome/Firefox/Safari and prints cleanly on white paper without dark UI backgrounds.
+  - A4 and US Letter aspect framing, configurable stroke widths, and optional number hiding render cleanly in Chrome/Firefox/Safari print preview without dark UI backgrounds.
 
 </details>
 
 ### US-4.3: Co-op Collaborator Region Ping Beacon
 
-- **Readiness**: `Ready for Sprint 3` *(Single-step Co-op `UNFILL` sync is already live in `App.tsx` and `HybridCoopRoomAdapter`; replay-rewind `UNFILL` is promoted to Sprint 1 `BUG-1` in [`TODO.md`](./TODO.md)).*
+- **Readiness**: `Ready for Sprint 3` *(Single-step Co-op `UNFILL_EVENT` / `UNFILL` sync & 2-peer `BroadcastChannel` E2E shipped in [#475](https://github.com/shthed/capy/pull/475); replay-rewind `UNFILL` + `WELCOME_STATE` session persistence is promoted to Sprint 1 `BUG-1` in [`TODO.md`](./TODO.md)).*
 - **Description**: Add a tap-and-hold or toolbar `'PING'` beacon message over `CoopRoomWireMessage` (`HybridCoopRoomAdapter`) rendered as an expanding dual-ring beacon via `CoopRippleBuffer.ts` on `PuzzleCanvas.tsx`.
 - **Value**: Lets Co-op partners point out tiny hard-to-find micro-regions visually on shared puzzles without verbal coordinates.
 - **Why Now**: Works immediately over same-device `BroadcastChannel` Co-op today with zero server changes and carries forward automatically when the WebSocket relay (`US-5.2`) goes live.
@@ -380,8 +378,10 @@ Parked native desktop/mobile store wrappers awaiting completion of `EPIC-2`--`EP
 Completed Epics and User Stories archived upon merge to `main` (full granular PR history lives in [`CHANGELOG.md`](./CHANGELOG.md)):
 
 <details>
-<summary>Expand Shipped Epics & Stories (EPIC-1 & Shipped Slices -- PRs #431--#474)</summary>
+<summary>Expand Shipped Epics & Stories (EPIC-1 & Shipped Slices -- PRs #431--#475)</summary>
 
+- **Shipped Slices from `EPIC-4` (*Serverless Infinite Zoom, Printable Art & Local Co-op Polish*)**:
+  - **Infinite Zoom Parent Breadcrumbs (`TASK-4.1a`), Printable Vector `.svg` Coloring Sheets (`TASK-4.2a`) & Co-op `UNFILL_EVENT` Undo Sync (`TASK-4.3a`)** -- [#475](https://github.com/shthed/capy/pull/475)
 - **Shipped Slices from `EPIC-3` (*Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays*)**:
   - **Daily Featured Puzzle (`TASK-3.1a`), Reduced Motion (`TASK-3.2a`), Desktop Keyboard Shortcuts (`TASK-3.2b`) & Lifetime Player Stats (`TASK-3.4a`)** -- [#474](https://github.com/shthed/capy/pull/474)
 - **Shipped Stories from `EPIC-2` (*Mobile Touch Precision & Tactile Sensory Polish*)**:

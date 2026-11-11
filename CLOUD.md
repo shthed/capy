@@ -47,9 +47,9 @@ Capy separates **CRDT save merging** (`CrdtCloudSaveAdapter` in [`ProviderRegist
    - *Transport*: Compresses painted region IDs, Free Colour overrides, `isFreeColor`, `updatedAt`, and `sourceRef` directly into the URL fragment (`https://shthed.github.io/capy/#s=...`) via `ShareLinkService.ts`.
    - *Size & Infrastructure*: `~100--400 bytes` (`< 2 KB` budget); **zero server required**; works across separate devices immediately for built-in Gallery artworks.
 2. **Local / Same-Browser Co-op Room (`?room=<ROOM6>`)**:
-   - *Transport*: Uses native `BroadcastChannel` (`capy_coop_room_<ROOM6>`) to stream real-time `HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `HEARTBEAT`, and `LEAVE` frames (`~120 bytes` per tap) between tabs/windows on the same device with **zero server required**.
+   - *Transport*: Uses native `BroadcastChannel` (`capy_coop_room_<ROOM6>`) to stream real-time `HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `UNFILL_EVENT`, `HEARTBEAT`, and `LEAVE` frames (`~120 bytes` per tap/undo) between tabs/windows on the same device with **zero server required**.
 3. **Internet Cross-Device Co-op Room (`?room=<ROOM6>`)**:
-   - *Transport*: Uses `HybridCoopRoomAdapter` over WebSocket (`VITE_CAPY_ROOM_WS_URL`) to relay `HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `HEARTBEAT`, and `LEAVE` frames (`~120 bytes` per tap) across phones, tablets, and PCs when `VITE_CAPY_ROOM_WS_URL` is configured.
+   - *Transport*: Uses `HybridCoopRoomAdapter` over WebSocket (`VITE_CAPY_ROOM_WS_URL`) to relay `HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `UNFILL_EVENT`, `HEARTBEAT`, and `LEAVE` frames (`~120 bytes` per tap/undo) across phones, tablets, and PCs when `VITE_CAPY_ROOM_WS_URL` is configured.
 4. **Portable `.capy` v2 Binary File Export**:
    - *Transport*: Exports a self-contained `CAPY\x02<flags>` binary archive (`flags`: `0x01` `FLAG_GZIP` single save, `0x03` `FLAG_GZIP | FLAG_ARCHIVE` multi-save library bundle, `0x00` uncompressed) containing the source image, quantized RLE segmentation map, custom palette, and undo/replay chronology via OS Share Sheet or file download.
    - *Size & Infrastructure*: `~15--45 KB` for built-in/line-art saves and `~45--95 KB` for custom photographic saves; **zero server required**; works offline across all devices.
