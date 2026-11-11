@@ -25,14 +25,14 @@ For subsystem references, see:
 
 | Priority Tier | Items | Focus Domain | Aggregate Complexity | Aggregate Difficulty | Est. Total Tokens | Est. Agent Time | Est. Human Dev Time |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Bugfixes -- Audit Findings** | 7 | State Consistency, Viewport Resize, Cloud Concurrency, Android Haptics & Memory Safety | Low to Medium | Easy to Moderate | `~145,000 tokens` | `~65-95 min` | `~11-16 hrs` |
+| **Bugfixes -- Audit Findings** | 4 | State Consistency, Cloud Concurrency, Graph Coloring & Android Memory Safety | Medium | Moderate | `~91,000 tokens` | `~40-60 min` | `~8-12 hrs` |
 | **P0 -- Critical Polish** | 4 | Sensory Audio, Tactile Juice & Precision Controls | Medium to High | Moderate to Hard | `~145,000 tokens` | `~65-95 min` | `~16-24 hrs` |
 | **P1 -- Retention & Accessibility** | 4 | Achievements, Daily Content, Accessibility & Video Export | Medium to High | Moderate to Hard | `~175,000 tokens` | `~80-115 min` | `~22-32 hrs` |
 | **P2 -- Engine & Infinite Zoom** | 3 | Focal-Point Infinite Zoom Pyramid & Vector Export | High | Hard | `~130,000 tokens` | `~60-85 min` | `~18-26 hrs` |
 | **P3 -- Real-Time Multiplayer** | 4 | Internet Co-op Relay, WebRTC P2P & Undo/Ping Sync | High to Very High | Hard to Expert | `~190,000 tokens` | `~90-130 min` | `~28-40 hrs` |
 | **P4 -- Cloud, Storefront & AI** | 4 | Play Console Credentials, AdMob UMP & Live AI Catalog | Medium to High | Moderate to Hard | `~155,000 tokens` | `~70-105 min` | `~20-30 hrs` |
 | **P5 -- Multi-Platform Expansion** | 3 | Steam Desktop (`Tauri`), iOS (`WKWebView`) & Microsoft Store | Very High | Hard to Expert | `~170,000 tokens` | `~80-115 min` | `~28-40 hrs` |
-| **Total Roadmap** | **29** | **Full Multi-Platform AAA Production Readiness** | **Low to Very High** | **Easy to Expert** | **`~1,110,000 tokens`** | **`~8.5-12.3 hrs`** | **`~143-208 hrs`** |
+| **Total Roadmap** | **26** | **Full Multi-Platform AAA Production Readiness** | **Low to Very High** | **Easy to Expert** | **`~1,056,000 tokens`** | **`~8.1-11.8 hrs`** | **`~140-204 hrs`** |
 
 ---
 
@@ -55,12 +55,9 @@ Every task in this roadmap is tagged with five standardized classification dimen
 | ID | Task Title | Priority | Type | Domain | Complexity | Difficulty | Est. Tokens | Est. Agent Time | Est. Human Time |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **BF-1** | Free Colour Undo Co-op Desync & Chronological Order Shift | `P0-fix` | `fix` | `multiplayer`, `ui` | `medium` | `moderate` | `~22,000` | `10-15 min` | `2-3 hrs` |
-| **BF-2** | Canvas Container Resize & Orientation Change Clamping | `P0-fix` | `fix` | `canvas` | `low` | `easy` | `~18,000` | `8-12 min` | `1-2 hrs` |
 | **BF-3** | Google Drive `appDataFolder` Concurrent Write Mutex | `P0-fix` | `fix` | `cloud` | `medium` | `moderate` | `~24,000` | `10-15 min` | `2-3 hrs` |
 | **BF-4** | B&W Coloring Book Graph-Coloring Source Fill Preservation | `P0-fix` | `fix` | `engine` | `medium` | `moderate` | `~22,000` | `10-15 min` | `2-3 hrs` |
 | **BF-5** | Android `ACTION_SEND` Downsampling & Background Decode | `P0-fix` | `fix` | `android` | `medium` | `moderate` | `~23,000` | `10-15 min` | `2-3 hrs` |
-| **BF-6** | IndexedDB Cache Eviction Custom Palette Restoration | `P0-fix` | `fix` | `ui`, `engine` | `low` | `easy` | `~16,000` | `7-10 min` | `1 hrs` |
-| **BF-7** | Android Pixel / API 33+ Tactile Haptic Feedback Silent Suppression | `P0-fix` | `fix` | `android` | `low` | `moderate` | `~20,000` | `10-15 min` | `2 hrs` |
 | **P0-1** | Procedural Web Audio & ASMR Sound Effects Engine | `P0-critical` | `feature` | `audio`, `ui` | `medium` | `moderate` | `~38,000` | `18-25 min` | `4-6 hrs` |
 | **P0-2** | Zero-Allocation Region Fill Micro-Animations & Bursts | `P0-critical` | `polish` | `canvas` | `high` | `hard` | `~42,000` | `20-28 min` | `5-7 hrs` |
 | **P0-3** | Floating Precision Loupe Magnifier & Crosshair Offset | `P0-critical` | `feature` | `canvas`, `ui` | `high` | `hard` | `~40,000` | `18-26 min` | `5-7 hrs` |
@@ -92,10 +89,6 @@ Every task in this roadmap is tagged with five standardized classification dimen
   - **Labels**: `[priority: P0-fix]` `[type: fix]` `[domain: multiplayer]` `[domain: ui]` `[complexity: medium]` `[difficulty: moderate]`
   - **Estimates**: `Est. Tokens: ~22,000 tokens` | `Est. Time: ~10-15 min agent (~2-3 hrs human dev)`
   - **Scope**: Repainting an already-filled region in Free Colour mode currently deletes and re-inserts the region ID at the tail of `filledRegionIds`, altering its original fill chronology, and undoing a Free Colour repaint when `previousPaintedColorId !== undefined` omits broadcasting a color-restoration `CoopPaintEvent` to connected Co-op collaborators.
-- [ ] **BF-2: Canvas Container Resize & Orientation Change Stale Offset Clamping ([`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx))**:
-  - **Labels**: `[priority: P0-fix]` `[type: fix]` `[domain: canvas]` `[complexity: low]` `[difficulty: easy]`
-  - **Estimates**: `Est. Tokens: ~18,000 tokens` | `Est. Time: ~8-12 min agent (~1-2 hrs human dev)`
-  - **Scope**: `clampCanvasOffset` executes inside an effect watching `[scale, puzzle]` rather than observing container dimension changes via `ResizeObserver`, leaving pan offsets unclamped after mobile screen rotation or browser window resizing until the next zoom gesture.
 - [ ] **BF-3: Google Drive `appDataFolder` Duplicate Slot File Accumulation on Concurrent Writes ([`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts))**:
   - **Labels**: `[priority: P0-fix]` `[type: fix]` `[domain: cloud]` `[complexity: medium]` `[difficulty: moderate]`
   - **Estimates**: `Est. Tokens: ~24,000 tokens` | `Est. Time: ~10-15 min agent (~2-3 hrs human dev)`
@@ -108,14 +101,6 @@ Every task in this roadmap is tagged with five standardized classification dimen
   - **Labels**: `[priority: P0-fix]` `[type: fix]` `[domain: android]` `[complexity: medium]` `[difficulty: moderate]`
   - **Estimates**: `Est. Tokens: ~23,000 tokens` | `Est. Time: ~10-15 min agent (~2-3 hrs human dev)`
   - **Scope**: `handleIncomingIntent` reads the entire shared `InputStream` into a `ByteArray` and Base64-encodes it synchronously on the UI thread without downsampling or size-capping ultra-high-resolution camera photos, risking `OutOfMemoryError` or ANR on low-RAM devices.
-- [ ] **BF-6: IndexedDB Cache Eviction Fallback Drops Custom Palette Modifications ([`web/src/App.tsx`](./web/src/App.tsx))**:
-  - **Labels**: `[priority: P0-fix]` `[type: fix]` `[domain: ui]` `[domain: engine]` `[complexity: low]` `[difficulty: easy]`
-  - **Estimates**: `Est. Tokens: ~16,000 tokens` | `Est. Time: ~7-10 min agent (~1 hr human dev)`
-  - **Scope**: When `StorageService.loadPuzzleData(snapshot.id)` returns `null` in `handleLoadSnapshot` and falls back to regenerating the puzzle via `loadArtworkFromImage`, user-edited `snapshot.customPalette` swatches are overwritten by the newly quantized palette.
-- [ ] **BF-7: Android Pixel / API 33+ Tactile Haptic Feedback Silent Suppression ([`app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt), [`app/src/main/java/com/capypaint/capy/MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt))**:
-  - **Labels**: `[priority: P0-fix]` `[type: fix]` `[domain: android]` `[complexity: low]` `[difficulty: moderate]`
-  - **Estimates**: `Est. Tokens: ~20,000 tokens` | `Est. Time: ~10-15 min agent (~2 hrs human dev)`
-  - **Scope**: Verified on Pixel 7 Pro hardware: `performHaptic` in [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt) currently calls `view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)` for `"tick"` events without `HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING` or a `Vibrator` fallback, and calls `vibrator.vibrate(VibrationEffect)` without `VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH)` on API 33+ (Android 13+). Because `Capy` controls haptics via its own in-app `settings.hapticsEnabled` toggle, `performHaptic` must pass `VibrationAttributes.USAGE_TOUCH` (or `AudioAttributes.USAGE_ASSISTANCE_SONIFICATION` on API < 33) and use crisp `VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)` / `EFFECT_TICK` / `EFFECT_HEAVY_CLICK` primitives on API 29+ so tactile feedback is reliably felt on Pixel devices.
 
 ---
 
