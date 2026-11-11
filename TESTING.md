@@ -1,58 +1,75 @@
-# Testing Architecture & Verification Guide: Capy Monorepo
+# Testing Architecture & Verification Guide -- Capy Monorepo (`TESTING.md`)
 
-This document outlines the testing strategy, tooling rationale, unified end-to-end verification suite, and platform test commands for the Capy monorepo across **Web** (`web/`) and **Android** (`app/`).
+This document outlines the testing strategy, tooling rationale, unified end-to-end verification suite, and platform test commands across **Web** ([`web/`](./web/)) and **Android** ([`app/`](./app/)).
+
+**Related Guides**: [`README.md`](./README.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TODO.md`](./TODO.md) | [`CHANGELOG.md`](./CHANGELOG.md)
+
+**Table of Contents**:
+1. [Tooling Evaluation: Why Playwright + Vite SSR Is Optimal](#1-tooling-evaluation-why-playwright--vite-ssr-is-optimal)
+2. [Test Suites & Commands Across Targets](#2-test-suites--commands-across-targets)
+3. [Automated Gesture & Canvas Feature Testing Patterns](#3-automated-gesture--canvas-feature-testing-patterns)
+4. [Continuous Integration Pipeline (`deploy-branch.yml`)](#4-continuous-integration-pipeline-deploy-branchyml)
 
 ---
 
-## 1. Tooling Evaluation: Why Playwright + Vite SSR is Optimal for Capy
+## 1. Tooling Evaluation: Why Playwright + Vite SSR Is Optimal
 
-Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers, binary RLE codecs, and mobile touch gestures presents unique requirements that traditional DOM testing libraries (e.g., Jest + JSDOM or Cypress) cannot fulfill alone.
+Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers, binary RLE codecs, and mobile touch gestures presents requirements that DOM-only runners (`Jest + JSDOM`) or iframe-bound runners (`Cypress`) cannot cover cleanly:
 
-### Comparison Matrix
-
-| Capability | Playwright | Puppeteer | Cypress | Jest / Testing Library |
-| :--- | :--- | :--- | :--- | :--- |
-| **Multi-Touch & Pointer Gestures** | **Native** (`hasTouch`, `touchIdentifier`, pointer stream) | Raw CDP touch events only | Limited / plugin-dependent | No real touch/canvas simulation |
-| **Canvas Pixel & Hit-Test Inspection** | **Full** (evaluate canvas contexts, `getImageData`, pixel sampling) | Full (evaluate in page) | Partial (iframe constraints) | Mocked / stubbed canvas only |
-| **Web Worker Lifecycle & Cancellation** | **Automatic** tracking and message interception | Manual worker target attachment | Poor worker isolation in iframe | No worker thread execution |
-| **Mobile Viewport & Safe-Area Emulation** | **Native** (DPR, safe-area insets, mobile touch events) | Viewport resize only | Emulated viewports only | Headless DOM only |
-| **Execution Speed & Reliability** | **High** (direct CDP multiplexing, isolated contexts) | High | Medium (in-browser iframe overhead) | Very High (but no browser rendering) |
+### Cross-Tooling Capability Summary
+- **Playwright + Vite SSR (Selected for Capy)**:
+  - *Multi-Touch & Pointer Gestures*: Native `hasTouch`, `pointerId`, and microsecond-timed `pointerdown` / `pointermove` / `pointerup` streams for pinch-to-zoom, one-finger double-tap drag zoom, and inertial pan gliding.
+  - *2D Canvas & Hit-Testing*: Direct browser context evaluation (`getImageData`, pixel sampling, `ResizeObserver` viewport checks).
+  - *Web Worker & Service Worker Lifecycle*: Real `puzzle.worker.ts` thread execution/cancellation and offline `capy-cache-v2` Service Worker reload verification.
+  - *Engine & Codec Unit Speed*: Loads TypeScript modules directly in Node via `vite.ssrLoadModule(...)` before launching headless Chromium in the same process.
+- **Puppeteer**: Supports raw CDP touch dispatch and canvas evaluation, but lacks built-in mobile viewport/safe-area ergonomics and Playwright's auto-waiting locators.
+- **Cypress**: Runs inside an in-browser iframe with limited multi-touch fidelity and weaker Web Worker / Service Worker isolation.
+- **Jest / Testing Library (`JSDOM`)**: Fast for pure JS functions, but has no real HTML5 2D Canvas rasterizer, `ResizeObserver`, `BroadcastChannel`, or Web Worker execution.
 
 ### Key Architectural Advantages
-1. **Single Unified Runner (`web/scripts/test.mjs`)**:
-   - Instead of spawning multiple redundant browser processes across fragmented test scripts, Capy consolidates all engine/codec unit assertions and browser E2E checks into a single deterministic script (`npm test` -> [`web/scripts/test.mjs`](./web/scripts/test.mjs)).
-   - Automatically starts an in-process Vite preview server on port 3000 if one is not already running, eliminating manual background server orchestration.
-2. **Precise Multi-Touch & Pointer Gesture Engine**:
-   - Capy relies on custom touch gestures: multi-touch pinch-to-zoom, single-finger inertial pan flicking, and Google Maps-style one-finger double-tap-and-drag zoom.
-   - Playwright's pointer dispatch engine sends microsecond-timed `pointerdown`, `pointermove`, and `pointerup` sequences with velocity tracking, testing inertial gliding and cancel-on-touch logic.
-3. **Worker-Driven Pipeline & Offline Service Worker Verification**:
-   - Verifies both instant pre-baked sample loading (`sample_saves.capy` with zero worker wait on first boot) and live Web Worker (`puzzle.worker.ts`) custom photo segmentation, plus 100% offline Service Worker (`capy-cache-v2`) reload.
+1. **Single Unified Runner ([`web/scripts/test.mjs`](./web/scripts/test.mjs))**:
+   - Consolidates all Vite SSR engine/codec unit checks and headless Chromium E2E stages into one deterministic script (`npm test`).
+   - Automatically boots an in-process Vite server on port `3000` when none is running, eliminating manual server setup.
+2. **Deterministic Pre-Baked + Live Worker Coverage**:
+   - Verifies both instant zero-worker startup via `./assets/sample_saves.capy` and live `puzzle.worker.ts` custom photo segmentation, IndexedDB (`capy_game_storage_v8`) persistence, and 100% offline PWA reload.
 
 ---
 
-## 2. Test Suites Across Targets
-
-| Target | Test Scope | Verification Commands |
-| :--- | :--- | :--- |
-| **Web Application (`web/`)** | TypeScript type check, production bundle build, unified codec + E2E browser suite | `npm run lint`, `npm run build`, `npm test` |
-| **Native Android Launcher (`app/`)** | JUnit4 native bridge unit tests (`CapyAndroidBridgeTest.kt`, including `resolveHapticSpec` tactile mapping and `calculateInSampleSize`/`calculateTargetDimensions` shared-image downsampling), web asset bundle sync, debug APK assembly | `./gradlew app:testDebugUnitTest`, `./gradlew app:assembleDebug` |
+## 2. Test Suites & Commands Across Targets
 
 ### A. Web Application (`web/`)
 
-| Command | Script | What It Verifies |
-| :--- | :--- | :--- |
-| `npm run lint` | `tsc --noEmit` | Strict TypeScript type-checking across all React components, services, and worker modules. |
-| `npm run build` | `tsc && vite build` | Compiles TypeScript and produces minified production bundles in `web/dist/`. |
-| `npm test` | `node scripts/test.mjs` | **Unified Engine, Codec & Browser E2E Suite** ([`web/scripts/test.mjs`](./web/scripts/test.mjs)):<br>1. **Engine, Binary Codec, Cloud Concurrency & Version/Changelog Unit Checks (Vite SSR)**: Verifies `ColorQuantizer` unsigned ARGB bit-packing, `RegionSegmenter` `cellPartitionMap` mosaic separation, `LineArtPuzzleGenerator` B&W coloring book source accent fill preservation (`BF-4`), `GoogleCloudDriver` per-file concurrent write serialization and file-ID caching (`BF-3`), bit-exact `CapyCodec` RLE + LEB128 compression/decompression, `.capy` v2 Gzip single/archive framing, `< 2 KB` `ProgressDeltaV2` CRDT merges, and `version.ts` (`APP_VERSION`, `APP_VERSION_CODE`) synchronization with `CHANGELOG.md` (including zero preamble, compact `### X.Y[.Z] - YYYY-MM-DD` headings, single-bullet-per-PR format, zero category sub-headings or nested bullets, and full `0.1.0`+ PR history coverage).<br>2. **Instant Boot & PWA Shell**: Verifies `/manifest.webmanifest`, `/privacy-policy.html`, `capy-cache-v2` Service Worker registration, and instant 4-sample `sample_saves.capy` bootstrap with zero worker spawn.<br>3. **Canvas Gameplay & Gestures**: Verifies `PaletteDock` swatch selection, region tap coloring, one-finger double-tap-and-drag zoom, inertial pan momentum flick + zero-latency touch cancellation, and Paint Mode.<br>4. **Undo, Redo & Replay Controls** ([`test.mjs#L420-L530`](./web/scripts/test.mjs#L420-L530), [`test.mjs#L781-L837`](./web/scripts/test.mjs#L781-L837)): Verifies `Enable Undo Action` toggle, single-step Undo/Redo, Redo button stacking above Undo, `Ctrl+Z` / `Ctrl+Y`, long-press Undo (`>= 450ms`) opening the default-minimised [`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx#L216-L366) YouTube-style bar (`data-minimized="true"`), zero-latency pointer-drag timeline scrubbing (`data-testid="replay-scrubber-track"` in [`test.mjs#L436-L450`](./web/scripts/test.mjs#L436-L450)), expanding to the two-row deck (`replay-toggle-minimize-btn`), `Resume Here` rewinding state, restoring saved zoom extent before replay on save load, strict viewport invariance when pressing **Watch Puzzle Replay** (`data-testid="replay-btn"` in [`test.mjs#L781-L837`](./web/scripts/test.mjs#L781-L837)), automatic offscreen step fast-forwarding, Follow Painting predictive safe-frame camera tracking (`replay-follow-btn` in [`PuzzleCanvas.tsx#L401-L591`](./web/src/components/PuzzleCanvas.tsx#L401-L591)), Auto-Loop replay (`replay-loop-btn`), and live panning/zooming during active playback.<br>5. **Settings, Gallery & Community Ideas**: Verifies `app-version-badge` matching `package.json`, atomic preset background reset (`Charcoal`), Settings tab memory (`capy_last_settings_tab`), Gallery tag filtering, search empty state, and family-friendly Community Puzzle Idea moderation.<br>6. **Share Links, Simultaneous Co-op, Saves & Resilience (`BF-1`, `BF-2`, `BF-6`)**: Verifies `< 2 KB` `#s=<token>` share URL restoration in an isolated browser context, 2-peer real-time `BroadcastChannel` Co-op stroke sync, Free Colour repaint first-fill chronology preservation and Co-op undo/redo repaint broadcast (`BF-1`), Saves Detail/Thumbnails view switching, custom photo `STORE_IMAGES` upload, `.capy` v2 binary export, 100% offline PWA reload, `ResizeObserver` canvas resize & orientation pan clamping (`BF-2`), and `customPalette` (edited + added swatch) preservation across IndexedDB `capy_puzzles_db` cache eviction (`BF-6`). |
-| `npm run gallery:capture` | `node scripts/capture-gallery.mjs` | Captures automated high-DPI UI showcase screenshots into `docs/gallery/`. |
-| `npm run generate:samples` | `node scripts/generate-sample-saves.mjs` | Generates all 4 built-in `SAMPLE_GALLERY` puzzles via headless Chromium and exports `web/public/assets/sample_saves.capy`. |
+Run from `web/`:
+
+- **`npm run lint` (`tsc --noEmit`)**: Strict TypeScript type-checking across all React 19 components, services, providers, and Web Worker modules.
+- **`npm run build` (`tsc && vite build`)**: Compiles TypeScript and produces code-split production bundles in `web/dist/`.
+- **`npm test` (`node scripts/test.mjs`)**: Runs the **Unified Engine, Codec & Browser E2E Suite**:
+  1. **Part 1 -- Engine, Binary Codec, Cloud Concurrency & Version/Changelog Unit Checks (Vite SSR)**:
+     - `ColorQuantizer` unsigned ARGB bit-packing and deterministic K-Means++ initialization (`0xca91ba7a`).
+     - `RegionSegmenter` `cellPartitionMap` mosaic separation.
+     - `LineArtPuzzleGenerator` B&W coloring book explicit source accent fill preservation (`BF-4`).
+     - `GoogleCloudDriver` per-file concurrent write serialization (`writeLocks` / `enqueueWrite`) and Google Drive file-ID caching (`BF-3`).
+     - Bit-exact `CapyCodec` scanline RLE + LEB128 varints, `.capy` v2 Gzip single/archive framing, and `< 2 KB` `ProgressDeltaV2` CRDT Set-Union + LWW merges.
+     - `version.ts` (`APP_VERSION`, `APP_VERSION_CODE`) synchronization with `web/package.json` and `CHANGELOG.md` (including zero preamble, compact `### X.Y[.Z] - YYYY-MM-DD` headings, single-bullet-per-PR format, zero category sub-headings or nested bullets, and full `0.1.0`+ PR history coverage).
+  2. **Part 2.1 -- Instant Boot & PWA Shell**:
+     - Verifies `/manifest.webmanifest`, `/privacy-policy.html`, `capy-cache-v2` Service Worker registration, and instant 4-sample `sample_saves.capy` bootstrap with zero worker spawn.
+  3. **Part 2.2 -- Canvas Gameplay & Gestures**:
+     - Verifies `PaletteDock` swatch selection, region tap coloring, Google Maps-style one-finger double-tap-and-drag zoom, inertial pan momentum flick + zero-latency touch cancellation, and continuous Paint Mode.
+  4. **Part 2.3 -- Undo, Redo & YouTube-Style Replay Controls**:
+     - Verifies `Enable Undo Action` toggle, single-step Undo/Redo, Redo stacking above Undo, `Ctrl+Z` / `Ctrl+Y`, long-press Undo (`>= 450ms`) opening default-minimised [`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx) (`data-minimized="true"`), zero-latency pointer-drag timeline scrubbing (`replay-scrubber-track`), expanding to the two-row deck (`replay-toggle-minimize-btn`), `Resume Here` state rewind, save-load zoom restoration, strict viewport invariance on `replay-btn`, offscreen step fast-forwarding, Follow Painting safe-frame camera tracking (`replay-follow-btn`), Auto-Loop (`replay-loop-btn`), and live pan/zoom during playback.
+  5. **Part 2.4 -- Settings, Gallery & Community Ideas**:
+     - Verifies `app-version-badge`, preset background reset (`Charcoal`), Settings tab persistence (`capy_last_settings_tab`), Gallery search & category filtering, and moderated Community Puzzle Ideas.
+  6. **Part 2.5 -- Share Links, Simultaneous Co-op, Saves & Resilience (`BF-1`, `BF-2`, `BF-6`)**:
+     - Verifies `< 2 KB` `#s=<token>` share URL restoration in an isolated browser context, 2-peer `BroadcastChannel` Co-op stroke sync, Free Colour repaint first-fill chronology preservation and Co-op undo/redo repaint broadcast (`BF-1`), Saves Detail/Thumbnails view switching, custom photo upload into IndexedDB `capy_game_storage_v8` (`images` & `puzzles` stores), `.capy` v2 binary export, 100% offline PWA reload, `ResizeObserver` canvas resize clamping (`BF-2`), and `customPalette` eviction recovery (`BF-6`; see `BF-8` in [`TODO.md`](./TODO.md) regarding aligning the test's IndexedDB name from `'capy_puzzles_db'` to `'capy_game_storage_v8'`).
+- **`npm run gallery:capture` (`node scripts/capture-gallery.mjs`)**: Captures deterministic high-DPI showcase screenshots into `docs/gallery/`.
+- **`npm run generate:samples` (`node scripts/generate-sample-saves.mjs`)**: Generates all 4 built-in `SAMPLE_GALLERY` puzzles via headless Chromium and writes `web/public/assets/sample_saves.capy`.
 
 ### B. Native Android Application (`app/`)
 
-From the repository root:
+Run from the repository root:
 
 ```bash
-# 1. Run unit tests for unified native Android wrapper (:app)
+# 1. Run JUnit4 unit tests (CapyAndroidBridgeTest.kt: haptics, deep-link validation, ACTION_SEND downsampling, disk backups)
 ./gradlew app:testDebugUnitTest
 
 # 2. Compile Web bundle and assemble Android debug APK
@@ -61,45 +78,44 @@ From the repository root:
 ```
 
 > [!IMPORTANT]
-> Never run `./gradlew app:installDebug` unless explicitly requested by the user, in accordance with repository safety rules.
+> Never run `./gradlew app:installDebug` unless explicitly requested by the user.
 
 ---
 
 ## 3. Automated Gesture & Canvas Feature Testing Patterns
 
-When extending [`web/scripts/test.mjs`](./web/scripts/test.mjs) for [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), adhere to these patterns:
+When extending [`web/scripts/test.mjs`](./web/scripts/test.mjs) for [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), follow these deterministic patterns:
 
-### 1. Testing Google Maps-Style One-Finger Double-Tap-and-Drag Zoom
-- **Gesture Sequence**:
-  1. Dispatch `pointerdown` at $(x, y)$, wait 30ms, and dispatch `pointerup` (first tap recorded).
-  2. Within 200ms (below `DOUBLE_TAP_TIMEOUT = 350ms`), dispatch second `pointerdown` at $(x, y)$.
-  3. Dispatch `pointermove` downward $(x, y + \Delta y)$ to zoom **in** (or upward to zoom **out** when `reverseDoubleTapZoom` is `false`).
-  4. Dispatch `pointerup`.
+### 1. Google Maps-Style One-Finger Double-Tap-and-Drag Zoom
+1. Dispatch `pointerdown` at $(x, y)$, wait 30ms, and dispatch `pointerup` (first tap).
+2. Within 200ms (below `DOUBLE_TAP_TIMEOUT = 350ms`), dispatch second `pointerdown` at $(x, y)$.
+3. Dispatch `pointermove` downward $(x, y + \Delta y)$ to zoom **in** (or upward to zoom **out** when `reverseDoubleTapZoom` is `false`), then `pointerup`.
 
-### 2. Testing Smooth Pan Momentum (Inertial Gliding) & Touch Cancellation
-- **Gesture Sequence**:
-  1. Dispatch `pointerdown` at $(x_0, y_0)$.
-  2. Dispatch a rapid series of `pointermove` events over ~80ms such that flick velocity exceeds $0.18\text{ px/ms}$, then dispatch `pointerup`.
-  3. Dispatch an immediate `pointerdown` mid-glide to verify zero-latency momentum cancellation.
+### 2. Smooth Pan Momentum (Inertial Gliding) & Touch Cancellation
+1. Dispatch `pointerdown` at $(x_0, y_0)$.
+2. Dispatch rapid `pointermove` steps over ~80ms so flick velocity exceeds $0.18\text{ px/ms}$, then `pointerup`.
+3. Dispatch an immediate `pointerdown` mid-glide to verify zero-latency momentum cancellation.
 
-### 3. Testing Corner Panning Bounds (`clampCanvasOffset`)
-- **Verification**:
-  1. Set zoom scale to $2.5\times$ and pan towards the top-left corner $(0, 0)$.
-  2. Verify that the artwork corner can be panned past the viewport center:
-     $$\text{panOffset.x} \le \frac{\text{containerWidth}}{2}$$
+### 3. Corner Panning Bounds (`clampCanvasOffset`)
+1. Zoom to $2.5\times$ and pan toward the top-left corner $(0, 0)$.
+2. Assert the artwork corner can pan comfortably past the viewport center:
+   $$\text{panOffset.x} \le \frac{\text{containerWidth}}{2}$$
 
 ---
 
-## 4. Continuous Integration Pipeline ([`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml))
+## 4. Continuous Integration Pipeline ([`deploy-branch.yml`](./.github/workflows/deploy-branch.yml))
 
-Capy uses a bifurcated GitHub Actions workflow ensuring high velocity and security:
+Capy uses a two-stage GitHub Actions workflow balancing fast verification and minimal permissions:
 
-1. **Build & Test Job** (`contents: read`):
-   - Compiles `web/` (`npm ci && npm run build`, which includes `tsc`).
-   - Executes Android unit tests (`./gradlew app:testDebugUnitTest`).
-   - Assembles native Android debug APK (`./gradlew app:assembleDebug`).
-   - Runs in parallel across PR branches without concurrency locks.
-2. **Deploy Job** (`pages: write`, `id-token: write`):
-   - Acquires `deploy-pages` concurrency lock.
-   - Publishes preview builds to `/pull/<number>/` and uploads debug APK to `/pull/<number>/capy.apk`.
-   - On `main` merges, publishes directly to the production root (`https://shthed.github.io/capy/`).
+1. **Build & Test Job (`contents: read`)**:
+   - Compiles `web/` (`npm ci && npm run build`, including `tsc` type verification).
+   - Runs Android JUnit4 unit tests (`./gradlew app:testDebugUnitTest`).
+   - Assembles the Android debug APK (`./gradlew app:assembleDebug`).
+   - Runs in parallel across PR branches without global concurrency locks.
+2. **Deploy to GitHub Pages Job (`contents: write`, `pages: write`, `id-token: write`, `pull-requests: write`)**:
+   - Acquires the `deploy-pages` concurrency lock (`cancel-in-progress: false`).
+   - Publishes open PR previews to `/pull/<number>/` and `/pull/<number>/capy.apk`.
+   - Publishes `main` merges to the production root (`https://shthed.github.io/capy/`) as a single squashed orphan commit on `gh-pages`.
+
+> [!NOTE]
+> **Local Pre-PR Gate vs. GitHub Actions Runner Scope**: `npm test` (Vite SSR unit/codec checks + Playwright headless Chromium E2E suite) is a **mandatory local pre-PR verification gate** before pushing Web/engine/codec changes, while `deploy-branch.yml` runs `npm ci && npm run build` and `./gradlew app:testDebugUnitTest app:assembleDebug` in CI (and skips CI completely via `paths-ignore` when a PR modifies only `.md` or `docs/**` files).

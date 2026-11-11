@@ -1,5 +1,6 @@
 ### 2.5 - 2026-11-11
 
+- Add DEV.md, streamline AGENTS.md, and overhaul repository documentation and privacy policy [#467](https://github.com/shthed/capy/pull/467)
 - Compact changelog headings for mobile, remove preamble, and group same-day patch releases [#469](https://github.com/shthed/capy/pull/469)
 - Standardize historical PR metadata, move changelog rules to AGENTS.md, and add full PR history [#468](https://github.com/shthed/capy/pull/468)
 - Resolve all remaining audit bugfixes from TODO [#466](https://github.com/shthed/capy/pull/466)
