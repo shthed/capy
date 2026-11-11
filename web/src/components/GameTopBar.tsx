@@ -5,6 +5,7 @@ import { CoopParticipant } from '../services/providers/types';
 interface GameTopBarProps {
   activeTitle?: string | null;
   progressPercentage: number;
+  zoomScale?: number;
   isPreviewMode: boolean;
   isCompleted: boolean;
   isFullscreen?: boolean;
@@ -16,11 +17,19 @@ interface GameTopBarProps {
   onOpenSettings: () => void;
   onOpenSaves: () => void;
   onOpenCoop?: () => void;
+  onStepZoom?: () => void;
+}
+
+function formatZoomBadge(zoomScale: number): string {
+  const safeZoom = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+  const roundedTenths = Math.round(safeZoom * 10) / 10;
+  return Number.isInteger(roundedTenths) ? `${roundedTenths}x` : `${roundedTenths.toFixed(1)}x`;
 }
 
 export const GameTopBar: React.FC<GameTopBarProps> = ({
   activeTitle,
   progressPercentage,
+  zoomScale = 1,
   isPreviewMode,
   isCompleted,
   isFullscreen,
@@ -32,7 +41,11 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
   onOpenSettings,
   onOpenSaves,
   onOpenCoop,
+  onStepZoom,
 }) => {
+  const formattedZoom = formatZoomBadge(zoomScale);
+  const isZoomedAwayFromFit = Math.abs(zoomScale - 1) > 0.05;
+
   return (
     <header
       className="fixed top-0 left-0 right-0 z-30 pointer-events-none px-3 pb-3 safe-top flex justify-between items-center"
@@ -41,8 +54,8 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
         paddingRight: 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
       }}
     >
-      {/* Top Left: Progress % / Title Pill */}
-      <div className="pointer-events-auto flex items-center gap-1.5">
+      {/* Top Left: Progress % / Title Pill & Zoom Stepper */}
+      <div className="pointer-events-auto flex items-center gap-1.5 min-w-0">
         <button
           type="button"
           onClick={onOpenSaves}
@@ -54,13 +67,30 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
           }`}
         >
           {activeTitle ? (
-            <span className="truncate max-w-[110px] sm:max-w-[200px]">{activeTitle}</span>
+            <span className="truncate max-w-[96px] sm:max-w-[200px]">{activeTitle}</span>
           ) : (
             <span>Capy Paint</span>
           )}
           <span>•</span>
           <span>{progressPercentage}%</span>
         </button>
+
+        {onStepZoom && (
+          <button
+            type="button"
+            data-testid="topbar-zoom-badge"
+            onClick={onStepZoom}
+            title={`Zoom ${formattedZoom} (tap to cycle 1x, 2x, 4x, 8x, 12x)`}
+            aria-label={`Zoom level ${formattedZoom}. Activate to step zoom`}
+            className={`px-2.5 py-1.5 rounded-full text-xs font-extrabold tabular-nums shadow-lg backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
+              isZoomedAwayFromFit
+                ? 'bg-amber-500/20 text-amber-300 border-amber-400/60 hover:bg-amber-500/30'
+                : 'bg-slate-900/80 text-slate-200 border-slate-700/60 hover:bg-slate-800/80'
+            }`}
+          >
+            {formattedZoom}
+          </button>
+        )}
 
         {coopRoomCode && onOpenCoop && (
           <button

@@ -755,6 +755,121 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
+              {/* Controls: Zoom & Procedural Audio */}
+              <div className="space-y-3 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80">
+                <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
+                  <span className="text-slate-200">Controls</span>
+                </div>
+
+                {/* Zoom Sensitivity */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-300">Zoom Sensitivity</span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {(settings.zoomSensitivity ?? 1.0).toFixed(1)}x
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.1"
+                    data-testid="setting-zoom-sensitivity"
+                    value={settings.zoomSensitivity ?? 1.0}
+                    onChange={(e) =>
+                      updateSetting(
+                        'zoomSensitivity',
+                        Math.round(parseFloat(e.target.value) * 10) / 10
+                      )
+                    }
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  />
+                  <div className="text-[10px] text-slate-400">
+                    Scales wheel, pinch-to-zoom, and one-finger double-tap drag zoom speed
+                  </div>
+                </div>
+
+                {/* Snap to Zoom Stops */}
+                <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
+                  <div className="pr-3 min-w-0">
+                    <div className="text-xs sm:text-sm font-semibold text-slate-200">
+                      Snap to Zoom Stops
+                    </div>
+                    <div className="text-[11px] text-slate-400 leading-tight">
+                      Magnetic detents at 1x, 2x, 4x, 8x, and 12x zoom levels
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    data-testid="setting-snap-zoom-levels"
+                    aria-checked={Boolean(settings.snapZoomLevels)}
+                    onClick={() => updateSetting('snapZoomLevels', !settings.snapZoomLevels)}
+                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                      settings.snapZoomLevels ? 'bg-amber-500' : 'bg-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                        settings.snapZoomLevels ? 'translate-x-4.5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Sound Effects */}
+                <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
+                  <div className="pr-3 min-w-0">
+                    <div className="text-xs sm:text-sm font-semibold text-slate-200">
+                      Sound Effects
+                    </div>
+                    <div className="text-[11px] text-slate-400 leading-tight">
+                      Warm procedural woodblock and brush tap audio feedback
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    data-testid="setting-sound-enabled"
+                    aria-checked={settings.soundEnabled !== false}
+                    onClick={() =>
+                      updateSetting('soundEnabled', !(settings.soundEnabled !== false))
+                    }
+                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                      settings.soundEnabled !== false ? 'bg-amber-500' : 'bg-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                        settings.soundEnabled !== false ? 'translate-x-4.5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Sound Volume */}
+                <div className="space-y-1 pt-1.5 border-t border-slate-800/60">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-300">Sound Volume</span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {Math.round((settings.soundVolume ?? 0.7) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    data-testid="setting-sound-volume"
+                    value={settings.soundVolume ?? 0.7}
+                    onChange={(e) =>
+                      updateSetting('soundVolume', Math.round(parseFloat(e.target.value) * 100) / 100)
+                    }
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  />
+                </div>
+              </div>
+
               {/* Label Sizing & Constraints */}
               <div className="space-y-3 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80">
                 <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">

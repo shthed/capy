@@ -266,7 +266,124 @@ async function runCodecAndEngineTests() {
       );
     }
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, and Version/Changelog sync verified.');
+    // 6. SoundService SSR safety, volume clamping, visibility/disable auto-suspend & rate-throttled woodblock tap
+    const soundMod = await vite.ssrLoadModule('/src/services/SoundService.ts');
+    const canvasMod = await vite.ssrLoadModule('/src/components/PuzzleCanvas.tsx');
+
+    assert.deepEqual(soundMod.SoundService.getConfig(), { enabled: true, volume: 0.7 });
+    assert.equal(
+      soundMod.SoundService.playRegionTap(1, 1000),
+      false,
+      'SoundService.playRegionTap must return false safely without AudioContext in Node SSR'
+    );
+    await soundMod.SoundService.suspend();
+
+    soundMod.SoundService.configure({ enabled: false, volume: 2.5 });
+    assert.deepEqual(soundMod.SoundService.getConfig(), { enabled: false, volume: 1.0 });
+    soundMod.SoundService.configure({ enabled: true, volume: -0.5 });
+    assert.deepEqual(soundMod.SoundService.getConfig(), { enabled: true, volume: 0.0 });
+    assert.equal(
+      soundMod.SoundService.playRegionTap(1, 1100),
+      false,
+      'SoundService must skip synthesis when volume is 0'
+    );
+
+    const prevAudioCtx = globalThis.AudioContext;
+    let mockOscCount = 0;
+    let mockSuspendCount = 0;
+    class MockAudioContext {
+      constructor() {
+        this.state = 'running';
+        this.currentTime = 0;
+        this.destination = {};
+      }
+      async resume() {
+        this.state = 'running';
+      }
+      async suspend() {
+        mockSuspendCount += 1;
+        this.state = 'suspended';
+      }
+      async close() {
+        this.state = 'closed';
+      }
+      createOscillator() {
+        mockOscCount += 1;
+        return {
+          type: 'triangle',
+          frequency: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+          connect() {},
+          disconnect() {},
+          start() {},
+          stop() {},
+          onended: null,
+        };
+      }
+      createBiquadFilter() {
+        return {
+          type: 'lowpass',
+          frequency: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+          Q: { setValueAtTime() {} },
+          connect() {},
+          disconnect() {},
+        };
+      }
+      createGain() {
+        return {
+          gain: {
+            setValueAtTime() {},
+            linearRampToValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+          },
+          connect() {},
+          disconnect() {},
+        };
+      }
+    }
+
+    try {
+      globalThis.AudioContext = MockAudioContext;
+      soundMod.SoundService.disposeForTesting();
+      soundMod.SoundService.configure({ enabled: true, volume: 0.8 });
+      assert.equal(soundMod.SoundService.playRegionTap(1, 2000), true, 'First tap should synthesize');
+      assert.equal(mockOscCount, 1);
+      assert.equal(
+        soundMod.SoundService.playRegionTap(2, 2000 + soundMod.MIN_TAP_INTERVAL_MS - 5),
+        false,
+        'Rapid Paint Mode tap within MIN_TAP_INTERVAL_MS must be throttled'
+      );
+      assert.equal(mockOscCount, 1);
+      assert.equal(
+        soundMod.SoundService.playRegionTap(2, 2000 + soundMod.MIN_TAP_INTERVAL_MS + 1),
+        true,
+        'Tap after MIN_TAP_INTERVAL_MS window must synthesize cleanly'
+      );
+      assert.equal(mockOscCount, 2);
+
+      soundMod.SoundService.configure({ enabled: false });
+      assert.equal(mockSuspendCount >= 1, true, 'Disabling sound must immediately suspend AudioContext');
+      assert.equal(soundMod.SoundService.playRegionTap(3, 3000), false);
+    } finally {
+      soundMod.SoundService.disposeForTesting();
+      soundMod.SoundService.configure({ enabled: true, volume: 0.7 });
+      if (prevAudioCtx === undefined) {
+        delete globalThis.AudioContext;
+      } else {
+        globalThis.AudioContext = prevAudioCtx;
+      }
+    }
+
+    // 7. Magnetic zoom detents (+-4%) & HUD zoom-stop cycle [1, 2, 4, 8, 12]
+    assert.equal(canvasMod.applyZoomSnapDetent(1.95, true), 2, 'Within +-4% of 2x should snap to 2');
+    assert.equal(canvasMod.applyZoomSnapDetent(1.89, true), 1.89, 'Outside +-4% of 2x should not snap');
+    assert.equal(canvasMod.applyZoomSnapDetent(1.95, false), 1.95, 'Disabled snapZoomLevels must be identity');
+    assert.equal(canvasMod.getNextZoomStop(1), 2);
+    assert.equal(canvasMod.getNextZoomStop(2), 4);
+    assert.equal(canvasMod.getNextZoomStop(4), 8);
+    assert.equal(canvasMod.getNextZoomStop(8), 12);
+    assert.equal(canvasMod.getNextZoomStop(12), 1);
+
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
@@ -1042,6 +1159,76 @@ async function runBrowserBasicsSuite() {
     );
     assert.equal(postEvictionPalette.isFreeColor, true, 'BF-6: Expected isFreeColor to be preserved after cache eviction');
     console.log('   PASS: Custom photo STORE_IMAGES persistence, 100% offline PWA reload, post-completion Replay viewport invariance, BF-2 ResizeObserver clamping, and BF-6 customPalette eviction recovery verified.');
+
+    // ------------------------------------------------------------------
+    // 9. Zoom Sensitivity, Magnetic Zoom Stops, Sound Controls & HUD Zoom-Badge Cycle
+    // ------------------------------------------------------------------
+    console.log('-> [E2E 9] Verifying Controls settings persistence and HUD zoom-badge stop cycling...');
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+
+    const zoomSensSlider = page.getByTestId('setting-zoom-sensitivity');
+    await zoomSensSlider.waitFor({ state: 'visible', timeout: 5000 });
+    await zoomSensSlider.fill('1.6');
+
+    const snapZoomToggle = page.getByTestId('setting-snap-zoom-levels');
+    await snapZoomToggle.click();
+
+    const soundEnabledToggle = page.getByTestId('setting-sound-enabled');
+    await soundEnabledToggle.click();
+
+    const soundVolumeSlider = page.getByTestId('setting-sound-volume');
+    await soundVolumeSlider.fill('0.45');
+
+    const persistedControls = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+    });
+    assert.ok(
+      Math.abs(Number(persistedControls.zoomSensitivity) - 1.6) < 1e-6,
+      `Expected zoomSensitivity=1.6 in capy_user_settings_v8, got ${persistedControls.zoomSensitivity}`
+    );
+    assert.equal(
+      persistedControls.snapZoomLevels,
+      true,
+      `Expected snapZoomLevels=true in capy_user_settings_v8, got ${persistedControls.snapZoomLevels}`
+    );
+    assert.equal(
+      persistedControls.soundEnabled,
+      false,
+      `Expected soundEnabled=false in capy_user_settings_v8, got ${persistedControls.soundEnabled}`
+    );
+    assert.ok(
+      Math.abs(Number(persistedControls.soundVolume) - 0.45) < 1e-6,
+      `Expected soundVolume=0.45 in capy_user_settings_v8, got ${persistedControls.soundVolume}`
+    );
+
+    // Re-enable sound effects so gameplay defaults stay clean
+    await soundEnabledToggle.click();
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    const zoomBadge = page.getByTestId('topbar-zoom-badge');
+    await zoomBadge.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Align to 1x stop if currently zoomed in from previous E2E steps
+    for (let guard = 0; guard < 6; guard++) {
+      const text = (await zoomBadge.innerText()).trim();
+      if (text === '1x') break;
+      await zoomBadge.click();
+    }
+    assert.equal((await zoomBadge.innerText()).trim(), '1x', 'Expected top HUD zoom badge to align to 1x');
+
+    const expectedZoomCycle = ['2x', '4x', '8x', '12x', '1x'];
+    for (const expectedLabel of expectedZoomCycle) {
+      await zoomBadge.click();
+      const actualLabel = (await zoomBadge.innerText()).trim();
+      assert.equal(
+        actualLabel,
+        expectedLabel,
+        `Expected topbar-zoom-badge to step to '${expectedLabel}', got '${actualLabel}'`
+      );
+    }
+    console.log('   PASS: Controls settings (zoomSensitivity, snapZoomLevels, soundEnabled, soundVolume) and HUD zoom-badge cycle (1x -> 2x -> 4x -> 8x -> 12x -> 1x) verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');

@@ -21,12 +21,12 @@ Active, prioritized product and engineering backlog for the **Capy** monorepo ([
   - **Tasks (`TASK-*`)**: Independently mergeable `1-PR` slices. `[quick-win]` marks `<= 15 min` agent tasks (`1--3` files, zero external backend blockers, suitable for `Flash`).
 - **Definition of Ready (Anti-Busywork Gate)**: Items enter `TODO.md` *only* when they deliver measurable gameplay delight, accessibility, retention, or crash/test reliability. Zero-impact chores, unused dependency pruning with zero binary impact, placeholder config scaffolds, and ad-SDK bloat are rejected.
 - **Definition of Done (Immediate Deletion)**: Never leave `[x]` checkboxes in `TODO.md`. When a `TASK-*` ships, delete that `TASK-*` line (and its Quick-Win Ready Queue pointer) in the same PR; when a Story or Bug's final task ships, delete the entire card. History lives in Git and [`CHANGELOG.md`](./CHANGELOG.md).
-- **Active Backlog Rollup (`16` Stories across `4` Epics, `10` `[quick-win]` tasks)**:
-  - `EPIC-2` (*4 Stories*): `~145k tokens` | `~65--95 min agent` (`~16--24 hrs human`).
+- **Active Backlog Rollup (`15` Stories across `4` Epics, `7` `[quick-win]` tasks)**:
+  - `EPIC-2` (*3 Stories*): `~104k tokens` | `~48--69 min agent` (`~12.5--17.5 hrs human`).
   - `EPIC-3` (*4 Stories*): `~175k tokens` | `~80--115 min agent` (`~22--32 hrs human`).
   - `EPIC-4` (*3 Stories*): `~117k tokens` | `~54--77 min agent` (`~15--22 hrs human`).
   - `EPIC-5` (*5 Stories*): `~245k tokens` | `~113--165 min agent` (`~34--50 hrs human`).
-  - **Active Total**: `~682k tokens` | `~5.2--7.5 hrs agent` (`~87--128 hrs human`).
+  - **Active Total**: `~641k tokens` | `~4.9--7.1 hrs agent` (`~83.5--121.5 hrs human`).
 
 </details>
 
@@ -36,16 +36,13 @@ Active, prioritized product and engineering backlog for the **Capy** monorepo ([
 
 Self-contained `1-PR` tasks (`1--3` files, zero external backend dependencies) ready to pull and ship immediately with `Flash` or `Pro`:
 
-1. **`TASK-2.2a`** ([`US-2.2`](#us-22-custom-zoom-sensitivity--magnetic-scale-detents)): Add `zoomSensitivity` (`0.5x--2.0x`) slider in Controls and scale canvas zoom deltas.
-2. **`TASK-2.2b`** ([`US-2.2`](#us-22-custom-zoom-sensitivity--magnetic-scale-detents)): Add `snapZoomLevels` (`1x`, `2x`, `4x`, `8x`, `12x`) magnetic detents and zoom-badge tap stepping.
-3. **`TASK-2.3a`** ([`US-2.3`](#us-23-zero-asset-procedural-asmr-web-audio-engine)): Scaffold `SoundService.ts` (`AudioContext` + visibility auto-suspend + tap woodblock click) and Settings controls.
-4. **`TASK-3.1a`** ([`US-3.1`](#us-31-daily-featured-puzzle--streak-medals)): Add deterministic UTC "Puzzle of the Day" hero card at the top of the **Create** tab.
-5. **`TASK-3.2a`** ([`US-3.2`](#us-32-inclusive-accessibility--reduced-motion-keyboard--colorblind-patterns)): Add `reducedMotion` setting (auto-detecting `prefers-reduced-motion: reduce`) to skip confetti, camera glides, and hint pulses.
-6. **`TASK-3.2b`** ([`US-3.2`](#us-32-inclusive-accessibility--reduced-motion-keyboard--colorblind-patterns)): Add `1`--`9` swatch select, `+`/`-` zoom, `0` reset view, and Arrow/WASD pan keyboard shortcuts.
-7. **`TASK-3.4a`** ([`US-3.4`](#us-34-lifetime-player-statistics--milestone-achievements)): Build local `PlayerStatsService.ts` (`capy_player_stats_v1`) and a **Lifetime Stats** card in Settings.
-8. **`TASK-4.1a`** ([`US-4.1`](#us-41-focal-point-quadtree-sub-tiles--parent-breadcrumbs)): Persist `parentSnapshotId` on detail tiles and show a "Back to Parent Puzzle" pill in `GameTopBar.tsx`.
-9. **`TASK-4.2a`** ([`US-4.2`](#us-42-printable-vector-svg--pdf-coloring-sheet-exporter)): Build `SvgPrintExporter.ts` exporting `borderMap` outlines, region numbers, and swatch legend as `.svg`.
-10. **`TASK-4.3a`** ([`US-4.3`](#us-43-co-op-collaborator-undo-sync--region-ping-beacon)): Broadcast `'UNFILL_EVENT'` over `HybridCoopRoomAdapter` so initial-fill Undo syncs across Co-op peers.
+1. **`TASK-3.1a`** ([`US-3.1`](#us-31-daily-featured-puzzle--streak-medals)): Add deterministic UTC "Puzzle of the Day" hero card at the top of the **Create** tab.
+2. **`TASK-3.2a`** ([`US-3.2`](#us-32-inclusive-accessibility--reduced-motion-keyboard--colorblind-patterns)): Add `reducedMotion` setting (auto-detecting `prefers-reduced-motion: reduce`) to skip confetti, camera glides, and hint pulses.
+3. **`TASK-3.2b`** ([`US-3.2`](#us-32-inclusive-accessibility--reduced-motion-keyboard--colorblind-patterns)): Add `1`--`9` swatch select, `+`/`-` zoom, `0` reset view, and Arrow/WASD pan keyboard shortcuts.
+4. **`TASK-3.4a`** ([`US-3.4`](#us-34-lifetime-player-statistics--milestone-achievements)): Build local `PlayerStatsService.ts` (`capy_player_stats_v1`) and a **Lifetime Stats** card in Settings.
+5. **`TASK-4.1a`** ([`US-4.1`](#us-41-focal-point-quadtree-sub-tiles--parent-breadcrumbs)): Persist `parentSnapshotId` on detail tiles and show a "Back to Parent Puzzle" pill in `GameTopBar.tsx`.
+6. **`TASK-4.2a`** ([`US-4.2`](#us-42-printable-vector-svg--pdf-coloring-sheet-exporter)): Build `SvgPrintExporter.ts` exporting `borderMap` outlines, region numbers, and swatch legend as `.svg`.
+7. **`TASK-4.3a`** ([`US-4.3`](#us-43-co-op-collaborator-undo-sync--region-ping-beacon)): Broadcast `'UNFILL_EVENT'` over `HybridCoopRoomAdapter` so initial-fill Undo syncs across Co-op peers.
 
 ---
 
@@ -75,47 +72,23 @@ Self-contained `1-PR` tasks (`1--3` files, zero external backend dependencies) r
 
 </details>
 
-### US-2.2: Custom Zoom Sensitivity & Magnetic Scale Detents
-
-- **Description**: Add a configurable zoom-speed multiplier (`0.5x--2.0x`) and optional magnetic snap detents (`1x`, `2x`, `4x`, `8x`, `12x`) with tap-to-step cycling on the top HUD zoom badge.
-- **Value**: Lets players tune pinch, trackpad, and mouse-wheel zoom speed to their comfort and snap cleanly to crisp overview/detail zoom stops.
-- **Why Now**: Camera zooming occurs dozens of times per session; improving zoom control upgrades every puzzle with low complexity (`2--3` files, zero backend).
-- **Tasks**:
-  - **TASK-2.2a** `[quick-win]`: Add `zoomSensitivity` (`0.5x--2.0x`) slider in `SettingsModal.tsx` and apply multiplier to wheel, pinch, and double-tap-drag zoom in `PuzzleCanvas.tsx`.
-  - **TASK-2.2b** `[quick-win]`: Add `snapZoomLevels` (`1x`, `2x`, `4x`, `8x`, `12x` within `+-4%`) detents in `PuzzleCanvas.tsx` and tap-to-step cycling on the zoom badge in `GameTopBar.tsx`.
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Story` | `EPIC-2` | `priority: critical` | `domain: canvas, ui`
-- **Complexity & Model**: `low` / `moderate` | **Recommended Model**: `Flash`
-- **Effort Estimate**: `~25,000 tokens` (`~13k` + `~12k`) | `~10--16 min agent` (`~2--4 hrs human`)
-- **Target Files**: [`web/src/types/index.ts`](./web/src/types/index.ts), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/components/GameTopBar.tsx`](./web/src/components/GameTopBar.tsx), [`WEB.md`](./WEB.md)
-- **Acceptance Criteria**:
-  - `zoomSensitivity` (default `1.0`) and `snapZoomLevels` (default `false`) persist in `capy_user_settings_v8`.
-  - Focal-point coordinate invariance under pinch midpoint / cursor holds across all sensitivity multipliers.
-
-</details>
-
 ### US-2.3: Zero-Asset Procedural ASMR Web Audio Engine
 
 - **Description**: Build a pure Web Audio API synthesizer (`SoundService.ts`) producing soft brush/woodblock taps, rising pentatonic Paint Mode streak notes, swatch-completion chord arpeggios, and puzzle-completion chimes.
 - **Value**: Adds warm, relaxing tactile audio feedback that pairs with mobile haptics while adding `0 KB` of MP3/WAV bundle weight and working 100% offline.
-- **Why Now**: Capy currently has visual and haptic feedback but is completely silent; subtle procedural ASMR audio dramatically elevates perceived game polish.
+- **Why Now**: Soft woodblock region-tap audio is now live (`SoundService.ts`); layering melodic Paint Mode streak notes and completion chimes finishes the tactile audio experience.
 - **Tasks**:
-  - **TASK-2.3a** `[quick-win]`: Create `SoundService.ts` (`AudioContext` unlock, `visibilitychange` auto-suspend, soft tap click) plus `soundEnabled` and `soundVolume` controls in `SettingsModal.tsx`.
   - **TASK-2.3b**: Layer harmonic pentatonic streak progression during Paint Mode drags, warm swatch-clear arpeggios, and 100% puzzle completion chimes.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | `EPIC-2` | `priority: critical` | `domain: audio, ui`
-- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Flash` (`2.3a`), `Pro` (`2.3b`)
-- **Effort Estimate**: `~38,000 tokens` (`~16k` + `~22k`) | `~18--25 min agent` (`~4--6 hrs human`)
-- **Target Files**: `web/src/services/SoundService.ts`, [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
+- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Pro`
+- **Effort Estimate**: `~22,000 tokens` | `~10--15 min agent` (`~2.5--3.5 hrs human`)
+- **Target Files**: [`web/src/services/SoundService.ts`](./web/src/services/SoundService.ts), [`web/src/App.tsx`](./web/src/App.tsx), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
-  - `soundEnabled: boolean` (default `true`) and `soundVolume: number` (`0.0--1.0`, default `0.7`) persist in `capy_user_settings_v8`.
-  - `AudioContext` suspends immediately on `document.hidden` / Android activity backgrounding so background audio never leaks battery.
+  - Rising pentatonic streak notes reset cleanly after gesture idle (`> 450ms`), and swatch/puzzle completion arpeggios respect `soundEnabled`, `soundVolume`, and `document.hidden` auto-suspend.
 
 </details>
 

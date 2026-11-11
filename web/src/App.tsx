@@ -14,6 +14,7 @@ import {
 } from './types';
 import { DEFAULT_SETTINGS, StorageService } from './services/StorageService';
 import { NativeBridge } from './services/NativeBridge';
+import { SoundService } from './services/SoundService';
 import { GenerationCancelledError, PuzzleWorkerService } from './services/PuzzleWorkerService';
 import {
   decodeProgressDeltaToken,
@@ -99,6 +100,14 @@ export const App: React.FC = () => {
   const [snapshots, setSnapshots] = useState<SavedSnapshot[]>(() => StorageService.loadSnapshots());
   const [activeSnapshotId, setActiveSnapshotId] = useState<string | null>(null);
 
+  // Sync procedural Web Audio synthesizer settings
+  useEffect(() => {
+    SoundService.configure({
+      enabled: settings.soundEnabled !== false,
+      volume: settings.soundVolume ?? 0.7,
+    });
+  }, [settings.soundEnabled, settings.soundVolume]);
+
   // Active Game State
   const [puzzle, setPuzzle] = useState<PuzzleData | null>(null);
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
@@ -111,8 +120,10 @@ export const App: React.FC = () => {
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
   const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState<number>(0);
+  const [stepZoomTrigger, setStepZoomTrigger] = useState<number>(0);
   const [resetViewTrigger, setResetViewTrigger] = useState<number>(0);
   const [restoreViewTrigger, setRestoreViewTrigger] = useState<number>(0);
+  const [currentZoomScale, setCurrentZoomScale] = useState<number>(1);
   const [isCanvasTransformed, setIsCanvasTransformed] = useState<boolean>(false);
   const [initialViewport, setInitialViewport] = useState<{
     zoomScale: number;
@@ -1645,6 +1656,7 @@ export const App: React.FC = () => {
 
         const orderedList = Array.from(nextFilled);
         const isComplete = nextFilled.size >= puzzle.regions.length;
+        SoundService.playRegionTap(activeColorId);
         if (isComplete) {
           NativeBridge.haptic('success', settings.hapticsEnabled);
           confetti({
@@ -1714,6 +1726,7 @@ export const App: React.FC = () => {
       setFilledRegionIds(nextFilled);
       setHintRegionId(null);
       emitCoopPaint('FILL', [regionId]);
+      SoundService.playRegionTap(region.colorId);
 
       const orderedList = Array.from(nextFilled);
 
@@ -1852,6 +1865,7 @@ export const App: React.FC = () => {
             newUndoEntries.map((u) => u.regionId),
             changedColors
           );
+          SoundService.playRegionTap(activeColorId);
 
           const orderedList = Array.from(nextFilled);
           const isComplete = nextFilled.size >= puzzle.regions.length;
@@ -1933,6 +1947,9 @@ export const App: React.FC = () => {
         emitCoopPaint(
           'FILL',
           newUndoEntries.map((u) => u.regionId)
+        );
+        SoundService.playRegionTap(
+          newUndoEntries[newUndoEntries.length - 1]?.paintedColorId ?? activeColorId
         );
 
         const orderedList = Array.from(nextFilled);
@@ -3378,6 +3395,7 @@ export const App: React.FC = () => {
       <GameTopBar
         activeTitle={activeTitle}
         progressPercentage={progressPercentage}
+        zoomScale={currentZoomScale}
         isPreviewMode={isPreviewMode}
         isCompleted={isCompleted}
         isFullscreen={isFullscreen}
@@ -3397,6 +3415,11 @@ export const App: React.FC = () => {
         onOpenCoop={() => {
           setSettingsInitialTab(3);
           setShowSettings(true);
+        }}
+        onStepZoom={() => {
+          if (!puzzle || isLoading) return;
+          NativeBridge.haptic('tick', settings.hapticsEnabled);
+          setStepZoomTrigger((prev) => prev + 1);
         }}
       />
 
@@ -3430,12 +3453,15 @@ export const App: React.FC = () => {
         hintIntensity={settings.hintIntensity}
         panMomentum={settings.panMomentum}
         reverseDoubleTapZoom={settings.reverseDoubleTapZoom}
+        zoomSensitivity={settings.zoomSensitivity}
+        snapZoomLevels={settings.snapZoomLevels}
         displayNumberMap={displayNumberMap}
         initialZoomScale={initialViewport.zoomScale}
         initialPanOffsetX={initialViewport.panOffsetX}
         initialPanOffsetY={initialViewport.panOffsetY}
         zoomInTrigger={zoomInTrigger}
         zoomOutTrigger={zoomOutTrigger}
+        stepZoomTrigger={stepZoomTrigger}
         resetViewTrigger={resetViewTrigger}
         restoreViewTrigger={restoreViewTrigger}
         replayFollowRegionId={
@@ -3460,6 +3486,7 @@ export const App: React.FC = () => {
           if (containerW && containerH && containerW > 0 && containerH > 0) {
             canvasContainerSizeRef.current = { width: containerW, height: containerH };
           }
+          setCurrentZoomScale((prev) => (Math.abs(prev - zoom) < 0.001 ? prev : zoom));
           setIsCanvasTransformed(zoom > 1.05 || Math.abs(panX) > 6 || Math.abs(panY) > 6);
           if (!isLoading && puzzle && activeSnapshotId) {
             viewportRef.current = { zoomScale: zoom, panOffsetX: panX, panOffsetY: panY };
