@@ -96,6 +96,45 @@ Capy pairs real-time 60--120fps HTML5 Canvas interaction, off-thread computer vi
 4. **Self-Healing Deterministic Verification**: Author and run unit, codec, Playwright E2E (`npm test`), TypeScript (`npm run lint`), Vite (`npm run build`), and Android Gradle checks (`./gradlew app:testDebugUnitTest`, `./gradlew app:assembleDebug`), fixing regressions autonomously before opening or updating a PR.
 5. **Zero-Drift Documentation & Traceability**: Synchronize subsystem `.md` files, [`CHANGELOG.md`](./CHANGELOG.md), and [`TODO.md`](./TODO.md) in the same PR as the code change, pinning every code reference to an immutable commit SHA (`blob/<sha>/<path>#L<start>-L<end>`).
 
+### Capy Lean Agile Backlog & `TODO.md` Entry Standard
+
+Capy uses a lightweight **Lean Agile** backlog in [`TODO.md`](./TODO.md) purpose-built for rapid Human + AI iteration rather than multi-week calendar sprints:
+
+1. **3-Tier Hierarchy (`EPIC-*` -> `US-*` / `BUG-*` -> `1-PR TASK-*`, plus `ICE-*`)**:
+   - **Epics (`EPIC-1`..`EPIC-N`)**: Outcome-driven product pillars ordered strictly by execution priority, each stating a clear **Epic Goal**.
+   - **User Stories (`US-N.M`) & Bugs (`BUG-N`)**: Cohesive player-facing capabilities or verified defects.
+   - **Tasks (`TASK-N.Ma`, `TASK-N.Mb`, ...)**: Independently mergeable `1-PR` slices. Tag `<= 15 min` (`1--3` file, zero-backend, `Flash`-ready) slices with `[quick-win]` and index them in Section 1 (`Quick-Win Ready Queue`).
+   - **Platform Icebox (`ICE-*`)**: Unscheduled long-term platform shells kept collapsed at the bottom of `TODO.md` until actively chartered.
+2. **Definition of Ready (Anti-Busywork Gate)**:
+   - An item may enter [`TODO.md`](./TODO.md) **only** if it states concrete **Player Value** (better touch ergonomics, tactile polish, accessibility, daily retention, creative sharing) or **Reliability Value** (fixing a real crash, data-loss vector, UI defect, or silent test blindspot) alongside a **Why Now** priority justification.
+   - Reject zero-impact housekeeping chores (e.g., pruning unreferenced catalog keys that add `0 B` to builds, committing dummy config placeholders before credentials exist, redundant P2P layers, or ad-SDK bloat).
+3. **Definition of Done (Immediate Deletion)**:
+   - Never leave `[x]` checkboxes in [`TODO.md`](./TODO.md). Delete completed `TASK-*` lines (and their Quick-Win Ready Queue pointers) in the same PR that ships them; once a Story or Bug's final task ships, delete the entire card immediately.
+4. **Canonical Mobile-First Card & `<details>` Template**:
+   - Keep **Description**, **Value**, **Why Now**, and **1-line `TASK-*` titles** visible on the card surface; wrap verbose **Tags, Priority, Model Tier, Token/Time Estimates, Target Files, and Acceptance Criteria** inside `<details><summary>...</summary></details>` (always keep a blank line after `</summary>` and before `</details>` so GitHub Flavored Markdown renders inner bullet lists):
+   ````markdown
+   ### US-X.Y: Concise Outcome-Focused Title
+
+   - **Description**: Plain-English summary of what is built or fixed.
+   - **Value**: Concrete benefit to player experience, accessibility, or reliability.
+   - **Why Now**: Justification for why this item earns its current backlog priority.
+   - **Tasks**:
+     - **TASK-X.Ya** `[quick-win]`: Independently mergeable 1-PR slice summary.
+     - **TASK-X.Yb**: Follow-up 1-PR slice summary.
+
+   <details>
+   <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+   - **Type & Priority**: `Story` | `EPIC-X` | `priority: high` | `domain: canvas, ui`
+   - **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Flash` (`X.Ya`), `Pro` (`X.Yb`)
+   - **Effort Estimate**: `~35,000 tokens` | `~16--22 min agent` (`~4--6 hrs human`)
+   - **Target Files**: `./web/src/...`
+   - **Acceptance Criteria**:
+     - Concrete, testable invariants verified by `npm test` or `./gradlew app:testDebugUnitTest`.
+
+   </details>
+   ````
+
 ---
 
 ## 3. Choosing the Right AI Model, Capability Tier & Workflow
