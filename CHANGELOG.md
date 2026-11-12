@@ -1,4 +1,8 @@
-### 2.6 - 2026-11-12 (Alpha)
+### 2.7 - 2026-11-12 (Alpha)
+
+- Add precision loupe, melodic Web Audio, fill blooms, CRDT reset epochs, Co-op rewind sync, and chunked Android cloud saves [#484](https://github.com/shthed/capy/pull/484)
+
+### 2.6 - 2026-11-12
 
 - Add capypaint.com Cloudflare Worker, Co-op relay security hardening, clean-room export, and dual-approval CI gate [#482](https://github.com/shthed/capy/pull/482)
 
