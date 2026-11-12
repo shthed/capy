@@ -1,3 +1,4 @@
+import { base64ToUint8, uint8ToBase64 } from '../CapyCodec';
 import { NativeBridge } from '../NativeBridge';
 import {
   attemptSilentOrOneTapGoogleSignIn,
@@ -406,15 +407,107 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
     return NativeBridge.saveCloudSnapshot(envelope.slotKey, JSON.stringify(envelope));
   }
 
-  async readBinaryBlob(): Promise<Uint8Array | null> {
-    // Play Games Snapshots embeds compact binary saves via inlineBinaryB64 inside the manifest
-    return null;
+  async readBinaryBlob(blobRef: string): Promise<Uint8Array | null> {
+    if (!blobRef || typeof blobRef !== 'string') return null;
+    const match = /^pgblob:([a-zA-Z0-9._-]+):(\d+):(\d+)$/.exec(blobRef.trim());
+    if (!match) return null;
+
+    const safeBlobKey = match[1];
+    const totalChunks = Number(match[2]);
+    const expectedBytes = Number(match[3]);
+    if (
+      !Number.isInteger(totalChunks) ||
+      totalChunks < 1 ||
+      totalChunks > MAX_PLAY_GAMES_BINARY_CHUNKS ||
+      !Number.isInteger(expectedBytes) ||
+      expectedBytes < 1 ||
+      expectedBytes > MAX_PLAY_GAMES_BINARY_BYTES
+    ) {
+      return null;
+    }
+
+    const assembled = new Uint8Array(expectedBytes);
+    let writeOffset = 0;
+
+    for (let i = 0; i < totalChunks; i++) {
+      let chunkB64 = NativeBridge.loadCloudBinaryChunk(safeBlobKey, i);
+      if (!chunkB64) {
+        const expectedPartSlot = `${safeBlobKey}_part_${i}`;
+        const pullStarted = NativeBridge.requestCloudSnapshotPull(expectedPartSlot);
+        if (pullStarted) {
+          chunkB64 = await new Promise<string | null>((resolve) => {
+            let settled = false;
+            const timer = setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              unsub();
+              resolve(NativeBridge.loadCloudBinaryChunk(safeBlobKey, i));
+            }, 1500);
+            const unsub = NativeBridge.onCloudSnapshot((slot, payload) => {
+              if (settled || slot !== expectedPartSlot) return;
+              settled = true;
+              clearTimeout(timer);
+              unsub();
+              resolve(payload || null);
+            });
+          });
+        }
+      }
+      if (!chunkB64) return null;
+
+      let partBytes: Uint8Array;
+      try {
+        partBytes = base64ToUint8(chunkB64);
+      } catch {
+        return null;
+      }
+      if (partBytes.byteLength === 0 || writeOffset + partBytes.byteLength > expectedBytes) {
+        return null;
+      }
+      assembled.set(partBytes, writeOffset);
+      writeOffset += partBytes.byteLength;
+    }
+
+    return writeOffset === expectedBytes ? assembled : null;
   }
 
-  async writeBinaryBlob(): Promise<string | null> {
-    return null;
+  async writeBinaryBlob(
+    slotKey: string,
+    _fileName: string,
+    bytes: Uint8Array
+  ): Promise<string | null> {
+    if (
+      !slotKey ||
+      !bytes ||
+      bytes.byteLength === 0 ||
+      bytes.byteLength > MAX_PLAY_GAMES_BINARY_BYTES
+    ) {
+      return null;
+    }
+    const cleanSlot = slotKey.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64) || 'custom_save';
+    const safeBlobKey = `pgblob_${cleanSlot}`;
+    const totalChunks = Math.ceil(bytes.byteLength / PLAY_GAMES_BINARY_CHUNK_BYTES);
+    if (totalChunks < 1 || totalChunks > MAX_PLAY_GAMES_BINARY_CHUNKS) {
+      return null;
+    }
+
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * PLAY_GAMES_BINARY_CHUNK_BYTES;
+      const end = Math.min(bytes.byteLength, start + PLAY_GAMES_BINARY_CHUNK_BYTES);
+      const chunkB64 = uint8ToBase64(bytes.subarray(start, end));
+      const saved = NativeBridge.saveCloudBinaryChunk(safeBlobKey, i, totalChunks, chunkB64);
+      if (!saved) {
+        return null;
+      }
+    }
+
+    return `pgblob:${safeBlobKey}:${totalChunks}:${bytes.byteLength}`;
   }
 }
+
+export const PLAY_GAMES_BINARY_CHUNK_BYTES = 180_000;
+export const MAX_PLAY_GAMES_BINARY_BYTES = 3 * 1024 * 1024;
+export const MAX_PLAY_GAMES_BINARY_CHUNKS = 32;
 
 // ---------------------------------------------------------------------------
 // 3. Extensible Future Platform Drivers (Steam, Microsoft/Xbox, Apple/iCloud)

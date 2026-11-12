@@ -1,0 +1,51 @@
+{
+  // Cloudflare Workers Static Assets + Hibernating SQLite Durable Object Co-op Relay
+  // Compatible with both Cloudflare Workers Free Plan and Paid Plan (`new_sqlite_classes`).
+  "name": "capy-paint",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "capypaint.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.capypaint.com",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "directory": "./web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COOP_ROOMS",
+        "class_name": "CoopRoomDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CoopRoomDurableObject"]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05
+    }
+  }
+}

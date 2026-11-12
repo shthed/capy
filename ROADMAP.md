@@ -325,7 +325,7 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Effort Estimate**: `~50,000 tokens` | `~25--35 min agent` (`~8--12 hrs human`)
 - **Target Files**: `relay/`, [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
-  - Hibernates between strokes (`0` billable CPU ms while idle), enforces `<= 4 KB` frame caps, and automatically falls back to `BroadcastChannel` when offline or unconfigured.
+  - Hibernates between strokes (`0` billable CPU ms while idle via C++ `PING`/`PONG`), enforces `<= 6 KB` frame caps, strict `Origin` validation, `40 frames / 5s` rate limiting, and write-once initial `seed_token` persistence, and automatically falls back to `BroadcastChannel` when offline or on `localhost`/`github.io`.
 
 </details>
 
@@ -417,8 +417,12 @@ Parked native desktop/mobile store wrappers awaiting completion of `EPIC-2`--`EP
 Completed Epics and User Stories archived upon merge to `main` (full granular PR history lives in [`CHANGELOG.md`](./CHANGELOG.md)):
 
 <details>
-<summary>Expand Shipped Epics & Stories (EPIC-1 #476 & Shipped Slices -- PRs #431--#483)</summary>
+<summary>Expand Shipped Epics & Stories (EPIC-1 #476 & Shipped Slices -- PRs #431--#484)</summary>
 
+- **Sprint 1 Reliability, Replay Polish & Cloud Hardening (`BUG-1`, `BUG-3`, `F-01`, `F-02`)**:
+  - **Co-op `WELCOME_STATE` Reload Persistence, Replay Scrubber `Resume Here` & `Reset Progress` `'UNFILL_EVENT'` Sync, Compact Mobile `ReplayControls` Pill Fit & Save-Load `replayLoop` Auto-Disable/Auto-Resume, Monotonic CRDT `resetEpoch`, `> 180 KB` Chunked Play Games Binary Sync, and Android `MainActivity` `onPause` / `onResume` WebView Lifecycle Guard** -- [#484](https://github.com/shthed/capy/pull/484)
+- **Shipped Slices from `EPIC-5` (*Production Cloud Auth, Cross-Network Co-op & Optional AI Creation* -- [#480](https://github.com/shthed/capy/issues/480))**:
+  - **`capypaint.com` Cloudflare Workers Static Assets, Hibernating `CoopRoomDurableObject` Relay (`US-5.2`) & Root `assetlinks.json` App Links (`US-5.1`)** -- [#482](https://github.com/shthed/capy/pull/482)
 - **Shipped Slices from `EPIC-4` (*Serverless Infinite Zoom, Printable Art & Local Co-op Polish* -- [#479](https://github.com/shthed/capy/issues/479))**:
   - **Infinite Zoom Parent Breadcrumbs (`TASK-4.1a`), Printable Vector `.svg` Coloring Sheets (`TASK-4.2a`) & Co-op `UNFILL_EVENT` Undo Sync (`TASK-4.3a`)** -- [#475](https://github.com/shthed/capy/pull/475)
 - **Shipped Slices from `EPIC-3` (*Touch Assist, Sensory Polish, Retention, Accessibility & Replays* -- [#478](https://github.com/shthed/capy/issues/478))**:

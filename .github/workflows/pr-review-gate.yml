@@ -1,0 +1,338 @@
+name: Dual AI & Owner PR Review Gate
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - converted_to_draft
+      - labeled
+      - unlabeled
+  pull_request_review:
+    types:
+      - submitted
+      - edited
+      - dismissed
+  issue_comment:
+    types:
+      - created
+      - edited
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: write
+
+concurrency:
+  group: pr-review-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  review-gate:
+    name: Dual AI & Owner Review Gate
+    if: github.repository == 'shthed/capy' && github.actor != 'github-actions[bot]' && (github.event_name != 'issue_comment' || github.event.issue.pull_request != null)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate Dual AI + Project Owner Approval State
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.payload.pull_request?.number || context.payload.issue?.number;
+            if (!prNumber) {
+              core.info('No pull request number associated with event; skipping.');
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber,
+            });
+            if (pr.state !== 'open') {
+              core.info(`PR #${prNumber} is ${pr.state}; skipping review gate.`);
+              return;
+            }
+
+            const headSha = pr.head.sha;
+            const isDraft = Boolean(pr.draft);
+            const ownerLogin = owner.toLowerCase();
+
+            const { data: headCommit } = await github.rest.repos.getCommit({
+              owner,
+              repo,
+              ref: headSha,
+            });
+            const commitMs =
+              Date.parse(headCommit.commit.committer?.date || headCommit.commit.author?.date || '') || 0;
+
+            const issueEvents = await github.paginate(github.rest.issues.listEvents, {
+              owner,
+              repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            let latestForcePushMs = 0;
+            for (const ev of issueEvents) {
+              if (ev.event === 'head_ref_force_pushed' && ev.created_at) {
+                const ts = Date.parse(ev.created_at) || 0;
+                if (ts > latestForcePushMs) latestForcePushMs = ts;
+              }
+            }
+            const latestPushMs = Math.max(commitMs, latestForcePushMs);
+
+            const activeLabels = new Set((pr.labels || []).map((l) => l.name));
+
+            async function safeRemoveLabel(labelName) {
+              if (!activeLabels.has(labelName)) return;
+              activeLabels.delete(labelName);
+              try {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  name: labelName,
+                });
+              } catch (err) {
+                if (err.status !== 404) {
+                  core.warning(`Failed to remove label ${labelName}: ${err.message}`);
+                }
+              }
+            }
+
+            const isNewPushOrDraft =
+              isDraft ||
+              (context.eventName === 'pull_request' &&
+                (context.payload.action === 'synchronize' ||
+                  context.payload.action === 'converted_to_draft'));
+
+            if (isNewPushOrDraft) {
+              await safeRemoveLabel('review:ai-approved');
+              await safeRemoveLabel('review:owner-approved');
+              await safeRemoveLabel('review:changes-requested');
+            }
+
+            // Determine latest labeled timestamps for review:owner-approved
+            let latestOwnerLabelMs = 0;
+            for (const ev of issueEvents) {
+              if (
+                ev.event === 'labeled' &&
+                ev.label?.name === 'review:owner-approved' &&
+                ev.actor?.login?.toLowerCase() === ownerLogin &&
+                ev.created_at
+              ) {
+                const ts = Date.parse(ev.created_at) || 0;
+                if (ts > latestOwnerLabelMs) latestOwnerLabelMs = ts;
+              }
+            }
+            if (activeLabels.has('review:owner-approved') && latestOwnerLabelMs < latestPushMs) {
+              await safeRemoveLabel('review:owner-approved');
+            }
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            // 1. Evaluate Independent AI Agent Gate for exact headSha
+            const aiMarkerRegex = new RegExp(
+              `<!--\\s*capy-review:\\s*actor=ai-agent\\s+verdict=(APPROVED|CHANGES_REQUESTED)\\s+sha=${headSha}\\s+score=([0-9]+(?:\\.[0-9]+)?)%?[^>]*-->`,
+              'i'
+            );
+            let latestAiSignal = null;
+            const allBodies = [
+              ...reviews.map((r) => ({
+                body: r.body || '',
+                ts: Date.parse(r.submitted_at || '') || 0,
+              })),
+              ...comments.map((c) => ({
+                body: c.body || '',
+                ts: Date.parse(c.updated_at || c.created_at || '') || 0,
+              })),
+            ].sort((a, b) => a.ts - b.ts);
+
+            for (const item of allBodies) {
+              const m = aiMarkerRegex.exec(item.body);
+              if (m) {
+                latestAiSignal = {
+                  verdict: m[1].toUpperCase(),
+                  score: Number(m[2]),
+                };
+              }
+            }
+
+            const hasValidAiMarker =
+              latestAiSignal !== null &&
+              latestAiSignal.verdict === 'APPROVED' &&
+              Number.isFinite(latestAiSignal.score) &&
+              latestAiSignal.score >= 95;
+
+            if (activeLabels.has('review:ai-approved') && !hasValidAiMarker) {
+              await safeRemoveLabel('review:ai-approved');
+            }
+
+            const aiApproved = !isDraft && activeLabels.has('review:ai-approved') && hasValidAiMarker;
+            const aiChangesRequested =
+              latestAiSignal !== null && latestAiSignal.verdict === 'CHANGES_REQUESTED';
+
+            // 2. Evaluate Separate Post-Push Human Project Owner Gate
+            let latestOwnerApprovalMs = 0;
+            let latestOwnerRejectionMs = 0;
+
+            if (activeLabels.has('review:owner-approved') && latestOwnerLabelMs >= latestPushMs) {
+              latestOwnerApprovalMs = Math.max(latestOwnerApprovalMs, latestOwnerLabelMs);
+            }
+            if (activeLabels.has('review:changes-requested')) {
+              latestOwnerRejectionMs = Number.MAX_SAFE_INTEGER;
+            }
+
+            const isHumanOwnerBody = (body) =>
+              !body.includes('<!-- capy-review:') && !body.includes('<!-- capy-pages-preview -->');
+
+            for (const r of reviews) {
+              if (r.user?.login?.toLowerCase() !== ownerLogin) continue;
+              const body = (r.body || '').trim();
+              if (!isHumanOwnerBody(body)) continue;
+              const ts = Date.parse(r.submitted_at || '') || 0;
+              if (ts < latestPushMs) continue;
+
+              if (
+                (r.state === 'APPROVED' && r.commit_id === headSha) ||
+                /^(?:APPROVED|LGTM)\b/i.test(body)
+              ) {
+                latestOwnerApprovalMs = Math.max(latestOwnerApprovalMs, ts);
+              } else if (
+                r.state === 'CHANGES_REQUESTED' ||
+                /^(?:CHANGES\s+REQUESTED|HOLD|DO\s+NOT\s+MERGE)\b/i.test(body)
+              ) {
+                latestOwnerRejectionMs = Math.max(latestOwnerRejectionMs, ts);
+              }
+            }
+
+            for (const c of comments) {
+              if (c.user?.login?.toLowerCase() !== ownerLogin) continue;
+              const body = (c.body || '').trim();
+              if (!isHumanOwnerBody(body)) continue;
+              const ts = Date.parse(c.updated_at || c.created_at || '') || 0;
+              if (ts < latestPushMs) continue;
+
+              if (/^(?:APPROVED|LGTM)\b/i.test(body)) {
+                latestOwnerApprovalMs = Math.max(latestOwnerApprovalMs, ts);
+              } else if (/^(?:CHANGES\s+REQUESTED|HOLD|DO\s+NOT\s+MERGE)\b/i.test(body)) {
+                latestOwnerRejectionMs = Math.max(latestOwnerRejectionMs, ts);
+              }
+            }
+
+            const changesRequested =
+              aiChangesRequested || latestOwnerRejectionMs > latestOwnerApprovalMs;
+            const ownerApproved =
+              !isDraft && !changesRequested && latestOwnerApprovalMs >= latestPushMs;
+            const dualApproved = !isDraft && aiApproved && ownerApproved && !changesRequested;
+
+            // 3. Reconcile github-actions[bot] formal PR review
+            const botReviews = reviews.filter(
+              (r) => r.user?.login === 'github-actions[bot]' && r.state === 'APPROVED'
+            );
+
+            if (dualApproved) {
+              let hasBotApprovalForHead = false;
+              for (const br of botReviews) {
+                if (br.commit_id === headSha) {
+                  hasBotApprovalForHead = true;
+                } else {
+                  try {
+                    await github.rest.pulls.dismissReview({
+                      owner,
+                      repo,
+                      pull_number: prNumber,
+                      review_id: br.id,
+                      message: `Superseded by newer commit ${headSha.slice(0, 7)}.`,
+                    });
+                  } catch (err) {
+                    core.warning(`Failed to dismiss stale bot review ${br.id}: ${err.message}`);
+                  }
+                }
+              }
+              if (!hasBotApprovalForHead) {
+                await github.rest.pulls.createReview({
+                  owner,
+                  repo,
+                  pull_number: prNumber,
+                  commit_id: headSha,
+                  event: 'APPROVE',
+                  body: `Dual review gate satisfied for \`${headSha}\` (AI Reviewer score \`${latestAiSignal.score}%\` + Project Owner post-push sign-off).`,
+                });
+              }
+            } else {
+              for (const br of botReviews) {
+                try {
+                  await github.rest.pulls.dismissReview({
+                    owner,
+                    repo,
+                    pull_number: prNumber,
+                    review_id: br.id,
+                    message: 'Dual AI + Project Owner approval is no longer active for current HEAD.',
+                  });
+                } catch (err) {
+                  core.warning(`Failed to dismiss bot review ${br.id}: ${err.message}`);
+                }
+              }
+            }
+
+            // 4. Post Commit Status capy/review-gate on headSha (<= 140 chars)
+            let state = 'pending';
+            let description = 'Awaiting AI review (review:ai-approved) and Owner sign-off';
+            if (changesRequested) {
+              state = 'failure';
+              description = 'Changes requested or hold active; address feedback before merge';
+            } else if (isDraft) {
+              state = 'pending';
+              description = 'Draft PR: complete work, pass AI review, and mark ready';
+            } else if (dualApproved) {
+              state = 'success';
+              description = 'Dual-approved: AI review (>=95%) + Owner sign-off verified';
+            } else if (aiApproved && !ownerApproved) {
+              state = 'pending';
+              description = 'AI review passed; awaiting Project Owner sign-off';
+            } else if (!aiApproved && ownerApproved) {
+              state = 'pending';
+              description = 'Owner approved; awaiting AI review marker for current HEAD';
+            }
+
+            const clippedDesc = description.slice(0, 140);
+            const { data: existingStatuses } = await github.rest.repos.listCommitStatusesForRef({
+              owner,
+              repo,
+              ref: headSha,
+              per_page: 30,
+            });
+            const latestGateStatus = existingStatuses.find(
+              (s) => s.context === 'capy/review-gate'
+            );
+            if (
+              !latestGateStatus ||
+              latestGateStatus.state !== state ||
+              latestGateStatus.description !== clippedDesc
+            ) {
+              await github.rest.repos.createCommitStatus({
+                owner,
+                repo,
+                sha: headSha,
+                context: 'capy/review-gate',
+                state,
+                description: clippedDesc,
+              });
+            }

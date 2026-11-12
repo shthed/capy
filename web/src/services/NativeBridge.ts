@@ -7,6 +7,14 @@ interface CapyAndroidInterface {
   loadBackup?: (key: string) => string | null;
   saveCloudSnapshot?: (slotKey: string, payloadJson: string) => boolean;
   loadCloudSnapshot?: (slotKey: string) => string | null;
+  saveCloudBinaryChunk?: (
+    blobKey: string,
+    chunkIndex: number,
+    totalChunks: number,
+    base64Chunk: string
+  ) => boolean;
+  loadCloudBinaryChunk?: (blobKey: string, chunkIndex: number) => string | null;
+  requestCloudSnapshotPull?: (slotKey: string) => boolean;
   signInPlayGames?: () => string | null;
   showRewardedAd?: () => boolean;
   shareImage?: (title: string, dataUrl: string) => void;
@@ -435,6 +443,70 @@ class NativeBridgeService {
       // Fallback handled by CrdtCloudSaveAdapter
     }
     return null;
+  }
+
+  saveCloudBinaryChunk(
+    blobKey: string,
+    chunkIndex: number,
+    totalChunks: number,
+    base64Chunk: string
+  ): boolean {
+    if (
+      !blobKey ||
+      !base64Chunk ||
+      chunkIndex < 0 ||
+      totalChunks < 1 ||
+      chunkIndex >= totalChunks
+    ) {
+      return false;
+    }
+    try {
+      if (window.CapyAndroid?.saveCloudBinaryChunk) {
+        return window.CapyAndroid.saveCloudBinaryChunk(
+          blobKey,
+          chunkIndex,
+          totalChunks,
+          base64Chunk
+        );
+      }
+      if (window.CapyAndroid?.saveCloudSnapshot) {
+        const safeKey = blobKey.replace(/[^a-zA-Z0-9._-]/g, '_') || 'default_key';
+        return window.CapyAndroid.saveCloudSnapshot(`${safeKey}_part_${chunkIndex}`, base64Chunk);
+      }
+    } catch {
+      // Safe fallback when native bridge is unavailable
+    }
+    return false;
+  }
+
+  loadCloudBinaryChunk(blobKey: string, chunkIndex: number): string | null {
+    if (!blobKey || chunkIndex < 0) return null;
+    try {
+      if (window.CapyAndroid?.loadCloudBinaryChunk) {
+        const res = window.CapyAndroid.loadCloudBinaryChunk(blobKey, chunkIndex);
+        return res && res.length > 0 ? res : null;
+      }
+      if (window.CapyAndroid?.loadCloudSnapshot) {
+        const safeKey = blobKey.replace(/[^a-zA-Z0-9._-]/g, '_') || 'default_key';
+        const res = window.CapyAndroid.loadCloudSnapshot(`${safeKey}_part_${chunkIndex}`);
+        return res && res.length > 0 ? res : null;
+      }
+    } catch {
+      // Safe fallback when native bridge is unavailable
+    }
+    return null;
+  }
+
+  requestCloudSnapshotPull(slotKey: string): boolean {
+    if (!slotKey) return false;
+    try {
+      if (window.CapyAndroid?.requestCloudSnapshotPull) {
+        return window.CapyAndroid.requestCloudSnapshotPull(slotKey);
+      }
+    } catch {
+      // Safe fallback when Play Games SDK pull hook is unavailable
+    }
+    return false;
   }
 
   showRewardedAd(): boolean {

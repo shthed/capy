@@ -3,12 +3,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
 import { chromium } from 'playwright';
 import { createServer, preview } from 'vite';
+import { runSanityChecks } from './sanity.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
-const BASE_URL = process.env.CAPY_TEST_URL || 'http://localhost:3000';
+const EXPLICIT_TEST_URL = (process.env.CAPY_TEST_URL || '').trim().replace(/\/+$/, '');
+const webPkgJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
 
 async function isServerListening(url) {
   try {
@@ -208,7 +211,92 @@ async function runCodecAndEngineTests() {
     assert.deepEqual(merged.filledRegionIds, [1, 4, 9, 2, 8]);
     assert.equal(merged.paintedRegionColors?.[4], 0xff3b82f6, 'Newer timestamp wins Free Colour conflict');
 
-    // 5. Semantic Versioning & CHANGELOG.md Synchronization
+    // 4b. M-01 CapyCodec malformed varint, gzip-bomb, and allocation-ceiling rejection
+    const nineByteDosToken = Buffer.from([
+      0x00, 0x02, 0x00, 0x01, 0xff, 0xff, 0xff, 0xff, 0x0f,
+    ]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(nineByteDosToken),
+      /filledLen|bounds/,
+      '9-byte filledLen=0xffffffff token must be rejected before allocation'
+    );
+    const truncatedPayloadToken = Buffer.from([0x00, 0x02, 0x00, 0x80]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(truncatedPayloadToken),
+      /Truncated progress delta payload/
+    );
+    const eofVarintToken = Buffer.from([0x00, 0x02, 0x00, 0x01, 0x80]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(eofVarintToken),
+      /Malformed varint: unexpected EOF/
+    );
+    const overlongVarintToken = Buffer.from([
+      0x00, 0x02, 0x00, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01,
+    ]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(overlongVarintToken),
+      /Malformed varint/
+    );
+    const overflowVarintToken = Buffer.from([
+      0x00, 0x02, 0x00, 0x80, 0x80, 0x80, 0x80, 0x10,
+    ]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(overflowVarintToken),
+      /uint32 overflow/
+    );
+    const oversizedColorsToken = Buffer.from([
+      0x00, 0x02, 0x02, 0x01, 0x00, 0xff, 0xff, 0x0f,
+    ]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(oversizedColorsToken),
+      /colorEntries|bounds/
+    );
+    const oversizedRefToken = Buffer.from([0x00, 0x02, 0x04, 0x01, 0x81, 0x20]).toString(
+      'base64url'
+    );
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(oversizedRefToken),
+      /sourceRef length/
+    );
+    const deltaGzipBombToken = Buffer.concat([
+      Buffer.from([0x01]),
+      zlib.gzipSync(Buffer.alloc(300 * 1024, 0)),
+    ]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(deltaGzipBombToken),
+      /exceeds limit/,
+      'Progress delta gzip stream > 256 KB must abort immediately'
+    );
+    const saveGzipBomb = new Uint8Array(
+      Buffer.concat([
+        Buffer.from([0x43, 0x41, 0x50, 0x59, 0x02, 0x01]),
+        zlib.gzipSync(Buffer.alloc(17 * 1024 * 1024, 0)),
+      ])
+    );
+    await assert.rejects(
+      () => codec.decodeBinarySaveV2(saveGzipBomb),
+      /exceeds limit/,
+      '.capy v2 gzip stream > 16 MB must abort immediately'
+    );
+    const badFramedSave = new Uint8Array([
+      0x43, 0x41, 0x50, 0x59, 0x02, 0x00, 0xff, 0xff, 0xff, 0x7f,
+    ]);
+    await assert.rejects(
+      () => codec.decodeBinarySaveV2(badFramedSave),
+      /JSON header exceeds payload/
+    );
+    assert.throws(
+      () =>
+        codec.decompressPuzzleRecord({
+          ...compact,
+          regionMeta: new Float32Array([1e9, 1, 0, 0, 1]),
+        }),
+      /exceeds limit/
+    );
+
+    // 5. Semantic Versioning, Fast <2s Sanity Gate & CHANGELOG.md Synchronization
+    const sanityRes = runSanityChecks({ repoRoot: path.resolve(projectRoot, '..') });
+    assert.equal(sanityRes.elapsedMs < 2000, true, `sanity.mjs must run in < 2s (${sanityRes.elapsedMs}ms)`);
     const versionMod = await vite.ssrLoadModule('/src/version.ts');
     const semverParts = versionMod.parseSemVer(versionMod.APP_VERSION);
     assert.equal(
@@ -284,11 +372,13 @@ async function runCodecAndEngineTests() {
     assert.equal(stableCh.stableWebUrl, 'https://shthed.github.io/capy/');
     assert.equal(stableCh.betaWebUrl, 'https://shthed.github.io/capy/beta/');
     assert.equal(stableCh.betaApkUrl, 'https://shthed.github.io/capy/beta/capy.apk');
+    assert.equal(stableCh.showChannelSwitcher, true);
 
     const betaCh = versionMod.resolveReleaseChannel('/capy/beta/', 'https://shthed.github.io', '');
     assert.equal(betaCh.channel, 'beta');
     assert.equal(betaCh.badgeLabel, 'BETA');
     assert.equal(betaCh.prNumber, null);
+    assert.equal(betaCh.showChannelSwitcher, true);
 
     const alphaCh = versionMod.resolveReleaseChannel(
       '/capy/pull/481/',
@@ -298,10 +388,38 @@ async function runCodecAndEngineTests() {
     assert.equal(alphaCh.channel, 'alpha');
     assert.equal(alphaCh.badgeLabel, 'ALPHA #481');
     assert.equal(alphaCh.prNumber, 481);
+    assert.equal(alphaCh.showChannelSwitcher, true);
 
     const devCh = versionMod.resolveReleaseChannel('/', 'http://localhost:3000', '');
     assert.equal(devCh.channel, 'dev');
     assert.equal(devCh.badgeLabel, null);
+    assert.equal(devCh.showChannelSwitcher, true);
+
+    const customDomCh = versionMod.resolveReleaseChannel('/', 'https://capypaint.com', '');
+    assert.equal(customDomCh.channel, 'stable');
+    assert.equal(customDomCh.badgeLabel, null);
+    assert.equal(customDomCh.stableWebUrl, 'https://capypaint.com/');
+    assert.equal(customDomCh.showChannelSwitcher, false);
+
+    const wwwDomCh = versionMod.resolveReleaseChannel('/', 'https://www.capypaint.com', '');
+    assert.equal(wwwDomCh.channel, 'stable');
+    assert.equal(wwwDomCh.showChannelSwitcher, false);
+
+    const androidDomCh = versionMod.resolveReleaseChannel(
+      '/assets/www/index.html',
+      'https://appassets.androidplatform.net',
+      ''
+    );
+    assert.equal(androidDomCh.channel, 'stable');
+    assert.equal(androidDomCh.showChannelSwitcher, false);
+
+    const customDomForcedBeta = versionMod.resolveReleaseChannel(
+      '/',
+      'https://capypaint.com',
+      '?capy_channel=beta'
+    );
+    assert.equal(customDomForcedBeta.channel, 'beta');
+    assert.equal(customDomForcedBeta.showChannelSwitcher, true);
 
     const queryBetaCh = versionMod.resolveReleaseChannel(
       '/',
@@ -332,9 +450,9 @@ async function runCodecAndEngineTests() {
     );
     for (const bullet of changelogBullets) {
       assert.equal(
-        /\s\[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)$/.test(bullet),
+        /\s(?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/pull\/\d+\)|#\d+)$/.test(bullet),
         true,
-        `Each CHANGELOG.md bullet must end with a bare [#000] PR link: ${bullet}`
+        `Each CHANGELOG.md bullet must end with a bare [#000] or #000 PR reference: ${bullet}`
       );
     }
 
@@ -603,22 +721,701 @@ async function runCodecAndEngineTests() {
       'capy-friends-zen-sheet-coloring-sheet.svg'
     );
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, and Version/Changelog sync verified.');
+    // 11. capypaint.com canonical ShareLinkService, Co-op WS auto-discovery & Cloudflare Worker protocol
+    const shareLinkMod = await vite.ssrLoadModule('/src/services/ShareLinkService.ts');
+    const providerMod = await vite.ssrLoadModule('/src/services/providers/ProviderRegistry.ts');
+    const relayProtoMod = await vite.ssrLoadModule(
+      path.resolve(projectRoot, '../worker/coopRoomProtocol.ts')
+    );
+
+    assert.equal(shareLinkMod.CANONICAL_PRODUCTION_URL, 'https://capypaint.com/');
+    const builtShare = await shareLinkMod.buildShareProgressUrl({
+      sourceRef: { kind: 'sample', uri: 'assets/capybara.webp' },
+      filledRegionIds: [1, 2, 3],
+      roomCode: 'abc123',
+    });
+    assert.equal(
+      builtShare.url.startsWith('https://capypaint.com/?room=ABC123#s='),
+      true,
+      `SSR canonical share URL must target https://capypaint.com/, got ${builtShare.url}`
+    );
+    for (const hostBase of [
+      'https://capypaint.com/',
+      'https://shthed.github.io/capy/',
+    ]) {
+      const parsedLink = await shareLinkMod.parseShareLinkFromUrl(
+        `${hostBase}?room=abc123#s=${builtShare.token}`
+      );
+      assert.equal(parsedLink.roomCode, 'ABC123');
+      assert.deepEqual(parsedLink.delta?.filledRegionIds, [1, 2, 3]);
+      assert.equal(parsedLink.matchedSample?.id, 'capybara_sample');
+    }
+
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'capypaint.com',
+        hostname: 'capypaint.com',
+      }),
+      'wss://capypaint.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'www.capypaint.com',
+        hostname: 'www.capypaint.com',
+      }),
+      'wss://capypaint.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'capy-paint.example.workers.dev',
+        hostname: 'capy-paint.example.workers.dev',
+      }),
+      null,
+      'Third-party .workers.dev origins must NOT auto-connect without explicit VITE_CAPY_ROOM_WS_URL'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'preview.capypaint.com',
+        hostname: 'preview.capypaint.com',
+      }),
+      'wss://preview.capypaint.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'appassets.androidplatform.net',
+        hostname: 'appassets.androidplatform.net',
+      }),
+      'wss://capypaint.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'http:',
+        host: 'localhost:3000',
+        hostname: 'localhost',
+      }),
+      null,
+      'Localhost without VITE_CAPY_ROOM_WS_URL must stay null so BroadcastChannel runs without spurious WS errors'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl('wss://custom-relay.example/ws', {
+        protocol: 'https:',
+        host: 'capypaint.com',
+        hostname: 'capypaint.com',
+      }),
+      'wss://custom-relay.example/ws'
+    );
+
+    for (let attempt = 0; attempt <= 10; attempt++) {
+      const minBackoff = providerMod.computeCoopReconnectDelayMs(attempt, 0);
+      const maxBackoff = providerMod.computeCoopReconnectDelayMs(attempt, 1);
+      assert.equal(minBackoff >= 1000 && minBackoff <= 15_000, true);
+      assert.equal(maxBackoff >= 1000 && maxBackoff <= 15_000, true);
+      assert.equal(maxBackoff >= minBackoff, true);
+    }
+
+    // Transport-aware peer pruning & PONG handling on HybridCoopRoomAdapter
+    {
+      const prevWS = globalThis.WebSocket;
+      const prevWin = globalThis.window;
+      const sentWsFrames = [];
+      let latestMockSocket = null;
+      class MockRoomSocket {
+        static OPEN = 1;
+        static CLOSED = 3;
+        constructor(url) {
+          this.url = url;
+          this.readyState = 1;
+          latestMockSocket = this;
+        }
+        send(payload) {
+          sentWsFrames.push(payload);
+        }
+        close() {
+          this.readyState = 3;
+        }
+      }
+      globalThis.WebSocket = MockRoomSocket;
+      globalThis.window = {
+        location: { protocol: 'https:', host: 'capypaint.com', hostname: 'capypaint.com' },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+      const adapter = new providerMod.HybridCoopRoomAdapter();
+      try {
+        await adapter.joinRoom(
+          'rmtest',
+          {
+            playerId: 'self-1',
+            displayName: 'Self Capy',
+            avatarColorHex: '#38bdf8',
+            lastActiveAt: Date.now(),
+          },
+          builtShare.token
+        );
+        assert.ok(latestMockSocket, 'HybridCoopRoomAdapter must open WebSocket on capypaint.com');
+        latestMockSocket.onopen?.();
+        assert.equal(sentWsFrames.length, 1, 'onopen must send initial HELLO over WebSocket');
+        assert.equal(JSON.parse(sentWsFrames[0]).type, 'HELLO');
+
+        // Raw PONG frame from C++ edge auto-response must be ignored cleanly without JSON parse error
+        latestMockSocket.onmessage?.({ data: 'PONG' });
+
+        // Remote WS peer joins and ages past 18s without 5s HEARTBEAT frames
+        latestMockSocket.onmessage?.({
+          data: JSON.stringify({
+            type: 'WELCOME_STATE',
+            roomCode: 'RMTEST',
+            sender: {
+              playerId: 'ws-peer-2',
+              displayName: 'Remote Peer',
+              avatarColorHex: '#f59e0b',
+              lastActiveAt: Date.now() - 25_000,
+            },
+            seedToken: builtShare.token,
+            sentAt: Date.now(),
+          }),
+        });
+        adapter.participants.get('ws-peer-2').lastActiveAt = Date.now() - 25_000;
+        adapter.pruneStaleParticipants();
+        assert.equal(
+          adapter.participants.has('ws-peer-2'),
+          true,
+          'Remote WebSocket peers must NOT be dropped at 18s when 5s HEARTBEAT is local-only'
+        );
+
+        // Local BroadcastChannel peer DOES prune after 18s inactivity
+        adapter.handleWireMessage(
+          {
+            type: 'HEARTBEAT',
+            roomCode: 'RMTEST',
+            sender: {
+              playerId: 'bc-peer-3',
+              displayName: 'Local Tab',
+              avatarColorHex: '#10b981',
+              lastActiveAt: Date.now(),
+            },
+            sentAt: Date.now(),
+          },
+          'channel'
+        );
+        adapter.participants.get('bc-peer-3').lastActiveAt = Date.now() - 25_000;
+        adapter.pruneStaleParticipants();
+        assert.equal(
+          adapter.participants.has('bc-peer-3'),
+          false,
+          'Stale BroadcastChannel peers must still prune cleanly past 18s'
+        );
+
+        // Socket close clears WS peers and schedules reconnect
+        latestMockSocket.onclose?.();
+        assert.equal(adapter.participants.has('ws-peer-2'), false);
+        assert.equal(Boolean(adapter.wsReconnectTimer), true);
+      } finally {
+        adapter.leaveRoom();
+        globalThis.WebSocket = prevWS;
+        globalThis.window = prevWin;
+      }
+    }
+
+    assert.equal(relayProtoMod.normalizeRoomCode(' ab-c_123! '), 'ABC123');
+    assert.equal(relayProtoMod.normalizeRoomCode('!!!'), null);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin(null), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin(''), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('   '), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://capypaint.com'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://www.capypaint.com'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://capyboop.github.io'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://appassets.androidplatform.net'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('http://localhost:5173'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://evil.workers.dev'), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('http://capypaint.com'), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://evil.example.com'), false);
+    assert.equal(
+      relayProtoMod.isAllowedRelayOrigin(
+        'https://preview.example.com',
+        'https://other.example.com, https://preview.example.com'
+      ),
+      true
+    );
+
+    assert.equal(relayProtoMod.MAX_COOP_FRAME_BYTES, 6144);
+    assert.equal(relayProtoMod.MAX_SEED_TOKEN_CHARS, 4096);
+    assert.equal(relayProtoMod.isValidSeedToken(builtShare.token), true);
+    assert.equal(relayProtoMod.isValidSeedToken('not!valid!base64'), false);
+    assert.equal(
+      relayProtoMod.isValidSeedToken(Buffer.from([0x99, 0x02, 0x00]).toString('base64url')),
+      false
+    );
+
+    const maxLenValidSeed = 'AAI' + 'A'.repeat(4093);
+    assert.equal(maxLenValidSeed.length, 4096);
+    const maxSeedHello = relayProtoMod.validateCoopFrame(
+      JSON.stringify({
+        type: 'HELLO',
+        roomCode: 'ABC123',
+        sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#38bdf8', lastActiveAt: 1 },
+        seedToken: maxLenValidSeed,
+        sentAt: 100,
+      }),
+      'ABC123'
+    );
+    assert.equal(maxSeedHello.ok, true, '4096-char valid seedToken frame must fit under 6144 bytes');
+    assert.equal(
+      relayProtoMod.validateCoopFrame(
+        JSON.stringify({
+          type: 'HELLO',
+          roomCode: 'ABC123',
+          sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#38bdf8', lastActiveAt: 1 },
+          seedToken: maxLenValidSeed + 'A',
+          sentAt: 100,
+        }),
+        'ABC123'
+      ).reason,
+      'seed_token_too_large'
+    );
+
+    const validRelayFrame = relayProtoMod.validateCoopFrame(
+      JSON.stringify({
+        type: 'PAINT_EVENT',
+        roomCode: 'abc123',
+        sender: {
+          playerId: 'p1',
+          displayName: 'Sunny Capy',
+          avatarColorHex: '#38bdf8',
+          lastActiveAt: 1000,
+        },
+        paintEvent: { eventId: 'ev1', regionIds: [4, 5], action: 'FILL' },
+        sentAt: 1234,
+      }),
+      'ABC123'
+    );
+    assert.equal(validRelayFrame.ok, true);
+    assert.equal(validRelayFrame.message?.roomCode, 'ABC123');
+    assert.equal(
+      relayProtoMod.validateCoopFrame('x'.repeat(6145), 'ABC123').reason,
+      'frame_size_exceeded',
+      'Worker Co-op relay must enforce <= 6144 byte frame cap'
+    );
+    for (const badPaintEvent of [
+      { eventId: '', regionIds: [1], action: 'FILL' },
+      { eventId: 'x'.repeat(97), regionIds: [1], action: 'FILL' },
+      { eventId: 'ev-empty', regionIds: [], action: 'FILL' },
+      { eventId: 'ev-neg', regionIds: [-1], action: 'FILL' },
+      { eventId: 'ev-many', regionIds: Array.from({ length: 513 }, (_, i) => i), action: 'FILL' },
+    ]) {
+      assert.equal(
+        relayProtoMod.validateCoopFrame(
+          JSON.stringify({
+            type: 'PAINT_EVENT',
+            roomCode: 'ABC123',
+            sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#fff', lastActiveAt: 1 },
+            paintEvent: badPaintEvent,
+            sentAt: 1,
+          }),
+          'ABC123'
+        ).reason,
+        'invalid_event_payload'
+      );
+    }
+    assert.equal(
+      relayProtoMod.validateCoopFrame(
+        JSON.stringify({
+          type: 'UNFILL_EVENT',
+          roomCode: 'ABC123',
+          sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#fff', lastActiveAt: 1 },
+          unfillEvent: { eventId: 'uf1', regionIds: [-2] },
+          sentAt: 1,
+        }),
+        'ABC123'
+      ).reason,
+      'invalid_event_payload'
+    );
+    assert.equal(
+      relayProtoMod.validateCoopFrame(
+        JSON.stringify({
+          type: 'HELLO',
+          roomCode: 'OTHER1',
+          sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#fff', lastActiveAt: 1 },
+          sentAt: 1,
+        }),
+        'ABC123'
+      ).reason,
+      'room_mismatch'
+    );
+
+    // Rate limiting (40 frames / 5000ms) & write-once initial HELLO seedToken policy
+    let rlTimestamps = [];
+    for (let i = 0; i < 40; i++) {
+      const rl = relayProtoMod.checkSocketRateLimit(rlTimestamps, 1000 + i * 10);
+      assert.equal(rl.allowed, true);
+      rlTimestamps = rl.timestamps;
+    }
+    assert.equal(relayProtoMod.checkSocketRateLimit(rlTimestamps, 1500).allowed, false);
+    assert.equal(relayProtoMod.checkSocketRateLimit(rlTimestamps, 6001).allowed, true);
+
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'HELLO',
+        incomingSeedToken: builtShare.token,
+        hasSocketJoined: true,
+        existingSeedToken: null,
+        lastSavedSeedToken: null,
+        lastWriteAtMs: 0,
+        nowMs: 1000,
+      }),
+      'write_now'
+    );
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'HELLO',
+        incomingSeedToken: maxLenValidSeed,
+        hasSocketJoined: true,
+        existingSeedToken: builtShare.token,
+        lastSavedSeedToken: builtShare.token,
+        lastWriteAtMs: 1000,
+        nowMs: 9000,
+      }),
+      'ignore',
+      'Late HELLO must never overwrite an existing room seed_token (F-03)'
+    );
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'WELCOME_STATE',
+        incomingSeedToken: maxLenValidSeed,
+        hasSocketJoined: true,
+        existingSeedToken: builtShare.token,
+        lastSavedSeedToken: builtShare.token,
+        lastWriteAtMs: 1000,
+        nowMs: 3000,
+      }),
+      'debounce'
+    );
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'WELCOME_STATE',
+        incomingSeedToken: maxLenValidSeed,
+        hasSocketJoined: true,
+        existingSeedToken: builtShare.token,
+        lastSavedSeedToken: builtShare.token,
+        lastWriteAtMs: 1000,
+        nowMs: 6500,
+      }),
+      'write_now'
+    );
+
+    const wranglerRaw = fs.readFileSync(path.resolve(projectRoot, '../wrangler.jsonc'), 'utf8');
+    const wranglerJson = JSON.parse(wranglerRaw.replace(/^\s*\/\/.*$/gm, ''));
+    assert.equal(wranglerJson.name, 'capy-paint');
+    assert.equal(wranglerJson.workers_dev, false);
+    assert.equal(wranglerJson.preview_urls, false);
+    assert.equal(wranglerJson.assets?.directory, './web/dist');
+    assert.equal(wranglerJson.assets?.not_found_handling, 'single-page-application');
+    assert.deepEqual(wranglerJson.assets?.run_worker_first, ['/api/*']);
+    assert.deepEqual(wranglerJson.migrations?.[0]?.new_sqlite_classes, ['CoopRoomDurableObject']);
+    assert.equal(
+      wranglerJson.routes?.some((r) => r.pattern === 'capypaint.com' && r.custom_domain === true),
+      true
+    );
+
+    // PwaService scoped cache naming, vite.config fingerprint parser & stamped dist/sw.js check
+    const pwaMod = await vite.ssrLoadModule('/src/services/PwaService.ts');
+    const viteConfigMod = await vite.ssrLoadModule('/vite.config.ts');
+    assert.equal(
+      pwaMod.resolvePwaCacheName('https://shthed.github.io/capy/beta/', '2.6.0'),
+      'capy-cache-v2.6.0:/capy/beta/'
+    );
+    assert.equal(
+      pwaMod.resolvePwaCacheName('https://capypaint.com/', '2.6.0'),
+      'capy-cache-v2.6.0:/'
+    );
+    assert.deepEqual(viteConfigMod.parseAndroidSha256Fingerprints(''), []);
+    assert.deepEqual(
+      viteConfigMod.parseAndroidSha256Fingerprints('00:'.repeat(31) + '00'),
+      []
+    );
+    assert.deepEqual(viteConfigMod.parseAndroidSha256Fingerprints('ab'.repeat(32)), [
+      Array(32).fill('AB').join(':'),
+    ]);
+    const distSwPath = path.join(projectRoot, 'dist/sw.js');
+    if (fs.existsSync(distSwPath)) {
+      const distSwText = fs.readFileSync(distSwPath, 'utf8');
+      assert.equal(
+        distSwText.includes(`const SW_BUILD_VERSION = '${versionMod.APP_VERSION}';`),
+        true,
+        'Built dist/sw.js must stamp SW_BUILD_VERSION with package.json version'
+      );
+      assert.equal(
+        distSwText.includes('__CAPY_SW_VERSION__'),
+        false,
+        'Built dist/sw.js must not retain unstamped __CAPY_SW_VERSION__ placeholder'
+      );
+      assert.equal(
+        distSwText.includes(".endsWith('.apk')"),
+        true,
+        'Service Worker must bypass .apk binary downloads'
+      );
+    }
+
+    // --- Sprint 2: F8 CRDT resetEpoch & F9 >180KB Play Games Chunks ---
+    {
+      const driversMod = await vite.ssrLoadModule('/src/services/providers/CloudProviderDrivers.ts');
+      const nativeBridgeMod = await vite.ssrLoadModule('/src/services/NativeBridge.ts');
+
+      // 1. F8 (F-01): ProgressDeltaV2 resetEpoch token round-trip & monotonic CRDT epoch dominance
+      const resetToken = await codec.encodeProgressDeltaToken({
+        version: 2,
+        sourceRef: { kind: 'sample', uri: './assets/capybara.webp' },
+        filledRegionIds: [4, 9],
+        resetEpoch: 3,
+        updatedAt: 1_750_000_000_000,
+      });
+      const decodedReset = await codec.decodeProgressDeltaToken(resetToken);
+      assert.equal(decodedReset.resetEpoch, 3, 'ProgressDeltaV2 codec must round-trip resetEpoch');
+      assert.deepEqual(decodedReset.filledRegionIds, [4, 9]);
+
+      // Higher remote resetEpoch dominates stale pre-reset local regions (0 resurrection)
+      const mergedRemoteReset = codec.mergeProgressDeltas(
+        { version: 2, filledRegionIds: [1, 2, 3, 4, 5], resetEpoch: 0, updatedAt: 1000 },
+        { version: 2, filledRegionIds: [], resetEpoch: 1, updatedAt: 2000 }
+      );
+      assert.equal(mergedRemoteReset.resetEpoch, 1);
+      assert.deepEqual(
+        mergedRemoteReset.filledRegionIds,
+        [],
+        'Higher remote resetEpoch must clear stale pre-reset regions with zero resurrection'
+      );
+
+      // Higher local resetEpoch dominates stale pre-reset cloud regions (0 resurrection)
+      const mergedLocalReset = codec.mergeProgressDeltas(
+        { version: 2, filledRegionIds: [11], resetEpoch: 2, updatedAt: 3000 },
+        { version: 2, filledRegionIds: [1, 2, 3, 4, 5, 6], resetEpoch: 1, updatedAt: 2500 }
+      );
+      assert.equal(mergedLocalReset.resetEpoch, 2);
+      assert.deepEqual(
+        mergedLocalReset.filledRegionIds,
+        [11],
+        'Higher local resetEpoch must reject stale lower-epoch cloud regions'
+      );
+
+      // Equal resetEpoch preserves lossless set-union CRDT behavior
+      const mergedSameEpoch = codec.mergeProgressDeltas(
+        { version: 2, filledRegionIds: [2, 5], resetEpoch: 2, updatedAt: 3000 },
+        { version: 2, filledRegionIds: [5, 8], resetEpoch: 2, updatedAt: 3100 }
+      );
+      assert.equal(mergedSameEpoch.resetEpoch, 2);
+      assert.deepEqual(mergedSameEpoch.filledRegionIds, [2, 5, 8]);
+
+      // ShareLinkService URL round-trips resetEpoch cleanly
+      const builtResetShare = await shareLinkMod.buildShareProgressUrl({
+        sourceRef: { kind: 'sample', uri: 'assets/capybara.webp' },
+        filledRegionIds: [7],
+        resetEpoch: 4,
+      });
+      const parsedResetShare = await shareLinkMod.parseShareLinkFromUrl(builtResetShare.url);
+      assert.equal(parsedResetShare.delta?.resetEpoch, 4, 'ShareLinkService must preserve resetEpoch in #s= URLs');
+
+      // CrdtCloudSaveAdapter.syncProgress dominates stale pre-reset slot envelopes
+      const prevLsF8 = globalThis.localStorage;
+      const lsMapF8 = new Map();
+      globalThis.localStorage = {
+        getItem: (k) => (lsMapF8.has(k) ? lsMapF8.get(k) : null),
+        setItem: (k, v) => lsMapF8.set(k, String(v)),
+        removeItem: (k) => lsMapF8.delete(k),
+      };
+      try {
+        await providerMod.ProviderRegistry.cloudSave.syncProgress(
+          'slot_reset_epoch_test',
+          'Capybara',
+          { version: 2, filledRegionIds: [1, 2, 3, 4], updatedAt: 1000 },
+          20
+        );
+        const syncedAfterReset = await providerMod.ProviderRegistry.cloudSave.syncProgress(
+          'slot_reset_epoch_test',
+          'Capybara',
+          { version: 2, filledRegionIds: [], resetEpoch: 1, updatedAt: 2000 },
+          20
+        );
+        assert.equal(syncedAfterReset.mergedDelta.resetEpoch, 1);
+        assert.deepEqual(
+          syncedAfterReset.mergedDelta.filledRegionIds,
+          [],
+          'CrdtCloudSaveAdapter.syncProgress must honor higher resetEpoch without resurrecting old fills'
+        );
+      } finally {
+        if (prevLsF8 === undefined) {
+          delete globalThis.localStorage;
+        } else {
+          globalThis.localStorage = prevLsF8;
+        }
+      }
+
+      // 2. F9 (F-02): PlayGamesAndroidDriver > 180 KB multi-chunk binary writeBinaryBlob & readBinaryBlob
+      const prevWindow = globalThis.window;
+      const chunkStore = new Map();
+      globalThis.window = {
+        CapyAndroid: {
+          saveCloudBinaryChunk(blobKey, chunkIndex, totalChunks, base64Chunk) {
+            if (chunkIndex < 0 || chunkIndex >= totalChunks) return false;
+            chunkStore.set(`${blobKey}_part_${chunkIndex}`, base64Chunk);
+            if (chunkIndex === totalChunks - 1) {
+              for (let k = totalChunks; k < 32; k++) {
+                chunkStore.delete(`${blobKey}_part_${k}`);
+              }
+            }
+            return true;
+          },
+          loadCloudBinaryChunk(blobKey, chunkIndex) {
+            return chunkStore.get(`${blobKey}_part_${chunkIndex}`) ?? null;
+          },
+          saveCloudSnapshot(slotKey, payloadJson) {
+            chunkStore.set(slotKey, payloadJson);
+            return true;
+          },
+          loadCloudSnapshot(slotKey) {
+            return chunkStore.get(slotKey) ?? null;
+          },
+        },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+      try {
+        const pgDriver = new driversMod.PlayGamesAndroidDriver();
+        const largeBinary = new Uint8Array(420_000);
+        for (let i = 0; i < largeBinary.length; i++) {
+          largeBinary[i] = (i * 29 + 13) & 0xff;
+        }
+        const blobRef = await pgDriver.writeBinaryBlob('save_hd_custom', 'save.capy', largeBinary);
+        assert.equal(
+          blobRef,
+          'pgblob:pgblob_save_hd_custom:3:420000',
+          '420 KB custom photo save must split across 3 x 180 KB Play Games chunks'
+        );
+        assert.equal(nativeBridgeMod.NativeBridge.loadCloudBinaryChunk('pgblob_save_hd_custom', 2) !== null, true);
+
+        const restoredBinary = await pgDriver.readBinaryBlob(blobRef);
+        assert.ok(restoredBinary, 'PlayGamesAndroidDriver.readBinaryBlob must reassemble 420 KB binary');
+        assert.equal(restoredBinary.byteLength, 420_000);
+        let diffBytes = 0;
+        for (let i = 0; i < largeBinary.length; i++) {
+          if (restoredBinary[i] !== largeBinary[i]) diffBytes++;
+        }
+        assert.equal(diffBytes, 0, 'Reassembled 420 KB Play Games binary must be bit-exact');
+
+        // Overwrite with smaller 2-chunk (200 KB) payload and verify stale part_2 is pruned
+        const smallerBinary = largeBinary.subarray(0, 200_000);
+        const smallerRef = await pgDriver.writeBinaryBlob('save_hd_custom', 'save.capy', smallerBinary);
+        assert.equal(smallerRef, 'pgblob:pgblob_save_hd_custom:2:200000');
+        assert.equal(
+          nativeBridgeMod.NativeBridge.loadCloudBinaryChunk('pgblob_save_hd_custom', 2),
+          null,
+          'Overwriting with fewer chunks must prune stale trailing chunk slots'
+        );
+
+        // Corrupt/mismatched/missing chunk resilience must return null cleanly without throwing
+        assert.equal(
+          await pgDriver.readBinaryBlob('pgblob:pgblob_save_hd_custom:2:999999'),
+          null,
+          'Mismatched expectedBytes in pgblob ref must return null cleanly'
+        );
+        chunkStore.set('pgblob_save_hd_custom_part_1', '%%%not_valid_base64%%%');
+        assert.equal(
+          await pgDriver.readBinaryBlob(smallerRef),
+          null,
+          'Corrupted Base64 chunk in PlayGamesAndroidDriver must return null cleanly'
+        );
+        chunkStore.delete('pgblob_save_hd_custom_part_1');
+        assert.equal(
+          await pgDriver.readBinaryBlob(smallerRef),
+          null,
+          'Missing chunk in PlayGamesAndroidDriver must return null cleanly'
+        );
+      } finally {
+        globalThis.window = prevWindow;
+      }
+    }
+
+    /* capy-dev-only:start */
+    const {
+      transformPersonaContent,
+      sanitizeCommitMessage,
+      exportCleanPersonaStage,
+    } = await import('./rebrand-persona.mjs');
+    const sampleDoc =
+      'Repo https://github.com/shthed/capy (`shthed`) [#482](https://github.com/shthed/capy/pull/482) [#477](https://github.com/shthed/capy/issues/477) [Sprint 1](https://github.com/shthed/capy/milestone/2) preview https://shthed.github.io/capy/pull/1/';
+    const transformedOnce = transformPersonaContent(sampleDoc);
+    assert.equal(
+      transformedOnce,
+      'Repo https://github.com/capyboop/capy (`capyboop`) #482 #477 Sprint 1 preview https://capypaint.com/'
+    );
+    assert.equal(transformPersonaContent(transformedOnce), transformedOnce);
+    assert.equal(
+      sanitizeCommitMessage('Add Cloudflare Worker for shthed/capy (#482)\n\nCo-authored-by: shthed'),
+      'Add Cloudflare Worker for capyboop/capy'
+    );
+    const tmpCleanStage = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-clean-stage-'));
+    try {
+      const stageStats = exportCleanPersonaStage({ stageDir: tmpCleanStage });
+      assert.equal(stageStats.verifiedFiles > 50, true);
+      assert.equal(fs.existsSync(path.join(tmpCleanStage, '.agents')), false);
+      assert.equal(
+        fs.existsSync(path.join(tmpCleanStage, '.github/workflows/publish-capyboop.yml')),
+        false
+      );
+      assert.equal(
+        fs.existsSync(path.join(tmpCleanStage, '.github/workflows/pr-review-gate.yml')),
+        false
+      );
+      assert.equal(
+        fs.existsSync(path.join(tmpCleanStage, 'web/scripts/rebrand-persona.mjs')),
+        false
+      );
+      const stagedRedirects = fs.readFileSync(
+        path.join(tmpCleanStage, 'web/public/_redirects'),
+        'utf8'
+      );
+      assert.equal(
+        stagedRedirects.includes('https://github.com/capyboop/capy/releases/latest/download/capy.apk'),
+        true
+      );
+    } finally {
+      fs.rmSync(tmpCleanStage, { recursive: true, force: true });
+    }
+    /* capy-dev-only:end */
+
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
 }
 
 async function runBrowserBasicsSuite() {
-  console.log(`\n=== PART 2: Unified Browser E2E Suite (${BASE_URL}) ===`);
   let previewServer = null;
-  if (!(await isServerListening(BASE_URL))) {
+  let BASE_URL = EXPLICIT_TEST_URL;
+  if (BASE_URL) {
+    if (!(await isServerListening(BASE_URL))) {
+      const explicitPort = Number(new URL(BASE_URL).port || 3000);
+      previewServer = await preview({
+        root: projectRoot,
+        preview: { host: '0.0.0.0', port: explicitPort, strictPort: true },
+        logLevel: 'error',
+      });
+    }
+  } else {
     previewServer = await preview({
       root: projectRoot,
-      preview: { host: '0.0.0.0', port: 3000, strictPort: true },
+      preview: { host: '0.0.0.0', port: Number(process.env.CAPY_TEST_PORT || 0), strictPort: false },
       logLevel: 'error',
     });
+    const addr = previewServer.httpServer.address();
+    const boundPort = typeof addr === 'object' && addr ? addr.port : 3000;
+    BASE_URL = `http://localhost:${boundPort}`;
   }
+  console.log(`\n=== PART 2: Unified Browser E2E Suite (${BASE_URL}) ===`);
 
   const chromiumPath =
     process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
@@ -645,14 +1442,27 @@ async function runBrowserBasicsSuite() {
     attachErrorListeners(page, 'main');
 
     // -------------------------------------------------------------------------
-    // 1. PWA Manifest, Privacy Policy & Instant Pre-Baked First Launch
+    // 1. PWA Manifest, Digital Asset Links, Privacy Policy & Instant Pre-Baked First Launch
     // -------------------------------------------------------------------------
-    console.log('1. Verifying PWA manifest, privacy policy, Service Worker & instant pre-baked boot...');
+    console.log('1. Verifying PWA manifest, Digital Asset Links, privacy policy, Service Worker & instant pre-baked boot...');
     const manifestRes = await page.goto(`${BASE_URL}/manifest.webmanifest`);
     assert.equal(manifestRes?.status(), 200);
     const manifestJson = JSON.parse(await manifestRes.text());
     assert.equal(manifestJson.name, 'Capy Paint');
     assert.equal(manifestJson.display, 'standalone');
+
+    const assetLinksRes = await page.goto(`${BASE_URL}/.well-known/assetlinks.json`);
+    assert.equal(assetLinksRes?.status(), 200);
+    const assetLinksJson = JSON.parse(await assetLinksRes.text());
+    assert.equal(assetLinksJson[0]?.target?.package_name, 'com.capypaint.capy');
+    assert.equal(Array.isArray(assetLinksJson[0]?.target?.sha256_cert_fingerprints), true);
+    assert.equal(
+      assetLinksJson[0].target.sha256_cert_fingerprints.includes(
+        '00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00'
+      ),
+      false,
+      'assetlinks.json must never ship all-zero placeholder SHA-256 fingerprints'
+    );
 
     const privacyRes = await page.goto(`${BASE_URL}/privacy-policy.html`);
     assert.equal(privacyRes?.status(), 200);
@@ -668,19 +1478,50 @@ async function runBrowserBasicsSuite() {
     page.off('request', onReq);
 
     assert.equal(workerRequestedOnBoot, false, 'Pre-baked sample_saves.capy must boot with zero worker wait');
-    const bootMeta = await page.evaluate(async () => {
+    const expectedSwCacheKey = `capy-cache-v${webPkgJson.version}:/`;
+    const bootMeta = await page.evaluate(async (expectedKey) => {
       const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
       const swReady = 'serviceWorker' in navigator ? Boolean((await navigator.serviceWorker.ready)?.active) : false;
       const cacheNames = await caches.keys();
-      return { count: snaps.length, firstId: snaps[0]?.id, swReady, hasCache: cacheNames.includes('capy-cache-v2') };
-    });
+      return {
+        count: snaps.length,
+        firstId: snaps[0]?.id,
+        swReady,
+        hasScopedCache: cacheNames.includes(expectedKey),
+        hasLegacyCache: cacheNames.includes('capy-cache-v2'),
+      };
+    }, expectedSwCacheKey);
     assert.equal(bootMeta.count, 4);
     assert.equal(bootMeta.firstId, 'sample-capybara');
     assert.equal(bootMeta.swReady, true);
-    assert.equal(bootMeta.hasCache, true);
+    assert.equal(bootMeta.hasScopedCache, true, `Expected Service Worker cache ${expectedSwCacheKey}`);
+    assert.equal(bootMeta.hasLegacyCache, false, 'Legacy unscoped capy-cache-v2 must not exist');
+
+    // Verify malformed #s= DoS token degrades cleanly without crashing the app
+    const dosSharePage = await context.newPage();
+    attachErrorListeners(dosSharePage, 'dosSharePage');
+    await dosSharePage.goto(`${BASE_URL}/#s=AAIAAf____8P`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(dosSharePage);
+    await dosSharePage.close();
+
+    // Verify Google Login button auto-hides on Web when VITE_GOOGLE_CLIENT_ID is unconfigured
+    const hasBakedClientId = Boolean((process.env.VITE_GOOGLE_CLIENT_ID || '').trim());
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.waitForTimeout(150);
+    await page.getByRole('button', { name: 'Saves', exact: true }).click();
+    await page.waitForTimeout(120);
+    await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'visible' });
+    assert.equal(
+      await page.getByTestId('play-games-signin-btn').count(),
+      hasBakedClientId ? 1 : 0,
+      'Web Google Login button must auto-hide when VITE_GOOGLE_CLIENT_ID is empty'
+    );
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
 
     // Disable autoReplayOnLoad and enable EASY difficulty for fast deterministic E2E interaction checks
     await page.evaluate(() => {
+      localStorage.removeItem('capy_last_settings_tab');
       const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
       s.autoReplayOnLoad = false;
       s.difficulty = 'EASY';
@@ -1929,6 +2770,310 @@ async function runBrowserBasicsSuite() {
     );
     await betaPage.close();
     console.log('   PASS: Release Channel switcher card, Beta APK link, and BETA HUD pill verified.');
+
+    // -------------------------------------------------------------------------
+    // 12. Stage 2 (v2.7): Co-op Welcome Persistence, Replay Rewind UNFILL, Reset Epoch & Mobile Replay Controls
+    // -------------------------------------------------------------------------
+    console.log('-> [2.7] Verifying Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, Reset Epoch & Mobile Replay Controls...');
+
+    // 12a. F7 & F8 (BUG-1, M-08, F-01): 2-peer BroadcastChannel WELCOME_STATE reload persistence, Replay Resume Here UNFILL & Reset Progress resetEpoch
+    // Reset active puzzle cleanly first so both Peer A and localStorage start at 0 filled regions
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('reset-progress-btn').click();
+    await page.waitForTimeout(450);
+
+    const totalPuzzleRegions27 = await readTotalRemainingRegions(page);
+    assert.ok(totalPuzzleRegions27 > 10, `Expected > 10 total puzzle regions after reset, got ${totalPuzzleRegions27}`);
+
+    // Boot Peer B while localStorage has 0 filled regions (100% deterministic, zero debounce race)
+    const peerS2 = await context.newPage();
+    attachErrorListeners(peerS2, 'peerS2-stage2');
+    await peerS2.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(peerS2);
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      totalPuzzleRegions27,
+      'Peer B must boot with 0 filled regions before joining Co-op room'
+    );
+
+    // Paint >= 3 regions on Peer A
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const curFilledLen = await page.evaluate(() => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0;
+      });
+      if (curFilledLen >= 3) break;
+      await tapCanvasGrid(page, 0.42 + attempt * 0.04, 14, 30);
+      await page.waitForTimeout(150);
+    }
+
+    const peerAStateBeforeRoom = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return {
+        activeSnapshotId: active.activeSnapshotId,
+        filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
+      };
+    });
+    assert.ok(
+      peerAStateBeforeRoom.activeSnapshotId && peerAStateBeforeRoom.filledCount >= 3,
+      `Expected >= 3 filled regions on Peer A before Co-op welcome/rewind test, got ${peerAStateBeforeRoom.filledCount}`
+    );
+    const remainingPeerABeforeJoin = await readTotalRemainingRegions(page);
+
+    // Host Co-op room on Peer A (live React state + room seedToken carry the >= 3 filled regions)
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('host-coop-room-btn').click();
+    await page.waitForTimeout(200);
+    const s2RoomText = await page.getByTestId('active-coop-room-code').innerText();
+    const s2RoomCode = s2RoomText.match(/Room\s+([A-Z0-9]{6})/)[1];
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(450);
+
+    // Clear persisted localStorage fills after Peer A settles so only Peer B's WELCOME_STATE can repopulate capy_active_session_v8
+    await page.evaluate((snapId) => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      active.filledRegionIds = [];
+      active.paintedRegionColors = {};
+      localStorage.setItem('capy_active_session_v8', JSON.stringify(active));
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').map((s) =>
+        s.id === snapId ? { ...s, filledCount: 0, filledRegionIds: [], paintedRegionColors: {} } : s
+      );
+      localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
+    }, peerAStateBeforeRoom.activeSnapshotId);
+
+    await peerS2.getByTestId('topbar-coop-btn').click();
+    await peerS2.waitForTimeout(150);
+    await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
+    await peerS2.getByTestId('join-coop-room-btn').click();
+    await peerS2.waitForTimeout(450);
+    await peerS2.keyboard.press('Escape');
+    await peerS2.waitForTimeout(150);
+
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      remainingPeerABeforeJoin,
+      'Peer B must immediately merge Peer A filled regions upon WELCOME_STATE'
+    );
+    const savedActiveAfterWelcome = await peerS2.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0;
+    });
+    assert.equal(
+      savedActiveAfterWelcome,
+      peerAStateBeforeRoom.filledCount,
+      'BUG-1: onWelcomeState must immediately persist welcomed filledRegionIds into capy_active_session_v8'
+    );
+
+    // Reload Peer B before painting any region and verify welcomed regions survive reload
+    await peerS2.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(peerS2);
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      remainingPeerABeforeJoin,
+      'BUG-1: Reloading joining peer immediately after WELCOME_STATE must retain all welcomed regions'
+    );
+
+    // Rejoin s2RoomCode on Peer B so both peers are live for Replay Rewind & Reset Progress sync
+    await peerS2.getByTestId('topbar-coop-btn').click();
+    await peerS2.waitForTimeout(150);
+    await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
+    await peerS2.getByTestId('join-coop-room-btn').click();
+    await peerS2.waitForTimeout(350);
+    await peerS2.keyboard.press('Escape');
+    await peerS2.waitForTimeout(150);
+
+    // Launch Replay on Peer A via Saves -> Replay, scrub backward to step 1, and click Resume Here
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId(`save-card-${peerAStateBeforeRoom.activeSnapshotId}`).click();
+    await page.waitForTimeout(100);
+    await page.getByTestId('save-action-replay').click();
+
+    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 5000 });
+    await page.getByTestId('replay-toggle-minimize-btn').click();
+    await page.waitForTimeout(120);
+    await page.getByTestId('replay-scrubber').fill('1');
+    await page.waitForTimeout(120);
+    await page.getByTestId('replay-resume-btn').click();
+    await page.waitForTimeout(200);
+    await peerS2.waitForTimeout(400);
+
+    const remainingAfterRewindA = await readTotalRemainingRegions(page);
+    const remainingAfterRewindB = await readTotalRemainingRegions(peerS2);
+    assert.equal(
+      remainingAfterRewindA,
+      totalPuzzleRegions27 - 1,
+      `Expected Replay Resume Here at step 1 to leave exactly 1 filled region on Peer A (${totalPuzzleRegions27 - 1} remaining), got ${remainingAfterRewindA}`
+    );
+    assert.equal(
+      remainingAfterRewindB,
+      remainingAfterRewindA,
+      'BUG-1: Replay Scrubber Resume Here must broadcast UNFILL_EVENT so Peer B rewinds in lockstep'
+    );
+
+    // Trigger Reset Progress on Peer A and verify Peer B clears to 0 filled regions + resetEpoch increments
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('reset-progress-btn').click();
+    await page.waitForTimeout(200);
+    await peerS2.waitForTimeout(400);
+
+    assert.equal(
+      await readTotalRemainingRegions(page),
+      totalPuzzleRegions27,
+      'Reset Progress must clear Peer A back to 0 filled regions'
+    );
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      totalPuzzleRegions27,
+      'M-08: Reset Progress must broadcast UNFILL_EVENT so Peer B clears to 0 filled regions'
+    );
+    const postResetEpochs = await page.evaluate((snapId) => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      const snap = (JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]') || []).find(
+        (s) => s.id === snapId
+      );
+      return {
+        activeEpoch: active.resetEpoch ?? 0,
+        snapEpoch: snap?.resetEpoch ?? 0,
+      };
+    }, peerAStateBeforeRoom.activeSnapshotId);
+    assert.ok(
+      postResetEpochs.activeEpoch >= 1 && postResetEpochs.snapEpoch >= 1,
+      `F-01: Expected monotonic resetEpoch >= 1 in both active session (${postResetEpochs.activeEpoch}) and snapshot (${postResetEpochs.snapEpoch})`
+    );
+
+    await peerS2.close();
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('leave-coop-room-btn').click();
+    await page.waitForTimeout(120);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(120);
+
+    // 12c. Mobile 360x800 minimized ReplayControls pill fit & save-load replayLoop auto-disable + gameplay auto-resume
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const curFilledLen = await page.evaluate(() => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0;
+      });
+      if (curFilledLen >= 4) break;
+      await tapCanvasGrid(page, 0.44 + attempt * 0.04, 14, 30);
+      await page.waitForTimeout(140);
+    }
+    const mobileReplaySetup = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const otherSnap = snaps.find(
+        (s) => s.id !== active.activeSnapshotId && String(s.id).startsWith('sample-')
+      );
+      return {
+        targetSnapId: active.activeSnapshotId,
+        otherSnapId: otherSnap ? otherSnap.id : null,
+        filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
+      };
+    });
+    assert.ok(
+      mobileReplaySetup.targetSnapId && mobileReplaySetup.otherSnapId && mobileReplaySetup.filledCount >= 3,
+      `Expected >= 3 filled regions and a secondary sample save for mobile replay test, got ${JSON.stringify(mobileReplaySetup)}`
+    );
+
+    // Switch to narrow 360x800 mobile viewport and load secondary sample first
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.waitForTimeout(150);
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId(`save-card-${mobileReplaySetup.otherSnapId}`).click();
+    await page.waitForTimeout(100);
+    await page.getByTestId('save-action-load').click();
+    await page.waitForFunction(
+      (expectedId) =>
+        JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId ===
+        expectedId,
+      mobileReplaySetup.otherSnapId,
+      { timeout: 15000 }
+    );
+    await waitForPuzzleLoaded(page);
+
+    // Enable Auto-Loop Replay (true) + 0.5x speed in Settings Tab 0, and ensure Replay on Load is ON in Saves
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.waitForTimeout(150);
+    await page.locator('button', { hasText: /^Settings$/ }).first().click();
+    await page.waitForTimeout(120);
+    const settingsLoopToggle = page.getByTestId('toggle-replay-loop-btn');
+    await settingsLoopToggle.scrollIntoViewIfNeeded();
+    if ((await settingsLoopToggle.getAttribute('aria-checked')) !== 'true') {
+      await settingsLoopToggle.click();
+      await page.waitForTimeout(80);
+    }
+    assert.equal(
+      await settingsLoopToggle.getAttribute('aria-checked'),
+      'true',
+      'Precondition: Auto-Loop Replay must be enabled before loading saved puzzle'
+    );
+    const speedHalfBtn = page.locator('button', { hasText: /^0\.5x$/ }).first();
+    await speedHalfBtn.scrollIntoViewIfNeeded();
+    await speedHalfBtn.click();
+    await page.waitForTimeout(80);
+
+    // Switch to Saves tab, ensure Replay on Load is enabled, and load targetSnapId
+    await page.locator('button', { hasText: /^Saves$/ }).first().click();
+    await page.waitForTimeout(120);
+    const autoReplaySavesSwitch = page.getByTestId('toggle-auto-replay-saves-btn');
+    if ((await autoReplaySavesSwitch.getAttribute('aria-checked')) !== 'true') {
+      await autoReplaySavesSwitch.click();
+      await page.waitForTimeout(80);
+    }
+    await page.getByTestId(`save-card-${mobileReplaySetup.targetSnapId}`).click();
+    await page.waitForTimeout(100);
+    await page.getByTestId('save-action-load').click();
+
+    const mobileReplayWin = page.getByTestId('replay-controls-window');
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 8000 });
+    assert.equal(
+      await mobileReplayWin.getAttribute('data-minimized'),
+      'true',
+      'Loaded save replay HUD must open minimized on mobile'
+    );
+    assert.equal(
+      await page.getByTestId('replay-loop-btn').getAttribute('aria-pressed'),
+      'false',
+      'Loading a puzzle save must immediately force replayLoop OFF (aria-pressed="false")'
+    );
+
+    const windowBox360 = await mobileReplayWin.boundingBox();
+    const exitBox360 = await page.getByTestId('replay-exit-btn').boundingBox();
+    assert.ok(windowBox360 && exitBox360, 'Expected visible bounding boxes for replay-controls-window and replay-exit-btn at 360x800');
+    assert.ok(
+      exitBox360.x >= windowBox360.x + 4 &&
+        exitBox360.x + exitBox360.width <= windowBox360.x + windowBox360.width - 4,
+      `Minimized ReplayControls X button (${exitBox360.x}..${exitBox360.x + exitBox360.width}) must fit strictly inside 360px mobile pill border (${windowBox360.x}..${windowBox360.x + windowBox360.width})`
+    );
+
+    // Wait for loaded save replay to finish and verify it automatically closes ReplayControls and resumes gameplay
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 10000 });
+    await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      await page.evaluate(
+        () => Boolean(JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}').replayLoop)
+      ),
+      false,
+      'Persisted capy_user_settings_v8.replayLoop must remain false after save-load replay auto-resumes gameplay'
+    );
+
+    // Restore desktop viewport and default test settings cleanly
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      s.autoReplayOnLoad = false;
+      s.replaySpeed = 1;
+      s.replayLoop = false;
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
+    });
+    await page.waitForTimeout(120);
+    console.log('   PASS: 360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');

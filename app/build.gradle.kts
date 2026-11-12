@@ -31,6 +31,23 @@ android {
         if (!playGamesAppId.isNullOrEmpty()) {
             resValue("string", "game_services_project_id", playGamesAppId)
         }
+
+        val rawCertFingerprints = System.getenv("CAPY_ANDROID_SHA256_CERT_FINGERPRINTS")?.trim().orEmpty()
+        val hasValidCertFingerprints = rawCertFingerprints
+            .split(Regex("[,;\\s]+"))
+            .map { token ->
+                val upper = token.trim().uppercase()
+                if (Regex("^[0-9A-F]{64}$").matches(upper)) {
+                    upper.chunked(2).joinToString(":")
+                } else {
+                    upper
+                }
+            }
+            .any { candidate ->
+                Regex("^([0-9A-F]{2}:){31}[0-9A-F]{2}$").matches(candidate) &&
+                    !Regex("^(00:){31}00$").matches(candidate)
+            }
+        manifestPlaceholders["appLinksAutoVerify"] = hasValidCertFingerprints.toString()
     }
 
     val releaseKeystorePath = System.getenv("CAPY_KEYSTORE_PATH")
