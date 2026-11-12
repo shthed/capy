@@ -39,6 +39,7 @@ import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { ReplayControls } from './components/ReplayControls';
+import { resolveReleaseChannel } from './version';
 
 const SettingsModal = React.lazy(() =>
   import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -193,10 +194,11 @@ export const App: React.FC = () => {
   const [loadingStatus, setLoadingStatus] = useState<string>('Loading Capy...');
   const [loadingPayload, setLoadingPayload] = useState<GenerationProgressPayload | null>(null);
 
-  // Modal Sheet
+  // Modal Sheet & Active Deployment Channel
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<number | undefined>(undefined);
   const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
+  const releaseChannelInfo = useMemo(() => resolveReleaseChannel(), []);
 
   // Maintain O(1) region lookup map for offscreen replay frustum checks
   useEffect(() => {
@@ -3900,6 +3902,7 @@ export const App: React.FC = () => {
         coopRoomCode={coopRoomCode}
         coopParticipants={coopParticipants}
         parentPuzzleTitle={parentSave?.title ?? null}
+        releaseChannelBadge={releaseChannelInfo.badgeLabel}
         onPickImage={() => fileInputRef.current?.click()}
         onTogglePreview={() => setIsPreviewMode((prev) => !prev)}
         onToggleFullscreen={handleToggleFullscreen}
@@ -3928,6 +3931,10 @@ export const App: React.FC = () => {
               }
             : undefined
         }
+        onOpenReleaseChannel={() => {
+          setSettingsInitialTab(0);
+          setShowSettings(true);
+        }}
       />
 
       {/* Full Screen Interactive Canvas */}
