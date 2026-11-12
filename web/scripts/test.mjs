@@ -231,27 +231,94 @@ async function runCodecAndEngineTests() {
     );
     const majorMinor = `${semverParts.major}.${semverParts.minor}`;
     const currentVersionHeadingRe = new RegExp(
-      `^### (?:${versionMod.APP_VERSION.replace(/\./g, '\\.')}|${majorMinor.replace(/\./g, '\\.')}) - \\d{4}-\\d{2}-\\d{2}$`,
+      `^### (?:${versionMod.APP_VERSION.replace(/\./g, '\\.')}|${majorMinor.replace(/\./g, '\\.')}) - \\d{4}-\\d{2}-\\d{2} \\((?:Alpha|Beta|Production|Production, Beta)\\)$`,
       'm'
     );
     assert.equal(
       currentVersionHeadingRe.test(changelogText),
       true,
-      `CHANGELOG.md must contain a compact ### release heading for ${versionMod.APP_VERSION} or ${majorMinor}`
+      `CHANGELOG.md must contain a compact ### release heading with active channel marker for ${versionMod.APP_VERSION} or ${majorMinor}`
     );
     const changelogHeadings = changelogText.split('\n').filter((line) => line.startsWith('#'));
+    let productionHeadingCount = 0;
+    let betaHeadingCount = 0;
+    let alphaHeadingCount = 0;
     for (const heading of changelogHeadings) {
       assert.equal(
-        /^### \d+\.\d+(?:\.\d+)? - \d{4}-\d{2}-\d{2}$/.test(heading),
+        /^### \d+\.\d+(?:\.\d+)? - \d{4}-\d{2}-\d{2}(?: \((?:Alpha|Beta|Production|Production, Beta)\))?$/.test(
+          heading
+        ),
         true,
-        `Each CHANGELOG.md heading must be concise "### X.Y[.Z] - YYYY-MM-DD": ${heading}`
+        `Each CHANGELOG.md heading must be concise "### X.Y[.Z] - YYYY-MM-DD [(Alpha|Beta|Production|Production, Beta)]": ${heading}`
       );
+      if (/\((?:Production|Production, Beta)\)$/.test(heading)) productionHeadingCount += 1;
+      if (/\((?:Beta|Production, Beta)\)$/.test(heading)) betaHeadingCount += 1;
+      if (/\(Alpha\)$/.test(heading)) alphaHeadingCount += 1;
     }
+    assert.equal(
+      productionHeadingCount,
+      1,
+      `CHANGELOG.md must mark exactly 1 active Production release heading, got ${productionHeadingCount}`
+    );
+    assert.equal(
+      betaHeadingCount <= 1,
+      true,
+      `CHANGELOG.md must mark at most 1 active Beta release heading, got ${betaHeadingCount}`
+    );
+    assert.equal(
+      alphaHeadingCount <= 1,
+      true,
+      `CHANGELOG.md must mark at most 1 active Alpha release heading, got ${alphaHeadingCount}`
+    );
     assert.equal(
       changelogText.includes('### 0.1.0 - '),
       true,
       'CHANGELOG.md must include retrospective 0.1.0--0.9.x release history'
     );
+
+    // Release channel path/origin/query resolution checks
+    const stableCh = versionMod.resolveReleaseChannel('/capy/', 'https://shthed.github.io', '');
+    assert.equal(stableCh.channel, 'stable');
+    assert.equal(stableCh.badgeLabel, null);
+    assert.equal(stableCh.prNumber, null);
+    assert.equal(stableCh.stableWebUrl, 'https://shthed.github.io/capy/');
+    assert.equal(stableCh.betaWebUrl, 'https://shthed.github.io/capy/beta/');
+    assert.equal(stableCh.betaApkUrl, 'https://shthed.github.io/capy/beta/capy.apk');
+
+    const betaCh = versionMod.resolveReleaseChannel('/capy/beta/', 'https://shthed.github.io', '');
+    assert.equal(betaCh.channel, 'beta');
+    assert.equal(betaCh.badgeLabel, 'BETA');
+    assert.equal(betaCh.prNumber, null);
+
+    const alphaCh = versionMod.resolveReleaseChannel(
+      '/capy/pull/481/',
+      'https://shthed.github.io',
+      ''
+    );
+    assert.equal(alphaCh.channel, 'alpha');
+    assert.equal(alphaCh.badgeLabel, 'ALPHA #481');
+    assert.equal(alphaCh.prNumber, 481);
+
+    const devCh = versionMod.resolveReleaseChannel('/', 'http://localhost:3000', '');
+    assert.equal(devCh.channel, 'dev');
+    assert.equal(devCh.badgeLabel, null);
+
+    const queryBetaCh = versionMod.resolveReleaseChannel(
+      '/',
+      'http://localhost:3000',
+      '?capy_channel=beta'
+    );
+    assert.equal(queryBetaCh.channel, 'beta');
+    assert.equal(queryBetaCh.badgeLabel, 'BETA');
+
+    const queryAlphaCh = versionMod.resolveReleaseChannel(
+      '/',
+      'http://localhost:3000',
+      '?capy_channel=alpha&pr=481'
+    );
+    assert.equal(queryAlphaCh.channel, 'alpha');
+    assert.equal(queryAlphaCh.badgeLabel, 'ALPHA #481');
+    assert.equal(queryAlphaCh.prNumber, 481);
     assert.equal(
       /^[ \t]+-\s+/m.test(changelogText),
       false,
@@ -1808,6 +1875,60 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
     console.log('   PASS: Printable SVG download, Sub-Tile Parent Breadcrumbs + parent delete cleanup, and 2-peer Co-op UNFILL_EVENT Undo sync verified.');
+
+    console.log('-> [2.6] Verifying Release Channel switcher card & Beta HUD pill...');
+    assert.equal(
+      await page.getByTestId('topbar-channel-badge').count(),
+      0,
+      'Default Stable/Dev root view must not display topbar-channel-badge clutter'
+    );
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.waitForTimeout(150);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.waitForTimeout(100);
+    const channelCard = page.getByTestId('release-channel-card');
+    await channelCard.scrollIntoViewIfNeeded();
+    assert.equal(await channelCard.isVisible(), true, 'release-channel-card must be visible in Controls tab');
+    assert.equal(
+      await page.getByTestId('toggle-beta-channel-btn').getAttribute('href'),
+      'https://shthed.github.io/capy/beta/',
+      'Default channel switcher must link to Beta Web URL'
+    );
+    assert.equal(
+      await page.getByTestId('beta-apk-download-link').getAttribute('href'),
+      'https://shthed.github.io/capy/beta/capy.apk',
+      'Beta Android APK link must point to /capy/beta/capy.apk'
+    );
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    const betaPage = await context.newPage();
+    attachErrorListeners(betaPage, 'betaPage');
+    await betaPage.goto(`${BASE_URL}/?capy_channel=beta`, { waitUntil: 'networkidle' });
+    await betaPage.locator('canvas').first().waitFor({ state: 'visible', timeout: 15000 });
+    const betaTopPill = betaPage.getByTestId('topbar-channel-badge');
+    await betaTopPill.waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      (await betaTopPill.textContent())?.trim(),
+      'BETA',
+      'Beta channel view must render BETA pill in GameTopBar'
+    );
+    await betaTopPill.click();
+    await betaPage.waitForTimeout(200);
+    const betaCard = betaPage.getByTestId('release-channel-card');
+    await betaCard.scrollIntoViewIfNeeded();
+    assert.equal(
+      await betaCard.getAttribute('data-channel'),
+      'beta',
+      'Clicking topbar-channel-badge must open Settings Controls tab with data-channel="beta"'
+    );
+    assert.equal(
+      await betaPage.getByTestId('toggle-beta-channel-btn').getAttribute('href'),
+      'https://shthed.github.io/capy/',
+      'Beta channel switcher must offer 1-tap Return to Stable Release link'
+    );
+    await betaPage.close();
+    console.log('   PASS: Release Channel switcher card, Beta APK link, and BETA HUD pill verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - beta
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -13,6 +14,7 @@ on:
   pull_request:
     branches:
       - main
+      - beta
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -64,6 +66,7 @@ jobs:
             const inputs = context.payload?.inputs || {};
             const branchInput = inputs.target_branch || '';
             const allowWithoutPrInput = inputs.allow_without_pr;
+            const isPullRequest = context.eventName === 'pull_request';
             const prFromPayload = context.payload?.pull_request?.number;
             const branchFromPayload = context.payload?.pull_request?.head?.ref;
             const branch = branchInput || branchFromPayload || context.ref.replace('refs/heads/', '');
@@ -78,7 +81,7 @@ jobs:
             const safeBranch = branch.replace(/[^a-zA-Z0-9._-]/g, '-');
 
             let prNumber = prFromPayload;
-            if (!prNumber && branch !== 'main') {
+            if (!prNumber && branch !== 'main' && branch !== 'beta') {
               try {
                 const { data: prs } = await github.rest.pulls.list({
                   owner: context.repo.owner,
@@ -94,17 +97,21 @@ jobs:
               }
             }
 
-            const targetDir = branch === 'main'
-              ? '.'
-              : prNumber
-                ? `pull/${prNumber}`
-                : `pull/${safeBranch}`;
+            const targetDir = isPullRequest
+              ? (prNumber ? `pull/${prNumber}` : `pull/${safeBranch}`)
+              : branch === 'main'
+                ? '.'
+                : branch === 'beta'
+                  ? 'beta'
+                  : prNumber
+                    ? `pull/${prNumber}`
+                    : `pull/${safeBranch}`;
 
             const previewUrl = targetDir === '.'
               ? `${basePreview}/`
               : `${basePreview}/${targetDir}/`;
 
-            const shouldSkip = branch !== 'main' && !prNumber && !allowWithoutPr;
+            const shouldSkip = !isPullRequest && branch !== 'main' && branch !== 'beta' && !prNumber && !allowWithoutPr;
 
             const checkoutRef = context.payload?.pull_request?.head?.sha || branchInput || context.sha;
 
@@ -163,7 +170,7 @@ jobs:
         if: steps.target.outputs.skip != 'true'
         uses: gradle/actions/setup-gradle@v6
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/beta' }}
 
       - name: Run unit tests and build Debug APK (app/)
         if: steps.target.outputs.skip != 'true'
@@ -185,10 +192,41 @@ jobs:
           path: staging
           retention-days: 1
 
+  e2e_release_gate:
+    name: Playwright E2E Release Gate
+    needs: [build]
+    if: needs.build.outputs.skip != 'true' && github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.build.outputs.checkout_ref }}
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies, build web bundle, and install Playwright Chromium
+        working-directory: web
+        run: |
+          npm ci --prefer-offline --no-audit --no-fund
+          npm run build
+          npx playwright install --with-deps chromium
+
+      - name: Run Unified Engine, Codec & Headless Chromium E2E Suite
+        working-directory: web
+        run: npm test
+
   deploy:
     name: Deploy to GitHub Pages
-    needs: [build]
-    if: needs.build.outputs.skip != 'true'
+    needs: [build, e2e_release_gate]
+    if: always() && needs.build.result == 'success' && needs.build.outputs.skip != 'true' && (needs.e2e_release_gate.result == 'success' || needs.e2e_release_gate.result == 'skipped')
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -239,6 +277,7 @@ jobs:
             rsync -avc --delete \
               --exclude '.git/' \
               --exclude 'pull/' \
+              --exclude 'beta/' \
               staging/web/ "${DEST_DIR}/"
           else
             rm -rf "${DEST_DIR}"

@@ -130,7 +130,7 @@ cd web && npm ci && npm run build
 # Build Debug APK (outputs to app/build/outputs/apk/debug/app-debug.apk)
 ./gradlew app:assembleDebug
 
-# Build signed Play Store Release AAB (when CAPY_KEYSTORE_* env vars are set)
+# Build signed Play Store Release AAB (when CAPY_KEYSTORE_* env vars are set; automated on v*.*.* tags via .github/workflows/release.yml)
 ./gradlew app:bundleRelease
 
 # Deploy to connected USB/Wi-Fi Android device (ONLY run when explicitly asked by user)
